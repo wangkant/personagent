@@ -1,22 +1,7 @@
-"""tools/auto_reviewer.py — auto-diagnose low-score eval entries; draft feedback patches.
+"""Diagnose low-score eval entries and draft feedback patches.
 
-Semi-automates the Hermes loop step "read low eval scores -> figure out
-what constraint to add -> write a BAD/OK pair".
-
-Workflow:
+Usage:
     python tools/auto_reviewer.py [--threshold 3] [--limit 20] [--dry-run]
-
-Reads eval.jsonl, finds replies with score <= threshold, asks the reviewer
-LLM to output:
-    1. failure_mode  (a 2-6 char tag)
-    2. bad_diagnosis (one-line: exactly what reads as AI-flavored)
-    3. tag_to_patch  (style / reasoning / intent_rules)
-    4. constraint_to_add (one negative rule, written like STYLE_GUIDE's BAD/OK)
-    5. pair_draft    (a BAD/OK pair ready to drop into feedback.jsonl)
-
-Output goes to candidates.jsonl; after human review, copy approved rows
-into feedback.jsonl.
-Idempotent: the same eval entry is never reviewed twice.
 """
 from __future__ import annotations
 
@@ -42,15 +27,11 @@ CANDIDATES_FILE = ROOT / "candidates.jsonl"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
-# deepseek-chat is known to return clean JSON for this prompt shape;
-# v4-flash sometimes returns empty content via the anthropic endpoint.
-# Override via REVIEWER_MODEL env if you want a different one.
 REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "deepseek-chat")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("auto-reviewer")
-
 
 REVIEWER_PROMPT = """你是 LLM persona-agent 提示词工程师。下面是一个 QQ 群 persona chatbot 一次得分低的回复样本，诊断 AI 味问题 + 给出修复草稿。
 
@@ -63,7 +44,6 @@ bot 回复: {reply}
 
 [严格按 JSON 一行输出，不要 markdown 包裹，所有字段必填]
 {{"failure_mode":"<2-6 字标签，如：客服腔/分析腔/喊名字/列点/句号多/称呼过频/张冠李戴/抢答/解释腔>","bad_diagnosis":"<一句话讲具体哪儿不像真人>","tag_to_patch":"<style 或 reasoning 或 intent_rules 三选一>","constraint_to_add":"<一行负向约束，写法仿『错『...』 对『...』』给具体反例>","pair_draft":{{"scenario":"<场景短标签>","context":["<上下文 1-2 行>"],"mode":"<owner|called|followup|judge 之一>","reply":"<原 BAD 回复，照抄>","better":"<改写成像真人的版本>"}}}}"""
-
 
 def load_evals(path: Path, threshold: int) -> list[dict]:
     if not path.exists():
@@ -85,7 +65,6 @@ def load_evals(path: Path, threshold: int) -> list[dict]:
             out.append(r)
     return out
 
-
 def load_existing_candidates(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -102,7 +81,6 @@ def load_existing_candidates(path: Path) -> set[str]:
         if ts:
             seen.add(ts)
     return seen
-
 
 async def review_one(client: anthropic.AsyncAnthropic, ev: dict) -> dict | None:
     prompt = REVIEWER_PROMPT.format(
@@ -126,7 +104,6 @@ async def review_one(client: anthropic.AsyncAnthropic, ev: dict) -> dict | None:
     raw = "".join(
         getattr(b, "text", "") for b in resp.content if getattr(b, "text", "")
     ).strip()
-    # Strip ``` fences if model wrapped it despite instruction
     raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
 
     try:
@@ -136,7 +113,6 @@ async def review_one(client: anthropic.AsyncAnthropic, ev: dict) -> dict | None:
                        ev.get("ts", "?")[:19], raw[:120], e)
         return None
     return diag
-
 
 async def main() -> int:
     p = argparse.ArgumentParser()
@@ -203,7 +179,6 @@ async def main() -> int:
         "stdout (dry-run)" if args.dry_run else CANDIDATES_FILE.name,
     )
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

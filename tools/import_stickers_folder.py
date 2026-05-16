@@ -42,7 +42,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("import")
 
-
 VISION_PROMPT = (
     "这张图是 QQ/微信群里用的**表情包**（不是真照片）。\n"
     "**任务：给它打 tag，严格按 JSON 一行输出。**\n"
@@ -63,7 +62,6 @@ VISION_PROMPT = (
     '{"meaning":"求抱抱委屈","tags":["委屈","抱抱","求安慰"]}'
 )
 
-
 def guess_ext(b: bytes) -> str | None:
     if b[:8] == b"\x89PNG\r\n\x1a\n": return "png"
     if b[:3] == b"\xff\xd8\xff":      return "jpg"
@@ -71,10 +69,8 @@ def guess_ext(b: bytes) -> str | None:
     if b[:4] == b"RIFF" and b[8:12] == b"WEBP": return "webp"
     return None
 
-
 def guess_mime(ext: str) -> str:
     return {"png":"image/png","jpg":"image/jpeg","gif":"image/gif","webp":"image/webp"}.get(ext, "image/jpeg")
-
 
 async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> dict | None:
     if len(img_bytes) > 5_000_000:
@@ -113,13 +109,12 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
             return None
         meaning = (parsed.get("meaning") or "").strip()[:50]
         tags = [str(t).strip()[:20] for t in (parsed.get("tags") or []) if t][:6]
-        if not meaning or meaning == "看不到" or not tags:  # "看不到" is the prompt's blank-output sentinel
+        if not meaning or meaning == "看不到" or not tags:
             return None
         return {"meaning": meaning, "tags": tags}
     except Exception as e:
         logger.debug("tag failed: %s: %s", type(e).__name__, e)
         return None
-
 
 async def main():
     p = argparse.ArgumentParser()
@@ -133,7 +128,6 @@ async def main():
         logger.error("not a directory: %s", src)
         return 1
 
-    # Load existing library
     STICKERS_DIR.mkdir(parents=True, exist_ok=True)
     if STICKERS_JSON.exists():
         entries = json.loads(STICKERS_JSON.read_text(encoding="utf-8"))
@@ -141,7 +135,6 @@ async def main():
         entries = {}
     md5_index = {v.get("md5"): k for k, v in entries.items() if isinstance(v, dict) and v.get("md5")}
 
-    # Enumerate source files
     files = sorted([p for p in src.iterdir() if p.is_file()])
     if args.limit:
         files = files[:args.limit]
@@ -209,7 +202,6 @@ async def main():
                     logger.info("[%d/%d] %s: imported (untagged)",
                                 i + 1, len(files), md5[:8])
 
-            # Save every 20 stickers to avoid losing progress
             if new_count % 20 == 0:
                 STICKERS_JSON.write_text(
                     json.dumps(entries, ensure_ascii=False, indent=2),
@@ -223,7 +215,6 @@ async def main():
     logger.info("done: %d new, %d tagged, %d dup skipped, %d unsupported, %d total in library",
                 new_count, tagged_count, skipped_dup, skipped_unsupported, len(entries))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

@@ -1,13 +1,7 @@
-"""Offline prompt tuning lab for the persona agent.
+"""Offline prompt tuning lab.
 
-Workflow:
+Usage:
     python tools/prompt_lab.py
-
-You'll get a menu. Pick "run all" -> agent generates a reply for each fixture
-with the current prompt + examples bank. You rate g/b/B/s. "Better" answers
-auto-flow into examples.jsonl which the live agent reads on every request.
-
-So the loop is: tweak prompt -> run lab -> review -> approved examples auto-applied to prod.
 """
 from __future__ import annotations
 
@@ -35,8 +29,6 @@ MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 
-
-# ----- ANSI color helpers -----
 def _c(text, code): return f"\033[{code}m{text}\033[0m"
 def cyan(t): return _c(t, "36")
 def green(t): return _c(t, "32")
@@ -45,8 +37,6 @@ def red(t): return _c(t, "31")
 def dim(t): return _c(t, "2")
 def bold(t): return _c(t, "1")
 
-
-# ----- IO helpers -----
 def load_jsonl(path: Path) -> list:
     if not path.exists():
         return []
@@ -62,14 +52,11 @@ def load_jsonl(path: Path) -> list:
             pass
     return out
 
-
 def append_jsonl(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-
-# ----- Prompt build -----
 def build_system_prompt(examples: list) -> str:
     parts = [
         f"<persona>\n{DEFAULT_PERSONA}\n</persona>",
@@ -89,13 +76,11 @@ def build_system_prompt(examples: list) -> str:
         parts.append("\n".join(ex_str))
     return "\n\n".join(parts)
 
-
 def get_client():
     kwargs = {"api_key": ANTHROPIC_API_KEY}
     if ANTHROPIC_BASE_URL:
         kwargs["base_url"] = ANTHROPIC_BASE_URL
     return anthropic.AsyncAnthropic(**kwargs)
-
 
 async def gen_reply(system: str, fx: dict, client) -> str:
     ctx_text = "\n".join(fx.get("context", []))
@@ -119,15 +104,12 @@ async def gen_reply(system: str, fx: dict, client) -> str:
         getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
     ).strip()
 
-
-# ----- Commands -----
 def cmd_list(fixtures: list):
     if not fixtures:
         print(dim("(no fixtures)"))
         return
     for fx in fixtures:
         print(f"  {cyan(fx.get('id','?'))}  [{fx.get('mode','?'):8}]  {fx.get('scenario','?')}")
-
 
 def cmd_show_examples(examples: list):
     if not examples:
@@ -138,7 +120,6 @@ def cmd_show_examples(examples: list):
         for line in e.get("context", []):
             print(f"  {dim(line)}")
         print(f"  {green('reply:')} {e.get('reply','')}\n")
-
 
 async def cmd_run(fixtures: list, ids_filter: list | None = None):
     examples = load_jsonl(EXAMPLES_FILE)
@@ -214,10 +195,9 @@ async def cmd_run(fixtures: list, ids_filter: list | None = None):
                 "ts": ts,
             })
             print(f"  {green('+')} added to examples bank")
-        else:  # bad
+        else:
             print(f"  {dim('logged to feedback only')}")
         append_jsonl(FEEDBACK_FILE, record)
-
 
 def cmd_add() -> dict | None:
     print(yellow("New fixture. Enter 'done' on empty context line to finish."))
@@ -244,14 +224,12 @@ def cmd_add() -> dict | None:
         return None
     return {"id": fid, "scenario": scenario, "mode": mode, "context": context}
 
-
 def cmd_show_prompt():
     examples = load_jsonl(EXAMPLES_FILE)
     system = build_system_prompt(examples)
     print(f"\n{dim('--- system prompt ---')}")
     print(system)
     print(f"{dim('--- end (len=' + str(len(system)) + ') ---')}\n")
-
 
 async def main():
     fixtures = load_jsonl(FIXTURES_FILE)
@@ -297,7 +275,6 @@ async def main():
             break
         else:
             print(red("unknown command"))
-
 
 if __name__ == "__main__":
     try:

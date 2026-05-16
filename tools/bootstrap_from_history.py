@@ -46,7 +46,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("bootstrap")
 
-
 # ============ NapCat history ============
 async def fetch_page(client: httpx.AsyncClient, group_id: str,
                      count: int, message_seq: int = 0) -> list[dict]:
@@ -58,7 +57,6 @@ async def fetch_page(client: httpx.AsyncClient, group_id: str,
     r.raise_for_status()
     data = r.json().get("data") or {}
     return data.get("messages") or []
-
 
 async def pull_history(group_id: str, limit: int) -> list[dict]:
     """Paginate backward. NapCat returns oldest-first inside each page;
@@ -74,7 +72,6 @@ async def pull_history(group_id: str, limit: int) -> list[dict]:
             if not msgs:
                 logger.info("  history exhausted")
                 break
-            # Dedupe by message_id (NapCat returns boundary message in next page)
             fresh = [m for m in msgs if m.get("message_id") not in seen_ids]
             for m in fresh:
                 seen_ids.add(m.get("message_id"))
@@ -82,7 +79,6 @@ async def pull_history(group_id: str, limit: int) -> list[dict]:
                 logger.info("  all duplicates — history reached")
                 break
             out = fresh + out
-            # Use oldest msg's seq − 1 to skip boundary repeat
             oldest_seq = int(msgs[0].get("message_seq", 0))
             new_cursor = oldest_seq - 1
             if new_cursor <= 0:
@@ -92,7 +88,6 @@ async def pull_history(group_id: str, limit: int) -> list[dict]:
             logger.info("  +%d unique (total=%d, anchor=%d)",
                         len(fresh), len(out), cursor)
     return out[-limit:]
-
 
 # ============ Classify ============
 def classify_message(msg: dict) -> dict:
@@ -122,7 +117,7 @@ def classify_message(msg: dict) -> dict:
             is_sticker = (
                 sub_type == 1
                 or "动画表情" in (d.get("summary") or "")
-                or (0 < fsize < 200_000)  # < 200KB ~ likely sticker
+                or (0 < fsize < 200_000)
             )
             image_segs.append({
                 "file": d.get("file", ""),
@@ -141,7 +136,6 @@ def classify_message(msg: dict) -> dict:
         "user_id": str(msg.get("user_id", "")),
         "msg_id": msg.get("message_id", 0),
     }
-
 
 # ============ Owner profile ============
 def compute_owner_profile(classified: list[dict]) -> dict:
@@ -174,7 +168,6 @@ def compute_owner_profile(classified: list[dict]) -> dict:
         "top_sticker_md5s": sticker_md5s.most_common(20),
     }
 
-
 # ============ Sticker seeding ============
 async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
     if not url:
@@ -189,7 +182,6 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
         logger.debug("download failed (%s): %s", url[:80], e)
         return None
 
-
 def guess_ext(b: bytes) -> str:
     if b[:8] == b"\x89PNG\r\n\x1a\n": return "png"
     if b[:3] == b"\xff\xd8\xff":      return "jpg"
@@ -197,14 +189,11 @@ def guess_ext(b: bytes) -> str:
     if b[:4] == b"RIFF" and b[8:12] == b"WEBP": return "webp"
     return "bin"
 
-
 def format_ctx_line(msg: dict) -> str:
     name = (msg.get("sender") or {}).get("card") or (msg.get("sender") or {}).get("nickname") or "?"
     raw = (msg.get("raw_message") or "").strip()
-    # Strip CQ-code image placeholders for cleaner context
     raw = re.sub(r"\[CQ:image[^\]]*\]", "[图]", raw)
     return f"{name}: {raw[:80]}"
-
 
 async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
     """Download all sticker-shaped images and register in stickers.json with
@@ -228,7 +217,7 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
             if not c["has_image"]:
                 continue
             if c["user_id"] == BOT_QQ:
-                continue  # don't seed our own
+                continue
             ctx_before = [
                 format_ctx_line(messages[j])
                 for j in range(max(0, i - 6), i)
@@ -238,14 +227,12 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
             for seg in c["image_segs"]:
                 if not seg["is_sticker"]:
                     continue
-                # Try md5 from file name first (skip download if already in lib)
                 file_md5 = ""
                 m = re.match(r"^([a-fA-F0-9]{32})\.", seg.get("file") or "")
                 if m:
                     file_md5 = m.group(1).lower()
 
                 if file_md5 and file_md5 in md5_index:
-                    # Already in lib — just append context
                     filename = md5_index[file_md5]
                     entry = entries[filename]
                     entry.setdefault("seen_contexts", []).append({
@@ -259,7 +246,6 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
                     seen_skip += 1
                     continue
 
-                # New sticker — download
                 img_bytes = await download_sticker(client, seg["url"])
                 if not img_bytes:
                     continue
@@ -267,7 +253,6 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
                     continue
                 md5 = hashlib.md5(img_bytes).hexdigest()
                 if md5 in md5_index:
-                    # md5 differs from file-name md5 (rare), still skip duplicate
                     continue
                 ext = guess_ext(img_bytes)
                 filename = f"auto/{md5}.{ext}"
@@ -310,7 +295,6 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
         "existing_md5_hits": seen_skip,
         "total_stickers_now": len(entries),
     }
-
 
 # ============ Main ============
 async def main():
@@ -368,7 +352,6 @@ async def main():
                     result["existing_md5_hits"], result["total_stickers_now"])
 
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

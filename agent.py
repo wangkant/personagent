@@ -1,4 +1,4 @@
-"""QQ-group persona agent — Hermes-style two-stage reasoning + intent classification + stickers + RAG memory."""
+"""QQ-group persona agent."""
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +27,6 @@ DEFAULT_PERSONA = (
     "请把这段替换成你自己的人设——参考 persona.example.txt，复制成 persona.txt 后改成你想要的样子。"
 )
 
-
 def _load_persona() -> str:
     """Load persona text from PERSONA_FILE (default persona.txt); fall back to DEFAULT_PERSONA."""
     persona_path = Path(os.getenv("PERSONA_FILE", "persona.txt"))
@@ -38,7 +37,6 @@ def _load_persona() -> str:
             logger.warning("read persona file failed, falling back to DEFAULT_PERSONA")
     return DEFAULT_PERSONA
 
-# Hermes-style: explicitly tell the model what tools exist and when to use them.
 TOOL_GUIDE = (
     "<tools>\n"
     "你可以用 web_search 工具联网查资料。**遇到任何你不熟悉的网络梗/流行语/人名/产品/热点/术语/具体事实，"
@@ -50,7 +48,6 @@ TOOL_GUIDE = (
     "</tools>"
 )
 
-# Output-style hard constraints — keep the model out of markdown / emoji / fake-action / customer-service mode.
 STYLE_GUIDE = (
     "<style>\n"
     "你在 QQ 上聊天，必须像真人发消息：\n"
@@ -98,9 +95,6 @@ STYLE_GUIDE = (
     "</style>"
 )
 
-# Hermes-style output protocol: the model thinks first, then writes the final reply.
-# Inspired by NousResearch Hermes 3's thinking-then-reply structure.
-# We do not pull in the full agent/tool_use stack — only the two-stage output mechanism.
 REASONING_PROTOCOL = (
     "<output_protocol>\n"
     "**每次回复严格按下面的两段式结构输出，XML 标签必须完整闭合：**\n"
@@ -140,8 +134,6 @@ REASONING_PROTOCOL = (
     "</output_protocol>"
 )
 
-# Intent-classification-driven sub-styles — tighter, more precise than the generic STYLE_GUIDE rules.
-# The model picks a tag inside <intent>, finds the matching rule here, then writes <reply>.
 INTENT_RULES = (
     "<intent_rules>\n"
     "**根据 reasoning 末尾 <intent> 的标签选对应风格——不同意图风格差很多：**\n"
@@ -153,7 +145,6 @@ INTENT_RULES = (
     "- `chat` 默认闲聊 → 走 STYLE_GUIDE 基础风格\n"
     "</intent_rules>"
 )
-
 
 class Agent:
     def __init__(
@@ -228,20 +219,13 @@ class Agent:
         self.owner_name = owner_name
 
         self.image_caption_cache: dict[str, str] = {}
-        # Bilibili video metadata cache (key=qqdocurl, value={title,up,desc,summary})
-        # Avoid hitting the API twice for the same video re-shared in the same group.
         self.bili_info_cache: dict[str, dict] = {}
-        # WBI signing-key cache (required by Bilibili's conclusion/get and similar endpoints).
-        # Refreshes after 24h; on failure stays as ("",""), which skips AI summarization.
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
-        # Private chat: per-user OpenAI-format message history.
         self.private_history: dict[str, list[dict]] = {}
 
-        # Cached async Anthropic client.
         self._anthropic_client = None
 
-        # Self-eval: background scoring of every reply, written to eval.jsonl
         self.eval_enable = eval_enable
         self.eval_model = eval_model or self.fallback_model or self.model
         eval_path = Path(eval_file)
@@ -249,17 +233,10 @@ class Agent:
             eval_path = Path(__file__).parent / eval_path
         self.eval_file = eval_path
 
-        # Vision model for image understanding. Must be explicitly set to a vision-capable
-        # model (e.g. claude-haiku, glm-4v). If empty, vision is disabled and we go straight
-        # to OCR — avoids text-only models hallucinating image descriptions.
-        # Routing by model-name prefix:
-        #   "glm-*"    → Zhipu OpenAI-compat endpoint via GLM_API_KEY/GLM_BASE_URL
-        #   "claude-*" → ANTHROPIC_BASE_URL (real Anthropic or deepseek anthropic-compat)
         self.vision_model = (vision_model or "").strip()
         self.glm_api_key = glm_api_key
         self.glm_base_url = glm_base_url.rstrip("/") if glm_base_url else ""
 
-        # Sticker library — auto-steal + auto-tag, see stickers.py
         stickers_path = Path(stickers_dir)
         if not stickers_path.is_absolute():
             stickers_path = Path(__file__).parent / stickers_path
@@ -274,35 +251,19 @@ class Agent:
             tagger_model="deepseek-chat",
         )
 
-        # Few-shot examples (curated by user via tools/prompt_lab.py)
         self.examples_file = Path(__file__).parent / "examples.jsonl"
         self._examples_cache: list = []
         self._examples_mtime: float = 0.0
 
-        # Preference pairs (rejected/chosen) auto-extracted from feedback.jsonl
-        # Hermes-style contrastive learning: stronger signal than chosen-only examples
         self.feedback_file = Path(__file__).parent / "feedback.jsonl"
         self._pairs_cache: list = []
         self._pairs_mtime: float = 0.0
 
-        # Message debounce: short wait before responding so consecutive short
-        # messages from the same user batch into one LLM call.
-        # Implemented via per-group monotonic seq — only the latest message in
-        # a burst triggers _think; older ones drop on seq mismatch.
         self.message_debounce_sec = max(0.0, message_debounce_sec)
         self._msg_seq: dict[str, int] = defaultdict(int)
 
-        # Count of in-flight vision describes per group. When user A posts an
-        # image and user B @s the bot almost simultaneously, B's phase 2 would
-        # otherwise fire before vision finishes for A, leading to "can't see image" replies.
-        # Phase 2 entry waits briefly if vision is still pending in same group.
         self._vision_in_flight: dict[str, int] = defaultdict(int)
 
-        # Sticky call marker: when an @/named-call comes in, remember it for a
-        # short window so a follow-up image/text message in the same burst
-        # (which loses seq race in debounce) still produces a `called` reply
-        # @-ing the original caller. Without this, "<bot-name><image><image>" pattern
-        # silently downgrades to followup/judge and loses the call context.
         self._sticky_call: dict[str, dict] = {}
 
         self.enabled = bool(api_key)
@@ -318,7 +279,6 @@ class Agent:
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
 
-        # Private chat: only respond to owner.
         if message_type == "private":
             if not self.owner_qq or user_id != self.owner_qq:
                 return False
@@ -328,9 +288,6 @@ class Agent:
         if not group_id:
             return False
 
-        # Track vision in-flight per group so concurrent non-image messages can
-        # wait for this group's vision to finish before processing (avoids
-        # avoids "image not visible" replies when someone else's image is still being described).
         has_image = any(
             isinstance(seg, dict) and seg.get("type") == "image"
             for seg in payload.get("message", [])
@@ -350,7 +307,6 @@ class Agent:
 
         is_at = self._is_at_me(payload)
         is_called = self.bot_name in text
-        # Sub-4-char acks like "嗯/哦/6": still buffered, but don't count toward the trigger threshold.
         is_noise = len(text.strip()) < 4 and not (is_at or is_called)
 
         is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
@@ -362,7 +318,6 @@ class Agent:
             if not is_noise:
                 self.counters[group_id] += 1
 
-            # Explicit memory command: reply immediately, skip debounce.
             if is_called or is_at:
                 mem_reply = self._handle_memory_command(group_id, text, user_id, nickname)
                 if mem_reply is not None:
@@ -377,10 +332,6 @@ class Agent:
                     logger.info("[Agent] memory command (group=%s): %s", group_id, mem_reply[:60])
                     return True
 
-            # Sticky-call: when this message is an @-mention or name-call, remember the caller.
-            # If a subsequent image/follow-up in the same burst wins the seq race, phase 2
-            # can use this record to promote mode back from followup/judge to called and
-            # @-reply the original caller.
             if is_at or is_called:
                 self._sticky_call[group_id] = {
                     "user_id": user_id,
@@ -388,14 +339,10 @@ class Agent:
                     "ts": time.time(),
                 }
 
-            # Stamp this message's seq; later arrivals will demote it from "latest".
             self._msg_seq[group_id] += 1
             my_seq = self._msg_seq[group_id]
 
         # === Debounce: short wait outside the lock so consecutive messages batch up ===
-        # Bare-call (just the name or @ with no real content) → double the wait, giving
-        # any follow-up image/text time to arrive — otherwise "<bot>" → 5s → <image>
-        # would reply once without ever seeing the image.
         bare_after_strip = (
             text.replace(f"@{self.bot_name}", "").replace(self.bot_name, "").strip()
         )
@@ -407,10 +354,6 @@ class Agent:
             except asyncio.CancelledError:
                 return False
 
-        # Wait for any in-flight vision in this group (up to 4s extra).
-        # Fixes the case where user A posts an image and user B @s the bot in
-        # the same window — without this wait, B processes before A's vision
-        # finishes and replies "image not visible".
         vision_waited = 0.0
         while self._vision_in_flight.get(group_id, 0) > 0 and vision_waited < 4.0:
             await asyncio.sleep(0.3)
@@ -421,7 +364,6 @@ class Agent:
         # === Phase 2: re-acquire lock; only the latest message in the burst hits the LLM ===
         async with self.locks[group_id]:
             if self._msg_seq.get(group_id, 0) != my_seq:
-                # A newer message has arrived in this group → let it trigger; we drop.
                 logger.debug("[Agent] debounce drop (group=%s seq=%d latest=%d)",
                              group_id, my_seq, self._msg_seq.get(group_id, 0))
                 return False
@@ -430,10 +372,6 @@ class Agent:
                 time.time() - self.last_reply_at[group_id] < self.followup_window
             )
 
-            # Sticky-call inheritance: earlier @ in same group might still be warm.
-            # Its original message lost the seq race, so unless we re-route here
-            # the winning follow-up (image / "你看这个") drops to followup/judge
-            # and loses the call context.
             sticky = self._sticky_call.get(group_id)
             sticky_ttl = self.message_debounce_sec + 5.0
             sticky_active = (
@@ -463,14 +401,12 @@ class Agent:
                 return False
 
             self.counters[group_id] = 0
-            # Clear sticky once consumed (or stale) so it doesn't bleed into the next burst.
             self._sticky_call.pop(group_id, None)
 
             try:
                 reply = await self._think(group_id, mode, text, caller_override=caller_override)
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
-                # In called mode, silence after an @ feels cold; send a brief fallback line.
                 if mode == "called":
                     import random
                     fallback = random.choice([
@@ -486,21 +422,17 @@ class Agent:
                         pass
                 return False
 
-            # Extract the optional MEM line (kept even if the reply ends up PASS).
             reply, auto_mem = self._split_reply_and_mem(reply or "")
 
             if not reply or reply.strip().upper().startswith("PASS"):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 if auto_mem:
                     self._save_auto_memory(group_id, auto_mem)
-                # PASS in followup mode means the conversation has moved on; exit followup
-                # immediately so we don't burn tokens calling the LLM on every subsequent line.
                 if mode == "followup":
                     self.last_reply_at[group_id] = 0.0
                 return False
 
             reply = reply.strip().strip('"').strip("「」")
-            # Parse the model's [AT:qq] markers.
             at_uid = ""
             at_match = re.search(r'\[AT:(\d+)\]', reply)
             if at_match:
@@ -508,12 +440,10 @@ class Agent:
                 reply = reply.replace(at_match.group(0), "").strip()
             if not at_uid and mode == "called":
                 at_uid = user_id
-            # reply length no longer truncated here; _send_qq handles splitting
             if auto_mem:
                 self._save_auto_memory(group_id, auto_mem)
             await self._send_qq(group_id, reply, at_uid)
             self.last_reply_at[group_id] = time.time()
-            # Append to the buffer for continuity, but don't bump the trigger counter (avoid self-feedback).
             self._append_buffer(group_id, self.bot_name, reply)
 
             if self.on_reply:
@@ -524,13 +454,11 @@ class Agent:
 
             logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
-            # Fire-and-forget self-evaluation (won't block, won't crash main flow)
             if self.eval_enable:
                 asyncio.create_task(self._evaluate_reply(group_id, mode, text, reply))
 
             return True
 
-    # -------- Private chat (owner-only; no persona overlay, plain chat) --------
     async def _handle_private(self, user_id: str, payload: dict) -> bool:
         text = await self._extract_text(payload)
         if not text:
@@ -539,7 +467,6 @@ class Agent:
         async with self.locks[f"private:{user_id}"]:
             history = self.private_history.setdefault(user_id, [])
             history.append({"role": "user", "content": text})
-            # Keep at most 40 messages (20 turns); trim oldest when over.
             if len(history) > 40:
                 self.private_history[user_id] = history[-40:]
                 history = self.private_history[user_id]
@@ -636,16 +563,13 @@ class Agent:
                 if not url:
                     parts.append("[图片]")
                     continue
-                # Sticker library: zero-cost md5 lookup via NapCat file field
                 entry = self.stickers.lookup_by_file_field(file_field)
                 if entry and entry.get("auto_tagged") and entry.get("meaning"):
                     parts.append(f"[表情包：{entry['meaning']}]")
-                    # Background: record this new context sighting (no download)
                     asyncio.create_task(self._record_sticker_context(
                         entry["md5"], group_id, sender_uid,
                     ))
                     continue
-                # Unknown or untagged — vision describe + background steal
                 desc = await self._describe_image(url)
                 parts.append(f"[图：{desc}]" if desc else "[图片]")
                 if group_id and sender_uid != self.bot_qq:
@@ -693,7 +617,6 @@ class Agent:
             from urllib.parse import urlparse, unquote
             parsed = urlparse(url)
             local = unquote(parsed.path)
-            # Windows: file:///C:/path → parsed.path is "/C:/path"; strip leading /
             if len(local) > 3 and local[0] == "/" and local[2] == ":":
                 local = local[1:]
             try:
@@ -742,7 +665,7 @@ class Agent:
         buf = list(self.buffers.get(group_id, []))
         out: list[str] = []
         for m in buf[-n:]:
-            if not m.get("user_id"):  # bot's own
+            if not m.get("user_id"):
                 continue
             out.append(f"{m.get('name','?')}: {m.get('text','')[:80]}")
         return out
@@ -798,7 +721,6 @@ class Agent:
                 line = f"[B站视频]《{video_title}》"
                 if up:
                     line += f" — up主{up}"
-                # Prefer the AI summary over the user-written desc — usually tighter and closer to the actual content.
                 if summary:
                     line += f"，AI总结:{summary[:200]}"
                 elif video_desc:
@@ -859,7 +781,6 @@ class Agent:
         except Exception as e:
             logger.debug("[Agent] Bili view API failed (%s): %s", bvid, e)
 
-        # AI summary: try once if we have cid + up_mid; gracefully skip on failure or empty.
         if info and cid and up_mid:
             summary = await self._fetch_bili_summary(bvid, cid, up_mid)
             if summary:
@@ -872,7 +793,6 @@ class Agent:
         logger.info("[Agent] bili view %s: %s", bvid, (info.get("title") or "(empty)")[:60])
         return info
 
-    # WBI signing permutation table (fixed 64-entry Bilibili constant, part of the signing algorithm).
     _WBI_MIXIN_KEY_ENC_TAB = [
         46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
         27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
@@ -913,7 +833,6 @@ class Agent:
         orig = img_key + sub_key
         mixin = "".join(orig[i] for i in self._WBI_MIXIN_KEY_ENC_TAB if i < len(orig))[:32]
         signed = dict(sorted({**params, "wts": int(time.time())}.items()))
-        # Strip characters disallowed in WBI signing.
         signed = {
             k: "".join(c for c in str(v) if c not in "!'()*")
             for k, v in signed.items()
@@ -949,7 +868,6 @@ class Agent:
                     return ""
                 d = data.get("data") or {}
                 mr = d.get("model_result") or {}
-                # result_type: 0=no summary, 1=outline only, 2=summary + outline
                 if not mr.get("result_type"):
                     return ""
                 summary = (mr.get("summary") or "").strip()
@@ -972,7 +890,6 @@ class Agent:
         return ""
 
     def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
-        # Merge consecutive messages from the same person to reduce buffer noise and save tokens.
         buf = self.buffers[group_id]
         if buf and buf[-1].get("name") == name and len(buf[-1].get("text", "")) < 300:
             buf[-1]["text"] = buf[-1]["text"] + " " + text
@@ -1047,7 +964,6 @@ class Agent:
         """Background quality eval. Scores 1-5 via cheap model, appends to eval.jsonl.
         Never raises — eval failures must not affect main reply flow."""
         try:
-            # Take last 5 buffer entries EXCLUDING the bot reply we just appended
             ctx_msgs = list(self.buffers[group_id])[-6:-1]
             ctx_text = "\n".join(f"{m['name']}: {m['text']}" for m in ctx_msgs)
 
@@ -1114,7 +1030,6 @@ class Agent:
         latest_text: str = "",
         caller_override: Optional[tuple] = None,
     ) -> str:
-        # Different modes use different history windows to save tokens.
         all_history = list(self.buffers[group_id])
         if mode == "followup":
             history = all_history[-30:]
@@ -1128,35 +1043,25 @@ class Agent:
             uid = m.get("user_id", "")
             if uid:
                 return f"[{m['name']}|qq={uid}] {m['text']}"
-            return f"[{m['name']}] {m['text']}"  # bot self or anonymous
+            return f"[{m['name']}] {m['text']}"
         history_text = "\n".join(_fmt_line(m) for m in history)
 
-        # Identify the latest non-bot speaker for explicit framing in prompt.
-        # When caller_override is set (sticky-call inheritance), trust that
-        # instead of buffer order — the original @-er is the right target,
-        # even if someone else slipped a message in between their @ and the
-        # winning burst message.
         if caller_override:
             latest_nick, latest_uid = caller_override
         else:
             latest_nick, latest_uid = "", ""
             for m in reversed(history):
-                if m.get("user_id"):  # bot's own entries have empty user_id
+                if m.get("user_id"):
                     latest_nick = m["name"]
                     latest_uid = m["user_id"]
                     break
 
-        # Time line is invisible metadata — used to ground the model's internal time sense
-        # so it doesn't hallucinate "3am" at noon. NOT for the model to bring up in replies.
         time_line = (
             f"[元信息] 现在北京时间 {self._current_time_str()}。"
             f"**仅用于内部时间感知**——回复里别主动提时间/别拿时间当调侃点，除非对方问。"
             f"群聊上下文里如果出现别的时间数字，那是过去的事，不是现在。\n\n"
         )
 
-        # Focus extraction: scan the last 5 entries for image/share/Bilibili descriptions
-        # and surface them at the top, so the model doesn't miss the visual content buried
-        # in a long text-heavy history (text-dominant attention bias).
         focus_block = ""
         focus_items: list[str] = []
         focus_pat = re.compile(r"(\[图：[^\]]+\]|\[B站视频\][^\n\[]+|\[分享\|[^\]]+\][^\n\[]*)")
@@ -1180,7 +1085,6 @@ class Agent:
             "限制：仅记真实事实，不记当下情绪、玩笑话、临时状态。没什么好记的就不要输出 MEM 行。"
         )
 
-        # Decision signals shared across modes
         signals = self._compute_chat_signals(group_id, history)
 
         decision_framework = (
@@ -1264,7 +1168,6 @@ class Agent:
                 f"他说错话或犯傻可以用高情商阴阳调侃一下（绵里藏针那种，留台阶），别变成直白的刻薄。"
                 f"你是普通有个性的妹妹，不是恋爱脑、不是工具人。"
             )
-        # Hermes-style system prompt: persona + style + intent routing + tools + stickers + few-shot + relations + long-term memory, segmented.
         system_content = (
             f"<persona>\n{self.persona}\n</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
@@ -1277,14 +1180,12 @@ class Agent:
             f"{REASONING_PROTOCOL}"
         )
 
-        # owner mode always uses the primary model; never downgrades.
         if mode == "owner":
             model_to_use = self.model
         else:
             model_to_use = self._pick_group_model()
         self.model_calls.append(time.time())
 
-        # judge mode only decides whether to interject — no web access; other modes enable web_search.
         enable_search = mode in ("called", "owner", "followup")
         raw = await self._call_anthropic(
             system=system_content,
@@ -1407,7 +1308,6 @@ class Agent:
         if cur.strip():
             chunks.append(cur.strip())
 
-        # Merge short fragments into the previous line.
         result: list[str] = []
         for c in chunks:
             if result and len(result[-1]) + len(c) < max_len:
@@ -1473,7 +1373,6 @@ class Agent:
                 if not file_path or not file_path.exists():
                     logger.info("[Agent] sticker tag %r → no match, skipping", value)
                     continue
-                # Brief delay before sticker too — simulates "finding the right one"
                 await asyncio.sleep(random.uniform(0.6, 1.4))
                 try:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
@@ -1487,7 +1386,6 @@ class Agent:
                 await self._napcat_send_group(group_id, msg_segs)
                 is_first = False
                 continue
-            # text chunk — split for typing simulation
             chunks = self._split_text(value)
             for chunk in chunks:
                 if not is_first:
@@ -1533,7 +1431,6 @@ class Agent:
         if not self.enabled:
             return
 
-        # Group-chat model (DeepSeek/OpenAI format).
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.post(
@@ -1551,7 +1448,6 @@ class Agent:
         except Exception as e:
             logger.warning("[Agent] group model probe failed: %s", e)
 
-        # Private-chat model (Anthropic-compatible endpoint).
         if self.anthropic_key:
             try:
                 import anthropic as _anthropic
@@ -1572,15 +1468,12 @@ class Agent:
     def _pick_group_model(self) -> str:
         """Pick primary or fallback model based on recent call frequency."""
         now = time.time()
-        # Drop entries outside the rate window.
         while self.model_calls and self.model_calls[0] < now - self.rate_window:
             self.model_calls.popleft()
 
-        # Still inside the fallback cooldown — keep using the fallback model.
         if self._fallback_until > now:
             return self.fallback_model
 
-        # Rate exceeded → trigger downgrade.
         if len(self.model_calls) >= self.rate_threshold:
             self._fallback_until = now + self.fallback_duration
             logger.warning(
@@ -1592,11 +1485,6 @@ class Agent:
 
         return self.model
 
-    # -------- Image OCR / vision --------
-    # Sticker-aware vision prompt: turn vision from "describe pixels" into "read meaning".
-    # ~80% of images in QQ groups are stickers (emotion symbols), so a naive describe
-    # would produce useless lines like "a shiba inu sitting at a desk". This prompt forces
-    # the model to give emotion/meme names, and still works on real photos.
     VISION_PROMPT = (
         "这张图大概率是 QQ 群里的**表情包**（约定俗成的情绪符号，不是照片）。\n"
         "**任务：说出它表达的情绪/梗，最多 20 字。**\n"
@@ -1644,8 +1532,6 @@ class Agent:
             if len(img_bytes) > 5_000_000:
                 logger.warning("[Agent] GLM image too large (%d bytes), skipping", len(img_bytes))
                 return ""
-            # MIME by magic bytes (no http response headers now that _fetch_image_bytes
-            # handles file:// too)
             if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
                 mime = "image/png"
             elif img_bytes[:3] == b"\xff\xd8\xff":
@@ -1732,9 +1618,7 @@ class Agent:
         if caption:
             return caption
 
-        # Fallback: NapCat OCR
         ocr_text = await self._ocr_image(url)
-        # Filter garbage: too short or fragmented single chars/symbols
         if ocr_text and len(ocr_text) >= 4:
             tokens = ocr_text.split()
             avg_token_len = sum(len(t) for t in tokens) / max(len(tokens), 1)
@@ -1776,7 +1660,6 @@ class Agent:
         logger.info("[Agent] OCR (%s): %s", url[:60], text[:60] or "(no text)")
         return text
 
-    # -------- Memory --------
     def _load_memories(self) -> dict:
         if not self.memory_file.exists():
             return {}
@@ -1832,7 +1715,6 @@ class Agent:
                     records.append(json.loads(ln))
                 except json.JSONDecodeError:
                     pass
-            # Only keep "better" rows where user provided a chosen alternative
             self._pairs_cache = [
                 r for r in records
                 if r.get("rating") == "better" and r.get("better") and r.get("reply")
@@ -1858,7 +1740,6 @@ class Agent:
         if not self._examples_cache and not self._pairs_cache:
             return ""
 
-        # Same ngram tokenization as _memories_for_prompt — consistent matching
         focus_lc = focus_text.lower()
         chinese_chars = re.findall(r"[一-鿿]", focus_lc)
         chinese_ngrams = {
@@ -1872,25 +1753,18 @@ class Agent:
             s = 0.0
             scenario_lc = ex.get("scenario", "").lower()
             ctx_lc = " ".join(ex.get("context", [])).lower()
-            # Scenario hit is high signal (curated tag)
             for tok in focus_tokens:
                 if tok in scenario_lc:
                     s += 1.0
                 if tok in ctx_lc:
                     s += 0.3
-            # Same-mode bonus (called/owner/followup/judge)
             if mode and ex.get("mode") == mode:
                 s += 0.5
-            # Mild recency tiebreaker: parse ts if present
             ts = ex.get("ts", "")
             if ts:
-                # newer entries get a small bump; use last 6 chars as quick proxy
-                s += len(ts) * 0.001  # all entries get ~0.02, breaks ties stably
+                s += len(ts) * 0.001
             return s
 
-        # Rank pairs (contrastive, stronger signal first). With no signal at
-        # all (judge mode, no focus), fall back to last-N rather than letting
-        # stable sort pick the *oldest* entries.
         have_signal = bool(focus_tokens or mode)
         if have_signal:
             pairs = sorted(self._pairs_cache, key=_score, reverse=True)[:limit_pairs]
@@ -1913,7 +1787,6 @@ class Agent:
                     f"[OK]  {p.get('better','')}"
                 )
 
-        # Dedupe + rank goods (same fallback rule)
         pair_chosen_set = {p.get("better", "") for p in pairs}
         candidates = [e for e in self._examples_cache if e.get("reply", "") not in pair_chosen_set]
         if have_signal:
@@ -1954,7 +1827,6 @@ class Agent:
                 "（等库里攒够了你就会爱上每条消息后面跟一张——但现在不行）\n"
                 "</sticker_guide>"
             )
-        # If we have an analyzed owner profile, embed it as the frequency target
         owner_pattern = self._owner_sticker_pattern_block()
         return (
             "\n\n<sticker_guide>\n"
@@ -2015,20 +1887,14 @@ class Agent:
         if not items:
             return ""
 
-        # user_ids currently present in the conversation (only their private memories get pulled in).
         present_uids = {
             m.get("user_id")
             for m in self.buffers.get(group_id, [])
             if m.get("user_id")
         }
-        # owner's memories are always considered present.
         if self.owner_qq:
             present_uids.add(self.owner_qq)
 
-        # Relevance scoring: 14-day linear recency decay + keyword overlap bonus.
-        # Tokenize Chinese via 2-char sliding ngrams (greedy match grabs whole runs
-        # which then fail substring lookup); ASCII via 3+ char words.
-        # No embeddings — keeps cold-path zero-dependency; good enough at this scale.
         now = time.time()
         focus_lc = focus_text.lower()
         chinese_chars = re.findall(r"[一-鿿]", focus_lc)
@@ -2058,8 +1924,6 @@ class Agent:
                 name = it.get("user_name") or uid
                 per_user[name].append(it)
 
-        # Top-K per bucket to bound token cost. Group-level wider since they
-        # apply to anyone; per-user narrower since each user may have many.
         group_level.sort(key=_score, reverse=True)
         group_level = group_level[:8]
         for name in list(per_user.keys()):
@@ -2070,7 +1934,6 @@ class Agent:
         if group_level:
             parts.append("群里记下的事：\n" + "\n".join(f"- {it['text']}" for it in group_level))
         for name, lst in per_user.items():
-            # Replace stored "我" (first person) with the speaker's name so the LLM reads unambiguously.
             texts = [re.sub(r"\b我\b", name, it["text"]) for it in lst]
             parts.append(f"关于 {name}：\n" + "\n".join(f"- {t}" for t in texts))
         if not parts:
@@ -2102,16 +1965,13 @@ class Agent:
 
     def _compute_chat_signals(self, group_id: str, history: list) -> dict:
         """Compute chat signals for prompt: topic heat / active count / time since bot spoke / topic type."""
-        # Active distinct users in recent window (excluding bot)
         active_count = len({
             m.get("user_id") for m in history
             if m.get("user_id") and m.get("user_id") != self.bot_qq
         })
 
-        # Topic heat: messages in last 30 entries treated as window
         heat = "热" if len(history) >= 15 else ("一般" if len(history) >= 5 else "冷清")
 
-        # Time since bot last spoke
         last = self.last_reply_at.get(group_id, 0.0)
         if last == 0:
             since = "很久没说话"
@@ -2124,7 +1984,6 @@ class Agent:
             else:
                 since = "10+ 分钟前"
 
-        # Topic type: heuristic on recent messages
         recent_text = " ".join(m.get("text", "") for m in history[-8:])
         if any(k in recent_text for k in ["bug", "代码", "报错", "需求", "deadline", "项目", "工作"]):
             ttype = "工作/技术"
@@ -2149,13 +2008,11 @@ class Agent:
         user_id: str = "",
         user_name: str = "",
     ) -> Optional[str]:
-        # Save: "<bot> 记住 XX" / "<bot> 记一下 XX" / "<bot> 记下 XX" — user-facing memory commands.
         m = re.search(rf"{self.bot_name}\s*[，,]?\s*记(?:住|一下|下)\s*[：:，,]?\s*(.+)", text)
         if m:
             content = m.group(1).strip()
             if not content:
                 return random.choice(["啊？记啥", "你说啊", "记啥呀，说嘛"])
-            # Bind memory to the speaker when it begins with "我..." or "自己...".
             bind_self = bool(re.match(r"^(?:我|自己)", content))
             item: dict = {"text": content[:200], "time": time.time()}
             if bind_self and user_id:
@@ -2169,7 +2026,6 @@ class Agent:
             self._save_memories()
             return random.choice(["嗯，记下了", "好的，记到小本本上了", "记住啦", "嗯嗯", "ok"])
 
-        # Delete: "<bot> 忘了 XX" / "<bot> 忘记 XX" / "<bot> 忘掉 XX".
         m = re.search(rf"{self.bot_name}\s*[，,]?\s*忘(?:了|记|掉)\s*[：:，,]?\s*(.+)", text)
         if m:
             query = m.group(1).strip()
@@ -2182,7 +2038,6 @@ class Agent:
             self._save_memories()
             return random.choice(["忘了", "好的，删了", "嗯，扔掉了", "拜拜"])
 
-        # List: "<bot> 记得什么" / "<bot> 记忆" / "<bot> 记得啥" / "<bot> 都记住了啥".
         if re.search(
             rf"{self.bot_name}\s*[，,]?\s*(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥)",
             text,
@@ -2224,7 +2079,6 @@ class Agent:
                 reply_inner = f"{reply_inner}\n{tail}" if reply_inner else tail
             return reply_inner, reasoning, intent
 
-        # <reply> open tag without close — take everything after </reasoning> (or <intent>)
         anchor_end = max(
             reasoning_m.end() if reasoning_m else -1,
             intent_m.end() if intent_m else -1,
@@ -2235,20 +2089,17 @@ class Agent:
             after = re.sub(r'\s*<\s*/\s*reply\s*>\s*$', '', after, flags=re.IGNORECASE)
             return after, reasoning, intent
 
-        # No protocol followed at all — treat the whole thing as reply (back-compat).
         return raw.strip(), "", intent
 
     def _split_reply_and_mem(self, raw: str) -> tuple[str, Optional[str]]:
         """Extract the MEM line from the LLM output; the rest is treated as the reply."""
         if not raw:
             return "", None
-        # Match a standalone MEM:... or MEM：... line.
         mem_match = re.search(r"(?:^|\n)\s*MEM\s*[:：]\s*(.+?)\s*$", raw, re.DOTALL)
         if not mem_match:
             return raw.strip(), None
         mem = mem_match.group(1).strip()
         reply = raw[: mem_match.start()].strip()
-        # Drop sentinel values the LLM may echo back from the prompt's placeholder examples.
         if mem.lower() in {"无", "none", "n/a", ""}:
             mem = ""
         return reply, mem or None
@@ -2258,12 +2109,9 @@ class Agent:
         if not text:
             return
         items = self.memories.setdefault(group_id, [])
-        # Simple dedupe: skip if the same text already exists.
         if any(it["text"] == text for it in items):
             return
         item: dict = {"text": text, "time": time.time(), "auto": True}
-        # Auto-tag subject by scanning text for known speaker names — lets
-        # per-user retrieval find this entry when subject speaks again.
         name_to_uid: dict[str, str] = {}
         for m in self.buffers.get(group_id, []):
             nm = m.get("name", "")

@@ -1,4 +1,4 @@
-"""QQ-group persona agent — FastAPI HTTP layer. Receives NapCat webhooks and dispatches to agent.handle()."""
+"""FastAPI HTTP layer for the QQ persona agent."""
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +57,6 @@ logger = logging.getLogger("bot")
 
 agent: Optional[Agent] = None
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent
@@ -97,14 +96,11 @@ async def lifespan(app: FastAPI):
     logger.info("bot started on %s:%d (agent=%s)", HOST, PORT, agent.enabled if agent else False)
     yield
 
-
 app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
-
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "agent_enabled": bool(agent and agent.enabled)}
-
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
@@ -113,10 +109,8 @@ async def qq_webhook(request: Request):
     except Exception:
         payload = {}
     if agent:
-        # Non-blocking: don't make NapCat wait for LLM round-trip
         asyncio.create_task(agent.handle(payload))
     return {"ok": True}
-
 
 if __name__ == "__main__":
     import uvicorn

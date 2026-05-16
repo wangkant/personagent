@@ -1,13 +1,4 @@
-"""StickerLibrary — auto-steal + auto-learn sticker module.
-
-- Incoming images are md5-deduped on insert, so the same sticker is never stored twice.
-- Each entry records seen_contexts (surrounding chat lines + sender); once
-  MIN_CONTEXTS_TO_TAG samples accumulate, async LLM tagging fires.
-- The model picks stickers via [STICKER:<tag>] markers in its reply.
-- Private chats never steal; the bot's own outgoing images never steal; when
-  the library exceeds MAX_STICKERS, the bottom 10% by
-  (auto_tagged, use_count, first_seen) is evicted.
-"""
+"""Sticker library: md5-deduped store with auto-tagging."""
 from __future__ import annotations
 
 import asyncio
@@ -24,9 +15,8 @@ logger = logging.getLogger("agent.stickers")
 
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
-MIN_CONTEXTS_TO_TAG = 2  # cold start friendly; live obs will refine over time
-RECENT_USE_COOLDOWN_SEC = 300  # don't repeat the same sticker within 5 minutes (avoids spam under heavy use)
-
+MIN_CONTEXTS_TO_TAG = 2
+RECENT_USE_COOLDOWN_SEC = 300
 
 class StickerLibrary:
     def __init__(
@@ -52,7 +42,6 @@ class StickerLibrary:
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
 
-    # ------------ Persistence ------------
     def _load(self) -> dict:
         if not self.file.exists():
             return {}
@@ -85,7 +74,6 @@ class StickerLibrary:
         except Exception:
             pass
 
-    # ------------ Lookup ------------
     def lookup_by_md5(self, md5: str) -> Optional[dict]:
         if not md5:
             return None
@@ -107,7 +95,6 @@ class StickerLibrary:
         m = re.match(r"^([a-fA-F0-9]{32})\.", file_field or "")
         return m.group(1).lower() if m else ""
 
-    # ------------ Steal ------------
     async def steal(
         self,
         image_bytes: bytes,
@@ -122,21 +109,18 @@ class StickerLibrary:
         if not image_bytes or len(image_bytes) < 200:
             return None
         if len(image_bytes) > 800_000:
-            # Likely a real photo, not a sticker — don't steal
             return None
 
         md5 = hashlib.md5(image_bytes).hexdigest()
         existing_filename = self._md5_index.get(md5)
 
         if existing_filename:
-            # Already in library, just record another context sample
             self._append_context(existing_filename, src_user, context_before)
             entry = self.entries.get(existing_filename, {})
             entry["use_count"] = entry.get("use_count", 0) + 1
             self._save()
             return md5
 
-        # New sticker
         if len(self.entries) >= MAX_STICKERS:
             self._evict_least_used()
 
@@ -183,7 +167,7 @@ class StickerLibrary:
         ctxs.append({
             "ts": time.time(),
             "sender": src_user,
-            "before": context_before[-5:],  # last 5 lines for context
+            "before": context_before[-5:],
         })
         if len(ctxs) > MAX_CONTEXTS_PER_STICKER:
             entry["seen_contexts"] = ctxs[-MAX_CONTEXTS_PER_STICKER:]
@@ -207,7 +191,7 @@ class StickerLibrary:
         ranked = sorted(
             self.entries.items(),
             key=lambda kv: (
-                kv[1].get("auto_tagged", False),  # untagged first
+                kv[1].get("auto_tagged", False),
                 kv[1].get("use_count", 0),
                 kv[1].get("first_seen", 0),
             ),
@@ -223,7 +207,6 @@ class StickerLibrary:
                     pass
         logger.info("[stickers] evicted %d entries", cut)
 
-    # ------------ Auto-tagging ------------
     async def maybe_tag(self, md5: str) -> None:
         """If sticker has enough contexts and isn't tagged, kick off LLM tagging.
         Fire-and-forget; safe to call from anywhere."""
@@ -290,7 +273,6 @@ class StickerLibrary:
         finally:
             self._tagging_inflight.discard(filename)
 
-    # ------------ Selection (for sending) ------------
     def available_tags_summary(self, limit: int = 20) -> str:
         """Prompt-friendly listing of available tagged stickers, ranked by use_count.
         Returns "" if no tagged stickers yet (so prompt skips the [STICKER:] guide)."""
@@ -302,7 +284,6 @@ class StickerLibrary:
             return ""
         tagged.sort(key=lambda kv: kv[1].get("use_count", 0), reverse=True)
         top = tagged[:limit]
-        # Distinct tags only, with one meaning hint per tag
         seen_tags: dict[str, str] = {}
         for _, v in top:
             for t in v.get("tags", []):
@@ -325,7 +306,6 @@ class StickerLibrary:
                 continue
             if v.get("md5", "") in exclude:
                 continue
-            # Cooldown: avoid spamming the same sticker
             last = self._last_used.get(filename, 0)
             if now - last < RECENT_USE_COOLDOWN_SEC:
                 continue
@@ -341,9 +321,7 @@ class StickerLibrary:
             meaning_lc = (v.get("meaning") or "").lower()
             if tag_lc and tag_lc in meaning_lc:
                 score += 1.0
-            # Use-count tiebreak (popular > rare, small weight)
             score += min(v.get("use_count", 0), 20) * 0.02
-            # Random jitter to break ties between equally-good stickers
             score += random.uniform(0, 0.1)
             if score > best_score:
                 best_score = score
@@ -354,7 +332,6 @@ class StickerLibrary:
         entry = self.entries.get(best_filename)
         if entry:
             entry["use_count"] = entry.get("use_count", 0) + 1
-            # No save here — _save costs disk; let next steal/tag flush it
         return self.dir / best_filename
 
     async def bootstrap_tag_all(self) -> int:
@@ -374,7 +351,7 @@ class StickerLibrary:
         logger.info("[stickers] bootstrap: tagging %d pending entries", len(pending))
         for md5 in pending:
             await self.maybe_tag(md5)
-            await asyncio.sleep(0.4)  # gentle pace on tagger API
+            await asyncio.sleep(0.4)
         return len(pending)
 
     def stats(self) -> dict:
