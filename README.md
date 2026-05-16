@@ -80,7 +80,7 @@ observe failure
   ↓
 locate which block owns it (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES)
   ↓
-add a hard constraint with a 反例 example next to similar rules
+add a hard constraint with a counter-example next to similar rules
   ↓
 write a BAD/OK pair into feedback.jsonl
   ↓
