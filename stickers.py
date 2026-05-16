@@ -16,7 +16,7 @@ logger = logging.getLogger("agent.stickers")
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
-RECENT_USE_COOLDOWN_SEC = 300
+RECENT_USE_COOLDOWN_SEC = 90
 
 class StickerLibrary:
     def __init__(
@@ -292,11 +292,44 @@ class StickerLibrary:
         lines = [f"  {tag}（{meaning}）" for tag, meaning in seen_tags.items()]
         return "\n".join(lines)
 
+    _SYNONYMS = {
+        "无奈": {"无奈", "翻白眼", "没办法", "醉了", "无语", "叹气", "服了"},
+        "翻白眼": {"翻白眼", "无奈", "无语", "没办法"},
+        "懒得理": {"懒得", "无语", "翻白眼", "无奈", "敷衍"},
+        "懒得": {"懒得", "无语", "翻白眼", "无奈"},
+        "敷衍": {"敷衍", "无语", "懒得"},
+        "doge": {"doge", "嘲讽", "笑", "挑衅"},
+        "嘲讽": {"嘲讽", "doge", "挑衅", "笑"},
+        "挑衅": {"挑衅", "嘲讽", "doge"},
+        "笑": {"笑", "doge", "绷不住", "嘲讽"},
+        "绷不住": {"绷不住", "笑"},
+        "抱抱": {"抱抱", "求安慰", "委屈"},
+        "委屈": {"委屈", "抱抱", "心疼"},
+        "心疼": {"心疼", "委屈", "抱抱"},
+        "震惊": {"震惊", "卧槽", "牛", "绝"},
+        "牛": {"牛", "震惊", "绝", "膜拜"},
+        "绝": {"绝", "牛", "震惊"},
+        "玩梗": {"玩梗", "doge", "嘲讽", "笑"},
+        "共鸣": {"共鸣", "确实", "无奈", "我也"},
+    }
+
+    @classmethod
+    def _expand_tag(cls, tag_lc: str) -> set[str]:
+        out = {tag_lc}
+        if tag_lc in cls._SYNONYMS:
+            out |= cls._SYNONYMS[tag_lc]
+        if len(tag_lc) >= 2:
+            out.add(tag_lc[:2])
+        return out
+
     def pick_by_tag(self, tag: str, exclude_md5s: set | None = None) -> Optional[Path]:
-        """Fuzzy match a tag to best sticker. Returns absolute file Path or None."""
+        """Fuzzy match a tag to best sticker. Matches across library tags, meaning,
+        and a synonym table so common emotion-name tags hit even when library
+        entries use related-but-different wording."""
         if not tag:
             return None
         tag_lc = tag.lower().strip()
+        probes = self._expand_tag(tag_lc)
         exclude = exclude_md5s or set()
         now = time.time()
         best_filename = None
@@ -310,17 +343,20 @@ class StickerLibrary:
             if now - last < RECENT_USE_COOLDOWN_SEC:
                 continue
             score = 0.0
-            for st_tag in v.get("tags", []):
-                st_lc = (st_tag or "").lower()
-                if not st_lc:
-                    continue
-                if tag_lc == st_lc:
-                    score += 3.0
-                elif tag_lc in st_lc or st_lc in tag_lc:
-                    score += 1.5
+            entry_tags_lc = [((t or "").lower()) for t in v.get("tags", []) if t]
             meaning_lc = (v.get("meaning") or "").lower()
-            if tag_lc and tag_lc in meaning_lc:
-                score += 1.0
+            if tag_lc in entry_tags_lc:
+                score += 3.0
+            for probe in probes:
+                if not probe:
+                    continue
+                for et in entry_tags_lc:
+                    if probe == et:
+                        score += 2.0
+                    elif probe in et or et in probe:
+                        score += 1.2
+                if probe in meaning_lc:
+                    score += 1.0
             score += min(v.get("use_count", 0), 20) * 0.02
             score += random.uniform(0, 0.1)
             if score > best_score:
