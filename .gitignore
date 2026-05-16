@@ -1,0 +1,38 @@
+# Secrets / local config
+.env
+.env.local
+.env.*.local
+
+# Persona (user-specific)
+persona.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Runtime / scraped data (PII: QQ numbers, group IDs, chat snippets)
+eval.jsonl
+memory.json
+candidates.jsonl
+unknown_stickers.jsonl
+owner_profile.json
+stickers.json
+stickers/auto/
+stickers/manual/
+
+# Logs
+*.log
+logs/
