@@ -4,7 +4,8 @@
 
 A template for building a **persona-driven LLM agent on QQ groups** — designed to send messages that read like a real person rather than a customer-service bot.
 
-> **Read [DISCLAIMER.md](DISCLAIMER.md) before deploying.** Third-party QQ protocol clients are unsanctioned by Tencent; use a secondary account and run from a residential IP.
+> **Educational / research project. Not affiliated with, endorsed by, or sponsored by Tencent.**
+> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party QQ protocol clients are unsanctioned by Tencent; use a secondary account and run from a residential IP.
 
 ## What's in the box
 

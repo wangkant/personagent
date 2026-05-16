@@ -137,7 +137,7 @@ def cmd_show_examples(examples: list):
         print(f"{bold(f'[{i}]')} {cyan(e.get('scenario','?'))}")
         for line in e.get("context", []):
             print(f"  {dim(line)}")
-        print(f"  {green('回复:')} {e.get('reply','')}\n")
+        print(f"  {green('reply:')} {e.get('reply','')}\n")
 
 
 async def cmd_run(fixtures: list, ids_filter: list | None = None):
@@ -194,7 +194,7 @@ async def cmd_run(fixtures: list, ids_filter: list | None = None):
         }
 
         if choice == "B":
-            better = input(f"  {yellow('期望的回复:')} ").strip()
+            better = input(f"  {yellow('better reply:')} ").strip()
             if not better:
                 print(f"  {dim('empty, skipped')}")
                 continue
@@ -232,7 +232,7 @@ def cmd_add() -> dict | None:
     fid = f"f{int(time.time()) % 1000000:06d}"
     context = []
     while True:
-        line = input(f"context [{len(context)+1}] (e.g. '小李: 你好', empty to finish): ").strip()
+        line = input(f"context [{len(context)+1}] (e.g. 'Alice: hi', empty to finish): ").strip()
         if not line:
             break
         if ":" not in line:

@@ -1,12 +1,13 @@
-"""tools/import_stickers_folder.py — 批量把文件夹里的图片导入 sticker 库 + 立刻打 tag。
+"""tools/import_stickers_folder.py — bulk-import images from a folder into the sticker library and tag them immediately.
 
-不依赖群上下文,直接 OCR 文字 + GLM-4V vision 推语义打 tag,适合 cold start。
+Does not need group context: OCR + vision model infer semantics directly,
+which makes this good for cold-starting the library.
 
 Usage:
     python tools/import_stickers_folder.py <src_folder>
     python tools/import_stickers_folder.py "<your sticker folder>"
-    python tools/import_stickers_folder.py --limit 50 <src_folder>     # 只导前 N 张
-    python tools/import_stickers_folder.py --no-tag <src_folder>       # 只复制不 tag
+    python tools/import_stickers_folder.py --limit 50 <src_folder>     # import first N only
+    python tools/import_stickers_folder.py --no-tag <src_folder>       # copy without tagging
 """
 from __future__ import annotations
 
@@ -112,7 +113,7 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
             return None
         meaning = (parsed.get("meaning") or "").strip()[:50]
         tags = [str(t).strip()[:20] for t in (parsed.get("tags") or []) if t][:6]
-        if not meaning or meaning == "看不到" or not tags:
+        if not meaning or meaning == "看不到" or not tags:  # "看不到" is the prompt's blank-output sentinel
             return None
         return {"meaning": meaning, "tags": tags}
     except Exception as e:
@@ -122,14 +123,14 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
 
 async def main():
     p = argparse.ArgumentParser()
-    p.add_argument("src", help="源图片文件夹")
-    p.add_argument("--limit", type=int, default=0, help="只导前 N 张 (0=全部)")
-    p.add_argument("--no-tag", action="store_true", help="只复制，不打 tag")
+    p.add_argument("src", help="source image folder")
+    p.add_argument("--limit", type=int, default=0, help="import first N only (0 = all)")
+    p.add_argument("--no-tag", action="store_true", help="copy only; skip tagging")
     args = p.parse_args()
 
     src = Path(args.src)
     if not src.is_dir():
-        logger.error("不是文件夹: %s", src)
+        logger.error("not a directory: %s", src)
         return 1
 
     # Load existing library
@@ -144,10 +145,10 @@ async def main():
     files = sorted([p for p in src.iterdir() if p.is_file()])
     if args.limit:
         files = files[:args.limit]
-    logger.info("源文件夹 %s: %d 张", src.name, len(files))
+    logger.info("source %s: %d files", src.name, len(files))
 
     if not args.no_tag and not GLM_API_KEY:
-        logger.error("GLM_API_KEY 未配置,无法 tag。用 --no-tag 跳过 tagging 或先配 .env")
+        logger.error("GLM_API_KEY not configured; cannot tag. Use --no-tag or fill in .env first")
         return 1
 
     new_count = 0
@@ -205,7 +206,7 @@ async def main():
                                 i + 1, len(files), md5[:8],
                                 tagged["meaning"], tagged["tags"])
                 else:
-                    logger.info("[%d/%d] %s: 入库未 tag",
+                    logger.info("[%d/%d] %s: imported (untagged)",
                                 i + 1, len(files), md5[:8])
 
             # Save every 20 stickers to avoid losing progress
@@ -219,7 +220,7 @@ async def main():
         json.dumps(entries, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    logger.info("完成: 新增 %d, 已 tag %d, 重复跳过 %d, 不支持 %d, 库总量 %d",
+    logger.info("done: %d new, %d tagged, %d dup skipped, %d unsupported, %d total in library",
                 new_count, tagged_count, skipped_dup, skipped_unsupported, len(entries))
     return 0
 

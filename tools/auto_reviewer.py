@@ -1,19 +1,22 @@
-"""tools/auto_reviewer.py — eval 低分自动诊断 + feedback 草稿生成
+"""tools/auto_reviewer.py — auto-diagnose low-score eval entries; draft feedback patches.
 
-把 Hermes 闭环的"看 eval 低分 → 想该加什么约束 → 写 BAD/OK 配对"这步半自动化。
+Semi-automates the Hermes loop step "read low eval scores -> figure out
+what constraint to add -> write a BAD/OK pair".
 
 Workflow:
     python tools/auto_reviewer.py [--threshold 3] [--limit 20] [--dry-run]
 
-读 eval.jsonl, 找 score ≤ threshold 的回复, 让 reviewer LLM 输出:
-    1. 失败模式分类 (2-6 字标签)
-    2. 一句话诊断 (具体哪儿不像真人)
-    3. 建议补到哪个 tag (style / reasoning / intent_rules)
-    4. 具体一行负向约束 (按 STYLE_GUIDE 错『...』对『...』格式)
-    5. BAD/OK pair 草稿 (准备加进 feedback.jsonl)
+Reads eval.jsonl, finds replies with score <= threshold, asks the reviewer
+LLM to output:
+    1. failure_mode  (a 2-6 char tag)
+    2. bad_diagnosis (one-line: exactly what reads as AI-flavored)
+    3. tag_to_patch  (style / reasoning / intent_rules)
+    4. constraint_to_add (one negative rule, written like STYLE_GUIDE's BAD/OK)
+    5. pair_draft    (a BAD/OK pair ready to drop into feedback.jsonl)
 
-输出到 candidates.jsonl, 人工 review 后把 approved 行复制进 feedback.jsonl。
-Idempotent: 同一条 eval 不会重复诊断。
+Output goes to candidates.jsonl; after human review, copy approved rows
+into feedback.jsonl.
+Idempotent: the same eval entry is never reviewed twice.
 """
 from __future__ import annotations
 
@@ -138,15 +141,15 @@ async def review_one(client: anthropic.AsyncAnthropic, ev: dict) -> dict | None:
 async def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--threshold", type=int, default=3,
-                   help="score <= threshold 的算低分 (default 3)")
+                   help="treat score <= threshold as a low-score entry (default 3)")
     p.add_argument("--limit", type=int, default=20,
-                   help="单次最多诊断多少条 (default 20)")
+                   help="max entries to review per run (default 20)")
     p.add_argument("--dry-run", action="store_true",
-                   help="只打印不写文件")
+                   help="print only, do not write candidates.jsonl")
     args = p.parse_args()
 
     if not ANTHROPIC_API_KEY:
-        logger.error("ANTHROPIC_API_KEY 未配置，无法调 reviewer")
+        logger.error("ANTHROPIC_API_KEY not configured; cannot call reviewer")
         return 1
 
     evals = load_evals(EVAL_FILE, args.threshold)
@@ -154,7 +157,7 @@ async def main() -> int:
     pending = [e for e in evals if e.get("ts") not in seen][: args.limit]
 
     logger.info(
-        "eval 低分 (score≤%d): %d 条；已诊断: %d；本轮处理: %d；reviewer=%s",
+        "low-score evals (score<=%d): %d; already reviewed: %d; this run: %d; reviewer=%s",
         args.threshold, len(evals), len(seen), len(pending), REVIEWER_MODEL,
     )
     if not pending:
@@ -195,7 +198,7 @@ async def main() -> int:
             fh.close()
 
     logger.info(
-        "完成: %d/%d 条已写入 %s",
+        "done: %d/%d written to %s",
         written, len(pending),
         "stdout (dry-run)" if args.dry_run else CANDIDATES_FILE.name,
     )

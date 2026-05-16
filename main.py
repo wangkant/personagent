@@ -1,4 +1,4 @@
-"""QQ 群 persona agent —— FastAPI HTTP 层。接 NapCat webhook，分发到 agent.handle()。"""
+"""QQ-group persona agent — FastAPI HTTP layer. Receives NapCat webhooks and dispatches to agent.handle()."""
 from __future__ import annotations
 
 import asyncio

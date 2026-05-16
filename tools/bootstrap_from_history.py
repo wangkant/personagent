@@ -1,14 +1,15 @@
-"""tools/bootstrap_from_history.py — 从 NapCat 群历史一次性 bootstrap 表情包库 + owner 频率画像。
+"""tools/bootstrap_from_history.py — one-shot bootstrap from NapCat group history.
 
-两件事:
-  1) owner_profile.json: owner 发表情包的频率 / 文字长度分布 / top 表情包
-  2) 把历史里出现过的所有 sub_type=1 表情包下载到 stickers/auto/<md5>.<ext>,
-     连带捕捉前后消息作为 seen_contexts(StickerLibrary 攒够 MIN_CONTEXTS_TO_TAG 后异步 tag)
+Does two things:
+  1) owner_profile.json: owner's sticker-send rate, text-length distribution, top stickers
+  2) Downloads every sub_type=1 sticker seen in history to stickers/auto/<md5>.<ext>,
+     capturing surrounding messages as seen_contexts (StickerLibrary tags them
+     asynchronously once it has MIN_CONTEXTS_TO_TAG samples).
 
 Usage:
-    python tools/bootstrap_from_history.py             # 双 bootstrap, 默认拉 2000 条
-    python tools/bootstrap_from_history.py --no-stickers  # 只算 profile
-    python tools/bootstrap_from_history.py --limit 500    # 拉少点
+    python tools/bootstrap_from_history.py             # both, default 2000 msgs per group
+    python tools/bootstrap_from_history.py --no-stickers  # profile only
+    python tools/bootstrap_from_history.py --limit 500    # pull fewer messages
 """
 from __future__ import annotations
 
@@ -315,33 +316,33 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
 async def main():
     p = argparse.ArgumentParser()
     p.add_argument("--limit", type=int, default=2000,
-                   help="单群拉多少条历史 (default 2000)")
+                   help="messages to pull per group (default 2000)")
     p.add_argument("--group", default="",
-                   help="只处理指定群; 默认 QQ_GROUPS")
+                   help="only process this group; defaults to QQ_GROUPS")
     p.add_argument("--no-stickers", action="store_true",
-                   help="只算 owner profile, 不下载表情包")
+                   help="compute owner profile only, skip sticker download")
     p.add_argument("--no-profile", action="store_true",
-                   help="只下载表情包, 不算 profile")
+                   help="download stickers only, skip profile")
     args = p.parse_args()
 
     if not OWNER_QQ:
-        logger.error("OWNER_QQ 未配置")
+        logger.error("OWNER_QQ not configured")
         return 1
     groups = [args.group] if args.group else QQ_GROUPS
     if not groups:
-        logger.error("无 QQ_GROUPS 配置")
+        logger.error("QQ_GROUPS not configured")
         return 1
 
     all_messages: list[dict] = []
     for gid in groups:
-        logger.info("拉群 %s 历史 (上限 %d 条)...", gid, args.limit)
+        logger.info("pulling history for group %s (limit %d)...", gid, args.limit)
         msgs = await pull_history(gid, args.limit)
-        logger.info("  %d 条消息", len(msgs))
+        logger.info("  %d messages", len(msgs))
         all_messages.extend(msgs)
 
     classified = [classify_message(m) for m in all_messages]
     owner_count = sum(1 for c in classified if c["user_id"] == OWNER_QQ)
-    logger.info("总计 %d 条消息，其中 owner (%s) %d 条", len(classified), OWNER_QQ, owner_count)
+    logger.info("total %d messages, of which owner (%s) sent %d", len(classified), OWNER_QQ, owner_count)
 
     if not args.no_profile:
         profile = compute_owner_profile(classified)
@@ -349,20 +350,20 @@ async def main():
             json.dumps(profile, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        logger.info("owner profile 写入 %s", OWNER_PROFILE.name)
+        logger.info("owner profile written to %s", OWNER_PROFILE.name)
         if profile.get("total_msgs", 0):
-            logger.info("  发图率: %.1f%% (每 %d 条 1 张)",
+            logger.info("  image rate: %.1f%% (1 image per %d msgs)",
                         profile["ratio_image"] * 100,
                         round(profile["total_msgs"] / max(profile["msgs_with_image"], 1)))
-            logger.info("  只发图比例: %.1f%%", profile["ratio_sticker_only"] * 100)
-            logger.info("  文字平均长度（不带图/带图）: %.0f / %.0f",
+            logger.info("  image-only ratio: %.1f%%", profile["ratio_sticker_only"] * 100)
+            logger.info("  avg text length (no-image / with-image): %.0f / %.0f",
                         profile["avg_text_len_no_sticker"],
                         profile["avg_text_len_with_sticker"])
 
     if not args.no_stickers:
-        logger.info("开始下载表情包...")
+        logger.info("downloading stickers...")
         result = await seed_stickers(all_messages, classified)
-        logger.info("种子完成: 新增 %d 张, 上下文样本 %d, 已有 md5 命中 %d, 总库 %d",
+        logger.info("seeding done: %d new, %d context samples, %d md5 hits, %d total",
                     result["new_stickers"], result["contexts_recorded"],
                     result["existing_md5_hits"], result["total_stickers_now"])
 

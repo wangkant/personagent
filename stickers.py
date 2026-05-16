@@ -1,9 +1,12 @@
-"""StickerLibrary — 自动偷 + 自动学的表情包模块。
+"""StickerLibrary — auto-steal + auto-learn sticker module.
 
-- 收图按 md5 去重入库，不会重复存
-- 每张表情包记 seen_contexts（前后聊天 + 发的人），攒够 MIN_CONTEXTS_TO_TAG 条触发异步 LLM tagging
-- 模型用 [STICKER:<tag>] 让 agent 按意图选 tag 发图
-- 私聊不偷、bot 自己发的不偷、超 MAX_STICKERS 张按 (auto_tagged, use_count, first_seen) 淘汰底部 10%
+- Incoming images are md5-deduped on insert, so the same sticker is never stored twice.
+- Each entry records seen_contexts (surrounding chat lines + sender); once
+  MIN_CONTEXTS_TO_TAG samples accumulate, async LLM tagging fires.
+- The model picks stickers via [STICKER:<tag>] markers in its reply.
+- Private chats never steal; the bot's own outgoing images never steal; when
+  the library exceeds MAX_STICKERS, the bottom 10% by
+  (auto_tagged, use_count, first_seen) is evicted.
 """
 from __future__ import annotations
 
@@ -22,7 +25,7 @@ logger = logging.getLogger("agent.stickers")
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2  # cold start friendly; live obs will refine over time
-RECENT_USE_COOLDOWN_SEC = 300  # 5 分钟内不复发同一张（trailing 模式下库会被频繁动用）
+RECENT_USE_COOLDOWN_SEC = 300  # don't repeat the same sticker within 5 minutes (avoids spam under heavy use)
 
 
 class StickerLibrary:
