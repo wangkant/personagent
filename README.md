@@ -41,6 +41,8 @@ python main.py
 
 You should see `bot started on 0.0.0.0:8080 (agent=True)`.
 
+> Optional: `launch.vbs` in the repo root is a one-click Windows launcher that starts NapCat and the agent in two minimized windows. Edit the three paths/QQ at the top before using.
+
 Configure your NapCat / OneBot client to POST events to `http://127.0.0.1:8080/webhook/qq`:
 
 ```json

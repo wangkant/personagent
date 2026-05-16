@@ -41,6 +41,8 @@ python main.py
 
 看到 `bot started on 0.0.0.0:8080 (agent=True)` 就是起来了。
 
+> 可选：仓库根目录的 `launch.vbs` 是 Windows 一键启动器，会把 NapCat 和 agent 各起一个最小化窗口。用之前先改顶上三个变量（QQ 号 + 两个路径）。
+
 NapCat / OneBot 客户端这边把 webhook 指过来：
 
 ```json
