@@ -569,6 +569,27 @@ class Agent:
             if not reply:
                 return False
 
+            # Full post-processing chain — mirror group handle() so protocol
+            # markers ([CORE_UPDATE]/MEM:) and AI-tell regex don't leak as text.
+            # Namespace core_memory/auto_memory under "private:{user_id}" so
+            # private chat memory doesn't collide with group keys.
+            pkey = f"private:{user_id}"
+            reply, auto_mem = self._split_reply_and_mem(reply)
+            reply = self._try_update_core_memory(pkey, reply)
+            filtered, blocked = self._apply_output_filter(reply)
+            if blocked:
+                logger.warning("[Agent] output_filter blocked (private user=%s): %s | original=%s",
+                               user_id, blocked, reply[:120])
+                return False
+            reply = filtered
+
+            if auto_mem:
+                self._save_auto_memory(pkey, auto_mem)
+
+            if not reply or reply.strip().upper().startswith("PASS"):
+                logger.info("[Agent] PASS (private user=%s)", user_id)
+                return False
+
             history.append({"role": "assistant", "content": reply})
             await self._send_private_qq(user_id, reply)
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
