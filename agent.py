@@ -601,24 +601,44 @@ class Agent:
                         intent or "?", reasoning.replace("\n", " | ")[:240])
         return reply
 
+    async def _napcat_send_private(self, user_id: str, message) -> None:
+        """Single-shot private send. message: str or list of segments."""
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.post(
+                    f"{self.napcat_api}/send_private_msg",
+                    json={"user_id": int(user_id), "message": message},
+                )
+                if r.status_code != 200:
+                    logger.warning("[Agent] NapCat private %d: %s", r.status_code, r.text[:200])
+        except Exception as e:
+            logger.warning("[Agent] send private msg failed: %s", e)
+
     async def _send_private_qq(self, user_id: str, text: str) -> None:
         text = self._sanitize_reply(text)
         if not text:
             return
-        try:
-            chunks = self._split_text(text)
-            for i, chunk in enumerate(chunks):
-                if i > 0:
-                    await asyncio.sleep(self._typing_delay(chunk))
-                async with httpx.AsyncClient(timeout=10) as client:
-                    r = await client.post(
-                        f"{self.napcat_api}/send_private_msg",
-                        json={"user_id": int(user_id), "message": chunk},
-                    )
-                    if r.status_code != 200:
-                        logger.warning("[Agent] NapCat private reply %d: %s", r.status_code, r.text[:200])
-        except Exception as e:
-            logger.warning("[Agent] send private msg failed: %s", e)
+        segments = self._parse_sticker_markers(text)
+        for kind, value in segments:
+            if kind == "sticker":
+                file_path = self.stickers.pick_by_tag(value)
+                if not file_path or not file_path.exists():
+                    logger.info("[Agent] sticker tag %r → no match, skipping (private)", value)
+                    continue
+                await asyncio.sleep(random.uniform(0.6, 1.4))
+                try:
+                    img_b64 = base64.b64encode(file_path.read_bytes()).decode()
+                except Exception as e:
+                    logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
+                    continue
+                msg = [{"type": "image", "data": {"file": f"base64://{img_b64}"}}]
+                await self._napcat_send_private(user_id, msg)
+                continue
+            # text chunk — split for typing simulation
+            chunks = self._split_text(value)
+            for chunk in chunks:
+                await asyncio.sleep(self._typing_delay(chunk))
+                await self._napcat_send_private(user_id, chunk)
 
     async def _extract_text(self, payload: dict) -> str:
         parts: list[str] = []
