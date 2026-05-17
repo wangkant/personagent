@@ -167,6 +167,17 @@ INTENT_RULES = (
     "</intent_rules>"
 )
 
+
+# Layer B/C: natural-rhythm pacing for spontaneous (non-@) reply paths.
+# Sleep window suppresses most spontaneous replies at night so the bot isn't
+# 24/7 online. Sub-trigger pass simulates "saw it, didn't feel like replying".
+# Both only apply to judge/followup; called/owner always go through.
+SLEEP_HOUR_START = 2          # 02:00 (inclusive)
+SLEEP_HOUR_END = 7            # 07:00 (exclusive)
+SLEEP_PASS_PROB = 0.70        # 70% PASS rate during sleep hours
+SUB_TRIGGER_PASS_PROB = 0.12  # 12% spontaneous skip on judge-mode triggers
+
+
 class Agent:
     def __init__(
         self,
@@ -447,6 +458,17 @@ class Agent:
 
             self.counters[group_id] = 0
             self._sticky_call.pop(group_id, None)
+
+            # Layer B/C: natural-rhythm gates for spontaneous reply paths.
+            # called/owner = explicit ask, always reply; followup/judge subject to pacing.
+            if mode in ("judge", "followup"):
+                if self._is_sleep_hour() and random.random() < SLEEP_PASS_PROB:
+                    logger.info("[Agent] PASS via sleep window (mode=%s, hour=%d, group=%s)",
+                                mode, time.localtime().tm_hour, group_id)
+                    return False
+                if mode == "judge" and random.random() < SUB_TRIGGER_PASS_PROB:
+                    logger.info("[Agent] PASS via spontaneous skip (mode=judge, group=%s)", group_id)
+                    return False
 
             try:
                 reply = await self._think(group_id, mode, text, caller_override=caller_override)
@@ -1446,6 +1468,15 @@ class Agent:
         return min(base + pause, 7.0)
 
     @staticmethod
+    def _is_sleep_hour() -> bool:
+        """True if current local hour falls in the sleep window (default 02:00-07:00).
+        Handles wraparound for future config changes."""
+        h = time.localtime().tm_hour
+        if SLEEP_HOUR_START <= SLEEP_HOUR_END:
+            return SLEEP_HOUR_START <= h < SLEEP_HOUR_END
+        return h >= SLEEP_HOUR_START or h < SLEEP_HOUR_END
+
+    @staticmethod
     def _parse_sticker_markers(text: str) -> list[tuple[str, str]]:
         """Split on [STICKER:tag] markers. Returns ordered (kind, value) where
         kind is 'text' or 'sticker'. Empty text segments dropped. Used by
@@ -1509,8 +1540,10 @@ class Agent:
                 continue
             chunks = self._split_text(value)
             for chunk in chunks:
-                if not is_first:
-                    await asyncio.sleep(self._typing_delay(chunk))
+                # Delay before every chunk including the first — feels like typing
+                # rather than instant emit. Already had debounce + _think latency
+                # upstream, so an extra ~1-3s on first chunk reads natural.
+                await asyncio.sleep(self._typing_delay(chunk))
                 if is_first and at_user_id:
                     message = [
                         {"type": "at", "data": {"qq": str(at_user_id)}},
