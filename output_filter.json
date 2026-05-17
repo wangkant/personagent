@@ -61,6 +61,12 @@
       "pattern": "^(您好|你好).{0,4}(我是|请问有什么|有什么可以|我可以帮)",
       "action": "reject",
       "reason": "customer-service opener - breaks character"
+    },
+    {
+      "name": "wiki_style_intro",
+      "pattern": "^.{0,8}(这部|这剧|这本|这游戏|这电影|这小说|这动漫|这本书|这本小说).{0,10}(讲的是|主要讲|是一部|是一本|是一个|讲述了|讲述的是)",
+      "action": "reject",
+      "reason": "wiki-style opening, real chatters don't talk like this - likely fabricating about something not actually seen"
     }
   ]
 }
