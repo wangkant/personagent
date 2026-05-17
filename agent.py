@@ -453,6 +453,15 @@ class Agent:
                 mode = "followup"
             elif self.counters[group_id] >= self.trigger_count:
                 mode = "judge"
+            elif (
+                self.last_reply_at[group_id] == 0.0
+                and self.counters[group_id] >= max(10, self.trigger_count // 3)
+            ):
+                # First-time presence: bot has never replied here, so a real
+                # person would chime in well before 30 messages of pure lurking.
+                # Use a lower threshold (~10 msgs) to establish initial presence;
+                # after the first reply, the regular trigger_count applies.
+                mode = "judge"
             else:
                 return False
 
@@ -461,7 +470,10 @@ class Agent:
 
             # Layer B/C: natural-rhythm gates for spontaneous reply paths.
             # called/owner = explicit ask, always reply; followup/judge subject to pacing.
-            if mode in ("judge", "followup"):
+            # Exception: first appearance in this group bypasses pacing — bot
+            # needs to surface at least once to be a real member.
+            first_appearance = self.last_reply_at[group_id] == 0.0
+            if mode in ("judge", "followup") and not first_appearance:
                 if self._is_sleep_hour() and random.random() < SLEEP_PASS_PROB:
                     logger.info("[Agent] PASS via sleep window (mode=%s, hour=%d, group=%s)",
                                 mode, time.localtime().tm_hour, group_id)
