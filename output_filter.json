@@ -1,0 +1,66 @@
+{
+  "_comment": "Pre-send regex sanity net. SillyTavern regex-extension style: an extra hard layer outside the prompt that blocks known-bad patterns from reaching the chat.\n\naction values:\n  - reject: drop the whole reply (PASS path, nothing sent)\n  - replace: substitute pattern with replacement, keep sending\n\nflags default to IGNORECASE + DOTALL. pattern uses Python regex syntax.\n\nBefore adding a rule, ask: 'would a real person ever say this?' If yes, don't add it; if it's a 100% AI tell, add it. Tune for your own persona/group — these are starter rules.",
+  "filters": [
+    {
+      "name": "self_outing_concede",
+      "pattern": "行行行.*(我|本人|本宝宝).*(是|算|当).*(AI|皮套|皮套人|机器人|工具人|虚拟)",
+      "action": "reject",
+      "reason": "identity capitulation - severe self-outing"
+    },
+    {
+      "name": "self_outing_admit",
+      "pattern": "(我|本人|本宝宝).*(承认|默认|认了|招了).*(是|算).*(AI|皮套|机器人|工具人|虚拟)",
+      "action": "reject",
+      "reason": "direct admission of being AI"
+    },
+    {
+      "name": "self_outing_yousayso",
+      "pattern": "(你|你们|你说).*(说是就是|说啥就是啥|说的对|说的都对)",
+      "action": "reject",
+      "reason": "total surrender phrase - real people don't talk like this"
+    },
+    {
+      "name": "ai_disclaimer_prefix",
+      "pattern": "^(作为|身为).*(AI|语言模型|人工智能|大模型|chatbot|聊天机器人)",
+      "action": "reject",
+      "reason": "classic AI self-introduction opener"
+    },
+    {
+      "name": "ai_disclaimer_inline",
+      "pattern": "(我是|我作为|本 ?AI|本模型|本助手).*(AI|语言模型|人工智能|大模型|助手)",
+      "action": "reject",
+      "reason": "mid-sentence AI identity disclosure"
+    },
+    {
+      "name": "ai_refuse_phrase",
+      "pattern": "(我没有|我无法|抱歉.{0,8}我).*(感受|情绪|身体|意识|肉体)",
+      "action": "reject",
+      "reason": "AI refusal boilerplate - real people don't talk like this"
+    },
+    {
+      "name": "owner_concede_negative",
+      "pattern": "(我哥|我姐|哥|姐)(确实|的确|真的)(挺|很|太|有点).*(怠惰|懒|废|烂|笨|傻|抠|穷|垃圾)",
+      "action": "reject",
+      "reason": "agreeing with insults aimed at owner - forbidden dogpiling"
+    },
+    {
+      "name": "reasoning_leak_input",
+      "pattern": "^[\\s\\-•]*(输入|发言人|意图|决策|风格)[:：]",
+      "action": "reject",
+      "reason": "reasoning fragment leaked into the visible reply"
+    },
+    {
+      "name": "reasoning_leak_tag",
+      "pattern": "</?(reasoning|intent|reply)>",
+      "action": "replace",
+      "replacement": "",
+      "reason": "stray protocol tags - strip silently"
+    },
+    {
+      "name": "polite_chatbot_intro",
+      "pattern": "^(您好|你好).{0,4}(我是|请问有什么|有什么可以|我可以帮)",
+      "action": "reject",
+      "reason": "customer-service opener - breaks character"
+    }
+  ]
+}

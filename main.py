@@ -92,6 +92,7 @@ async def lifespan(app: FastAPI):
         )
         asyncio.create_task(agent.probe_models())
         asyncio.create_task(agent.check_missed_mentions())
+        asyncio.create_task(agent.loop_check_missed())
         asyncio.create_task(agent.stickers.bootstrap_tag_all())
     logger.info("bot started on %s:%d (agent=%s)", HOST, PORT, agent.enabled if agent else False)
     yield

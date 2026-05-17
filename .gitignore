@@ -26,12 +26,17 @@ Thumbs.db
 # Runtime / scraped data (PII: QQ numbers, group IDs, chat snippets)
 eval.jsonl
 memory.json
+core_memory.json
 candidates.jsonl
 unknown_stickers.jsonl
 owner_profile.json
 stickers.json
 stickers/auto/
 stickers/manual/
+
+# DSPy tuned artifacts (may contain PII from feedback.jsonl as few-shot demos)
+tools/dspy_tuned.json
+tools/dspy_log.md
 
 # Logs
 *.log

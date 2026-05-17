@@ -45,6 +45,10 @@ TOOL_GUIDE = (
     "\n"
     "想推荐 B 站视频/分享链接时直接把完整 URL 写在回复里（b23.tv/xxx 或 bilibili.com/video/BVxxx），"
     "QQ 客户端会自动渲染成卡片。**别自己手搓小程序卡片 JSON**，QQ 会拒渲染。\n"
+    "\n"
+    "**[CORE_UPDATE]...[/CORE_UPDATE]** — 自维护笔记。如果这条对话让你对某个群友/群氛围有了新的、"
+    "稳定的印象，在 reply 末尾加 `[CORE_UPDATE]完整新笔记[/CORE_UPDATE]` 覆盖更新 core_memory。"
+    "笔记 <400 字，只记『基调性』事实（谁爱玩什么梗、谁夜猫子、什么话题对方会炸），不堆流水。\n"
     "</tools>"
 )
 
@@ -271,12 +275,29 @@ class Agent:
         self._pairs_cache: list = []
         self._pairs_mtime: float = 0.0
 
+        # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
+        self.output_filter_file = Path(__file__).parent / "output_filter.json"
+        self._filters_cache: list = []
+        self._filters_mtime: float = 0.0
+
+        # SillyTavern-style lorebook (keyword-triggered context entries)
+        self.lorebook_file = Path(__file__).parent / "lorebook.json"
+        self._lorebook_cache: list = []
+        self._lorebook_mtime: float = 0.0
+
+        # letta-style core memory (per-group short note, always in prompt)
+        self.core_memory_file = Path(__file__).parent / "core_memory.json"
+        self.core_memory: dict[str, str] = self._load_core_memory()
+
         self.message_debounce_sec = max(0.0, message_debounce_sec)
         self._msg_seq: dict[str, int] = defaultdict(int)
 
         self._vision_in_flight: dict[str, int] = defaultdict(int)
 
         self._sticky_call: dict[str, dict] = {}
+
+        # message_id ring for de-duping between webhook and periodic catch-up paths
+        self._seen_msg_ids: deque = deque(maxlen=2000)
 
         self.enabled = bool(api_key)
         if not self.enabled:
@@ -287,6 +308,13 @@ class Agent:
             return False
         if payload.get("post_type") and payload.get("post_type") != "message":
             return False
+
+        # De-dup: same message_id may arrive via webhook and via catch-up replay
+        mid = payload.get("message_id")
+        if mid is not None:
+            if mid in self._seen_msg_ids:
+                return False
+            self._seen_msg_ids.append(mid)
 
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
@@ -435,6 +463,16 @@ class Agent:
                 return False
 
             reply, auto_mem = self._split_reply_and_mem(reply or "")
+            reply = self._try_update_core_memory(group_id, reply)
+
+            # Pre-send regex filter: reject known self-outing / AI-tell patterns
+            filtered, blocked = self._apply_output_filter(reply)
+            if blocked:
+                logger.warning("[Agent] output_filter blocked (mode=%s, group=%s): %s | original=%s",
+                               mode, group_id, blocked, reply[:120])
+                reply = ""
+            else:
+                reply = filtered
 
             if not reply or reply.strip().upper().startswith("PASS"):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
@@ -941,32 +979,83 @@ class Agent:
         max_tokens: int = 2048,
         enable_search: bool = True,
         max_search_uses: int = 2,
+        disable_thinking: bool = False,
     ) -> str:
-        """统一的 Anthropic 调用：自动带 web_search 工具、错误日志、空回复兜底。"""
+        """Unified Anthropic call: web_search tool, error logging, empty-reply fallback.
+        Some Anthropic-compatible endpoints (e.g. DeepSeek) keep thinking blocks ON by
+        default and they consume max_tokens — if stop_reason=max_tokens and only a
+        ThinkingBlock came back, we auto-retry once with double the budget.
+        disable_thinking=True passes thinking={"type":"disabled"} (used for judge mode
+        where we only need PASS/REPLY, no reasoning)."""
         client = self._get_anthropic_client()
-        kwargs: dict = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": messages,
-        }
-        if enable_search:
-            kwargs["tools"] = [{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": max_search_uses,
-            }]
+        # If the endpoint rejected the thinking param before, don't keep trying it.
+        no_thinking = disable_thinking and not getattr(self, "_anthropic_no_thinking_param", False)
+
+        async def _do_call(mtok: int, with_disable: bool):
+            kwargs: dict = {
+                "model": model,
+                "max_tokens": mtok,
+                "system": system,
+                "messages": messages,
+            }
+            if with_disable:
+                kwargs["thinking"] = {"type": "disabled"}
+            if enable_search:
+                kwargs["tools"] = [{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": max_search_uses,
+                }]
+            return await client.messages.create(**kwargs)
+
         try:
-            response = await client.messages.create(**kwargs)
+            response = await _do_call(max_tokens, no_thinking)
         except Exception as e:
-            logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e)
-            raise
+            # Endpoint doesn't accept the thinking param → flag and retry without it.
+            msg = str(e).lower()
+            if no_thinking and (
+                "thinking" in msg or "unknown" in msg or "unsupported" in msg
+                or "bad request" in msg or "400" in msg
+            ):
+                logger.warning("[Agent] thinking=disabled not supported; stopping further attempts: %s", e)
+                self._anthropic_no_thinking_param = True
+                no_thinking = False
+                try:
+                    response = await _do_call(max_tokens, False)
+                except Exception as e2:
+                    logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e2)
+                    raise
+            else:
+                logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e)
+                raise
+
         text = "".join(
             getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
         ).strip()
+
+        # Thinking block ate the whole budget → retry once with double the budget (cap 6000).
+        stop_reason = getattr(response, "stop_reason", "?")
+        only_thinking = (
+            not text
+            and stop_reason == "max_tokens"
+            and any(type(b).__name__ == "ThinkingBlock" for b in response.content)
+        )
+        if only_thinking and max_tokens < 6000:
+            retry_tok = min(max_tokens * 2, 6000)
+            logger.info("[Agent] thinking block ate max_tokens=%d, retrying with max_tokens=%d",
+                        max_tokens, retry_tok)
+            try:
+                response = await _do_call(retry_tok, no_thinking)
+                text = "".join(
+                    getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
+                ).strip()
+                stop_reason = getattr(response, "stop_reason", "?")
+            except Exception as e:
+                logger.warning("[Agent] retry also failed (model=%s): %s", model, e)
+
         if not text:
             logger.warning("[Agent] Anthropic returned empty text; stop_reason=%s blocks=%s",
-                           getattr(response, "stop_reason", "?"),
+                           stop_reason,
                            [type(b).__name__ for b in response.content])
         return text
 
@@ -1188,25 +1277,39 @@ class Agent:
             f"{TOOL_GUIDE}"
             f"{self._sticker_guide_for_prompt()}"
             f"{self._examples_for_prompt(focus_text=latest_text, mode=mode)}"
+            f"{self._lorebook_for_prompt(all_history, focus_text=latest_text)}"
             f"{owner_block}"
+            f"{self._core_memory_for_prompt(group_id)}"
             f"{self._memories_for_prompt(group_id, focus_text=latest_text)}\n\n"
             f"{REASONING_PROTOCOL}"
         )
 
         if mode == "owner":
             model_to_use = self.model
+        elif mode == "judge":
+            model_to_use = self.fallback_model or self.model
         else:
             model_to_use = self._pick_group_model()
         self.model_calls.append(time.time())
+
+        # judge only outputs PASS/REPLY → disable thinking to save budget;
+        # other modes keep thinking on for the reasoning + intent + reply protocol.
+        if mode == "judge":
+            max_tok = 200
+            disable_thinking = True
+        else:
+            max_tok = 2048
+            disable_thinking = False
 
         enable_search = mode in ("called", "owner", "followup")
         raw = await self._call_anthropic(
             system=system_content,
             messages=[{"role": "user", "content": user_prompt}],
             model=model_to_use,
-            max_tokens=2048,
+            max_tokens=max_tok,
             enable_search=enable_search,
             max_search_uses=2,
+            disable_thinking=disable_thinking,
         )
         reply, reasoning, intent = self._parse_hermes_output(raw)
         if reasoning:
@@ -1439,6 +1542,22 @@ class Agent:
             except Exception as e:
                 logger.warning("[Agent] missed-mention check failed (group=%s): %s", group_id, e)
 
+    async def loop_check_missed(self, interval: int = 1800) -> None:
+        """Periodic catch-up loop. NapCat can drop webhooks during reboots / restarts;
+        every `interval` seconds we re-poll recent group history and replay any @-mention
+        that didn't go through handle() yet. The message_id ring in handle() makes the
+        replay idempotent."""
+        if not self.enabled:
+            return
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                await self.check_missed_mentions()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning("[Agent] loop_check_missed iteration failed: %s", e)
+
     async def probe_models(self) -> None:
         """Lightweight probe at startup to confirm what each endpoint actually returns."""
         if not self.enabled:
@@ -1553,7 +1672,19 @@ class Agent:
                 mime = "image/gif"
             elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
                 mime = "image/webp"
+            elif img_bytes[:2] == b"BM":
+                mime = "image/bmp"
+            elif img_bytes[4:12] in (b"ftypheic", b"ftypheix", b"ftyphevc", b"ftypmif1", b"ftypmsf1"):
+                # HEIC/HEIF — GLM doesn't accept this format; let caller fall through to OCR
+                logger.info("[Agent] GLM skip HEIC/HEIF, fallback to OCR")
+                return ""
+            elif img_bytes[4:12] in (b"ftypavif", b"ftypavis"):
+                # AVIF — GLM doesn't accept; OCR fallback
+                logger.info("[Agent] GLM skip AVIF, fallback to OCR")
+                return ""
             else:
+                logger.debug("[Agent] GLM unknown image magic %s, defaulting to jpeg",
+                             img_bytes[:12].hex())
                 mime = "image/jpeg"
             data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
 
@@ -1735,6 +1866,169 @@ class Agent:
             self._pairs_mtime = mtime
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
+
+    # -------- Output filter (SillyTavern regex-extension style) --------
+    def _reload_filters_if_stale(self) -> None:
+        try:
+            mtime = self.output_filter_file.stat().st_mtime
+        except FileNotFoundError:
+            self._filters_cache = []
+            self._filters_mtime = 0.0
+            return
+        if mtime <= self._filters_mtime:
+            return
+        try:
+            data = json.loads(self.output_filter_file.read_text(encoding="utf-8"))
+            raw = data.get("filters", []) if isinstance(data, dict) else data
+            compiled = []
+            for f in raw:
+                pat = f.get("pattern")
+                if not pat:
+                    continue
+                try:
+                    compiled.append({
+                        "name": f.get("name", "?"),
+                        "regex": re.compile(pat, re.IGNORECASE | re.DOTALL),
+                        "action": f.get("action", "reject"),
+                        "replacement": f.get("replacement", ""),
+                        "reason": f.get("reason", ""),
+                    })
+                except re.error as e:
+                    logger.warning("[Agent] output_filter '%s' regex compile failed: %s",
+                                   f.get("name"), e)
+            self._filters_cache = compiled
+            self._filters_mtime = mtime
+            logger.info("[Agent] output_filter loaded %d rules", len(compiled))
+        except Exception as e:
+            logger.warning("[Agent] output_filter.json load failed: %s", e)
+
+    def _apply_output_filter(self, reply: str) -> tuple[str, str]:
+        """Pre-send regex sanity net. Returns (filtered_reply, blocked_reason).
+        Non-empty blocked_reason → drop the whole reply, take the PASS path."""
+        self._reload_filters_if_stale()
+        if not self._filters_cache or not reply:
+            return reply, ""
+        for f in self._filters_cache:
+            m = f["regex"].search(reply)
+            if not m:
+                continue
+            if f["action"] == "reject":
+                return "", f"{f['name']} ({f['reason']})"
+            if f["action"] == "replace":
+                reply = f["regex"].sub(f.get("replacement", ""), reply)
+        return reply.strip(), ""
+
+    # -------- Lorebook (SillyTavern World Info style) --------
+    def _reload_lorebook_if_stale(self) -> None:
+        try:
+            mtime = self.lorebook_file.stat().st_mtime
+        except FileNotFoundError:
+            self._lorebook_cache = []
+            self._lorebook_mtime = 0.0
+            return
+        if mtime <= self._lorebook_mtime:
+            return
+        try:
+            data = json.loads(self.lorebook_file.read_text(encoding="utf-8"))
+            raw = data.get("entries", []) if isinstance(data, dict) else data
+            entries = []
+            for e in raw:
+                kws = e.get("keywords", [])
+                if not kws or not e.get("content"):
+                    continue
+                entries.append({
+                    "name": e.get("name", "?"),
+                    "keywords": [str(k).lower() for k in kws],
+                    "content": e["content"],
+                    "priority": int(e.get("priority", 100)),
+                    "scan_depth": int(e.get("scan_depth", 5)),
+                })
+            entries.sort(key=lambda x: -x["priority"])
+            self._lorebook_cache = entries
+            self._lorebook_mtime = mtime
+            logger.info("[Agent] lorebook loaded %d entries", len(entries))
+        except Exception as e:
+            logger.warning("[Agent] lorebook.json load failed: %s", e)
+
+    def _lorebook_for_prompt(self, history: list, focus_text: str = "") -> str:
+        """Scan recent history + focus_text; inject keyword-matched entries.
+        Caps at 5 entries per turn to keep the prompt from ballooning."""
+        self._reload_lorebook_if_stale()
+        if not self._lorebook_cache:
+            return ""
+        scan_pool = [focus_text.lower()] if focus_text else []
+        for m in history[-10:]:
+            scan_pool.append((m.get("text") or "").lower())
+        scan_blob = " ".join(scan_pool)
+        if not scan_blob.strip():
+            return ""
+        matched = []
+        for entry in self._lorebook_cache:
+            for kw in entry["keywords"]:
+                if kw and kw in scan_blob:
+                    matched.append(entry)
+                    break
+            if len(matched) >= 5:
+                break
+        if not matched:
+            return ""
+        parts = ["\n\n<lorebook>"]
+        for entry in matched:
+            parts.append(f"\n[{entry['name']}] {entry['content']}")
+        parts.append("\n</lorebook>")
+        return "".join(parts)
+
+    # -------- Core memory (letta style) --------
+    CORE_MEMORY_MAX_CHARS = 400
+
+    def _load_core_memory(self) -> dict[str, str]:
+        try:
+            return json.loads(self.core_memory_file.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except Exception as e:
+            logger.warning("[Agent] core_memory.json load failed: %s", e)
+            return {}
+
+    def _save_core_memory(self) -> None:
+        try:
+            self.core_memory_file.write_text(
+                json.dumps(self.core_memory, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.warning("[Agent] core_memory save failed: %s", e)
+
+    def _core_memory_for_prompt(self, group_id: str) -> str:
+        note = (self.core_memory.get(group_id) or "").strip()
+        if not note:
+            return ""
+        return (
+            "\n\n<core_memory>\n"
+            "你对这个群/这些人形成的稳定印象。这是你**自己**写的笔记 —— 想更新就在 reply 末尾加 [CORE_UPDATE]新笔记[/CORE_UPDATE]。\n"
+            "（保持 <400 字, 别堆流水, 只记『基调性』事实, 比如『张三爱玩谐音梗+爱催更』『李四凌晨活跃』）\n"
+            "---\n"
+            f"{note}\n"
+            "</core_memory>"
+        )
+
+    def _try_update_core_memory(self, group_id: str, reply: str) -> str:
+        """Pull [CORE_UPDATE]...[/CORE_UPDATE] block, overwrite core memory, return reply
+        with the tag stripped. The model rewrites the whole note each time (no merging)
+        which forces it to keep the note short. Closed tag form so nested [STICKER:xxx]
+        doesn't truncate it."""
+        m = re.search(r'\[CORE_UPDATE\](.*?)\[/CORE_UPDATE\]', reply, re.DOTALL)
+        if not m:
+            return reply
+        new_note = m.group(1).strip()
+        if len(new_note) > self.CORE_MEMORY_MAX_CHARS:
+            new_note = new_note[:self.CORE_MEMORY_MAX_CHARS] + "..."
+        if new_note:
+            self.core_memory[group_id] = new_note
+            self._save_core_memory()
+            logger.info("[Agent] core_memory updated (group=%s, %d chars)",
+                        group_id, len(new_note))
+        return reply.replace(m.group(0), "").strip()
 
     def _examples_for_prompt(
         self,
