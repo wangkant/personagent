@@ -247,6 +247,11 @@ class Agent:
 
         self.image_caption_cache: dict[str, str] = {}
         self.bili_info_cache: dict[str, dict] = {}
+        # Generic URL metadata cache (key=url, value=preformatted descriptor
+        # like `[B站视频]...` / `[YouTube]《...》` / `[site]《title》desc`).
+        # Bounded FIFO at 200 entries — the same URL reposted across a
+        # group only hits the network once.
+        self.url_info_cache: dict[str, str] = {}
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
         self.private_history: dict[str, list[dict]] = {}
@@ -701,7 +706,15 @@ class Agent:
             t = seg.get("type")
             d = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
             if t == "text":
-                parts.append(d.get("text", ""))
+                txt = d.get("text", "")
+                parts.append(txt)
+                # Inline URLs in plain text: pull metadata as separate buffer
+                # segments so reasoning can actually "see" what the link is
+                # about (Bilibili, YouTube, or any OG-tagged site).
+                for url in self._extract_urls(txt):
+                    desc = await self._describe_url(url)
+                    if desc and desc != "[链接]":
+                        parts.append(f" {desc}")
             elif t == "at":
                 qq = str(d.get("qq", ""))
                 parts.append(f"@{self.bot_name}" if qq == self.bot_qq else f"@{qq}")
@@ -876,8 +889,19 @@ class Agent:
                 return line
             return f"[B站视频]《{desc_field}》" if desc_field else "[B站视频]"
 
+        # Non-Bilibili mini-app share card: the card's own title/desc fields
+        # are usually thin. If the card carries a jumpUrl/qqdocurl, route it
+        # through the generic URL describer for richer OG-tag metadata.
+        if url:
+            url_info = await self._describe_url(url)
+            if url_info and url_info != "[链接]":
+                src = (prompt or "").strip()
+                if src and src not in url_info:
+                    return f"{src} {url_info}"
+                return url_info
+
         if title_field and desc_field:
-            return f"[分享|{title_field}]{desc_field[:80]}"
+            return f"[分享|{title_field}]{desc_field[:120]}"
         return f"[分享|{title_field or '未知'}]"
 
     async def _fetch_bili_info(self, url: str) -> dict:
@@ -1036,6 +1060,174 @@ class Agent:
         except Exception as e:
             logger.debug("[Agent] bili summary failed (%s): %s", bvid, e)
         return ""
+
+    # ============ Generic URL understanding ============
+    # URL terminator: whitespace, CJK characters (U+3000-303F punctuation,
+    # U+4E00-9FFF ideographs, U+FF00-FFEF full-width), or common ASCII
+    # brackets/pipes that would never appear inside a URL.
+    URL_PATTERN = re.compile(
+        r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
+    )
+    _URL_SKIP_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172.16.")
+    _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
+                     ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
+                     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
+
+    @classmethod
+    def _extract_urls(cls, text: str) -> list[str]:
+        """Pull http(s) URLs out of text, deduped, order preserved."""
+        if not text:
+            return []
+        urls = []
+        seen = set()
+        for u in cls.URL_PATTERN.findall(text):
+            u = u.rstrip(').,;:!?。，；：！？)』」]>')
+            if u in seen:
+                continue
+            seen.add(u)
+            urls.append(u)
+        return urls
+
+    @classmethod
+    def _should_skip_url(cls, url: str) -> bool:
+        u = url.lower()
+        if any(host in u for host in cls._URL_SKIP_HOSTS):
+            return True
+        if any(u.split('?')[0].endswith(ext) for ext in cls._URL_SKIP_EXT):
+            return True
+        return False
+
+    async def _describe_url(self, url: str) -> str:
+        """Fetch URL metadata and return a preformatted descriptor like
+        `[B站视频]...` / `[YouTube]《title》 — author` / `[site]《title》desc`.
+
+        Routing:
+          - bilibili.com / b23.tv → reuse _fetch_bili_info (title + up + AI summary)
+          - youtube.com / youtu.be → oEmbed (no API key required)
+          - everything else → generic OG-tag scrape (og:title / og:description /
+            og:site_name, falling back to <title>)
+
+        Cache: same URL across the same group only hits the network once.
+        Failures return "[链接]" as a graceful placeholder so the model knows
+        a URL was present without reciting the raw href."""
+        if not url or self._should_skip_url(url):
+            return ""
+        if url in self.url_info_cache:
+            return self.url_info_cache[url]
+        if len(self.url_info_cache) >= 200:
+            try:
+                first = next(iter(self.url_info_cache))
+                self.url_info_cache.pop(first, None)
+            except StopIteration:
+                pass
+
+        result = ""
+        try:
+            host = url.split('//', 1)[-1].split('/', 1)[0].lower()
+            if "bilibili.com" in host or "b23.tv" in host:
+                info = await self._fetch_bili_info(url)
+                if info:
+                    title = info.get("title", "") or ""
+                    up = info.get("up", "")
+                    summary = (info.get("summary", "") or "").strip().replace("\n", " ")
+                    desc = (info.get("desc", "") or "").strip().replace("\n", " ")[:80]
+                    line = f"[B站视频]《{title}》"
+                    if up:
+                        line += f" — up主{up}"
+                    if summary:
+                        line += f"，AI总结:{summary[:200]}"
+                    elif desc:
+                        line += f"，简介:{desc}"
+                    result = line
+            elif "youtube.com" in host or "youtu.be" in host:
+                result = await self._fetch_oembed_youtube(url)
+            else:
+                result = await self._fetch_og_meta(url)
+        except Exception as e:
+            logger.debug("[Agent] _describe_url failed (%s): %s: %s", url, type(e).__name__, e)
+
+        if not result:
+            result = "[链接]"
+        self.url_info_cache[url] = result
+        return result
+
+    async def _fetch_oembed_youtube(self, url: str) -> str:
+        """YouTube exposes a public oEmbed endpoint with no API key needed."""
+        try:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=True) as c:
+                r = await c.get(
+                    "https://www.youtube.com/oembed",
+                    params={"url": url, "format": "json"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if r.status_code != 200:
+                    return ""
+                data = r.json()
+                title = (data.get("title") or "").strip()
+                author = (data.get("author_name") or "").strip()
+                if title:
+                    line = f"[YouTube]《{title}》"
+                    if author:
+                        line += f" — {author}"
+                    return line
+        except Exception as e:
+            logger.debug("[Agent] youtube oembed failed (%s): %s", url, e)
+        return ""
+
+    _OG_TITLE_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:title|twitter:title)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _OG_DESC_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:description|twitter:description|description)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _OG_SITE_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\']og:site_name["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _TITLE_TAG_PAT = re.compile(r'<title[^>]*>(.*?)</title>', re.IGNORECASE | re.DOTALL)
+
+    async def _fetch_og_meta(self, url: str) -> str:
+        """Generic Open Graph / Twitter card scraper. GET the first 100KB of
+        HTML and pull og:title / og:description / og:site_name (falling back
+        to <title>). Returns "" on every failure path so callers can shrug."""
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            }
+            async with httpx.AsyncClient(timeout=5, follow_redirects=True, headers=headers) as c:
+                r = await c.get(url)
+                if r.status_code != 200:
+                    return ""
+                html = r.text[:100_000]
+        except Exception as e:
+            logger.debug("[Agent] OG fetch failed (%s): %s: %s", url, type(e).__name__, e)
+            return ""
+
+        t = self._OG_TITLE_PAT.search(html)
+        d = self._OG_DESC_PAT.search(html)
+        s = self._OG_SITE_PAT.search(html)
+        title = (t.group(1) if t else "").strip()
+        if not title:
+            tt = self._TITLE_TAG_PAT.search(html)
+            if tt:
+                title = re.sub(r'\s+', ' ', tt.group(1)).strip()[:80]
+        desc = (d.group(1) if d else "").strip()
+        site = (s.group(1) if s else "").strip()
+        if not title and not desc:
+            return ""
+        import html as _html
+        title = _html.unescape(title)[:80]
+        desc = _html.unescape(desc).replace("\n", " ")[:120]
+        prefix = f"[{site}]" if site else "[链接]"
+        if title and desc:
+            return f"{prefix}《{title}》{desc}"
+        if title:
+            return f"{prefix}《{title}》"
+        return f"{prefix}{desc}"
 
     def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
         buf = self.buffers[group_id]
