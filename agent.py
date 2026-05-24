@@ -1071,7 +1071,7 @@ class Agent:
 
     async def _call_anthropic(
         self,
-        system: str,
+        system,  # str | list[dict] — list form enables cache_control segmentation
         messages: list[dict],
         model: str,
         max_tokens: int = 2048,
@@ -1080,20 +1080,33 @@ class Agent:
         disable_thinking: bool = False,
     ) -> str:
         """Unified Anthropic call: web_search tool, error logging, empty-reply fallback.
-        Some Anthropic-compatible endpoints (e.g. DeepSeek) keep thinking blocks ON by
-        default and they consume max_tokens — if stop_reason=max_tokens and only a
+
+        `system` may be a plain string OR a list of `{"type":"text", "text":..., "cache_control":...}`
+        blocks. The list form lets callers mark persistent prompt segments for
+        Anthropic prompt caching, dropping repeated-call input token cost to
+        ~10% for those blocks. If the endpoint doesn't recognize cache_control
+        (some compatible endpoints don't), we flatten the list back into a
+        string and retry — same pattern as the `thinking` param probe.
+
+        Some Anthropic-compatible endpoints keep thinking blocks ON by default
+        and they consume max_tokens — if stop_reason=max_tokens and only a
         ThinkingBlock came back, we auto-retry once with double the budget.
-        disable_thinking=True passes thinking={"type":"disabled"} (used for judge mode
-        where we only need PASS/REPLY, no reasoning)."""
+        disable_thinking=True passes thinking={"type":"disabled"} (used for
+        judge mode where we only need PASS/REPLY)."""
         client = self._get_anthropic_client()
-        # If the endpoint rejected the thinking param before, don't keep trying it.
         no_thinking = disable_thinking and not getattr(self, "_anthropic_no_thinking_param", False)
+        cache_disabled = getattr(self, "_anthropic_no_cache_control", False)
+
+        def _system_for_call():
+            if cache_disabled and isinstance(system, list):
+                return "".join(blk.get("text", "") for blk in system if isinstance(blk, dict))
+            return system
 
         async def _do_call(mtok: int, with_disable: bool):
             kwargs: dict = {
                 "model": model,
                 "max_tokens": mtok,
-                "system": system,
+                "system": _system_for_call(),
                 "messages": messages,
             }
             if with_disable:
@@ -1109,9 +1122,20 @@ class Agent:
         try:
             response = await _do_call(max_tokens, no_thinking)
         except Exception as e:
-            # Endpoint doesn't accept the thinking param → flag and retry without it.
             msg = str(e).lower()
-            if no_thinking and (
+            # Endpoint doesn't accept cache_control → flatten list to string, retry.
+            if (not cache_disabled and isinstance(system, list)
+                    and ("cache_control" in msg or "cache control" in msg)):
+                logger.warning("[Agent] cache_control not supported by endpoint; disabling caching: %s", e)
+                self._anthropic_no_cache_control = True
+                cache_disabled = True
+                try:
+                    response = await _do_call(max_tokens, no_thinking)
+                except Exception as e2:
+                    logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e2)
+                    raise
+            # Endpoint doesn't accept the thinking param → flag and retry without it.
+            elif no_thinking and (
                 "thinking" in msg or "unknown" in msg or "unsupported" in msg
                 or "bad request" in msg or "400" in msg
             ):
@@ -1155,6 +1179,18 @@ class Agent:
             logger.warning("[Agent] Anthropic returned empty text; stop_reason=%s blocks=%s",
                            stop_reason,
                            [type(b).__name__ for b in response.content])
+        # Cache visibility: usage.cache_read_input_tokens > 0 means the
+        # cached prefix matched and we paid ~10% for it; cache_creation_
+        # input_tokens > 0 means a new prefix was just created. Persistent
+        # zero values across calls indicate caching isn't taking effect
+        # (content changed each call, or endpoint silently ignores cache_control).
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            cr = getattr(usage, "cache_read_input_tokens", 0) or 0
+            cc = getattr(usage, "cache_creation_input_tokens", 0) or 0
+            if cr or cc:
+                logger.info("[Agent] cache: read=%d create=%d (model=%s)",
+                            cr, cc, model)
         return text
 
     async def _evaluate_reply(
@@ -1415,19 +1451,39 @@ class Agent:
                 f"相处自然就行——比对其他人稍微上心一点、更倾向回他，但**不要过度亲昵、撒娇、黏他**。"
                 f"他说错话或犯傻可以轻巧调侃（留台阶），但**不要每次都反弹**——也可以平淡接一句、装懒、发表情包。"
             )
-        system_content = (
+        # System prompt split into three blocks for Anthropic prompt caching.
+        # The first two carry cache_control=ephemeral so persistent content
+        # is billed at ~10% on cache hits (5min TTL); the third stays
+        # uncached because it changes per call.
+        # - Block 1 (cache): persona + STYLE_GUIDE + INTENT_RULES +
+        #   TOOL_GUIDE + owner_block + REASONING_PROTOCOL — process-wide
+        #   constants.
+        # - Block 2 (cache): sticker guide — semi-static, only changes when
+        #   new stickers get tagged; stable enough to cache between calls.
+        # - Block 3 (no cache): few-shot examples + lorebook + memory —
+        #   focus/group/history dependent, varies every call.
+        static_block = (
             f"<persona>\n{self.persona}\n</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
             f"{INTENT_RULES}\n\n"
             f"{TOOL_GUIDE}"
-            f"{self._sticker_guide_for_prompt()}"
+            f"{owner_block}"
+            f"\n\n{REASONING_PROTOCOL}"
+        )
+        semi_static_block = self._sticker_guide_for_prompt()
+        dynamic_block = (
             f"{self._examples_for_prompt(focus_text=latest_text, mode=mode)}"
             f"{self._lorebook_for_prompt(all_history, focus_text=latest_text)}"
-            f"{owner_block}"
             f"{self._core_memory_for_prompt(group_id)}"
-            f"{self._memories_for_prompt(group_id, focus_text=latest_text)}\n\n"
-            f"{REASONING_PROTOCOL}"
+            f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
+        system_content = [
+            {"type": "text", "text": static_block,
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": semi_static_block,
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": dynamic_block},
+        ]
 
         if mode == "owner":
             model_to_use = self.model
@@ -1438,12 +1494,14 @@ class Agent:
         self.model_calls.append(time.time())
 
         # judge only outputs PASS/REPLY → disable thinking to save budget;
-        # other modes keep thinking on for the reasoning + intent + reply protocol.
+        # other modes keep thinking on for the reasoning + intent + reply
+        # protocol. Both budgets allow generous room for the JSON wrapper
+        # so a long reasoning field doesn't crowd out the reply field.
         if mode == "judge":
-            max_tok = 200
+            max_tok = 600
             disable_thinking = True
         else:
-            max_tok = 2048
+            max_tok = 2500
             disable_thinking = False
 
         enable_search = mode in ("called", "owner", "followup")
