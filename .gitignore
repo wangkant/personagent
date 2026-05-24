@@ -33,6 +33,7 @@ owner_profile.json
 stickers.json
 stickers/auto/
 stickers/manual/
+seen_msg_ids.json
 
 # DSPy tuned artifacts (may contain PII from feedback.jsonl as few-shot demos)
 tools/dspy_tuned.json

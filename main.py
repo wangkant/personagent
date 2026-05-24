@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -48,11 +49,31 @@ GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 
 # ========== Logging ==========
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(message)s",
-    datefmt="%H:%M:%S",
-)
+_log_root = logging.getLogger()
+# Guarded so a re-import of this module (uvicorn does this with the
+# "main:app" string form) doesn't attach duplicate handlers.
+if not _log_root.handlers:
+    _log_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    _log_root.setLevel(logging.INFO)
+    _stdout_h = logging.StreamHandler()
+    _stdout_h.setFormatter(_log_formatter)
+    _log_root.addHandler(_stdout_h)
+    try:
+        from logging.handlers import RotatingFileHandler
+        # Absolute path anchored to this file so the log lands in the
+        # project directory regardless of the working directory the bot
+        # was launched from.
+        _log_path = Path(__file__).resolve().parent / "bot.log"
+        _file_h = RotatingFileHandler(
+            str(_log_path), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
+        )
+        _file_h.setFormatter(_log_formatter)
+        _log_root.addHandler(_file_h)
+    except Exception:
+        pass
 logger = logging.getLogger("bot")
 
 agent: Optional[Agent] = None

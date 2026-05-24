@@ -88,7 +88,17 @@ STYLE_GUIDE = (
     "  错『张三这记忆堪比金鱼』『李四你这话两头说』 对『这记忆堪比金鱼』『你这话两头说』\n"
     "- **@ 之后别重名**:[AT:qq号] 已经定向,紧接着不要再喊昵称\n"
     "  错『[AT:123]张三这是撑不住了』 对『[AT:123]这是撑不住了』\n"
+    "- **自称只用「我」**: 别人会叫你 BOT_NAME, 你回话时**绝不用 BOT_NAME 当主语**自指. 错『XX 也救不了你』『XX 觉得』 对『我也救不了你』『我觉得』\n"
     "- 称呼词(哥/姐/老板)一段对话 0-1 次当强调,不要每句都来\n"
+    "\n"
+    "【看图不念图】真人收到 [图]/[表情包] 走**反应/玩梗/接话**, **绝不复述图里画的啥**——\n"
+    "  内部 reasoning 看 caption 是为了知道发生了啥, **回复里不准把 caption 翻出来念**(典型 AI tell)\n"
+    "- 禁口: 「这只 X」「图里那个」「看着像 Y」「画风 Z」「表情 W」「这早餐/房间/猫/狗 怎样」\n"
+    "- 错『这只猫该不会是在暗示我吧』 对『该不会是在暗示我吧』 / [STICKER:doge]\n"
+    "- 错『这早餐看着还行啊 北海咋了』 对『北海咋了』\n"
+    "- 错『这表情一看就是肝到没石头了』 对『肝到没石头了吧』\n"
+    "- 错『这只灰猫卡通生闷气』 对『咋了这是』 / [STICKER:无奈]\n"
+    "- 真人语气: 『笑死』『啥情况』『心疼一下』『有意思』『绷不住了』+ STICKER 接力, 或直接对**对方**(不是图)说话\n"
     "\n"
     "【不装懂 - AI 头号 tell】\n"
     "- 没接触过的具体作品/人/地/事/赛事 → 直接『没看过/没听过/不熟/哪个来着』,**绝不编**剧情/人名/年份/评分/感受\n"
@@ -318,8 +328,24 @@ class Agent:
 
         self._sticky_call: dict[str, dict] = {}
 
-        # message_id ring for de-duping between webhook and periodic catch-up paths
+        # message_id ring for de-duping between webhook and periodic catch-up
+        # paths. Persisted to disk so a restart doesn't accidentally re-handle
+        # messages the bot already responded to before going down — without
+        # this, the startup check_missed_mentions sees an empty ring and may
+        # treat a still-recent @ mention as new.
         self._seen_msg_ids: deque = deque(maxlen=2000)
+        self._seen_msg_file = Path(__file__).resolve().parent / "seen_msg_ids.json"
+        try:
+            if self._seen_msg_file.exists():
+                with self._seen_msg_file.open("r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, list):
+                    self._seen_msg_ids.extend(loaded[-2000:])
+                    logger.info("[Agent] loaded %d seen message_ids from disk",
+                                len(self._seen_msg_ids))
+        except Exception as e:
+            logger.warning("[Agent] seen_msg_ids load failed: %s: %s",
+                           type(e).__name__, e)
 
         self.enabled = bool(api_key)
         if not self.enabled:
@@ -336,7 +362,7 @@ class Agent:
         if mid is not None:
             if mid in self._seen_msg_ids:
                 return False
-            self._seen_msg_ids.append(mid)
+            self._remember_msg_id(mid)
 
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
@@ -743,6 +769,22 @@ class Agent:
                 parts.append("[表情]")
             elif t == "reply":
                 parts.append("[回复]")
+            elif t == "record":
+                # Voice message — no ASR pipeline; show a clean placeholder
+                # so the raw CQ-code (which would leak file paths) doesn't
+                # fall through to raw_message at the bottom of this function.
+                parts.append("[语音]")
+            elif t == "video":
+                parts.append("[视频]")
+            elif t == "file":
+                parts.append("[文件]")
+            elif t == "forward":
+                parts.append("[聊天记录]")
+            elif t == "mface":
+                # Market emoji: the `summary` field often carries a name like
+                # "[骰子]" — prefer it; otherwise fall back to a placeholder.
+                summary = (d.get("summary") or "").strip()
+                parts.append(summary if summary else "[表情]")
             elif t == "json":
                 raw_data = d.get("data", "")
                 if raw_data:
@@ -1712,6 +1754,27 @@ class Agent:
                         mode, intent or "?", reasoning.replace("\n", " | ")[:240])
         return reply, intent or "chat", mem
 
+    def _remember_msg_id(self, mid) -> None:
+        """Append a message_id to the dedup ring AND persist it to disk.
+
+        Without persistence, a restart would leave _seen_msg_ids empty, and
+        the startup check_missed_mentions would treat 2h-old @ mentions
+        as new — leading to double-replies on messages the bot already
+        responded to before going down.
+
+        The on-disk JSON is small (≤2000 ids ≈ 50KB) and written atomically
+        via .tmp + rename so a mid-write crash can't corrupt the file."""
+        self._seen_msg_ids.append(mid)
+        try:
+            tmp = self._seen_msg_file.with_suffix('.json.tmp')
+            with tmp.open('w', encoding='utf-8') as f:
+                json.dump(list(self._seen_msg_ids), f,
+                          ensure_ascii=False, separators=(',', ':'))
+            tmp.replace(self._seen_msg_file)
+        except Exception as e:
+            # Disk full / read-only fs shouldn't fail message handling
+            logger.debug("[Agent] seen_msg_ids persist failed: %s", e)
+
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
         """Append a line; rotate path to path.old when it would exceed max_bytes."""
@@ -1959,6 +2022,13 @@ class Agent:
                     r.raise_for_status()
                     msgs = r.json().get("data", {}).get("messages", [])
                     for msg in reversed(msgs):
+                        # Skip messages already processed in a previous run
+                        # / poll. Without this, the same offline @ mention
+                        # would log "replaying" every 30 minutes even though
+                        # handle() short-circuits via the seen-id ring.
+                        mid = msg.get("message_id")
+                        if mid is not None and mid in self._seen_msg_ids:
+                            continue
                         sender_id = str(msg.get("sender", {}).get("user_id", ""))
                         if sender_id == self.bot_qq:
                             continue
