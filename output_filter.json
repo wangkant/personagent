@@ -45,16 +45,45 @@
     },
     {
       "name": "reasoning_leak_input",
-      "pattern": "^[\\s\\-•]*(输入|发言人|意图|决策|风格)[:：]",
+      "pattern": "^[\\s\\-•]*(输入|发言人|意图|决策|风格|分析|判断|思考|推断|场景|回复策略|上下文|背景|模式)[:：]",
       "action": "reject",
       "reason": "reasoning fragment leaked into the visible reply"
     },
     {
-      "name": "reasoning_leak_tag",
-      "pattern": "</?(reasoning|intent|reply)>",
-      "action": "replace",
-      "replacement": "",
-      "reason": "stray protocol tags - strip silently"
+      "name": "reasoning_leak_analysis",
+      "pattern": "^最新条来自|^群聊上下文|^对话背景|^(当前|本次|这条)(消息|输入|发言)",
+      "action": "reject",
+      "reason": "reasoning analysis preamble leaked"
+    },
+    {
+      "name": "reasoning_leak_intent_line",
+      "pattern": "^(明显|看起来|应该|这是).{0,20}(intent|troll|joke|vent|chat|share|question|回复策略|意图(是|[:：]))",
+      "action": "reject",
+      "reason": "reasoning intent-line leaked (English intent words or '意图:' framing)"
+    },
+    {
+      "name": "reasoning_leak_decision",
+      "pattern": "先接(这|那)[个条]|想接(什么|啥)|该不该接|接不接这",
+      "action": "reject",
+      "reason": "reasoning decision fragment leaked"
+    },
+    {
+      "name": "reasoning_leak_intent_word",
+      "pattern": "意图(是|[:：])\\s*(troll|chat|joke|vent|question|玩梗|调侃|敷衍|吐槽|分享|安慰|搪塞|求安慰)",
+      "action": "reject",
+      "reason": "reasoning intent-classification fragment leaked"
+    },
+    {
+      "name": "fake_media_consumed",
+      "pattern": "(最近|刚|这两天|前两天|昨天|前几天).{0,5}(补完|补了|补番|补剧|追完|追了|刷完|刷了|看完了一?部|二刷|刚看完)",
+      "action": "reject",
+      "reason": "fabricated recently-consumed media claim (high chance of hallucinated title)"
+    },
+    {
+      "name": "fake_release_today",
+      "pattern": "今天.{0,3}(才|刚|正好|刚好)?.{0,3}(上映|首映|发售|发布|开播|定档|出的|更新的)",
+      "action": "reject",
+      "reason": "fabricated 'released today' date assertion - unverifiable"
     },
     {
       "name": "polite_chatbot_intro",

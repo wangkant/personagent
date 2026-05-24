@@ -111,43 +111,38 @@ STYLE_GUIDE = (
 
 REASONING_PROTOCOL = (
     "<output_protocol>\n"
-    "**每次回复严格按下面的两段式结构输出，XML 标签必须完整闭合：**\n"
+    "**严格输出单个 JSON 对象, 不要 markdown 围栏, 不要任何 JSON 之外的散文/标签/解释/前缀/后缀.**\n"
+    "**只许 4 个 key: reasoning / intent / reply / mem.**\n"
     "\n"
-    "<reasoning>\n"
-    "[最多 4 行内部分析，不超过 140 字。这段是你给自己看的，用户看不到。]\n"
-    "- 输入：本轮新进来的关键要素全列一遍——最新文本 + 所有 [图：xxx]/[表情]/[B站视频]/[分享] 描述里的具体内容。\n"
-    "  **看到图或卡片就必须把它当作主信息**，图里写的字 / 表情包的梗 / 视频标题 = 对方真正想说的话，绝不能装作只看到文字\n"
-    "- 发言人：本轮最新这条来自 buffer 里哪个 [name|qq=xxx]，照抄那个 ID。**[AT:qq] 只能 @ 这个 ID**，不准 @ 其他人；\n"
-    "  也别把别人之前的话题（『你刚才...』『刚才那条...』『磕得激动』之类）安到这个发言人头上——那是 context bleed，张冠李戴扣分\n"
-    "- 意图：最新这条是什么意图？（问我/敷衍回应/转移/求安慰/分享/玩梗/搪塞）\n"
-    "- 决策：该不该接？以下情况一律 PASS（别硬解读、别装聪明）：\n"
-    "    1) 结束信号：短促敷衍（哦/哦哦/嗯/嗯嗯/好的/确实/行/行吧/ok/是的）\n"
-    "    2) 结束信号：句尾型（先这样/就这样/晚安/睡了/撤了/下次聊）\n"
-    "    3) 转向他人/技术细节/跟你无关\n"
-    "    4) **碎片/噪音输入**：单字母（D / e）、含空格碎片（D . e）、孤立标点（。/？/…）、\n"
-    "       乱码、纯符号、明显是图片 OCR 出来的非自然语言碎片 → 千万别装机灵解读，直接 PASS\n"
-    "       反例（绝对禁止）：群里来一句『D . e』，你回『你是想让我夸你命名有艺术感还是怎么的』——这是装聪明，扣分\n"
-    "    5) **旁观者位**：最新这条 @ 的是别人（不是你 BOT_QQ）且明显在跟那人对话 →\n"
-    "       你是旁观者，**绝对不能用「我/你」把自己代入对话双方任何一边**。默认 PASS；非要发只能用第三方旁观口吻\n"
-    "       反例（绝对禁止）：张三 @李四 问『醒这么早?』→ 你回『你自己不也一大早就喊我』——把「我」代入了李四的位置，扣分\n"
-    "       **即使发言人是 owner**，只要他 @ 的是别人，这条就不是对你说的，别走「主人在跟我讲话」的默认神\n"
-    "    6) **burst 进行中**：同一人 30 秒内连发多条且最新这条像没收尾——结尾悬挂（『真是...』『就...』『结果...』）、\n"
-    "       或上一条是图/视频而本条只是 1-3 字衔接（『绝了』『真是』『笑死』）→ PASS 等他这一串说完再回，别中途插嘴\n"
-    "       反例（绝对禁止）：A 发『讲个抽象故事』→ A 发[图]→ A 发『真是抽象故事』，你在中间图后就接『胎死腹中』——这是抢答，扣分\n"
-    "    7) **同梗重复追问**：群里几个人在追问/复读同一个梗（『你是X你是X你是X』之类），\n"
-    "       你已经就这个梗回过 2 条 → 第 3 条往后强制 PASS 或只发表情包（[STICKER:无奈/翻白眼/懒得理]）。\n"
-    "       真人被同一个梗追第 3 次根本懒得编新词反弹了——再硬接就是表演型 AI\n"
-    "- 风格：接的话定调（情绪共情/接梗玩话/答内容/读图意），自检 AI 味（喊名字/列点/分析腔/X的就是Y句式 → 改掉）\n"
-    "  **图/表情包不是装饰**——别绕过图本身去玩发图人 ID 的谐音梗。先回图，再考虑顺带玩梗\n"
-    "</reasoning>\n"
-    "<intent>joke|vent|share|question|troll|chat</intent>\n"
-    "[紧接 </reasoning> 后另起一行输出，6 个标签选 1 个；拿不准选 chat]\n"
-    "<reply>\n"
-    "不接 → 这里只写 PASS（大写，不加别的）\n"
-    "接 → 最终回复内容，按上面 reasoning 定的语气和长度（默认 1 句、15-30 字）\n"
-    "</reply>\n"
+    "格式样板 (一行也行, 多行也行, 关键是 JSON 合法):\n"
+    '{\"reasoning\": \"...\", \"intent\": \"chat\", \"reply\": \"...\", \"mem\": \"\"}\n'
     "\n"
-    "想记事的话在 </reply> 之后另起一行：MEM: 想记的内容\n"
+    "**各字段含义:**\n"
+    "\n"
+    "reasoning (≤100字, 字符串值, 内部用用户看不到): 列下面 5 项\n"
+    "- 输入: 新进关键要素——文字 + 所有 [图]/[表情]/[B站]/[分享] 内容. **图/卡片是主信息**, 图里字/表情梗/视频标题 = 对方真正想说的, 不能装看不到. **谐音扫描**: 怪字按谐音代入\n"
+    "- 发言人: 最新条来自哪个 [name|qq=xxx], 照抄. **[AT:qq] 只能 @ 这个**, 不准 @ 其他人, 也别把别人话题安他头上(context bleed 扣分)\n"
+    "- 意图: 问我/敷衍/转移/求安慰/分享/玩梗/搪塞\n"
+    "- 决策: 接不接? 以下一律 PASS:\n"
+    "    1) 结束信号-敷衍: 哦/嗯/好的/确实/行/ok/是的\n"
+    "    2) 结束信号-收尾: 先这样/晚安/睡了/撤了/下次聊\n"
+    "    3) 转向他人/技术细节/与你无关\n"
+    "    4) **碎片噪音**: 单字母(D/e)/含空格碎片(D . e)/孤立标点/乱码/OCR 碎屑 → 别装机灵, 直接 PASS\n"
+    "    5) **旁观者位**: 最新条 @ 别人(非你 BOT_QQ)且明显跟那人对话 → 你是旁观者, **禁用「我/你」代入双方**, 默认 PASS, 非发只能旁观腔. **即使发言人是 owner**, 他 @ 别人时这条也不是对你说的\n"
+    "    6) **burst 进行中**: 同人 30 秒内连发, 最新条悬挂(『真是...』『结果...』)或图/视频后只有 1-3 字衔接(『绝了』『笑死』)→ PASS 等他说完\n"
+    "    7) **同梗重复**: 同个梗你已回过 2 条 → 第 3 条往后 PASS 或只发 [STICKER:无奈/翻白眼/懒得理]\n"
+    "- 风格: 定调(共情/接梗/答内容/读图) + 自检 AI 味(喊名字/列点/分析腔/X的就是Y → 改掉). **图/表情包是主体**, 先回图再考虑玩梗\n"
+    "\n"
+    'intent (字符串, 6 选 1): \"joke\" / \"vent\" / \"share\" / \"question\" / \"troll\" / \"chat\". 拿不准选 \"chat\"\n'
+    "\n"
+    "reply (字符串, 群里实际看到的回复):\n"
+    '  - 不接 → 写 \"PASS\" (大写, 别加别的)\n'
+    "  - 接 → 默认 1 句 / 15-30 字\n"
+    "  - 字符串值里**不要**嵌套 JSON / XML 标签 / 多余方括号 (只许 [STICKER:tag] 和 [AT:qq] 两种 marker)\n"
+    "\n"
+    "mem (字符串, 想记事就填一句, 不记就填空字符串 \"\"): 比如人物特征/事件/态度. 写 \"无\"/\"none\"/\"null\" 等同空字符串.\n"
+    "\n"
+    "**JSON 合法**最关键: 字符串值里的引号要 \\\\\" 转义, 换行用 \\\\n. 输出前自查能不能被 json.loads 吃下去.\n"
     "</output_protocol>"
 )
 
@@ -483,7 +478,7 @@ class Agent:
                     return False
 
             try:
-                reply = await self._think(group_id, mode, text, caller_override=caller_override)
+                reply, _intent, auto_mem = await self._think(group_id, mode, text, caller_override=caller_override)
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 if mode == "called":
@@ -501,7 +496,10 @@ class Agent:
                         pass
                 return False
 
-            reply, auto_mem = self._split_reply_and_mem(reply or "")
+            # auto_mem comes directly from the JSON-protocol `mem` field
+            # (see _think → _parse_model_output). PASS replies may still
+            # carry a non-empty mem worth keeping.
+            reply = reply or ""
             reply = self._try_update_core_memory(group_id, reply)
 
             # Pre-send regex filter: reject known self-outing / AI-tell patterns
@@ -561,7 +559,7 @@ class Agent:
                 history = self.private_history[user_id]
 
             try:
-                reply = await self._chat_private(history)
+                reply, auto_mem = await self._chat_private(history)
             except Exception as e:
                 logger.warning("[Agent] private-chat LLM failed: %s", e)
                 return False
@@ -574,7 +572,6 @@ class Agent:
             # Namespace core_memory/auto_memory under "private:{user_id}" so
             # private chat memory doesn't collide with group keys.
             pkey = f"private:{user_id}"
-            reply, auto_mem = self._split_reply_and_mem(reply)
             reply = self._try_update_core_memory(pkey, reply)
             filtered, blocked = self._apply_output_filter(reply)
             if blocked:
@@ -595,7 +592,7 @@ class Agent:
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
-    async def _chat_private(self, history: list[dict]) -> str:
+    async def _chat_private(self, history: list[dict]) -> tuple[str, str]:
         """Private chat with owner. Uses Anthropic SDK + DeepSeek anthropic endpoint."""
         last_user = next(
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
@@ -638,11 +635,11 @@ class Agent:
             enable_search=True,
             max_search_uses=3,
         )
-        reply, reasoning, intent = self._parse_hermes_output(raw)
+        reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
             logger.info("[Agent] reasoning (private intent=%s): %s",
                         intent or "?", reasoning.replace("\n", " | ")[:240])
-        return reply
+        return reply, mem
 
     async def _napcat_send_private(self, user_id: str, message) -> None:
         """Single-shot private send. message: str or list of segments."""
@@ -1401,11 +1398,11 @@ class Agent:
             max_search_uses=2,
             disable_thinking=disable_thinking,
         )
-        reply, reasoning, intent = self._parse_hermes_output(raw)
+        reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
             logger.info("[Agent] reasoning (mode=%s intent=%s): %s",
                         mode, intent or "?", reasoning.replace("\n", " | ")[:240])
-        return reply
+        return reply, intent or "chat", mem
 
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
@@ -1498,6 +1495,16 @@ class Agent:
         text = text.strip()
         if text != original:
             logger.info("[Agent] sanitize: %r -> %r", original[:80], text[:80])
+        # Final gate: whitelist character validation. Any reply that doesn't
+        # look like normal Chinese chat (XML / JSON / system tokens / pipe
+        # characters / pure English template) is dropped wholesale.
+        # The strategy is whitelist-not-blacklist so future unseen leak
+        # shapes are blocked automatically without per-shape filter rules.
+        ok, reason = Agent._validate_reply_safe(text)
+        if not ok:
+            logger.warning("[Agent] validator rejected reply: %s | text=%r",
+                           reason, text[:80])
+            return ""
         return text
 
     @staticmethod
@@ -2461,55 +2468,135 @@ class Agent:
         return None
 
     @staticmethod
-    def _parse_hermes_output(raw: str) -> tuple[str, str, str]:
-        """Parse Hermes-style structured output:
-        <reasoning>...</reasoning> <intent>tag</intent> <reply>...</reply>
+    def _parse_model_output(raw: str) -> tuple[str, str, str, str]:
+        """Parse JSON-structured model output:
+            {"reasoning": "...", "intent": "...", "reply": "...", "mem": "..."}
 
-        Returns (reply_text, reasoning_text, intent). intent is "" when tag is
-        missing/malformed. MEM lines after </reply> are appended to reply so
-        downstream _split_reply_and_mem still works.
+        Returns (reply, reasoning, intent, mem). Fail-closed: a parse failure
+        or missing `reply` key yields ("", raw[:240], "", "") plus a warning.
+
+        Why JSON instead of XML inline tags: with string-embedded structure
+        the parser's fallback branches can leak reasoning text into the reply
+        when the model truncates, malforms, or emits provider-specific tokens.
+        With JSON fields each piece is isolated; if `reply` is missing the
+        send pipeline simply produces nothing.
+
+        Robustness layers:
+        1. Strip optional ```json ... ``` fences.
+        2. Try json.loads on the whole string.
+        3. Fall back to JSONDecoder.raw_decode from the first `{` so two
+           concatenated JSON objects parse as the first valid one.
+        4. If still no dict, last-ditch chat-shape heuristic: short Chinese
+           text without XML/JSON/pipe characters and not a reasoning-style
+           prefix is treated as a naked reply. The downstream whitelist
+           validator (_validate_reply_safe) is the final gate.
         """
-        if not raw:
-            return "", "", ""
-
-        reasoning_m = re.search(r'<reasoning>(.*?)</reasoning>', raw, re.DOTALL | re.IGNORECASE)
-        reasoning = reasoning_m.group(1).strip() if reasoning_m else ""
-
-        intent_m = re.search(r'<intent>\s*([a-zA-Z_]+)\s*</intent>', raw, re.IGNORECASE)
-        intent = intent_m.group(1).lower() if intent_m else ""
-
-        reply_m = re.search(r'<reply>(.*?)</reply>', raw, re.DOTALL | re.IGNORECASE)
-        if reply_m:
-            reply_inner = reply_m.group(1).strip()
-            tail = raw[reply_m.end():].strip()
-            if tail:
-                reply_inner = f"{reply_inner}\n{tail}" if reply_inner else tail
-            return reply_inner, reasoning, intent
-
-        anchor_end = max(
-            reasoning_m.end() if reasoning_m else -1,
-            intent_m.end() if intent_m else -1,
-        )
-        if anchor_end > 0:
-            after = raw[anchor_end:].strip()
-            after = re.sub(r'^\s*<\s*reply\s*>\s*', '', after, flags=re.IGNORECASE)
-            after = re.sub(r'\s*<\s*/\s*reply\s*>\s*$', '', after, flags=re.IGNORECASE)
-            return after, reasoning, intent
-
-        return raw.strip(), "", intent
-
-    def _split_reply_and_mem(self, raw: str) -> tuple[str, Optional[str]]:
-        """Extract the MEM line from the LLM output; the rest is treated as the reply."""
-        if not raw:
-            return "", None
-        mem_match = re.search(r"(?:^|\n)\s*MEM\s*[:：]\s*(.+?)\s*$", raw, re.DOTALL)
-        if not mem_match:
-            return raw.strip(), None
-        mem = mem_match.group(1).strip()
-        reply = raw[: mem_match.start()].strip()
-        if mem.lower() in {"无", "none", "n/a", ""}:
+        if not raw or not raw.strip():
+            return "", "", "", ""
+        s = raw.strip()
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s*```$", "", s)
+        data = None
+        try:
+            data = json.loads(s)
+        except (json.JSONDecodeError, TypeError):
+            start = s.find('{')
+            if start >= 0:
+                try:
+                    data, _end = json.JSONDecoder().raw_decode(s[start:])
+                except json.JSONDecodeError:
+                    data = None
+        if not isinstance(data, dict):
+            # Naked-text rescue: occasionally a model just emits the reply text
+            # directly without the JSON wrapper. If it looks like a normal
+            # short Chinese chat line, ship it and let the validator gate.
+            cleaned = raw.strip()[:300]
+            looks_like_reply = (
+                3 <= len(cleaned) <= 200
+                and any(0x4E00 <= ord(c) <= 0x9FFF for c in cleaned)
+                and not re.search(r'[<>{}|｜▁]', cleaned)
+                and not re.match(
+                    r'^[\s\-•]*(输入|发言人|意图|决策|风格|分析|判断|思考|场景|回复策略|上下文|背景|模式)[:：]',
+                    cleaned,
+                )
+            )
+            if looks_like_reply:
+                logger.warning("[Agent] parser: non-JSON but raw looks like a valid reply, passing through: %r",
+                               cleaned[:80])
+                return cleaned, "", "", ""
+            logger.warning("[Agent] parser: model output is not JSON, dropping raw=%r",
+                           raw[:200])
+            return "", raw.strip()[:240], "", ""
+        reply = str(data.get("reply") or "").strip()
+        reasoning = str(data.get("reasoning") or "").strip()
+        intent = str(data.get("intent") or "").strip().lower()
+        mem_raw = data.get("mem")
+        mem = str(mem_raw).strip() if mem_raw is not None else ""
+        # Placeholder words count as empty (model occasionally fills "无" / "none" / etc.)
+        if mem.lower() in {"无", "none", "n/a", "null", "无内容", "无可记"}:
             mem = ""
-        return reply, mem or None
+        return reply, reasoning, intent, mem
+
+    @staticmethod
+    def _validate_reply_safe(text: str) -> tuple[bool, str]:
+        """Whitelist character-class validator: only release replies that look
+        like genuine Chinese chat text.
+
+        Strategy: strip approved bracket markers ([STICKER:tag] / [AT:qq]),
+        then verify every remaining character belongs to an allowed class
+        (CJK ideographs / CJK punctuation / full-width / common ASCII letters,
+        digits, punctuation, whitespace). Known bad token characters
+        (`< > { } | ｜ ▁`) are hard-rejected. A reply with no CJK content
+        and no markers is also rejected (suspected English-template leak
+        or system token leak).
+
+        This catches every future leak shape — XML residue, JSON fragments,
+        provider-specific tokens — without needing a per-shape filter rule.
+
+        Returns (ok, reason). A failing result causes the send pipeline to
+        drop the reply entirely (fail-closed)."""
+        if not text or not text.strip():
+            return False, "empty"
+        if len(text) > 500:
+            return False, f"too long ({len(text)})"
+        marker_pat = re.compile(r'\[(?:STICKER:[^\[\]\s]+|AT:\d+)\]')
+        has_marker = bool(marker_pat.search(text))
+        residual = marker_pat.sub('', text).strip()
+        if not residual:
+            return (True, "") if has_marker else (False, "empty after marker strip")
+        cjk_count = 0
+        for ch in residual:
+            c = ord(ch)
+            # Hard reject: known bad token characters
+            # < > { } | (ASCII)  — XML/JSON/pipe fragments
+            # ｜ (U+FF5C full-width pipe) — provider internal separators
+            # ▁ (U+2581 subword marker) — tokenizer leak
+            if ch in '<>{}|' or c == 0xFF5C or c == 0x2581:
+                return False, f"bad token char {ch!r} (U+{c:04X})"
+            # CJK unified ideographs (incl. extensions A/B)
+            if 0x4E00 <= c <= 0x9FFF or 0x3400 <= c <= 0x4DBF or 0x20000 <= c <= 0x2A6DF:
+                cjk_count += 1
+                continue
+            # CJK punctuation
+            if 0x3000 <= c <= 0x303F:
+                continue
+            # Full-width forms (｜ already rejected above)
+            if 0xFF00 <= c <= 0xFFEF:
+                continue
+            # Whitespace
+            if ch in '\n\t \r':
+                continue
+            # ASCII letters / digits
+            if c < 0x80 and ch.isalnum():
+                continue
+            # Common ASCII punctuation used in casual chat
+            if ch in '.,?!;:\'\"()-_~`@#&+*=%^/':
+                continue
+            return False, f"unexpected char {ch!r} (U+{c:04X})"
+        # No CJK and no markers → likely English template or token leak
+        if cjk_count == 0 and not has_marker:
+            return False, "no CJK content (suspect English template / token leak)"
+        return True, ""
 
     def _save_auto_memory(self, group_id: str, text: str) -> None:
         text = text.strip()[:200]
