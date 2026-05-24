@@ -12,7 +12,7 @@ A template for building a **persona-driven LLM agent on QQ groups** — designed
 Most "LLM in a group chat" projects end up sounding like a chatbot stuck in customer-service mode — formal, eager, always replies, never has an opinion. This template attacks the persona problem from several angles:
 
 - **Output safety first.** Reasoning, intent and reply are JSON fields, not XML inline tags, so a malformed model output can never leak the reasoning channel into the visible reply. A whitelist character validator drops anything that doesn't look like Chinese chat (XML residue, JSON braces, provider tokens, English-template leaks) — future unknown leak shapes are blocked automatically.
-- **Style as code.** STYLE_GUIDE encodes the persona's *register* (口吻), forbidden phrases, identity-attack defense, observer-position rules, and "look at the picture, don't recite the picture" — the kinds of rules that turn a chatbot into someone.
+- **Style as code.** STYLE_GUIDE encodes the persona's *register*, forbidden phrases, identity-attack defenses, observer-position rules, and a "react to the image, don't describe it" rule — the kinds of rules that turn a chatbot into someone.
 - **Stickers as part of the voice.** The library auto-steals new stickers seen in the group, vision-tags them, judges persona-fit twice (text + visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A real-conversation feedback loop demotes stickers that consistently feel off.
 - **Read what's actually there.** Inline URLs, Bilibili / YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context so the model isn't just staring at an opaque link.
 
@@ -127,25 +127,25 @@ Even past the parser, `_validate_reply_safe` applies a character whitelist befor
 
 ## Reply examples
 
-What "sounds like a real person" looks like in practice (paraphrased / sanitized):
+What "sounds like a real person" looks like in practice. (Illustrative — the agent itself runs in Chinese; the patterns translate.)
 
-> Friend: `晓艺是傻子吗?` (using a homophone-pun insult)
-> Bot: `啥子在四川话里是"什么"的意思，你这方言学得不太行啊`
-> — defuses the pun by treating the character literally; doesn't escalate, doesn't admit to anything.
+> **Friend** *(taking a jab)*: "doing your usual genius work today huh"
+> **Bot**: "yeah just mashing keys and hoping a feature falls out"
+> — takes the jab literally, plays along instead of getting defensive. No "I'm doing my best!", no apology.
 
-> Friend: `(sends a sticker with no text)`
-> Bot: `又来一张，你这是要把我表情包文件夹塞爆啊 [STICKER:翻白眼]`
-> — reacts to the *act* of sending a sticker, doesn't recite what's in the image.
+> **Friend**: *(sends a reaction sticker, no text)*
+> **Bot**: "stickers as a substitute for words. classic. [STICKER:eyeroll]"
+> — reacts to the *act* of sending a sticker, not the contents of the image.
 
-> Friend: `(complains about a tough game match)`
-> Bot: `匹配机制制裁局, 手抡断了也架不住队友送 [STICKER:无奈]`
-> — joins the vent with a fitting sticker, doesn't ask "why" or offer a plan.
+> **Friend**: "ranked is rigged man, lost 4 in a row, teammates feeding nonstop"
+> **Bot**: "matchmaker decided you needed character development today [STICKER:resigned]"
+> — joins the vent with a fitting sticker. No "why don't you take a break", no follow-up question.
 
-> Owner: `所以这个乐乐到底是啥意思`
-> Bot: `哥你这记忆堪比金鱼 刚说完呢 [STICKER:嘲讽]`
-> — pokes fun with the owner; the relationship gives more license to tease.
+> **Owner**: "wait what was that thing called again, the one we just talked about"
+> **Bot**: "two minutes ago, bro. two minutes. [STICKER:smug]"
+> — pokes fun at the owner; the closer relationship gives more license to tease.
 
-The pattern: the agent reasons about who said what to whom (observer-position aware), picks an intent, then writes in the sub-style for that intent — no list-bullet analysis, no service-counter politeness.
+The pattern: the agent reasons about who said what to whom (observer-position aware), picks an intent tag, then writes in the sub-style for that intent — no bulleted analysis, no service-counter politeness, and never describing what an image literally contains.
 
 ## Configuration
 
