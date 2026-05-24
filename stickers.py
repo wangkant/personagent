@@ -18,6 +18,11 @@ MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
 RECENT_USE_COOLDOWN_SEC = 90
 
+# Bump this whenever the persona-fit prompt criteria change. On the next
+# startup, recheck_persona_fit_all will re-evaluate every entry whose
+# _persona_version is older than this — no manual JSON surgery needed.
+PERSONA_PROMPT_VERSION = 2
+
 class StickerLibrary:
     def __init__(
         self,
@@ -26,6 +31,7 @@ class StickerLibrary:
         unknown_log: str | Path,
         anthropic_caller: Optional[Callable[..., Awaitable[str]]] = None,
         tagger_model: str = "deepseek-chat",
+        persona_brief: str = "",
     ):
         self.dir = Path(stickers_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -34,6 +40,10 @@ class StickerLibrary:
         self.unknown_log = Path(unknown_log)
         self._anthropic_caller = anthropic_caller
         self.tagger_model = tagger_model
+        # Optional one-line persona description. When set, the tag prompt
+        # asks the model to also judge persona-fit (false → entry is hidden
+        # from pick_by_tag and purged on next cleanup pass).
+        self.persona_brief = persona_brief
 
         self.entries: dict[str, dict] = self._load()
         self._md5_index: dict[str, str] = {
@@ -235,13 +245,30 @@ class StickerLibrary:
                 f"样本{i+1}（sender={c['sender']}）:\n" + "\n".join(c.get("before", []))
                 for i, c in enumerate(ctxs)
             )
+            persona_block = ""
+            if self.persona_brief:
+                persona_block = (
+                    f"\n[人设]\n{self.persona_brief}\n"
+                    "另外判断这张表情包**这个人会不会发**——她爱阴阳/调侃/玩梗，所以**嘲讽/翻白眼/无语/敷衍/吐槽/挑衅/阴阳/doge/笑/绷不住** 都 fit=true。\n"
+                    "**fit=false 标准**：\n"
+                    "  - 粗俗低俗 / 男性化抽象 / 攻击性极强 / 恐怖血腥 / 纯水图无表情 / 政治\n"
+                    "  - **土/审美差**：中老年表情包(花体字「早上好」「周末快乐」+ 闪光 + 玫瑰/大头娃娃)、家族群风格、印花字体配鲜艳色块、抖音烂梗烂图、2010 年代非主流风\n"
+                    "  - **过气可爱风**：粗糙渲染的卡通熊/狗 + 字幕、QQ秀风格、低质量贴纸\n"
+                    "  关键词参考: 早安/晚安祝福/动感闪字/玫瑰祝福/夸张感叹号/低分辨率彩色描边\n"
+                    "其它一概 fit=true。**宁可错放一千不可错杀一个**(土的除外, 这条要严)。\n"
+                )
             prompt = (
                 "你帮我给一张 QQ 群表情包打 tag。下面是这张表情包在群里被人发的 N 个上下文样本——\n"
                 "你看不到图，但能从「发图前后大家在聊什么」推断出这张表情包大概是啥含义。\n\n"
-                f"{ctx_block}\n\n"
-                "[严格按 JSON 一行输出，不要 markdown 包裹]\n"
-                '{"meaning":"<2-8 字描述这张表情包的语义/情绪，比如 \'doge 笑/嘲讽\' \'摸鱼大鱼/划水\'>",'
-                '"tags":["<2-4 个标签，便于检索时 fuzzy match，例如：嘲讽、笑、无语、摸鱼>"]}'
+                f"{ctx_block}\n"
+                f"{persona_block}"
+                "\n[严格按 JSON 一行输出，不要 markdown 包裹]\n"
+                + ('{"meaning":"<2-8 字描述这张表情包的语义/情绪>",'
+                   '"tags":["<2-4 个标签>"],'
+                   '"fit":true|false}'
+                   if self.persona_brief else
+                   '{"meaning":"<2-8 字描述这张表情包的语义/情绪，比如 \'doge 笑/嘲讽\' \'摸鱼大鱼/划水\'>",'
+                   '"tags":["<2-4 个标签，便于检索时 fuzzy match，例如：嘲讽、笑、无语、摸鱼>"]}')
             )
             raw = await self._anthropic_caller(
                 system="你是表情包语义分析器，只输出 JSON。",
@@ -262,23 +289,138 @@ class StickerLibrary:
             entry["tags"] = [
                 str(t).strip()[:20] for t in (parsed.get("tags") or []) if t
             ][:6]
+            if "fit" in parsed:
+                entry["persona_fit"] = bool(parsed.get("fit"))
             entry["auto_tagged"] = True
             entry["tagged_ts"] = time.time()
+            entry["_persona_version"] = PERSONA_PROMPT_VERSION
             self._save()
-            logger.info("[stickers] tagged %s: meaning=%r tags=%s",
-                        filename, entry["meaning"], entry["tags"])
+            fit_mark = " [SKIP-not-fit]" if entry.get("persona_fit") is False else ""
+            logger.info("[stickers] tagged %s: meaning=%r tags=%s%s",
+                        filename, entry["meaning"], entry["tags"], fit_mark)
         except Exception as e:
             logger.warning("[stickers] tagging failed for %s: %s: %s",
                            filename, type(e).__name__, e)
         finally:
             self._tagging_inflight.discard(filename)
 
+    async def recheck_persona_fit_all(self, limit: int = 50) -> int:
+        """Re-evaluate persona-fit for already-tagged entries whose
+        _persona_version is stale (or unset). Lets you tighten the criteria
+        by editing the prompt and bumping PERSONA_PROMPT_VERSION —
+        existing entries get re-judged on next startup, no JSON surgery.
+        Returns the count rechecked."""
+        if not self.persona_brief or not self._anthropic_caller:
+            return 0
+        todo = [
+            (fn, v) for fn, v in self.entries.items()
+            if v.get("auto_tagged") and (
+                "persona_fit" not in v
+                or v.get("_persona_version", 0) < PERSONA_PROMPT_VERSION
+            )
+        ][:limit]
+        if not todo:
+            return 0
+        checked = 0
+        for fn, v in todo:
+            meaning = (v.get("meaning") or "").strip()
+            tags = v.get("tags", [])
+            if not meaning and not tags:
+                continue
+            prompt = (
+                f"[人设]\n{self.persona_brief}\n\n"
+                f"[表情包]\nmeaning: {meaning}\ntags: {tags}\n\n"
+                "判断这张表情包**这个人会不会发**。\n"
+                "她调皮、爱阴阳怪气、爱玩梗——所以**嘲讽/调侃/翻白眼/无语/敷衍/吐槽/挑衅/阴阳怪气/doge/笑/绷不住** 这类**都算 fit=true**(这就是她日常风格)。\n"
+                "**fit=false 标准**:\n"
+                "  - 粗俗低俗(屎尿屁/性暗示/擦边/骂街)\n"
+                "  - 男性化的兄贵/狗叫/抽象黑话/重度二次元\n"
+                "  - 攻击性极强带攻击意图的(杀/打/血腥/恐怖/恶心)\n"
+                "  - 阴森丧到底(自杀/抑郁意象)\n"
+                "  - 纯水图无意义无表情\n"
+                "  - 政治/敏感\n"
+                "  - **土/审美差**: 中老年表情包(花体字祝福/早安晚安/玫瑰/大头娃娃/动感闪字)、家族群风格、印花字体配鲜艳色块、抖音烂梗烂图、2010 年代非主流、低分辨率彩色描边贴纸、过气可爱风\n"
+                "  **关键词参考**: 早安/晚安祝福/动感/闪字/玫瑰祝福/夸张感叹号/低分辨率/印花体\n"
+                "其它一概 fit=true。**土的要严, 其它宁可错放不可错杀**。\n"
+                '[只输出 JSON 一行] {"fit":true|false}'
+            )
+            try:
+                raw = await self._anthropic_caller(
+                    system="你是表情包人设匹配判断器，只输出 JSON。",
+                    messages=[{"role": "user", "content": prompt}],
+                    model=self.tagger_model,
+                    max_tokens=40,
+                    enable_search=False,
+                    max_search_uses=0,
+                )
+                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
+                parsed = json.loads(raw)
+                v["persona_fit"] = bool(parsed.get("fit"))
+                v["_persona_version"] = PERSONA_PROMPT_VERSION
+                checked += 1
+                logger.info("[stickers] persona-fit %s: %s (%r)",
+                            fn, v["persona_fit"], meaning)
+            except Exception as e:
+                logger.warning("[stickers] persona recheck failed for %s: %s", fn, e)
+                continue
+            await asyncio.sleep(0.4)
+        if checked:
+            self._save()
+        return checked
+
+    def purge_unfit(self) -> int:
+        """Physically delete entries flagged persona_fit=false (record + file).
+        Mirror of _evict_least_used's delete pattern. Run after a recheck
+        pass so the library only retains in-character stickers on disk."""
+        unfit = [fn for fn, v in self.entries.items() if v.get("persona_fit") is False]
+        if not unfit:
+            return 0
+        for filename in unfit:
+            entry = self.entries.pop(filename, None)
+            if not entry:
+                continue
+            self._md5_index.pop(entry.get("md5", ""), None)
+            try:
+                (self.dir / filename).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning("[stickers] purge unlink failed for %s: %s", filename, e)
+        self._save()
+        logger.info("[stickers] purged %d unfit entries", len(unfit))
+        return len(unfit)
+
+    # Quality-feedback loop thresholds. After QUALITY_MIN_SAMPLES eval scores,
+    # if the running average drops below QUALITY_FAIL_THRESHOLD, the sticker
+    # gets auto-demoted to persona_fit=false and removed on the next purge.
+    QUALITY_HISTORY_LEN = 10
+    QUALITY_MIN_SAMPLES = 5
+    QUALITY_FAIL_THRESHOLD = 3.0
+
+    def record_quality(self, filename: str, score: int) -> None:
+        """Append a 1-5 eval score for a sticker. When enough samples
+        accumulate and the mean falls below threshold the entry is auto
+        demoted (persona_fit=false). Uses real-conversation signal rather
+        than a one-shot LLM judgment."""
+        entry = self.entries.get(filename)
+        if not entry or not isinstance(score, int) or not (1 <= score <= 5):
+            return
+        scores = entry.setdefault("quality_scores", [])
+        scores.append(score)
+        if len(scores) > self.QUALITY_HISTORY_LEN:
+            del scores[:-self.QUALITY_HISTORY_LEN]
+        if (len(scores) >= self.QUALITY_MIN_SAMPLES
+                and sum(scores) / len(scores) < self.QUALITY_FAIL_THRESHOLD
+                and entry.get("persona_fit") is not False):
+            entry["persona_fit"] = False
+            logger.info("[stickers] auto-demoted %s: avg=%.1f scores=%s → persona_fit=false",
+                        filename, sum(scores) / len(scores), scores)
+        self._save()
+
     def available_tags_summary(self, limit: int = 20) -> str:
         """Prompt-friendly listing of available tagged stickers, ranked by use_count.
         Returns "" if no tagged stickers yet (so prompt skips the [STICKER:] guide)."""
         tagged = [
             (k, v) for k, v in self.entries.items()
-            if v.get("auto_tagged") and v.get("tags")
+            if v.get("auto_tagged") and v.get("tags") and v.get("persona_fit") is not False
         ]
         if not tagged:
             return ""
@@ -297,7 +439,9 @@ class StickerLibrary:
         "翻白眼": {"翻白眼", "无奈", "无语", "没办法"},
         "懒得理": {"懒得", "无语", "翻白眼", "无奈", "敷衍"},
         "懒得": {"懒得", "无语", "翻白眼", "无奈"},
-        "敷衍": {"敷衍", "无语", "懒得"},
+        "敷衍": {"敷衍", "无语", "懒得", "翻白眼", "无奈"},
+        "无视": {"无视", "翻白眼", "无奈", "无语", "敷衍", "不理", "懒得"},
+        "不理": {"不理", "无视", "翻白眼", "无奈", "懒得"},
         "doge": {"doge", "嘲讽", "笑", "挑衅"},
         "嘲讽": {"嘲讽", "doge", "挑衅", "笑"},
         "挑衅": {"挑衅", "嘲讽", "doge"},
@@ -323,9 +467,25 @@ class StickerLibrary:
         return out
 
     def pick_by_tag(self, tag: str, exclude_md5s: set | None = None) -> Optional[Path]:
-        """Fuzzy match a tag to best sticker. Matches across library tags, meaning,
-        and a synonym table so common emotion-name tags hit even when library
-        entries use related-but-different wording."""
+        """Fuzzy match a tag to the best sticker.
+
+        Scoring layers:
+          - Exact tag match: +3.0
+          - Synonym/probe set hits in entry tags: +2.0 (exact) / +1.2 (partial)
+          - Probe hits in meaning text: +1.0
+          - Light usage bonus: up to +0.4
+          - Freshness bonus (favors recently-stolen entries): up to +0.6,
+            decaying over ~30 days so new stickers cycle in naturally
+          - Random jitter: 0-0.1
+
+        Safety:
+          - Skips entries flagged persona_fit=false (visual/quality demoted)
+          - Skips entries whose backing file is missing on disk (orphan
+            records can otherwise win the score and lead pick to a dead
+            path, blocking same-tag valid stickers from being chosen)
+          - Cooldown bucket: when no fresh match is found, fall back to a
+            cooled-down entry so a sticker-only reply doesn't drop silently
+        """
         if not tag:
             return None
         tag_lc = tag.lower().strip()
@@ -334,13 +494,21 @@ class StickerLibrary:
         now = time.time()
         best_filename = None
         best_score = 0.0
+        # Fallback bucket: best match excluded only by the recent-use cooldown
+        cd_filename = None
+        cd_score = 0.0
         for filename, v in self.entries.items():
             if not v.get("auto_tagged"):
                 continue
+            if v.get("persona_fit") is False:
+                continue
             if v.get("md5", "") in exclude:
                 continue
-            last = self._last_used.get(filename, 0)
-            if now - last < RECENT_USE_COOLDOWN_SEC:
+            # Skip orphan records pointing to missing files; if the dead
+            # path wins the score, pick_by_tag returns it, _send_qq's
+            # .exists() check trips, and same-tag valid stickers never
+            # get chosen.
+            if not (self.dir / filename).exists():
                 continue
             score = 0.0
             entry_tags_lc = [((t or "").lower()) for t in v.get("tags", []) if t]
@@ -358,10 +526,26 @@ class StickerLibrary:
                 if probe in meaning_lc:
                     score += 1.0
             score += min(v.get("use_count", 0), 20) * 0.02
+            # Freshness bonus: favor recently-stolen entries so the library
+            # cycles naturally instead of locking onto old picks. Max +0.6
+            # at < 1 day, decays to ~0 over 30 days. Stays well below the
+            # exact-tag (+3.0) tier so semantics still dominate.
+            first_seen = v.get("first_seen", 0)
+            if first_seen:
+                age_days = max(0.0, (now - first_seen) / 86400.0)
+                score += max(0.0, 0.6 - age_days * 0.02)
             score += random.uniform(0, 0.1)
+            last = self._last_used.get(filename, 0)
+            if now - last < RECENT_USE_COOLDOWN_SEC:
+                if score > cd_score:
+                    cd_score = score
+                    cd_filename = filename
+                continue
             if score > best_score:
                 best_score = score
                 best_filename = filename
+        if (not best_filename or best_score < 1.0) and cd_filename and cd_score >= 1.0:
+            best_filename, best_score = cd_filename, cd_score
         if not best_filename or best_score < 1.0:
             return None
         self._last_used[best_filename] = now

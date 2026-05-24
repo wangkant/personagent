@@ -94,6 +94,22 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(agent.check_missed_mentions())
         asyncio.create_task(agent.loop_check_missed())
         asyncio.create_task(agent.stickers.bootstrap_tag_all())
+
+        async def _recheck_then_purge():
+            # First pass: text-based persona-fit (LLM judges from
+            # meaning/tags inferred from usage context — fast, no vision).
+            # Second pass: vision-based aesthetic (judges from pixels, catches
+            # what text can't — e.g. gaudy-design stickers that score the
+            # right "smug" emotion in context).
+            # Both passes use a version stamp on each entry so bumping the
+            # respective version constant re-judges the whole library.
+            n = await agent.stickers.recheck_persona_fit_all()
+            if n:
+                agent.stickers.purge_unfit()
+            m = await agent.visual_recheck_aesthetic_all()
+            if m:
+                agent.stickers.purge_unfit()
+        asyncio.create_task(_recheck_then_purge())
     logger.info("bot started on %s:%d (agent=%s)", HOST, PORT, agent.enabled if agent else False)
     yield
 

@@ -270,12 +270,18 @@ class Agent:
         stickers_json = Path(stickers_file)
         if not stickers_json.is_absolute():
             stickers_json = Path(__file__).parent / stickers_json
+        # Pass a one-line persona digest down to the sticker library; it uses
+        # this to ask the tagger whether each sticker fits the persona (so
+        # off-character stickers get persona_fit=false and aren't picked).
+        # Truncated so it stays well under the tagger's prompt budget.
+        persona_brief = (self.persona or "").replace("\n", " ").strip()[:200]
         self.stickers = StickerLibrary(
             stickers_dir=stickers_path,
             stickers_file=stickers_json,
             unknown_log=Path(__file__).parent / "unknown_stickers.jsonl",
             anthropic_caller=self._call_anthropic,
             tagger_model="deepseek-chat",
+            persona_brief=persona_brief,
         )
 
         self.examples_file = Path(__file__).parent / "examples.jsonl"
@@ -529,7 +535,7 @@ class Agent:
                 at_uid = user_id
             if auto_mem:
                 self._save_auto_memory(group_id, auto_mem)
-            await self._send_qq(group_id, reply, at_uid)
+            sticker_files = await self._send_qq(group_id, reply, at_uid)
             self.last_reply_at[group_id] = time.time()
             self._append_buffer(group_id, self.bot_name, reply)
 
@@ -541,8 +547,13 @@ class Agent:
 
             logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
+            # Pass the actual sticker files sent to eval so it can score
+            # them and feed back into the quality loop (low-average →
+            # auto persona_fit=false → purged on next startup).
             if self.eval_enable:
-                asyncio.create_task(self._evaluate_reply(group_id, mode, text, reply))
+                asyncio.create_task(self._evaluate_reply(
+                    group_id, mode, text, reply, sticker_files,
+                ))
 
             return True
 
@@ -1147,23 +1158,43 @@ class Agent:
         return text
 
     async def _evaluate_reply(
-        self, group_id: str, mode: str, user_msg: str, reply: str
+        self, group_id: str, mode: str, user_msg: str, reply: str,
+        sticker_files: list[str] | None = None,
     ) -> None:
-        """Background quality eval. Scores 1-5 via cheap model, appends to eval.jsonl.
-        Never raises — eval failures must not affect main reply flow."""
+        """Background quality eval. Scores 1-5 via the eval model, appends
+        to eval.jsonl. Never raises — eval failures must not affect main
+        reply flow.
+
+        If the reply contained [STICKER:tag] markers and stickers were
+        actually sent, ask the eval model for an extra sticker_score (1-5)
+        and route it back to stickers.record_quality. Real conversation
+        signal beats a one-shot LLM judgment for catching off-persona
+        stickers."""
         try:
             ctx_msgs = list(self.buffers[group_id])[-6:-1]
             ctx_text = "\n".join(f"{m['name']}: {m['text']}" for m in ctx_msgs)
+
+            has_sticker = bool(sticker_files)
+            sticker_clause = (
+                "\n该回复带了表情包. 同时给表情包贴合度打分 sticker_score (1-5):"
+                " 5=表情完美贴合语境/接梗, 3=可发可不发, 1=表情完全不符 (情绪错/审美土/出戏)."
+            ) if has_sticker else ""
+            json_schema = (
+                '{"score": 整数1-5, "reason": "一句话原因", "sticker_score": 整数1-5}'
+                if has_sticker else
+                '{"score": 整数1-5, "reason": "一句话原因"}'
+            )
 
             eval_prompt = (
                 f"评估 QQ 群聊回复质量。1-5 打分，5=完美自然，4=不错有小瑕疵，"
                 f"3=一般有点出戏，2=差明显不合适，1=灾难。\n\n"
                 f"群聊上下文：\n---\n{ctx_text}\n---\n"
-                f"{self.bot_name or 'bot'}的回复：「{reply}」\n\n"
+                f"{self.bot_name or 'bot'}的回复：「{reply}」\n"
+                f"{sticker_clause}\n"
                 f"人设：{self.bot_name or 'bot'} 是 QQ 群里的普通群友，自然口语，有自己脾气，不油腻不客套，"
                 f"该接梗接梗，该正经正经。\n"
                 f"考察：1) 是否贴上下文 2) 是否符合人设 3) 是否自然不像 AI 4) 长度是否合理。\n"
-                f'只输出 JSON：{{"score": 整数1-5, "reason": "一句话原因"}}'
+                f'只输出 JSON：{json_schema}'
             )
 
             async with httpx.AsyncClient(timeout=15) as client:
@@ -1182,11 +1213,33 @@ class Agent:
                     },
                 )
                 r.raise_for_status()
-                content = r.json()["choices"][0]["message"]["content"]
+                # Some reasoning models on OpenAI-compatible endpoints route
+                # output into `reasoning_content` and leave `content` empty.
+                # Fall back to either so we don't drop eval samples.
+                _msg = r.json()["choices"][0]["message"]
+                raw = (_msg.get("content") or _msg.get("reasoning_content") or "")
 
-            data = json.loads(content)
+            # Robust parse: model may wrap JSON in ```json fences or prose.
+            data = None
+            try:
+                data = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                m = re.search(r"\{.*\}", raw, re.S)
+                if m:
+                    try:
+                        data = json.loads(m.group(0))
+                    except json.JSONDecodeError:
+                        data = None
+            if not isinstance(data, dict):
+                logger.warning("[Agent] eval response not JSON mode=%s: %r", mode, raw[:200])
+                return
             score = int(data.get("score", 0))
             reason = str(data.get("reason", ""))[:200]
+            sticker_score = data.get("sticker_score")
+            try:
+                sticker_score = int(sticker_score) if sticker_score is not None else None
+            except (TypeError, ValueError):
+                sticker_score = None
 
             record = {
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1197,6 +1250,11 @@ class Agent:
                 "score": score,
                 "reason": reason,
             }
+            if sticker_score is not None and sticker_files:
+                record["sticker_score"] = sticker_score
+                record["sticker_files"] = sticker_files
+                for fn in sticker_files:
+                    self.stickers.record_quality(fn, sticker_score)
             self._append_with_rotation(
                 self.eval_file,
                 json.dumps(record, ensure_ascii=False) + "\n",
@@ -1208,8 +1266,8 @@ class Agent:
             else:
                 logger.debug("[Agent] eval %d/5 mode=%s: %s", score, mode, reason)
         except Exception as e:
-            logger.debug("[Agent] reply evaluation failed: %s: %s",
-                         type(e).__name__, e)
+            logger.warning("[Agent] reply evaluation failed: %s: %s",
+                           type(e).__name__, e)
 
     async def _think(
         self,
@@ -1583,10 +1641,16 @@ class Agent:
         except Exception as e:
             logger.warning("[Agent] send group msg failed: %s", e)
 
-    async def _send_qq(self, group_id: str, text: str, at_user_id: str = "") -> None:
+    async def _send_qq(self, group_id: str, text: str, at_user_id: str = "") -> list[str]:
+        """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
+        group. Returns the list of sticker filenames (relative to
+        self.stickers.dir) that were actually sent — used by the quality
+        feedback loop so eval can attribute scores back to specific
+        stickers."""
         text = self._sanitize_reply(text)
+        sent_stickers: list[str] = []
         if not text:
-            return
+            return sent_stickers
         segments = self._parse_sticker_markers(text)
         is_first = True
         for kind, value in segments:
@@ -1607,6 +1671,11 @@ class Agent:
                 msg_segs.append({"type": "image", "data": {"file": f"base64://{img_b64}"}})
                 await self._napcat_send_group(group_id, msg_segs)
                 is_first = False
+                try:
+                    rel = str(file_path.relative_to(self.stickers.dir)).replace("\\", "/")
+                    sent_stickers.append(rel)
+                except ValueError:
+                    pass
                 continue
             chunks = self._split_text(value)
             for chunk in chunks:
@@ -1623,6 +1692,7 @@ class Agent:
                     message = chunk
                 await self._napcat_send_group(group_id, message)
                 is_first = False
+        return sent_stickers
 
     async def check_missed_mentions(self) -> None:
         """启动后拉最近 10 条群消息，如有被 @/叫名字且未回复的，补处理 1 条。"""
@@ -1738,6 +1808,39 @@ class Agent:
         "6. 不要『这张图/图中/图片显示』前缀，直接说"
     )
 
+    # Aesthetic judgment prompt used by visual_recheck_aesthetic_all. The
+    # auto-tagger only sees the *context* a sticker is used in (and decides
+    # emotional intent) — it can't see the image itself, so it can't tell a
+    # cleanly-designed "smug" sticker from a tacky old WeChat-family-group
+    # one with the same emotional intent. This prompt asks the vision model
+    # to look at the image directly and judge whether the visual style
+    # matches the configured persona.
+    VISION_AESTHETIC_PROMPT = (
+        "判断这张 QQ 表情包的视觉审美是否符合一个**高知温柔聪明的女生网友**会发的风格.\n"
+        "**只输出一行 JSON: {\"tacky\": true|false, \"reason\": \"6 字内\"}**\n"
+        "\n"
+        "tacky=true (不符合, 该 ban) 标准:\n"
+        "- 中老年/家族群风格: 花体字祝福(早安/晚安/周末快乐/恭喜发财) + 闪光特效 + 玫瑰/动感卡通\n"
+        "- 印花字体配鲜艳色块 / 低分辨率彩色描边贴纸\n"
+        "- 抖音/快手 烂梗烂图, 视觉粗糙\n"
+        "- 2010 年代非主流风, QQ 秀美图秀秀风\n"
+        "- 过气可爱风: 粗糙渲染的卡通熊狗+硬字幕\n"
+        "- 任何让人觉得'微信家族群/红包群'里才会发的设计\n"
+        "\n"
+        "tacky=false (OK 可以发) 标准:\n"
+        "- 现代清爽设计 / 经典 doge / 优质表情包贴纸 / 影视截图 / 综艺截图\n"
+        "- 卡通形象但视觉精致 / 简单纯色块 / 文字简洁\n"
+        "- 真人/明星/动漫截图 / 流行 meme 图\n"
+        "- 哈基米 / 无语熊猫 / 摸鱼大鱼 / 流泪猫猫头 等公认现代表情包\n"
+        "\n"
+        "拿不准就 false (宁可放过, 别误杀好图). 只 ban 一眼看上去就土的."
+    )
+
+    # Bump this whenever VISION_AESTHETIC_PROMPT criteria change. On the next
+    # startup, visual_recheck_aesthetic_all will re-judge every entry whose
+    # _visual_aesthetic_version is older — no manual JSON surgery needed.
+    VISUAL_AESTHETIC_VERSION = 1
+
     _VISION_REJECT_TOKENS = (
         "不清楚", "不确定", "看不到", "看不了", "看不清", "打不开",
         "无法", "不存在", "无内容", "黑屏", "空白", "没看到",
@@ -1759,6 +1862,148 @@ class Agent:
         )
         return ""
 
+    @staticmethod
+    def _gif_first_frame_png(gif_bytes: bytes) -> bytes:
+        """Extract a GIF's first frame as PNG. GLM-4V and many other vision
+        endpoints reject GIF directly (error 1210 on Zhipu); the first frame
+        as PNG carries enough signal for a caption. Returns empty bytes on
+        failure so the caller can fall back to OCR."""
+        try:
+            from io import BytesIO
+            from PIL import Image
+            im = Image.open(BytesIO(gif_bytes))
+            im.seek(0)
+            out = BytesIO()
+            im.convert("RGB").save(out, format="PNG")
+            return out.getvalue()
+        except Exception as e:
+            logger.debug("[Agent] GIF→PNG failed: %s: %s", type(e).__name__, e)
+            return b""
+
+    async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
+        """Ask the vision model if a sticker is visually tacky / off-persona.
+        Returns True (tacky → should ban), False (fine), or None on judgment
+        failure (read error / API error / unparseable response — entry is
+        left untouched). Reuses the GLM-4V infra: MIME detection, first-frame
+        for GIF, base64 data URL."""
+        try:
+            if not img_bytes or len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
+                return None
+            head = img_bytes[:16]
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                mime = "image/png"
+            elif head[:3] == b"\xff\xd8\xff":
+                mime = "image/jpeg"
+            elif head[:4] == b"GIF8":
+                frame = self._gif_first_frame_png(img_bytes)
+                if not frame:
+                    return None
+                img_bytes = frame
+                mime = "image/png"
+            elif head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+                mime = "image/webp"
+            else:
+                return None
+            data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
+
+            # Aggressive backoff: aesthetic recheck is a startup burst, free
+            # tiers rate-limit hard. Without retry many judgments return None
+            # and the recheck appears to do nothing.
+            payload = {
+                "model": self.vision_model,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.VISION_AESTHETIC_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }],
+                "max_tokens": 60,
+                "temperature": 0,
+            }
+            raw = ""
+            async with httpx.AsyncClient(timeout=30) as c:
+                for attempt in range(4):
+                    r = await c.post(
+                        f"{self.glm_base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.glm_api_key}"},
+                        json=payload,
+                    )
+                    if r.status_code == 429:
+                        if attempt == 3:
+                            return None
+                        await asyncio.sleep(2 ** attempt * 3.0)  # 3s, 6s, 12s
+                        continue
+                    if r.status_code != 200:
+                        return None
+                    raw = (r.json().get("choices", [{}])[0]
+                                .get("message", {})
+                                .get("content", "") or "").strip()
+                    break
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+            data = None
+            try:
+                data = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                m = re.search(r"\{.*\}", raw, re.S)
+                if m:
+                    try:
+                        data = json.loads(m.group(0))
+                    except json.JSONDecodeError:
+                        data = None
+            if not isinstance(data, dict) or "tacky" not in data:
+                return None
+            return bool(data.get("tacky"))
+        except Exception as e:
+            logger.debug("[Agent] sticker aesthetic judge failed: %s: %s",
+                         type(e).__name__, e)
+            return None
+
+    async def visual_recheck_aesthetic_all(self, limit: int = 200) -> int:
+        """Scan tagged stickers and demote visually-tacky ones to
+        persona_fit=false. Complements the text-based recheck_persona_fit_all:
+        that one only sees meaning/tags (LLM-inferred from usage context and
+        oblivious to visual style), so two stickers with the same "smug"
+        meaning but wildly different aesthetics (clean meme vs gaudy old
+        family-group sticker) both look fit by text alone. This pass looks
+        at the pixels.
+
+        Version-gated via _visual_aesthetic_version on each entry. Bump
+        VISUAL_AESTHETIC_VERSION to force re-judgment of all entries."""
+        todo = [
+            (fn, v) for fn, v in self.stickers.entries.items()
+            if v.get("auto_tagged")
+            and v.get("persona_fit") is not False
+            and v.get("_visual_aesthetic_version", 0) < self.VISUAL_AESTHETIC_VERSION
+        ][:limit]
+        if not todo:
+            return 0
+        marked = 0
+        for fn, v in todo:
+            file_path = self.stickers.dir / fn
+            if not file_path.exists():
+                continue
+            try:
+                img_bytes = file_path.read_bytes()
+            except Exception as e:
+                logger.debug("[Agent] aesthetic read failed %s: %s", fn, e)
+                continue
+            tacky = await self._judge_sticker_aesthetic(img_bytes)
+            v["_visual_aesthetic_version"] = self.VISUAL_AESTHETIC_VERSION
+            if tacky is True:
+                v["persona_fit"] = False
+                marked += 1
+                logger.info("[stickers] visual-aesthetic ban %s: meaning=%r",
+                            fn, v.get("meaning", ""))
+            # 5s pacing: free-tier vision rate limits are tight; tighter
+            # spacing burns through the quota in seconds and most judgments
+            # come back None from 429s.
+            await asyncio.sleep(5.0)
+        self.stickers._save()
+        logger.info("[Agent] visual aesthetic recheck: scanned=%d banned=%d",
+                    len(todo), marked)
+        return marked
+
     async def _describe_image_glm(self, url: str) -> str:
         """智谱 GLM-4V — fetch image, send as base64 data URL.
         Raw URLs trigger GLM error 1210 (图片输入格式/解析错误); base64 mandatory."""
@@ -1777,7 +2022,14 @@ class Agent:
             elif img_bytes[:3] == b"\xff\xd8\xff":
                 mime = "image/jpeg"
             elif img_bytes[:4] == b"GIF8":
-                mime = "image/gif"
+                # GLM rejects GIFs (error 1210, format/parse). Pull the first
+                # frame as PNG so animated stickers/memes still get a caption.
+                frame = self._gif_first_frame_png(img_bytes)
+                if not frame:
+                    logger.info("[Agent] GLM skip GIF (first-frame extract failed), fallback to OCR")
+                    return ""
+                img_bytes = frame
+                mime = "image/png"
             elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
                 mime = "image/webp"
             elif img_bytes[:2] == b"BM":
@@ -1796,26 +2048,36 @@ class Agent:
                 mime = "image/jpeg"
             data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
 
+            # 429 backoff retry: free-tier vision endpoints rate-limit
+            # aggressively. Each incoming group image goes through here, so
+            # without retry many captions silently fall back to OCR.
+            payload = {
+                "model": self.vision_model,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.VISION_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }],
+                "max_tokens": 120,
+                "temperature": 0.3,
+            }
             async with httpx.AsyncClient(timeout=30) as c:
-                r = await c.post(
-                    f"{self.glm_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.glm_api_key}"},
-                    json={
-                        "model": self.vision_model,
-                        "messages": [{
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": self.VISION_PROMPT},
-                                {"type": "image_url", "image_url": {"url": data_url}},
-                            ],
-                        }],
-                        "max_tokens": 120,
-                        "temperature": 0.3,
-                    },
-                )
-                if r.status_code != 200:
+                r = None
+                for attempt in range(3):
+                    r = await c.post(
+                        f"{self.glm_base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.glm_api_key}"},
+                        json=payload,
+                    )
+                    if r.status_code != 429 or attempt == 2:
+                        break
+                    await asyncio.sleep(2 ** attempt)  # 1s, 2s
+                if r is None or r.status_code != 200:
                     logger.warning("[Agent] GLM vision HTTP %d: %s",
-                                   r.status_code, r.text[:200])
+                                   r.status_code if r else 0,
+                                   (r.text if r else "")[:200])
                     return ""
                 data = r.json()
                 text = (data.get("choices", [{}])[0]
