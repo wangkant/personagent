@@ -242,36 +242,53 @@ class StickerLibrary:
                 return
             ctxs = entry.get("seen_contexts", [])
             ctx_block = "\n\n".join(
-                f"样本{i+1}（sender={c['sender']}）:\n" + "\n".join(c.get("before", []))
+                f"sample {i+1} (sender={c['sender']}):\n" + "\n".join(c.get("before", []))
                 for i, c in enumerate(ctxs)
             )
             persona_block = ""
             if self.persona_brief:
                 persona_block = (
-                    f"\n[人设]\n{self.persona_brief}\n"
-                    "另外判断这张表情包**这个人会不会发**——她爱阴阳/调侃/玩梗，所以**嘲讽/翻白眼/无语/敷衍/吐槽/挑衅/阴阳/doge/笑/绷不住** 都 fit=true。\n"
-                    "**fit=false 标准**：\n"
-                    "  - 粗俗低俗 / 男性化抽象 / 攻击性极强 / 恐怖血腥 / 纯水图无表情 / 政治\n"
-                    "  - **土/审美差**：中老年表情包(花体字「早上好」「周末快乐」+ 闪光 + 玫瑰/大头娃娃)、家族群风格、印花字体配鲜艳色块、抖音烂梗烂图、2010 年代非主流风\n"
-                    "  - **过气可爱风**：粗糙渲染的卡通熊/狗 + 字幕、QQ秀风格、低质量贴纸\n"
-                    "  关键词参考: 早安/晚安祝福/动感闪字/玫瑰祝福/夸张感叹号/低分辨率彩色描边\n"
-                    "其它一概 fit=true。**宁可错放一千不可错杀一个**(土的除外, 这条要严)。\n"
+                    f"\n[Persona]\n{self.persona_brief}\n"
+                    "Also judge **would this person actually send this sticker**. "
+                    "Sticker meanings in the sarcastic / teasing / meme / eyeroll / "
+                    "speechless / amused / playful / mocking / doge family typically "
+                    "fit=true — these are normal chat-voice stickers.\n"
+                    "**fit=false criteria**:\n"
+                    "  - Vulgar / crude / hostile / horror / blood / pure-filler "
+                    "(no expression) / political\n"
+                    "  - **Tacky / dated aesthetic**: older family-group style "
+                    "(floral-script 'good morning' / 'happy weekend' + sparkle "
+                    "effects + roses / big-head dolls), chain-message style, "
+                    "loud printed fonts on saturated color blocks, low-effort "
+                    "short-video memes, 2010s subculture aesthetic\n"
+                    "  - **Stale cute style**: crudely-rendered cartoon bears/dogs "
+                    "+ hard subtitles, low-quality stickers\n"
+                    "  Reference keywords: morning/evening greetings, animated "
+                    "sparkle text, rose-themed congratulations, excessive "
+                    "exclamation marks, low-res outlined stickers.\n"
+                    "Default to fit=true. **Better to let through one bad sticker "
+                    "than to wrongly ban a good one** — except for the tacky "
+                    "category above, which should be strict.\n"
                 )
             prompt = (
-                "你帮我给一张 QQ 群表情包打 tag。下面是这张表情包在群里被人发的 N 个上下文样本——\n"
-                "你看不到图，但能从「发图前后大家在聊什么」推断出这张表情包大概是啥含义。\n\n"
+                "Help me tag a reaction sticker from a group chat. Below are "
+                "N samples of how the sticker has been used in the group — "
+                "you can't see the image itself, but from \"what people were "
+                "saying before and after the sticker\" you can infer roughly "
+                "what it means.\n\n"
                 f"{ctx_block}\n"
                 f"{persona_block}"
-                "\n[严格按 JSON 一行输出，不要 markdown 包裹]\n"
-                + ('{"meaning":"<2-8 字描述这张表情包的语义/情绪>",'
-                   '"tags":["<2-4 个标签>"],'
+                "\n[Output a single JSON line, no markdown fences]\n"
+                + ('{"meaning":"<2-8 words describing the sticker\'s semantics/emotion>",'
+                   '"tags":["<2-4 tags>"],'
                    '"fit":true|false}'
                    if self.persona_brief else
-                   '{"meaning":"<2-8 字描述这张表情包的语义/情绪，比如 \'doge 笑/嘲讽\' \'摸鱼大鱼/划水\'>",'
-                   '"tags":["<2-4 个标签，便于检索时 fuzzy match，例如：嘲讽、笑、无语、摸鱼>"]}')
+                   '{"meaning":"<2-8 words describing the sticker\'s semantics/emotion, '
+                   'e.g. \'doge — smug/mocking\' \'salaryman slacking\'>",'
+                   '"tags":["<2-4 tags for fuzzy retrieval, e.g. smug, lol, eyeroll, slacking>"]}')
             )
             raw = await self._anthropic_caller(
-                system="你是表情包语义分析器，只输出 JSON。",
+                system="You are a sticker semantic analyzer. Output JSON only.",
                 messages=[{"role": "user", "content": prompt}],
                 model=self.tagger_model,
                 max_tokens=200,
@@ -328,25 +345,36 @@ class StickerLibrary:
             if not meaning and not tags:
                 continue
             prompt = (
-                f"[人设]\n{self.persona_brief}\n\n"
-                f"[表情包]\nmeaning: {meaning}\ntags: {tags}\n\n"
-                "判断这张表情包**这个人会不会发**。\n"
-                "她调皮、爱阴阳怪气、爱玩梗——所以**嘲讽/调侃/翻白眼/无语/敷衍/吐槽/挑衅/阴阳怪气/doge/笑/绷不住** 这类**都算 fit=true**(这就是她日常风格)。\n"
-                "**fit=false 标准**:\n"
-                "  - 粗俗低俗(屎尿屁/性暗示/擦边/骂街)\n"
-                "  - 男性化的兄贵/狗叫/抽象黑话/重度二次元\n"
-                "  - 攻击性极强带攻击意图的(杀/打/血腥/恐怖/恶心)\n"
-                "  - 阴森丧到底(自杀/抑郁意象)\n"
-                "  - 纯水图无意义无表情\n"
-                "  - 政治/敏感\n"
-                "  - **土/审美差**: 中老年表情包(花体字祝福/早安晚安/玫瑰/大头娃娃/动感闪字)、家族群风格、印花字体配鲜艳色块、抖音烂梗烂图、2010 年代非主流、低分辨率彩色描边贴纸、过气可爱风\n"
-                "  **关键词参考**: 早安/晚安祝福/动感/闪字/玫瑰祝福/夸张感叹号/低分辨率/印花体\n"
-                "其它一概 fit=true。**土的要严, 其它宁可错放不可错杀**。\n"
-                '[只输出 JSON 一行] {"fit":true|false}'
+                f"[Persona]\n{self.persona_brief}\n\n"
+                f"[Sticker]\nmeaning: {meaning}\ntags: {tags}\n\n"
+                "Judge whether **this person would actually send this sticker**.\n"
+                "Stickers in the sarcastic / teasing / eyeroll / speechless / "
+                "playful / mocking / doge / amused / 'can't keep a straight face' "
+                "family typically count as **fit=true** — that's everyday "
+                "conversational range.\n"
+                "**fit=false criteria**:\n"
+                "  - Vulgar / crude (toilet humor, sexual content, slurs, swearing)\n"
+                "  - Macho / bro-fight aesthetic / aggressive in-jokes / heavy "
+                "subculture-specific anime\n"
+                "  - Hostile with real intent (kill / beat / blood / horror / gore)\n"
+                "  - Heavy depression imagery (self-harm / suicide / nihilism)\n"
+                "  - Pure filler with no expression / meaning\n"
+                "  - Political / sensitive\n"
+                "  - **Tacky / dated aesthetic**: older family-group style (floral "
+                "greeting fonts / morning-evening blessings / roses / big-head "
+                "dolls / animated sparkle text), chain-message style, loud printed "
+                "fonts on saturated color blocks, low-effort short-video memes, "
+                "2010s subculture, low-res outlined stickers, stale cute style.\n"
+                "  **Reference keywords**: morning/evening blessings, animated "
+                "text, rose-themed greetings, excessive exclamation marks, "
+                "low-resolution, ornamental fonts.\n"
+                "Everything else defaults to fit=true. **Strict on tacky; lenient "
+                "elsewhere — better to keep through than to mis-ban.**\n"
+                '[Output a single JSON line] {"fit":true|false}'
             )
             try:
                 raw = await self._anthropic_caller(
-                    system="你是表情包人设匹配判断器，只输出 JSON。",
+                    system="You are a sticker / persona-fit classifier. Output JSON only.",
                     messages=[{"role": "user", "content": prompt}],
                     model=self.tagger_model,
                     max_tokens=40,
@@ -431,10 +459,36 @@ class StickerLibrary:
             for t in v.get("tags", []):
                 if t and t not in seen_tags:
                     seen_tags[t] = v.get("meaning") or t
-        lines = [f"  {tag}（{meaning}）" for tag, meaning in seen_tags.items()]
+        lines = [f"  {tag} ({meaning})" for tag, meaning in seen_tags.items()]
         return "\n".join(lines)
 
+    # Tag synonym map used by pick_by_tag for fuzzy retrieval. Both English
+    # and Chinese entries are seeded so the same dict serves both locales
+    # without users having to write their own. Add your own entries here if
+    # your sticker-tagger uses a different naming convention.
     _SYNONYMS = {
+        # English
+        "eyeroll":   {"eyeroll", "tired", "speechless", "fed-up", "whatever"},
+        "tired":     {"tired", "eyeroll", "speechless", "exhausted", "done"},
+        "speechless": {"speechless", "tired", "eyeroll", "no-words"},
+        "lazy":      {"lazy", "tired", "speechless", "eyeroll", "whatever"},
+        "whatever":  {"whatever", "fed-up", "eyeroll", "tired"},
+        "smug":      {"smug", "doge", "mocking", "sarcastic", "lol"},
+        "doge":      {"doge", "smug", "mocking", "sarcastic", "lol"},
+        "mocking":   {"mocking", "smug", "doge", "sarcastic"},
+        "sarcastic": {"sarcastic", "smug", "doge", "mocking"},
+        "lol":       {"lol", "doge", "cracking-up", "smug"},
+        "cracking-up": {"cracking-up", "lol", "dying", "amused"},
+        "amused":    {"amused", "lol", "cracking-up"},
+        "hug":       {"hug", "comfort", "sympathetic"},
+        "sympathetic": {"sympathetic", "hug", "comfort"},
+        "comfort":   {"comfort", "hug", "sympathetic"},
+        "shocked":   {"shocked", "wow", "no-way", "speechless"},
+        "wow":       {"wow", "shocked", "amazing", "no-way"},
+        "amazing":   {"amazing", "wow", "shocked"},
+        "meme":      {"meme", "doge", "smug", "lol"},
+        "agree":     {"agree", "exactly", "fair", "true"},
+        # Chinese (legacy / backward-compat seeds for Chinese-locale forks)
         "无奈": {"无奈", "翻白眼", "没办法", "醉了", "无语", "叹气", "服了"},
         "翻白眼": {"翻白眼", "无奈", "无语", "没办法"},
         "懒得理": {"懒得", "无语", "翻白眼", "无奈", "敷衍"},
@@ -442,7 +496,6 @@ class StickerLibrary:
         "敷衍": {"敷衍", "无语", "懒得", "翻白眼", "无奈"},
         "无视": {"无视", "翻白眼", "无奈", "无语", "敷衍", "不理", "懒得"},
         "不理": {"不理", "无视", "翻白眼", "无奈", "懒得"},
-        "doge": {"doge", "嘲讽", "笑", "挑衅"},
         "嘲讽": {"嘲讽", "doge", "挑衅", "笑"},
         "挑衅": {"挑衅", "嘲讽", "doge"},
         "笑": {"笑", "doge", "绷不住", "嘲讽"},
