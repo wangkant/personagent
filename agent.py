@@ -1719,9 +1719,14 @@ class Agent:
             {"type": "text", "text": dynamic_block},
         ]
 
-        if mode == "owner":
-            model_to_use = self.model
-        elif mode == "judge":
+        # Model routing:
+        # - owner / called → main model (user-facing reply, keep quality)
+        # - judge / followup → fallback (background decisions + proactive
+        #   chime-ins, short output, ~70% cheaper per call)
+        # - Rate-limit-triggered fallback still applies via _pick_group_model
+        if mode in ("owner", "called"):
+            model_to_use = self._pick_group_model() if mode == "called" else self.model
+        elif mode in ("judge", "followup"):
             model_to_use = self.fallback_model or self.model
         else:
             model_to_use = self._pick_group_model()
@@ -2241,6 +2246,8 @@ class Agent:
                 "max_tokens": 60,
                 "temperature": 0,
             }
+            if "k2" in self.vision_model.lower():
+                payload["thinking"] = {"type": "disabled"}
             raw = ""
             async with httpx.AsyncClient(timeout=30) as c:
                 for attempt in range(4):
@@ -2383,6 +2390,13 @@ class Agent:
                 "max_tokens": 120,
                 "temperature": 0.3,
             }
+            # K2-family models are reasoning models — by default they spend
+            # the entire max_tokens budget on reasoning_content and leave
+            # the actual content empty. Short-caption tasks like this need
+            # thinking disabled. Older vision-preview models reject this
+            # field with HTTP 400, so gate on the model name.
+            if "k2" in self.vision_model.lower():
+                payload["thinking"] = {"type": "disabled"}
             async with httpx.AsyncClient(timeout=30) as c:
                 r = None
                 for attempt in range(3):
@@ -2757,9 +2771,19 @@ class Agent:
                     s += 0.3
             if mode and ex.get("mode") == mode:
                 s += 0.5
+            # Recency: half-life 14 days, max bonus +0.3 — recent samples
+            # win ties but cannot outweigh a strong content match. (The old
+            # `len(ts) * 0.001` was a constant offset; all ISO timestamps
+            # are 19 chars so it gave every entry the same bump.)
             ts = ex.get("ts", "")
             if ts:
-                s += len(ts) * 0.001
+                try:
+                    from datetime import datetime
+                    ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    age_days = (datetime.now(ts_dt.tzinfo) - ts_dt).total_seconds() / 86400
+                    s += 0.3 * (0.5 ** (age_days / 14.0))
+                except Exception:
+                    pass
             return s
 
         have_signal = bool(focus_tokens or mode)
@@ -2772,14 +2796,14 @@ class Agent:
 
         if pairs:
             parts.append(
-                "【对比学习】下面是同一情境的「错误回复 [BAD]」vs「正确回复 [OK]」对照——"
-                "重点学 [OK] 那种说话风格，避免 [BAD] 那种 AI 味。"
+                "[Contrastive] Below are same-scenario [BAD] vs [OK] reply pairs. "
+                "Learn the voice in [OK], avoid the AI-flavored phrasing in [BAD]."
             )
             for p in pairs:
                 ctx = "\n".join(p.get("context", []))
                 parts.append(
-                    f"\n场景: {p.get('scenario','?')}\n"
-                    f"群里:\n{ctx}\n"
+                    f"\nScenario: {p.get('scenario','?')}\n"
+                    f"Group chat:\n{ctx}\n"
                     f"[BAD] {p.get('reply','')}\n"
                     f"[OK]  {p.get('better','')}"
                 )
@@ -2791,13 +2815,13 @@ class Agent:
         else:
             goods = candidates[-limit_good:]
         if goods:
-            parts.append("\n【正面示范】这些回复都贴你的风格，学这种感觉：")
+            parts.append("\n[Positive examples] These replies match your voice — pick up the feel:")
             for e in goods:
                 ctx = "\n".join(e.get("context", []))
                 parts.append(
-                    f"\n场景: {e.get('scenario','?')}\n"
-                    f"群里:\n{ctx}\n"
-                    f"你的回复: {e.get('reply','')}"
+                    f"\nScenario: {e.get('scenario','?')}\n"
+                    f"Group chat:\n{ctx}\n"
+                    f"Your reply: {e.get('reply','')}"
                 )
 
         parts.append("\n</examples>")
@@ -2812,40 +2836,44 @@ class Agent:
         if not tags_summary:
             return (
                 "\n\n<sticker_guide>\n"
-                "**你目前还没攒到任何表情包**——你刚加群，库里是空的。\n"
-                f"（已观察到 {stats['total']} 张，但都还没攒够上下文理解含义，所以发不出去。）\n"
+                "**You haven't collected any stickers yet** — fresh in the group, library is empty.\n"
+                f"({stats['total']} seen so far, but none with enough context to interpret, so nothing to send.)\n"
                 "\n"
-                "**被问『有什么表情包』『发个表情包』『让我看看你收藏的』时：**\n"
-                "- **坦白没攒着**，禁止瞎编不存在的表情包名字（比如『猫猫无语脸』『熊猫摊手』之类的，你**根本没有**就别说有）\n"
-                "- 自然回应：『刚来还没攒呢』『还没收藏多少』『让我先看你们都发啥再说』『我先观察一阵子』\n"
-                "- 反向调侃也行：『你倒挺会蹭，自己先发几个让我学学』『想抄我作业是吧』\n"
+                "**When asked 'got any stickers?' / 'send a sticker' / 'show me your collection':**\n"
+                "- **Be honest you have none.** Do NOT fabricate names that don't exist in the library — if it's not there, don't claim it is.\n"
+                "- Natural deflections: 'haven't collected any yet' / 'still watching what y'all post' / 'give me a bit to observe'\n"
+                "- Or flip it: 'you're welcome to drop a few so I can learn' / 'trying to copy my homework huh'\n"
                 "\n"
-                "**绝对不要使用 `[STICKER:xxx]` 标记**——库里没货发不出，会显得很傻\n"
-                "（等库里攒够了你就会爱上每条消息后面跟一张——但现在不行）\n"
+                "**Do NOT emit `[STICKER:xxx]` markers** — the library is empty, nothing would send, you'd look silly.\n"
+                "(Once the library fills up you'll start riffing one onto most replies — but not yet.)\n"
                 "</sticker_guide>"
             )
         owner_pattern = self._owner_sticker_pattern_block()
         return (
             "\n\n<sticker_guide>\n"
-            f"**你常用表情包**——库里有 {stats['tagged']} 张 tagged。在 reply 里写 `[STICKER:<tag>]`，agent 会自动从库里挑张匹配的发出去。\n"
+            f"**Your sticker library** has {stats['tagged']} tagged entries. Write `[STICKER:<tag>]` in your reply and the agent will pick a matching one from the library.\n"
             "\n"
             f"{owner_pattern}"
-            "**频率目标**：大约**每 3-4 条回复就有 1 条带表情包**——真人聊天的常态，不带反而显冷。\n"
-            "近一波 burst 内最起码用 1 次。如果你回了 4 条以上都纯文字，下一条**强烈倾向**带一张。\n"
+            "**Frequency target**: roughly **1 sticker every 3-4 replies** — natural human pace; going without makes you feel cold.\n"
+            "At least once per burst. If you've sent 4+ pure-text replies in a row, the next one **strongly prefers** a sticker.\n"
             "\n"
-            "**怎么用**：\n"
-            "- joke/troll/吐槽/玩梗 → 文字 + sticker（例：『确实牛』+ `[STICKER:嘲讽]`）\n"
-            "- 被 @ 没啥可说 / 接梗到位 / 笑场 / 同梗追问 → **只发 sticker 不发字**（例：单独一行 `[STICKER:翻白眼]`）\n"
-            "- vent 共情 → 偶尔带（例：『心疼』+ `[STICKER:抱抱]`）\n"
+            "**How to use**:\n"
+            "- joke / tease / mock-complain / meme → text + sticker (e.g. 'fair enough' + `[STICKER:smug]`)\n"
+            "- @ with nothing real to say / nailed the joke / cracking up / piling on → **sticker only, no text**\n"
+            "- vent empathy → occasionally (e.g. 'oof' + `[STICKER:hug]`)\n"
             "\n"
-            "**不该带**：\n"
-            "- 答正经问题/给具体信息 → 不跟\n"
-            "- 长解释超 50 字 → 不跟\n"
-            "- 上一条刚发过 → 这条歇一下\n"
+            "**Don't use a sticker when**:\n"
+            "- answering a real question / delivering concrete info\n"
+            "- explanation runs past ~50 chars\n"
+            "- you just sent one in the previous reply\n"
             "\n"
-            "**tag 选择**：直接用下面列出的 tag 之一。匹配比较宽松，相近词（无奈≈翻白眼、嘲讽≈doge）都行，**实在拿不准就用 `无奈/翻白眼/嘲讽` 这三个万能 tag**。\n"
+            "**Tag diversity — important**:\n"
+            "- **Don't default-spam** the same handful of fallback tags. Even when they map to multiple files, the files look visually similar within a tag and users perceive 'all the same'.\n"
+            "- **Pick the tag that fits the moment**: real laugh → `lol/cracking-up`, teasing → `smug/doge/sarcastic`, spectating → `popcorn/watching`, empathy → `hug/sympathetic`, puzzled → `confused/thinking`, agreement → `agree/exactly`, conceding → `surrender/lost`. Try a specific tag before falling back.\n"
+            "- Synonym matching is lenient — adjacent tags fall through automatically, so leaning specific actually works better than leaning generic.\n"
+            "- **Don't repeat the same tag in two consecutive replies in the same thread** — humans don't.\n"
             "\n"
-            "当前库里可用 tag（按热度）：\n"
+            "Available tags (by frequency):\n"
             f"{tags_summary}\n"
             "</sticker_guide>"
         )
