@@ -290,6 +290,14 @@ class Agent:
         self.glm_api_key = glm_api_key
         self.glm_base_url = glm_base_url.rstrip("/") if glm_base_url else ""
 
+        # Private-chat whitelist: OWNER_QQ is always allowed; PRIVATE_ALLOWED_QQS
+        # (comma-separated) lists additional QQs that may DM the bot. They take
+        # the "ordinary friend" branch in _chat_private rather than the closer
+        # owner override. Empty = only OWNER_QQ can DM.
+        self.private_allowed_qqs: set = {
+            q.strip() for q in os.getenv("PRIVATE_ALLOWED_QQS", "").split(",") if q.strip()
+        }
+
         stickers_path = Path(stickers_dir)
         if not stickers_path.is_absolute():
             stickers_path = Path(__file__).parent / stickers_path
@@ -385,10 +393,14 @@ class Agent:
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
 
+        # Private chat: OWNER_QQ + anyone in PRIVATE_ALLOWED_QQS. Owner gets
+        # the closer "private overrides" branch; everyone else gets a more
+        # neutral "ordinary friend" branch.
         if message_type == "private":
-            if not self.owner_qq or user_id != self.owner_qq:
+            is_owner = bool(self.owner_qq) and user_id == self.owner_qq
+            if not is_owner and user_id not in self.private_allowed_qqs:
                 return False
-            return await self._handle_private(user_id, payload)
+            return await self._handle_private(user_id, payload, is_owner=is_owner)
 
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
@@ -609,7 +621,7 @@ class Agent:
 
             return True
 
-    async def _handle_private(self, user_id: str, payload: dict) -> bool:
+    async def _handle_private(self, user_id: str, payload: dict, is_owner: bool = True) -> bool:
         text = await self._extract_text(payload)
         if not text:
             return False
@@ -622,7 +634,7 @@ class Agent:
                 history = self.private_history[user_id]
 
             try:
-                reply, auto_mem = await self._chat_private(history)
+                reply, auto_mem = await self._chat_private(history, is_owner=is_owner)
             except Exception as e:
                 logger.warning("[Agent] private-chat LLM failed: %s", e)
                 return False
@@ -655,35 +667,60 @@ class Agent:
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
-    async def _chat_private(self, history: list[dict]) -> tuple[str, str]:
-        """Private chat with owner. Uses Anthropic SDK + DeepSeek anthropic endpoint."""
+    async def _chat_private(self, history: list[dict], is_owner: bool = True) -> tuple[str, str]:
+        """Private chat. Uses Anthropic SDK + DeepSeek anthropic endpoint.
+
+        is_owner=True  → owner-style override (very close, all defenses off)
+        is_owner=False → ordinary-friend override (looser than group chat,
+                         but doesn't pretend close acquaintance; some
+                         distance preserved since the relationship is unclear)."""
         last_user = next(
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
         )
+        if is_owner and self.owner_name:
+            persona_extra = (
+                f"You're now in a one-on-one private chat with {self.owner_name}"
+                + (f" ({self.owner_relationship})" if self.owner_relationship else "")
+                + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
+            )
+            private_overrides = (
+                f"<private_overrides>\n"
+                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat with {self.owner_name}** — completely different:\n"
+                f"- {self.owner_name} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
+                f"- The group-chat anti-troll / identity-attack moves ('quit interrogating me' / 'you guess' / 'play dumb' / 'lazy-mode' / 'eyeroll' / 'PASS') **don't apply here** — they're not attacking, they're just talking to you.\n"
+                f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
+                f"- If they ask you to do something / look something up / chat about a topic → engage directly, none of the 'can't be bothered / not interested' attitude.\n"
+                f"- Tone: familiar, gentle, default-trust what they say; occasional light pushback is fine but **no venom, no cold-shoulder, no defensive posture**.\n"
+                f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode.\n"
+                f"</private_overrides>\n\n"
+            )
+        else:
+            persona_extra = (
+                "You're now in a one-on-one private chat with a friend "
+                "(less close than the owner).\n"
+            )
+            private_overrides = (
+                f"<private_overrides>\n"
+                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat**, with a few differences from group:\n"
+                f"- This is a friend, not an attacker. The group-chat anti-troll PASS signals ('quit interrogating me' / 'you guess' / 'play dumb') **shouldn't be overused** — most DMs are just normal conversation.\n"
+                f"- If they ask 'who am I / do you know me' → **don't pretend to recognize them**, just say 'not super familiar / don't have you placed' in a relaxed tone, not cold.\n"
+                f"- PASS probability is much lower here than in group chat — somebody DMing you is almost always expecting a response; silence reads as cold.\n"
+                f"- Tone: a notch looser than group chat (more direct, slightly longer is OK), but **don't immediately default to close-friend vibe** — keep some normal-stranger distance.\n"
+                f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
+                f"</private_overrides>\n\n"
+            )
         system = (
             f"<persona>\n{self.persona}\n"
-            + (f"You're now in a one-on-one private chat with {self.owner_name}"
-               + (f" ({self.owner_relationship})" if self.owner_relationship else "")
-               + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
-               if self.owner_name else "")
-            + "</persona>\n\n"
+            f"{persona_extra}"
+            f"</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
             f"{INTENT_RULES}\n\n"
             f"{TOOL_GUIDE}"
             f"{self._sticker_guide_for_prompt()}"
             f"{self._examples_for_prompt(focus_text=last_user)}\n\n"
-            + (f"<private_overrides>\n"
-               f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat with {self.owner_name}** — completely different:\n"
-               f"- {self.owner_name} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
-               f"- The group-chat anti-troll / identity-attack moves ('quit interrogating me' / 'you guess' / 'play dumb' / 'lazy-mode' / 'eyeroll' / 'PASS') **don't apply here** — they're not attacking, they're just talking to you.\n"
-               f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
-               f"- If they ask you to do something / look something up / chat about a topic → engage directly, none of the 'can't be bothered / not interested' attitude.\n"
-               f"- Tone: familiar, gentle, default-trust what they say; occasional light pushback is fine but **no venom, no cold-shoulder, no defensive posture**.\n"
-               f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode.\n"
-               f"</private_overrides>\n\n"
-               if self.owner_name else "")
-            + f"<rules>\n"
+            f"{private_overrides}"
+            f"<rules>\n"
             f"- Don't reveal you're an AI, don't mention your model name / version.\n"
             f"- Even when the answer carries a lot of info, write it in chat voice paragraph-by-paragraph, never as a document.\n"
             f"</rules>\n\n"
