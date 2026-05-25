@@ -1561,8 +1561,10 @@ class Agent:
             }
             # K2-family reasoning models burn the budget on reasoning_content;
             # short-JSON evals need thinking disabled (same as vision path).
+            # K2.6 also only accepts temperature=0.6.
             if "k2" in em:
                 eval_payload["thinking"] = {"type": "disabled"}
+                eval_payload["temperature"] = 0.6
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.post(
                     eval_url,
@@ -2395,6 +2397,8 @@ class Agent:
             }
             if "k2" in self.vision_model.lower():
                 payload["thinking"] = {"type": "disabled"}
+                # K2.6 only accepts temperature=0.6 (single-valued whitelist)
+                payload["temperature"] = 0.6
             raw = ""
             async with httpx.AsyncClient(timeout=30) as c:
                 for attempt in range(4):
@@ -2548,6 +2552,8 @@ class Agent:
             # field with HTTP 400, so gate on the model name.
             if "k2" in self.vision_model.lower():
                 payload["thinking"] = {"type": "disabled"}
+                # K2.6 only accepts temperature=0.6 (single-valued whitelist)
+                payload["temperature"] = 0.6
             async with httpx.AsyncClient(timeout=30) as c:
                 r = None
                 for attempt in range(3):
