@@ -1,11 +1,11 @@
-# qq-persona-agent
+# onebot-llm-agent
 
 [English](README.md) | **中文**
 
-一个用来在 QQ 群里跑**人设型 LLM agent** 的模板 —— 目标是发出来的消息像真人闲聊，而不是客服机器人。
+一个**人设型 LLM agent 在 OneBot v11 群聊上的模板** —— 目标是发出来的消息像真人闲聊，而不是客服机器人。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接 OneBot 平台只是演示载体，仓库内不包含任何 IM 协议实现。
 
-> **教育/研究用途。本项目与腾讯无任何关联，未获腾讯授权或赞助。**
-> 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 QQ 协议端没有腾讯背书，建议用小号 + 家庭/居民 IP 跑。
+> **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
+> 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 OneBot 协议端 (例如 QQ 的 NapCat) 没有上游 IM 平台背书；如果你选择部署到 QQ，建议用小号 + 家庭/居民 IP 跑。仓库作者不对你选择的协议端承担任何责任。
 
 ## 这个项目想解决什么
 

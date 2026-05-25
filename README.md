@@ -1,11 +1,11 @@
-# qq-persona-agent
+# onebot-llm-agent
 
 **English** | [中文](README.zh-CN.md)
 
-A template for building a **persona-driven LLM agent on QQ groups** — designed to send messages that read like a real person rather than a customer-service bot.
+A **template for building persona-driven LLM agents on OneBot v11 group chats** — designed to send messages that read like a real person rather than a customer-service bot. This repo is primarily a study in LLM agent / prompt engineering design patterns; the OneBot platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
-> **Educational / research project. Not affiliated with, endorsed by, or sponsored by Tencent.**
-> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party QQ protocol clients are unsanctioned by Tencent; use a secondary account and run from a residential IP.
+> **Educational / research project. Not affiliated with, endorsed by, or sponsored by any IM platform vendor.**
+> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party OneBot protocol clients (such as NapCat for QQ) are not sanctioned by their upstream IM platforms; if you choose to deploy against QQ, use a secondary account and run from a residential IP. Repo authors take no responsibility for downstream protocol-client choices.
 
 ## Why this exists
 
