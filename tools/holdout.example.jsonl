@@ -1,0 +1,5 @@
+{"filename": "REPLACE_WITH_REAL_FILENAME_1.png", "expected_approved": true, "note": "clean modern meme (e.g. doge family) — easy positive"}
+{"filename": "REPLACE_WITH_REAL_FILENAME_2.png", "expected_approved": false, "note": "tacky family-group style with floral filigree text + sparkle effects"}
+{"filename": "REPLACE_WITH_REAL_FILENAME_3.png", "expected_approved": true, "note": "TV/film screenshot with crisp subtitle"}
+{"filename": "REPLACE_WITH_REAL_FILENAME_4.png", "expected_approved": false, "note": "low-res rendered cartoon bear + hard subtitle"}
+{"filename": "REPLACE_WITH_REAL_FILENAME_5.png", "expected_approved": true, "note": "borderline: real photo (not a meme) — check what the model does"}
