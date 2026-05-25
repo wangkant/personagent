@@ -299,9 +299,16 @@ class Agent:
             persona_brief=persona_brief,
         )
 
+        # Few-shot examples. Curated entries can be hand-authored or imported
+        # from prompt_lab.py; high-scoring replies are also auto-appended at
+        # runtime (see _evaluate_reply) so the retrieval pool keeps growing
+        # instead of being stuck at bootstrap size.
         self.examples_file = Path(__file__).parent / "examples.jsonl"
         self._examples_cache: list = []
         self._examples_mtime: float = 0.0
+        # In-memory dedup for runtime-appended examples: a frequent stock
+        # phrase should only land in the pool once.
+        self._auto_examples_seen: set[str] = set()
 
         self.feedback_file = Path(__file__).parent / "feedback.jsonl"
         self._pairs_cache: list = []
@@ -583,7 +590,7 @@ class Agent:
             # auto persona_fit=false → purged on next startup).
             if self.eval_enable:
                 asyncio.create_task(self._evaluate_reply(
-                    group_id, mode, text, reply, sticker_files,
+                    group_id, mode, text, reply, sticker_files, _intent,
                 ))
 
             return True
@@ -1430,6 +1437,7 @@ class Agent:
     async def _evaluate_reply(
         self, group_id: str, mode: str, user_msg: str, reply: str,
         sticker_files: list[str] | None = None,
+        intent: str = "",
     ) -> None:
         """Background quality eval. Scores 1-5 via the eval model, appends
         to eval.jsonl. Never raises — eval failures must not affect main
@@ -1439,48 +1447,76 @@ class Agent:
         actually sent, ask the eval model for an extra sticker_score (1-5)
         and route it back to stickers.record_quality. Real conversation
         signal beats a one-shot LLM judgment for catching off-persona
-        stickers."""
+        stickers.
+
+        High-scoring replies (score >= 4) are also auto-appended to
+        examples.jsonl with dedup, so the dynamic few-shot retrieval pool
+        grows from real successes rather than staying frozen at bootstrap
+        size."""
         try:
             ctx_msgs = list(self.buffers[group_id])[-6:-1]
             ctx_text = "\n".join(f"{m['name']}: {m['text']}" for m in ctx_msgs)
 
             has_sticker = bool(sticker_files)
             sticker_clause = (
-                "\n该回复带了表情包. 同时给表情包贴合度打分 sticker_score (1-5):"
-                " 5=表情完美贴合语境/接梗, 3=可发可不发, 1=表情完全不符 (情绪错/审美土/出戏)."
+                "\nThis reply included a sticker. Also rate sticker_score (1-5):"
+                " 5 = perfectly matches the mood/joke, 3 = neutral, 1 = entirely"
+                " off (wrong emotion / tacky aesthetic / breaks character)."
             ) if has_sticker else ""
             json_schema = (
-                '{"score": 整数1-5, "reason": "一句话原因", "sticker_score": 整数1-5}'
+                '{"score": int 1-5, "reason": "one short sentence", "sticker_score": int 1-5}'
                 if has_sticker else
-                '{"score": 整数1-5, "reason": "一句话原因"}'
+                '{"score": int 1-5, "reason": "one short sentence"}'
             )
 
             eval_prompt = (
-                f"评估 QQ 群聊回复质量。1-5 打分，5=完美自然，4=不错有小瑕疵，"
-                f"3=一般有点出戏，2=差明显不合适，1=灾难。\n\n"
-                f"群聊上下文：\n---\n{ctx_text}\n---\n"
-                f"{self.bot_name or 'bot'}的回复：「{reply}」\n"
+                f"Rate the quality of this group-chat reply. 1-5 scale: "
+                f"5 = perfectly natural, 4 = solid, 3 = a bit off, "
+                f"2 = clearly wrong, 1 = disaster.\n\n"
+                f"Group chat context:\n---\n{ctx_text}\n---\n"
+                f"{self.bot_name or 'bot'}'s reply: \"{reply}\"\n"
                 f"{sticker_clause}\n"
-                f"人设：{self.bot_name or 'bot'} 是 QQ 群里的普通群友，自然口语，有自己脾气，不油腻不客套，"
-                f"该接梗接梗，该正经正经。\n"
-                f"考察：1) 是否贴上下文 2) 是否符合人设 3) 是否自然不像 AI 4) 长度是否合理。\n"
-                f'只输出 JSON：{json_schema}'
+                f"Persona: {self.bot_name or 'bot'} is a regular member of the "
+                f"group, casual spoken style, has opinions, never customer-service "
+                f"polite, picks up jokes where appropriate.\n"
+                f"Judge by: 1) does the reply fit the context 2) does it match the "
+                f"persona 3) does it sound natural rather than AI-flavored 4) is "
+                f"the length reasonable.\n"
+                f"Output JSON only: {json_schema}"
             )
 
+            # Cross-vendor eval to avoid the main-model and judge-model sharing
+            # the same RLHF reward lineage ("grading my own homework"). If the
+            # configured eval_model name names a Moonshot/Kimi family model and
+            # GLM_* credentials are populated, route through that endpoint; the
+            # GLM_* config is OpenAI-compatible and is also used by the vision
+            # path. Otherwise fall through to the main base_url/api_key.
+            em = self.eval_model.lower()
+            if ("moonshot" in em or "kimi" in em) and self.glm_api_key and self.glm_base_url:
+                eval_url = f"{self.glm_base_url}/chat/completions"
+                eval_auth = self.glm_api_key
+            else:
+                eval_url = f"{self.base_url}/chat/completions"
+                eval_auth = self.api_key
+            eval_payload = {
+                "model": self.eval_model,
+                "messages": [
+                    {"role": "system", "content": "You are a strict reply quality evaluator. Output JSON only, no markdown."},
+                    {"role": "user", "content": eval_prompt},
+                ],
+                "temperature": 0,
+                "max_tokens": 400,
+                "response_format": {"type": "json_object"},
+            }
+            # K2-family reasoning models burn the budget on reasoning_content;
+            # short-JSON evals need thinking disabled (same as vision path).
+            if "k2" in em:
+                eval_payload["thinking"] = {"type": "disabled"}
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    json={
-                        "model": self.eval_model,
-                        "messages": [
-                            {"role": "system", "content": "You are a strict reply quality evaluator. Output JSON only, no markdown."},
-                            {"role": "user", "content": eval_prompt},
-                        ],
-                        "temperature": 0,
-                        "max_tokens": 120,
-                        "response_format": {"type": "json_object"},
-                    },
+                    eval_url,
+                    headers={"Authorization": f"Bearer {eval_auth}"},
+                    json=eval_payload,
                 )
                 r.raise_for_status()
                 # Some reasoning models on OpenAI-compatible endpoints route
@@ -1535,6 +1571,36 @@ class Agent:
                                score, mode, reply[:60], reason)
             else:
                 logger.debug("[Agent] eval %d/5 mode=%s: %s", score, mode, reason)
+
+            # High-score replies feed back into examples.jsonl so the dynamic
+            # few-shot retrieval pool grows from real successes. Without this,
+            # examples.jsonl is frozen at bootstrap and "dynamic retrieval" is
+            # a scaffold over a static dataset. PASS (skip-reply marker) and
+            # already-seen replies are filtered to keep the pool clean.
+            reply_clean = reply.strip()
+            if (score >= 4 and reply_clean and reply_clean.upper() != "PASS"
+                    and reply_clean not in self._auto_examples_seen):
+                ctx_list = [f"{m['name']}: {m['text']}" for m in ctx_msgs]
+                ex = {
+                    "ts": record["ts"],
+                    "scenario": f"{mode}:{intent}" if intent else mode,
+                    "mode": mode,
+                    "intent": intent,
+                    "context": ctx_list,
+                    "reply": reply_clean,
+                    "score": score,
+                }
+                self._append_with_rotation(
+                    self.examples_file,
+                    json.dumps(ex, ensure_ascii=False) + "\n",
+                )
+                self._auto_examples_seen.add(reply_clean)
+                # Cap the in-memory dedup set; on reload from disk the full
+                # set is rebuilt, so light pruning here is harmless.
+                if len(self._auto_examples_seen) > 2000:
+                    self._auto_examples_seen = set(
+                        list(self._auto_examples_seen)[-1000:]
+                    )
         except Exception as e:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
@@ -2539,6 +2605,12 @@ class Agent:
             lines = self.examples_file.read_text(encoding="utf-8").splitlines()
             self._examples_cache = [json.loads(l) for l in lines if l.strip()]
             self._examples_mtime = mtime
+            # Rebuild runtime auto-append dedup set from on-disk replies so a
+            # restart doesn't forget which replies are already in the pool.
+            self._auto_examples_seen = {
+                ex.get("reply", "").strip() for ex in self._examples_cache
+                if ex.get("reply", "").strip()
+            }
         except Exception as e:
             logger.warning("[Agent] examples.jsonl reload failed: %s", e)
 
