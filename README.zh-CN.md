@@ -30,6 +30,11 @@
 
 ## 架构图
 
+![onebot-llm-agent 架构](docs/onebot_llm_agent_architecture.zh-CN.svg)
+
+<details>
+<summary>实现细节（handler 调用链）</summary>
+
 ```
 NapCat (QQ ↔ OneBot)
     │
@@ -65,6 +70,7 @@ NapCat (QQ ↔ OneBot)
     ▼
 NapCat → QQ
 ```
+</details>
 
 ## 快速开始
 
@@ -117,6 +123,8 @@ python main.py
 }
 ```
 
+![JSON 与 XML 输出协议对比](docs/json_vs_xml_protocol_comparison.zh-CN.svg)
+
 为什么不用 `<reasoning>...</reasoning><intent>...</intent><reply>...</reply>` XML：
 
 - **字段隔离。** 模型截断、标签拼错、吐出厂商内部 token 时，JSON 解析直接失败 — 整条不发。原 XML 形式的兜底分支会把 reasoning 漏到 reply。
@@ -167,6 +175,8 @@ python main.py
 
 ## 迭代循环
 
+![热加载迭代闭环](docs/hot_reload_iteration_loop.zh-CN.svg)
+
 prompt 的分块结构是为了让 bug 好定位：
 
 ```
@@ -187,6 +197,8 @@ prompt 的分块结构是为了让 bug 好定位：
 `output_filter.json` 是**热加载**的，改完不用重启。`lorebook.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
 ## 表情包质量机制
+
+![表情包库七步过滤](docs/sticker_seven_step_filter.zh-CN.svg)
 
 表情包在能被选用之前要过多层门：
 

@@ -30,6 +30,11 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 
 ## Architecture sketch
 
+![onebot-llm-agent architecture](docs/onebot_llm_agent_architecture.svg)
+
+<details>
+<summary>Implementation detail (handler call chain)</summary>
+
 ```
 NapCat (QQ ↔ OneBot)
     │
@@ -65,6 +70,7 @@ NapCat (QQ ↔ OneBot)
     ▼
 NapCat → QQ
 ```
+</details>
 
 ## Quick start
 
@@ -117,6 +123,8 @@ The model is required to emit a single JSON object per reply:
 }
 ```
 
+![JSON vs XML output protocol](docs/json_vs_xml_protocol_comparison.svg)
+
 Why JSON instead of `<reasoning>...</reasoning><intent>...</intent><reply>...</reply>`:
 
 - **Field isolation.** If the model truncates, malforms tags, or emits provider-specific tokens, JSON parsing fails closed — nothing gets sent. The XML form had fallback branches that could leak the reasoning channel into the visible reply.
@@ -167,6 +175,8 @@ See `.env.example` for the full list.
 
 ## Iteration loop
 
+![Hot-reload iteration loop](docs/hot_reload_iteration_loop.svg)
+
 The agent's prompt is structured to make failures debuggable:
 
 ```
@@ -187,6 +197,8 @@ The retrieval over `examples.jsonl` + `feedback.jsonl` uses 2-char Chinese ngram
 `output_filter.json` is hot-reloaded — edit it without restarting. Same for `lorebook.json` (keyword-triggered context injection à la SillyTavern World Info).
 
 ## Sticker quality machinery
+
+![Sticker library seven-step filter](docs/sticker_seven_step_filter.svg)
 
 Stickers go through several gates before being eligible for selection:
 
