@@ -190,7 +190,13 @@ INTENT_RULES = (
 SLEEP_HOUR_START = 2          # 02:00 (inclusive)
 SLEEP_HOUR_END = 7            # 07:00 (exclusive)
 SLEEP_PASS_PROB = 0.70        # 70% PASS rate during sleep hours
-SUB_TRIGGER_PASS_PROB = 0.12  # 12% spontaneous skip on judge-mode triggers
+SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
+# 0.12 left judge mode triggering an LLM call on 88% of group messages.
+# With the LLM's reply-leaning prompts on top, end-to-end reply rate
+# becomes "chases every topic" rather than "occasionally chimes in".
+# 0.35 lets 35% of judge triggers skip before any LLM call — combined
+# with the model's own PASS signals, observed reply rate lands around
+# the "human who sometimes can't be bothered" range.
 
 
 class Agent:
@@ -1732,7 +1738,7 @@ class Agent:
             f"- Topic heat: are recent lines circling one topic / how frequent ({signals['heat']})\n"
             f"- Topic type: chitchat/venting/joking → lean reply; serious discussion / work details / argument / sensitive → lean PASS (current type: {signals['type']})\n"
             f"- Active speakers: multi-person chatter = easy to slot in; 1-person monologue = be careful (recent active: {signals['active_count']} people)\n"
-            f"- Your recent activity: just spoke = don't force another one; long silence = OK to chime in (you last spoke: {signals['last_spoke']})\n"
+            f"- Your recent activity: just spoke = don't force another one (you last spoke: {signals['last_spoke']}). **Silence is NOT a reason to reply** — 'I haven't said anything for a while so I should chime in' is AI thinking; real people just stay quiet when they have nothing to add.\n"
             f"- Atmosphere: a cold lull can use a break-the-ice line; heated argument = stay out\n"
             "Better to PASS than to chat awkwardly. But **when something is clearly meant for you, take it** — don't cold-shoulder it.\n"
         )
