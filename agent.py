@@ -1637,8 +1637,15 @@ class Agent:
             # examples.jsonl is frozen at bootstrap and "dynamic retrieval" is
             # a scaffold over a static dataset. PASS (skip-reply marker) and
             # already-seen replies are filtered to keep the pool clean.
+            #
+            # Threshold is 5 (not 4) by default. Production audit showed many
+            # eval models score generously — 97% of replies landing at >=4 in
+            # one observation — which lets reply patterns the user explicitly
+            # disliked sneak into the example pool and reinforce themselves
+            # through retrieval. Requiring a top score keeps the bar high; if
+            # your eval model scores conservatively you can lower this.
             reply_clean = reply.strip()
-            if (score >= 4 and reply_clean and reply_clean.upper() != "PASS"
+            if (score >= 5 and reply_clean and reply_clean.upper() != "PASS"
                     and reply_clean not in self._auto_examples_seen):
                 ctx_list = [f"{m['name']}: {m['text']}" for m in ctx_msgs]
                 ex = {
