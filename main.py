@@ -147,7 +147,15 @@ async def qq_webhook(request: Request):
     except Exception:
         payload = {}
     if agent:
-        asyncio.create_task(agent.handle(payload))
+        # Non-blocking: don't make NapCat wait for the LLM round-trip.
+        # Wrap in a guard so a raised exception is logged instead of vanishing
+        # as an unretrieved-task warning.
+        async def _safe_handle():
+            try:
+                await agent.handle(payload)
+            except Exception:
+                logger.exception("handle failed")
+        asyncio.create_task(_safe_handle())
     return {"ok": True}
 
 if __name__ == "__main__":

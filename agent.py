@@ -71,8 +71,8 @@ STYLE_GUIDE = (
     "- Punctuation: avoid full stops at sentence end, em-dashes, semicolons, formal quotes; if you need a beat, line-break or use a casual comma\n"
     "- Square brackets [] are reserved for [AT:qq] and [STICKER:tag] markers ONLY — never for anything else\n"
     "\n"
-    "[MINIMAL — one sentence by default]\n"
-    "- Target ~15-30 characters / ~8-15 English words. Never over 40 chars / 25 words\n"
+    "[LENGTH HAS RHYTHM]\n"
+    "- Usually one or two short lines (~15-30 characters / ~8-15 English words). Occasionally (roughly one in four) when something genuinely lands, two short bursts are fine. Never three same-length lines in a row\n"
     "- Strip explanations / bullets / analysis. Keep just the punchy line. If you really need more, line-break so the system splits it\n"
     "\n"
     "[EMOTIONAL SCENES — respond to the feeling, don't analyze]\n"
@@ -158,7 +158,7 @@ REASONING_PROTOCOL = (
     "\n"
     "reply (string, what the group will actually see):\n"
     '  - Not replying → write exactly \"PASS\" (uppercase, nothing else)\n'
-    "  - Replying → default 1 sentence, ~15-30 chars / ~8-15 English words\n"
+    "  - Replying → usually one or two short lines (~15-30 chars / ~8-15 English words); occasionally two short bursts when something really lands (see STYLE_GUIDE length rhythm)\n"
     "  - **No nested JSON / XML tags / extra brackets** inside the string value. The only markers allowed inside reply are [STICKER:tag] and [AT:qq].\n"
     "\n"
     'mem (string — one line if there\'s something worth remembering, empty string \"\" if not). Persona/event/attitude facts. Writing \"none\"/\"null\"/\"n/a\" is treated as empty.\n'
@@ -385,6 +385,15 @@ class Agent:
             logger.warning("[Agent] DEEPSEEK_API_KEY not configured; %s disabled", bot_name)
 
     async def handle(self, payload: dict) -> bool:
+        # Top-level guard so any failure in the message pipeline is logged
+        # loudly instead of silently dying as an unretrieved-task warning.
+        try:
+            return await self._handle_inner(payload)
+        except Exception:
+            logger.exception("[Agent] handle failed")
+            return False
+
+    async def _handle_inner(self, payload: dict) -> bool:
         if not self.enabled:
             return False
         if payload.get("post_type") and payload.get("post_type") != "message":
@@ -427,7 +436,10 @@ class Agent:
         if not text:
             return False
 
-        sender = payload.get("sender", {})
+        # `or {}` (not a default of {}) because the protocol can emit
+        # "sender": null — a present-but-null key, where .get("sender", {})
+        # still returns None and the following .get() raises AttributeError.
+        sender = payload.get("sender") or {}
         nickname = (sender.get("card") or sender.get("nickname") or "?")[:8]
 
         is_at = self._is_at_me(payload)
@@ -640,13 +652,23 @@ class Agent:
                 self.private_history[user_id] = history[-40:]
                 history = self.private_history[user_id]
 
+            # On any path where no assistant turn gets appended (LLM failure /
+            # empty / filtered / PASS), drop the user turn we just added so
+            # private history doesn't keep a dangling unanswered message.
+            def _drop_pending_user() -> None:
+                h = self.private_history.get(user_id)
+                if h and h[-1].get("role") == "user":
+                    h.pop()
+
             try:
                 reply, auto_mem = await self._chat_private(history, is_owner=is_owner)
             except Exception as e:
                 logger.warning("[Agent] private-chat LLM failed: %s", e)
+                _drop_pending_user()
                 return False
 
             if not reply:
+                _drop_pending_user()
                 return False
 
             # Full post-processing chain — mirror group handle() so protocol
@@ -659,6 +681,7 @@ class Agent:
             if blocked:
                 logger.warning("[Agent] output_filter blocked (private user=%s): %s | original=%s",
                                user_id, blocked, reply[:120])
+                _drop_pending_user()
                 return False
             reply = filtered
 
@@ -667,6 +690,7 @@ class Agent:
 
             if not reply or reply.strip().upper().startswith("PASS"):
                 logger.info("[Agent] PASS (private user=%s)", user_id)
+                _drop_pending_user()
                 return False
 
             history.append({"role": "assistant", "content": reply})
@@ -717,23 +741,45 @@ class Agent:
                 f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
                 f"</private_overrides>\n\n"
             )
-        system = (
+        # Mirror the group path: split system into a cache_control=ephemeral
+        # stable head + an uncached dynamic tail, so the ~4-5K persona / rules
+        # prefix is billed at ~10% on cache hits. _call_anthropic accepts a
+        # list system and flattens it back to a string if the endpoint doesn't
+        # support cache_control.
+        # - static_block (cache): persona + STYLE_GUIDE + INTENT_RULES +
+        #     TOOL_GUIDE + rules — process-wide constants.
+        # - semi_static_block (cache): sticker guide — only changes when new
+        #     stickers get tagged.
+        # - dynamic_block (no cache): private_overrides + few-shot examples +
+        #     time line + REASONING_PROTOCOL. The output contract stays at the
+        #     very end of the prompt (same ordering as before) so it's the last
+        #     thing the model reads before generating.
+        static_block = (
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
             f"</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
             f"{INTENT_RULES}\n\n"
             f"{TOOL_GUIDE}"
-            f"{self._sticker_guide_for_prompt()}"
-            f"{self._examples_for_prompt(focus_text=last_user)}\n\n"
-            f"{private_overrides}"
             f"<rules>\n"
             f"- Don't reveal you're an AI, don't mention your model name / version.\n"
             f"- Even when the answer carries a lot of info, write it in chat voice paragraph-by-paragraph, never as a document.\n"
             f"</rules>\n\n"
+        )
+        semi_static_block = self._sticker_guide_for_prompt()
+        dynamic_block = (
+            f"{private_overrides}"
+            f"{self._examples_for_prompt(focus_text=last_user)}\n\n"
             f"[Current local time] {self._current_time_str()}\n\n"
             f"{REASONING_PROTOCOL}"
         )
+        system = [
+            {"type": "text", "text": static_block,
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": semi_static_block,
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": dynamic_block},
+        ]
         raw = await self._call_anthropic(
             system=system,
             messages=history,
@@ -1338,7 +1384,12 @@ class Agent:
 
     def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
         buf = self.buffers[group_id]
-        if buf and buf[-1].get("name") == name and len(buf[-1].get("text", "")) < 300:
+        # Merge only when BOTH name AND user_id match the previous entry —
+        # keying on name alone cross-merges different users sharing a nickname
+        # and collides with the bot's own name.
+        if (buf and buf[-1].get("name") == name
+                and buf[-1].get("user_id", "") == user_id
+                and len(buf[-1].get("text", "")) < 300):
             buf[-1]["text"] = buf[-1]["text"] + " " + text
         else:
             buf.append({"name": name, "text": text, "user_id": user_id})
@@ -1714,7 +1765,14 @@ class Agent:
 
         focus_block = ""
         focus_items: list[str] = []
-        focus_pat = re.compile(r"(\[image:[^\]]+\]|\[bilibili-video\][^\n\[]+|\[share\|[^\]]+\][^\n\[]*)")
+        # Also capture the sticker / bare-image markers _extract_text emits
+        # ([sticker: ...], [image]), otherwise recognized stickers/images never
+        # reach the focus block — violating the prompt's own "images/cards are
+        # primary signal" rule.
+        focus_pat = re.compile(
+            r"(\[image:[^\]]+\]|\[sticker:[^\]]+\]|\[image\]|\[sticker\]"
+            r"|\[bilibili-video\][^\n\[]+|\[share\|[^\]]+\][^\n\[]*)"
+        )
         for m in history[-5:]:
             for hit in focus_pat.findall(m.get("text", "")):
                 if hit not in focus_items:
@@ -1877,7 +1935,10 @@ class Agent:
             max_tok = 600
             disable_thinking = True
         else:
-            max_tok = 2500
+            # 1200 is already several times real demand (the persona keeps
+            # replies very short); the rare thinking-budget overrun is caught
+            # by _call_anthropic's thinking-budget retry.
+            max_tok = 1200
             disable_thinking = False
 
         enable_search = mode in ("called", "owner", "followup")
@@ -2094,19 +2155,38 @@ class Agent:
             out.append(("text", text.strip()))
         return out
 
-    async def _napcat_send_group(self, group_id: str, message) -> None:
-        """Single-shot send to NapCat. message: str or list of segments."""
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.post(
-                    f"{self.napcat_api}/send_group_msg",
-                    json={"group_id": int(group_id), "message": message},
-                )
-                if r.status_code != 200:
-                    logger.warning("[Agent] NapCat returned %d: %s",
-                                   r.status_code, r.text[:200])
-        except Exception as e:
-            logger.warning("[Agent] send group msg failed: %s", e)
+    async def _napcat_send_group(self, group_id: str, message) -> bool:
+        """Send to NapCat with a small bounded retry on connect/timeout errors.
+
+        message: str or list of segments. Returns True on success so callers
+        (e.g. _send_qq) can stop emitting later chunks on a hard failure and
+        avoid truncated / out-of-order replies."""
+        attempts = 3  # 1 initial + 2 retries
+        for attempt in range(attempts):
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    r = await client.post(
+                        f"{self.napcat_api}/send_group_msg",
+                        json={"group_id": int(group_id), "message": message},
+                    )
+                if r.status_code == 200:
+                    return True
+                # Non-200 is a server-side reject, not a transient network
+                # error — retrying rarely helps, so log and stop.
+                logger.warning("[Agent] NapCat returned %d: %s",
+                               r.status_code, r.text[:200])
+                return False
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+                    httpx.WriteTimeout, httpx.PoolTimeout) as e:
+                if attempt == attempts - 1:
+                    logger.warning("[Agent] send group msg failed after %d attempts: %s",
+                                   attempts, e)
+                    return False
+                await asyncio.sleep(0.5 * (attempt + 1))
+            except Exception as e:
+                logger.warning("[Agent] send group msg failed: %s", e)
+                return False
+        return False
 
     async def _send_qq(self, group_id: str, text: str, at_user_id: str = "") -> list[str]:
         """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
@@ -2136,8 +2216,12 @@ class Agent:
                 if is_first and at_user_id:
                     msg_segs.append({"type": "at", "data": {"qq": str(at_user_id)}})
                 msg_segs.append({"type": "image", "data": {"file": f"base64://{img_b64}"}})
-                await self._napcat_send_group(group_id, msg_segs)
+                ok = await self._napcat_send_group(group_id, msg_segs)
                 is_first = False
+                if not ok:
+                    logger.warning("[Agent] send aborted (sticker chunk failed), "
+                                   "dropping remaining segments (group=%s)", group_id)
+                    break
                 try:
                     rel = str(file_path.relative_to(self.stickers.dir)).replace("\\", "/")
                     sent_stickers.append(rel)
@@ -2157,8 +2241,14 @@ class Agent:
                     ]
                 else:
                     message = chunk
-                await self._napcat_send_group(group_id, message)
+                ok = await self._napcat_send_group(group_id, message)
                 is_first = False
+                if not ok:
+                    # Stop on a hard failure so we don't emit a reply split
+                    # across a network gap (truncated / out-of-order chunks).
+                    logger.warning("[Agent] send aborted (text chunk failed), "
+                                   "dropping remaining chunks (group=%s)", group_id)
+                    return sent_stickers
         return sent_stickers
 
     async def check_missed_mentions(self) -> None:
@@ -2175,7 +2265,8 @@ class Agent:
                         json={"group_id": int(group_id), "count": 10},
                     )
                     r.raise_for_status()
-                    msgs = r.json().get("data", {}).get("messages", [])
+                    # `or {}` because the protocol can return "data": null.
+                    msgs = (r.json().get("data") or {}).get("messages", [])
                     for msg in reversed(msgs):
                         # Skip messages already processed in a previous run
                         # / poll. Without this, the same offline @ mention
@@ -2184,7 +2275,7 @@ class Agent:
                         mid = msg.get("message_id")
                         if mid is not None and mid in self._seen_msg_ids:
                             continue
-                        sender_id = str(msg.get("sender", {}).get("user_id", ""))
+                        sender_id = str((msg.get("sender") or {}).get("user_id", ""))
                         if sender_id == self.bot_qq:
                             continue
                         raw = msg.get("raw_message", "")
@@ -2235,11 +2326,9 @@ class Agent:
 
         if self.anthropic_key:
             try:
-                import anthropic as _anthropic
-                client_kwargs: dict = {"api_key": self.anthropic_key}
-                if self.anthropic_base_url:
-                    client_kwargs["base_url"] = self.anthropic_base_url
-                client = _anthropic.AsyncAnthropic(**client_kwargs)
+                # Reuse the cached client so the probe resolves base_url / key
+                # exactly like the production call path.
+                client = self._get_anthropic_client()
                 response = await client.messages.create(
                     model=self.anthropic_private_model,
                     max_tokens=1,

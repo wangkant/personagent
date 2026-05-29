@@ -16,7 +16,7 @@ logger = logging.getLogger("agent.stickers")
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
-RECENT_USE_COOLDOWN_SEC = 90
+RECENT_USE_COOLDOWN_SEC = 300  # min gap before re-sending the same sticker; sending one too often reads as a bot (fallback bucket prevents dropping sticker-only replies)
 
 # Bump this whenever the persona-fit prompt criteria change. On the next
 # startup, recheck_persona_fit_all will re-evaluate every entry whose
@@ -62,11 +62,15 @@ class StickerLibrary:
             return {}
 
     def _save(self) -> None:
+        # Atomic write: serialize to a .tmp then replace, so a crash mid-write
+        # can't corrupt stickers.json.
         try:
-            self.file.write_text(
+            tmp = self.file.with_suffix(".json.tmp")
+            tmp.write_text(
                 json.dumps(self.entries, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self.file)
         except Exception as e:
             logger.warning("stickers.json save failed: %s", e)
 
