@@ -21,6 +21,16 @@ from stickers import StickerLibrary
 
 logger = logging.getLogger("agent")
 
+# Cheap pre-filter so we only spend a search-decision call on messages that
+# plausibly need a web lookup (questions / facts / memes / links), not on
+# casual chatter like "lol" or "you there?".
+_SEARCH_HINT_RE = re.compile(
+    r"[?？]|who|what|when|where|why|how|which|is it|how much|how many|price|"
+    r"news|latest|recent|release[ds]?|meme|slang|term|look ?up|search|google|"
+    r"http|www\.|\.com|\.org|\.net|\.io|\.cn",
+    re.IGNORECASE,
+)
+
 DEFAULT_PERSONA = (
     "You're a regular member of a group chat. Goal: write messages that "
     "read like a real person, not an AI assistant. Don't be the helpful "
@@ -42,12 +52,15 @@ def _load_persona() -> str:
 
 TOOL_GUIDE = (
     "<tools>\n"
-    "You have a web_search tool. **Whenever you encounter an unfamiliar "
-    "meme/slang/person/product/news/term/concrete fact, call web_search "
-    "first, then reply** — don't fabricate, don't bluff, don't deflect "
-    "with \"what's that meme even mean\". After looking it up, weave the "
-    "info into your reply naturally; never say \"I searched\" or \"I just "
-    "looked it up\" — just talk as if you already knew.\n"
+    "When needed, the system **searches the web automatically** and drops the "
+    "results into the context inside a <web_search_results> tag (when there "
+    "are any). **Whenever you encounter an unfamiliar "
+    "meme/slang/person/product/news/term/concrete fact**, prefer answering "
+    "from what's inside <web_search_results> — don't fabricate, don't bluff, "
+    "don't deflect with \"what's that meme even mean\"; if it's not in the "
+    "results either, just admit you're not sure. Weave the info into your "
+    "reply naturally; never say \"I searched\" or \"I just looked it up\" — "
+    "just talk as if you already knew.\n"
     "\n"
     "When you want to share a video / link, paste the full URL straight "
     "into the reply text. The IM client renders it as a preview card. "
@@ -232,6 +245,7 @@ class Agent:
         vision_model: str = "",
         glm_api_key: str = "",
         glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4",
+        tavily_key: str = "",
         stickers_dir: str = "stickers",
         stickers_file: str = "stickers.json",
         message_debounce_sec: float = 2.5,
@@ -296,6 +310,7 @@ class Agent:
         self.vision_model = (vision_model or "").strip()
         self.glm_api_key = glm_api_key
         self.glm_base_url = glm_base_url.rstrip("/") if glm_base_url else ""
+        self.tavily_key = (tavily_key or "").strip()
 
         # Private-chat whitelist: OWNER_QQ is always allowed; PRIVATE_ALLOWED_QQS
         # (comma-separated) lists additional QQs that may DM the bot. They take
@@ -1461,13 +1476,24 @@ class Agent:
             }
             if with_disable:
                 kwargs["thinking"] = {"type": "disabled"}
-            if enable_search:
-                kwargs["tools"] = [{
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": max_search_uses,
-                }]
             return await client.messages.create(**kwargs)
+
+        # Web search: let the model decide (OpenAI-compatible /v1
+        # function-calling), fetch real results (Tavily if keyed, else
+        # DuckDuckGo), and inject them into the last user turn. Replaces the old
+        # server-side web_search tool, which never fired on the chat endpoint.
+        # Failures never block the reply.
+        if enable_search:
+            try:
+                _sr = await self._decide_and_search(messages)
+            except Exception:
+                _sr = ""
+            if _sr:
+                _last = messages[-1]
+                messages = messages[:-1] + [{
+                    **_last,
+                    "content": f"<web_search_results>\n{_sr}\n</web_search_results>\n\n{_last.get('content', '')}",
+                }]
 
         try:
             response = await _do_call(max_tokens, no_thinking)
@@ -1542,6 +1568,136 @@ class Agent:
                 logger.info("[Agent] cache: read=%d create=%d (model=%s)",
                             cr, cc, model)
         return text
+
+    def _might_need_search(self, text: str) -> bool:
+        """Cheap gate: does the message plausibly need a web lookup?"""
+        t = (text or "").strip()
+        if len(t) < 3:
+            return False
+        return bool(_SEARCH_HINT_RE.search(t))
+
+    async def _web_search(self, query: str, max_results: int = 4) -> str:
+        """Dispatch to the configured search backend: Tavily if a key is set
+        (keyed, more reliable, LLM-optimized), else no-key DuckDuckGo."""
+        if self.tavily_key:
+            return await self._web_search_tavily(query, max_results)
+        return await self._web_search_ddg(query, max_results)
+
+    async def _web_search_tavily(self, query: str, max_results: int = 4) -> str:
+        """Tavily search (keyed). Returns a compact results block, or '' on any
+        failure — search must never break the reply."""
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": self.tavily_key,
+                        "query": query,
+                        "search_depth": "basic",
+                        "max_results": max_results,
+                        "include_answer": False,
+                    },
+                )
+            if resp.status_code != 200:
+                logger.warning("[Agent] Tavily HTTP %d: %s", resp.status_code, resp.text[:200])
+                return ""
+            results = resp.json().get("results", []) or []
+        except Exception as e:
+            logger.warning("[Agent] Tavily search failed (q=%r): %s", query, e)
+            return ""
+        lines = []
+        for r in results[:max_results]:
+            title = (r.get("title") or "").strip()
+            content = (r.get("content") or "").strip()
+            if title or content:
+                lines.append((f"- {title}: {content}" if title else f"- {content}")[:300])
+        return "\n".join(lines)
+
+    async def _web_search_ddg(self, query: str, max_results: int = 4) -> str:
+        """No-key DuckDuckGo search (via ddgs). Returns a compact results block,
+        or '' on any failure — search must never break the reply."""
+        try:
+            from ddgs import DDGS
+        except Exception:
+            logger.warning("[Agent] ddgs not installed; web search disabled")
+            return ""
+        try:
+            def _run():
+                return DDGS().text(query, max_results=max_results) or []
+            results = await asyncio.to_thread(_run)
+        except Exception as e:
+            logger.warning("[Agent] web_search DDG failed (q=%r): %s", query, e)
+            return ""
+        lines = []
+        for r in results[:max_results]:
+            title = (r.get("title") or "").strip()
+            body = (r.get("body") or "").strip()
+            if title or body:
+                lines.append((f"- {title}: {body}" if title else f"- {body}")[:300])
+        return "\n".join(lines)
+
+    async def _decide_and_search(self, messages: list[dict]) -> str:
+        """Let the model decide whether to web-search and with what query, via
+        the OpenAI-compatible /v1 function-calling endpoint; if it calls
+        web_search, run the configured backend and return the formatted
+        results. Returns '' if no search is warranted. Never raises."""
+        if not (self.base_url and self.api_key):
+            return ""
+        latest = ""
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                latest = m.get("content") or ""
+                break
+        if not self._might_need_search(latest):
+            return ""
+        try:
+            tool = {
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "Search the web for current events, memes, slang, people, products, prices, or any fact you are unsure about.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string", "description": "concise search query"}},
+                        "required": ["query"],
+                    },
+                },
+            }
+            payload = {
+                "model": self.fallback_model or self.model,
+                "messages": [
+                    {"role": "system", "content": "You are a search-decision gate. If the user's message mentions a meme/slang/person/product/current event/price/concrete fact you are unsure about, call web_search to look it up; otherwise do nothing. Only decide — do not write a reply."},
+                    {"role": "user", "content": latest[:800]},
+                ],
+                "tools": [tool],
+                "tool_choice": "auto",
+                "max_tokens": 150,
+                "temperature": 0.1,
+            }
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=payload,
+                )
+            if resp.status_code != 200:
+                logger.warning("[Agent] search-decide HTTP %d: %s", resp.status_code, resp.text[:200])
+                return ""
+            data = resp.json()
+            tcs = data["choices"][0]["message"].get("tool_calls") or []
+            if not tcs:
+                return ""
+            args = json.loads(tcs[0]["function"].get("arguments") or "{}")
+            query = (args.get("query") or "").strip()
+            if not query:
+                return ""
+            results = await self._web_search(query)
+            if results:
+                logger.info("[Agent] web_search q=%r -> %d chars", query, len(results))
+            return results
+        except Exception as e:
+            logger.warning("[Agent] search-decide failed: %s", e)
+            return ""
 
     async def _evaluate_reply(
         self, group_id: str, mode: str, user_msg: str, reply: str,

@@ -4,14 +4,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from agent import Agent
+from health import run_checks, all_critical_ok
 
 load_dotenv(override=True)
 
@@ -47,6 +50,7 @@ EVAL_FILE = os.getenv("EVAL_FILE", "eval.jsonl")
 VISION_MODEL = os.getenv("VISION_MODEL", "")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
 # ========== Logging ==========
 _log_root = logging.getLogger()
@@ -110,6 +114,7 @@ async def lifespan(app: FastAPI):
             vision_model=VISION_MODEL,
             glm_api_key=GLM_API_KEY,
             glm_base_url=GLM_BASE_URL,
+            tavily_key=TAVILY_API_KEY,
         )
         asyncio.create_task(agent.probe_models())
         asyncio.create_task(agent.check_missed_mentions())
@@ -136,9 +141,29 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
 
+
+# /health caches its probe results briefly so monitoring polls don't spam the
+# upstream APIs (each full probe spends a few tokens + 1 search credit).
+_health_cache: dict = {"ts": 0.0, "data": None}
+
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "agent_enabled": bool(agent and agent.enabled)}
+    now = time.time()
+    if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
+        # Probes do blocking HTTP; run them off the event loop.
+        _health_cache["data"] = await asyncio.to_thread(run_checks)
+        _health_cache["ts"] = now
+    results = _health_cache["data"]
+    ok = all_critical_ok(results)
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={
+            "status": "ok" if ok else "degraded",
+            "agent_enabled": bool(agent and agent.enabled),
+            "services": results,
+        },
+    )
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
