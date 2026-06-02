@@ -6,3 +6,7 @@ anthropic>=0.103,<1
 # Used by the vision pipeline to extract the first frame of a GIF as PNG
 # (most vision endpoints, including Zhipu GLM-4V, reject GIFs directly).
 Pillow>=10,<13
+# No-key web search backend for the agent's auto-lookup (the primary chat model
+# decides the query via /v1 function-calling; ddgs fetches via DuckDuckGo).
+# Swappable for Tavily/Serper later by editing _web_search.
+ddgs>=9,<10
