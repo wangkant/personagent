@@ -1770,7 +1770,11 @@ class Agent:
                     {"role": "user", "content": eval_prompt},
                 ],
                 "temperature": 0,
-                "max_tokens": 400,
+                # Evaluators (esp. kimi-k2.6) still emit chain-of-thought prose
+                # before the JSON even with thinking disabled; too few tokens cut
+                # the trailing JSON in half and the parse fails. 800 leaves room
+                # for prose + JSON; the parser also salvages a truncated object.
+                "max_tokens": 800,
                 "response_format": {"type": "json_object"},
             }
             # K2-family reasoning models burn the budget on reasoning_content;
@@ -1804,8 +1808,22 @@ class Agent:
                     except json.JSONDecodeError:
                         data = None
             if not isinstance(data, dict):
-                logger.warning("[Agent] eval response not JSON mode=%s: %r", mode, raw[:200])
-                return
+                # Last-ditch salvage: pull the score straight out of truncated or
+                # prose-wrapped output (K2.6 emits CoT prose then a possibly
+                # cut-off JSON). Don't drop the whole eval just because the
+                # closing brace never arrived.
+                m_score = re.search(r'"score"\s*:\s*([1-5])', raw)
+                if m_score:
+                    data = {"score": int(m_score.group(1))}
+                    m_reason = re.search(r'"reason"\s*:\s*"([^"]*)"', raw)
+                    if m_reason:
+                        data["reason"] = m_reason.group(1)
+                    m_sticker = re.search(r'"sticker_score"\s*:\s*([1-5])', raw)
+                    if m_sticker:
+                        data["sticker_score"] = int(m_sticker.group(1))
+                else:
+                    logger.warning("[Agent] eval response not JSON mode=%s: %r", mode, raw[:200])
+                    return
             score = int(data.get("score", 0))
             reason = str(data.get("reason", ""))[:200]
             sticker_score = data.get("sticker_score")
@@ -1878,6 +1896,20 @@ class Agent:
         except Exception as e:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
+
+    def _followup_wants_pro(self, latest_text: str, signals: dict) -> bool:
+        """Pre-routing for followup (proactive chime-ins): substantive turns use
+        the main model, pure memes/stickers/filler use the cheap fallback. The
+        intent label isn't known until after generation, so this is a cheap
+        heuristic on the triggering context; when unsure, prefer the main model."""
+        t = latest_text or ""
+        if re.search(r"[?？]", t) or "http" in t.lower():
+            return True                              # question / link → substantive
+        if signals.get("type") in ("work/tech", "question/discussion"):
+            return True                              # work or real discussion → substantive
+        # Strip visual markers ([image]/[sticker:x]/[share|x]); if real text remains, substantive.
+        bare = re.sub(r"\[[^\]]*\]", "", t).strip()
+        return len(bare) >= 6
 
     async def _think(
         self,
@@ -2071,17 +2103,32 @@ class Agent:
         ]
 
         # Model routing:
-        # - owner / called → main model (user-facing reply, keep quality)
-        # - judge / followup → fallback (background decisions + proactive
-        #   chime-ins, short output, ~70% cheaper per call)
-        # - Rate-limit-triggered fallback still applies via _pick_group_model
-        if mode in ("owner", "called"):
-            model_to_use = self._pick_group_model() if mode == "called" else self.model
-        elif mode in ("judge", "followup"):
-            model_to_use = self.fallback_model or self.model
-        else:
+        # - owner → main model (user-facing, never downgrade)
+        # - called → _pick_group_model (main model, only downgrades on rate spikes)
+        # - followup (proactive chime-in) → split by content: substantive turns
+        #   (questions/discussion/work/longer chitchat) use the main model for
+        #   quality; pure memes/stickers/filler use the cheap fallback (see
+        #   _followup_wants_pro). Routing every followup to fallback makes most
+        #   of what the group actually sees come from the dumb model.
+        # - judge → fallback (only decides whether to chime in, short, low risk)
+        if mode == "owner":
+            model_to_use = self.model
+        elif mode == "called":
             model_to_use = self._pick_group_model()
-        self.model_calls.append(time.time())
+        elif mode == "followup":
+            model_to_use = (
+                self._pick_group_model()
+                if self._followup_wants_pro(latest_text, signals)
+                else (self.fallback_model or self.model)
+            )
+        else:  # judge
+            model_to_use = self.fallback_model or self.model
+        # Only count user-facing replies (owner/called) toward the rate window.
+        # Background judge/followup calls already use the fallback model, so they
+        # must not pollute the limiter — otherwise a burst of them would drag the
+        # foreground `called` replies into a 300s downgrade too.
+        if mode in ("owner", "called"):
+            self.model_calls.append(time.time())
 
         # judge only outputs PASS/REPLY → disable thinking to save budget;
         # other modes keep thinking on for the reasoning + intent + reply
@@ -2581,10 +2628,12 @@ class Agent:
     )
 
     def _accept_vision_caption(self, url: str, text: str, provider: str) -> str:
+        # Truncated to 150 chars (a long caption is still useful); no longer
+        # discard the whole caption for being "too long" — the old >80 reject
+        # silently threw away many valid descriptions of complex images.
         text = (text or "").strip()[:150]
         hit = next((t for t in self._VISION_REJECT_TOKENS if t in text), "")
-        too_long = len(text) > 80
-        if text and len(text) >= 4 and not hit and not too_long:
+        if text and len(text) >= 4 and not hit:
             self.image_caption_cache[url] = text
             self._gc_image_cache()
             logger.info("[Agent] vision/%s (%s): %s", provider, url[:60], text[:60])
