@@ -22,11 +22,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FEEDBACK_FILE = ROOT / "feedback.jsonl"
-EXAMPLES_FILE = ROOT / "examples.jsonl"
+sys.path.insert(0, str(ROOT))
+from agent import _resolve_lang_file
+
+AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)
+EXAMPLES_FILE = _resolve_lang_file("examples", "jsonl", AGENT_LANG)
 OUT_PROGRAM = Path(__file__).parent / "dspy_tuned.json"
 OUT_LOG = Path(__file__).parent / "dspy_log.md"
 

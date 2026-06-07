@@ -27,7 +27,9 @@ logger = logging.getLogger("agent")
 _SEARCH_HINT_RE = re.compile(
     r"[?？]|who|what|when|where|why|how|which|is it|how much|how many|price|"
     r"news|latest|recent|release[ds]?|meme|slang|term|look ?up|search|google|"
-    r"http|www\.|\.com|\.org|\.net|\.io|\.cn",
+    r"http|www\.|\.com|\.org|\.net|\.io|\.cn|"
+    # Chinese fact-seeking hints (for the zh variant; harmless to English text)
+    r"是什么|怎么|为什么|多少|哪里|哪个|谁是|新闻|最新|查一下|搜一下|价格",
     re.IGNORECASE,
 )
 
@@ -36,19 +38,95 @@ DEFAULT_PERSONA = (
     "read like a real person, not an AI assistant. Don't be the helpful "
     "service bot; don't volunteer summaries; don't say things like \"hope "
     "this helps\". Not saccharine, not cutesy, not pompous. "
-    "Replace this with your own persona — copy persona.example.txt to "
+    "Replace this with your own persona — copy persona.example.en.txt to "
     "persona.txt and edit it to whoever you want the bot to be."
 )
 
-def _load_persona() -> str:
-    """Load persona text from PERSONA_FILE (default persona.txt); fall back to DEFAULT_PERSONA."""
+def _load_persona(lang: str = "en") -> str:
+    """Load persona text from PERSONA_FILE (default persona.txt); fall back to
+    the bundled persona.example.<lang>.txt, then DEFAULT_PERSONA. Falling back
+    to the language-appropriate example keeps a fresh checkout coherent before
+    the user writes their own persona.txt."""
     persona_path = Path(os.getenv("PERSONA_FILE", "persona.txt"))
     if persona_path.is_file():
         try:
             return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
         except Exception:
-            logger.warning("read persona file failed, falling back to DEFAULT_PERSONA")
+            logger.warning("read persona file failed, falling back to bundled example")
+    example = Path(__file__).resolve().parent / f"persona.example.{lang}.txt"
+    if example.is_file():
+        try:
+            return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
+        except Exception:
+            pass
     return DEFAULT_PERSONA
+
+
+def _resolve_lang_file(stem: str, ext: str, lang: str) -> Path:
+    """Resolve a bundled data file by language: prefer <stem>.<lang>.<ext>, and
+    fall back to the bare <stem>.<ext> so single-language or customized
+    deployments keep working. Anchored to this file's directory."""
+    base_dir = Path(__file__).resolve().parent
+    suffixed = base_dir / f"{stem}.{lang}.{ext}"
+    if suffixed.is_file():
+        return suffixed
+    return base_dir / f"{stem}.{ext}"
+
+
+# Common English function words filtered out of retrieval tokens so they don't
+# uniformly inflate relevance scores. Deliberately excludes chat-signal words
+# (lol, haha, etc.) which carry meaning for scenario matching.
+_EN_STOPWORDS = frozenset({
+    "the", "and", "you", "your", "yours", "that", "this", "these", "those",
+    "with", "have", "has", "had", "for", "are", "was", "were", "but", "not",
+    "its", "they", "them", "their", "his", "her", "she", "him", "our", "out",
+    "can", "cant", "just", "one", "all", "any", "than", "then", "there",
+    "about", "from", "into", "over", "been", "does", "did", "done", "because",
+    "what", "when", "where", "why", "how", "who", "will", "would", "could",
+    "should", "here", "very", "really", "still", "also", "even", "some",
+})
+
+
+# Topic-type keyword lexicons for _compute_chat_signals (drives the reply/PASS
+# decision framework). Keys are lowercase; matching lowercases the chat text so
+# "LOL"/"Haha" match too. The 'banter' bucket is the most language-specific.
+_TOPIC_LEXICON = {
+    "en": {
+        "work": ["bug", "code", "error", "deploy", "ship", "deadline", "pr ",
+                 "merge", "repo", "build", "project", "work", "meeting", "ticket",
+                 "refactor", "commit", "prod", "staging", "api"],
+        "banter": ["lol", "lmao", "lmfao", "rofl", "haha", "lolol", "dying",
+                   "deadass", " fr ", "ratio", "based", "cope", "seethe", "bruh",
+                   "bro ", "meme", "kek", "real ", "wtf", "omg", "lmaooo"],
+    },
+    "zh": {
+        "work": ["bug", "代码", "code", "报错", "error", "需求", "deadline",
+                 "项目", "project", "工作", "work"],
+        "banter": ["哈哈", "草", "笑死", "梗", "绷", "乐", "lol", "lmao", "haha"],
+    },
+}
+
+
+def _focus_tokens(text: str, lang: str = "en") -> set:
+    """Tokenize focus text for few-shot / memory retrieval relevance scoring.
+
+    English (default): lowercased word tokens of 3+ chars, minus common
+    function-word stopwords. Chinese: 2-char sliding-window ngrams over CJK
+    runs, unioned with the ASCII tokens (so mixed zh/en input still matches
+    either pool). The ASCII tokens are always included since latin words show
+    up in both languages."""
+    focus_lc = text.lower()
+    ascii_tokens = {
+        t for t in re.findall(r"[a-z0-9]{3,}", focus_lc) if t not in _EN_STOPWORDS
+    }
+    if lang == "zh":
+        chinese_chars = re.findall(r"[一-鿿]", focus_lc)
+        cjk_ngrams = {
+            "".join(chinese_chars[i:i + 2])
+            for i in range(max(0, len(chinese_chars) - 1))
+        }
+        return cjk_ngrams | ascii_tokens
+    return ascii_tokens
 
 TOOL_GUIDE = (
     "<tools>\n"
@@ -249,10 +327,16 @@ class Agent:
         stickers_dir: str = "stickers",
         stickers_file: str = "stickers.json",
         message_debounce_sec: float = 2.5,
+        lang: str = "",
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        # Process-wide language. 'en' (default) is the primary build; 'zh'
+        # selects the Chinese variant. Drives the reply validator, the
+        # per-language data files, and the control-flow lexicons. Single
+        # source of truth — everything language-dependent reads self.agent_lang.
+        self.agent_lang = (lang or os.getenv("AGENT_LANG") or "en").strip().lower()
         self.fallback_model = fallback_model or model
         self.rate_window = rate_window
         self.rate_threshold = rate_threshold
@@ -268,7 +352,7 @@ class Agent:
         self.trigger_count = trigger_count
         self.context_len = context_len
         self.followup_window = followup_window
-        self.persona = persona if persona is not None else _load_persona()
+        self.persona = persona if persona is not None else _load_persona(self.agent_lang)
         self.owner_relationship = owner_relationship
         self.on_reply = on_reply
         self.buffers: dict[str, deque] = defaultdict(lambda: deque(maxlen=context_len))
@@ -344,24 +428,24 @@ class Agent:
         # from prompt_lab.py; high-scoring replies are also auto-appended at
         # runtime (see _evaluate_reply) so the retrieval pool keeps growing
         # instead of being stuck at bootstrap size.
-        self.examples_file = Path(__file__).parent / "examples.jsonl"
+        self.examples_file = _resolve_lang_file("examples", "jsonl", self.agent_lang)
         self._examples_cache: list = []
         self._examples_mtime: float = 0.0
         # In-memory dedup for runtime-appended examples: a frequent stock
         # phrase should only land in the pool once.
         self._auto_examples_seen: set[str] = set()
 
-        self.feedback_file = Path(__file__).parent / "feedback.jsonl"
+        self.feedback_file = _resolve_lang_file("feedback", "jsonl", self.agent_lang)
         self._pairs_cache: list = []
         self._pairs_mtime: float = 0.0
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
-        self.output_filter_file = Path(__file__).parent / "output_filter.json"
+        self.output_filter_file = _resolve_lang_file("output_filter", "json", self.agent_lang)
         self._filters_cache: list = []
         self._filters_mtime: float = 0.0
 
         # SillyTavern-style lorebook (keyword-triggered context entries)
-        self.lorebook_file = Path(__file__).parent / "lorebook.json"
+        self.lorebook_file = _resolve_lang_file("lorebook", "json", self.agent_lang)
         self._lorebook_cache: list = []
         self._lorebook_mtime: float = 0.0
 
@@ -823,7 +907,7 @@ class Agent:
             logger.warning("[Agent] send private msg failed: %s", e)
 
     async def _send_private_qq(self, user_id: str, text: str) -> None:
-        text = self._sanitize_reply(text)
+        text = self._sanitize_reply(text, self.agent_lang)
         if not text:
             return
         segments = self._parse_sticker_markers(text)
@@ -2235,9 +2319,11 @@ class Agent:
         return f"{now.strftime('%Y-%m-%d %H:%M')} {weekdays[now.weekday()]} {part}"
 
     @staticmethod
-    def _sanitize_reply(text: str) -> str:
+    def _sanitize_reply(text: str, lang: str = "en") -> str:
         """Pre-flight regex strip catching what STYLE_GUIDE failed to suppress.
-        Logs when it changes the text so prompt drift is observable."""
+        Logs when it changes the text so prompt drift is observable. The CJK
+        punctuation substitutions below are no-ops on English text, so the same
+        pass serves both languages; `lang` is forwarded to the final validator."""
         if not text:
             return text
         original = text
@@ -2285,11 +2371,11 @@ class Agent:
         if text != original:
             logger.info("[Agent] sanitize: %r -> %r", original[:80], text[:80])
         # Final gate: whitelist character validation. Any reply that doesn't
-        # look like normal Chinese chat (XML / JSON / system tokens / pipe
-        # characters / pure English template) is dropped wholesale.
+        # look like normal chat for the active language (XML / JSON / system
+        # tokens / pipe characters / a leaked template) is dropped wholesale.
         # The strategy is whitelist-not-blacklist so future unseen leak
         # shapes are blocked automatically without per-shape filter rules.
-        ok, reason = Agent._validate_reply_safe(text)
+        ok, reason = Agent._validate_reply_safe(text, lang)
         if not ok:
             logger.warning("[Agent] validator rejected reply: %s | text=%r",
                            reason, text[:80])
@@ -2397,7 +2483,7 @@ class Agent:
         self.stickers.dir) that were actually sent — used by the quality
         feedback loop so eval can attribute scores back to specific
         stickers."""
-        text = self._sanitize_reply(text)
+        text = self._sanitize_reply(text, self.agent_lang)
         sent_stickers: list[str] = []
         if not text:
             return sent_stickers
@@ -3225,14 +3311,7 @@ class Agent:
         if not self._examples_cache and not self._pairs_cache:
             return ""
 
-        focus_lc = focus_text.lower()
-        chinese_chars = re.findall(r"[一-鿿]", focus_lc)
-        chinese_ngrams = {
-            "".join(chinese_chars[i:i+2])
-            for i in range(max(0, len(chinese_chars) - 1))
-        }
-        ascii_tokens = set(re.findall(r"[a-z0-9]{3,}", focus_lc))
-        focus_tokens = chinese_ngrams | ascii_tokens
+        focus_tokens = _focus_tokens(focus_text, self.agent_lang)
 
         def _score(ex: dict) -> float:
             s = 0.0
@@ -3395,14 +3474,7 @@ class Agent:
             present_uids.add(self.owner_qq)
 
         now = time.time()
-        focus_lc = focus_text.lower()
-        chinese_chars = re.findall(r"[一-鿿]", focus_lc)
-        chinese_ngrams = {
-            "".join(chinese_chars[i:i+2])
-            for i in range(max(0, len(chinese_chars) - 1))
-        }
-        ascii_tokens = set(re.findall(r"[a-z0-9]{3,}", focus_lc))
-        focus_tokens = chinese_ngrams | ascii_tokens
+        focus_tokens = _focus_tokens(focus_text, self.agent_lang)
 
         def _score(it: dict) -> float:
             text_lc = it.get("text", "").lower()
@@ -3433,7 +3505,13 @@ class Agent:
         if group_level:
             parts.append("Things noted about the group:\n" + "\n".join(f"- {it['text']}" for it in group_level))
         for name, lst in per_user.items():
-            texts = [re.sub(r"\b我\b", name, it["text"]) for it in lst]
+            if self.agent_lang == "zh":
+                # Rewrite the first-person pronoun to the speaker's name so a
+                # memory stored as "我喜欢猫" surfaces as "Alice 喜欢猫". English
+                # memories keep their "I" — rewriting it would be lossy.
+                texts = [re.sub(r"\b我\b", name, it["text"]) for it in lst]
+            else:
+                texts = [it["text"] for it in lst]
             parts.append(f"About {name}:\n" + "\n".join(f"- {t}" for t in texts))
         if not parts:
             return ""
@@ -3485,11 +3563,13 @@ class Agent:
                 since = "10+ min ago"
 
         recent_text = " ".join(m.get("text", "") for m in history[-8:])
-        if any(k in recent_text.lower() for k in ["bug", "代码", "code", "报错", "error", "需求", "deadline", "项目", "project", "工作", "work"]):
+        recent_lc = recent_text.lower()
+        lex = _TOPIC_LEXICON.get(self.agent_lang, _TOPIC_LEXICON["en"])
+        if any(k in recent_lc for k in lex["work"]):
             ttype = "work/tech"
-        elif any(k in recent_text for k in ["哈哈", "草", "笑死", "梗", "绷", "乐", "lol", "lmao", "haha"]):
+        elif any(k in recent_lc for k in lex["banter"]):
             ttype = "memes/banter"
-        elif any(k in recent_text for k in ["？", "?"]):
+        elif "?" in recent_text or "？" in recent_text:
             ttype = "question/discussion"
         else:
             ttype = "chitchat"
@@ -3601,10 +3681,10 @@ class Agent:
         2. Try json.loads on the whole string.
         3. Fall back to JSONDecoder.raw_decode from the first `{` so two
            concatenated JSON objects parse as the first valid one.
-        4. If still no dict, last-ditch chat-shape heuristic: short Chinese
-           text without XML/JSON/pipe characters and not a reasoning-style
-           prefix is treated as a naked reply. The downstream whitelist
-           validator (_validate_reply_safe) is the final gate.
+        4. If still no dict, last-ditch chat-shape heuristic: short chat text
+           (English or CJK) without XML/JSON/pipe characters and not a
+           reasoning-style prefix is treated as a naked reply. The downstream
+           whitelist validator (_validate_reply_safe) is the final gate.
         """
         if not raw or not raw.strip():
             return "", "", "", ""
@@ -3661,17 +3741,23 @@ class Agent:
         return reply, reasoning, intent, mem
 
     @staticmethod
-    def _validate_reply_safe(text: str) -> tuple[bool, str]:
+    def _validate_reply_safe(text: str, lang: str = "en") -> tuple[bool, str]:
         """Whitelist character-class validator: only release replies that look
-        like genuine Chinese chat text.
+        like genuine human chat text for the active language.
 
         Strategy: strip approved bracket markers ([STICKER:tag] / [AT:qq]),
         then verify every remaining character belongs to an allowed class
         (CJK ideographs / CJK punctuation / full-width / common ASCII letters,
         digits, punctuation, whitespace). Known bad token characters
-        (`< > { } | ｜ ▁`) are hard-rejected. A reply with no CJK content
-        and no markers is also rejected (suspected English-template leak
-        or system token leak).
+        (`< > { } | ｜ ▁`) are hard-rejected.
+
+        Language gate (the only language-dependent rule):
+          - zh: a reply with no CJK and no marker is rejected (a Chinese bot
+            emitting pure ASCII is a suspected template / token leak).
+          - en (default) and any other lang: a reply with no letter at all
+            (no ASCII letter and no CJK) and no marker is rejected. Mixed
+            zh/en code-switching always passes since the CJK classes stay
+            allowed.
 
         This catches every future leak shape — XML residue, JSON fragments,
         provider-specific tokens — without needing a per-shape filter rule.
@@ -3688,6 +3774,7 @@ class Agent:
         if not residual:
             return (True, "") if has_marker else (False, "empty after marker strip")
         cjk_count = 0
+        letter_count = 0
         for ch in residual:
             c = ord(ch)
             # Hard reject: known bad token characters
@@ -3711,14 +3798,23 @@ class Agent:
                 continue
             # ASCII letters / digits
             if c < 0x80 and ch.isalnum():
+                if ch.isalpha():
+                    letter_count += 1
                 continue
             # Common ASCII punctuation used in casual chat
             if ch in '.,?!;:\'\"()-_~`@#&+*=%^/':
                 continue
             return False, f"unexpected char {ch!r} (U+{c:04X})"
-        # No CJK and no markers → likely English template or token leak
-        if cjk_count == 0 and not has_marker:
-            return False, "no CJK content (suspect English template / token leak)"
+        if not has_marker:
+            if lang == "zh":
+                # Chinese build: no CJK → suspected template / token leak.
+                if cjk_count == 0:
+                    return False, "no CJK content (suspect template / token leak)"
+            else:
+                # English (default) build: needs at least one letter (ASCII or
+                # CJK); a residual of only digits/punctuation is suspect.
+                if letter_count == 0 and cjk_count == 0:
+                    return False, "no letter content (suspect template / token leak)"
         return True, ""
 
     def _save_auto_memory(self, group_id: str, text: str) -> None:

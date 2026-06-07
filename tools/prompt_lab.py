@@ -19,11 +19,19 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
 
 import anthropic
-from agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE
+from agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE, _resolve_lang_file
 
-FIXTURES_FILE = Path(__file__).parent / "fixtures.jsonl"
-FEEDBACK_FILE = ROOT / "feedback.jsonl"
-EXAMPLES_FILE = ROOT / "examples.jsonl"
+AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+
+_fixtures_suffixed = Path(__file__).parent / f"fixtures.{AGENT_LANG}.jsonl"
+FIXTURES_FILE = (
+    _fixtures_suffixed if _fixtures_suffixed.is_file()
+    else Path(__file__).parent / "fixtures.jsonl"
+)
+# Approved replies flow into the active-language pools so they match the
+# language the agent actually runs in.
+FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)
+EXAMPLES_FILE = _resolve_lang_file("examples", "jsonl", AGENT_LANG)
 
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -64,14 +72,26 @@ def build_system_prompt(examples: list) -> str:
         TOOL_GUIDE,
     ]
     if examples:
-        ex_str = ["\n<examples>", "学习以下高质量回复的说话方式（学风格不照搬原文）："]
-        for e in examples[-5:]:
-            ctx = "\n".join(e.get("context", []))
-            ex_str.append(
-                f"\n场景: {e.get('scenario','?')}\n"
-                f"群里:\n{ctx}\n"
-                f"你的回复: {e.get('reply','')}"
-            )
+        if AGENT_LANG == "zh":
+            ex_str = ["\n<examples>", "学习以下高质量回复的说话方式（学风格不照搬原文）："]
+            for e in examples[-5:]:
+                ctx = "\n".join(e.get("context", []))
+                ex_str.append(
+                    f"\n场景: {e.get('scenario','?')}\n"
+                    f"群里:\n{ctx}\n"
+                    f"你的回复: {e.get('reply','')}"
+                )
+        else:
+            ex_str = ["\n<examples>",
+                      "Learn the speaking style of these high-quality replies "
+                      "(mimic the voice, don't copy verbatim):"]
+            for e in examples[-5:]:
+                ctx = "\n".join(e.get("context", []))
+                ex_str.append(
+                    f"\nscenario: {e.get('scenario','?')}\n"
+                    f"group:\n{ctx}\n"
+                    f"your reply: {e.get('reply','')}"
+                )
         ex_str.append("\n</examples>")
         parts.append("\n".join(ex_str))
     return "\n\n".join(parts)
@@ -84,16 +104,29 @@ def get_client():
 
 async def gen_reply(system: str, fx: dict, client) -> str:
     ctx_text = "\n".join(fx.get("context", []))
-    mode_hint = {
-        "called": "(最后一条点名/at 了你)",
-        "owner": "(最后一条是 owner 说的)",
-        "judge": "(群里在聊，你没被点名)",
-        "followup": "(你刚发过言，现在有新消息)",
-    }.get(fx.get("mode", "judge"), "")
-    user_prompt = (
-        f"群聊上下文 {mode_hint}:\n---\n{ctx_text}\n---\n"
-        f"直接输出你要说的话，符合人设。如果你判断这种情境根本不该插话就只输出 PASS。"
-    )
+    if AGENT_LANG == "zh":
+        mode_hint = {
+            "called": "(最后一条点名/at 了你)",
+            "owner": "(最后一条是 owner 说的)",
+            "judge": "(群里在聊，你没被点名)",
+            "followup": "(你刚发过言，现在有新消息)",
+        }.get(fx.get("mode", "judge"), "")
+        user_prompt = (
+            f"群聊上下文 {mode_hint}:\n---\n{ctx_text}\n---\n"
+            f"直接输出你要说的话，符合人设。如果你判断这种情境根本不该插话就只输出 PASS。"
+        )
+    else:
+        mode_hint = {
+            "called": "(the last message named / @'d you)",
+            "owner": "(the last message is from the owner)",
+            "judge": "(the group is chatting; you weren't named)",
+            "followup": "(you just spoke; now there's a new message)",
+        }.get(fx.get("mode", "judge"), "")
+        user_prompt = (
+            f"Group chat context {mode_hint}:\n---\n{ctx_text}\n---\n"
+            f"Output exactly what you'd say, in character. If this isn't a moment "
+            f"you'd jump in, output only PASS."
+        )
     response = await client.messages.create(
         model=MODEL,
         max_tokens=500,

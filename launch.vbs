@@ -36,5 +36,6 @@ WS.Run "cmd /k ""cd /d " & NAPCAT_DIR & " && launcher-user.bat " & BOT_QQ & """"
 ' Give NapCat ~3s to come up before the agent starts hitting its HTTP API
 WScript.Sleep 3000
 
-' Launch the agent
-WS.Run "cmd /k ""cd /d " & AGENT_DIR & " && set PYTHONIOENCODING=utf-8 && python main.py""", 7, False
+' Launch the agent. Prefer the .venv that quickstart.py creates; fall back to a
+' global python so this works whether or not the venv flow was used.
+WS.Run "cmd /k ""cd /d " & AGENT_DIR & " && set PYTHONIOENCODING=utf-8 && (if exist .venv\Scripts\python.exe (.venv\Scripts\python.exe main.py) else (python main.py))""", 7, False
