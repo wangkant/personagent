@@ -4,6 +4,8 @@
 
 一个**人设型 LLM agent 在 OneBot v11 群聊上的模板** —— 目标是发出来的消息像真人闲聊，而不是客服机器人。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接 OneBot 平台只是演示载体，仓库内不包含任何 IM 协议实现。
 
+> **英文优先, 中英双语。** agent 默认跑英文, 一个开关 (`AGENT_LANG=zh`) 切到中文。详见[语言](#语言english--中文)。想 30 秒上手、不需要 QQ 账号？直接看[免 QQ 试用](#免-qq-试用)。
+
 > **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
 > 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 OneBot 协议端 (例如 QQ 的 NapCat) 没有上游 IM 平台背书；如果你选择部署到 QQ，建议用小号 + 家庭/居民 IP 跑。仓库作者不对你选择的协议端承担任何责任。
 
@@ -11,7 +13,7 @@
 
 大部分"群里跑 LLM"的项目最后都像卡在客服模式的机器人 —— 礼貌、热心、有问必答，没自己的脾气。这套模板从几个角度治这个病：
 
-- **输出安全优先。** reasoning / intent / reply 不再是 XML 内嵌标签，而是 JSON 字段 —— 模型输出哪怕半截，也不可能把内部思考漏到群里。送出前还过一层字符白名单，凡是不像中文聊天的(XML 残片、JSON 大括号、模型 token、纯英文模板腔) 整条丢。
+- **输出安全优先。** reasoning / intent / reply 不再是 XML 内嵌标签，而是 JSON 字段 —— 模型输出哪怕半截，也不可能把内部思考漏到群里。送出前还过一层字符白名单，凡是不像**当前语言**真实聊天的(XML 残片、JSON 大括号、模型 token、漏出的模板) 整条丢 —— 未来出现的未知漏出形态会被自动挡掉。
 - **风格当成代码写。** STYLE_GUIDE 把人设的*口吻*、雷区句式、身份攻击防御、旁观者位规则、"看图不念图"等都编码进 prompt —— 这些规则是把"AI 客服"变成"一个人"的关键。
 - **表情包是声音的一部分。** 表情库自动收新表情、打标签、文字+视觉两层 persona-fit 过滤；真实对话反馈闭环会把不合人设的表情慢慢降级。模型用 `[STICKER:<tag>]` 标记发表情。
 - **真正看懂内容。** 文本里贴的链接、B 站 / YouTube 视频、各种小程序分享卡都会抓取元信息，作为结构化上下文喂给模型，不再让它对着一个 URL 干瞪眼。
@@ -20,12 +22,12 @@
 
 | 模块 | 作用 |
 |---|---|
-| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `examples.jsonl` / `feedback.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
+| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `examples.<lang>.jsonl` / `feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
 | `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
 | `tools/auto_reviewer.py` | 扫 `eval.jsonl` 里低分条目，自动生成 `failure_mode + constraint + BAD/OK 草稿` 用于打补丁 |
-| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `fixtures.jsonl`，人工打分，通过的回复流到 `examples.jsonl` |
+| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
 
 ## 架构图
@@ -74,41 +76,81 @@ NapCat → QQ
 
 ## 快速开始
 
-依赖：Python 3.10+、NapCat（或任意 OneBot v11 实现）、一个 OpenAI 兼容的 chat completions API key。
+依赖：Python 3.10+、一个 OpenAI 兼容的 chat completions API key。OneBot v11 客户端（例如 NapCat）只有跑**真实群聊**时才需要 —— 下面的试用不用。
 
 ```bash
-# 1. 一行命令搞定 venv、装依赖、复制 env/persona 模板
+# 一行命令搞定 venv、装依赖、复制 .env + persona 模板
 python quickstart.py
-
-# 2. 填 API key 和 bot/群号
-$EDITOR .env
-
-# 3. 写人设
-$EDITOR persona.txt
-
-# 4. 激活 venv 后跑
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-python main.py
 ```
 
-`quickstart.py` 是幂等的 — 已经存在的不会被覆盖，重跑只会跳过。如果想手动来，它做的事就是：创建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env`、复制 `persona.example.txt → persona.txt`。
+`quickstart.py` 是幂等的 —— 重跑只会报告哪些已经就位。等价的手动步骤：创建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env`、复制 `persona.example.<lang>.txt → persona.txt`。
 
-启动成功会看到 `bot started on 0.0.0.0:8080 (agent=True)`。
+### 免 QQ 试用
 
-把 NapCat / OneBot 客户端配置成把事件 POST 到 `http://127.0.0.1:8080/webhook/qq`：
+体验人设最快的路子 —— 不要 QQ 账号、不要 NapCat，只要一个 API key。
 
-```json
-{
-  "http": { "enable": true, "host": "0.0.0.0", "port": 3000 },
-  "webhook": {
-    "enable": true,
-    "url": "http://127.0.0.1:8080/webhook/qq",
-    "timeout": 5000
-  }
-}
+```bash
+# .env 里只填 DEEPSEEK_API_KEY（不是 DeepSeek 的话再加 DEEPSEEK_BASE_URL / DEEPSEEK_MODEL）
+python try_chat.py             # 英文（默认）
+python try_chat.py --lang zh   # 中文变体
+python try_chat.py --owner     # 以配置的 owner 身份说话
 ```
 
-> **Windows 用户:** `launch.vbs` 是一键启动脚本，会用最小化窗口同时启动 NapCat 和 agent。用之前先改文件开头的三个路径 / QQ 号。
+你打一行，bot 回一句 —— 走的是和线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。它还会把选中的 `intent` 和抽取到的 `mem` 一起打印出来，方便你看协议怎么运作。想针对 fixture 做批量/离线调优（给回复打分、扩充 few-shot 库），用 `python tools/prompt_lab.py`。
+
+### 在群里实际运行
+
+1. **配 `.env`** —— 填 *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* 那一块（`BOT_QQ`、`QQ_GROUPS`、`NAPCAT_API`），并写好你的 `persona.txt`。
+2. **启动 agent：**
+   ```bash
+   source .venv/bin/activate            # Windows: .venv\Scripts\activate
+   python main.py                       # 或: ./start.sh   (Windows: .\start.ps1)
+   ```
+   应当看到 `bot started on 0.0.0.0:8080 (agent=True, lang=zh)`。
+3. **配好 NapCat**（或任意 OneBot v11 客户端）并指向 agent —— 见下文。
+
+#### NapCat 三步走
+
+1. 下载 [NapCat](https://github.com/NapNeko/NapCatQQ) 并登录一个**小号** QQ（扫码 / 确认登录）。先看 [DISCLAIMER.md](DISCLAIMER.md) —— 用一次性小号 + 家庭/居民 IP。
+2. 在 NapCat 的 OneBot 配置里同时开启 HTTP 服务器**和** HTTP webhook：
+   ```json
+   {
+     "http": { "enable": true, "host": "0.0.0.0", "port": 3000 },
+     "webhook": {
+       "enable": true,
+       "url": "http://127.0.0.1:8080/webhook/qq",
+       "timeout": 5000
+     }
+   }
+   ```
+3. 先起 NapCat，再起 agent。在群里发条消息，看日志。
+
+#### 两个端口、两个方向
+
+新手最容易搞混 —— 这两条是反方向的：
+
+```
+NapCat  --(webhook: 事件)-->  agent :8080    (.env 里的 HOST / PORT)
+agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
+```
+
+> **Windows 一键启动:** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。用之前先改文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；它会自动优先用 `.venv`。
+
+## 语言（English / 中文）
+
+agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LANG`：
+
+- `AGENT_LANG=en`（默认）—— 主英文构建。
+- `AGENT_LANG=zh` —— 中文变体。
+
+这个开关一步到位地选择：
+
+- **按后缀选数据文件**：`persona.example.<lang>.txt`、`examples.<lang>.jsonl`、`feedback.<lang>.jsonl`、`output_filter.<lang>.json`、`lorebook.<lang>.json`。每个先解析到 `<lang>` 文件，找不到再回退到不带后缀的同名文件（方便你放自己的）。
+- **回复校验器**（`_validate_reply_safe`）：英文模式接受任何带字母的回复（仍然丢掉 XML / JSON / token 漏出）；`zh` 模式要求含 CJK。中英混说两种模式都放行。
+- **控制流词表**：few-shot/记忆的分词器和话题类型分类器按语言切换各自的词表。
+- **开发工具**：`tools/auto_reviewer.py`、`tools/import_stickers_folder.py`、`tools/prompt_lab.py` 同样跟随 `AGENT_LANG`。
+
+想加一门新语言，放进一套 `*.<lang>.*` 数据文件，用 `AGENT_LANG=<lang>` 跑即可（校验器把任何非 `zh` 的语言当成基于字母处理）。
 
 ## 输出协议 — JSON 不是 XML
 
@@ -128,14 +170,14 @@ python main.py
 为什么不用 `<reasoning>...</reasoning><intent>...</intent><reply>...</reply>` XML：
 
 - **字段隔离。** 模型截断、标签拼错、吐出厂商内部 token 时，JSON 解析直接失败 — 整条不发。原 XML 形式的兜底分支会把 reasoning 漏到 reply。
-- **多层容错好加。** parser 剥可选的 ```json``` 围栏 → `json.JSONDecoder.raw_decode`（处理双对象拼接）→ 兜底把短的纯中文当裸 reply（仍然走 validator 把关）。
-- **缓存友好。** 持久部分(STYLE_GUIDE / INTENT_RULES / 协议) 用 Anthropic `cache_control: ephemeral` 标记后命中能省 ~90% 输入 token。
+- **多层容错好加。** parser 剥可选的 ```json``` 围栏 → `json.JSONDecoder.raw_decode`（处理双对象拼接）→ 兜底把短的、长得像聊天的输出当裸 reply（英文或 CJK 都行，仍然走 validator 把关）。
+- **缓存友好。** system prompt 持有 schema；每次调用的差异落在 user message 和一小段「动态」分块里。持久部分用 Anthropic `cache_control: ephemeral` 标记，命中时重复调用的输入成本降到约 ~10%。
 
-`_validate_reply_safe` 是 send 阶段的最后一关：字符白名单，剥掉 [STICKER:tag] / [AT:qq] 后只允许 CJK + CJK 标点 + 全角 + 安全 ASCII，其他(XML / JSON 大括号 / 管道 / 子词标记)整条丢。未来出现新形式的漏出也自动挡，不用追加规则。
+即便过了 parser，`_validate_reply_safe` 在 send 前还要过一道字符白名单，且**按语言区分**：英文模式下，任何带至少一个字母的回复放行，而 XML / JSON 大括号 / 管道 / 子词标记一律丢；`zh` 模式下回复必须含 CJK。中英混说两种模式都放行。未来出现的未知漏出形态无需逐条加正则即可自动挡掉。
 
 ## 回复示例
 
-"像真人"在实际对话里的样子 (示例已脱敏 / 改写)：
+"像真人"在实际对话里的样子 (示例已脱敏 / 改写)。(主构建为英文；设 `AGENT_LANG=zh` 切到中文变体，模式一致。)
 
 > 群友 *(挑刺)*: `今天又做天才发明家了?`
 > Bot: `对啊 一直在敲键盘碰运气 等哪个 feature 自己掉出来`
@@ -161,8 +203,9 @@ python main.py
 
 | 变量 | 含义 |
 |---|---|
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行 |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_PRIVATE_MODEL` | Anthropic 兼容端点 (主回复路径走这, prompt caching 在这条上启用) |
+| `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_PRIVATE_MODEL` | **可选。** 主回复路径（`_call_anthropic`）走的 Anthropic 兼容端点，prompt caching 在这条上启用。留空则回退到主端点的 `{DEEPSEEK_BASE_URL}/anthropic` URL，用 `DEEPSEEK_API_KEY` 走这条路径 |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | bot 比较熟的人 (可选, 默认空) |
 | `QQ_GROUPS` | 监听的群号, 逗号分隔. 留空 = 所有群都听 |
@@ -185,16 +228,16 @@ prompt 的分块结构是为了让 bug 好定位：
 定位归属块 (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES / output_filter)
   ↓
 在相近规则旁边加硬约束 + 反例,
-  或往 output_filter.json 里加一条语义正则
+  或往 output_filter.<lang>.json 里加一条语义正则
   ↓
-在 feedback.jsonl 里加一条 BAD/OK pair
+在 feedback.<lang>.jsonl 里加一条 BAD/OK pair
   ↓
 下次类似输入触发, 动态 few-shot 检索把这对拿出来注入
 ```
 
-`examples.jsonl` + `feedback.jsonl` 的检索用 2 字中文 ngram + 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
+`examples.<lang>.jsonl` + `feedback.<lang>.jsonl` 的检索用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
 
-`output_filter.json` 是**热加载**的，改完不用重启。`lorebook.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
+`output_filter.<lang>.json` 是**热加载**的，改完不用重启。`lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
 ## 表情包质量机制
 
@@ -228,7 +271,7 @@ candidates.jsonl          # auto-reviewer 输出
 *.log                     # 运行日志
 ```
 
-仓库里附带的 `examples.jsonl` / `feedback.jsonl` / `tools/fixtures.jsonl` 是**纯合成**的格式示例，没有真实聊天内容。
+仓库里附带的 `examples.{en,zh}.jsonl` / `feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**纯合成**的格式示例，没有真实聊天内容。
 
 ## License
 

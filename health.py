@@ -28,7 +28,11 @@ def _get(url, timeout=10):
 
 
 def check_anthropic_chat():
-    """Anthropic-compatible endpoint used by the private-message path."""
+    """Anthropic-compatible endpoint for the main reply path (optional). When
+    ANTHROPIC_* is blank the agent routes the main path through the primary
+    endpoint's Anthropic-compatible URL ({DEEPSEEK_BASE_URL}/anthropic) with
+    DEEPSEEK_API_KEY, so this probe reports 'not configured' (skipped, not a
+    failure) unless you explicitly set ANTHROPIC_*."""
     key = os.getenv("ANTHROPIC_API_KEY", "")
     base = os.getenv("ANTHROPIC_BASE_URL", "")
     model = os.getenv("ANTHROPIC_PRIVATE_MODEL", "")

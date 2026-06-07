@@ -519,7 +519,10 @@ class StickerLibrary:
         out = {tag_lc}
         if tag_lc in cls._SYNONYMS:
             out |= cls._SYNONYMS[tag_lc]
-        if len(tag_lc) >= 2:
+        # 2-char prefix probe: meaningful for CJK tags (a 2-char word), but for
+        # English it produces noisy stubs ("smug" -> "sm" partial-matches
+        # "small"), so only add it when the tag starts with a CJK character.
+        if len(tag_lc) >= 2 and "一" <= tag_lc[0] <= "鿿":
             out.add(tag_lc[:2])
         return out
 

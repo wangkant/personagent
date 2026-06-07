@@ -1,0 +1,101 @@
+{
+  "_comment": "Pre-send regex sanity net. SillyTavern regex-extension style: an extra hard layer outside the prompt that blocks known-bad patterns from reaching the chat.\n\naction values:\n  - reject: drop the whole reply (PASS path, nothing sent)\n  - replace: substitute pattern with replacement, keep sending\n\nflags default to IGNORECASE + DOTALL. pattern uses Python regex syntax.\n\nBefore adding a rule, ask: 'would a real person ever say this?' If yes, don't add it; if it's a 100% AI tell, add it. Because 'reject' silently drops the reply, keep patterns tight so you don't mute legit chat. Tune for your own persona/group — these are starter rules.",
+  "filters": [
+    {
+      "name": "ai_disclaimer_prefix",
+      "pattern": "^(as|being)\\s+(an?\\s+)?(ai|a\\.i\\.|language model|large language model|ai assistant|chatbot|virtual assistant)\\b",
+      "action": "reject",
+      "reason": "classic AI self-introduction opener"
+    },
+    {
+      "name": "ai_disclaimer_inline",
+      "pattern": "\\b(i'?m|i am)\\s+(just\\s+)?(an?\\s+)?(ai|a\\.i\\.|language model|large language model|ai assistant|chatbot|virtual assistant|computer program)\\b",
+      "action": "reject",
+      "reason": "mid-sentence AI identity disclosure"
+    },
+    {
+      "name": "ai_refuse_feelings",
+      "pattern": "\\bi\\s+(don'?t|do not|can'?t|cannot)\\s+(have|possess|experience)\\s+(emotions|consciousness|a physical body|a physical form|personal experiences|real opinions|the ability to)",
+      "action": "reject",
+      "reason": "AI refusal boilerplate - real people don't talk like this"
+    },
+    {
+      "name": "ai_apology_refusal",
+      "pattern": "^(i'?m sorry|i apologize|my apologies|sorry,?\\s+but)\\b.{0,30}\\bi\\s+(can'?t|cannot|am unable to|am not able to)\\s+(help|assist|provide|comply|fulfill|generate|do that|answer that)",
+      "action": "reject",
+      "reason": "assistant apology-refusal boilerplate"
+    },
+    {
+      "name": "service_desk_opener",
+      "pattern": "^(hi|hello|hey)[\\s!,.]*((how|what)\\s+can\\s+i\\s+(help|assist|do)|how\\s+may\\s+i\\s+(help|assist)|is\\s+there\\s+anything\\s+i\\s+can)",
+      "action": "reject",
+      "reason": "customer-service opener - breaks character"
+    },
+    {
+      "name": "eager_assistant_opener",
+      "pattern": "^(certainly|absolutely|of course|happy to help|i'?d be happy to)[\\s!,.]+(here'?s|here is|i can help|let me help|i'?d be happy|assist)",
+      "action": "reject",
+      "reason": "eager-assistant opener - breaks character"
+    },
+    {
+      "name": "helpful_closer",
+      "pattern": "(hope\\s+(this|that|it)\\s+helps|feel\\s+free\\s+to\\s+(ask|reach out)|if\\s+you\\s+have\\s+any\\s+(other\\s+|further\\s+)?questions|let\\s+me\\s+know\\s+if\\s+(you\\s+(need|have any|want any more|require)|there'?s\\s+anything\\s+(else\\s+)?i))",
+      "action": "reject",
+      "reason": "helpful-assistant sign-off"
+    },
+    {
+      "name": "self_outing_concede",
+      "pattern": "\\b(fine|ok|okay|alright|yeah yeah)\\b.{0,25}\\bi'?m\\b.{0,18}\\b(an ai|a bot|a language model|a chatbot|not (a )?real|not human)\\b",
+      "action": "reject",
+      "reason": "identity capitulation - severe self-outing"
+    },
+    {
+      "name": "self_outing_admit",
+      "pattern": "\\bi\\b.{0,12}(admit|confess|won'?t deny|guess i'?m|am actually)\\b.{0,18}\\b(an ai|a bot|a language model|a chatbot|a robot|not human)\\b",
+      "action": "reject",
+      "reason": "direct admission of being AI"
+    },
+    {
+      "name": "reasoning_leak_input",
+      "pattern": "^[\\s\\-•]*(input|speaker|intent|decision|style|analysis|judgment|reasoning|thinking|scenario|reply strategy|context|background|mode)\\s*[:：]",
+      "action": "reject",
+      "reason": "reasoning fragment leaked into the visible reply"
+    },
+    {
+      "name": "reasoning_leak_intent_line",
+      "pattern": "^(clearly|looks like|seems like|this is|probably)\\b.{0,20}\\bintent\\b",
+      "action": "reject",
+      "reason": "reasoning intent-line leaked"
+    },
+    {
+      "name": "reasoning_leak_intent_word",
+      "pattern": "\\bintent\\s*[:=]\\s*(troll|chat|joke|vent|question|share)\\b",
+      "action": "reject",
+      "reason": "reasoning intent-classification fragment leaked"
+    },
+    {
+      "name": "reasoning_leak_analysis",
+      "pattern": "^(the (latest|last) message|the group context|the conversation (so far|background)|this (message|reply) is)\\b",
+      "action": "reject",
+      "reason": "reasoning analysis preamble leaked"
+    },
+    {
+      "name": "fake_media_consumed",
+      "pattern": "\\b(just|recently|the other day|last night|yesterday|this week)\\b.{0,14}\\b(binged|caught up on|rewatched|marathoned|watched all of|finished (watching|reading|the (show|series|anime|book|game|season)))\\b",
+      "action": "reject",
+      "reason": "fabricated recently-consumed media claim (high chance of hallucinated title)"
+    },
+    {
+      "name": "fake_release_today",
+      "pattern": "\\b(came out|released|dropped|premiered|launched)\\s+(today|this morning|just now|an hour ago|earlier today)\\b",
+      "action": "reject",
+      "reason": "fabricated 'released today' assertion - unverifiable"
+    },
+    {
+      "name": "wiki_style_intro",
+      "pattern": "^(this\\s+(show|movie|book|game|anime|series|novel|film|manga))\\s+(is\\s+(about|a|an)|tells the story|follows|centers?\\s+(on|around)|revolves around)",
+      "action": "reject",
+      "reason": "wiki-style opening - real chatters don't talk like this; likely fabricating about something not actually seen"
+    }
+  ]
+}

@@ -192,7 +192,7 @@ def guess_ext(b: bytes) -> str:
 def format_ctx_line(msg: dict) -> str:
     name = (msg.get("sender") or {}).get("card") or (msg.get("sender") or {}).get("nickname") or "?"
     raw = (msg.get("raw_message") or "").strip()
-    raw = re.sub(r"\[CQ:image[^\]]*\]", "[图]", raw)
+    raw = re.sub(r"\[CQ:image[^\]]*\]", "[image]", raw)
     return f"{name}: {raw[:80]}"
 
 async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:

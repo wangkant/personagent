@@ -1,7 +1,7 @@
 {"id":"f001","scenario":"owner 分享","mode":"owner","context":["owner: 我刚 git rebase 把上礼拜的 commit 都搞没了"]}
 {"id":"f002","scenario":"bare call 光叫名字","mode":"called","context":["张三: <bot-name>"]}
-{"id":"f003","scenario":"burst 进行中","mode":"followup","context":["李四: 给你讲个抽象故事","李四: [图: 表情包]"]}
+{"id":"f003","scenario":"burst 进行中","mode":"followup","context":["李四: 给你讲个抽象故事","李四: [image:表情包]"]}
 {"id":"f004","scenario":"碎片噪音","mode":"judge","context":["王五: D . e"]}
-{"id":"f005","scenario":"旁观者位 - owner @ 别人","mode":"called","context":["owner: [AT:张三] 醒这么早?","owner: [图: 早起表情包]","张三: ✓"]}
+{"id":"f005","scenario":"旁观者位 - owner @ 别人","mode":"called","context":["owner: [AT:张三] 醒这么早?","owner: [image:早起表情包]","张三: ✓"]}
 {"id":"f006","scenario":"群友闲聊接梗","mode":"judge","context":["赵六: 加班到现在","赵六: 一抬头窗外都亮了"]}
 {"id":"f007","scenario":"被点名调戏","mode":"called","context":["王五: <bot-name> 你是不是 AI"]}

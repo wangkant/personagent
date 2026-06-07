@@ -28,9 +28,13 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 BOT_QQ = os.getenv("BOT_QQ", "")
 BOT_NAME = os.getenv("BOT_NAME", "")
+# Language of the agent: 'en' (default, primary build) or 'zh' (Chinese variant).
+# Selects the reply validator mode, the per-language data files
+# (persona/examples/feedback/output_filter/lorebook), and the control-flow lexicons.
+AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 AGENT_ENABLE = os.getenv("AGENT_ENABLE", "true").lower() == "true"
 AGENT_TRIGGER_COUNT = int(os.getenv("AGENT_TRIGGER_COUNT", 30))
-AGENT_CONTEXT_LEN = int(os.getenv("AGENT_CONTEXT_LEN", 60))
+AGENT_CONTEXT_LEN = int(os.getenv("AGENT_CONTEXT_LEN", 120))
 AGENT_FOLLOWUP_WINDOW = int(os.getenv("AGENT_FOLLOWUP_WINDOW", 120))
 AGENT_MEMORY_FILE = os.getenv("AGENT_MEMORY_FILE", "memory.json")
 AGENT_MEMORY_MAX = int(os.getenv("AGENT_MEMORY_MAX", 50))
@@ -41,10 +45,12 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 ANTHROPIC_PRIVATE_MODEL = os.getenv("ANTHROPIC_PRIVATE_MODEL", "")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
-RATE_WINDOW = int(os.getenv("RATE_WINDOW", 60))
-RATE_THRESHOLD = int(os.getenv("RATE_THRESHOLD", 5))
-FALLBACK_DURATION = int(os.getenv("FALLBACK_DURATION", 300))
-EVAL_ENABLE = os.getenv("EVAL_ENABLE", "true").lower() == "true"
+# Defaults below match .env.example so behavior is identical whether or not a
+# .env is present (no silent drift between the template and the code).
+RATE_WINDOW = int(os.getenv("RATE_WINDOW", 120))
+RATE_THRESHOLD = int(os.getenv("RATE_THRESHOLD", 30))
+FALLBACK_DURATION = int(os.getenv("FALLBACK_DURATION", 180))
+EVAL_ENABLE = os.getenv("EVAL_ENABLE", "false").lower() == "true"
 EVAL_MODEL = os.getenv("EVAL_MODEL", "")
 EVAL_FILE = os.getenv("EVAL_FILE", "eval.jsonl")
 VISION_MODEL = os.getenv("VISION_MODEL", "")
@@ -115,6 +121,7 @@ async def lifespan(app: FastAPI):
             glm_api_key=GLM_API_KEY,
             glm_base_url=GLM_BASE_URL,
             tavily_key=TAVILY_API_KEY,
+            lang=AGENT_LANG,
         )
         asyncio.create_task(agent.probe_models())
         asyncio.create_task(agent.check_missed_mentions())
@@ -136,7 +143,8 @@ async def lifespan(app: FastAPI):
             if m:
                 agent.stickers.purge_unfit()
         asyncio.create_task(_recheck_then_purge())
-    logger.info("bot started on %s:%d (agent=%s)", HOST, PORT, agent.enabled if agent else False)
+    logger.info("bot started on %s:%d (agent=%s, lang=%s)", HOST, PORT,
+                agent.enabled if agent else False, AGENT_LANG)
     yield
 
 app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)

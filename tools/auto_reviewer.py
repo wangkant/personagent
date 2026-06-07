@@ -28,12 +28,25 @@ CANDIDATES_FILE = ROOT / "candidates.jsonl"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "deepseek-chat")
+AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("auto-reviewer")
 
-REVIEWER_PROMPT = """你是 LLM persona-agent 提示词工程师。下面是一个 QQ 群 persona chatbot 一次得分低的回复样本，诊断 AI 味问题 + 给出修复草稿。
+REVIEWER_PROMPTS = {
+    "en": """You are a prompt engineer for an LLM persona agent. Below is one low-scoring reply from a group-chat persona chatbot. Diagnose the "AI tell" and draft a fix.
+
+[raw data]
+mode: {mode}
+user message: {user_msg}
+bot reply: {reply}
+score: {score}/5
+low-score reason: {reason}
+
+[Output a single line of JSON, no markdown fences, all fields required]
+{{"failure_mode":"<2-4 word label, e.g. service-desk tone / analytical tone / name-at-start / bulleted / too many periods / over-addressing / wrong-target / jumped-the-gun / explainer tone>","bad_diagnosis":"<one sentence: exactly what doesn't read like a real person>","tag_to_patch":"<one of: style | reasoning | intent_rules>","constraint_to_add":"<one negative constraint with a concrete counter-example, written as: BAD 'x' -> OK 'y'>","pair_draft":{{"scenario":"<short scene label>","context":["<1-2 context lines>"],"mode":"<one of owner|called|followup|judge>","reply":"<the original BAD reply, copied verbatim>","better":"<rewrite that reads like a real person>"}}}}""",
+    "zh": """你是 LLM persona-agent 提示词工程师。下面是一个群 persona chatbot 一次得分低的回复样本，诊断 AI 味问题 + 给出修复草稿。
 
 [原始数据]
 模式: {mode}
@@ -43,7 +56,9 @@ bot 回复: {reply}
 低分原因: {reason}
 
 [严格按 JSON 一行输出，不要 markdown 包裹，所有字段必填]
-{{"failure_mode":"<2-6 字标签，如：客服腔/分析腔/喊名字/列点/句号多/称呼过频/张冠李戴/抢答/解释腔>","bad_diagnosis":"<一句话讲具体哪儿不像真人>","tag_to_patch":"<style 或 reasoning 或 intent_rules 三选一>","constraint_to_add":"<一行负向约束，写法仿『错『...』 对『...』』给具体反例>","pair_draft":{{"scenario":"<场景短标签>","context":["<上下文 1-2 行>"],"mode":"<owner|called|followup|judge 之一>","reply":"<原 BAD 回复，照抄>","better":"<改写成像真人的版本>"}}}}"""
+{{"failure_mode":"<2-6 字标签，如：客服腔/分析腔/喊名字/列点/句号多/称呼过频/张冠李戴/抢答/解释腔>","bad_diagnosis":"<一句话讲具体哪儿不像真人>","tag_to_patch":"<style 或 reasoning 或 intent_rules 三选一>","constraint_to_add":"<一行负向约束，写法仿『错『...』 对『...』』给具体反例>","pair_draft":{{"scenario":"<场景短标签>","context":["<上下文 1-2 行>"],"mode":"<owner|called|followup|judge 之一>","reply":"<原 BAD 回复，照抄>","better":"<改写成像真人的版本>"}}}}""",
+}
+REVIEWER_PROMPT = REVIEWER_PROMPTS.get(AGENT_LANG, REVIEWER_PROMPTS["en"])
 
 def load_evals(path: Path, threshold: int) -> list[dict]:
     if not path.exists():

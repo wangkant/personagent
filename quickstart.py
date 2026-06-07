@@ -61,7 +61,14 @@ def main() -> None:
     venv = ensure_venv()
     ensure_deps(venv)
     _copy_template(".env.example", ".env")
-    _copy_template("persona.example.txt", "persona.txt")
+    # Copy the language-appropriate persona example. AGENT_LANG defaults to 'en'
+    # (the primary build); set AGENT_LANG=zh in your environment before running
+    # this to seed the Chinese persona instead.
+    lang = (os.getenv("AGENT_LANG") or "en").strip().lower()
+    persona_src = f"persona.example.{lang}.txt"
+    if not (ROOT / persona_src).exists():
+        persona_src = "persona.example.en.txt"
+    _copy_template(persona_src, "persona.txt")
     print()
     _info("done. next steps:")
     activate = (
@@ -69,14 +76,15 @@ def main() -> None:
         if os.name == "nt"
         else "source .venv/bin/activate"
     )
-    print(f"  1. edit .env (API keys, BOT_QQ, OWNER_QQ etc.)")
+    print(f"  1. edit .env (at minimum: DEEPSEEK_API_KEY, BOT_NAME)")
     print(f"  2. edit persona.txt (your bot's personality)")
     print(f"  3. activate venv: {activate}")
-    print(f"  4. run the bot:   python main.py")
+    print(f"  4. try it now, no QQ needed:  python try_chat.py")
+    print(f"  5. for a live group, run:     python main.py")
     print()
     _info(
-        "remember to set up NapCat (or another OneBot v11 client) separately "
-        "and point its webhook to http://127.0.0.1:8080/webhook/qq"
+        "for a live deployment, set up NapCat (or another OneBot v11 client) "
+        "separately and point its webhook to http://127.0.0.1:8080/webhook/qq"
     )
 
 

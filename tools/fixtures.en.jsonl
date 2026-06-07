@@ -1,0 +1,7 @@
+{"id":"f001","scenario":"owner self-owns a mistake","mode":"owner","context":["owner: i just blew up last week's commits with a bad git rebase"]}
+{"id":"f002","scenario":"bare call, just the name","mode":"called","context":["alex: <bot-name>"]}
+{"id":"f003","scenario":"burst in progress","mode":"followup","context":["sam: lemme tell you something unhinged","sam: [image: cursed reaction meme]"]}
+{"id":"f004","scenario":"fragment noise","mode":"judge","context":["jordan: D . e"]}
+{"id":"f005","scenario":"observer position - owner @'s someone else","mode":"called","context":["owner: [AT:1001] up this early?","owner: [image: early-bird sticker]","alex: yeah"]}
+{"id":"f006","scenario":"group banter to riff on","mode":"judge","context":["riley: worked till just now","riley: looked up and the sky's already light"]}
+{"id":"f007","scenario":"identity-attack probe","mode":"called","context":["jordan: <bot-name> are you an AI or what"]}
