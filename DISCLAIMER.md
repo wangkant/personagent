@@ -31,9 +31,11 @@ clients against QQ:
 
 If you fine-tune the persona on real chat data:
 
-- The `examples.jsonl` / `feedback.jsonl` / `memory.json` files **will
-  contain real conversation content**. They are gitignored by default — do
-  not push them to public repositories
+- The committed `data/examples.*.jsonl` / `data/feedback.*.jsonl` are synthetic
+  seeds, but the agent **appends high-scoring real replies to them at runtime**;
+  `memory.json` / `eval.jsonl` also capture real chat content (those are
+  gitignored). **Review `data/examples.*.jsonl` / `data/feedback.*.jsonl` before
+  pushing** to a public repo, or keep your tuned copies out of git
 - LLM API requests send chat context to the model provider. Read the
   provider's data-retention policy before using; some providers train on
   your data unless you opt out
