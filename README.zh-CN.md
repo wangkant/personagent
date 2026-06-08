@@ -1,6 +1,6 @@
 # onebot-llm-agent
 
-[![在线 demo](https://img.shields.io/badge/live%20demo-online-2ea44f?style=flat)](https://qiankangwang.github.io/onebot-llm-agent/)
+[![在线 demo](assets/live-demo.svg)](https://qiankangwang.github.io/onebot-llm-agent/)
 
 [English](README.md) | **中文**
 
