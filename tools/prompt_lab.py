@@ -33,7 +33,7 @@ FIXTURES_FILE = (
 FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)
 EXAMPLES_FILE = _resolve_lang_file("examples", "jsonl", AGENT_LANG)
 
-MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 

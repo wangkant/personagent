@@ -88,6 +88,20 @@ logger = logging.getLogger("bot")
 
 agent: Optional[Agent] = None
 
+# Strong refs to fire-and-forget tasks. asyncio keeps only a weak reference to
+# a task, so one suspended at an await with no other reference can be garbage
+# collected mid-flight, silently dropping the work (e.g. an inbound message).
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    """create_task + retain a strong ref until the task finishes."""
+    t = asyncio.create_task(coro)
+    _bg_tasks.add(t)
+    t.add_done_callback(_bg_tasks.discard)
+    return t
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent
@@ -123,11 +137,11 @@ async def lifespan(app: FastAPI):
             tavily_key=TAVILY_API_KEY,
             lang=AGENT_LANG,
         )
-        asyncio.create_task(agent.probe_models())
-        asyncio.create_task(agent.check_missed_mentions())
-        asyncio.create_task(agent.loop_check_missed())
-        asyncio.create_task(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLE
-        asyncio.create_task(agent.stickers.bootstrap_tag_all())
+        _spawn(agent.probe_models())
+        _spawn(agent.check_missed_mentions())
+        _spawn(agent.loop_check_missed())
+        _spawn(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLE
+        _spawn(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():
             # First pass: text-based persona-fit (LLM judges from
@@ -143,7 +157,7 @@ async def lifespan(app: FastAPI):
             m = await agent.visual_recheck_aesthetic_all()
             if m:
                 agent.stickers.purge_unfit()
-        asyncio.create_task(_recheck_then_purge())
+        _spawn(_recheck_then_purge())
     logger.info("bot started on %s:%d (agent=%s, lang=%s)", HOST, PORT,
                 agent.enabled if agent else False, AGENT_LANG)
     yield
@@ -154,15 +168,22 @@ app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
 # /health caches its probe results briefly so monitoring polls don't spam the
 # upstream APIs (each full probe spends a few tokens + 1 search credit).
 _health_cache: dict = {"ts": 0.0, "data": None}
+_health_lock = asyncio.Lock()
 
 
 @app.get("/health")
 async def health():
     now = time.time()
     if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
-        # Probes do blocking HTTP; run them off the event loop.
-        _health_cache["data"] = await asyncio.to_thread(run_checks)
-        _health_cache["ts"] = now
+        async with _health_lock:
+            # Re-check inside the lock: a concurrent poll may have just
+            # refreshed the cache, so we don't fan out duplicate probes
+            # (each full probe spends tokens + a search credit).
+            now = time.time()
+            if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
+                # Probes do blocking HTTP; run them off the event loop.
+                _health_cache["data"] = await asyncio.to_thread(run_checks)
+                _health_cache["ts"] = now
     results = _health_cache["data"]
     ok = all_critical_ok(results)
     return JSONResponse(
@@ -189,7 +210,7 @@ async def qq_webhook(request: Request):
                 await agent.handle(payload)
             except Exception:
                 logger.exception("handle failed")
-        asyncio.create_task(_safe_handle())
+        _spawn(_safe_handle())
     return {"ok": True}
 
 if __name__ == "__main__":
