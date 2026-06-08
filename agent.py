@@ -2237,18 +2237,30 @@ class Agent:
             f"\n\n{REASONING_PROTOCOL}"
         )
         semi_static_block = self._sticker_guide_for_prompt()
-        dynamic_block = (
-            f"{self._examples_for_prompt(focus_text=latest_text, mode=mode)}"
+        examples_block = self._examples_for_prompt(focus_text=latest_text, mode=mode)
+        context_block = (
             f"{self._lorebook_for_prompt(all_history, focus_text=latest_text)}"
             f"{self._core_memory_for_prompt(group_id)}"
             f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
+        dynamic_block = f"{examples_block}{context_block}"
         system_content = [
             {"type": "text", "text": static_block,
              "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": semi_static_block,
              "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": dynamic_block},
+        ]
+        # Lighter prompt for the cheap gate: drop the few-shot examples + the
+        # sticker guide. Those shape HOW to write a reply, not WHETHER to reply,
+        # so the PASS/REPLY decision doesn't need them — persona, the
+        # style/intent/reasoning rules, lorebook and memory all stay, so the
+        # decision keeps its full context. The reply stage below uses the
+        # complete prompt, so what the group actually sees is unchanged.
+        gate_system_content = [
+            {"type": "text", "text": static_block,
+             "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": context_block},
         ]
 
         # Model routing — two stages for self-initiated modes:
@@ -2264,7 +2276,7 @@ class Agent:
         gated = mode in ("judge", "followup", "proactive")
         if gated:
             gate_raw = await self._call_anthropic(
-                system=system_content,
+                system=gate_system_content,
                 messages=[{"role": "user", "content": user_prompt}],
                 model=self.judge_model,
                 max_tokens=600,
