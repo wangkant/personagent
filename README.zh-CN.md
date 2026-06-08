@@ -22,12 +22,12 @@
 
 | 模块 | 作用 |
 |---|---|
-| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `examples.<lang>.jsonl` / `feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
+| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
 | `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
 | `tools/auto_reviewer.py` | 扫 `eval.jsonl` 里低分条目，自动生成 `failure_mode + constraint + BAD/OK 草稿` 用于打补丁 |
-| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `examples.<lang>.jsonl` |
+| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
 
 ## 架构图
@@ -83,7 +83,7 @@ NapCat → QQ
 python quickstart.py
 ```
 
-`quickstart.py` 是幂等的 —— 重跑只会报告哪些已经就位。等价的手动步骤：创建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env`、复制 `persona.example.<lang>.txt → persona.txt`。
+`quickstart.py` 是幂等的 —— 重跑只会报告哪些已经就位。等价的手动步骤：创建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env`、复制 `data/persona.example.<lang>.txt → persona.txt`。
 
 ### 免 QQ 试用
 
@@ -145,7 +145,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 
 这个开关一步到位地选择：
 
-- **按后缀选数据文件**：`persona.example.<lang>.txt`、`examples.<lang>.jsonl`、`feedback.<lang>.jsonl`、`output_filter.<lang>.json`、`lorebook.<lang>.json`。每个先解析到 `<lang>` 文件，找不到再回退到不带后缀的同名文件（方便你放自己的）。
+- **按后缀选数据文件（在 `data/` 下）**：`data/persona.example.<lang>.txt`、`data/examples.<lang>.jsonl`、`data/feedback.<lang>.jsonl`、`data/output_filter.<lang>.json`、`data/lorebook.<lang>.json`。每个先解析到 `<lang>` 文件，找不到再回退到不带后缀的同名文件（方便你放自己的）。
 - **回复校验器**（`_validate_reply_safe`）：英文模式接受任何带字母的回复（仍然丢掉 XML / JSON / token 漏出）；`zh` 模式要求含 CJK。中英混说两种模式都放行。
 - **控制流词表**：few-shot/记忆的分词器和话题类型分类器按语言切换各自的词表。
 - **开发工具**：`tools/auto_reviewer.py`、`tools/import_stickers_folder.py`、`tools/prompt_lab.py` 同样跟随 `AGENT_LANG`。
@@ -228,16 +228,16 @@ prompt 的分块结构是为了让 bug 好定位：
 定位归属块 (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES / output_filter)
   ↓
 在相近规则旁边加硬约束 + 反例,
-  或往 output_filter.<lang>.json 里加一条语义正则
+  或往 data/output_filter.<lang>.json 里加一条语义正则
   ↓
-在 feedback.<lang>.jsonl 里加一条 BAD/OK pair
+在 data/feedback.<lang>.jsonl 里加一条 BAD/OK pair
   ↓
 下次类似输入触发, 动态 few-shot 检索把这对拿出来注入
 ```
 
-`examples.<lang>.jsonl` + `feedback.<lang>.jsonl` 的检索用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
+`data/examples.<lang>.jsonl` + `data/feedback.<lang>.jsonl` 的检索用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
 
-`output_filter.<lang>.json` 是**热加载**的，改完不用重启。`lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
+`data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
 ## 表情包质量机制
 
@@ -271,7 +271,7 @@ candidates.jsonl          # auto-reviewer 输出
 *.log                     # 运行日志
 ```
 
-仓库里附带的 `examples.{en,zh}.jsonl` / `feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**纯合成**的格式示例，没有真实聊天内容。
+仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**纯合成**的格式示例，没有真实聊天内容。
 
 ## License
 

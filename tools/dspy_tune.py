@@ -2,7 +2,7 @@
 
 Idea: instead of hand-tuning STYLE_GUIDE bullets, treat the prompt as a program
 and let DSPy search for better few-shot composition / instructions, using
-feedback.jsonl 'better' pairs as the optimization signal.
+data/feedback.<lang>.jsonl 'better' pairs as the optimization signal.
 
 Status: SCAFFOLD ONLY. Tuning a chatbot persona via DSPy is fiddly because the
 metric isn't a clean accuracy number — it needs an LLM judge. Treat this as a
@@ -10,7 +10,7 @@ starting point you can iterate on; don't expect one run to give you a magical pr
 
 Quick start:
     pip install dspy-ai
-    python tools/dspy_tune.py --bootstrap   # bootstrap demos from feedback.jsonl
+    python tools/dspy_tune.py --bootstrap   # bootstrap demos from data/feedback.<lang>.jsonl
     python tools/dspy_tune.py --tune        # run BootstrapFewShot optimizer
 
 Outputs:
@@ -129,7 +129,7 @@ def cmd_bootstrap():
     goods = load_goods()
     print(f"Loaded {len(pairs)} pairs, {len(goods)} good examples")
     if not pairs and not goods:
-        print("Nothing to bootstrap from. Add entries to feedback.jsonl first.")
+        print("Nothing to bootstrap from. Add entries to data/feedback.<lang>.jsonl first.")
         return
     print("Pairs head:")
     for p in pairs[:3]:
@@ -146,7 +146,7 @@ def cmd_tune(judge_model: str = "deepseek-chat"):
     pairs = load_pairs()
     goods = load_goods()
     if not pairs:
-        print("No 'better' pairs in feedback.jsonl — cannot run BootstrapFewShot.")
+        print("No 'better' pairs in data/feedback.<lang>.jsonl — cannot run BootstrapFewShot.")
         return
 
     api_key = os.getenv("DEEPSEEK_API_KEY", "")

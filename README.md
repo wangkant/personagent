@@ -22,12 +22,12 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 
 | Module | What it does |
 |---|---|
-| `agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `examples.<lang>.jsonl` / `feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl`; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
+| `agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl`; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
 | `stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
 | `tools/auto_reviewer.py` | Scans low-score entries in `eval.jsonl` and proposes `failure_mode + constraint + BAD/OK pair_draft` for prompt patches |
-| `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `fixtures.<lang>.jsonl`, rate replies, approved ones flow into `examples.<lang>.jsonl` |
+| `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into `data/examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
 
 ## Architecture sketch
@@ -83,7 +83,7 @@ Requirements: Python 3.10+ and one OpenAI-compatible chat API key. A OneBot v11 
 python quickstart.py
 ```
 
-`quickstart.py` is idempotent — re-running just reports what's already in place. Manual equivalent: create `.venv`, `pip install -r requirements.txt`, copy `.env.example → .env`, copy `persona.example.en.txt → persona.txt`.
+`quickstart.py` is idempotent — re-running just reports what's already in place. Manual equivalent: create `.venv`, `pip install -r requirements.txt`, copy `.env.example → .env`, copy `data/persona.example.en.txt → persona.txt`.
 
 ### Try it without QQ
 
@@ -145,7 +145,7 @@ The agent is **English-first** and runs Chinese with one switch. Set `AGENT_LANG
 
 The switch selects, in one move:
 
-- **Data files** by suffix: `persona.example.<lang>.txt`, `examples.<lang>.jsonl`, `feedback.<lang>.jsonl`, `output_filter.<lang>.json`, `lorebook.<lang>.json`. Each resolves to the `<lang>` file, falling back to a bare-named file if you drop in your own.
+- **Data files** (under `data/`) by suffix: `data/persona.example.<lang>.txt`, `data/examples.<lang>.jsonl`, `data/feedback.<lang>.jsonl`, `data/output_filter.<lang>.json`, `data/lorebook.<lang>.json`. Each resolves to the `<lang>` file, falling back to a bare-named file if you drop in your own.
 - **The reply validator** (`_validate_reply_safe`): English mode accepts any letter-bearing reply (and still drops XML/JSON/token leaks); `zh` mode requires CJK. Mixed zh/en code-switching passes either way.
 - **Control-flow lexicons**: the few-shot/memory tokenizer and the topic-type classifier swap their word lists per language.
 - **Dev tools**: `tools/auto_reviewer.py`, `tools/import_stickers_folder.py`, and `tools/prompt_lab.py` follow `AGENT_LANG` too.
@@ -228,16 +228,16 @@ observe failure (eval.jsonl LOW-SCORE / live observation)
 locate which block owns it (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES / output_filter)
   ↓
 add a hard constraint with a counter-example next to similar rules,
-  or add a semantic regex rule in output_filter.<lang>.json
+  or add a semantic regex rule in data/output_filter.<lang>.json
   ↓
-write a BAD/OK pair into feedback.<lang>.jsonl
+write a BAD/OK pair into data/feedback.<lang>.jsonl
   ↓
 next time a similar input arrives, dynamic few-shot retrieval surfaces the pair
 ```
 
-The retrieval over `examples.<lang>.jsonl` + `feedback.<lang>.jsonl` uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
+The retrieval over `data/examples.<lang>.jsonl` + `data/feedback.<lang>.jsonl` uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
 
-`output_filter.<lang>.json` is hot-reloaded — edit it without restarting. Same for `lorebook.<lang>.json` (keyword-triggered context injection à la SillyTavern World Info).
+`data/output_filter.<lang>.json` is hot-reloaded — edit it without restarting. Same for `data/lorebook.<lang>.json` (keyword-triggered context injection à la SillyTavern World Info).
 
 ## Sticker quality machinery
 
@@ -271,7 +271,7 @@ candidates.jsonl          # auto-reviewer output
 *.log                     # runtime logs
 ```
 
-The committed `examples.{en,zh}.jsonl` / `feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` in this template are **fully synthetic** examples showing the format only.
+The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` in this template are **fully synthetic** examples showing the format only.
 
 ## License
 

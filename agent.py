@@ -53,7 +53,7 @@ def _load_persona(lang: str = "en") -> str:
             return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
         except Exception:
             logger.warning("read persona file failed, falling back to bundled example")
-    example = Path(__file__).resolve().parent / f"persona.example.{lang}.txt"
+    example = Path(__file__).resolve().parent / "data" / f"persona.example.{lang}.txt"
     if example.is_file():
         try:
             return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
@@ -63,10 +63,10 @@ def _load_persona(lang: str = "en") -> str:
 
 
 def _resolve_lang_file(stem: str, ext: str, lang: str) -> Path:
-    """Resolve a bundled data file by language: prefer <stem>.<lang>.<ext>, and
-    fall back to the bare <stem>.<ext> so single-language or customized
-    deployments keep working. Anchored to this file's directory."""
-    base_dir = Path(__file__).resolve().parent
+    """Resolve a bundled data file (under data/) by language: prefer
+    data/<stem>.<lang>.<ext>, and fall back to the bare data/<stem>.<ext> so
+    single-language or customized deployments keep working."""
+    base_dir = Path(__file__).resolve().parent / "data"
     suffixed = base_dir / f"{stem}.{lang}.{ext}"
     if suffixed.is_file():
         return suffixed

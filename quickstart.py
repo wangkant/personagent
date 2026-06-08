@@ -65,9 +65,9 @@ def main() -> None:
     # (the primary build); set AGENT_LANG=zh in your environment before running
     # this to seed the Chinese persona instead.
     lang = (os.getenv("AGENT_LANG") or "en").strip().lower()
-    persona_src = f"persona.example.{lang}.txt"
+    persona_src = f"data/persona.example.{lang}.txt"
     if not (ROOT / persona_src).exists():
-        persona_src = "persona.example.en.txt"
+        persona_src = "data/persona.example.en.txt"
     _copy_template(persona_src, "persona.txt")
     print()
     _info("done. next steps:")
