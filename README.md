@@ -152,6 +152,19 @@ The switch selects, in one move:
 
 To add another language, drop in `*.<lang>.*` data files and run with `AGENT_LANG=<lang>` (the validator treats any non-`zh` language as letter-based).
 
+## Proactive messaging (optional)
+
+By default the bot is purely reactive — it only speaks when a message arrives. Set `PROACTIVE_ENABLE=true` and a background loop will occasionally **initiate** a message with no trigger, so it reads like a person who sometimes breaks the silence rather than a 24/7 responder.
+
+It's deliberately conservative — the failure mode ("needy bot spamming dead air") is worse than staying quiet:
+
+- **Only after real silence**, outside the sleep window, with a per-chat cooldown and a low per-tick probability.
+- **Never cold-opens.** It only acts in groups it's already seen talk, and only DMs people who've DMed it before (the owner + `PRIVATE_ALLOWED_QQS`) — it won't message someone out of nowhere.
+- **The model is told to PASS unless it genuinely has something to say** — a callback to an earlier topic, a passing thought, or a light check-in — and *not* to post filler like "anyone here?". Most ticks produce nothing.
+- Works the same in **groups and DMs**, each with their own silence / cooldown / probability knobs.
+
+Tune `PROACTIVE_*` in `.env`. Defaults: groups quiet ≥ 45 min, ≥ 3 h between initiations, ~25% per check; DMs quiet ≥ 4 h, ≥ 24 h apart, ~20%.
+
 ## Output protocol — JSON, not XML
 
 The model is required to emit a single JSON object per reply:
@@ -211,6 +224,7 @@ All settings come from `.env`. Key fields:
 | `QQ_GROUPS` | Comma-separated group IDs to listen on. Empty = listen everywhere |
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | Vision model for image / sticker understanding. Leave blank to skip (OCR-only fallback) |
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
+| `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | Auto-downgrade to a cheaper model when request rate spikes |
 | `EVAL_MODEL` | Model used by the async self-eval scorer (often a cheaper one is fine) |
 
