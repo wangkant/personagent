@@ -226,6 +226,7 @@ All settings come from `.env`. Key fields:
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | Auto-downgrade to a cheaper model when request rate spikes |
+| `JUDGE_MODEL` | Cheapest model for the "should I reply?" gate on self-initiated modes (judge/followup/proactive). The reply that's actually sent is always written by the main model. Defaults to `FALLBACK_MODEL` |
 | `EVAL_MODEL` | Model used by the async self-eval scorer (often a cheaper one is fine) |
 
 See `.env.example` for the full list.
