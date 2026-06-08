@@ -93,7 +93,7 @@ async def pull_history(group_id: str, limit: int) -> list[dict]:
 def classify_message(msg: dict) -> dict:
     """Return {text_len, has_image, sticker_only, image_segs[]}.
     A 'sticker' here = image segment with sub_type 1 (animated/face) OR small file
-    OR summary like '[动画表情]'."""
+    OR a NapCat animated-sticker summary tag."""
     segs = msg.get("message") or []
     text_len = 0
     image_segs: list[dict] = []

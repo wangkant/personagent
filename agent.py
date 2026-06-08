@@ -695,7 +695,6 @@ class Agent:
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 if mode == "called":
-                    import random
                     # Three short, persona-consistent excuses for upstream LLM
                     # failure. Customize these in your fork to match the bot's
                     # voice (the strings ARE shipped to the group on failure).
@@ -933,7 +932,6 @@ class Agent:
             model=self.anthropic_private_model,
             max_tokens=2048,
             enable_search=not proactive,
-            max_search_uses=3,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
@@ -1466,7 +1464,7 @@ class Agent:
                 title = (data.get("title") or "").strip()
                 author = (data.get("author_name") or "").strip()
                 if title:
-                    line = f"[YouTube]《{title}》"
+                    line = f'[YouTube] "{title}"'
                     if author:
                         line += f" — {author}"
                     return line
@@ -1573,7 +1571,6 @@ class Agent:
         model: str,
         max_tokens: int = 2048,
         enable_search: bool = True,
-        max_search_uses: int = 2,
         disable_thinking: bool = False,
     ) -> str:
         """Unified Anthropic call: web_search tool, error logging, empty-reply fallback.
@@ -2035,16 +2032,10 @@ class Agent:
         mode: str,
         latest_text: str = "",
         caller_override: Optional[tuple] = None,
-    ) -> str:
+    ) -> tuple[str, str, str]:
         all_history = list(self.buffers[group_id])
-        if mode == "followup":
-            history = all_history[-30:]
-        elif mode == "called":
-            history = all_history[-30:]
-        elif mode == "owner":
-            history = all_history[-30:]
-        else:
-            history = all_history
+        # called/owner/followup use the last 30 turns; judge/proactive see all
+        history = all_history[-30:] if mode in ("followup", "called", "owner") else all_history
         def _fmt_line(m: dict) -> str:
             uid = m.get("user_id", "")
             if uid:
@@ -2300,7 +2291,6 @@ class Agent:
             model=model_to_use,
             max_tokens=1200,
             enable_search=enable_search,
-            max_search_uses=2,
             disable_thinking=False,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
@@ -3216,9 +3206,7 @@ class Agent:
                            url[:80], type(e).__name__, str(e) or "(no message)")
             return ""
         self.image_caption_cache[url] = text
-        if len(self.image_caption_cache) > 200:
-            for k in list(self.image_caption_cache.keys())[:50]:
-                self.image_caption_cache.pop(k, None)
+        self._gc_image_cache()
         logger.info("[Agent] OCR (%s): %s", url[:60], text[:60] or "(no text)")
         return text
 
@@ -3701,7 +3689,7 @@ class Agent:
                 unique.append((uid, nick))
         if not unique:
             return ""
-        return "、".join([f"{nick}({uid})" for uid, nick in unique[:5]])
+        return ", ".join([f"{nick}({uid})" for uid, nick in unique[:5]])
 
     def _compute_chat_signals(self, group_id: str, history: list) -> dict:
         """Compute chat signals for prompt: topic heat / active count / time since bot spoke / topic type."""
