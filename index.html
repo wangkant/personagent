@@ -34,7 +34,7 @@
     --i-share: #0f766e;
     --i-question: #1d4ed8;
     --i-troll: #be185d;
-    --i-chat: #475569;
+    --i-chat: #0e7490;
   }
   [data-theme="dark"] {
     --bg: #0b0e14;
@@ -58,7 +58,7 @@
     --i-share: #2dd4bf;
     --i-question: #60a5fa;
     --i-troll: #f472b6;
-    --i-chat: #94a3b8;
+    --i-chat: #22d3ee;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -212,6 +212,9 @@
   }
   .card-head .dot3 { display: flex; gap: .35rem; }
   .card-head .dot3 i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); display: block; }
+  .card-head .dot3 i:nth-child(1) { background: #ff5f57; }
+  .card-head .dot3 i:nth-child(2) { background: #febc2e; }
+  .card-head .dot3 i:nth-child(3) { background: #28c840; }
   .card-head .title {
     font-family: var(--mono); font-size: .72rem; font-weight: 700;
     letter-spacing: .04em; color: var(--muted);
@@ -227,8 +230,16 @@
     background:
       radial-gradient(1200px 400px at 80% -10%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%);
   }
-  .msg { display: flex; flex-direction: column; max-width: 82%; animation: rise .35s cubic-bezier(.22,1,.36,1) both; }
+  .msg { display: flex; flex-direction: row; align-items: flex-end; gap: .5rem; max-width: 88%; animation: rise .35s cubic-bezier(.22,1,.36,1) both; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .msg-body { display: flex; flex-direction: column; min-width: 0; }
+  .avatar {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: .72rem; line-height: 1;
+    box-shadow: var(--shadow); user-select: none; margin-bottom: 1px;
+  }
+  .avatar-bot { background: var(--bubble-bot); }
   .msg .who {
     font-size: .66rem; color: var(--faint); margin: 0 .55rem .18rem;
     font-family: var(--mono); letter-spacing: .03em;
@@ -242,10 +253,12 @@
   .bubble {
     padding: .55rem .8rem; border-radius: 14px; font-size: .9rem;
     line-height: 1.45; word-wrap: break-word; white-space: pre-wrap;
+    box-shadow: 0 1px 2px rgba(16,24,40,.06);
   }
   .msg.them { align-self: flex-start; }
   .msg.them .bubble { background: var(--bubble-in); color: var(--bubble-in-text); border-bottom-left-radius: 5px; }
-  .msg.bot { align-self: flex-end; align-items: flex-end; }
+  .msg.bot { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.bot .msg-body { align-items: flex-end; }
   .msg.bot .who { justify-content: flex-end; color: var(--accent); }
   .msg.bot .bubble { background: var(--bubble-bot); color: var(--bubble-bot-text); border-bottom-right-radius: 5px; }
 
@@ -605,6 +618,10 @@
     zh: { owner: "群主", alex: "张三", sam: "李四", jordan: "王五", riley: "赵六" },
   };
 
+  // Avatar tint per speaker (display only — distinct hues so the chat reads
+  // like a real group). The bot uses its bubble accent (.avatar-bot).
+  const SPEAKER = { owner: "#d97706", alex: "#0ea5e9", sam: "#10b981", jordan: "#8b5cf6", riley: "#ec4899" };
+
   // ── State ─────────────────────────────────────────────────────
   let lang = "en";
   let idx = 0;            // index of the NEXT event to play (committed only on clean completion)
@@ -633,6 +650,16 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  function avatarHtml(key) {
+    const color = SPEAKER[key] || "#64748b";
+    const initial = escapeHtml((NAMES[lang][key] || key).trim().charAt(0).toUpperCase());
+    return `<span class="avatar" style="background:${color}" aria-hidden="true">${initial}</span>`;
+  }
+  function botAvatarHtml() {
+    const initial = escapeHtml(I18N[lang].botName.trim().charAt(0).toUpperCase());
+    return `<span class="avatar avatar-bot" aria-hidden="true">${initial}</span>`;
+  }
+
   function addUserMsg(ev) {
     const t = I18N[lang];
     const wrap = document.createElement("div");
@@ -653,7 +680,7 @@
     } else {
       body = `<div class="bubble">${escapeHtml(ev.text)}</div>`;
     }
-    wrap.innerHTML = who + body;
+    wrap.innerHTML = `${avatarHtml(ev.from)}<div class="msg-body">${who}${body}</div>`;
     chat.appendChild(wrap);
     scrollChat();
   }
@@ -662,7 +689,7 @@
     removeTyping();
     const el = document.createElement("div");
     el.className = "msg bot typing";
-    el.innerHTML = `<div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div>`;
+    el.innerHTML = `${botAvatarHtml()}<div class="msg-body"><div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div></div>`;
     chat.appendChild(el);
     typingEl = el;
     scrollChat();
@@ -679,7 +706,7 @@
       const g = STICKER_GLYPH[ev.sticker] || "🙂";
       inner += `<div class="sticker-sent"><span class="glyph" aria-hidden="true">${g}</span><span class="tag">[STICKER:${escapeHtml(ev.sticker)}]</span></div>`;
     }
-    wrap.innerHTML = inner;
+    wrap.innerHTML = `${botAvatarHtml()}<div class="msg-body">${inner}</div>`;
     chat.appendChild(wrap);
     scrollChat();
   }
