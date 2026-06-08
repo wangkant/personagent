@@ -338,6 +338,11 @@ class Agent:
         # source of truth — everything language-dependent reads self.agent_lang.
         self.agent_lang = (lang or os.getenv("AGENT_LANG") or "en").strip().lower()
         self.fallback_model = fallback_model or model
+        # The "judgment" model: cheapest available, used only to gate self-initiated
+        # modes (judge / followup / proactive) — decide PASS vs reply. The reply
+        # that actually gets sent is always written by the main model. Defaults to
+        # the fallback (cheap) model; set JUDGE_MODEL to point at an even cheaper one.
+        self.judge_model = os.getenv("JUDGE_MODEL", "") or self.fallback_model or self.model
         self.rate_window = rate_window
         self.rate_threshold = rate_threshold
         self.fallback_duration = fallback_duration
@@ -2024,20 +2029,6 @@ class Agent:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
 
-    def _followup_wants_pro(self, latest_text: str, signals: dict) -> bool:
-        """Pre-routing for followup (proactive chime-ins): substantive turns use
-        the main model, pure memes/stickers/filler use the cheap fallback. The
-        intent label isn't known until after generation, so this is a cheap
-        heuristic on the triggering context; when unsure, prefer the main model."""
-        t = latest_text or ""
-        if re.search(r"[?？]", t) or "http" in t.lower():
-            return True                              # question / link → substantive
-        if signals.get("type") in ("work/tech", "question/discussion"):
-            return True                              # work or real discussion → substantive
-        # Strip visual markers ([image]/[sticker:x]/[share|x]); if real text remains, substantive.
-        bare = re.sub(r"\[[^\]]*\]", "", t).strip()
-        return len(bare) >= 6
-
     async def _think(
         self,
         group_id: str,
@@ -2260,61 +2251,45 @@ class Agent:
             {"type": "text", "text": dynamic_block},
         ]
 
-        # Model routing:
-        # - owner → main model (user-facing, never downgrade)
-        # - called → _pick_group_model (main model, only downgrades on rate spikes)
-        # - followup (proactive chime-in) → split by content: substantive turns
-        #   (questions/discussion/work/longer chitchat) use the main model for
-        #   quality; pure memes/stickers/filler use the cheap fallback (see
-        #   _followup_wants_pro). Routing every followup to fallback makes most
-        #   of what the group actually sees come from the dumb model.
-        # - judge → fallback (only decides whether to chime in, short, low risk)
-        if mode == "owner":
-            model_to_use = self.model
-        elif mode == "called":
-            model_to_use = self._pick_group_model()
-        elif mode == "followup":
-            model_to_use = (
-                self._pick_group_model()
-                if self._followup_wants_pro(latest_text, signals)
-                else (self.fallback_model or self.model)
+        # Model routing — two stages for self-initiated modes:
+        #   1. GATE (cheapest model): judge / followup / proactive first ask the
+        #      cheap "judgment" model only "would a real person reply here, or
+        #      stay quiet?". Most spontaneous messages PASS here and cost nothing
+        #      more than one cheap call.
+        #   2. REPLY (unified, main model): the line that actually gets sent is
+        #      always written by the main model (_pick_group_model — main unless a
+        #      rate spike forces a downgrade). called / owner are addressed
+        #      directly and skip straight to stage 2.
+        # Net: cheap, high-frequency gating; every reply the group sees is pro.
+        gated = mode in ("judge", "followup", "proactive")
+        if gated:
+            gate_raw = await self._call_anthropic(
+                system=system_content,
+                messages=[{"role": "user", "content": user_prompt}],
+                model=self.judge_model,
+                max_tokens=600,
+                enable_search=False,
+                disable_thinking=True,
             )
-        elif mode == "proactive":
-            # Rare + self-initiated → use the main model; quality matters more
-            # than cost here since it's the bot speaking unprompted.
-            model_to_use = self._pick_group_model()
-        else:  # judge
-            model_to_use = self.fallback_model or self.model
-        # Only count user-facing replies (owner/called) toward the rate window.
-        # Background judge/followup calls already use the fallback model, so they
-        # must not pollute the limiter — otherwise a burst of them would drag the
-        # foreground `called` replies into a 300s downgrade too.
-        if mode in ("owner", "called"):
-            self.model_calls.append(time.time())
+            gate_reply, _gr, gate_intent, _gm = self._parse_model_output(gate_raw)
+            if not gate_reply or gate_reply.strip().upper() == "PASS":
+                # Stayed quiet — only the cheap gate call was spent.
+                return "", gate_intent or "chat", ""
 
-        # judge only outputs PASS/REPLY → disable thinking to save budget;
-        # other modes keep thinking on for the reasoning + intent + reply
-        # protocol. Both budgets allow generous room for the JSON wrapper
-        # so a long reasoning field doesn't crowd out the reply field.
-        if mode == "judge":
-            max_tok = 600
-            disable_thinking = True
-        else:
-            # 1200 is already several times real demand (the persona keeps
-            # replies very short); the rare thinking-budget overrun is caught
-            # by _call_anthropic's thinking-budget retry.
-            max_tok = 1200
-            disable_thinking = False
-
+        # Stage 2 (and the only stage for called / owner): the main model writes
+        # the reply that's actually sent. Count it toward the rate window so a
+        # genuine burst can still trigger a temporary downgrade.
+        model_to_use = self._pick_group_model()
+        self.model_calls.append(time.time())
         enable_search = mode in ("called", "owner", "followup")
         raw = await self._call_anthropic(
             system=system_content,
             messages=[{"role": "user", "content": user_prompt}],
             model=model_to_use,
-            max_tokens=max_tok,
+            max_tokens=1200,
             enable_search=enable_search,
             max_search_uses=2,
-            disable_thinking=disable_thinking,
+            disable_thinking=False,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
