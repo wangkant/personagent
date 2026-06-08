@@ -404,6 +404,28 @@ class Agent:
             q.strip() for q in os.getenv("PRIVATE_ALLOWED_QQS", "").split(",") if q.strip()
         }
 
+        # Proactive mechanism: a background loop that occasionally self-initiates
+        # a message (no incoming trigger) so the bot reads more like a real
+        # person who sometimes breaks the silence — not a 24/7 responder. Off by
+        # default; opt in with PROACTIVE_ENABLE=true. Heavily gated: only acts in
+        # chats it has already seen activity in, only outside sleep hours, only
+        # after a quiet stretch, with per-target cooldowns and a low per-tick
+        # probability, and the model is told to PASS unless it genuinely has
+        # something to say. DMs go to the owner + the private whitelist only.
+        self.proactive_enable = os.getenv("PROACTIVE_ENABLE", "false").lower() == "true"
+        self.proactive_interval = int(os.getenv("PROACTIVE_INTERVAL", 1500))        # tick: 25 min
+        self.proactive_min_silence = int(os.getenv("PROACTIVE_MIN_SILENCE", 2700))  # group quiet ≥ 45 min
+        self.proactive_cooldown = int(os.getenv("PROACTIVE_COOLDOWN", 10800))       # ≥ 3h between group initiations
+        self.proactive_prob = float(os.getenv("PROACTIVE_PROB", 0.25))              # per eligible tick
+        self.proactive_dm_min_silence = int(os.getenv("PROACTIVE_DM_MIN_SILENCE", 14400))  # DM quiet ≥ 4h
+        self.proactive_dm_cooldown = int(os.getenv("PROACTIVE_DM_COOLDOWN", 86400))        # ≥ 24h between DMs
+        self.proactive_dm_prob = float(os.getenv("PROACTIVE_DM_PROB", 0.2))
+        # Last time any human message landed in a group / DM (silence tracking),
+        # and the last time the bot proactively initiated (per group and "dm:<uid>").
+        self.last_activity_at: dict[str, float] = defaultdict(float)
+        self.last_dm_activity_at: dict[str, float] = defaultdict(float)
+        self.last_proactive_at: dict[str, float] = defaultdict(float)
+
         stickers_path = Path(stickers_dir)
         if not stickers_path.is_absolute():
             stickers_path = Path(__file__).parent / stickers_path
@@ -550,6 +572,7 @@ class Agent:
         # === Phase 1: absorb message, handle immediate commands, stamp seq ===
         async with self.locks[group_id]:
             self._append_buffer(group_id, nickname, text[:200], user_id)
+            self.last_activity_at[group_id] = time.time()  # silence tracking for the proactive loop
             self.active_users[group_id].append((user_id, nickname))
             if not is_noise:
                 self.counters[group_id] += 1
@@ -745,6 +768,7 @@ class Agent:
             return False
 
         async with self.locks[f"private:{user_id}"]:
+            self.last_dm_activity_at[user_id] = time.time()  # silence tracking for the proactive loop
             history = self.private_history.setdefault(user_id, [])
             history.append({"role": "user", "content": text})
             if len(history) > 40:
@@ -797,7 +821,7 @@ class Agent:
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
-    async def _chat_private(self, history: list[dict], is_owner: bool = True) -> tuple[str, str]:
+    async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False) -> tuple[str, str]:
         """Private chat. Uses Anthropic SDK + DeepSeek anthropic endpoint.
 
         is_owner=True  → owner-style override (very close, all defenses off)
@@ -866,7 +890,19 @@ class Agent:
             f"</rules>\n\n"
         )
         semi_static_block = self._sticker_guide_for_prompt()
+        proactive_note = ""
+        if proactive:
+            who = self.owner_name if (is_owner and self.owner_name) else "them"
+            proactive_note = (
+                "<proactive>\n"
+                f"Nobody messaged you — this is an INTERNAL cue to OPTIONALLY open the conversation, not a message from {who}. "
+                f"It's been a while since you and {who} last talked. If a natural opener genuinely comes to mind "
+                "(a callback to something earlier, a passing thought, or a light 'what are you up to'), send that one line in persona. "
+                "If nothing feels natural, output exactly: PASS. Don't send filler like 'you there?' / 'hello?'.\n"
+                "</proactive>\n\n"
+            )
         dynamic_block = (
+            f"{proactive_note}"
             f"{private_overrides}"
             f"{self._examples_for_prompt(focus_text=last_user)}\n\n"
             f"[Current local time] {self._current_time_str()}\n\n"
@@ -879,12 +915,19 @@ class Agent:
              "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": dynamic_block},
         ]
+        messages = list(history)
+        if proactive and (not messages or messages[-1].get("role") == "assistant"):
+            # Anthropic needs a trailing user turn; supply an explicit internal cue.
+            messages = messages + [{
+                "role": "user",
+                "content": "(internal proactive cue — open the chat if you genuinely want to, otherwise reply only: PASS)",
+            }]
         raw = await self._call_anthropic(
             system=system,
-            messages=history,
+            messages=messages,
             model=self.anthropic_private_model,
             max_tokens=2048,
-            enable_search=True,
+            enable_search=not proactive,
             max_search_uses=3,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
@@ -2119,6 +2162,37 @@ class Agent:
                 f"{decision_framework}"
                 f"{mem_instruction}"
             )
+        elif mode == "proactive":
+            # Self-initiated (no incoming message). Deliberately NOT using
+            # decision_framework here — that block tells the model "silence is
+            # not a reason to reply", which is right for reactive judging but is
+            # the opposite of what this path is for. Instead: explicit permission
+            # to break the silence, but a strong PASS bias and a hard no-filler
+            # rule so it reads like a person with a genuine thought, not a bot
+            # filling dead air.
+            active_text = self._active_users_for_prompt(group_id)
+            at_hint = ""
+            if active_text:
+                at_hint = (
+                    f"- If you open at a specific person, lead with [AT:qq], e.g. [AT:123456] then your message\n"
+                )
+            user_prompt = (
+                f"{time_line}"
+                f"{focus_block}"
+                f"The group has gone quiet for a while. Recent chat:\n"
+                f"---\n{history_text}\n---\n"
+                f"Nobody messaged you — this is your own moment to OPTIONALLY bring something up. "
+                f"Only speak if something genuinely comes to mind right now: a real callback to an earlier "
+                f"topic worth reviving, a passing thought that fits your persona, or a light check-in. "
+                f"**Do NOT post filler** like 'anyone here', 'so quiet', or a generic 'good morning' for its own sake. "
+                f"If nothing feels natural, output PASS — that's the common case and totally fine.\n"
+                f"Output:\n"
+                f"- PASS, or the single line you'd actually send (no quote prefix)\n"
+                f"{at_hint}"
+                f"{mem_instruction}"
+            )
+            if active_text:
+                user_prompt += f"\n\nRecently active members: {active_text}"
         else:
             active_text = self._active_users_for_prompt(group_id)
             at_hint = ""
@@ -2205,6 +2279,10 @@ class Agent:
                 if self._followup_wants_pro(latest_text, signals)
                 else (self.fallback_model or self.model)
             )
+        elif mode == "proactive":
+            # Rare + self-initiated → use the main model; quality matters more
+            # than cost here since it's the bot speaking unprompted.
+            model_to_use = self._pick_group_model()
         else:  # judge
             model_to_use = self.fallback_model or self.model
         # Only count user-facing replies (owner/called) toward the rate window.
@@ -2590,6 +2668,103 @@ class Agent:
                 return
             except Exception as e:
                 logger.warning("[Agent] loop_check_missed iteration failed: %s", e)
+
+    # ---------------- Proactive (self-initiated) messaging ----------------
+    async def loop_proactive(self) -> None:
+        """Background loop that occasionally initiates a message with no incoming
+        trigger, so the bot reads like a person who sometimes breaks the silence.
+        Opt-in (PROACTIVE_ENABLE). Skips sleep hours; per-target silence /
+        cooldown / probability gating lives in the dispatchers. At most one
+        proactive action (group OR dm) per tick."""
+        if not self.enabled or not self.proactive_enable:
+            return
+        logger.info(
+            "[Agent] proactive loop ON (tick=%ds, group_silence=%ds, group_cooldown=%ds, p=%.2f)",
+            self.proactive_interval, self.proactive_min_silence,
+            self.proactive_cooldown, self.proactive_prob,
+        )
+        while True:
+            try:
+                await asyncio.sleep(self.proactive_interval)
+                if self._is_sleep_hour():
+                    continue
+                acted = await self._maybe_proactive_groups()
+                if not acted:
+                    await self._maybe_proactive_dms()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning("[Agent] proactive loop iteration failed: %s", e)
+
+    async def _maybe_proactive_groups(self) -> bool:
+        """At most one proactive group message per tick. Returns True if sent."""
+        now = time.time()
+        groups = list(self.buffers.keys()) or [
+            g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()
+        ]
+        random.shuffle(groups)
+        for gid in groups:
+            last_act = self.last_activity_at.get(gid, 0.0)
+            # Never cold-open a group we've observed no activity in this run, and
+            # only after it's been quiet long enough.
+            if not last_act or now - last_act < self.proactive_min_silence:
+                continue
+            if now - self.last_proactive_at.get(gid, 0.0) < self.proactive_cooldown:
+                continue
+            if now - self.last_reply_at.get(gid, 0.0) < self.proactive_cooldown:
+                continue
+            if random.random() > self.proactive_prob:
+                continue
+            try:
+                reply, intent, mem = await self._think(gid, mode="proactive")
+            except Exception as e:
+                logger.warning("[Agent] proactive group think failed (%s): %s", gid, e)
+                continue
+            # Mark the attempt either way so a PASS doesn't re-roll every tick.
+            self.last_proactive_at[gid] = now
+            if not reply or reply.strip().upper() == "PASS":
+                continue
+            await self._send_qq(gid, reply)
+            self.last_reply_at[gid] = now
+            if mem:
+                self._save_auto_memory(gid, mem)
+            logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
+            return True
+        return False
+
+    async def _maybe_proactive_dms(self) -> bool:
+        """At most one proactive DM per tick, to the owner or a whitelisted QQ
+        that has DMed the bot before this run. Returns True if sent."""
+        now = time.time()
+        targets = list(self.private_allowed_qqs | ({self.owner_qq} if self.owner_qq else set()))
+        random.shuffle(targets)
+        for uid in targets:
+            last_act = self.last_dm_activity_at.get(uid, 0.0)
+            # Don't cold-DM someone who never messaged the bot.
+            if not last_act or now - last_act < self.proactive_dm_min_silence:
+                continue
+            key = f"dm:{uid}"
+            if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown:
+                continue
+            if random.random() > self.proactive_dm_prob:
+                continue
+            is_owner = bool(self.owner_qq) and uid == self.owner_qq
+            try:
+                async with self.locks[f"private:{uid}"]:
+                    history = list(self.private_history.get(uid, []))[-10:]
+                    reply, mem = await self._chat_private(history, is_owner=is_owner, proactive=True)
+                    self.last_proactive_at[key] = now
+                    if not reply or reply.strip().upper() == "PASS":
+                        continue
+                    # Record so the next turn has context, mirroring _handle_private.
+                    self.private_history.setdefault(uid, []).append({"role": "assistant", "content": reply})
+            except Exception as e:
+                logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
+                continue
+            await self._send_private_qq(uid, reply)
+            logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
+            return True
+        return False
 
     async def probe_models(self) -> None:
         """Lightweight probe at startup to confirm what each endpoint actually returns."""

@@ -126,6 +126,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(agent.probe_models())
         asyncio.create_task(agent.check_missed_mentions())
         asyncio.create_task(agent.loop_check_missed())
+        asyncio.create_task(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLE
         asyncio.create_task(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():
