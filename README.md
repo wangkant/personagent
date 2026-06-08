@@ -1,10 +1,10 @@
 # onebot-llm-agent
 
+[![Live demo](https://img.shields.io/badge/live%20demo-online-2ea44f?style=flat)](https://qiankangwang.github.io/onebot-llm-agent/)
+
 **English** | [中文](README.zh-CN.md)
 
 A **template for building persona-driven LLM agents on OneBot v11 group chats** — designed to send messages that read like a real person rather than a customer-service bot. This repo is primarily a study in LLM agent / prompt engineering design patterns; the OneBot platform integration is a demonstration carrier and contains no proprietary IM protocol code.
-
-> **▶ [Live demo](https://qiankangwang.github.io/onebot-llm-agent/)** — a no-install, scripted walkthrough: watch the agent reason through a group chat (mode routing, the JSON output protocol, intent tags, sticker pick, PASS / stay-silent, and self-eval). No API key, no QQ. Replies are drawn straight from this repo's own example set.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
