@@ -4,6 +4,8 @@
 
 一个**人设型 LLM agent 在 OneBot v11 群聊上的模板** —— 目标是发出来的消息像真人闲聊，而不是客服机器人。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接 OneBot 平台只是演示载体，仓库内不包含任何 IM 协议实现。
 
+> **▶ [在线 Demo](https://qiankangwang.github.io/onebot-llm-agent/)** —— 免安装、剧本化地看 agent 在群聊里推理（mode 路由、JSON 输出协议、意图标签、选表情包、PASS 不接话、自评分）。不需要 API key，不需要 QQ。回复全部取自本仓库自带的示例集。
+
 > **英文优先, 中英双语。** agent 默认跑英文, 一个开关 (`AGENT_LANG=zh`) 切到中文。详见[语言](#语言english--中文)。想 30 秒上手、不需要 QQ 账号？直接看[免 QQ 试用](#免-qq-试用)。
 
 > **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
