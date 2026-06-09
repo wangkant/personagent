@@ -4,16 +4,18 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
 import os
 import random
 import re
+import socket
 import time
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -350,6 +352,10 @@ class Agent:
         self._fallback_until: float = 0.0
         self.bot_qq = str(bot_qq)
         self.bot_name = bot_name
+        # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
+        # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
+        # _spawn pattern main.py already uses for webhook tasks.
+        self._bg_tasks: set[asyncio.Task] = set()
         self.anthropic_key = anthropic_key
         self.anthropic_base_url = anthropic_base_url.rstrip("/") if anthropic_base_url else ""
         self.anthropic_private_model = anthropic_private_model
@@ -509,6 +515,17 @@ class Agent:
         self.enabled = bool(api_key)
         if not self.enabled:
             logger.warning("[Agent] DEEPSEEK_API_KEY not configured; %s disabled", bot_name)
+        if self.enabled and not self.bot_name:
+            logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
+                           "explicit @-mentions (set BOT_NAME so it answers to its name)")
+
+    def _spawn(self, coro) -> asyncio.Task:
+        """Launch a background task and keep a strong reference to it until it
+        finishes, so it can't be garbage-collected mid-flight."""
+        t = asyncio.create_task(coro)
+        self._bg_tasks.add(t)
+        t.add_done_callback(self._bg_tasks.discard)
+        return t
 
     async def handle(self, payload: dict) -> bool:
         # Top-level guard so any failure in the message pipeline is logged
@@ -569,7 +586,10 @@ class Agent:
         nickname = (sender.get("card") or sender.get("nickname") or "?")[:8]
 
         is_at = self._is_at_me(payload)
-        is_called = self.bot_name in text
+        # Guard the substring test: an empty bot_name (the shipped default
+        # when BOT_NAME is unset) would make `"" in text` always True and the
+        # bot would treat every message as a named call, replying to everything.
+        is_called = bool(self.bot_name) and self.bot_name in text
         is_noise = len(text.strip()) < 4 and not (is_at or is_called)
 
         is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
@@ -760,7 +780,7 @@ class Agent:
             # them and feed back into the quality loop (low-average →
             # auto persona_fit=false → purged on next startup).
             if self.eval_enable:
-                asyncio.create_task(self._evaluate_reply(
+                self._spawn(self._evaluate_reply(
                     group_id, mode, text, reply, sticker_files, _intent,
                 ))
 
@@ -1009,14 +1029,14 @@ class Agent:
                 entry = self.stickers.lookup_by_file_field(file_field)
                 if entry and entry.get("auto_tagged") and entry.get("meaning"):
                     parts.append(f"[sticker: {entry['meaning']}]")
-                    asyncio.create_task(self._record_sticker_context(
+                    self._spawn(self._record_sticker_context(
                         entry["md5"], group_id, sender_uid,
                     ))
                     continue
                 desc = await self._describe_image(url)
                 parts.append(f"[image: {desc}]" if desc else "[image]")
                 if group_id and sender_uid != self.bot_qq:
-                    asyncio.create_task(self._steal_image_async(
+                    self._spawn(self._steal_image_async(
                         url=url,
                         sender_uid=sender_uid,
                         group_id=group_id,
@@ -1079,12 +1099,29 @@ class Agent:
             if len(local) > 3 and local[0] == "/" and local[2] == ":":
                 local = local[1:]
             try:
-                return Path(local).read_bytes()
+                path = Path(local).resolve()
+            except Exception:
+                return None
+            # Optional containment: if NAPCAT_IMAGE_DIR is set, only read
+            # file:// paths inside it, so a malicious image segment can't point
+            # the bot at an arbitrary local file (read -> sent to the vision
+            # provider / stolen into the sticker library). Left open by default
+            # to keep NapCat's local-cache mode working out of the box.
+            allowed = os.getenv("NAPCAT_IMAGE_DIR", "").strip()
+            if allowed:
+                try:
+                    if not path.is_relative_to(Path(allowed).resolve()):
+                        logger.warning("[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
+                        return None
+                except Exception:
+                    return None
+            try:
+                return path.read_bytes()
             except Exception as e:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True, max_redirects=5) as c:
                 r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 if r.status_code != 200:
                     return None
@@ -1128,6 +1165,24 @@ class Agent:
                 continue
             out.append(f"{m.get('name','?')}: {m.get('text','')[:80]}")
         return out
+
+    @staticmethod
+    def _format_bili_line(info: dict, title_fallback: str = "") -> str:
+        """Build the `[bilibili-video] "title" — by <up>, AI summary/description: ...`
+        descriptor fed to the model. Shared by _describe_share and _describe_url
+        (the share path passes a title_fallback; the URL path leaves it empty)."""
+        title = info.get("title") or title_fallback
+        up = info.get("up", "")
+        summary = (info.get("summary", "") or "").strip().replace("\n", " ")
+        desc = (info.get("desc", "") or "").strip().replace("\n", " ")[:80]
+        line = f"[bilibili-video] \"{title}\""
+        if up:
+            line += f" — by {up}"
+        if summary:
+            line += f", AI summary: {summary[:200]}"
+        elif desc:
+            line += f", description: {desc}"
+        return line
 
     async def _describe_share(self, raw_json: str) -> str:
         """Parse an IM mini-app share-card JSON segment into a text line the LLM
@@ -1173,18 +1228,7 @@ class Agent:
         if is_bili:
             info = await self._fetch_bili_info(url)
             if info:
-                video_title = info.get("title") or desc_field
-                up = info.get("up", "")
-                video_desc = (info.get("desc", "") or "").strip().replace("\n", " ")[:80]
-                summary = (info.get("summary", "") or "").strip().replace("\n", " ")
-                line = f"[bilibili-video] \"{video_title}\""
-                if up:
-                    line += f" — by {up}"
-                if summary:
-                    line += f", AI summary: {summary[:200]}"
-                elif video_desc:
-                    line += f", description: {video_desc}"
-                return line
+                return self._format_bili_line(info, title_fallback=desc_field)
             return f"[bilibili-video] \"{desc_field}\"" if desc_field else "[bilibili-video]"
 
         # Non-Bilibili mini-app share card: the card's own title/desc fields
@@ -1215,7 +1259,7 @@ class Agent:
         real_url = url
         if "b23.tv" in url:
             try:
-                async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
+                async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5) as client:
                     r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                     real_url = str(r.url)
             except Exception as e:
@@ -1366,7 +1410,6 @@ class Agent:
     URL_PATTERN = re.compile(
         r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
     )
-    _URL_SKIP_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172.16.")
     _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
                      ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
                      ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
@@ -1386,14 +1429,47 @@ class Agent:
             urls.append(u)
         return urls
 
+    @staticmethod
+    def _ip_is_internal(ip) -> bool:
+        return (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+    @classmethod
+    def _host_is_internal(cls, url: str) -> bool:
+        """SSRF guard: True if the URL's host is, or resolves to, an internal
+        address — loopback, RFC1918, link-local (incl. the 169.254.169.254
+        cloud-metadata endpoint), reserved, or IPv6 equivalents. Resolving the
+        hostname also blocks public names that point at internal IPs.
+        Note: does not re-check redirect hops; the fetchers cap redirects."""
+        try:
+            host = (urlsplit(url).hostname or "").strip("[]")
+        except Exception:
+            return True
+        if not host:
+            return True
+        try:
+            return cls._ip_is_internal(ipaddress.ip_address(host))
+        except ValueError:
+            pass  # not an IP literal — resolve the hostname below
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except Exception:
+            return False  # can't resolve → let the normal fetch fail
+        for info in infos:
+            addr = info[4][0].split('%')[0]  # strip IPv6 zone id
+            try:
+                if cls._ip_is_internal(ipaddress.ip_address(addr)):
+                    return True
+            except ValueError:
+                continue
+        return False
+
     @classmethod
     def _should_skip_url(cls, url: str) -> bool:
         u = url.lower()
-        if any(host in u for host in cls._URL_SKIP_HOSTS):
-            return True
         if any(u.split('?')[0].endswith(ext) for ext in cls._URL_SKIP_EXT):
             return True
-        return False
+        return cls._host_is_internal(url)
 
     async def _describe_url(self, url: str) -> str:
         """Fetch URL metadata and return a preformatted descriptor like
@@ -1425,18 +1501,7 @@ class Agent:
             if "bilibili.com" in host or "b23.tv" in host:
                 info = await self._fetch_bili_info(url)
                 if info:
-                    title = info.get("title", "") or ""
-                    up = info.get("up", "")
-                    summary = (info.get("summary", "") or "").strip().replace("\n", " ")
-                    desc = (info.get("desc", "") or "").strip().replace("\n", " ")[:80]
-                    line = f"[bilibili-video] \"{title}\""
-                    if up:
-                        line += f" — by {up}"
-                    if summary:
-                        line += f", AI summary: {summary[:200]}"
-                    elif desc:
-                        line += f", description: {desc}"
-                    result = line
+                    result = self._format_bili_line(info)
             elif "youtube.com" in host or "youtu.be" in host:
                 result = await self._fetch_oembed_youtube(url)
             else:
@@ -1452,7 +1517,7 @@ class Agent:
     async def _fetch_oembed_youtube(self, url: str) -> str:
         """YouTube exposes a public oEmbed endpoint with no API key needed."""
         try:
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True) as c:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5) as c:
                 r = await c.get(
                     "https://www.youtube.com/oembed",
                     params={"url": url, "format": "json"},
@@ -1496,7 +1561,7 @@ class Agent:
                 "Accept": "text/html,application/xhtml+xml",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             }
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True, headers=headers) as c:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5, headers=headers) as c:
                 r = await c.get(url)
                 if r.status_code != 200:
                     return ""
@@ -1793,7 +1858,9 @@ class Agent:
                 },
             }
             payload = {
-                "model": self.fallback_model or self.model,
+                # Cheapest available model — this is only a yes/no + query
+                # decision, so route it through judge_model like the reply gate.
+                "model": self.judge_model,
                 "messages": [
                     {"role": "system", "content": "You are a search-decision gate. If the user's message mentions a meme/slang/person/product/current event/price/concrete fact you are unsure about, call web_search to look it up; otherwise do nothing. Only decide — do not write a reply."},
                     {"role": "user", "content": latest[:800]},
@@ -2034,8 +2101,10 @@ class Agent:
         caller_override: Optional[tuple] = None,
     ) -> tuple[str, str, str]:
         all_history = list(self.buffers[group_id])
-        # called/owner/followup use the last 30 turns; judge/proactive see all
-        history = all_history[-30:] if mode in ("followup", "called", "owner") else all_history
+        # called/owner/followup use the last 30 turns; judge/proactive get a
+        # wider window but still capped (the PASS/REPLY judgment rarely needs
+        # the full buffer, and the gate call pays input tokens for every line).
+        history = all_history[-30:] if mode in ("followup", "called", "owner") else all_history[-60:]
         def _fmt_line(m: dict) -> str:
             uid = m.get("user_id", "")
             if uid:
@@ -2081,18 +2150,10 @@ class Agent:
                 + "\n\n"
             )
 
-        mem_instruction = (
-            "\n\n[Optional memory extraction]\n"
-            "If anything in this exchange is worth remembering long-term "
-            "(someone's real-name identity / profession / hobby / nickname / "
-            "important status), output `MEM:short one-liner` on a new line "
-            "after the reply. Examples:\n"
-            "MEM: Alice is a developer\n"
-            "MEM: Bob has a cat named Mochi\n"
-            "Rule: real facts only — not current mood, not jokes, not "
-            "transient states. If nothing's worth recording, don't output a "
-            "MEM line at all."
-        )
+        # NOTE: memory extraction is carried by the JSON `mem` field defined in
+        # REASONING_PROTOCOL, parsed in _parse_model_output. A separate plaintext
+        # "MEM:" instruction used to be appended here, but nothing ever parsed it
+        # and it contradicted the JSON-only output contract, so it was removed.
 
         signals = self._compute_chat_signals(group_id, history)
 
@@ -2119,7 +2180,6 @@ class Agent:
                 f"---\n{history_text}\n---\n"
                 f"You were called out, so reply unless it was a purely incidental mention with no actual content directed at you.\n"
                 f"Address {latest_nick or 'the person who called you'} directly, sound like a real person."
-                f"{mem_instruction}"
             )
         elif mode == "owner":
             user_prompt = (
@@ -2130,7 +2190,6 @@ class Agent:
                 f"{self.owner_name} is the owner — **lean towards replying**: casual chat / questions / venting / sharing — engage with all of them.\n"
                 f"If owner is in a 1-on-1 thread with someone else about work/tech that doesn't involve you → PASS.\n"
                 f"Apply the protocol's PASS signals as usual (even from owner, closing signals / fragment noise still PASS).\n"
-                f"{mem_instruction}"
             )
         elif mode == "followup":
             user_prompt = (
@@ -2142,7 +2201,6 @@ class Agent:
                 f"If you do reply, address {latest_nick or 'the speaker'} alone — don't braid in others.\n"
                 f"**Prefer PASS over forcing a reply** — being clingy is worse than being quiet.\n"
                 f"{decision_framework}"
-                f"{mem_instruction}"
             )
         elif mode == "proactive":
             # Self-initiated (no incoming message). Deliberately NOT using
@@ -2171,7 +2229,6 @@ class Agent:
                 f"Output:\n"
                 f"- PASS, or the single line you'd actually send (no quote prefix)\n"
                 f"{at_hint}"
-                f"{mem_instruction}"
             )
             if active_text:
                 user_prompt += f"\n\nRecently active members: {active_text}"
@@ -2192,7 +2249,6 @@ class Agent:
                 f"Output:\n"
                 f"- PASS, or what you want to say (no quote prefix)\n"
                 f"{at_hint}"
-                f"{mem_instruction}"
             )
             if active_text:
                 user_prompt += f"\n\nRecently active members: {active_text}"
@@ -2623,7 +2679,7 @@ class Agent:
                         if sender_id == self.bot_qq:
                             continue
                         raw = msg.get("raw_message", "")
-                        if self.bot_name in raw or f"@{self.bot_qq}" in raw:
+                        if (self.bot_name and self.bot_name in raw) or f"@{self.bot_qq}" in raw:
                             logger.info("[Agent] missed offline @-mention detected; replaying (group=%s)", group_id)
                             await self.handle(msg)
                             break
@@ -3220,11 +3276,15 @@ class Agent:
             return {}
 
     def _save_memories(self) -> None:
+        # Atomic write: serialize to a .tmp then replace, so a crash mid-write
+        # can't truncate memory.json and wipe every group's stored memory.
         try:
-            self.memory_file.write_text(
+            tmp = self.memory_file.with_suffix(".json.tmp")
+            tmp.write_text(
                 json.dumps(self.memories, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self.memory_file)
         except Exception as e:
             logger.warning("[Agent] memory save failed: %s", e)
 
@@ -3403,11 +3463,15 @@ class Agent:
             return {}
 
     def _save_core_memory(self) -> None:
+        # Atomic write: serialize to a .tmp then replace, so a crash mid-write
+        # can't corrupt core_memory.json.
         try:
-            self.core_memory_file.write_text(
+            tmp = self.core_memory_file.with_suffix(".json.tmp")
+            tmp.write_text(
                 json.dumps(self.core_memory, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self.core_memory_file)
         except Exception as e:
             logger.warning("[Agent] core_memory save failed: %s", e)
 
