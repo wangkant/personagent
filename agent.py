@@ -370,6 +370,11 @@ class Agent:
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        # Separate per-group send locks: _send_qq sleeps through its typing
+        # simulation, so it runs OUTSIDE the group lock (which would otherwise
+        # block message intake for the whole send). The send lock still
+        # serializes same-group sends so two replies can't interleave.
+        self.send_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.active_users: dict[str, deque] = defaultdict(lambda: deque(maxlen=20))
 
         self.memory_file = Path(memory_file)
@@ -764,27 +769,36 @@ class Agent:
                 at_uid = user_id
             if auto_mem:
                 self._save_auto_memory(group_id, auto_mem)
-            sticker_files = await self._send_qq(group_id, reply, at_uid)
+            # Commit state inside the group lock (last_reply_at / buffer), then
+            # release it before the slow send: _send_qq sleeps for seconds of
+            # simulated typing, and holding the group lock through it would
+            # block intake of every new message in this group for the duration.
             self.last_reply_at[group_id] = time.time()
             self._append_buffer(group_id, self.bot_name, reply)
-
-            if self.on_reply:
-                try:
-                    await self.on_reply(group_id, reply)
-                except Exception as e:
-                    logger.warning("[Agent] on_reply callback failed: %s", e)
-
             logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
-            # Pass the actual sticker files sent to eval so it can score
-            # them and feed back into the quality loop (low-average →
-            # auto persona_fit=false → purged on next startup).
-            if self.eval_enable:
-                self._spawn(self._evaluate_reply(
-                    group_id, mode, text, reply, sticker_files, _intent,
-                ))
+        # —— group lock released ——
+        # The send still runs under a per-group send lock so same-group sends
+        # stay serialized (no interleaved text/sticker chunks), but new
+        # messages can be absorbed while the bot is "typing".
+        async with self.send_locks[group_id]:
+            sticker_files = await self._send_qq(group_id, reply, at_uid)
 
-            return True
+        if self.on_reply:
+            try:
+                await self.on_reply(group_id, reply)
+            except Exception as e:
+                logger.warning("[Agent] on_reply callback failed: %s", e)
+
+        # Pass the actual sticker files sent to eval so it can score
+        # them and feed back into the quality loop (low-average →
+        # auto persona_fit=false → purged on next startup).
+        if self.eval_enable:
+            self._spawn(self._evaluate_reply(
+                group_id, mode, text, reply, sticker_files, _intent,
+            ))
+
+        return True
 
     async def _handle_private(self, user_id: str, payload: dict, is_owner: bool = True) -> bool:
         text = await self._extract_text(payload)
