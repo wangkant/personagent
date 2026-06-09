@@ -437,7 +437,7 @@
         <button id="lang-en" aria-pressed="true">EN</button>
         <button id="lang-zh" aria-pressed="false">中文</button>
       </div>
-      <button class="btn" id="theme-btn" aria-label="Toggle dark mode">
+      <button class="btn" id="theme-btn" aria-label="Toggle dark mode" aria-pressed="false">
         <span id="theme-ico" aria-hidden="true">🌙</span><span id="theme-txt">Dark</span>
       </button>
       <a class="icon-link" id="repo-link" href="https://github.com/qiankangwang/onebot-llm-agent" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
@@ -897,7 +897,9 @@
     const sc = script();
     const playedTurns = sc.slice(0, idx).filter((e) => e.t === "turn").length;
     $("counter").textContent = `${playedTurns} / ${turnsTotal()}`;
-    $("prog").style.width = `${Math.round((idx / sc.length) * 100)}%`;
+    // Drive the bar off the same unit as the counter (played turns) so the two
+    // advance together, instead of the bar tracking total events (msg+turn).
+    $("prog").style.width = `${Math.round((playedTurns / turnsTotal()) * 100)}%`;
     syncButtons();
   }
 
@@ -946,6 +948,7 @@
   // ── Theme ─────────────────────────────────────────────────────
   function setTheme(dark) {
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    $("theme-btn").setAttribute("aria-pressed", String(dark));
     $("theme-ico").textContent = dark ? "☀️" : "🌙";
     $("theme-txt").textContent = dark ? "Light" : "Dark";
     try { localStorage.setItem("onebot-demo-theme", dark ? "dark" : "light"); } catch (e) {}
