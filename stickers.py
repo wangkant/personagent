@@ -105,10 +105,6 @@ class StickerLibrary:
             return self.lookup_by_md5(m.group(1))
         return None
 
-    def md5_from_file_field(self, file_field: str) -> str:
-        m = re.match(r"^([a-fA-F0-9]{32})\.", file_field or "")
-        return m.group(1).lower() if m else ""
-
     async def steal(
         self,
         image_bytes: bytes,
