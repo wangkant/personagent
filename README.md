@@ -154,6 +154,16 @@ QQ                              -->  NapCat                      --HTTP-->  agen
 
 Gateway conversations are namespaced `<platform>:<id>`, so memory and state never collide with QQ. Keep `aiocqhttp` in the plugin's excluded platforms (the default) when NapCat already feeds the agent directly, or QQ messages get handled twice. QQ-only machinery (sticker stealing, OCR, proactive / missed-mention catch-up) stays on the QQ path; text / sticker / mention replies work everywhere.
 
+### WeChat (the official, ban-safe route)
+
+Personal-WeChat bridges all rely on the unsanctioned pad/hook protocols and risk a ban. The clean alternative is **WeCom (企业微信)**, which AstrBot supports natively — no bridge binary, no database, no ban risk — at the cost of being a *work* bot (members talk to it inside WeCom, not in ordinary personal-WeChat friend groups). It needs no agent-side code: the forwarder plugin relays the `wecom` platform like any other.
+
+1. On [work.weixin.qq.com](https://work.weixin.qq.com): register an enterprise, then create a self-built app (应用管理 → 自建). Collect **CorpID** (我的企业 → 企业信息), the app **AgentId** and **Secret**, and under 接收消息 → API接收 set a **Token** and **EncodingAESKey**.
+2. In AstrBot, add a `wecom` platform adapter with those values (`corpid`, `secret`, `token`, `encoding_aes_key`, `port`, `callback_server_host`).
+3. **Public callback:** unlike Telegram (which the bot polls outbound), WeCom *pushes* events to your callback URL, so AstrBot's callback port must be reachable from the internet — put it behind a reverse proxy / tunnel (frp, Cloudflare Tunnel, …) and register that URL in the app's 接收消息 settings.
+
+The bundled gateway plugin then forwards WeCom group + 1:1 messages to the agent automatically.
+
 ## Language (English / 中文)
 
 The agent is **English-first** and runs Chinese with one switch. Set `AGENT_LANG` in `.env`:
