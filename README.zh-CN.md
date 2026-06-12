@@ -1,6 +1,6 @@
-# onebot-llm-agent
+# persona-llm-agent
 
-[![在线 demo](assets/live-demo.svg)](https://qiankangwang.github.io/onebot-llm-agent/)
+[![在线 demo](assets/live-demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
 
 [English](README.md) | **中文**
 
@@ -35,7 +35,7 @@
 
 ## 架构图
 
-![onebot-llm-agent 架构](docs/onebot_llm_agent_architecture.zh-CN.svg)
+![persona-llm-agent 架构](docs/persona_llm_agent_architecture.zh-CN.svg)
 
 <details>
 <summary>实现细节（handler 调用链）</summary>

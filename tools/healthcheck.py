@@ -21,7 +21,7 @@ from health import run_checks, all_critical_ok
 
 def main():
     print("=" * 64)
-    print("  onebot-llm-agent — API health check")
+    print("  persona-llm-agent — API health check")
     print("=" * 64)
     results = run_checks()
     for r in results:

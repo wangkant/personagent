@@ -1,6 +1,6 @@
-# onebot-llm-agent
+# persona-llm-agent
 
-[![Live demo](assets/live-demo.svg)](https://qiankangwang.github.io/onebot-llm-agent/)
+[![Live demo](assets/live-demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
 
 **English** | [中文](README.zh-CN.md)
 
@@ -35,7 +35,7 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 
 ## Architecture sketch
 
-![onebot-llm-agent architecture](docs/onebot_llm_agent_architecture.svg)
+![persona-llm-agent architecture](docs/persona_llm_agent_architecture.svg)
 
 <details>
 <summary>Implementation detail (handler call chain)</summary>

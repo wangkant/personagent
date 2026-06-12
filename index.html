@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>onebot-llm-agent — Live Demo</title>
+<title>persona-llm-agent — Live Demo</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzI1NjNlYiIvPjxyZWN0IHg9IjYuNSIgeT0iOSIgd2lkdGg9IjE5IiBoZWlnaHQ9IjEyLjUiIHJ4PSIzLjUiIGZpbGw9IiNmZmZmZmYiLz48cGF0aCBkPSJNMTIgMjAuNXY0LjZsNS42LTQuNnoiIGZpbGw9IiNmZmZmZmYiLz48Y2lyY2xlIGN4PSIxMi41IiBjeT0iMTUiIHI9IjEuNiIgZmlsbD0iIzI1NjNlYiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTUiIHI9IjEuNiIgZmlsbD0iIzI1NjNlYiIvPjxjaXJjbGUgY3g9IjE5LjUiIGN5PSIxNSIgcj0iMS42IiBmaWxsPSIjMjU2M2ViIi8+PC9zdmc+" />
   <meta name="theme-color" content="#2563eb" />
-<meta name="description" content="Interactive demo of onebot-llm-agent: watch a persona-driven LLM agent reason through a group chat — mode routing, JSON output protocol, intent tags, sticker selection, PASS/stay-silent, and self-eval." />
+<meta name="description" content="Interactive demo of persona-llm-agent: watch a persona-driven LLM agent reason through a group chat — mode routing, JSON output protocol, intent tags, sticker selection, PASS/stay-silent, and self-eval." />
 <style>
   :root {
     --bg: #fafbfc;
@@ -428,7 +428,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>onebot-llm-agent</h1>
+      <h1>persona-llm-agent</h1>
       <span class="live-tag"><span class="live-dot"></span>Live demo</span>
     </div>
     <span class="spacer"></span>
@@ -440,7 +440,7 @@
       <button class="btn" id="theme-btn" aria-label="Toggle dark mode" aria-pressed="false">
         <span id="theme-ico" aria-hidden="true">🌙</span><span id="theme-txt">Dark</span>
       </button>
-      <a class="icon-link" id="repo-link" href="https://github.com/qiankangwang/onebot-llm-agent" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
+      <a class="icon-link" id="repo-link" href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
       </a>
     </div>
@@ -496,7 +496,7 @@
 "use strict";
 (function () {
   /* ─────────────────────────────────────────────────────────────
-     onebot-llm-agent — scripted demo
+     persona-llm-agent — scripted demo
      A faithful, no-API replay of the agent's own example set.
      Every reply below is taken verbatim from data/examples.*.jsonl
      or the PASS "better" lines in data/feedback.*.jsonl.
@@ -529,7 +529,7 @@
       passReplyVal: "PASS",
       silent: (n) => `${n} stays silent`,
       ownerPip: "owner",
-      foot: 'Scripted simulation — replies are recorded verbatim from the repo\'s own example set; no live API call is made. Run it for real with <code>python try_chat.py</code>. Source: <a href="https://github.com/qiankangwang/onebot-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/onebot-llm-agent</a>',
+      foot: 'Scripted simulation — replies are recorded verbatim from the repo\'s own example set; no live API call is made. Run it for real with <code>python try_chat.py</code>. Source: <a href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/persona-llm-agent</a>',
       attach: { youtube: "YouTube", bili: "Bilibili", image: "image", video: "video" },
     },
     zh: {
@@ -548,7 +548,7 @@
       passReplyVal: "PASS",
       silent: (n) => `${n} 选择不接话`,
       ownerPip: "群主",
-      foot: '剧本化模拟 —— 回复全部原样取自仓库自带的示例集，不发任何实时 API 请求。想跑真的：<code>python try_chat.py</code>。源码：<a href="https://github.com/qiankangwang/onebot-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/onebot-llm-agent</a>',
+      foot: '剧本化模拟 —— 回复全部原样取自仓库自带的示例集，不发任何实时 API 请求。想跑真的：<code>python try_chat.py</code>。源码：<a href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/persona-llm-agent</a>',
       attach: { youtube: "YouTube", bili: "B站", image: "图片", video: "视频" },
     },
   };
