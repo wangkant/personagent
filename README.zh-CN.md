@@ -154,6 +154,16 @@ QQ                              -->  NapCat             --HTTP-->  agent /webhoo
 
 网关会话全部带 `<平台>:<id>` 命名空间，记忆和状态不会跟 QQ 串。NapCat 直连 agent 时，插件的排除平台里要留着 `aiocqhttp`（默认就是），否则 QQ 消息会被处理两遍。QQ 专属机制（偷表情包、OCR、主动发言/漏 @ 补抓）只走 QQ 链路；文字 / 表情包 / @ 回复全平台都通。
 
+### 微信（官方、不封号的那条路）
+
+个人微信的桥都靠未授权的 pad/hook 协议，有封号风险。干净的替代是 **企业微信（WeCom）**：AstrBot 原生支持，不要桥二进制、不要数据库、零封号风险——代价是它是个**工作号**机器人（成员在企业微信里跟它聊，进不了普通的私人微信亲友群）。agent 侧不用任何新代码，转发插件把 `wecom` 平台跟其他平台一视同仁地转发。
+
+1. 在 [work.weixin.qq.com](https://work.weixin.qq.com)：注册一个企业，再建自建应用（应用管理 → 自建）。拿到 **CorpID**（我的企业 → 企业信息）、应用的 **AgentId** 和 **Secret**，并在 接收消息 → API接收 里设好 **Token** 和 **EncodingAESKey**。
+2. 在 AstrBot 里加一个 `wecom` 平台适配器，填这些值（`corpid`、`secret`、`token`、`encoding_aes_key`、`port`、`callback_server_host`）。
+3. **公网回调**：跟 Telegram（agent 主动拉）不同，WeCom 是把事件**推送**到你的回调地址，所以 AstrBot 的回调端口必须公网可达——挂在反代/隧道后面（frp、Cloudflare Tunnel 等），把那个地址填回应用的 接收消息 设置里。
+
+之后插件会自动把 WeCom 的群聊 + 1:1 消息转发给 agent。
+
 ## 语言（English / 中文）
 
 agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LANG`：
