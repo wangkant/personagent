@@ -4,7 +4,7 @@
 
 [English](README.md) | **中文**
 
-一个**人设型 LLM agent 在 OneBot v11 群聊上的模板** —— 目标是发出来的消息像真人闲聊，而不是客服机器人。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接 OneBot 平台只是演示载体，仓库内不包含任何 IM 协议实现。
+一个**人设型 LLM agent 模板**，用于群聊和私聊 —— 目标是发出来的消息像真人闲聊，而不是客服机器人。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关 + [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，把同一个人设扩展到 **Telegram、Discord、Slack、飞书、KOOK、微信（经企业微信 WeCom）**，且人设管线零改动。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接平台只是演示载体，仓库内不包含任何 IM 协议实现。
 
 > **英文优先, 中英双语。** agent 默认跑英文, 一个开关 (`AGENT_LANG=zh`) 切到中文。详见[语言](#语言english--中文)。想 30 秒上手、不需要 QQ 账号？直接看[免 QQ 试用](#免-qq-试用)。
 
@@ -139,9 +139,9 @@ agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
 
 > **Windows 一键启动:** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。用之前先改文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；它会自动优先用 `.venv`。
 
-## 多平台接入（AstrBot，可选）
+## 多平台接入（AstrBot）
 
-上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK 的群聊和私聊。
+上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK / 微信 的群聊和私聊。人设管线完全不动：网关把中立入站事件合成进原有 handler、回复经上下文局部 sink 捕获，AstrBot 侧的翻译由内置转发插件完成。
 
 ```
 Telegram / Discord / Slack / …  -->  AstrBot + 转发插件  --HTTP-->  agent /webhook/gateway
