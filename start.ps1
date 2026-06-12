@@ -1,8 +1,8 @@
-# onebot-llm-agent — one-click start (Windows)
+# persona-llm-agent — one-click start (Windows)
 $port = if ($env:PORT) { $env:PORT } else { 8080 }
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   onebot-llm-agent" -ForegroundColor Cyan
+Write-Host "   persona-llm-agent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Prefer the venv that quickstart.py creates; fall back to a global interpreter.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# onebot-llm-agent — one-click start (Linux/macOS)
+# persona-llm-agent — one-click start (Linux/macOS)
 set -e
 cd "$(dirname "$0")"
 PORT="${PORT:-8080}"
