@@ -4,7 +4,7 @@
 
 **English** | [中文](README.zh-CN.md)
 
-A **template for building persona-driven LLM agents on OneBot v11 group chats** — designed to send messages that read like a real person rather than a customer-service bot. This repo is primarily a study in LLM agent / prompt engineering design patterns; the OneBot platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, KOOK, and WeChat (via WeCom)** with no changes to the persona pipeline. This repo is primarily a study in LLM agent / prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
@@ -139,9 +139,9 @@ agent   --(send replies)----->  NapCat :3000   (NAPCAT_API in .env)
 
 > **Windows one-click:** `launch.vbs` starts NapCat and the agent in two minimized windows. Edit the three values at the top (`BOT_QQ`, `NAPCAT_DIR`, `AGENT_DIR`) first; it prefers `.venv` automatically.
 
-## Multi-platform via AstrBot (optional)
+## Multi-platform via AstrBot
 
-QQ/NapCat above is the primary path, but the agent also exposes a platform-neutral webhook — `POST /webhook/gateway` — so the same persona can sit in Telegram / Discord / Slack / Lark / KOOK groups and DMs through [AstrBot](https://github.com/AstrBotDevs/AstrBot)'s platform adapters.
+QQ/NapCat above is the primary path, but the agent also exposes a platform-neutral webhook — `POST /webhook/gateway` — so the same persona can sit in Telegram / Discord / Slack / Lark / KOOK / WeChat groups and DMs through [AstrBot](https://github.com/AstrBotDevs/AstrBot)'s platform adapters. The persona pipeline is untouched: the gateway synthesizes a neutral inbound event into the existing handler and captures replies through a context-local sink, and a bundled forwarder plugin does the AstrBot-side translation.
 
 ```
 Telegram / Discord / Slack / …  -->  AstrBot + forwarder plugin  --HTTP-->  agent /webhook/gateway
