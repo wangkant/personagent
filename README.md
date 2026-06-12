@@ -27,6 +27,7 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 | `agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl`; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
 | `stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
+| `gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs. Regression suite in `tests/test_gateway.py` (plain `python tests/test_gateway.py`, no pytest needed) |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
 | `tools/auto_reviewer.py` | Scans low-score entries in `eval.jsonl` and proposes `failure_mode + constraint + BAD/OK pair_draft` for prompt patches |
 | `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into `data/examples.<lang>.jsonl` |
@@ -137,6 +138,21 @@ agent   --(send replies)----->  NapCat :3000   (NAPCAT_API in .env)
 ```
 
 > **Windows one-click:** `launch.vbs` starts NapCat and the agent in two minimized windows. Edit the three values at the top (`BOT_QQ`, `NAPCAT_DIR`, `AGENT_DIR`) first; it prefers `.venv` automatically.
+
+## Multi-platform via AstrBot (optional)
+
+QQ/NapCat above is the primary path, but the agent also exposes a platform-neutral webhook — `POST /webhook/gateway` — so the same persona can sit in Telegram / Discord / Slack / Lark / KOOK groups and DMs through [AstrBot](https://github.com/AstrBotDevs/AstrBot)'s platform adapters.
+
+```
+Telegram / Discord / Slack / …  -->  AstrBot + forwarder plugin  --HTTP-->  agent /webhook/gateway
+QQ                              -->  NapCat                      --HTTP-->  agent /webhook/qq      (unchanged)
+```
+
+1. Install AstrBot and configure the platform adapters you want.
+2. Copy `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` into AstrBot's `data/plugins/` and set its config (agent URL, optional shared token, group/DM whitelists). Full reference: [plugin README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md).
+3. Optional hardening in `.env`: `GATEWAY_TOKEN` (shared secret checked on the webhook) and `GATEWAY_OWNER_IDS` (treat e.g. `telegram:12345` as the owner). See `.env.example`.
+
+Gateway conversations are namespaced `<platform>:<id>`, so memory and state never collide with QQ. Keep `aiocqhttp` in the plugin's excluded platforms (the default) when NapCat already feeds the agent directly, or QQ messages get handled twice. QQ-only machinery (sticker stealing, OCR, proactive / missed-mention catch-up) stays on the QQ path; text / sticker / mention replies work everywhere.
 
 ## Language (English / 中文)
 

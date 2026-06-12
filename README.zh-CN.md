@@ -27,6 +27,7 @@
 | `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
 | `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
+| `gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊。回归测试在 `tests/test_gateway.py`（直接 `python tests/test_gateway.py`，不需要 pytest） |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
 | `tools/auto_reviewer.py` | 扫 `eval.jsonl` 里低分条目，自动生成 `failure_mode + constraint + BAD/OK 草稿` 用于打补丁 |
 | `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
@@ -137,6 +138,21 @@ agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
 ```
 
 > **Windows 一键启动:** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。用之前先改文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；它会自动优先用 `.venv`。
+
+## 多平台接入（AstrBot，可选）
+
+上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK 的群聊和私聊。
+
+```
+Telegram / Discord / Slack / …  -->  AstrBot + 转发插件  --HTTP-->  agent /webhook/gateway
+QQ                              -->  NapCat             --HTTP-->  agent /webhook/qq      (不变)
+```
+
+1. 装好 AstrBot，配上想要的平台适配器。
+2. 把 `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` 拷进 AstrBot 的 `data/plugins/`，改插件配置（agent 地址、可选共享密钥、群/私聊白名单）。完整说明见[插件 README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)。
+3. `.env` 可选加固：`GATEWAY_TOKEN`（webhook 共享密钥）和 `GATEWAY_OWNER_IDS`（把例如 `telegram:12345` 当主人对待），见 `.env.example`。
+
+网关会话全部带 `<平台>:<id>` 命名空间，记忆和状态不会跟 QQ 串。NapCat 直连 agent 时，插件的排除平台里要留着 `aiocqhttp`（默认就是），否则 QQ 消息会被处理两遍。QQ 专属机制（偷表情包、OCR、主动发言/漏 @ 补抓）只走 QQ 链路；文字 / 表情包 / @ 回复全平台都通。
 
 ## 语言（English / 中文）
 

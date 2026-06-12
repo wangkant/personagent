@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from gateway import GatewaySink, current_sink, synthesize_onebot_payload
 from stickers import StickerLibrary
 
 logger = logging.getLogger("agent")
@@ -330,6 +331,7 @@ class Agent:
         stickers_file: str = "stickers.json",
         message_debounce_sec: float = 2.5,
         lang: str = "",
+        gateway_owner_ids: tuple = (),
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -418,6 +420,14 @@ class Agent:
         # owner override. Empty = only OWNER_QQ can DM.
         self.private_allowed_qqs: set = {
             q.strip() for q in os.getenv("PRIVATE_ALLOWED_QQS", "").split(",") if q.strip()
+        }
+
+        # Gateway DM owners: platform-prefixed ids (e.g. "telegram:12345") that
+        # get the owner branch when they DM the bot through the gateway. The
+        # gateway path itself is open (the forwarding plugin's config is the
+        # access filter); this set only selects the closer owner persona.
+        self.gateway_owner_ids: set = {
+            str(i).strip() for i in (gateway_owner_ids or ()) if str(i).strip()
         }
 
         # Proactive mechanism: a background loop that occasionally self-initiates
@@ -541,6 +551,26 @@ class Agent:
             logger.exception("[Agent] handle failed")
             return False
 
+    async def handle_gateway(self, event: dict) -> dict:
+        """Handle one platform-neutral event forwarded by a gateway plugin.
+
+        Synchronous round-trip: a GatewaySink is installed as a contextvar so
+        the NapCat send funnels divert their messages into it, then the normal
+        pipeline runs to completion and the collected replies go back in the
+        HTTP response (the forwarder relays them to the source platform)."""
+        payload = synthesize_onebot_payload(event, self.bot_qq)
+        sink = GatewaySink()
+        tok = current_sink.set(sink)
+        try:
+            handled = await self.handle(payload)
+        finally:
+            # Close before reset: background tasks spawned during handling
+            # inherit a context that still references this sink, and a send
+            # after the response is gone should be dropped, not collected.
+            sink.closed = True
+            current_sink.reset(tok)
+        return {"handled": bool(handled), "replies": sink.items}
+
     async def _handle_inner(self, payload: dict) -> bool:
         if not self.enabled:
             return False
@@ -559,11 +589,18 @@ class Agent:
 
         # Private chat: OWNER_QQ + anyone in PRIVATE_ALLOWED_QQS. Owner gets
         # the closer "private overrides" branch; everyone else gets a more
-        # neutral "ordinary friend" branch.
+        # neutral "ordinary friend" branch. Gateway DMs bypass the QQ whitelist
+        # (the forwarding plugin's own config is the access filter) and use
+        # GATEWAY_OWNER_IDS for the owner branch. The bypass gates on the sink
+        # contextvar — set only inside handle_gateway, unforgeable from the
+        # network — never on payload flags: /webhook/qq accepts arbitrary
+        # JSON, so a crafted "_gateway": true must not skip the whitelist.
         if message_type == "private":
-            is_owner = bool(self.owner_qq) and user_id == self.owner_qq
-            if not is_owner and user_id not in self.private_allowed_qqs:
-                return False
+            is_owner = (bool(self.owner_qq) and user_id == self.owner_qq) \
+                or user_id in self.gateway_owner_ids
+            if current_sink.get() is None:
+                if not is_owner and user_id not in self.private_allowed_qqs:
+                    return False
             return await self._handle_private(user_id, payload, is_owner=is_owner)
 
         group_id = str(payload.get("group_id", "")).strip()
@@ -761,10 +798,17 @@ class Agent:
 
             reply = reply.strip().strip('"').strip("「」")
             at_uid = ""
-            at_match = re.search(r'\[AT:(\d+)\]', reply)
+            # Non-digit targets included: gateway user ids look like
+            # "telegram:12345" (the QQ path drops non-numeric ats in _send_qq).
+            at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
             if at_match:
                 at_uid = at_match.group(1)
                 reply = reply.replace(at_match.group(0), "").strip()
+                # Strip any leftover markers too (e.g. a second, hallucinated
+                # "[AT:Bob]"): the validator removes markers before
+                # whitelisting, so an un-stripped one would otherwise be sent
+                # as literal text.
+                reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
             if not at_uid and mode == "called":
                 at_uid = user_id
             if auto_mem:
@@ -975,6 +1019,12 @@ class Agent:
 
     async def _napcat_send_private(self, user_id: str, message) -> None:
         """Single-shot private send. message: str or list of segments."""
+        sink = current_sink.get()
+        if sink is not None:
+            # Gateway capture: hand the reply back over HTTP instead of
+            # posting to NapCat (gateway ids aren't ints anyway).
+            sink.add(message)
+            return
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.post(
@@ -1049,7 +1099,12 @@ class Agent:
                     continue
                 desc = await self._describe_image(url)
                 parts.append(f"[image: {desc}]" if desc else "[image]")
-                if group_id and sender_uid != self.bot_qq:
+                # Sticker stealing is a QQ-path feature: gateway images must
+                # not get cataloged into the QQ sticker library or burn
+                # tagging calls, so skip the spawn while the gateway sink is
+                # set (the steal decision happens inside handle_gateway).
+                if group_id and sender_uid != self.bot_qq \
+                        and current_sink.get() is None:
                     self._spawn(self._steal_image_async(
                         url=url,
                         sender_uid=sender_uid,
@@ -1102,10 +1157,19 @@ class Agent:
         self.stickers._append_context(filename, sender_uid, ctx)
 
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
-        """Fetch image bytes. Handles file:// (local read for NapCat local-cache
+        """Fetch image bytes. Handles base64:// (inline data from a gateway
+        b64-only image segment), file:// (local read for NapCat local-cache
         mode) and http(s) (httpx)."""
         if not url:
             return None
+        if url.startswith("base64://"):
+            # synthesize_onebot_payload emits a base64:// file field when the
+            # forwarder had no URL — the bytes are inline, nothing to fetch.
+            try:
+                return base64.b64decode(url[len("base64://"):])
+            except Exception as e:
+                logger.debug("[Agent] base64 image decode failed: %s", e)
+                return None
         if url.startswith("file://"):
             from urllib.parse import urlparse, unquote
             parsed = urlparse(url)
@@ -2575,6 +2639,12 @@ class Agent:
         message: str or list of segments. Returns True on success so callers
         (e.g. _send_qq) can stop emitting later chunks on a hard failure and
         avoid truncated / out-of-order replies."""
+        sink = current_sink.get()
+        if sink is not None:
+            # Gateway capture: hand the reply back over HTTP instead of
+            # posting to NapCat (gateway ids aren't ints anyway).
+            sink.add(message)
+            return True
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
             try:
@@ -2612,6 +2682,14 @@ class Agent:
         sent_stickers: list[str] = []
         if not text:
             return sent_stickers
+        # On the QQ path an at target must be a bare QQ number — a hallucinated
+        # non-numeric [AT:] marker would produce a broken NapCat at segment, so
+        # drop the mention (the marker text was already stripped upstream).
+        # Gateway sends keep prefixed ids like "telegram:12345" as-is.
+        if at_user_id and not at_user_id.isdigit() and current_sink.get() is None:
+            logger.warning("[Agent] dropping non-numeric at target %r (group=%s)",
+                           at_user_id, group_id)
+            at_user_id = ""
         segments = self._parse_sticker_markers(text)
         is_first = True
         for kind, value in segments:
@@ -2672,6 +2750,10 @@ class Agent:
             return
         fallback_groups = [g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()]
         for group_id in list(self.buffers.keys()) or fallback_groups:
+            # Gateway conversations ("<platform>:<id>") are inbound-only; the
+            # NapCat history API can't poll them (and int() would crash).
+            if ":" in group_id:
+                continue
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
                     r = await client.post(
@@ -2751,6 +2833,10 @@ class Agent:
         ]
         random.shuffle(groups)
         for gid in groups:
+            # Gateway conversations ("<platform>:<id>") are inbound-only;
+            # there is no NapCat send channel to cold-open them through.
+            if ":" in gid:
+                continue
             last_act = self.last_activity_at.get(gid, 0.0)
             # Never cold-open a group we've observed no activity in this run, and
             # only after it's been quiet long enough.
@@ -3196,9 +3282,36 @@ class Agent:
                          type(e).__name__, e)
             return ""
 
+    @staticmethod
+    def _sniff_image_mime(img_bytes: bytes) -> str:
+        """Magic-byte mime sniff for the formats vision APIs accept;
+        jpeg fallback for anything unrecognized."""
+        if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+            return "image/png"
+        if img_bytes[:3] == b"\xff\xd8\xff":
+            return "image/jpeg"
+        if img_bytes[:4] == b"GIF8":
+            return "image/gif"
+        if img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
+            return "image/webp"
+        return "image/jpeg"
+
     async def _describe_image_anthropic(self, url: str) -> str:
         """Anthropic SDK vision call (claude-haiku / claude-sonnet / etc.)."""
         try:
+            if url.startswith("base64://"):
+                # b64-only gateway image: the API can't fetch a pseudo-URL,
+                # so pass the decoded bytes as a base64 source instead.
+                img_bytes = await self._fetch_image_bytes(url)
+                if not img_bytes:
+                    return ""
+                source = {
+                    "type": "base64",
+                    "media_type": self._sniff_image_mime(img_bytes),
+                    "data": base64.b64encode(img_bytes).decode(),
+                }
+            else:
+                source = {"type": "url", "url": url}
             client = self._get_anthropic_client()
             response = await asyncio.wait_for(
                 client.messages.create(
@@ -3207,7 +3320,7 @@ class Agent:
                     messages=[{
                         "role": "user",
                         "content": [
-                            {"type": "image", "source": {"type": "url", "url": url}},
+                            {"type": "image", "source": source},
                             {"type": "text", "text": self.VISION_PROMPT},
                         ],
                     }],
@@ -3238,6 +3351,13 @@ class Agent:
             caption = await self._describe_image_anthropic(url)
         if caption:
             return caption
+
+        # The OCR fallback is a QQ-path facility: NapCat cannot fetch
+        # foreign-platform URLs or base64 pseudo-URLs, so a gateway image
+        # would only burn a doomed NapCat call. Skip it while the gateway
+        # sink is set.
+        if current_sink.get() is not None:
+            return ""
 
         ocr_text = await self._ocr_image(url)
         if ocr_text and len(ocr_text) >= 4:
@@ -3996,7 +4116,9 @@ class Agent:
             return False, "empty"
         if len(text) > 500:
             return False, f"too long ({len(text)})"
-        marker_pat = re.compile(r'\[(?:STICKER:[^\[\]\s]+|AT:\d+)\]')
+        # AT targets aren't only digits anymore: gateway ids look like
+        # "telegram:12345", so the marker class matches anything bracket-safe.
+        marker_pat = re.compile(r'\[(?:STICKER:[^\[\]\s]+|AT:[^\]\s]+)\]')
         has_marker = bool(marker_pat.search(text))
         residual = marker_pat.sub('', text).strip()
         if not residual:

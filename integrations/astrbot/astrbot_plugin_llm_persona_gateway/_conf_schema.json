@@ -1,0 +1,42 @@
+{
+  "agent_url": {
+    "type": "string",
+    "description": "URL of the persona agent's gateway endpoint (POST /webhook/gateway).",
+    "default": "http://127.0.0.1:8080/webhook/gateway"
+  },
+  "gateway_token": {
+    "type": "string",
+    "description": "Shared secret sent as the X-Gateway-Token header. Leave empty if the agent has no GATEWAY_TOKEN configured.",
+    "default": ""
+  },
+  "timeout_s": {
+    "type": "int",
+    "description": "HTTP timeout in seconds for one agent round-trip. The agent simulates human typing delays before answering, so keep this generous.",
+    "default": 180
+  },
+  "excluded_platforms": {
+    "type": "list",
+    "description": "Platform adapter names that must NOT be forwarded. Keep aiocqhttp here when NapCat already feeds the agent directly, otherwise QQ messages would be handled twice.",
+    "default": ["aiocqhttp"]
+  },
+  "group_whitelist": {
+    "type": "list",
+    "description": "Group IDs to forward. An empty list forwards all groups.",
+    "default": []
+  },
+  "private_enabled": {
+    "type": "bool",
+    "description": "Forward private (direct) messages to the agent.",
+    "default": true
+  },
+  "private_whitelist": {
+    "type": "list",
+    "description": "Sender IDs allowed in private chat. An empty list allows all senders (when private_enabled is on).",
+    "default": []
+  },
+  "block_default": {
+    "type": "bool",
+    "description": "Stop the AstrBot pipeline after forwarding so the built-in LLM never double-replies in conversations owned by the agent.",
+    "default": true
+  }
+}

@@ -57,6 +57,12 @@ VISION_MODEL = os.getenv("VISION_MODEL", "")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+# Gateway (platform-neutral forwarding): shared secret for /webhook/gateway
+# (blank = no auth) and platform-prefixed ids treated as owner in gateway DMs.
+GATEWAY_TOKEN = os.getenv("GATEWAY_TOKEN", "")
+GATEWAY_OWNER_IDS = tuple(
+    s.strip() for s in os.getenv("GATEWAY_OWNER_IDS", "").split(",") if s.strip()
+)
 
 # ========== Logging ==========
 _log_root = logging.getLogger()
@@ -136,6 +142,7 @@ async def lifespan(app: FastAPI):
             glm_base_url=GLM_BASE_URL,
             tavily_key=TAVILY_API_KEY,
             lang=AGENT_LANG,
+            gateway_owner_ids=GATEWAY_OWNER_IDS,
         )
         _spawn(agent.probe_models())
         _spawn(agent.check_missed_mentions())
@@ -201,6 +208,13 @@ async def qq_webhook(request: Request):
         payload = await request.json()
     except Exception:
         payload = {}
+    # Defense in depth: these keys mark payloads synthesized inside
+    # handle_gateway and must never arrive from the network. Security
+    # decisions gate on the sink contextvar, but strip them anyway so an
+    # external body can't masquerade as gateway-synthesized.
+    if isinstance(payload, dict):
+        payload.pop("_gateway", None)
+        payload.pop("_platform", None)
     if agent:
         # Non-blocking: don't make NapCat wait for the LLM round-trip.
         # Wrap in a guard so a raised exception is logged instead of vanishing
@@ -212,6 +226,28 @@ async def qq_webhook(request: Request):
                 logger.exception("handle failed")
         _spawn(_safe_handle())
     return {"ok": True}
+
+
+@app.post("/webhook/gateway")
+async def gateway_webhook(request: Request):
+    """Platform-neutral inbound endpoint for forwarder plugins (schema in
+    gateway.py). Unlike /webhook/qq this is a synchronous round-trip: the
+    forwarder needs the replies in the response body to relay them back, so
+    the full handle pipeline (debounce + typing simulation included) runs
+    before returning — set the plugin's HTTP timeout accordingly."""
+    if GATEWAY_TOKEN and request.headers.get("X-Gateway-Token") != GATEWAY_TOKEN:
+        return JSONResponse(status_code=403, content={"error": "invalid gateway token"})
+    try:
+        event = await request.json()
+    except Exception:
+        event = {}
+    if not isinstance(event, dict):
+        # A body that parses to JSON null/list/string would otherwise hit
+        # event.get(...) in synthesize_onebot_payload and 500.
+        event = {}
+    if agent is None:
+        return {"handled": False, "replies": []}
+    return await agent.handle_gateway(event)
 
 if __name__ == "__main__":
     import uvicorn
