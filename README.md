@@ -41,10 +41,10 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 <summary>Implementation detail (handler call chain)</summary>
 
 ```
-NapCat (QQ ↔ OneBot)
-    │
-    │  HTTP POST /webhook/qq
-    ▼
+NapCat (QQ ↔ OneBot)          AstrBot + forwarder plugin
+    │                              │
+    │  POST /webhook/qq            │  POST /webhook/gateway
+    ▼                              ▼
 ┌──────────────────── main.py (FastAPI) ────────────────────┐
 │                                                            │
 │  ┌──────────────────── agent.py ────────────────────────┐  │
@@ -70,10 +70,10 @@ NapCat (QQ ↔ OneBot)
 │  │  → eval feedback loop → freshness-biased selection    │  │
 │  └──────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────┘
-    │
-    │  HTTP POST /send_group_msg
-    ▼
-NapCat → QQ
+    │                              │
+    │  POST /send_group_msg        │  replies in the gateway response
+    ▼                              ▼
+NapCat → QQ                   AstrBot → Telegram / Discord / …
 ```
 </details>
 

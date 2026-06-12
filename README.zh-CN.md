@@ -41,10 +41,10 @@
 <summary>实现细节（handler 调用链）</summary>
 
 ```
-NapCat (QQ ↔ OneBot)
-    │
-    │  HTTP POST /webhook/qq
-    ▼
+NapCat (QQ ↔ OneBot)          AstrBot + 转发插件
+    │                              │
+    │  POST /webhook/qq            │  POST /webhook/gateway
+    ▼                              ▼
 ┌──────────────────── main.py (FastAPI) ────────────────────┐
 │                                                            │
 │  ┌──────────────────── agent.py ────────────────────────┐  │
@@ -70,10 +70,10 @@ NapCat (QQ ↔ OneBot)
 │  │  → eval 反馈闭环 → 偏向新鲜度的选择                     │  │
 │  └──────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────┘
-    │
-    │  HTTP POST /send_group_msg
-    ▼
-NapCat → QQ
+    │                              │
+    │  POST /send_group_msg        │  网关响应里带回复
+    ▼                              ▼
+NapCat → QQ                   AstrBot → Telegram / Discord / …
 ```
 </details>
 
