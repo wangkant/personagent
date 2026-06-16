@@ -294,6 +294,28 @@ SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
 # the "human who sometimes can't be bothered" range.
 
 
+class _PooledHTTP:
+    """An ``async with``-compatible handle over a shared, long-lived httpx client.
+
+    Entering returns the pooled client; exiting does NOT close it. This swaps the
+    "new AsyncClient per call (pays a fresh TCP+TLS handshake every time)" pattern
+    for a config-keyed connection pool — the same approach Hermes uses. Call sites
+    keep their ``async with`` form unchanged; only ``httpx.AsyncClient(`` becomes
+    ``self._http(``.
+    """
+
+    __slots__ = ("_client",)
+
+    def __init__(self, client):
+        self._client = client
+
+    async def __aenter__(self):
+        return self._client
+
+    async def __aexit__(self, *exc):
+        return False  # shared client — never closed here
+
+
 class Agent:
     def __init__(
         self,
@@ -352,6 +374,12 @@ class Agent:
         self.fallback_duration = fallback_duration
         self.model_calls: deque = deque()
         self._fallback_until: float = 0.0
+        # LLM transient-error retry count (Hermes-style jittered backoff; 0 disables).
+        self.api_max_retries = int(os.getenv("LLM_MAX_RETRIES", "2") or 2)
+        # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
+        self._http_pool: dict = {}
+        # Main LLM call timeout (seconds); reasoning models can be slow.
+        self.llm_timeout = float(os.getenv("LLM_TIMEOUT", "120") or 120)
         self.bot_qq = str(bot_qq)
         self.bot_name = bot_name
         # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
@@ -399,8 +427,6 @@ class Agent:
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
         self.private_history: dict[str, list[dict]] = {}
-
-        self._anthropic_client = None
 
         self.eval_enable = eval_enable
         self.eval_model = eval_model or self.fallback_model or self.model
@@ -527,6 +553,14 @@ class Agent:
             logger.warning("[Agent] seen_msg_ids load failed: %s: %s",
                            type(e).__name__, e)
 
+        # Quote-reply resolution index: message_id -> "speaker: text". When a
+        # later message quotes an earlier one, _extract_text looks it up here
+        # (zero cost) before falling back to a NapCat get_msg call. Without it the
+        # quoted content never reaches the model and it has to guess who/what it
+        # is replying to → wrong-person / crossed-thread replies (off-topic).
+        self._msg_index: dict[str, str] = {}
+        self._msg_index_cap = 1000
+
         self.enabled = bool(api_key)
         if not self.enabled:
             logger.warning("[Agent] DEEPSEEK_API_KEY not configured; %s disabled", bot_name)
@@ -639,6 +673,11 @@ class Agent:
         # === Phase 1: absorb message, handle immediate commands, stamp seq ===
         async with self.locks[group_id]:
             self._append_buffer(group_id, nickname, text[:200], user_id)
+            # Index this message for quote-reply resolution (Layer A, zero API):
+            # a later "reply to this" can fetch the original text locally.
+            _mid = payload.get("message_id")
+            if _mid is not None:
+                self._index_msg(_mid, f"{nickname}: {text[:60]}")
             self.last_activity_at[group_id] = time.time()  # silence tracking for the proactive loop
             self.active_users[group_id].append((user_id, nickname))
             if not is_noise:
@@ -1026,7 +1065,7 @@ class Agent:
             sink.add(message)
             return
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with self._http(timeout=10) as client:
                 r = await client.post(
                     f"{self.napcat_api}/send_private_msg",
                     json={"user_id": int(user_id), "message": message},
@@ -1113,7 +1152,14 @@ class Agent:
             elif t == "face":
                 parts.append("[face]")
             elif t == "reply":
-                parts.append("[reply]")
+                # QQ quote-reply: data.id is the quoted message's id. Resolve it
+                # to the original text so the model knows what's being replied to;
+                # otherwise it sees a referent-less "[reply]111" and guesses who/
+                # what → wrong-person / crossed-thread replies. Falls back to a
+                # bare "[reply]" if it can't be fetched (never blocks / drops).
+                qid = d.get("id")
+                quoted = await self._resolve_quote(qid, group_id) if qid else ""
+                parts.append(f"[reply {quoted}]" if quoted else "[reply]")
             elif t == "record":
                 # Voice message — no ASR pipeline; show a clean placeholder
                 # so the raw CQ-code (which would leak file paths) doesn't
@@ -1124,7 +1170,9 @@ class Agent:
             elif t == "file":
                 parts.append("[file]")
             elif t == "forward":
-                parts.append("[forwarded-chat]")
+                # Merged-forward contents aren't fetched here — mark "not visible"
+                # so the model asks instead of fabricating what the forward said.
+                parts.append("[forwarded-chat (content not visible)]")
             elif t == "mface":
                 # Market emoji: the `summary` field often carries a name
                 # (e.g. "[dice]") — prefer it; otherwise fall back to a placeholder.
@@ -1140,6 +1188,57 @@ class Agent:
         if parts:
             return "".join(parts).strip()
         return payload.get("raw_message", "").strip()
+
+    def _index_msg(self, mid, rendered: str) -> None:
+        """Record a message_id -> 'speaker: text' entry for quote-reply
+        resolution (Layer A, zero cost). Bounded: drops the oldest on overflow."""
+        if mid is None or not rendered:
+            return
+        key = str(mid)
+        self._msg_index.pop(key, None)  # re-insert at the end to refresh recency
+        self._msg_index[key] = rendered
+        if len(self._msg_index) > self._msg_index_cap:
+            try:
+                del self._msg_index[next(iter(self._msg_index))]
+            except StopIteration:
+                pass
+
+    async def _resolve_quote(self, mid, group_id: str) -> str:
+        """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
+        understands the referent. Layer A: local _msg_index (zero cost, hits most
+        recent messages). Layer B: NapCat get_msg (one call, only on a miss). Any
+        failure returns '' — the caller degrades to a bare '[reply]', never
+        blocking or dropping the message."""
+        if mid is None:
+            return ""
+        key = str(mid)
+        hit = self._msg_index.get(key)
+        if hit:
+            return hit
+        # Gateway path has no NapCat to query; skip the API call.
+        if current_sink.get() is not None:
+            return ""
+        try:
+            async with self._http(timeout=4) as client:
+                r = await client.post(
+                    f"{self.napcat_api}/get_msg",
+                    json={"message_id": int(mid)},
+                )
+            data = r.json().get("data") or {}
+        except Exception as e:
+            logger.debug("[Agent] get_msg(%s) failed: %s: %s",
+                         mid, type(e).__name__, e)
+            return ""
+        sender = data.get("sender") or {}
+        name = (sender.get("card") or sender.get("nickname") or "")[:8]
+        raw = (data.get("raw_message") or "").strip()
+        # Strip nested CQ codes (image/at/reply/...) to keep a clean one-liner; cap.
+        raw = re.sub(r"\[CQ:[^\]]*\]", "", raw).strip()[:60]
+        if not raw:
+            return ""
+        rendered = f"{name}: {raw}" if name else raw
+        self._index_msg(key, rendered)  # cache so repeats in a burst skip the API
+        return rendered
 
     async def _record_sticker_context(self, md5: str, group_id: str, sender_uid: str) -> None:
         """Lightweight: log another context sighting for a known sticker
@@ -1199,7 +1298,7 @@ class Agent:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True, max_redirects=5) as c:
+            async with self._http(timeout=15, follow_redirects=True, max_redirects=5) as c:
                 r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 if r.status_code != 200:
                     return None
@@ -1337,7 +1436,7 @@ class Agent:
         real_url = url
         if "b23.tv" in url:
             try:
-                async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5) as client:
+                async with self._http(timeout=5, follow_redirects=True, max_redirects=5) as client:
                     r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                     real_url = str(r.url)
             except Exception as e:
@@ -1353,7 +1452,7 @@ class Agent:
         cid: int = 0
         up_mid: int = 0
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with self._http(timeout=5) as client:
                 r = await client.get(
                     "https://api.bilibili.com/x/web-interface/view",
                     params={"bvid": bvid},
@@ -1399,7 +1498,7 @@ class Agent:
         if self._wbi_keys[0] and now - self._wbi_keys_ts < 86400:
             return self._wbi_keys
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with self._http(timeout=5) as client:
                 r = await client.get(
                     "https://api.bilibili.com/x/web-interface/nav",
                     headers={"User-Agent": "Mozilla/5.0"},
@@ -1443,7 +1542,7 @@ class Agent:
             img_key, sub_key,
         )
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with self._http(timeout=8) as client:
                 r = await client.get(
                     "https://api.bilibili.com/x/web-interface/view/conclusion/get",
                     params=params,
@@ -1595,7 +1694,7 @@ class Agent:
     async def _fetch_oembed_youtube(self, url: str) -> str:
         """YouTube exposes a public oEmbed endpoint with no API key needed."""
         try:
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5) as c:
+            async with self._http(timeout=5, follow_redirects=True, max_redirects=5) as c:
                 r = await c.get(
                     "https://www.youtube.com/oembed",
                     params={"url": url, "format": "json"},
@@ -1639,7 +1738,7 @@ class Agent:
                 "Accept": "text/html,application/xhtml+xml",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             }
-            async with httpx.AsyncClient(timeout=5, follow_redirects=True, max_redirects=5, headers=headers) as c:
+            async with self._http(timeout=5, follow_redirects=True, max_redirects=5, headers=headers) as c:
                 r = await c.get(url)
                 if r.status_code != 200:
                     return ""
@@ -1694,18 +1793,73 @@ class Agent:
                 return True
         return False
 
-    def _get_anthropic_client(self):
-        """Lazy-create and cache the anthropic AsyncClient."""
-        if self._anthropic_client is not None:
-            return self._anthropic_client
-        import anthropic as _anthropic
-        kwargs: dict = {"api_key": self.anthropic_key or self.api_key}
-        if self.anthropic_base_url:
-            kwargs["base_url"] = self.anthropic_base_url
-        elif self.base_url:
-            kwargs["base_url"] = self.base_url + "/anthropic"
-        self._anthropic_client = _anthropic.AsyncAnthropic(**kwargs)
-        return self._anthropic_client
+    # _get_anthropic_client removed: all LLM calls now go through the provider's
+    # OpenAI-compatible endpoint (/v1/chat/completions) via httpx; no anthropic SDK.
+
+    def _http(self, **kwargs) -> "_PooledHTTP":
+        """Pooled httpx client. Use exactly like a native ``AsyncClient`` context.
+
+        Identical constructor kwargs reuse the same client (a keep-alive
+        connection pool), eliminating the per-request TCP+TLS handshake. The
+        clients are process-lived and need no explicit close.
+        """
+        def _norm(v):
+            return tuple(sorted(v.items())) if isinstance(v, dict) else v
+
+        key = tuple(sorted((k, _norm(v)) for k, v in kwargs.items()))
+        client = self._http_pool.get(key)
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(**kwargs)
+            self._http_pool[key] = client
+        return _PooledHTTP(client)
+
+    @staticmethod
+    def _classify_api_error(e: BaseException) -> str:
+        """A miniature of Hermes's error_classifier — picks a recovery strategy.
+
+        Returns:
+          rate_limit    — throttle/overload: switch to fallback model now + set cooldown
+          transient     — network/timeout/5xx: jittered backoff, retry same model
+          fatal_auth    — auth/billing: neither retry nor model swap helps; re-raise
+          fatal_request — 4xx request-level: don't retry, but a fallback model may work
+        Unknown errors are treated as transient (Hermes's default: unknown = retryable).
+        """
+        msg = str(e).lower()
+        name = type(e).__name__.lower()
+        # Prefer a structured HTTP status code when the SDK exposes one
+        # (anthropic.APIStatusError.status_code, or .response.status_code) so a
+        # number inside a request id / token count isn't read as a status code.
+        status = getattr(e, "status_code", None)
+        if status is None:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+        try:
+            status = int(status) if status is not None else None
+        except (TypeError, ValueError):
+            status = None
+        # Fallback: a word-boundary 4xx/5xx from the message. \b keeps '401' from
+        # matching inside '4012345' and '504' from matching inside '5040 tokens'.
+        if status is None:
+            m = re.search(r"\b([45]\d\d)\b", msg)
+            if m:
+                status = int(m.group(1))
+
+        if status in (429, 529) or any(k in msg for k in (
+                "rate limit", "rate_limit", "too many requests", "overloaded")):
+            return "rate_limit"
+        if status in (401, 403) or any(k in msg for k in (
+                "invalid api key", "authentication", "insufficient",
+                "balance", "quota", "billing")):
+            return "fatal_auth"
+        if status in (400, 404, 422) or any(k in msg for k in (
+                "model not found", "bad request", "invalid request", "unprocessable")):
+            return "fatal_request"
+        if ((status is not None and 500 <= status <= 599)
+                or any(k in name for k in ("timeout", "connect", "network", "protocol"))
+                or any(k in msg for k in ("timeout", "timed out", "connection",
+                                          "peer closed", "ssl", "eof", "server error",
+                                          "service unavailable", "internal error"))):
+            return "transient"
+        return "transient"
 
     async def _call_anthropic(
         self,
@@ -1716,39 +1870,34 @@ class Agent:
         enable_search: bool = True,
         disable_thinking: bool = False,
     ) -> str:
-        """Unified Anthropic call: web_search tool, error logging, empty-reply fallback.
+        """Unified LLM call → the provider's OpenAI-compatible endpoint
+        (/v1/chat/completions). No anthropic SDK. Carries web_search, jittered
+        retry + error-driven fallback, and empty-reply logging.
 
-        `system` may be a plain string OR a list of `{"type":"text", "text":..., "cache_control":...}`
-        blocks. The list form lets callers mark persistent prompt segments for
-        Anthropic prompt caching, dropping repeated-call input token cost to
-        ~10% for those blocks. If the endpoint doesn't recognize cache_control
-        (some compatible endpoints don't), we flatten the list back into a
-        string and retry — same pattern as the `thinking` param probe.
+        `system` may be a plain string OR a list of `{"type":"text", "text":...}`
+        blocks (the old cache_control segmentation form); it is flattened into a
+        single system message. Providers like DeepSeek auto prefix-cache identical
+        prefixes, so no explicit cache_control is needed.
 
-        Some Anthropic-compatible endpoints keep thinking blocks ON by default
-        and they consume max_tokens — if stop_reason=max_tokens and only a
-        ThinkingBlock came back, we auto-retry once with double the budget.
-        disable_thinking=True passes thinking={"type":"disabled"} (used for
-        judge mode where we only need PASS/REPLY)."""
-        client = self._get_anthropic_client()
-        no_thinking = disable_thinking and not getattr(self, "_anthropic_no_thinking_param", False)
-        cache_disabled = getattr(self, "_anthropic_no_cache_control", False)
+        disable_thinking is kept for signature compatibility but ignored on the
+        OpenAI endpoint (the message `content` is the answer)."""
+        if not (self.base_url and self.api_key):
+            logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
+            return ""
+        # `system` may be a str or a list of {"type":"text","text":...} blocks; flatten.
+        if isinstance(system, list):
+            sys_text = "".join(blk.get("text", "") for blk in system if isinstance(blk, dict))
+        else:
+            sys_text = system or ""
+        _url = f"{self.base_url}/v1/chat/completions"
+        _headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-        def _system_for_call():
-            if cache_disabled and isinstance(system, list):
-                return "".join(blk.get("text", "") for blk in system if isinstance(blk, dict))
-            return system
-
-        async def _do_call(mtok: int, with_disable: bool):
-            kwargs: dict = {
-                "model": model,
-                "max_tokens": mtok,
-                "system": _system_for_call(),
-                "messages": messages,
-            }
-            if with_disable:
-                kwargs["thinking"] = {"type": "disabled"}
-            return await client.messages.create(**kwargs)
+        async def _do_call(mtok: int, mdl: str):
+            payload = {"model": mdl, "max_tokens": mtok, "messages": _oai_messages}
+            async with self._http(timeout=self.llm_timeout) as client:
+                resp = await client.post(_url, headers=_headers, json=payload)
+            resp.raise_for_status()
+            return resp.json()
 
         # Web search: let the model decide (OpenAI-compatible /v1
         # function-calling), fetch real results (Tavily if keyed, else
@@ -1767,78 +1916,80 @@ class Agent:
                     "content": f"<web_search_results>\n{_sr}\n</web_search_results>\n\n{_last.get('content', '')}",
                 }]
 
+        # OpenAI endpoint uses a single system message; provider auto prefix-caches.
+        _oai_messages = ([{"role": "system", "content": sys_text}] if sys_text else []) + list(messages)
+
+        # ── Hermes-style call recovery: jittered backoff on transient errors +
+        # error-driven model failover ──
+        # Network blips / 5xx auto-retry; throttling switches to the fallback model
+        # immediately and arms a cooldown window (_pick_group_model then routes
+        # subsequent traffic to the fallback too); after retries are exhausted a
+        # non-auth error gets one last shot on the fallback model.
+        async def _call_with_recovery():
+            cur_model = model
+            attempt = 0
+            while True:
+                try:
+                    return (await _do_call(max_tokens, cur_model)), cur_model
+                except Exception as e:
+                    kind = self._classify_api_error(e)
+                    # Throttled: arm a cooldown window (later calls reroute via
+                    # _pick_group_model) and switch to the fallback model now — don't
+                    # waste retries on the throttled model.
+                    if (kind == "rate_limit" and self.fallback_model
+                            and cur_model != self.fallback_model):
+                        self._fallback_until = max(
+                            self._fallback_until, time.time() + self.fallback_duration)
+                        logger.warning(
+                            "[Agent] throttled (model=%s); cooldown %ds, switching to fallback=%s: %s",
+                            cur_model, self.fallback_duration, self.fallback_model, e)
+                        cur_model = self.fallback_model
+                        attempt = 0  # give the fallback model its own retry budget
+                        continue
+                    # Transient: exponential backoff + jitter, retry same model.
+                    if (kind in ("transient", "rate_limit")
+                            and attempt < self.api_max_retries):
+                        delay = (1.5 * (2 ** attempt)) * (0.7 + random.random() * 0.6)
+                        attempt += 1
+                        logger.warning(
+                            "[Agent] API %s error (attempt %d/%d, model=%s), retrying in %.1fs: %s",
+                            kind, attempt, self.api_max_retries, cur_model, delay, e)
+                        await asyncio.sleep(delay)
+                        continue
+                    # Retries exhausted / request-level error: one last shot on the
+                    # fallback model (except auth/billing, which it can't fix).
+                    if (kind != "fatal_auth" and self.fallback_model
+                            and cur_model != self.fallback_model):
+                        self._fallback_until = max(
+                            self._fallback_until, time.time() + self.fallback_duration)
+                        logger.warning(
+                            "[Agent] model=%s failed (%s); last attempt on fallback=%s",
+                            cur_model, kind, self.fallback_model)
+                        cur_model = self.fallback_model
+                        attempt = 0  # give the fallback model its own retry budget
+                        continue
+                    logger.warning("[Agent] LLM call failed (model=%s, %s): %s",
+                                   cur_model, kind, e)
+                    raise
+
+        data, used_model = await _call_with_recovery()
         try:
-            response = await _do_call(max_tokens, no_thinking)
+            _choice = (data.get("choices") or [{}])[0]
+            text = ((_choice.get("message") or {}).get("content") or "").strip()
+            finish = _choice.get("finish_reason", "?")
         except Exception as e:
-            msg = str(e).lower()
-            # Endpoint doesn't accept cache_control → flatten list to string, retry.
-            if (not cache_disabled and isinstance(system, list)
-                    and ("cache_control" in msg or "cache control" in msg)):
-                logger.warning("[Agent] cache_control not supported by endpoint; disabling caching: %s", e)
-                self._anthropic_no_cache_control = True
-                cache_disabled = True
-                try:
-                    response = await _do_call(max_tokens, no_thinking)
-                except Exception as e2:
-                    logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e2)
-                    raise
-            # Endpoint doesn't accept the thinking param → flag and retry without it.
-            elif no_thinking and (
-                "thinking" in msg or "unknown" in msg or "unsupported" in msg
-                or "bad request" in msg or "400" in msg
-            ):
-                logger.warning("[Agent] thinking=disabled not supported; stopping further attempts: %s", e)
-                self._anthropic_no_thinking_param = True
-                no_thinking = False
-                try:
-                    response = await _do_call(max_tokens, False)
-                except Exception as e2:
-                    logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e2)
-                    raise
-            else:
-                logger.warning("[Agent] Anthropic API call failed (model=%s): %s", model, e)
-                raise
-
-        text = "".join(
-            getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
-        ).strip()
-
-        # Thinking block ate the whole budget → retry once with double the budget (cap 6000).
-        stop_reason = getattr(response, "stop_reason", "?")
-        only_thinking = (
-            not text
-            and stop_reason == "max_tokens"
-            and any(type(b).__name__ == "ThinkingBlock" for b in response.content)
-        )
-        if only_thinking and max_tokens < 6000:
-            retry_tok = min(max_tokens * 2, 6000)
-            logger.info("[Agent] thinking block ate max_tokens=%d, retrying with max_tokens=%d",
-                        max_tokens, retry_tok)
-            try:
-                response = await _do_call(retry_tok, no_thinking)
-                text = "".join(
-                    getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
-                ).strip()
-                stop_reason = getattr(response, "stop_reason", "?")
-            except Exception as e:
-                logger.warning("[Agent] retry also failed (model=%s): %s", model, e)
+            logger.warning("[Agent] failed to parse LLM response: %s; data=%.300s", e, str(data))
+            return ""
 
         if not text:
-            logger.warning("[Agent] Anthropic returned empty text; stop_reason=%s blocks=%s",
-                           stop_reason,
-                           [type(b).__name__ for b in response.content])
-        # Cache visibility: usage.cache_read_input_tokens > 0 means the
-        # cached prefix matched and we paid ~10% for it; cache_creation_
-        # input_tokens > 0 means a new prefix was just created. Persistent
-        # zero values across calls indicate caching isn't taking effect
-        # (content changed each call, or endpoint silently ignores cache_control).
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            cr = getattr(usage, "cache_read_input_tokens", 0) or 0
-            cc = getattr(usage, "cache_creation_input_tokens", 0) or 0
-            if cr or cc:
-                logger.info("[Agent] cache: read=%d create=%d (model=%s)",
-                            cr, cc, model)
+            logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
+                           finish, used_model)
+        # Providers like DeepSeek auto prefix-cache; usage exposes hit/miss tokens.
+        usage = data.get("usage") or {}
+        _hit = usage.get("prompt_cache_hit_tokens")
+        _miss = usage.get("prompt_cache_miss_tokens")
+        if _hit or _miss:
+            logger.info("[Agent] cache: hit=%s miss=%s (model=%s)", _hit, _miss, used_model)
         return text
 
     def _might_need_search(self, text: str) -> bool:
@@ -1859,7 +2010,7 @@ class Agent:
         """Tavily search (keyed). Returns a compact results block, or '' on any
         failure — search must never break the reply."""
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with self._http(timeout=20) as client:
                 resp = await client.post(
                     "https://api.tavily.com/search",
                     json={
@@ -1948,7 +2099,7 @@ class Agent:
                 "max_tokens": 150,
                 "temperature": 0.1,
             }
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with self._http(timeout=20) as client:
                 resp = await client.post(
                     f"{self.base_url}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
@@ -2057,7 +2208,7 @@ class Agent:
             if "k2" in em:
                 eval_payload["thinking"] = {"type": "disabled"}
                 eval_payload["temperature"] = 0.6
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with self._http(timeout=15) as client:
                 r = await client.post(
                     eval_url,
                     headers={"Authorization": f"Bearer {eval_auth}"},
@@ -2171,6 +2322,23 @@ class Agent:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
 
+    @staticmethod
+    def _is_blind_content(text: str) -> bool:
+        """True if the trigger message carries only placeholders the bot can't
+        actually read (bare image/voice/video/file/forward/unresolved-quote),
+        with no readable text and no usable [image: caption] / [sticker: meaning]
+        / [reply X: text]. Used to tell the model not to fabricate — the @-forced
+        called/owner paths otherwise answer media they never saw."""
+        if not text:
+            return False
+        had_blind = bool(re.search(r"\[(image|voice|video|file|face|reply)\]|\[forwarded-chat", text))
+        if not had_blind:
+            return False
+        t = re.sub(r"\[(image|voice|video|file|face|reply)\]", "", text)
+        t = re.sub(r"\[forwarded-chat[^\]]*\]", "", t)
+        t = re.sub(r"\[AT:[^\]]+\]|@\S+|\[STICKER:[^\]]+\]", "", t)
+        return not t.strip()
+
     async def _think(
         self,
         group_id: str,
@@ -2189,6 +2357,19 @@ class Agent:
                 return f"[{m['name']}|qq={uid}] {m['text']}"
             return f"[{m['name']}] {m['text']}"
         history_text = "\n".join(_fmt_line(m) for m in history)
+
+        # If the triggering (latest) message is only placeholders the bot can't
+        # read (bare image/voice/video/file/forward/unresolved-quote), tell it not
+        # to fabricate. called/owner skip the PASS gate and must reply, so they're
+        # the ones that otherwise answer media they never saw.
+        blind_note = ""
+        if history and self._is_blind_content(history[-1].get("text", "")):
+            blind_note = (
+                "\n⚠️ This turn's trigger is something you **can't see** (image / voice / "
+                "video / file / forwarded chat, or a quoted message that couldn't be fetched) "
+                "— there's no text to go on. **Don't guess the content, don't pretend you saw it**: "
+                "either ask naturally ('what's that?' / 'what'd you send?') or PASS. **Never fabricate** details.\n"
+            )
 
         if caller_override:
             latest_nick, latest_uid = caller_override
@@ -2330,6 +2511,8 @@ class Agent:
             )
             if active_text:
                 user_prompt += f"\n\nRecently active members: {active_text}"
+
+        user_prompt += blind_note
 
         owner_block = ""
         if self.owner_qq and self.owner_name:
@@ -2559,6 +2742,13 @@ class Agent:
         text = text.strip()
         if text != original:
             logger.info("[Agent] sanitize: %r -> %r", original[:80], text[:80])
+        # Reasoning-leak guard: a degraded / protocol-ignoring model occasionally
+        # dumps its chain-of-thought into the reply. The whitelist validator below
+        # only catches garbled tokens, not fluent reasoning prose, so check here
+        # and drop the whole thing (PASS) — better silent than talking to itself.
+        if text and Agent._looks_like_reasoning_leak(text):
+            logger.warning("[Agent] reasoning-leak blocked, dropping reply: %r", text[:80])
+            return ""
         # Final gate: whitelist character validation. Any reply that doesn't
         # look like normal chat for the active language (XML / JSON / system
         # tokens / pipe characters / a leaked template) is dropped wholesale.
@@ -2570,6 +2760,28 @@ class Agent:
                            reason, text[:80])
             return ""
         return text
+
+    @staticmethod
+    def _looks_like_reasoning_leak(text: str) -> bool:
+        """Block internal reasoning from being sent as the reply (degraded /
+        protocol-ignoring models occasionally dump their chain-of-thought into
+        the reply field). The whitelist validator only catches garbled tokens,
+        not fluent reasoning prose. Conservative — only strong signals count; a
+        false positive just means PASS (don't send), which is the safe side."""
+        if not text:
+            return False
+        # Protocol field labels at line start = almost certainly a reasoning leak
+        # (a real reply never opens with "Decision:" / "Speaker:" / "决策:").
+        if re.search(r"(?im)^[\s\-•*]*(input|speaker|intent|decision|style|"
+                     r"输入|发言人|意图|决策|风格|分析|判断)\s*[:：]", text):
+            return True
+        # Self-narration about HOW to reply (describing the response process).
+        meta = ("i should reply", "let me reply", "let me respond", "i'll respond",
+                "先接这个", "我回不了那个", "回一句", "应该是看到", "按protocol")
+        low = text.lower()
+        hits = sum(1 for m in meta if m.lower() in low)
+        # Long reply (chat is rarely >80 chars) + ≥1 meta phrase, or any ≥2 → leak.
+        return (len(text) > 80 and hits >= 1) or hits >= 2
 
     @staticmethod
     def _split_text(text: str, max_len: int = 50) -> list[str]:
@@ -2648,7 +2860,7 @@ class Agent:
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
+                async with self._http(timeout=10) as client:
                     r = await client.post(
                         f"{self.napcat_api}/send_group_msg",
                         json={"group_id": int(group_id), "message": message},
@@ -2755,7 +2967,7 @@ class Agent:
             if ":" in group_id:
                 continue
             try:
-                async with httpx.AsyncClient(timeout=15) as client:
+                async with self._http(timeout=15) as client:
                     r = await client.post(
                         f"{self.napcat_api}/get_group_msg_history",
                         json={"group_id": int(group_id), "count": 10},
@@ -2905,7 +3117,7 @@ class Agent:
             return
 
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with self._http(timeout=15) as client:
                 r = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
@@ -2921,20 +3133,9 @@ class Agent:
         except Exception as e:
             logger.warning("[Agent] group model probe failed: %s", e)
 
-        if self.anthropic_key:
-            try:
-                # Reuse the cached client so the probe resolves base_url / key
-                # exactly like the production call path.
-                client = self._get_anthropic_client()
-                response = await client.messages.create(
-                    model=self.anthropic_private_model,
-                    max_tokens=1,
-                    messages=[{"role": "user", "content": "hi"}],
-                )
-                actual = getattr(response, "model", "?")
-                logger.info("[Agent] private model probe OK: configured=%s actual=%s", self.anthropic_private_model, actual)
-            except Exception as e:
-                logger.warning("[Agent] private model probe failed: %s", e)
+        # Private and group chat now share the same OpenAI-compatible endpoint
+        # (anthropic_private_model is just a model name); the group probe above
+        # already covers it, so no separate anthropic-endpoint probe.
 
     def _pick_group_model(self) -> str:
         """Pick primary or fallback model based on recent call frequency."""
@@ -3102,7 +3303,7 @@ class Agent:
                 # K2.6 only accepts temperature=0.6 (single-valued whitelist)
                 payload["temperature"] = 0.6
             raw = ""
-            async with httpx.AsyncClient(timeout=30) as c:
+            async with self._http(timeout=30) as c:
                 for attempt in range(4):
                     r = await c.post(
                         f"{self.glm_base_url}/chat/completions",
@@ -3256,7 +3457,7 @@ class Agent:
                 payload["thinking"] = {"type": "disabled"}
                 # K2.6 only accepts temperature=0.6 (single-valued whitelist)
                 payload["temperature"] = 0.6
-            async with httpx.AsyncClient(timeout=30) as c:
+            async with self._http(timeout=30) as c:
                 r = None
                 for attempt in range(3):
                     r = await c.post(
@@ -3297,58 +3498,24 @@ class Agent:
         return "image/jpeg"
 
     async def _describe_image_anthropic(self, url: str) -> str:
-        """Anthropic SDK vision call (claude-haiku / claude-sonnet / etc.)."""
-        try:
-            if url.startswith("base64://"):
-                # b64-only gateway image: the API can't fetch a pseudo-URL,
-                # so pass the decoded bytes as a base64 source instead.
-                img_bytes = await self._fetch_image_bytes(url)
-                if not img_bytes:
-                    return ""
-                source = {
-                    "type": "base64",
-                    "media_type": self._sniff_image_mime(img_bytes),
-                    "data": base64.b64encode(img_bytes).decode(),
-                }
-            else:
-                source = {"type": "url", "url": url}
-            client = self._get_anthropic_client()
-            response = await asyncio.wait_for(
-                client.messages.create(
-                    model=self.vision_model,
-                    max_tokens=120,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "source": source},
-                            {"type": "text", "text": self.VISION_PROMPT},
-                        ],
-                    }],
-                ),
-                timeout=20.0,
-            )
-            text = "".join(
-                getattr(b, "text", "") for b in response.content if getattr(b, "text", "")
-            )
-            return self._accept_vision_caption(url, text, "anthropic")
-        except Exception as e:
-            logger.debug("[Agent] Anthropic vision failed: %s: %s",
-                         type(e).__name__, e)
-            return ""
+        """Deprecated no-op: the Anthropic-SDK vision path was removed. Vision now
+        goes through the OpenAI-compatible endpoint (_describe_image_glm). Kept as
+        an empty shell so any stray reference degrades gracefully."""
+        return ""
 
     async def _describe_image(self, url: str) -> str:
-        """Route to GLM or Anthropic by vision_model prefix; OCR fallback on miss.
-        Filters garbage OCR (too short / single-char fragments)."""
+        """Vision goes through the OpenAI-compatible endpoint (_describe_image_glm
+        is the general OpenAI-compatible path; the name is historical). OCR
+        fallback on miss. Filters garbage OCR (too short / single-char fragments)."""
         if not url:
             return ""
         if url in self.image_caption_cache:
             return self.image_caption_cache[url]
 
         caption = ""
-        if self.vision_model.startswith("glm") and self.glm_api_key and self.glm_base_url:
+        if self.vision_model and self.glm_api_key and self.glm_base_url:
+            # OpenAI-compatible: glm-* / moonshot-* / kimi-* / deepseek-vl-* / qwen-vl-* …
             caption = await self._describe_image_glm(url)
-        elif self.vision_model:
-            caption = await self._describe_image_anthropic(url)
         if caption:
             return caption
 
@@ -3380,7 +3547,7 @@ class Agent:
         if url in self.image_caption_cache:
             return self.image_caption_cache[url]
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with self._http(timeout=15) as client:
                 r = await client.post(
                     f"{self.napcat_api}/ocr_image",
                     json={"image": url},

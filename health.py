@@ -28,22 +28,19 @@ def _get(url, timeout=10):
 
 
 def check_anthropic_chat():
-    """Anthropic-compatible endpoint for the main reply path (optional). When
-    ANTHROPIC_* is blank the agent routes the main path through the primary
-    endpoint's Anthropic-compatible URL ({DEEPSEEK_BASE_URL}/anthropic) with
-    DEEPSEEK_API_KEY, so this probe reports 'not configured' (skipped, not a
-    failure) unless you explicitly set ANTHROPIC_*."""
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    base = os.getenv("ANTHROPIC_BASE_URL", "")
-    model = os.getenv("ANTHROPIC_PRIVATE_MODEL", "")
-    if not (key and base and model):
+    """Private-chat model probe. Private and group chat now share the provider's
+    OpenAI-compatible endpoint (/v1/chat/completions); the anthropic SDK is no
+    longer used. Falls back to DEEPSEEK_* when ANTHROPIC_* is unset."""
+    key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("DEEPSEEK_API_KEY", "")
+    base = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    model = os.getenv("ANTHROPIC_PRIVATE_MODEL", "") or os.getenv("DEEPSEEK_MODEL", "")
+    if not (key and model):
         return None, "not configured"
-    import anthropic
-    client = anthropic.Anthropic(api_key=key, base_url=base)
-    r = client.messages.create(model=model, max_tokens=8,
-                               messages=[{"role": "user", "content": "reply with: ok"}])
-    txt = "".join(getattr(b, "text", "") for b in r.content).strip()
-    return True, (f"{model} -> {txt[:20]!r}" if txt else f"{model} responded (thinking model; short-reply budget)")
+    payload = {"model": model, "max_tokens": 8,
+               "messages": [{"role": "user", "content": "reply with: ok"}]}
+    r = _post_json(f"{base}/v1/chat/completions", payload, {"Authorization": f"Bearer {key}"})
+    txt = ((r["choices"][0]["message"] or {}).get("content") or "").strip()
+    return True, (f"{model} -> {txt[:20]!r}" if txt else f"{model} responded")
 
 
 def check_primary_chat_tools():
@@ -133,7 +130,7 @@ def check_onebot():
 
 # (name, probe, is_critical)
 CHECKS = [
-    ("Anthropic chat",          check_anthropic_chat,     True),
+    ("Private chat (openai)",   check_anthropic_chat,     True),
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),
