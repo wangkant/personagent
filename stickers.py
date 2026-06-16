@@ -293,7 +293,6 @@ class StickerLibrary:
                 model=self.tagger_model,
                 max_tokens=200,
                 enable_search=False,
-                max_search_uses=0,
             )
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
             try:
@@ -379,7 +378,6 @@ class StickerLibrary:
                     model=self.tagger_model,
                     max_tokens=40,
                     enable_search=False,
-                    max_search_uses=0,
                 )
                 raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
                 parsed = json.loads(raw)
