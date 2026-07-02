@@ -4,7 +4,7 @@
 
 **English** | [中文](README.zh-CN.md)
 
-A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, KOOK, and WeChat (via WeCom)** with no changes to the persona pipeline. This repo is primarily a study in LLM agent / prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repo is primarily a study in LLM agent / prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
@@ -141,7 +141,7 @@ agent   --(send replies)----->  NapCat :3000   (NAPCAT_API in .env)
 
 ## Multi-platform via AstrBot
 
-QQ/NapCat above is the primary path, but the agent also exposes a platform-neutral webhook — `POST /webhook/gateway` — so the same persona can sit in Telegram / Discord / Slack / Lark / KOOK / WeChat groups and DMs through [AstrBot](https://github.com/AstrBotDevs/AstrBot)'s platform adapters. The persona pipeline is untouched: the gateway synthesizes a neutral inbound event into the existing handler and captures replies through a context-local sink, and a bundled forwarder plugin does the AstrBot-side translation.
+QQ/NapCat above is the primary path, but the agent also exposes a platform-neutral webhook — `POST /webhook/gateway` — so the same persona can sit in Telegram / Discord / Slack / Lark / KOOK groups and DMs through [AstrBot](https://github.com/AstrBotDevs/AstrBot)'s platform adapters. The persona pipeline is untouched: the gateway synthesizes a neutral inbound event into the existing handler and captures replies through a context-local sink, and a bundled forwarder plugin does the AstrBot-side translation.
 
 ```
 Telegram / Discord / Slack / …  -->  AstrBot + forwarder plugin  --HTTP-->  agent /webhook/gateway
@@ -153,16 +153,6 @@ QQ                              -->  NapCat                      --HTTP-->  agen
 3. Optional hardening in `.env`: `GATEWAY_TOKEN` (shared secret checked on the webhook) and `GATEWAY_OWNER_IDS` (treat e.g. `telegram:12345` as the owner). See `.env.example`.
 
 Gateway conversations are namespaced `<platform>:<id>`, so memory and state never collide with QQ. Keep `aiocqhttp` in the plugin's excluded platforms (the default) when NapCat already feeds the agent directly, or QQ messages get handled twice. QQ-only machinery (sticker stealing, OCR, proactive / missed-mention catch-up) stays on the QQ path; text / sticker / mention replies work everywhere.
-
-### WeChat (the official, ban-safe route)
-
-Personal-WeChat bridges all rely on the unsanctioned pad/hook protocols and risk a ban. The clean alternative is **WeCom**, which AstrBot supports natively — no bridge binary, no database, no ban risk — at the cost of being a *work* bot (members talk to it inside WeCom, not in ordinary personal-WeChat friend groups). It needs no agent-side code: the forwarder plugin relays the `wecom` platform like any other.
-
-1. On [work.weixin.qq.com](https://work.weixin.qq.com): register an enterprise, then create a self-built app (Apps → Self-Built Apps). Collect the **CorpID** (My Company → Company Info), the app **AgentId** and **Secret**, and under Receive Messages → API Reception set a **Token** and **EncodingAESKey**.
-2. In AstrBot, add a `wecom` platform adapter with those values (`corpid`, `secret`, `token`, `encoding_aes_key`, `port`, `callback_server_host`).
-3. **Public callback:** unlike Telegram (which the bot polls outbound), WeCom *pushes* events to your callback URL, so AstrBot's callback port must be reachable from the internet — put it behind a reverse proxy / tunnel (frp, Cloudflare Tunnel, …) and register that URL in the app's Receive Messages settings.
-
-The bundled gateway plugin then forwards WeCom group + 1:1 messages to the agent automatically.
 
 ## Language (English / 中文)
 
