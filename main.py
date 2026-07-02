@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 import os
 import time
@@ -19,8 +22,16 @@ from health import run_checks, all_critical_ok
 load_dotenv(override=True)
 
 # ========== Config ==========
-HOST = os.getenv("HOST", "0.0.0.0")
+# Bind loopback by default: NapCat posts events from localhost
+# (NAPCAT_API=http://127.0.0.1:3000), so the webhook never needs to be
+# world-exposed. Set HOST=0.0.0.0 only for a split deployment, and then set
+# WEBHOOK_SECRET so forged OneBot payloads (impersonating OWNER_QQ, poisoning
+# memory, burning tokens) can't reach /webhook/qq.
+HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", 8080))
+# Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
+# /webhook/qq body must carry a matching `x-signature: sha1=<hex>` header.
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -167,7 +178,26 @@ async def lifespan(app: FastAPI):
         _spawn(_recheck_then_purge())
     logger.info("bot started on %s:%d (agent=%s, lang=%s)", HOST, PORT,
                 agent.enabled if agent else False, AGENT_LANG)
+    # Exposure warning: binding a non-loopback host without transport auth means
+    # anyone who can reach the port can forge events (impersonate OWNER_QQ,
+    # poison memory, fabricate per-key state, burn tokens).
+    if HOST not in ("127.0.0.1", "localhost", "::1"):
+        if not WEBHOOK_SECRET:
+            logger.warning("SECURITY: HOST=%s is not loopback and WEBHOOK_SECRET is unset — "
+                           "/webhook/qq accepts forged OneBot events. Set WEBHOOK_SECRET.", HOST)
+        if not GATEWAY_TOKEN:
+            logger.warning("SECURITY: HOST=%s is not loopback and GATEWAY_TOKEN is unset — "
+                           "/webhook/gateway is open (attacker-chosen keys). Set GATEWAY_TOKEN.", HOST)
     yield
+    # ---- shutdown: cancel background loops + force out throttled writes so
+    # buffered state (dedup ring / sticker index) isn't lost ----
+    for t in list(_bg_tasks):
+        t.cancel()
+    if agent is not None:
+        try:
+            agent.flush_state()
+        except Exception:
+            logger.exception("shutdown flush failed")
 
 app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
 
@@ -204,8 +234,20 @@ async def health():
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
+    body = await request.body()
+    # OneBot HMAC verification (opt-in via WEBHOOK_SECRET). Without it, anyone
+    # who can reach this port can POST a forged event — impersonate OWNER_QQ,
+    # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
+    # when its httpClient `secret` is set; configure both or leave unset (and
+    # keep HOST=127.0.0.1).
+    if WEBHOOK_SECRET:
+        sig = request.headers.get("x-signature", "")
+        expected = "sha1=" + hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha1).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            logger.warning("webhook rejected: bad/absent x-signature")
+            return JSONResponse(status_code=403, content={"error": "bad signature"})
     try:
-        payload = await request.json()
+        payload = json.loads(body or b"{}")
     except Exception:
         payload = {}
     # Defense in depth: these keys mark payloads synthesized inside

@@ -13,9 +13,23 @@ from typing import Awaitable, Callable, Optional
 
 logger = logging.getLogger("agent.stickers")
 
+# Strong refs to fire-and-forget tag tasks. Without this, a task GC'd before
+# its finally (which discards from _tagging_inflight) leaks the inflight entry
+# forever → that sticker can never be retagged.
+_BG_TASKS: set = set()
+
+
+def _spawn(coro) -> "asyncio.Task":
+    t = asyncio.create_task(coro)
+    _BG_TASKS.add(t)
+    t.add_done_callback(_BG_TASKS.discard)
+    return t
+
+
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
+SAVE_MIN_INTERVAL_SEC = 5.0  # _save() flush-throttle floor: hot paths call it on every sticker sighting; coalesce writes so the event loop isn't stalled
 RECENT_USE_COOLDOWN_SEC = 300  # min gap before re-sending the same sticker; sending one too often reads as a bot (fallback bucket prevents dropping sticker-only replies)
 
 # Bump this whenever the persona-fit prompt criteria change. On the next
@@ -49,6 +63,12 @@ class StickerLibrary:
         self._md5_index: dict[str, str] = {
             v["md5"]: k for k, v in self.entries.items() if v.get("md5")
         }
+        # _save() flush-throttle state (see _save). The in-memory entries are
+        # always current; a crash loses at most a few seconds of context /
+        # use_count updates (self-healing, non-critical). Important writes use
+        # _save(force=True).
+        self._dirty = False
+        self._last_save = 0.0
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
 
@@ -61,22 +81,45 @@ class StickerLibrary:
             logger.warning("stickers.json load failed: %s", e)
             return {}
 
-    def _save(self) -> None:
+    def _save(self, force: bool = False) -> None:
         # Atomic write: serialize to a .tmp then replace, so a crash mid-write
         # can't corrupt stickers.json.
+        # Throttled: hot-path callers (steal re-sighting / context / quality)
+        # fire this on every sticker sighting; rewriting the whole library each
+        # time blocks the event loop, so coalesce to at most once per
+        # SAVE_MIN_INTERVAL_SEC. Pass force=True for writes that must survive
+        # an immediate crash (new sticker / completed tagging / purge).
+        # Compact separators (no indent) keep the potentially-large write
+        # cheaper; the file is machine-managed and gitignored.
+        self._dirty = True
+        now = time.monotonic()
+        if not force and (now - self._last_save) < SAVE_MIN_INTERVAL_SEC:
+            return
         try:
             tmp = self.file.with_suffix(".json.tmp")
             tmp.write_text(
-                json.dumps(self.entries, ensure_ascii=False, indent=2),
+                json.dumps(self.entries, ensure_ascii=False, separators=(',', ':')),
                 encoding="utf-8",
             )
             tmp.replace(self.file)
+            self._dirty = False
+            self._last_save = now
         except Exception as e:
             logger.warning("stickers.json save failed: %s", e)
 
     def _log_unknown(self, md5: str, src_user: str, src_group: str, url: str) -> None:
         try:
             self.unknown_log.parent.mkdir(parents=True, exist_ok=True)
+            # Rotate to .old so this write-only diagnostic log doesn't grow
+            # without bound (evicted stickers get re-stolen and re-logged).
+            try:
+                if self.unknown_log.exists() and self.unknown_log.stat().st_size > 2_000_000:
+                    old = self.unknown_log.with_suffix(self.unknown_log.suffix + ".old")
+                    if old.exists():
+                        old.unlink()
+                    self.unknown_log.rename(old)
+            except OSError:
+                pass
             with open(self.unknown_log, "a", encoding="utf-8", newline="\n") as f:
                 f.write(json.dumps({
                     "ts": time.time(),
@@ -157,7 +200,7 @@ class StickerLibrary:
         self.entries[filename] = entry
         self._md5_index[md5] = filename
         self._append_context(filename, src_user, context_before, save=False)
-        self._save()
+        self._save(force=True)  # new entry — persist now so the stolen file isn't orphaned on crash
         logger.info("[stickers] stole new (%s, %d bytes, group=%s)",
                     md5[:8], len(image_bytes), src_group)
         self._log_unknown(md5, src_user, src_group, url)
@@ -233,7 +276,7 @@ class StickerLibrary:
         if filename in self._tagging_inflight:
             return
         self._tagging_inflight.add(filename)
-        asyncio.create_task(self._tag_one(filename))
+        _spawn(self._tag_one(filename))
 
     async def _tag_one(self, filename: str) -> None:
         try:
@@ -310,7 +353,7 @@ class StickerLibrary:
             entry["auto_tagged"] = True
             entry["tagged_ts"] = time.time()
             entry["_persona_version"] = PERSONA_PROMPT_VERSION
-            self._save()
+            self._save(force=True)  # tagging result — persist now to avoid re-tagging cost on crash
             fit_mark = " [SKIP-not-fit]" if entry.get("persona_fit") is False else ""
             logger.info("[stickers] tagged %s: meaning=%r tags=%s%s",
                         filename, entry["meaning"], entry["tags"], fit_mark)
@@ -391,7 +434,7 @@ class StickerLibrary:
                 continue
             await asyncio.sleep(0.4)
         if checked:
-            self._save()
+            self._save(force=True)  # one-time startup work — don't lose it to the throttle
         return checked
 
     def purge_unfit(self) -> int:
@@ -410,7 +453,7 @@ class StickerLibrary:
                 (self.dir / filename).unlink(missing_ok=True)
             except Exception as e:
                 logger.warning("[stickers] purge unlink failed for %s: %s", filename, e)
-        self._save()
+        self._save(force=True)  # entries + files just deleted — keep the index in sync on disk
         logger.info("[stickers] purged %d unfit entries", len(unfit))
         return len(unfit)
 

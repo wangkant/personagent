@@ -10,6 +10,7 @@ import asyncio
 import base64
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Make the repo root importable when invoked as `python tests/test_gateway.py`.
@@ -349,6 +350,11 @@ def make_agent(tmp: Path) -> Agent:
     # Keep runtime state files out of the repo during tests.
     a._seen_msg_file = tmp / "seen_msg_ids.json"
     a.core_memory_file = tmp / "core_memory.json"
+    # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
+    # into memory BEFORE we redirected the paths above. Clear them so tests run
+    # against clean state (a stray production message_id would flake-dedupe).
+    a._seen_msg_ids.clear()
+    a.core_memory.clear()
     # Skip the typing-simulation sleeps so the round-trip is instant.
     a._typing_delay = lambda chunk: 0.0
     return a
@@ -547,6 +553,210 @@ async def regression_numeric_at_kept_in_payload(tmp: Path) -> None:
           sent == ["yo"], repr(sent))
 
 
+# ---------------------------------------------------------------------------
+# Unit: audit bug-fix regressions (pure functions)
+# ---------------------------------------------------------------------------
+
+def test_sticker_marker_whitespace() -> None:
+    """A stray space inside a sticker marker ('[STICKER: doge]') must still
+    parse as a sticker and must NOT make the validator fail-close the reply."""
+    segs = Agent._parse_sticker_markers("haha [STICKER: doge]")
+    check("sticker marker: spaced marker parsed as sticker",
+          ("sticker", "doge") in segs, repr(segs))
+    ok, reason = Agent._validate_reply_safe("haha [STICKER: doge]")
+    check("sticker marker: spaced marker passes validator", ok, reason)
+    out = Agent._sanitize_reply("haha [STICKER: doge]")
+    check("sticker marker: spaced marker survives sanitize (reply not dropped)",
+          out != "", repr(out))
+
+
+def test_sanitize_strips_core_update() -> None:
+    """Residual CORE_UPDATE tags (paired or the malformed colon form) must be
+    scrubbed from a reply, never shown verbatim in chat."""
+    out = Agent._sanitize_reply("okay okay [CORE_UPDATE]new note[/CORE_UPDATE]")
+    check("sanitize: paired CORE_UPDATE stripped",
+          "CORE_UPDATE" not in out and "okay okay" in out, repr(out))
+    out2 = Agent._sanitize_reply("fine [CORE_UPDATE: some impression]")
+    check("sanitize: colon-form CORE_UPDATE stripped",
+          "CORE_UPDATE" not in out2, repr(out2))
+
+
+def test_evict_memory_prefers_auto() -> None:
+    """Cap eviction must drop the oldest AUTO memory before any manual one, so
+    a user's explicitly-saved memory isn't churned out by auto-memory growth."""
+    items = [{"text": "manual A"}, {"text": "auto B", "auto": True}, {"text": "manual C"}]
+    Agent._evict_memory(items)
+    check("evict: drops oldest auto before manual",
+          [it["text"] for it in items] == ["manual A", "manual C"], repr(items))
+    items2 = [{"text": "x"}, {"text": "y"}]
+    Agent._evict_memory(items2)
+    check("evict: FIFO fallback when no auto entry",
+          [it["text"] for it in items2] == ["y"], repr(items2))
+
+
+def test_host_is_internal() -> None:
+    """SSRF guard: internal / cloud-metadata / RFC1918 (incl. 172.17-31 that a
+    substring blacklist would miss) / IPv6 must be blocked; public hosts pass."""
+    A = Agent
+    for u in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:3000/x",
+              "http://localhost/x", "http://192.168.1.10/x", "http://10.0.0.5/x",
+              "http://172.17.0.1/x", "http://[::1]/x"):
+        check(f"ssrf: blocks {u}", A._host_is_internal(u) is True, u)
+    for u in ("https://example.com/page", "https://www.bilibili.com/video/BV1x"):
+        check(f"ssrf: allows {u}", A._host_is_internal(u) is False, u)
+    check("ssrf: ext skip still fires", A._should_skip_url("https://example.com/a.zip") is True)
+
+
+def test_pick_group_model_mode_exempt() -> None:
+    """Frequency-driven downgrade must exempt called/owner (no 'dumber when most
+    @-ed'); error-driven fallback (_fallback_until) must apply to ALL modes."""
+    from collections import deque
+    a = Agent(api_key="k", bot_qq="1", bot_name="B", model="pro", fallback_model="flash",
+              rate_window=60, rate_threshold=5, fallback_duration=300)
+    a.model, a.fallback_model = "pro", "flash"
+    a.model_calls = deque([time.time()] * 6)  # over threshold
+    check("route: hot window called stays pro", a._pick_group_model("called") == "pro")
+    check("route: hot window owner stays pro", a._pick_group_model("owner") == "pro")
+    check("route: hot window followup downgrades", a._pick_group_model("followup") == "flash")
+    check("route: after trip judge downgraded", a._pick_group_model("judge") == "flash")
+    check("route: after trip called still pro", a._pick_group_model("called") == "pro")
+    a._freq_fallback_until = 0.0
+    a._fallback_until = time.time() + 100  # real 429
+    check("route: api-429 downgrades called too", a._pick_group_model("called") == "flash")
+    check("route: api-429 downgrades owner too", a._pick_group_model("owner") == "flash")
+
+
+def test_extract_core_update_no_persist() -> None:
+    """_extract_core_update strips the tag and returns the note WITHOUT persisting
+    (commit is deferred until the reply survives the output filter — anti-poison)."""
+    a = Agent(api_key="k", bot_qq="1", bot_name="B")
+    with tempfile.TemporaryDirectory() as d:
+        # Redirect BEFORE committing: the ctor loaded the REPO's real
+        # core_memory.json, and clear()+commit would rewrite that live file
+        # down to just the test key, wiping a deployed bot's actual core
+        # notes. Never write repo-real state from tests.
+        a.core_memory_file = Path(d) / "core_memory.json"
+        a.core_memory.clear()
+        stripped, note = a._extract_core_update("ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE]")
+        check("core: tag stripped from reply",
+              "CORE_UPDATE" not in stripped and stripped == "ok", repr(stripped))
+        check("core: note extracted", note == "this group is all cat people", repr(note))
+        check("core: NOT persisted on extract",
+              "g" not in a.core_memory and len(a.core_memory) == 0, repr(dict(a.core_memory)))
+        a._commit_core_memory("g", note)
+        check("core: commit persists",
+              a.core_memory.get("g") == "this group is all cat people", repr(dict(a.core_memory)))
+
+
+async def regression_forget_no_overdelete(tmp: Path) -> None:
+    """'forget X' must only delete memories whose text contains X — not memories
+    that happen to be a substring of the forget sentence (the old bidirectional
+    match wrongly wiped unrelated short memories)."""
+    agent = make_agent(tmp)
+    g = "g1"
+    agent.memories[g] = [
+        {"text": "has a ragdoll cat", "time": 1.0},
+        {"text": "cat", "time": 2.0},  # short memory the old reverse-match would wrongly delete
+        {"text": "likes gaming", "time": 3.0},
+    ]
+    agent._handle_memory_command(g, "TestBot forget cat videos")  # matches no stored text
+    texts = [it["text"] for it in agent.memories[g]]
+    check("forget: no over-delete of unrelated short memory",
+          "cat" in texts and len(texts) == 3, repr(texts))
+    agent._handle_memory_command(g, "TestBot forget ragdoll")  # real substring match
+    texts2 = [it["text"] for it in agent.memories[g]]
+    check("forget: substring match still deletes",
+          "has a ragdoll cat" not in texts2 and "cat" in texts2, repr(texts2))
+
+
+async def regression_auto_memory_preserves_manual(tmp: Path) -> None:
+    """A burst of auto memories must not evict a manual ('remember') memory."""
+    agent = make_agent(tmp)
+    agent.memory_max = 3
+    g = "g2"
+    agent.memories[g] = [
+        {"text": "manual important", "time": 1.0},          # manual (no 'auto')
+        {"text": "auto1", "time": 2.0, "auto": True},
+        {"text": "auto2", "time": 3.0, "auto": True},
+    ]
+    agent._save_auto_memory(g, "auto3")  # 4th entry > cap → must evict oldest AUTO, not the manual one
+    texts = [it["text"] for it in agent.memories[g]]
+    check("auto-memory eviction preserves manual memory",
+          "manual important" in texts and len(texts) == 3, repr(texts))
+
+
+async def regression_throttle_send(tmp: Path) -> None:
+    """Outbound throttle: enforces a min interval between sends and drops beyond
+    the per-target 60s cap (anti-flood). Never touches group/send locks."""
+    from agent import _SEND_MAX_PER_MIN
+    agent = make_agent(tmp)
+    t0 = time.monotonic()
+    await agent._throttle_send("group:X")
+    await agent._throttle_send("group:X")
+    check("throttle: min-interval enforced between sends",
+          time.monotonic() - t0 >= 0.5, repr(time.monotonic() - t0))
+    results = []
+    for _ in range(_SEND_MAX_PER_MIN + 3):
+        agent._last_send_mono = 0.0  # skip the interval wait, exercise the cap only
+        results.append(await agent._throttle_send("group:Y"))
+    check("throttle: per-target cap drops overflow",
+          sum(results) == _SEND_MAX_PER_MIN and results[-1] is False, repr(results))
+
+
+async def regression_mem_command_sends_outside_lock(tmp: Path) -> None:
+    """A memory command ('remember…') must send with the group lock RELEASED
+    (so a long memory dump can't block the group), and still return handled=True."""
+    agent = make_agent(tmp)
+    agent.owner_qq = "1"
+    lock_held_during_send = []
+
+    async def fake_send(group_id, text, at_user_id=""):
+        lock_held_during_send.append(agent.locks[group_id].locked())
+        return []
+
+    agent._send_qq = fake_send
+    payload = {
+        "post_type": "message", "message_type": "group", "group_id": "123",
+        "user_id": "1", "message_id": 91001, "sender": {"nickname": "Alice"},
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": " remember I like cats"}}],
+        "raw_message": "remember I like cats",
+    }
+    handled = await agent.handle(payload)
+    check("mem-cmd: handled", handled is True, repr(handled))
+    check("mem-cmd: sent exactly once", len(lock_held_during_send) == 1, repr(lock_held_during_send))
+    check("mem-cmd: group lock released during send",
+          lock_held_during_send == [False], repr(lock_held_during_send))
+
+
+async def regression_gateway_conv_eviction(tmp: Path) -> None:
+    """Gateway conversation keys are LRU-capped so a runaway/malicious
+    forwarder can't grow the per-conversation dicts without bound. In-flight
+    (locked) conversations are skipped; QQ-path state is never touched."""
+    from agent import _MAX_GATEWAY_CONVS
+    agent = make_agent(tmp)
+    agent.buffers["123456"].append({"name": "q", "text": "qq group", "user_id": "7"})
+    agent.buffers["tg:0"].append({"name": "x", "text": "hi", "user_id": "9"})
+    agent.counters["tg:0"] = 3
+    agent._touch_gateway_conv("tg:0")
+    async with agent.locks["tg:1"]:
+        agent.buffers["tg:1"].append({"name": "y", "text": "held", "user_id": "8"})
+        agent._touch_gateway_conv("tg:1")
+        for i in range(2, _MAX_GATEWAY_CONVS + 2):
+            agent._touch_gateway_conv(f"tg:{i}")
+    check("conv-evict: cap enforced",
+          len(agent._gateway_conv_lru) <= _MAX_GATEWAY_CONVS,
+          repr(len(agent._gateway_conv_lru)))
+    check("conv-evict: oldest evicted with its state",
+          "tg:0" not in agent._gateway_conv_lru
+          and "tg:0" not in agent.buffers and "tg:0" not in agent.counters)
+    check("conv-evict: locked conversation skipped",
+          "tg:1" in agent._gateway_conv_lru and "tg:1" in agent.buffers)
+    check("conv-evict: next-oldest unlocked evicted instead",
+          "tg:2" not in agent._gateway_conv_lru)
+    check("conv-evict: QQ group state untouched", "123456" in agent.buffers)
+
+
 async def main_async() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -557,6 +767,11 @@ async def main_async() -> None:
         await unit_b64_image_fetch(tmp / "e")
         await integration_same_mid_distinct_conversations(tmp / "f")
         await regression_forged_gateway_flag_rejected(tmp / "g")
+        await regression_forget_no_overdelete(tmp / "h")
+        await regression_auto_memory_preserves_manual(tmp / "i")
+        await regression_throttle_send(tmp / "j")
+        await regression_mem_command_sends_outside_lock(tmp / "k")
+        await regression_gateway_conv_eviction(tmp / "l")
 
 
 def main() -> int:
@@ -570,6 +785,12 @@ def main() -> int:
     test_sink_closed_drop()
     test_validator_accepts_prefixed_at_marker()
     test_plugin_reply_id_strip()
+    test_sticker_marker_whitespace()
+    test_sanitize_strips_core_update()
+    test_evict_memory_prefers_auto()
+    test_host_is_internal()
+    test_pick_group_model_mode_exempt()
+    test_extract_core_update_no_persist()
     asyncio.run(main_async())
     print()
     if _failures:
