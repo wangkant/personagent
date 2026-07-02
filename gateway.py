@@ -1,7 +1,7 @@
 """Platform-neutral gateway layer.
 
 Lets an external forwarder (e.g. an AstrBot plugin bridging Telegram /
-Discord / Slack / a WeChat bridge) POST one inbound message to this agent
+Discord / Slack) POST one inbound message to this agent
 and receive the agent's replies in the same HTTP response. The QQ/NapCat
 direct path is untouched: the gateway synthesizes a OneBot-v11-shaped
 payload that the existing pipeline consumes unchanged, and a contextvar

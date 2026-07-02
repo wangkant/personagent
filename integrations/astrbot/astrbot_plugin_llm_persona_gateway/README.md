@@ -6,7 +6,7 @@ multi-platform transport for [persona-llm-agent](https://github.com/qiankangwang
 ## What it does
 
 - Subscribes to every message AstrBot receives on any platform adapter
-  (Telegram, Discord, Slack, WeChat bridges, ...).
+  (Telegram, Discord, Slack, ...).
 - Maps each message to a platform-neutral inbound event and POSTs it to the
   agent's `POST /webhook/gateway` endpoint.
 - Converts the agent's reply items (text and base64 images, with optional

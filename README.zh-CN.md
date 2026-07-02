@@ -4,7 +4,7 @@
 
 [English](README.md) | **中文**
 
-一个**人设型 LLM agent 模板**，用于群聊和私聊 —— 目标是发出来的消息像真人闲聊，而不是客服机器人。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关 + [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，把同一个人设扩展到 **Telegram、Discord、Slack、飞书、KOOK、微信（经企业微信 WeCom）**，且人设管线零改动。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接平台只是演示载体，仓库内不包含任何 IM 协议实现。
+一个**人设型 LLM agent 模板**，用于群聊和私聊 —— 目标是发出来的消息像真人闲聊，而不是客服机器人。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关 + [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，把同一个人设扩展到 **Telegram、Discord、Slack、飞书、KOOK**，且人设管线零改动。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接平台只是演示载体，仓库内不包含任何 IM 协议实现。
 
 > **英文优先, 中英双语。** agent 默认跑英文, 一个开关 (`AGENT_LANG=zh`) 切到中文。详见[语言](#语言english--中文)。想 30 秒上手、不需要 QQ 账号？直接看[免 QQ 试用](#免-qq-试用)。
 
@@ -141,7 +141,7 @@ agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
 
 ## 多平台接入（AstrBot）
 
-上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK / 微信 的群聊和私聊。人设管线完全不动：网关把中立入站事件合成进原有 handler、回复经上下文局部 sink 捕获，AstrBot 侧的翻译由内置转发插件完成。
+上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK 的群聊和私聊。人设管线完全不动：网关把中立入站事件合成进原有 handler、回复经上下文局部 sink 捕获，AstrBot 侧的翻译由内置转发插件完成。
 
 ```
 Telegram / Discord / Slack / …  -->  AstrBot + 转发插件  --HTTP-->  agent /webhook/gateway
@@ -153,16 +153,6 @@ QQ                              -->  NapCat             --HTTP-->  agent /webhoo
 3. `.env` 可选加固：`GATEWAY_TOKEN`（webhook 共享密钥）和 `GATEWAY_OWNER_IDS`（把例如 `telegram:12345` 当主人对待），见 `.env.example`。
 
 网关会话全部带 `<平台>:<id>` 命名空间，记忆和状态不会跟 QQ 串。NapCat 直连 agent 时，插件的排除平台里要留着 `aiocqhttp`（默认就是），否则 QQ 消息会被处理两遍。QQ 专属机制（偷表情包、OCR、主动发言/漏 @ 补抓）只走 QQ 链路；文字 / 表情包 / @ 回复全平台都通。
-
-### 微信（官方、不封号的那条路）
-
-个人微信的桥都靠未授权的 pad/hook 协议，有封号风险。干净的替代是 **企业微信（WeCom）**：AstrBot 原生支持，不要桥二进制、不要数据库、零封号风险——代价是它是个**工作号**机器人（成员在企业微信里跟它聊，进不了普通的私人微信亲友群）。agent 侧不用任何新代码，转发插件把 `wecom` 平台跟其他平台一视同仁地转发。
-
-1. 在 [work.weixin.qq.com](https://work.weixin.qq.com)：注册一个企业，再建自建应用（应用管理 → 自建）。拿到 **CorpID**（我的企业 → 企业信息）、应用的 **AgentId** 和 **Secret**，并在 接收消息 → API接收 里设好 **Token** 和 **EncodingAESKey**。
-2. 在 AstrBot 里加一个 `wecom` 平台适配器，填这些值（`corpid`、`secret`、`token`、`encoding_aes_key`、`port`、`callback_server_host`）。
-3. **公网回调**：跟 Telegram（agent 主动拉）不同，WeCom 是把事件**推送**到你的回调地址，所以 AstrBot 的回调端口必须公网可达——挂在反代/隧道后面（frp、Cloudflare Tunnel 等），把那个地址填回应用的 接收消息 设置里。
-
-之后插件会自动把 WeCom 的群聊 + 1:1 消息转发给 agent。
 
 ## 语言（English / 中文）
 
