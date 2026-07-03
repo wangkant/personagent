@@ -1,0 +1,12 @@
+# Line-ending normalization. Keep all text files LF in the repository so
+# endings stay consistent across platforms and Windows contributors stop
+# seeing the "LF will be replaced by CRLF" churn on every commit.
+* text=auto eol=lf
+
+# Image / binary assets: never apply line-ending or diff conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
