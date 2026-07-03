@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>persona-llm-agent — Live Demo</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzI1NjNlYiIvPjxyZWN0IHg9IjYuNSIgeT0iOSIgd2lkdGg9IjE5IiBoZWlnaHQ9IjEyLjUiIHJ4PSIzLjUiIGZpbGw9IiNmZmZmZmYiLz48cGF0aCBkPSJNMTIgMjAuNXY0LjZsNS42LTQuNnoiIGZpbGw9IiNmZmZmZmYiLz48Y2lyY2xlIGN4PSIxMi41IiBjeT0iMTUiIHI9IjEuNiIgZmlsbD0iIzI1NjNlYiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTUiIHI9IjEuNiIgZmlsbD0iIzI1NjNlYiIvPjxjaXJjbGUgY3g9IjE5LjUiIGN5PSIxNSIgcj0iMS42IiBmaWxsPSIjMjU2M2ViIi8+PC9zdmc+" />
+  <meta name="theme-color" content="#2563eb" />
+<meta name="description" content="Interactive demo of persona-llm-agent: watch a persona-driven LLM agent reason through a group chat — mode routing, JSON output protocol, intent tags, sticker selection, PASS/stay-silent, and self-eval." />
+<style>
+  :root {
+    --bg: #fafbfc;
+    --panel: #ffffff;
+    --panel-2: #f9fafb;
+    --border: #e5e7eb;
+    --border-strong: #d6dae0;
+    --text: #111827;
+    --muted: #4b5563;          /* darkened for WCAG AA on white */
+    --faint: #6b7280;          /* darkened for WCAG AA on white */
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --live: #16a34a;
+    --bubble-in: #f1f3f5;
+    --bubble-in-text: #1f2937;
+    --bubble-bot: #2563eb;
+    --bubble-bot-text: #ffffff;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+    /* intent palette — darkened in light theme so the text-on-white usages
+       inside the JSON card clear WCAG AA */
+    --i-joke: #b45309;
+    --i-vent: #6d28d9;
+    --i-share: #0f766e;
+    --i-question: #1d4ed8;
+    --i-troll: #be185d;
+    --i-chat: #0e7490;
+  }
+  [data-theme="dark"] {
+    --bg: #0b0e14;
+    --panel: #11151d;
+    --panel-2: #0e131b;
+    --border: #1f2731;
+    --border-strong: #2a333f;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --faint: #8b94a3;          /* lightened for AA on dark panel */
+    --accent: #5b9cff;
+    --accent-soft: #14233f;
+    --live: #34d399;
+    --bubble-in: #1a212c;
+    --bubble-in-text: #d7dce4;
+    --bubble-bot: #2f6fe0;
+    --bubble-bot-text: #f3f7ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
+    --i-joke: #f0a72b;
+    --i-vent: #a78bfa;
+    --i-share: #2dd4bf;
+    --i-question: #60a5fa;
+    --i-troll: #f472b6;
+    --i-chat: #22d3ee;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    cursor: default;
+    min-height: 100vh;
+    /* keep the final content clear of the sticky controls bar */
+    padding-bottom: 1rem;
+    transition: background .3s ease, color .3s ease;
+  }
+  a { color: var(--accent); }
+
+  /* shared keyboard focus ring (with graceful fallback) */
+  .btn:focus-visible, .seg button:focus-visible, .icon-link:focus-visible,
+  .ctl-btn:focus-visible, #chat:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  .btn:focus, .seg button:focus, .icon-link:focus, .ctl-btn:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn:focus:not(:focus-visible), .seg button:focus:not(:focus-visible),
+  .icon-link:focus:not(:focus-visible), .ctl-btn:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; gap: 1rem;
+    padding: .85rem clamp(1rem, 4vw, 2.25rem);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 30;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+  .brand h1 {
+    font-size: clamp(.95rem, 2.2vw, 1.15rem);
+    font-weight: 650; letter-spacing: -.01em;
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  .live-tag {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-family: var(--mono); font-size: .62rem; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--live);
+    border: 1px solid color-mix(in srgb, var(--live) 40%, transparent);
+    background: color-mix(in srgb, var(--live) 10%, transparent);
+    padding: .2rem .5rem .2rem .45rem; border-radius: 999px;
+  }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--live);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 70%, transparent);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent); }
+    70%  { box-shadow: 0 0 0 7px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .spacer { flex: 1 1 auto; }
+  .tools { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--mono); font-size: .72rem; font-weight: 600;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: .4rem .65rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: .4rem;
+    transition: background .2s, border-color .2s, color .2s, transform .1s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .seg {
+    display: inline-flex; border: 1px solid var(--border-strong);
+    border-radius: 8px; overflow: hidden;
+  }
+  .seg button {
+    font-family: var(--mono); font-size: .72rem; font-weight: 600;
+    background: var(--panel); color: var(--muted);
+    border: none; padding: .4rem .6rem; cursor: pointer; transition: background .2s, color .2s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .icon-link {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--border-strong); color: var(--text); background: var(--panel);
+    transition: border-color .2s, color .2s;
+  }
+  .icon-link:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-link svg { width: 17px; height: 17px; }
+
+  /* ── Intro strip ── */
+  .intro {
+    padding: 1rem clamp(1rem, 4vw, 2.25rem) .25rem;
+    max-width: 1180px; margin: 0 auto;
+  }
+  .intro p.lede { color: var(--muted); font-size: .92rem; max-width: 72ch; }
+  .intro p.lede strong { color: var(--text); font-weight: 600; }
+  .intro p.lede code { font-family: var(--mono); font-size: .82em; color: var(--accent); }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: .4rem .5rem; margin-top: .75rem;
+    align-items: center;
+  }
+  .legend .lab {
+    font-family: var(--mono); font-size: .6rem; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--faint); margin-right: .15rem;
+  }
+  .ichip {
+    font-family: var(--mono); font-size: .66rem; font-weight: 700;
+    padding: .18rem .5rem; border-radius: 999px;
+    border: 1px solid currentColor;
+    display: inline-flex; align-items: center; gap: .35rem;
+  }
+  .ichip::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: currentColor; }
+  .ichip.joke { color: var(--i-joke); }
+  .ichip.vent { color: var(--i-vent); }
+  .ichip.share { color: var(--i-share); }
+  .ichip.question { color: var(--i-question); }
+  .ichip.troll { color: var(--i-troll); }
+  .ichip.chat { color: var(--i-chat); }
+
+  /* ── Stage layout ── */
+  .stage {
+    max-width: 1180px; margin: 0 auto;
+    padding: 1rem clamp(1rem, 4vw, 2.25rem) 2rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    align-items: start;
+  }
+  @media (max-width: 860px) { .stage { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .7rem .9rem; border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .card-head .dot3 { display: flex; gap: .35rem; }
+  .card-head .dot3 i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); display: block; }
+  .card-head .dot3 i:nth-child(1) { background: #ff5f57; }
+  .card-head .dot3 i:nth-child(2) { background: #febc2e; }
+  .card-head .dot3 i:nth-child(3) { background: #28c840; }
+  .card-head .title {
+    font-family: var(--mono); font-size: .72rem; font-weight: 700;
+    letter-spacing: .04em; color: var(--muted);
+  }
+  .card-head .sub { font-family: var(--mono); font-size: .64rem; color: var(--faint); margin-left: auto; }
+
+  /* ── Chat ── */
+  /* NOTE: scoped to #chat (the container) on purpose — a bare `.chat`
+     selector also matches the `chat` intent chip (<span class="ichip chat">)
+     and would stretch it into a tall column. */
+  #chat {
+    height: clamp(420px, 56vh, 600px);
+    overflow-y: auto; padding: 1rem .9rem 1.2rem;
+    display: flex; flex-direction: column; gap: .55rem;
+    scroll-behavior: smooth;
+    background:
+      radial-gradient(1200px 400px at 80% -10%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%);
+  }
+  .msg { display: flex; flex-direction: row; align-items: flex-end; gap: .5rem; max-width: 88%; animation: rise .35s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .msg-body { display: flex; flex-direction: column; min-width: 0; }
+  .avatar {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: .72rem; line-height: 1;
+    box-shadow: var(--shadow); user-select: none; margin-bottom: 1px;
+  }
+  .avatar-bot { background: var(--bubble-bot); }
+  .msg .who {
+    font-size: .66rem; color: var(--faint); margin: 0 .55rem .18rem;
+    font-family: var(--mono); letter-spacing: .03em;
+    display: flex; align-items: center; gap: .35rem;
+  }
+  .msg .who .owner-pip {
+    font-size: .54rem; color: var(--i-joke);
+    border: 1px solid color-mix(in srgb, var(--i-joke) 45%, transparent);
+    border-radius: 4px; padding: 0 .25rem; letter-spacing: .08em;
+  }
+  .bubble {
+    padding: .55rem .8rem; border-radius: 14px; font-size: .9rem;
+    line-height: 1.45; word-wrap: break-word; white-space: pre-wrap;
+    box-shadow: 0 1px 2px rgba(16,24,40,.06);
+  }
+  .msg.them { align-self: flex-start; }
+  .msg.them .bubble { background: var(--bubble-in); color: var(--bubble-in-text); border-bottom-left-radius: 5px; }
+  .msg.bot { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.bot .msg-body { align-items: flex-end; }
+  .msg.bot .who { justify-content: flex-end; color: var(--accent); }
+  .msg.bot .bubble { background: var(--bubble-bot); color: var(--bubble-bot-text); border-bottom-right-radius: 5px; }
+
+  .attach {
+    display: inline-flex; align-items: center; gap: .5rem;
+    font-size: .82rem; color: var(--muted);
+    border: 1px dashed var(--border-strong); border-radius: 10px;
+    padding: .45rem .6rem; background: var(--panel-2);
+  }
+  .attach .ico { font-size: 1rem; line-height: 1; }
+  .attach .kind { font-family: var(--mono); font-size: .58rem; text-transform: uppercase; letter-spacing: .1em; color: var(--faint); }
+  .at-pill { color: var(--accent); font-weight: 600; }
+
+  /* sticker as sent by the bot */
+  .sticker-sent {
+    display: inline-flex; flex-direction: column; align-items: center; gap: .25rem;
+    padding: .55rem .7rem; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow);
+  }
+  .sticker-sent .glyph { font-size: 2.1rem; line-height: 1; }
+  .sticker-sent .tag { font-family: var(--mono); font-size: .58rem; color: var(--faint); letter-spacing: .05em; }
+
+  /* typing indicator */
+  .typing { align-self: flex-end; }
+  .typing .bubble { background: var(--bubble-bot); padding: .6rem .8rem; }
+  .typing .dots { display: inline-flex; gap: .25rem; }
+  .typing .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.85); animation: blink 1.2s infinite; }
+  .typing .dots i:nth-child(2) { animation-delay: .2s; }
+  .typing .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+
+  /* PASS ghost line */
+  .pass-line {
+    align-self: center; font-family: var(--mono); font-size: .68rem;
+    color: var(--faint); letter-spacing: .03em;
+    border: 1px dashed var(--border-strong); border-radius: 999px;
+    padding: .25rem .7rem; background: var(--panel-2);
+    animation: rise .35s cubic-bezier(.22,1,.36,1) both;
+  }
+  .pass-line b { color: var(--i-chat); font-weight: 700; }
+
+  /* ── Agent panel ── */
+  .agent { padding: 0; }
+  .agent-empty {
+    padding: 2.5rem 1.2rem; text-align: center; color: var(--faint);
+    font-size: .85rem; font-family: var(--mono);
+  }
+  .agent-body { padding: .9rem .95rem 1.1rem; display: flex; flex-direction: column; gap: .85rem; }
+
+  .mode-row { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+  .mode-row .k { font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); }
+  .mode-chip {
+    font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    padding: .2rem .55rem; border-radius: 7px;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  /* pipeline */
+  .pipe { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .pstep {
+    font-family: var(--mono); font-size: .585rem; letter-spacing: .01em;
+    padding: .22rem .45rem; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--faint);
+    background: var(--panel-2);
+    transition: color .25s, border-color .25s, background .25s, box-shadow .25s;
+    white-space: nowrap;
+  }
+  .pstep.on {
+    color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .pstep.done { color: var(--text); border-color: var(--border-strong); background: var(--panel); }
+
+  /* JSON protocol card */
+  .json {
+    font-family: var(--mono); font-size: .78rem; line-height: 1.6;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: .75rem .85rem; overflow-x: auto;
+  }
+  .json .brace { color: var(--faint); }
+  .json .row { display: flex; gap: .4rem; opacity: 0; transform: translateY(4px); transition: opacity .35s, transform .35s; flex-wrap: wrap; }
+  .json .row.show { opacity: 1; transform: none; }
+  .json .key { color: var(--muted); }
+  .json .str { color: var(--text); }
+  .json .reason { color: var(--muted); font-style: italic; }
+  .json .pass-val { color: var(--i-chat); font-weight: 700; }
+  .json .empty { color: var(--faint); }
+  .intent-inline {
+    font-weight: 700; padding: 0 .35rem; border-radius: 5px;
+    border: 1px solid currentColor;
+  }
+  .intent-inline.joke { color: var(--i-joke); }
+  .intent-inline.vent { color: var(--i-vent); }
+  .intent-inline.share { color: var(--i-share); }
+  .intent-inline.question { color: var(--i-question); }
+  .intent-inline.troll { color: var(--i-troll); }
+  .intent-inline.chat { color: var(--i-chat); }
+
+  /* sub-cards (sticker / mem / eval) */
+  .subgrid { display: flex; flex-direction: column; gap: .55rem; }
+  .subcard {
+    display: flex; align-items: flex-start; gap: .6rem;
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: .55rem .7rem; background: var(--panel);
+    opacity: 0; transform: translateY(4px); transition: opacity .35s, transform .35s;
+  }
+  .subcard.show { opacity: 1; transform: none; }
+  .subcard .sk { font-family: var(--mono); font-size: .58rem; text-transform: uppercase; letter-spacing: .1em; color: var(--faint); min-width: 4.5rem; padding-top: .12rem; }
+  .subcard .sv { font-size: .8rem; color: var(--text); }
+  .subcard .sv .muted { color: var(--muted); }
+  .stars { letter-spacing: .12em; color: var(--i-joke); font-size: .85rem; }
+  .stars .off { color: var(--border-strong); }
+  .eval-note { color: var(--faint); font-size: .68rem; font-family: var(--mono); }
+  .sticker-mini { display: inline-flex; align-items: center; gap: .4rem; }
+  .sticker-mini .g { font-size: 1.2rem; }
+  .sticker-mini code { font-family: var(--mono); font-size: .72rem; color: var(--i-share); }
+
+  /* ── Controls ── */
+  .controls {
+    position: sticky; bottom: 0; z-index: 20;
+    max-width: 1180px; margin: 0 auto;
+    padding: .7rem clamp(1rem, 4vw, 2.25rem);
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+  }
+  .controls .progress {
+    flex: 1 1 140px; height: 5px; border-radius: 999px; background: var(--border);
+    overflow: hidden; min-width: 100px;
+  }
+  .controls .progress > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
+  .ctl-btn {
+    font-family: var(--mono); font-size: .74rem; font-weight: 650;
+    border: 1px solid var(--border-strong); border-radius: 9px;
+    background: var(--panel); color: var(--text);
+    padding: .45rem .7rem; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+    transition: background .2s, border-color .2s, color .2s, transform .1s;
+  }
+  .ctl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ctl-btn:active { transform: translateY(1px); }
+  .ctl-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ctl-btn.primary:hover { filter: brightness(1.05); color: #fff; }
+  .ctl-btn[disabled] { opacity: .55; cursor: not-allowed; }
+  .counter { font-family: var(--mono); font-size: .68rem; color: var(--faint); min-width: 3.2rem; text-align: right; }
+
+  .foot {
+    max-width: 1180px; margin: 0 auto;
+    padding: .25rem clamp(1rem, 4vw, 2.25rem) 2.5rem;
+    color: var(--faint); font-size: .72rem;
+  }
+  .foot code { font-family: var(--mono); color: var(--muted); background: var(--panel-2); padding: .08rem .3rem; border-radius: 4px; border: 1px solid var(--border); }
+  .foot a { font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001s !important; transition-duration: .001s !important; }
+    .live-dot, .typing .dots i { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>persona-llm-agent</h1>
+      <span class="live-tag"><span class="live-dot"></span>Live demo</span>
+    </div>
+    <span class="spacer"></span>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Language">
+        <button id="lang-en" aria-pressed="true">EN</button>
+        <button id="lang-zh" aria-pressed="false">中文</button>
+      </div>
+      <button class="btn" id="theme-btn" aria-label="Toggle dark mode" aria-pressed="false">
+        <span id="theme-ico" aria-hidden="true">🌙</span><span id="theme-txt">Dark</span>
+      </button>
+      <a class="icon-link" id="repo-link" href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <section class="intro">
+    <p class="lede" id="lede"></p>
+    <div class="legend" aria-hidden="true">
+      <span class="lab" id="legend-lab">Intent tags</span>
+      <span class="ichip joke">joke</span>
+      <span class="ichip vent">vent</span>
+      <span class="ichip share">share</span>
+      <span class="ichip question">question</span>
+      <span class="ichip troll">troll</span>
+      <span class="ichip chat">chat</span>
+    </div>
+  </section>
+
+  <main class="stage">
+    <!-- Chat -->
+    <div class="card">
+      <div class="card-head">
+        <span class="dot3"><i></i><i></i><i></i></span>
+        <span class="title" id="chat-title">group · 5 members + ami</span>
+        <span class="sub" id="chat-sub">OneBot v11</span>
+      </div>
+      <div id="chat" role="log" aria-live="polite" aria-label="Group chat"></div>
+    </div>
+
+    <!-- Agent internals -->
+    <div class="card agent">
+      <div class="card-head">
+        <span class="title" id="agent-title">inside the agent</span>
+        <span class="sub">agent.py · JSON protocol</span>
+      </div>
+      <div id="agent-mount">
+        <div class="agent-empty" id="agent-empty">— press ▶ Play to watch a turn —</div>
+      </div>
+    </div>
+  </main>
+
+  <div class="controls">
+    <button class="ctl-btn" id="restart" aria-label="Restart from the beginning">⏮ <span id="t-restart">Restart</span></button>
+    <button class="ctl-btn primary" id="play" aria-label="Play or pause"><span class="ic" aria-hidden="true">▶</span> <span class="lbl">Play</span></button>
+    <button class="ctl-btn" id="step" aria-label="Step one event forward">⏭ <span id="t-step">Step</span></button>
+    <div class="progress" aria-hidden="true"><span id="prog"></span></div>
+    <span class="counter" id="counter" aria-live="off">0 / 0</span>
+  </div>
+
+  <p class="foot" id="foot"></p>
+
+<script>
+"use strict";
+(function () {
+  /* ─────────────────────────────────────────────────────────────
+     persona-llm-agent — scripted demo
+     A faithful, no-API replay of the agent's own example set.
+     Every reply below is taken verbatim from data/examples.*.jsonl
+     or the PASS "better" lines in data/feedback.*.jsonl.
+     ───────────────────────────────────────────────────────────── */
+
+  // Sticker tag -> glyph (the live bot sends real images via [STICKER:<tag>]).
+  const STICKER_GLYPH = { smug: "😏", eyeroll: "🙄", resigned: "😮‍💨", grin: "😆" };
+
+  // The six intent tags the agent may emit (README; agent.py).
+  const INTENTS = ["joke", "vent", "share", "question", "troll", "chat"];
+
+  // Pipeline steps the agent runs per handled message (README call chain).
+  const PIPE_FULL = ["dedup", "debounce", "mode", "prompt·cached", "LLM·json", "parse", "filter", "validate", "send", "self-eval"];
+  const PIPE_PASS = ["dedup", "debounce", "mode", "prompt·cached", "LLM·json", "parse", "decide:PASS"];
+
+  const I18N = {
+    en: {
+      botName: "ami",
+      members: "group · 5 members + ami",
+      lede: "A persona-driven LLM agent for OneBot v11 group chats — built to sound like a person, not a help desk. <strong>Watch it think:</strong> for each message it picks a routing <code>mode</code>, emits a JSON object (<code>reasoning / intent / reply / mem</code>), routes by intent, sometimes drops a sticker, and often decides to stay silent.",
+      legend: "Intent tags",
+      empty: "— press ▶ Play to watch a turn —",
+      play: "Play", pause: "Pause", step: "Step", restart: "Restart",
+      modeK: "mode",
+      kReason: "reasoning", kIntent: "intent", kReply: "reply", kMem: "mem",
+      stickerK: "sticker", memK: "memory", evalK: "self-eval",
+      stickerPick: (t) => `pick_by_tag("${t}") → in-character ✓`,
+      memNone: "(nothing worth recording)",
+      evalNote: "scored async → eval.jsonl",
+      passReplyVal: "PASS",
+      silent: (n) => `${n} stays silent`,
+      ownerPip: "owner",
+      foot: 'Scripted simulation — replies are recorded verbatim from the repo\'s own example set; no live API call is made. Run it for real with <code>python try_chat.py</code>. Source: <a href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/persona-llm-agent</a>',
+      attach: { youtube: "YouTube", bili: "Bilibili", image: "image", video: "video" },
+    },
+    zh: {
+      botName: "小艺",
+      members: "群聊 · 5 人 + 小艺",
+      lede: "一个跑在 OneBot v11 群聊里的人设 LLM agent —— 目标是说话像真人而不是客服。<strong>看它怎么想：</strong>每条消息先判路由 <code>mode</code>，输出一个 JSON 对象（<code>reasoning / intent / reply / mem</code>），按 intent 走子风格，偶尔甩个表情包，而且经常选择不接话。",
+      legend: "意图标签",
+      empty: "— 点 ▶ 播放，看一轮推理 —",
+      play: "播放", pause: "暂停", step: "单步", restart: "重播",
+      modeK: "mode",
+      kReason: "reasoning", kIntent: "intent", kReply: "reply", kMem: "mem",
+      stickerK: "表情包", memK: "记忆", evalK: "自评分",
+      stickerPick: (t) => `pick_by_tag("${t}") → 人设匹配 ✓`,
+      memNone: "（没什么值得记的）",
+      evalNote: "异步打分 → eval.jsonl",
+      passReplyVal: "PASS",
+      silent: (n) => `${n} 选择不接话`,
+      ownerPip: "群主",
+      foot: '剧本化模拟 —— 回复全部原样取自仓库自带的示例集，不发任何实时 API 请求。想跑真的：<code>python try_chat.py</code>。源码：<a href="https://github.com/qiankangwang/persona-llm-agent" target="_blank" rel="noopener noreferrer">github.com/qiankangwang/persona-llm-agent</a>',
+      attach: { youtube: "YouTube", bili: "B站", image: "图片", video: "视频" },
+    },
+  };
+
+  // ── Conversation scripts ──────────────────────────────────────
+  // event: {t:'msg', from, kind?, text, atTarget?, attach?}
+  //      | {t:'turn', mode, reasoning, intent, reply|null, sticker?, mem?, evalScore?, passReason?}
+  // Modes are the agent's real routing modes: owner | called | followup | judge | proactive
+  // ("chat" is an INTENT tag, never a mode). Replies trace to examples/feedback jsonl.
+  const SCRIPTS = {
+    en: [
+      { t: "msg", from: "owner", text: "just found out git push -f nukes the remote branch lol" },
+      { t: "turn", mode: "owner", reasoning: "owner self-owns a mistake — closer relationship, safe to tease back", intent: "joke", reply: "ah so you HAVE used -f before, the guilt is showing", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "riley", text: "can you actually fall asleep after coffee at night" },
+      { t: "turn", mode: "called", reasoning: "asked directly — give a real personal take, no bulleted analysis", intent: "chat", reply: "depends on the person, i'm out like a light, some people get one cup and they're wired till 3am", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "sam", text: "spent 3 hours on this and ctrl+z'd the whole thing into the void" },
+      { t: "turn", mode: "judge", reasoning: "not addressed to me — but it's a vent worth a beat of empathy, not a fix-it list", intent: "vent", reply: "rip. take five before you go back in", mem: "", evalScore: 4 },
+
+      { t: "msg", from: "sam", text: "D . e" },
+      { t: "turn", mode: "judge", reasoning: "single letters + spaces is noise — nothing to actually engage with", intent: "chat", reply: null, passReason: "noise, not a real message" },
+
+      { t: "msg", from: "alex", kind: "video", attach: "youtube", text: "the most cursed way to make instant noodles" },
+      { t: "msg", from: "alex", text: "i'm hooked" },
+      { t: "turn", mode: "judge", reasoning: "shared a video — riff on it instead of generic praise", intent: "share", reply: "watching cooking crimes at midnight is a choice", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "jordan", text: "thinking about rewriting the whole frontend from react to svelte" },
+      { t: "turn", mode: "judge", reasoning: "overambitious plan — high-EQ tease, leave them an out", intent: "troll", reply: "ah, a new arc. no wonder the chat's been lively lately", mem: "jordan's eyeing a react→svelte rewrite", evalScore: 5 },
+
+      { t: "msg", from: "owner", kind: "at", atTarget: "alex", text: "you're up early?" },
+      { t: "turn", mode: "owner", reasoning: "owner @'d alex specifically — I'm a bystander here, don't butt in", intent: "chat", reply: null, passReason: "observer position — not my turn" },
+
+      { t: "msg", from: "riley", kind: "image", text: "5★ character splash art" },
+      { t: "msg", from: "riley", text: "FINALLY pulled them" },
+      { t: "turn", mode: "judge", reasoning: "lucky gacha pull — celebrate, and a sticker fits better than words", intent: "share", reply: "the gacha gods have chosen", sticker: "smug", mem: "", evalScore: 5 },
+    ],
+    zh: [
+      { t: "msg", from: "owner", text: "我今天才知道 git push -f 会覆盖远程分支..." },
+      { t: "turn", mode: "owner", reasoning: "群主自嘲犯错 —— 关系近，可以接着调侃", intent: "joke", reply: "哈哈，所以之前是不是偷偷用过 -f 了", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "riley", text: "你觉得睡前喝咖啡能睡着吗" },
+      { t: "turn", mode: "called", reasoning: "被直接问到 —— 给个人真实看法，别列点分析", intent: "chat", reply: "看人吧，我喝完照睡，有人一杯就失眠", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "sam", text: "写了三小时代码不小心 ctrl+z 全没了" },
+      { t: "turn", mode: "judge", reasoning: "不是冲我说的 —— 但是个值得共情一下的吐槽，别给一二三", intent: "vent", reply: "心疼一下，缓两分钟再开搞", mem: "", evalScore: 4 },
+
+      { t: "msg", from: "sam", text: "D . e" },
+      { t: "turn", mode: "judge", reasoning: "单字母加空格就是噪声，没什么可接的", intent: "chat", reply: null, passReason: "纯噪声，不是真消息" },
+
+      { t: "msg", from: "alex", kind: "video", attach: "bili", text: "来山西之前你不会知道 10 块钱的面有多便宜" },
+      { t: "msg", from: "alex", text: "馋了" },
+      { t: "turn", mode: "judge", reasoning: "分享视频 —— 接梗，别说套话夸", intent: "share", reply: "大半夜发这个，是饿了还是打算明天飞过去", mem: "", evalScore: 5 },
+
+      { t: "msg", from: "jordan", text: "我打算把前端从 react 换成 svelte 重写一遍" },
+      { t: "turn", mode: "judge", reasoning: "又一个大计划 —— 高情商调侃，给个台阶", intent: "troll", reply: "这是又有新想法了，怪不得最近群里这么热闹", mem: "王五在琢磨把前端从 react 重写成 svelte", evalScore: 5 },
+
+      { t: "msg", from: "owner", kind: "at", atTarget: "alex", text: "这么早就起了？" },
+      { t: "turn", mode: "owner", reasoning: "群主 @ 的是张三，我是旁观者，别插话", intent: "chat", reply: null, passReason: "旁观位 —— 没轮到我" },
+
+      { t: "msg", from: "riley", kind: "image", text: "六星角色立绘" },
+      { t: "msg", from: "riley", text: "终于出了" },
+      { t: "turn", mode: "judge", reasoning: "欧皇抽卡 —— 一起庆祝，表情包比文字更到位", intent: "share", reply: "出了出了，欧皇上线", sticker: "smug", mem: "", evalScore: 5 },
+    ],
+  };
+
+  // Display names per language (kept fictional — owner shown as "owner"/"群主").
+  const NAMES = {
+    en: { owner: "owner", alex: "alex", sam: "sam", jordan: "jordan", riley: "riley" },
+    zh: { owner: "群主", alex: "张三", sam: "李四", jordan: "王五", riley: "赵六" },
+  };
+
+  // Avatar tint per speaker (display only — distinct hues so the chat reads
+  // like a real group). The bot uses its bubble accent (.avatar-bot).
+  const SPEAKER = { owner: "#d97706", alex: "#0ea5e9", sam: "#10b981", jordan: "#8b5cf6", riley: "#ec4899" };
+
+  // ── State ─────────────────────────────────────────────────────
+  let lang = "en";
+  let idx = 0;            // index of the NEXT event to play (committed only on clean completion)
+  let playing = false;    // play-loop is active
+  let busy = false;       // an advance() is currently animating (play- or step-driven)
+  let stepping = false;   // the current advance() was started by Step (not the play loop)
+  let resetToken = 0;     // bumped on hard reset (restart / lang) to cancel in-flight animations
+  let typingEl = null;    // module-level ref to the typing bubble (avoids duplicate ids)
+
+  const $ = (id) => document.getElementById(id);
+  const chat = $("chat");
+  const mount = $("agent-mount");
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const D = (ms) => (reduced ? 0 : ms);
+
+  function script() { return SCRIPTS[lang]; }
+  function turnsTotal() { return script().filter((e) => e.t === "turn").length; }
+  function safeIntent(i) { return INTENTS.includes(i) ? i : "chat"; }
+
+  // ── Rendering: chat ───────────────────────────────────────────
+  function nameOf(key) { return NAMES[lang][key] || key; }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function avatarHtml(key) {
+    const color = SPEAKER[key] || "#64748b";
+    const initial = escapeHtml((NAMES[lang][key] || key).trim().charAt(0).toUpperCase());
+    return `<span class="avatar" style="background:${color}" aria-hidden="true">${initial}</span>`;
+  }
+  function botAvatarHtml() {
+    const initial = escapeHtml(I18N[lang].botName.trim().charAt(0).toUpperCase());
+    return `<span class="avatar avatar-bot" aria-hidden="true">${initial}</span>`;
+  }
+
+  function addUserMsg(ev) {
+    const t = I18N[lang];
+    const wrap = document.createElement("div");
+    wrap.className = "msg them";
+    const isOwner = ev.from === "owner";
+    let who = `<div class="who">${escapeHtml(nameOf(ev.from))}`;
+    if (isOwner) who += `<span class="owner-pip">${t.ownerPip}</span>`;
+    who += `</div>`;
+
+    let body;
+    if (ev.kind === "video") {
+      const label = t.attach[ev.attach] || t.attach.video;
+      body = `<div class="bubble"><span class="attach"><span class="ico" aria-hidden="true">▶</span><span><span class="kind">${label}</span><br>${escapeHtml(ev.text)}</span></span></div>`;
+    } else if (ev.kind === "image") {
+      body = `<div class="bubble"><span class="attach"><span class="ico" aria-hidden="true">🖼</span><span><span class="kind">${t.attach.image}</span><br>${escapeHtml(ev.text)}</span></span></div>`;
+    } else if (ev.kind === "at") {
+      body = `<div class="bubble"><span class="at-pill">@${escapeHtml(nameOf(ev.atTarget))}</span> ${escapeHtml(ev.text)}</div>`;
+    } else {
+      body = `<div class="bubble">${escapeHtml(ev.text)}</div>`;
+    }
+    wrap.innerHTML = `${avatarHtml(ev.from)}<div class="msg-body">${who}${body}</div>`;
+    chat.appendChild(wrap);
+    scrollChat();
+  }
+
+  function addTyping() {
+    removeTyping();
+    const el = document.createElement("div");
+    el.className = "msg bot typing";
+    el.innerHTML = `${botAvatarHtml()}<div class="msg-body"><div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div></div>`;
+    chat.appendChild(el);
+    typingEl = el;
+    scrollChat();
+  }
+  function removeTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+
+  function addBotReply(ev) {
+    const t = I18N[lang];
+    const wrap = document.createElement("div");
+    wrap.className = "msg bot";
+    let inner = `<div class="who">${escapeHtml(t.botName)}</div>`;
+    if (ev.reply) inner += `<div class="bubble">${escapeHtml(ev.reply)}</div>`;
+    if (ev.sticker) {
+      const g = STICKER_GLYPH[ev.sticker] || "🙂";
+      inner += `<div class="sticker-sent"><span class="glyph" aria-hidden="true">${g}</span><span class="tag">[STICKER:${escapeHtml(ev.sticker)}]</span></div>`;
+    }
+    wrap.innerHTML = `${botAvatarHtml()}<div class="msg-body">${inner}</div>`;
+    chat.appendChild(wrap);
+    scrollChat();
+  }
+
+  function addPassLine(ev) {
+    const t = I18N[lang];
+    const p = document.createElement("div");
+    p.className = "pass-line";
+    p.innerHTML = `<b>PASS</b> · ${escapeHtml(t.silent(t.botName))}`;
+    chat.appendChild(p);
+    scrollChat();
+  }
+
+  function scrollChat() { chat.scrollTop = chat.scrollHeight; }
+
+  // ── Rendering: agent panel ────────────────────────────────────
+  function intentInline(intent) {
+    const i = safeIntent(intent);
+    return `<span class="intent-inline ${i}">${i}</span>`;
+  }
+
+  function buildAgentPanel(ev) {
+    const t = I18N[lang];
+    const isPass = ev.reply === null;
+    const steps = (isPass ? PIPE_PASS : PIPE_FULL)
+      .map((s) => `<span class="pstep" data-step="${escapeHtml(s)}">${escapeHtml(s)}</span>`).join("");
+
+    const replyRow = isPass
+      ? `<span class="key">"${t.kReply}":</span> <span class="pass-val">"${t.passReplyVal}"</span><span class="brace">,</span>`
+      : `<span class="key">"${t.kReply}":</span> <span class="str">"${escapeHtml(ev.reply)}"</span>${ev.sticker ? ` <span class="empty">+ [STICKER:${escapeHtml(ev.sticker)}]</span>` : ""}<span class="brace">,</span>`;
+
+    const memVal = ev.mem
+      ? `<span class="str">"${escapeHtml(ev.mem)}"</span>`
+      : `<span class="empty">""</span>`;
+
+    mount.innerHTML = `
+      <div class="agent-body">
+        <div class="mode-row">
+          <span class="k">${t.modeK}</span>
+          <span class="mode-chip">${escapeHtml(ev.mode)}</span>
+        </div>
+        <div class="pipe">${steps}</div>
+        <div class="json" id="json">
+          <span class="brace">{</span>
+          <div class="row" data-row="reasoning"><span class="key">"${t.kReason}":</span> <span class="reason">"${escapeHtml(ev.reasoning)}"</span><span class="brace">,</span></div>
+          <div class="row" data-row="intent"><span class="key">"${t.kIntent}":</span> ${intentInline(ev.intent)}<span class="brace">,</span></div>
+          <div class="row" data-row="reply">${replyRow}</div>
+          <div class="row" data-row="mem"><span class="key">"${t.kMem}":</span> ${memVal}</div>
+          <span class="brace">}</span>
+        </div>
+        <div class="subgrid" id="subgrid"></div>
+      </div>`;
+    return isPass;
+  }
+
+  function buildSubcards(ev) {
+    const t = I18N[lang];
+    const grid = $("subgrid");
+    const cards = [];
+    if (ev.sticker) {
+      const g = STICKER_GLYPH[ev.sticker] || "🙂";
+      cards.push(`<div class="subcard" data-sub><span class="sk">${t.stickerK}</span><span class="sv"><span class="sticker-mini"><span class="g" aria-hidden="true">${g}</span><code>:${escapeHtml(ev.sticker)}</code></span><br><span class="muted">${escapeHtml(t.stickerPick(ev.sticker))}</span></span></div>`);
+    }
+    cards.push(`<div class="subcard" data-sub><span class="sk">${t.memK}</span><span class="sv">${ev.mem ? escapeHtml(ev.mem) : `<span class="muted">${escapeHtml(t.memNone)}</span>`}</span></div>`);
+    if (typeof ev.evalScore === "number") {
+      let s = "";
+      for (let i = 1; i <= 5; i++) s += i <= ev.evalScore ? "★" : `<span class="off">★</span>`;
+      cards.push(`<div class="subcard" data-sub><span class="sk">${t.evalK}</span><span class="sv"><span class="stars" aria-hidden="true">${s}</span> <span class="eval-note">${ev.evalScore}/5 · ${escapeHtml(t.evalNote)}</span></span></div>`);
+    }
+    grid.innerHTML = cards.join("");
+    return Array.from(grid.querySelectorAll("[data-sub]"));
+  }
+
+  // ── Turn animation ────────────────────────────────────────────
+  // Returns true if it ran to completion, false if cancelled by a hard reset.
+  async function animateTurn(ev, token) {
+    const isPass = buildAgentPanel(ev);
+    addTyping();
+    try {
+      const steps = Array.from(mount.querySelectorAll(".pstep"));
+      for (const st of steps) {
+        if (token !== resetToken) return false;
+        st.classList.add("on");
+        await sleep(D(170));
+        if (token !== resetToken) return false;
+        st.classList.remove("on");
+        st.classList.add("done");
+        // once the model output is parsed, reveal the JSON fields progressively
+        if (st.getAttribute("data-step") === "parse") {
+          const ok = await revealJson(token, isPass);
+          if (!ok) return false;
+        }
+      }
+      removeTyping();
+      if (isPass) {
+        addPassLine(ev);
+      } else {
+        addBotReply(ev);
+        const subs = buildSubcards(ev);
+        for (const sc of subs) {
+          if (token !== resetToken) return false;
+          await sleep(D(160));
+          sc.classList.add("show");
+        }
+      }
+      return true;
+    } finally {
+      // guarantee the typing bubble is never orphaned, even on cancel
+      removeTyping();
+    }
+  }
+
+  async function revealJson(token, isPass) {
+    const rows = ["reasoning", "intent", "reply", "mem"];
+    for (const r of rows) {
+      if (token !== resetToken) return false;
+      const el = mount.querySelector(`[data-row="${r}"]`);
+      if (el) el.classList.add("show");
+      await sleep(D(isPass ? 220 : 180));
+    }
+    return true;
+  }
+
+  // ── Advance one event ─────────────────────────────────────────
+  // The single point that mutates idx. idx is committed only when an event
+  // finishes uncancelled, so pause/lang/restart can never drop or desync a turn.
+  async function advance() {
+    if (idx >= script().length) return false;
+    busy = true;
+    syncButtons();
+    const token = resetToken;
+    const ev = script()[idx];
+
+    if (ev.t === "msg") {
+      addUserMsg(ev);
+      await sleep(D(ev.kind ? 520 : 420));
+    } else {
+      await sleep(D(260));
+      await animateTurn(ev, token);
+      if (token === resetToken) await sleep(D(420));
+    }
+
+    if (token !== resetToken) return false;   // cancelled by a hard reset (which already reset state)
+    busy = false;
+    idx++;
+    updateProgress();
+    return idx < script().length;
+  }
+
+  // ── Player loop ───────────────────────────────────────────────
+  async function runLoop() {
+    while (playing) {
+      if (busy) { await sleep(20); continue; }   // safety: yield if a step is mid-flight
+      const token = resetToken;
+      const more = await advance();
+      if (token !== resetToken) return;          // a reset happened mid-advance — abandon
+      if (!more) {                               // reached the end
+        playing = false;
+        setPlayLabel();
+        syncButtons();
+        maybeFocusRestart();
+        return;
+      }
+    }
+    setPlayLabel();
+    syncButtons();
+  }
+
+  function maybeFocusRestart() {
+    const a = document.activeElement;
+    if (a === $("play") || a === $("step")) $("restart").focus();
+  }
+
+  // ── UI sync ───────────────────────────────────────────────────
+  function setPlayLabel() {
+    const t = I18N[lang];
+    const btn = $("play");
+    const ic = btn.querySelector(".ic");
+    const lbl = btn.querySelector(".lbl");
+    if (ic) ic.textContent = playing ? "⏸" : "▶";
+    if (lbl) lbl.textContent = playing ? t.pause : t.play;
+  }
+
+  function updateProgress() {
+    const sc = script();
+    const playedTurns = sc.slice(0, idx).filter((e) => e.t === "turn").length;
+    $("counter").textContent = `${playedTurns} / ${turnsTotal()}`;
+    // Drive the bar off the same unit as the counter (played turns) so the two
+    // advance together, instead of the bar tracking total events (msg+turn).
+    $("prog").style.width = `${Math.round((playedTurns / turnsTotal()) * 100)}%`;
+    syncButtons();
+  }
+
+  function syncButtons() {
+    const atEnd = idx >= script().length;
+    // Step: never while a play-loop runs, while an advance animates, or at the end.
+    $("step").disabled = atEnd || playing || busy;
+    // Play doubles as Pause: enabled while playing; disabled only while a STEP
+    // animates (not while a just-paused turn drains) or at the end when idle.
+    $("play").disabled = (stepping && !playing) || (atEnd && !playing);
+  }
+
+  // ── Reset / language ──────────────────────────────────────────
+  function resetStage() {
+    resetToken++;            // cancel any in-flight animation
+    playing = false;
+    busy = false;
+    idx = 0;
+    typingEl = null;
+    chat.innerHTML = "";
+    mount.innerHTML = `<div class="agent-empty">${escapeHtml(I18N[lang].empty)}</div>`;
+    applyStaticI18n();
+    updateProgress();
+  }
+
+  function applyStaticI18n() {
+    const t = I18N[lang];
+    $("lede").innerHTML = t.lede;
+    $("legend-lab").textContent = t.legend;
+    $("chat-title").textContent = t.members;
+    $("t-restart").textContent = t.restart;
+    $("t-step").textContent = t.step;
+    $("foot").innerHTML = t.foot;
+    setPlayLabel();
+  }
+
+  function setLang(next) {
+    if (next === lang) return;
+    lang = next;
+    $("lang-en").setAttribute("aria-pressed", String(next === "en"));
+    $("lang-zh").setAttribute("aria-pressed", String(next === "zh"));
+    document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
+    resetStage();
+  }
+
+  // ── Theme ─────────────────────────────────────────────────────
+  function setTheme(dark) {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    $("theme-btn").setAttribute("aria-pressed", String(dark));
+    $("theme-ico").textContent = dark ? "☀️" : "🌙";
+    $("theme-txt").textContent = dark ? "Light" : "Dark";
+    try { localStorage.setItem("onebot-demo-theme", dark ? "dark" : "light"); } catch (e) {}
+  }
+
+  // ── Wire up ───────────────────────────────────────────────────
+  $("play").addEventListener("click", () => {
+    if (idx >= script().length) return;
+    if (playing) {            // pause: let the in-flight advance finish, then the loop exits
+      playing = false;
+      setPlayLabel();
+      syncButtons();
+    } else {
+      playing = true;
+      setPlayLabel();
+      syncButtons();
+      // If a turn is still draining from a just-issued pause, the existing
+      // runLoop will pick `playing` back up on its next iteration; only start a
+      // fresh loop when idle, so we never run two loops at once.
+      if (!busy) runLoop();
+    }
+  });
+
+  $("step").addEventListener("click", async () => {
+    if (playing || busy || idx >= script().length) return;
+    stepping = true;
+    await advance();
+    stepping = false;
+    syncButtons();
+  });
+
+  $("restart").addEventListener("click", () => resetStage());
+  $("lang-en").addEventListener("click", () => setLang("en"));
+  $("lang-zh").addEventListener("click", () => setLang("zh"));
+  $("theme-btn").addEventListener("click", () => {
+    const dark = document.documentElement.getAttribute("data-theme") !== "dark";
+    setTheme(dark);
+  });
+
+  // initial theme: stored pref → system
+  (function initTheme() {
+    let pref = null;
+    try { pref = localStorage.getItem("onebot-demo-theme"); } catch (e) {}
+    if (pref === null) {
+      pref = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    setTheme(pref === "dark");
+  })();
+
+  applyStaticI18n();
+  updateProgress();
+})();
+</script>
+</body>
+</html>
