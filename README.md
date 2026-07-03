@@ -82,18 +82,19 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 Requirements: Python 3.10+ and one OpenAI-compatible chat API key. A OneBot v11 client (e.g. NapCat) is only needed for a **live group** — not for the trial below.
 
 ```bash
-# Bootstrap the venv, install deps, copy .env + persona templates
+# One command: venv + deps + an interactive setup wizard
 python quickstart.py
 ```
 
-`quickstart.py` is idempotent — re-running just reports what's already in place. Manual equivalent: create `.venv`, `pip install -r requirements.txt`, copy `.env.example → .env`, copy `data/persona.example.en.txt → persona.txt`.
+The wizard asks for your API provider (DeepSeek / Kimi / OpenAI / Ollama / any OpenAI-compatible endpoint), key, bot name and language, writes the answers into `.env` for you, can verify the key with a 1-token test call, optionally collects the live-QQ settings too (and prints the exact NapCat config to paste), then offers to drop you straight into a terminal chat. **No manual `.env` editing needed** — the file still doubles as the fully-annotated reference for every advanced knob.
+
+Idempotent — re-running reports what's in place and only re-offers the wizard if you want to reconfigure. `--no-input` (or piped stdin) skips the wizard for CI and just bootstraps: create `.venv`, `pip install -r requirements.txt`, copy `.env.example → .env` + persona template.
 
 ### Try it without QQ
 
-The fastest way to feel out a persona — no QQ account, no NapCat, just an API key.
+The fastest way to feel out a persona — no QQ account, no NapCat, just an API key. The wizard offers this at the end of setup; to run it again later:
 
 ```bash
-# In .env set just DEEPSEEK_API_KEY (+ DEEPSEEK_BASE_URL / DEEPSEEK_MODEL if not DeepSeek)
 python try_chat.py             # English (default)
 python try_chat.py --lang zh   # Chinese variant
 python try_chat.py --owner     # speak as the configured owner
@@ -103,13 +104,13 @@ You type a line, the bot replies — through the **same** reasoning path the liv
 
 ### Run live on a group
 
-1. **Configure `.env`** — fill the *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* block (`BOT_QQ`, `QQ_GROUPS`, `NAPCAT_API`) and write your `persona.txt`.
+1. **Configure `.env`** — if you answered the wizard's live-deployment questions this is already done; otherwise fill the *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* block (`BOT_QQ`, `QQ_GROUPS`, `NAPCAT_API`) and write your `persona.txt`.
 2. **Start the agent:**
    ```bash
    source .venv/bin/activate            # Windows: .venv\Scripts\activate
    python main.py                       # or: ./start.sh   (Windows: .\start.ps1)
    ```
-   You should see `bot started on 0.0.0.0:8080 (agent=True, lang=en)`.
+   You should see `bot started on 127.0.0.1:8080 (agent=True, lang=en)`.
 3. **Set up NapCat** (or any OneBot v11 client) and point it at the agent — see below.
 
 #### NapCat in 3 steps
