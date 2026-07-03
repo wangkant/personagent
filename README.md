@@ -236,7 +236,7 @@ All settings come from `.env`. Key fields:
 |---|---|
 | `AGENT_LANG` | `en` (default) or `zh`. Selects the per-language data files, validator mode, and lexicons. See [Language](#language-english--中文) |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Primary chat-completion model. Any OpenAI-compatible endpoint works. **The only key needed for `python try_chat.py`** |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_PRIVATE_MODEL` | **Optional.** Anthropic-compatible endpoint for the main reply path (`_call_anthropic`), where prompt caching kicks in. Leave blank to route through your primary endpoint's `{DEEPSEEK_BASE_URL}/anthropic` URL with `DEEPSEEK_API_KEY` |
+| `ANTHROPIC_PRIVATE_MODEL` | **Optional.** Alternate model name for 1:1 private chats, served by the same primary endpoint (the prefix is historical). Blank = `DEEPSEEK_MODEL` |
 | `BOT_QQ` / `BOT_NAME` | The bot account's QQ number and display name |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | A "favorite person" the bot is closer to (optional, all blank by default) |
 | `QQ_GROUPS` | Comma-separated group IDs to listen on. Empty = listen everywhere |

@@ -47,6 +47,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("import")
 
+
+def _atomic_write_json(path, obj) -> None:
+    """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
+    stickers.json, or the bot's next startup _load() silently falls back to an
+    empty library (all metadata lost)."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
 VISION_PROMPTS = {
     "en": (
         "This image is a **sticker / reaction meme** used in a group chat (not a real photo).\n"
@@ -230,15 +240,9 @@ async def main():
                                 i + 1, len(files), md5[:8])
 
             if new_count % 20 == 0:
-                STICKERS_JSON.write_text(
-                    json.dumps(entries, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
+                _atomic_write_json(STICKERS_JSON, entries)
 
-    STICKERS_JSON.write_text(
-        json.dumps(entries, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(STICKERS_JSON, entries)
     logger.info("done: %d new, %d tagged, %d dup skipped, %d unsupported, %d total in library",
                 new_count, tagged_count, skipped_dup, skipped_unsupported, len(entries))
     return 0

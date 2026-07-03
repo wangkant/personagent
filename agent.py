@@ -348,8 +348,6 @@ class Agent:
         model: str = "deepseek-chat",
         bot_qq: str = "",
         bot_name: str = "",
-        anthropic_key: str = "",
-        anthropic_base_url: str = "",
         anthropic_private_model: str = "",
         napcat_api: str = "http://127.0.0.1:3000",
         trigger_count: int = 30,
@@ -425,9 +423,12 @@ class Agent:
         # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
         # _spawn pattern main.py already uses for webhook tasks.
         self._bg_tasks: set[asyncio.Task] = set()
-        self.anthropic_key = anthropic_key
-        self.anthropic_base_url = anthropic_base_url.rstrip("/") if anthropic_base_url else ""
-        self.anthropic_private_model = anthropic_private_model
+        # Empty-model fallback: a blank ANTHROPIC_PRIVATE_MODEL in .env would
+        # otherwise send {"model": ""} on every DM — a guaranteed 400 that also
+        # arms the global fallback cooldown and downgrades group replies.
+        # (The name is historical: it's just an alternate model name served by
+        # the same OpenAI-compatible primary endpoint.)
+        self.anthropic_private_model = anthropic_private_model or model
         self.napcat_api = napcat_api.rstrip("/")
         self.trigger_count = trigger_count
         self.context_len = context_len
@@ -479,6 +480,13 @@ class Agent:
         self.glm_base_url = glm_base_url.rstrip("/") if glm_base_url else ""
         self.tavily_key = (tavily_key or "").strip()
 
+        # Group listen whitelist (QQ_GROUPS); empty set = listen everywhere.
+        # This is what .env.example promises ("the group(s) to listen on") —
+        # without an in-code gate a bot invited into N groups replies in all
+        # of them regardless of the setting.
+        self.allowed_groups: set = {
+            g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()
+        }
         # Private-chat whitelist: OWNER_QQ is always allowed; PRIVATE_ALLOWED_QQS
         # (comma-separated) lists additional QQs that may DM the bot. They take
         # the "ordinary friend" branch in _chat_private rather than the closer
@@ -690,6 +698,14 @@ class Agent:
 
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
+            return False
+        # QQ group whitelist (QQ_GROUPS) applies to the QQ path only: gateway
+        # groups carry ids like "telegram:-100..." that can never appear in
+        # QQ_GROUPS, and the forwarder plugin's own group_whitelist is the
+        # access filter for gateway conversations. Gate on the sink, which is
+        # set only inside handle_gateway.
+        if self.allowed_groups and current_sink.get() is None \
+                and group_id not in self.allowed_groups:
             return False
         if mid is not None:
             self._remember_msg_id(mid)
@@ -906,7 +922,10 @@ class Agent:
                 reply = filtered
                 self._commit_core_memory(group_id, _pending_core)
 
-            if not reply or reply.strip().upper().startswith("PASS"):
+            # Word boundary: only swallow the "PASS"/"PASS."/"PASS —" sentinel
+            # variants, not genuine replies like "passable lol" / "passed the
+            # vibe check" (the old prefix match silently dropped those).
+            if not reply or re.match(r"PASS\b", reply.strip(), re.IGNORECASE):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 if auto_mem:
                     self._save_auto_memory(group_id, auto_mem)
@@ -999,7 +1018,8 @@ class Agent:
                     h.pop()
 
             try:
-                reply, auto_mem = await self._chat_private(history, is_owner=is_owner)
+                reply, auto_mem = await self._chat_private(
+                    history, is_owner=is_owner, pkey=f"private:{user_id}")
             except Exception as e:
                 logger.warning("[Agent] private-chat LLM failed: %s", e)
                 _drop_pending_user()
@@ -1027,7 +1047,9 @@ class Agent:
             if auto_mem:
                 self._save_auto_memory(pkey, auto_mem)
 
-            if not reply or reply.strip().upper().startswith("PASS"):
+            # Same as the group path: word-boundary match so real replies
+            # starting with "pass" aren't swallowed.
+            if not reply or re.match(r"PASS\b", reply.strip(), re.IGNORECASE):
                 logger.info("[Agent] PASS (private user=%s)", user_id)
                 _drop_pending_user()
                 return False
@@ -1037,13 +1059,16 @@ class Agent:
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
-    async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False) -> tuple[str, str]:
+    async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "") -> tuple[str, str]:
         """Private chat. Uses Anthropic SDK + DeepSeek anthropic endpoint.
 
         is_owner=True  → owner-style override (very close, all defenses off)
         is_owner=False → ordinary-friend override (looser than group chat,
                          but doesn't pretend close acquaintance; some
-                         distance preserved since the relationship is unclear)."""
+                         distance preserved since the relationship is unclear).
+        pkey = "private:<uid>" memory namespace — without it, private-chat
+        memories / core notes are write-only (the model saves a mem but never
+        sees it next turn, which reads as "forgot everything I told it")."""
         last_user = next(
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
@@ -1117,10 +1142,20 @@ class Agent:
                 "If nothing feels natural, output exactly: PASS. Don't send filler like 'you there?' / 'hello?'.\n"
                 "</proactive>\n\n"
             )
+        # The private-chat memory namespace: _handle_private persists to
+        # private:<uid>; the same namespace must be read back into the prompt
+        # here, otherwise private memories are write-only.
+        memory_blocks = ""
+        if pkey:
+            memory_blocks = (
+                f"{self._core_memory_for_prompt(pkey)}"
+                f"{self._memories_for_prompt(pkey, focus_text=last_user)}"
+            )
         dynamic_block = (
             f"{proactive_note}"
             f"{private_overrides}"
-            f"{self._examples_for_prompt(focus_text=last_user)}\n\n"
+            f"{self._examples_for_prompt(focus_text=last_user)}"
+            f"{memory_blocks}\n\n"
             f"[Current local time] {self._current_time_str()}\n\n"
             f"{REASONING_PROTOCOL}"
         )
@@ -1419,6 +1454,13 @@ class Agent:
             except Exception as e:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
+        # SSRF guard: an image-segment URL can point at internal endpoints
+        # (169.254.169.254 IMDS, RFC1918) and the fetched bytes get shipped to
+        # the vision provider / sticker library. Block internal hosts here too
+        # — this fetcher doesn't go through _should_skip_url.
+        if self._host_is_internal(url):
+            logger.warning("[Agent] refusing internal-address image url: %s", url)
+            return None
         try:
             async with self._http(timeout=15, follow_redirects=True, max_redirects=5) as c:
                 r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -1557,6 +1599,13 @@ class Agent:
 
         real_url = url
         if "b23.tv" in url:
+            # SSRF gate: share-card JSON is group-member-controlled, and
+            # "contains b23.tv" is not "is a Bilibili shortlink"
+            # (http://10.0.0.1/x?b23.tv matches too) — never fetch internal hosts.
+            if self._host_is_internal(url):
+                logger.warning("[Agent] refusing internal-address b23 url: %s", url)
+                self.bili_info_cache[url] = {}
+                return {}
             try:
                 async with self._http(timeout=5, follow_redirects=True, max_redirects=5) as client:
                     r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -2285,13 +2334,17 @@ class Agent:
             # Context snapshotted at reply time (inside the group lock),
             # EXCLUDING the bot reply. Fall back to a live buffer read only if
             # the caller didn't pass a snapshot (older call sites / safety net).
+            # ctx_lines is normalized to a list of "name: text" strings — the
+            # example auto-append below reuses it; never index the strings as
+            # dicts again.
             if ctx_msgs is not None:
-                ctx_text = "\n".join(ctx_msgs)
+                ctx_lines = list(ctx_msgs)
             else:
-                ctx_text = "\n".join(
+                ctx_lines = [
                     f"{m['name']}: {m['text']}"
                     for m in list(self.buffers[group_id])[-6:-1]
-                )
+                ]
+            ctx_text = "\n".join(ctx_lines)
 
             has_sticker = bool(sticker_files)
             sticker_clause = (
@@ -2332,7 +2385,10 @@ class Agent:
                 eval_url = f"{self.glm_base_url}/chat/completions"
                 eval_auth = self.glm_api_key
             else:
-                eval_url = f"{self.base_url}/chat/completions"
+                # /v1 prefix matches the main call path (_call_anthropic):
+                # DeepSeek accepts both aliases, but other OpenAI-compatible
+                # endpoints only serve /v1 — without it evals silently 404.
+                eval_url = f"{self.base_url}/v1/chat/completions"
                 eval_auth = self.api_key
             eval_payload = {
                 "model": self.eval_model,
@@ -2443,18 +2499,16 @@ class Agent:
             reply_clean = reply.strip()
             if (score >= 5 and reply_clean and reply_clean.upper() != "PASS"
                     and reply_clean not in self._auto_examples_seen):
-                ctx_list = [f"{m['name']}: {m['text']}" for m in ctx_msgs]
                 ex = {
                     "ts": record["ts"],
                     "scenario": f"{mode}:{intent}" if intent else mode,
                     "mode": mode,
                     "intent": intent,
-                    "context": ctx_list,
+                    "context": ctx_lines,
                     "reply": reply_clean,
                     "score": score,
                 }
-                self._append_with_rotation(
-                    self.examples_file,
+                self._append_example_with_trim(
                     json.dumps(ex, ensure_ascii=False) + "\n",
                 )
                 self._auto_examples_seen.add(reply_clean)
@@ -2762,7 +2816,7 @@ class Agent:
             disable_thinking=False,
             # Search decisions judge the real trigger text, not the whole
             # rendered prompt (see _decide_and_search).
-            search_hint=text,
+            search_hint=latest_text,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
@@ -2814,6 +2868,47 @@ class Agent:
             self.stickers._save(force=True)
         except Exception as e:
             logger.debug("[Agent] sticker flush on shutdown failed: %s", e)
+
+    def _append_example_with_trim(self, line: str, max_bytes: int = 5_000_000) -> None:
+        """Append an auto-harvested example. Over budget, **trim instead of
+        rotating**: _append_with_rotation moves the whole file to .old and
+        starts fresh, but the head of examples.jsonl is the hand-curated
+        bootstrap pool (no "score" field) — rotation would wipe it and the
+        few-shot retrieval pool would collapse to near-empty. Keep every
+        curated entry; drop the oldest auto entries (the ones carrying
+        "score") until back under half the budget. Atomic (.tmp + replace)."""
+        path = self.examples_file
+        try:
+            sz = path.stat().st_size if path.exists() else 0
+        except OSError:
+            sz = 0
+        if path.exists() and sz + len(line.encode("utf-8")) > max_bytes:
+            try:
+                lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+                curated = [l for l in lines if '"score"' not in l]
+                auto = [l for l in lines if '"score"' in l]
+                budget = max_bytes // 2  # trim to half budget so appends don't rewrite every time
+                kept: list[str] = []
+                used = sum(len(l.encode("utf-8")) + 1 for l in curated)
+                for l in reversed(auto):  # newest first
+                    b = len(l.encode("utf-8")) + 1
+                    if used + b > budget:
+                        break
+                    kept.append(l)
+                    used += b
+                new_lines = curated + list(reversed(kept))
+                tmp = path.with_suffix(path.suffix + ".tmp")
+                tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                tmp.replace(path)
+                logger.info("[Agent] examples.jsonl trimmed: %d -> %d lines (%d curated kept)",
+                            len(lines), len(new_lines), len(curated))
+            except OSError as e:
+                logger.warning("[Agent] examples trim failed: %s", e)
+        try:
+            with path.open("a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError as e:
+            logger.warning("[Agent] examples append failed: %s", e)
 
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
@@ -2997,9 +3092,18 @@ class Agent:
 
     @staticmethod
     def _is_sleep_hour() -> bool:
-        """True if current local hour falls in the sleep window (default 02:00-07:00).
-        Handles wraparound for future config changes."""
-        h = time.localtime().tm_hour
+        """True if the current hour falls in the sleep window (default
+        02:00-07:00). Uses the TZ_OFFSET_HOURS timezone — the same clock
+        _current_time_str shows the model — not the server's local time:
+        on e.g. a UTC host the bot would otherwise "sleep" through the
+        persona's morning and chat freely at persona 3 a.m. Handles
+        wraparound for future config changes."""
+        from datetime import datetime, timezone, timedelta
+        try:
+            tz_hours = float(os.getenv("TZ_OFFSET_HOURS", "8"))
+        except ValueError:
+            tz_hours = 8.0
+        h = datetime.now(timezone(timedelta(hours=tz_hours))).hour
         if SLEEP_HOUR_START <= SLEEP_HOUR_END:
             return SLEEP_HOUR_START <= h < SLEEP_HOUR_END
         return h >= SLEEP_HOUR_START or h < SLEEP_HOUR_END
@@ -3052,10 +3156,13 @@ class Agent:
             break
 
     def _evict_conversation(self, key: str) -> None:
-        """Drop all of a conversation's transient in-memory state (buffer /
-        locks / counters / throttle window / ...). Persistent stores
-        (memories / core_memory) are left alone — they have their own per-key
-        caps and evicting them would lose real user data."""
+        """Drop all of a conversation's in-memory state (buffer / locks /
+        counters / throttle window / ...). Entries under the same key in the
+        persistent stores (memories / core_memory) go too: gateway conversation
+        keys are minted remotely, and keeping them would let a malicious
+        forwarder cycle conversation ids to grow memory.json / core_memory.json
+        forever (each key is capped, the key count wasn't). QQ groups/DMs never
+        enter the LRU, so real user data is unaffected."""
         self._gateway_conv_lru.pop(key, None)
         for d in (self.locks, self.send_locks, self.buffers, self.counters,
                   self.last_reply_at, self.active_users, self._msg_seq,
@@ -3069,6 +3176,12 @@ class Agent:
             self.private_history.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(f"dm:{uid}", None)
+        # Group-conversation memory key = the group_id itself; gateway DM
+        # memory key = "private:<uid>" = key.
+        if self.memories.pop(key, None) is not None:
+            self._save_memories()
+        if self.core_memory.pop(key, None) is not None:
+            self._save_core_memory()
         logger.info("[Agent] gateway conversation evicted (over the %d cap): %s",
                     _MAX_GATEWAY_CONVS, key)
 
@@ -3218,8 +3331,8 @@ class Agent:
         @ed or named the bot and weren't replied to, process one of them."""
         if not self.enabled:
             return
-        fallback_groups = [g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()]
-        for group_id in list(self.buffers.keys()) or fallback_groups:
+        # Single source of truth: allowed_groups is parsed from QQ_GROUPS in __init__.
+        for group_id in list(self.buffers.keys()) or list(self.allowed_groups):
             # Gateway conversations ("<platform>:<id>") are inbound-only; the
             # NapCat history API can't poll them (and int() would crash).
             if ":" in group_id:
@@ -3302,9 +3415,7 @@ class Agent:
     async def _maybe_proactive_groups(self) -> bool:
         """At most one proactive group message per tick. Returns True if sent."""
         now = time.time()
-        groups = list(self.buffers.keys()) or [
-            g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()
-        ]
+        groups = list(self.buffers.keys()) or list(self.allowed_groups)
         random.shuffle(groups)
         for gid in groups:
             # Gateway conversations ("<platform>:<id>") are inbound-only;
@@ -3365,7 +3476,8 @@ class Agent:
             try:
                 async with self.locks[f"private:{uid}"]:
                     history = list(self.private_history.get(uid, []))[-10:]
-                    reply, mem = await self._chat_private(history, is_owner=is_owner, proactive=True)
+                    reply, mem = await self._chat_private(
+                        history, is_owner=is_owner, proactive=True, pkey=f"private:{uid}")
                     self.last_proactive_at[key] = now
                     if not reply or reply.strip().upper() == "PASS":
                         continue
@@ -3387,7 +3499,7 @@ class Agent:
         try:
             async with self._http(timeout=15) as client:
                 r = await client.post(
-                    f"{self.base_url}/chat/completions",
+                    f"{self.base_url}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={
                         "model": self.model,

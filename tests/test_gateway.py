@@ -729,6 +729,109 @@ async def regression_mem_command_sends_outside_lock(tmp: Path) -> None:
           lock_held_during_send == [False], repr(lock_held_during_send))
 
 
+async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
+    """With the QQ group whitelist configured (QQ_GROUPS), gateway groups
+    (sink set) must still be handled, while an unlisted QQ group on the
+    no-sink path is rejected — the whitelist the docs promise."""
+    agent = make_agent(tmp)
+    agent.allowed_groups = {"123456"}
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        return "on my way", "called", ""
+
+    agent._think = fake_think
+    event = {
+        "platform": "telegram",
+        "message_type": "group",
+        "conversation_id": "-100777",
+        "user_id": "42",
+        "sender_name": "Alice",
+        "self_id": "999000",
+        "message_id": 801,
+        "is_at_me": True,
+        "segments": [
+            {"type": "mention", "user_id": "999000", "name": "TestBot"},
+            {"type": "text", "text": " hello"},
+        ],
+        "raw_text": "@TestBot hello",
+    }
+    result = await agent.handle_gateway(event)
+    check("group whitelist: gateway group bypasses QQ_GROUPS",
+          result["handled"] is True and len(result["replies"]) >= 1, repr(result))
+
+    qq_payload = {
+        "post_type": "message",
+        "message_type": "group",
+        "group_id": "999999",  # not in allowed_groups
+        "user_id": "777",
+        "sender": {"user_id": "777", "nickname": "Bob"},
+        "raw_message": "@TestBot hi",
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": " hi"}}],
+        "message_id": 802,
+    }
+    handled = await agent.handle(qq_payload)
+    check("group whitelist: unlisted QQ group rejected",
+          handled is False, repr(handled))
+
+
+async def regression_think_full_path_search_hint(tmp: Path) -> None:
+    """_think's full prompt-build path must run end to end (a search_hint
+    referencing an undefined name once broke every group reply with a
+    NameError), and search_hint must carry the real trigger text rather than
+    the whole rendered prompt."""
+    agent = make_agent(tmp)
+    captured = {}
+
+    async def fake_call(system, messages, model, **kw):
+        captured.update(kw)
+        return '{"reasoning": "r", "intent": "chat", "reply": "sounds right", "mem": ""}'
+
+    agent._call_anthropic = fake_call
+    agent._append_buffer("g", "Alice", "TestBot what is black myth wukong", "42")
+    reply, intent, mem = await agent._think("g", "called", "what is black myth wukong")
+    check("think: full prompt path runs (no NameError)", reply == "sounds right", repr(reply))
+    check("think: search_hint carries the real trigger text",
+          captured.get("search_hint") == "what is black myth wukong", repr(captured))
+
+
+async def regression_eval_auto_append_examples(tmp: Path) -> None:
+    """A score-5 reply must actually land in the examples.jsonl few-shot pool
+    (indexing the string context as dicts once made the whole self-training
+    harvest silently raise TypeError)."""
+    agent = make_agent(tmp)
+    agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
+
+    class _FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": '{"score": 5, "reason": "good"}'}}]}
+
+    class _FakeHTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *a, **k):
+            return _FakeResp()
+
+    agent._http = lambda **kw: _FakeHTTP()
+    await agent._evaluate_reply("g", "called", "question", "a really sharp reply",
+                                None, "chat", ["Alice: question"])
+    check("eval: examples file created", agent.examples_file.exists(),
+          "auto-append never ran")
+    if agent.examples_file.exists():
+        import json as _json
+        ex = _json.loads(agent.examples_file.read_text(encoding="utf-8").strip().splitlines()[-1])
+        check("eval: high-score reply appended", ex.get("reply") == "a really sharp reply", repr(ex))
+        check("eval: snapshot context stored as strings",
+              ex.get("context") == ["Alice: question"], repr(ex.get("context")))
+
+
 async def regression_gateway_conv_eviction(tmp: Path) -> None:
     """Gateway conversation keys are LRU-capped so a runaway/malicious
     forwarder can't grow the per-conversation dicts without bound. In-flight
@@ -738,6 +841,7 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     agent.buffers["123456"].append({"name": "q", "text": "qq group", "user_id": "7"})
     agent.buffers["tg:0"].append({"name": "x", "text": "hi", "user_id": "9"})
     agent.counters["tg:0"] = 3
+    agent.memories["tg:0"] = [{"text": "m", "time": 1.0}]  # persistent entry must go too
     agent._touch_gateway_conv("tg:0")
     async with agent.locks["tg:1"]:
         agent.buffers["tg:1"].append({"name": "y", "text": "held", "user_id": "8"})
@@ -750,6 +854,8 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     check("conv-evict: oldest evicted with its state",
           "tg:0" not in agent._gateway_conv_lru
           and "tg:0" not in agent.buffers and "tg:0" not in agent.counters)
+    check("conv-evict: persistent memories for the evicted gateway key dropped",
+          "tg:0" not in agent.memories, repr(list(agent.memories)))
     check("conv-evict: locked conversation skipped",
           "tg:1" in agent._gateway_conv_lru and "tg:1" in agent.buffers)
     check("conv-evict: next-oldest unlocked evicted instead",
@@ -772,6 +878,9 @@ async def main_async() -> None:
         await regression_throttle_send(tmp / "j")
         await regression_mem_command_sends_outside_lock(tmp / "k")
         await regression_gateway_conv_eviction(tmp / "l")
+        await regression_group_whitelist_gateway_bypass(tmp / "m")
+        await regression_think_full_path_search_hint(tmp / "n")
+        await regression_eval_auto_append_examples(tmp / "o")
 
 
 def main() -> int:

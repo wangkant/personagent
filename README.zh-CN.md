@@ -236,7 +236,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 |---|---|
 | `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_PRIVATE_MODEL` | **可选。** 主回复路径（`_call_anthropic`）走的 Anthropic 兼容端点，prompt caching 在这条上启用。留空则回退到主端点的 `{DEEPSEEK_BASE_URL}/anthropic` URL，用 `DEEPSEEK_API_KEY` 走这条路径 |
+| `ANTHROPIC_PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点（前缀是历史遗留）。留空 = 私聊也用 `DEEPSEEK_MODEL` |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | bot 比较熟的人 (可选, 默认空) |
 | `QQ_GROUPS` | 监听的群号, 逗号分隔. 留空 = 所有群都听 |
