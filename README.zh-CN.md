@@ -1,6 +1,8 @@
 # persona-llm-agent
 
 [![在线 demo](assets/live-demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 [English](README.md) | **中文**
 
@@ -11,6 +13,25 @@
 > **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
 > 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 OneBot 协议端 (例如 QQ 的 NapCat) 没有上游 IM 平台背书；如果你选择部署到 QQ，建议用小号 + 家庭/居民 IP 跑。仓库作者不对你选择的协议端承担任何责任。
 
+## 目录
+
+- [设计动机](#设计动机)
+- [快速开始](#快速开始)
+- [多平台接入（AstrBot）](#多平台接入astrbot)
+- [语言（English / 中文）](#语言english--中文)
+- [主动发言（可选）](#主动发言可选)
+- [输出协议：JSON 不是 XML](#输出协议json-不是-xml)
+- [回复示例](#回复示例)
+- [配置](#配置)
+- [迭代循环](#迭代循环)
+- [表情包质量管线](#表情包质量管线)
+- [架构](#架构)
+- [组成模块](#组成模块)
+- [开发](#开发)
+- [隐私](#隐私)
+- [License](#license)
+- [致谢](#致谢)
+
 ## 设计动机
 
 大多数"群聊 LLM"项目最终都停留在客服模式：礼貌、热心、有问必答，却没有自己的立场。本模板从四个方面解决人设问题：
@@ -19,63 +40,6 @@
 - **将风格作为代码维护。** `STYLE_GUIDE` 将人设的*口吻*、禁用句式、身份攻击防御、旁观者位规则以及"看图而不复述图"等规则编码进 prompt——这些约束正是让 agent 具备人格、而非通用助手的关键。
 - **表情包是语气的一部分。** 表情库自动收集群内新表情，用视觉模型打标，进行文字与视觉两层 persona-fit 评估，并允许模型通过 `[STICKER:<tag>]` 内联发送。基于真实对话的反馈闭环会将持续表现不佳的表情降级。
 - **理解实际内容。** 文本中的链接、B 站 / YouTube 视频以及各类小程序分享卡都会被抓取、解析，并以结构化上下文提供给模型，使其接收到底层内容，而非一个不透明的 URL。
-
-## 组成模块
-
-| 模块 | 职责 |
-|---|---|
-| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
-| `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
-| `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
-| `gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊。回归测试在 `tests/test_gateway.py`（直接 `python tests/test_gateway.py`，不需要 pytest） |
-| `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
-| `tools/auto_reviewer.py` | 扫 `eval.jsonl` 里低分条目，自动生成 `failure_mode + constraint + BAD/OK 草稿` 用于打补丁 |
-| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
-| `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
-
-## 架构
-
-![persona-llm-agent 架构](docs/persona_llm_agent_architecture.zh-CN.svg)
-
-<details>
-<summary>实现细节（handler 调用链）</summary>
-
-```
-NapCat (QQ ↔ OneBot)          AstrBot + 转发插件
-    │                              │
-    │  POST /webhook/qq            │  POST /webhook/gateway
-    ▼                              ▼
-┌──────────────────── main.py (FastAPI) ────────────────────┐
-│                                                            │
-│  ┌──────────────────── agent.py ────────────────────────┐  │
-│  │  handle(payload)                                     │  │
-│  │    ├─ 持久 dedup (seen_msg_ids.json)                  │  │
-│  │    ├─ 防抖 + sticky-call 继承                          │  │
-│  │    ├─ 视觉 (图 / 表情 caption)                         │  │
-│  │    ├─ URL / 分享卡 元信息抓取                          │  │
-│  │    ├─ buffer (按群滚动历史)                             │  │
-│  │    ├─ 模式判定 (owner / called / followup / judge)     │  │
-│  │    └─ _think()                                       │  │
-│  │         ├─ 拼缓存分块 system prompt                    │  │
-│  │         ├─ 调 LLM (JSON 输出协议)                      │  │
-│  │         ├─ _parse_model_output (fail-closed)         │  │
-│  │         ├─ output_filter (语义正则规则)                │  │
-│  │         ├─ _validate_reply_safe (字符白名单)           │  │
-│  │         ├─ _send_qq (表情匹配 + 发送)                   │  │
-│  │         └─ 异步自评 → eval.jsonl + sticker 评分        │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌──────────────────── stickers.py ─────────────────────┐  │
-│  │  偷 → 打标 → persona-fit 文字门 → 视觉审美门            │  │
-│  │  → eval 反馈闭环 → 偏向新鲜度的选择                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
-    │                              │
-    │  POST /send_group_msg        │  网关响应里带回复
-    ▼                              ▼
-NapCat → QQ                   AstrBot → Telegram / Discord / …
-```
-</details>
 
 ## 快速开始
 
@@ -184,7 +148,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 
 在 `.env` 里调 `PROACTIVE_*`。默认值：群冷场 ≥45 分钟、两次间隔 ≥3 小时、每次检查约 25%；私聊冷场 ≥4 小时、间隔 ≥24 小时、约 20%。
 
-## 输出协议 — JSON 不是 XML
+## 输出协议：JSON 不是 XML
 
 模型每条回复输出单个 JSON 对象：
 
@@ -286,6 +250,79 @@ prompt 的分块结构是为了让 bug 好定位：
 5. **评估反馈闭环。** 每张发出的表情由自评器打 1–5 分；累积平均低于阈值即自动降级为 `persona_fit=false`。
 6. **选择。** `pick_by_tag` 通过同义词扩展进行匹配，为较新条目给予少量新鲜度加分，跳过孤儿条目（backing 文件缺失的条目），并在丢弃纯表情回复前回退到近期用过的匹配项。
 7. **清理。** 标记为 `persona_fit=false` 的条目会在下次启动时删除（记录与文件）。
+
+## 架构
+
+![persona-llm-agent 架构](docs/persona_llm_agent_architecture.zh-CN.svg)
+
+<details>
+<summary>实现细节（handler 调用链）</summary>
+
+```
+NapCat (QQ ↔ OneBot)          AstrBot + 转发插件
+    │                              │
+    │  POST /webhook/qq            │  POST /webhook/gateway
+    ▼                              ▼
+┌──────────────────── main.py (FastAPI) ────────────────────┐
+│                                                            │
+│  ┌──────────────────── agent.py ────────────────────────┐  │
+│  │  handle(payload)                                     │  │
+│  │    ├─ 持久 dedup (seen_msg_ids.json)                  │  │
+│  │    ├─ 防抖 + sticky-call 继承                          │  │
+│  │    ├─ 视觉 (图 / 表情 caption)                         │  │
+│  │    ├─ URL / 分享卡 元信息抓取                          │  │
+│  │    ├─ buffer (按群滚动历史)                             │  │
+│  │    ├─ 模式判定 (owner / called / followup / judge)     │  │
+│  │    └─ _think()                                       │  │
+│  │         ├─ 拼缓存分块 system prompt                    │  │
+│  │         ├─ 调 LLM (JSON 输出协议)                      │  │
+│  │         ├─ _parse_model_output (fail-closed)         │  │
+│  │         ├─ output_filter (语义正则规则)                │  │
+│  │         ├─ _validate_reply_safe (字符白名单)           │  │
+│  │         ├─ _send_qq (表情匹配 + 发送)                   │  │
+│  │         └─ 异步自评 → eval.jsonl + sticker 评分        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│  ┌──────────────────── stickers.py ─────────────────────┐  │
+│  │  偷 → 打标 → persona-fit 文字门 → 视觉审美门            │  │
+│  │  → eval 反馈闭环 → 偏向新鲜度的选择                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+    │                              │
+    │  POST /send_group_msg        │  网关响应里带回复
+    ▼                              ▼
+NapCat → QQ                   AstrBot → Telegram / Discord / …
+```
+</details>
+
+## 组成模块
+
+| 模块 | 职责 |
+|---|---|
+| `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
+| `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
+| `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
+| `gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊 |
+| `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
+| `tools/auto_reviewer.py` | 扫 `eval.jsonl` 里低分条目，自动生成 `failure_mode + constraint + BAD/OK 草稿` 用于打补丁 |
+| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
+| `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
+
+## 开发
+
+回归测试无需测试框架——纯标准库 Python，不依赖 pytest：
+
+```bash
+python tests/test_gateway.py
+```
+
+它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流以及配置向导的 `.env` 写入逻辑。提交 PR 前请先跑一遍。
+
+用于 prompt 与人设调优：
+
+- `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
+- `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 `data/examples.<lang>.jsonl`。
+- `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁建议。
 
 ## 隐私
 
