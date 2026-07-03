@@ -4,25 +4,25 @@
 
 [English](README.md) | **中文**
 
-一个**人设型 LLM agent 模板**，用于群聊和私聊 —— 目标是发出来的消息像真人闲聊，而不是客服机器人。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关 + [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，把同一个人设扩展到 **Telegram、Discord、Slack、飞书、KOOK**，且人设管线零改动。本仓库的主要价值在于 LLM agent / prompt engineering 的设计模式实践；接平台只是演示载体，仓库内不包含任何 IM 协议实现。
+一个**人设型 LLM agent 模板**，用于群聊和私聊，目标是让发出的消息读起来像真人闲聊，而非客服机器人。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关与 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，可在人设管线零改动的前提下，将同一人设扩展到 **Telegram、Discord、Slack、飞书、KOOK**。本仓库的核心价值在于 LLM agent 与 prompt engineering 的设计模式实践；平台接入仅为演示载体，仓库内不包含任何 IM 协议实现。
 
-> **英文优先, 中英双语。** agent 默认跑英文, 一个开关 (`AGENT_LANG=zh`) 切到中文。详见[语言](#语言english--中文)。想 30 秒上手、不需要 QQ 账号？直接看[免 QQ 试用](#免-qq-试用)。
+> **英文优先，中英双语。** agent 默认运行英文，通过一个开关（`AGENT_LANG=zh`）即可切换至中文。详见[语言](#语言english--中文)。想在 30 秒内上手、且无需 QQ 账号？请直接查看[免 QQ 试用](#免-qq-试用)。
 
 > **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
 > 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 OneBot 协议端 (例如 QQ 的 NapCat) 没有上游 IM 平台背书；如果你选择部署到 QQ，建议用小号 + 家庭/居民 IP 跑。仓库作者不对你选择的协议端承担任何责任。
 
-## 这个项目想解决什么
+## 设计动机
 
-大部分"群里跑 LLM"的项目最后都像卡在客服模式的机器人 —— 礼貌、热心、有问必答，没自己的脾气。这套模板从几个角度治这个病：
+大多数"群聊 LLM"项目最终都停留在客服模式：礼貌、热心、有问必答，却没有自己的立场。本模板从四个方面解决人设问题：
 
-- **输出安全优先。** reasoning / intent / reply 不再是 XML 内嵌标签，而是 JSON 字段 —— 模型输出哪怕半截，也不可能把内部思考漏到群里。送出前还过一层字符白名单，凡是不像**当前语言**真实聊天的(XML 残片、JSON 大括号、模型 token、漏出的模板) 整条丢 —— 未来出现的未知漏出形态会被自动挡掉。
-- **风格当成代码写。** STYLE_GUIDE 把人设的*口吻*、雷区句式、身份攻击防御、旁观者位规则、"看图不念图"等都编码进 prompt —— 这些规则是把"AI 客服"变成"一个人"的关键。
-- **表情包是声音的一部分。** 表情库自动收新表情、打标签、文字+视觉两层 persona-fit 过滤；真实对话反馈闭环会把不合人设的表情慢慢降级。模型用 `[STICKER:<tag>]` 标记发表情。
-- **真正看懂内容。** 文本里贴的链接、B 站 / YouTube 视频、各种小程序分享卡都会抓取元信息，作为结构化上下文喂给模型，不再让它对着一个 URL 干瞪眼。
+- **输出安全优先。** reasoning / intent / reply 是 JSON 字段而非内嵌 XML 标签，因此模型输出即便残缺，也无法将内部思考泄露到可见回复中。发送前还会经过一层字符白名单，凡是不符合**当前语言**正常聊天特征的内容（XML 残片、JSON 大括号、模型 token、泄露的模板）整条丢弃；未来出现的未知泄露形态也会被自动拦截。
+- **将风格作为代码维护。** `STYLE_GUIDE` 将人设的*口吻*、禁用句式、身份攻击防御、旁观者位规则以及"看图而不复述图"等规则编码进 prompt——这些约束正是让 agent 具备人格、而非通用助手的关键。
+- **表情包是语气的一部分。** 表情库自动收集群内新表情，用视觉模型打标，进行文字与视觉两层 persona-fit 评估，并允许模型通过 `[STICKER:<tag>]` 内联发送。基于真实对话的反馈闭环会将持续表现不佳的表情降级。
+- **理解实际内容。** 文本中的链接、B 站 / YouTube 视频以及各类小程序分享卡都会被抓取、解析，并以结构化上下文提供给模型，使其接收到底层内容，而非一个不透明的 URL。
 
-## 仓库结构
+## 组成模块
 
-| 模块 | 作用 |
+| 模块 | 职责 |
 |---|---|
 | `agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl`；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
 | `stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
@@ -33,7 +33,7 @@
 | `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
 
-## 架构图
+## 架构
 
 ![persona-llm-agent 架构](docs/persona_llm_agent_architecture.zh-CN.svg)
 
@@ -79,7 +79,7 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 
 ## 快速开始
 
-依赖：Python 3.10+、一个 OpenAI 兼容的 chat completions API key。OneBot v11 客户端（例如 NapCat）只有跑**真实群聊**时才需要 —— 下面的试用不用。
+依赖：Python 3.10+ 与一个 OpenAI 兼容的 chat completions API key。OneBot v11 客户端（例如 NapCat）仅在运行**真实群聊**时才需要；下面的试用无需它。
 
 ```bash
 # 一条命令：venv + 依赖 + 交互式配置向导
@@ -92,7 +92,7 @@ python quickstart.py
 
 ### 免 QQ 试用
 
-体验人设最快的路子 —— 不要 QQ 账号、不要 NapCat，只要一个 API key。向导最后一步就会主动带你进来；之后想再跑：
+体验人设最快的方式——无需 QQ 账号、无需 NapCat，只要一个 API key。向导会在最后一步引导你进入；之后如需再次运行：
 
 ```bash
 python try_chat.py             # 英文（默认）
@@ -100,7 +100,7 @@ python try_chat.py --lang zh   # 中文变体
 python try_chat.py --owner     # 以配置的 owner 身份说话
 ```
 
-你打一行，bot 回一句 —— 走的是和线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。它还会把选中的 `intent` 和抽取到的 `mem` 一起打印出来，方便你看协议怎么运作。想针对 fixture 做批量/离线调优（给回复打分、扩充 few-shot 库），用 `python tools/prompt_lab.py`。
+你输入一行，bot 回复一句——走的是与线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。它还会一并打印选中的 `intent` 与抽取到的 `mem`，便于观察协议的运作。若需针对 fixture 做批量 / 离线调优（为回复打分、扩充 few-shot 库），使用 `python tools/prompt_lab.py`。
 
 ### 在群里实际运行
 
@@ -129,16 +129,16 @@ python try_chat.py --owner     # 以配置的 owner 身份说话
    ```
 3. 先起 NapCat，再起 agent。在群里发条消息，看日志。
 
-#### 两个端口、两个方向
+#### 端口与数据流向
 
-新手最容易搞混 —— 这两条是反方向的：
+这两条连接方向相反，容易混淆：
 
 ```
 NapCat  --(webhook: 事件)-->  agent :8080    (.env 里的 HOST / PORT)
 agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
 ```
 
-> **Windows 一键启动:** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。用之前先改文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；它会自动优先用 `.venv`。
+> **Windows 启动器：** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。使用前先设置文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；存在 `.venv` 时会自动优先使用。
 
 ## 多平台接入（AstrBot）
 
@@ -175,12 +175,12 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 
 默认 bot 是纯被动的 —— 只在有消息进来时才说话。设 `PROACTIVE_ENABLE=true` 后，后台循环会偶尔在没有任何触发的情况下**主动**发一句，让它更像一个偶尔会打破沉默的真人，而不是 24 小时待命的应答机。
 
-这套机制刻意保守 ——「黏人 bot 对着空气刷屏」比安静更糟：
+该机制刻意保守：一个对着空场刷屏的 bot 比保持安静更糟：
 
-- **只在真正冷场之后**、且在 sleep window 之外触发，带每个会话的冷却和很低的单次概率。
-- **绝不凭空开口。** 只在它已经见过有人说话的群里动，只主动私聊曾经私聊过它的人（owner + `PRIVATE_ALLOWED_QQS`）—— 不会无缘无故给谁发消息。
-- **模型被告知：除非真有话想说否则一律 PASS** —— 接之前的话题 / 一个路过的想法 / 轻问候 —— 而且**不许发**「在吗」这种空话。大多数 tick 什么都不产出。
-- **群聊和私聊**一视同仁，各自有独立的静默 / 冷却 / 概率旋钮。
+- **仅在真正冷场之后**，且在 sleep window 之外触发，附带每个会话的冷却时间与很低的单次触发概率。
+- **绝不凭空开口。** 仅在已观察到有人发言的群里活动，也只主动私聊曾私聊过它的人（owner 与 `PRIVATE_ALLOWED_QQS`）；不会无端联系任何人。
+- **模型被要求：除非确有话可说，否则一律返回 PASS**——例如接续此前的话题、一个偶发的想法，或一句简短问候——并**不得发送**「在吗」之类的空话。大多数 tick 不产出任何内容。
+- **群聊与私聊**行为一致，各自拥有独立的静默、冷却与概率参数。
 
 在 `.env` 里调 `PROACTIVE_*`。默认值：群冷场 ≥45 分钟、两次间隔 ≥3 小时、每次检查约 25%；私聊冷场 ≥4 小时、间隔 ≥24 小时、约 20%。
 
@@ -227,7 +227,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 > Bot: `哥 两分钟前的事 这记忆堪比金鱼 [STICKER:嘲讽]`
 > — 对熟人 (owner) 可以小调侃, 留台阶.
 
-风格规律：agent 先推理谁说啥给谁(旁观者位敏感)、选 intent、用对应子风格写 reply ——不列点、不分析腔、不客服腔。
+风格规律：agent 先推理谁对谁说了什么（具备旁观者位意识），选定 intent，再以对应子风格撰写 reply——不列点、不用分析腔、不用客服腔。
 
 ## 配置
 
@@ -273,19 +273,19 @@ prompt 的分块结构是为了让 bug 好定位：
 
 `data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
-## 表情包质量机制
+## 表情包质量管线
 
 ![表情包库七步过滤](docs/sticker_seven_step_filter.zh-CN.svg)
 
-表情包在能被选用之前要过多层门：
+表情包在可被选用之前需经过多道门：
 
-1. **偷.** 群里出现的非 bot 图片，按 md5 去重存盘。
-2. **打标.** 上下文够了，tagger LLM 根据**周围聊天**推断这个表情的情绪/梗（它看不到图）。
-3. **文字 persona-fit 门.** 同 tagger 判定推断的情绪是不是合人设。`PERSONA_PROMPT_VERSION` 一 bump，旧条目下次启动会被重新评判。
-4. **视觉审美门.** 视觉模型直接**看图**判视觉风格 (现代清爽设计 vs 中老年群家族风)。文字判不出来的它能。`VISUAL_AESTHETIC_VERSION` 同样 bump 触发重跑。
-5. **eval 反馈闭环.** 每张发出去的表情都拿 1-5 分；累积平均低于阈值自动 `persona_fit=false`。
-6. **选择.** `pick_by_tag` 同义词扩展 + 新鲜度加分 + 跳孤儿条目 + 冷却兜底（避免纯表情回复整条丢）。
-7. **清理.** `persona_fit=false` 的下次启动物理删除(条目 + 文件)。
+1. **收集。** 群内出现的非 bot 图片按 md5 去重后存盘。
+2. **打标。** 上下文积累足够后，tagger LLM 依据**周围聊天**推断该表情的情绪 / 梗（它看不到图片本身）。
+3. **文字 persona-fit 门。** 同一 tagger 判定推断出的含义是否契合人设。`PERSONA_PROMPT_VERSION` 递增后，旧条目会在下次启动时重新评判。
+4. **视觉审美门。** 视觉模型直接**查看图片**判定视觉风格（现代清爽设计 vs. 陈旧的家族群风格）——这是文字无法分辨的。`VISUAL_AESTHETIC_VERSION` 递增时同样触发重新评判。
+5. **评估反馈闭环。** 每张发出的表情由自评器打 1–5 分；累积平均低于阈值即自动降级为 `persona_fit=false`。
+6. **选择。** `pick_by_tag` 通过同义词扩展进行匹配，为较新条目给予少量新鲜度加分，跳过孤儿条目（backing 文件缺失的条目），并在丢弃纯表情回复前回退到近期用过的匹配项。
+7. **清理。** 标记为 `persona_fit=false` 的条目会在下次启动时删除（记录与文件）。
 
 ## 隐私
 

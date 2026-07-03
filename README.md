@@ -4,25 +4,25 @@
 
 **English** | [中文](README.zh-CN.md)
 
-A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repo is primarily a study in LLM agent / prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
 > **Educational / research project. Not affiliated with, endorsed by, or sponsored by any IM platform vendor.**
-> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party OneBot protocol clients (such as NapCat for QQ) are not sanctioned by their upstream IM platforms; if you choose to deploy against QQ, use a secondary account and run from a residential IP. Repo authors take no responsibility for downstream protocol-client choices.
+> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party OneBot protocol clients (such as NapCat for QQ) are not sanctioned by their upstream IM platforms; if you choose to deploy against QQ, use a secondary account and run from a residential IP. The repository authors accept no responsibility for downstream protocol-client choices.
 
-## Why this exists
+## Motivation
 
-Most "LLM in a group chat" projects end up sounding like a chatbot stuck in customer-service mode — formal, eager, always replies, never has an opinion. This template attacks the persona problem from several angles:
+Most "LLM in a group chat" projects sound like a chatbot stuck in customer-service mode: formal, eager, always replying, never holding an opinion. This template addresses the persona problem on four fronts:
 
-- **Output safety first.** Reasoning, intent and reply are JSON fields, not XML inline tags, so a malformed model output can never leak the reasoning channel into the visible reply. A whitelist character validator drops anything that doesn't look like genuine chat for the active language (XML residue, JSON braces, provider tokens, leaked templates) — future unknown leak shapes are blocked automatically.
-- **Style as code.** STYLE_GUIDE encodes the persona's *register*, forbidden phrases, identity-attack defenses, observer-position rules, and a "react to the image, don't describe it" rule — the kinds of rules that turn a chatbot into someone.
-- **Stickers as part of the voice.** The library auto-steals new stickers seen in the group, vision-tags them, judges persona-fit twice (text + visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A real-conversation feedback loop demotes stickers that consistently feel off.
-- **Read what's actually there.** Inline URLs, Bilibili / YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context so the model isn't just staring at an opaque link.
+- **Output safety first.** Reasoning, intent, and reply are JSON fields rather than inline XML tags, so a malformed model output cannot leak the reasoning channel into the visible reply. A whitelist character validator rejects anything that does not resemble genuine chat for the active language (XML residue, JSON braces, provider tokens, leaked templates); previously unseen leak shapes are blocked automatically.
+- **Style as code.** `STYLE_GUIDE` encodes the persona's *register*, forbidden phrasings, identity-attack defenses, observer-position rules, and a "react to the image, do not describe it" rule — the constraints that distinguish a character from a generic assistant.
+- **Stickers as part of the voice.** The library collects new stickers seen in the group, tags them with a vision model, evaluates persona-fit twice (text and visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A conversation-driven feedback loop demotes stickers that consistently score poorly.
+- **Understand the content.** Inline URLs, Bilibili and YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context, so the model receives the underlying content rather than an opaque link.
 
-## What's in the box
+## Components
 
-| Module | What it does |
+| Module | Responsibility |
 |---|---|
 | `agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl`; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
 | `stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
@@ -33,7 +33,7 @@ Most "LLM in a group chat" projects end up sounding like a chatbot stuck in cust
 | `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into `data/examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
 
-## Architecture sketch
+## Architecture
 
 ![persona-llm-agent architecture](docs/persona_llm_agent_architecture.svg)
 
@@ -129,16 +129,16 @@ You type a line, the bot replies — through the **same** reasoning path the liv
    ```
 3. Start NapCat, then the agent. Post in the group and watch the logs.
 
-#### Two ports, two directions
+#### Ports and data flow
 
-Newcomers mix these up — they point opposite ways:
+The two connections point in opposite directions and are easy to confuse:
 
 ```
 NapCat  --(webhook: events)-->  agent :8080    (HOST / PORT in .env)
 agent   --(send replies)----->  NapCat :3000   (NAPCAT_API in .env)
 ```
 
-> **Windows one-click:** `launch.vbs` starts NapCat and the agent in two minimized windows. Edit the three values at the top (`BOT_QQ`, `NAPCAT_DIR`, `AGENT_DIR`) first; it prefers `.venv` automatically.
+> **Windows launcher:** `launch.vbs` starts NapCat and the agent in two minimized windows. Set the three values at the top (`BOT_QQ`, `NAPCAT_DIR`, `AGENT_DIR`) first; it uses `.venv` automatically when present.
 
 ## Multi-platform via AstrBot
 
@@ -175,12 +175,12 @@ To add another language, drop in `*.<lang>.*` data files and run with `AGENT_LAN
 
 By default the bot is purely reactive — it only speaks when a message arrives. Set `PROACTIVE_ENABLE=true` and a background loop will occasionally **initiate** a message with no trigger, so it reads like a person who sometimes breaks the silence rather than a 24/7 responder.
 
-It's deliberately conservative — the failure mode ("needy bot spamming dead air") is worse than staying quiet:
+The mechanism is deliberately conservative; an over-eager bot posting into silence is worse than one that stays quiet:
 
-- **Only after real silence**, outside the sleep window, with a per-chat cooldown and a low per-tick probability.
-- **Never cold-opens.** It only acts in groups it's already seen talk, and only DMs people who've DMed it before (the owner + `PRIVATE_ALLOWED_QQS`) — it won't message someone out of nowhere.
-- **The model is told to PASS unless it genuinely has something to say** — a callback to an earlier topic, a passing thought, or a light check-in — and *not* to post filler like "anyone here?". Most ticks produce nothing.
-- Works the same in **groups and DMs**, each with their own silence / cooldown / probability knobs.
+- **Only after genuine silence**, outside the sleep window, with a per-conversation cooldown and a low per-tick probability.
+- **Never cold-opens.** It acts only in groups where it has already observed activity, and messages only people who have messaged it before (the owner and `PRIVATE_ALLOWED_QQS`); it will not contact someone unprompted.
+- **The model is instructed to return PASS unless it genuinely has something to say** — a callback to an earlier topic, a passing thought, or a brief check-in — and *not* to post filler such as "anyone here?". Most ticks produce nothing.
+- Behaves identically in **groups and direct messages**, each with independent silence, cooldown, and probability parameters.
 
 Tune `PROACTIVE_*` in `.env`. Defaults: groups quiet ≥ 45 min, ≥ 3 h between initiations, ~25% per check; DMs quiet ≥ 4 h, ≥ 24 h apart, ~20%.
 
@@ -273,19 +273,19 @@ The retrieval over `data/examples.<lang>.jsonl` + `data/feedback.<lang>.jsonl` u
 
 `data/output_filter.<lang>.json` is hot-reloaded — edit it without restarting. Same for `data/lorebook.<lang>.json` (keyword-triggered context injection à la SillyTavern World Info).
 
-## Sticker quality machinery
+## Sticker quality pipeline
 
 ![Sticker library seven-step filter](docs/sticker_seven_step_filter.svg)
 
-Stickers go through several gates before being eligible for selection:
+Stickers pass through several gates before becoming eligible for selection:
 
-1. **Steal.** Any non-bot image that lingers in conversation context gets md5-stored.
-2. **Tag.** Once enough context accumulates, an LLM-tagger names the emotion / meme using the surrounding chat (it never sees the image).
-3. **Text persona-fit gate.** Same tagger judges whether the inferred meaning fits the configured persona. Stale entries are re-judged whenever `PERSONA_PROMPT_VERSION` bumps.
-4. **Visual aesthetic gate.** The vision model looks at the *pixels* and judges visual style (cleanly-designed meme vs. gaudy old family-group sticker). Catches what text alone can't. Stale entries are re-judged whenever `VISUAL_AESTHETIC_VERSION` bumps.
-5. **Eval feedback loop.** Each sent sticker gets a 1-5 score from the self-eval. Sustained low average auto-demotes to `persona_fit=false`.
-6. **Selection.** `pick_by_tag` matches with synonym expansion, gives a small freshness bonus to newer picks, skips orphan records (entries whose backing file is missing), and falls back to a cooled-down match before dropping a sticker-only reply.
-7. **Purge.** Entries flagged `persona_fit=false` are physically removed (record + file) on the next startup pass.
+1. **Collect.** Any non-bot image that appears in conversation context is stored, deduplicated by md5.
+2. **Tag.** Once sufficient context accumulates, an LLM tagger names the emotion or meme from the surrounding chat (it never sees the image itself).
+3. **Text persona-fit gate.** The same tagger evaluates whether the inferred meaning fits the configured persona. Stale entries are re-evaluated whenever `PERSONA_PROMPT_VERSION` is incremented.
+4. **Visual aesthetic gate.** The vision model inspects the *pixels* and evaluates visual style (a cleanly designed meme versus a dated family-group sticker) — a distinction text alone cannot make. Stale entries are re-evaluated whenever `VISUAL_AESTHETIC_VERSION` is incremented.
+5. **Evaluation feedback loop.** Each sent sticker receives a 1–5 score from the self-evaluator. A sustained low average demotes it to `persona_fit=false`.
+6. **Selection.** `pick_by_tag` matches with synonym expansion, applies a small freshness bonus to newer entries, skips orphan records (entries whose backing file is missing), and falls back to a recently used match before dropping a sticker-only reply.
+7. **Purge.** Entries flagged `persona_fit=false` are removed (record and file) on the next startup pass.
 
 ## Privacy
 
