@@ -82,18 +82,19 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 依赖：Python 3.10+、一个 OpenAI 兼容的 chat completions API key。OneBot v11 客户端（例如 NapCat）只有跑**真实群聊**时才需要 —— 下面的试用不用。
 
 ```bash
-# 一行命令搞定 venv、装依赖、复制 .env + persona 模板
+# 一条命令：venv + 依赖 + 交互式配置向导
 python quickstart.py
 ```
 
-`quickstart.py` 是幂等的 —— 重跑只会报告哪些已经就位。等价的手动步骤：创建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env`、复制 `data/persona.example.<lang>.txt → persona.txt`。
+装完环境后向导会问你：API 服务商（DeepSeek / Kimi / OpenAI / Ollama / 任意 OpenAI 兼容端点）、key、bot 名字、语言 —— 答案自动写进 `.env`，可以顺手发一次 1-token 调用验证 key，选择上真实群的话还会继续收集 live 配置并**把要粘贴的 NapCat 配置直接打出来**，最后可以直接进终端试聊。**全程不用手动编辑 `.env`** —— 这个文件仍然是所有进阶开关的完整注释参考。
+
+幂等 —— 重跑只报告哪些已就位，想重新配置才会再进向导。`--no-input`（或管道输入）跳过向导只做经典引导（建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env` 和 persona 模板），适合 CI。
 
 ### 免 QQ 试用
 
-体验人设最快的路子 —— 不要 QQ 账号、不要 NapCat，只要一个 API key。
+体验人设最快的路子 —— 不要 QQ 账号、不要 NapCat，只要一个 API key。向导最后一步就会主动带你进来；之后想再跑：
 
 ```bash
-# .env 里只填 DEEPSEEK_API_KEY（不是 DeepSeek 的话再加 DEEPSEEK_BASE_URL / DEEPSEEK_MODEL）
 python try_chat.py             # 英文（默认）
 python try_chat.py --lang zh   # 中文变体
 python try_chat.py --owner     # 以配置的 owner 身份说话
@@ -103,13 +104,13 @@ python try_chat.py --owner     # 以配置的 owner 身份说话
 
 ### 在群里实际运行
 
-1. **配 `.env`** —— 填 *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* 那一块（`BOT_QQ`、`QQ_GROUPS`、`NAPCAT_API`），并写好你的 `persona.txt`。
+1. **配 `.env`** —— 向导里答过 live 部署那几问的话这步已经完成；否则填 *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* 那一块（`BOT_QQ`、`QQ_GROUPS`、`NAPCAT_API`），并写好你的 `persona.txt`。
 2. **启动 agent：**
    ```bash
    source .venv/bin/activate            # Windows: .venv\Scripts\activate
    python main.py                       # 或: ./start.sh   (Windows: .\start.ps1)
    ```
-   应当看到 `bot started on 0.0.0.0:8080 (agent=True, lang=zh)`。
+   应当看到 `bot started on 127.0.0.1:8080 (agent=True, lang=zh)`。
 3. **配好 NapCat**（或任意 OneBot v11 客户端）并指向 agent —— 见下文。
 
 #### NapCat 三步走

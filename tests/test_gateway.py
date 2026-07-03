@@ -557,6 +557,25 @@ async def regression_numeric_at_kept_in_payload(tmp: Path) -> None:
 # Unit: audit bug-fix regressions (pure functions)
 # ---------------------------------------------------------------------------
 
+def test_quickstart_set_env_values() -> None:
+    """The wizard's .env writer must fill existing keys in place, preserve
+    comments (so .env keeps doubling as the annotated reference), skip
+    commented-out keys, and append keys that don't exist yet."""
+    from quickstart import set_env_values
+    src = ("# ==== section ====\n"
+           "DEEPSEEK_API_KEY=\n"
+           "BOT_NAME=old\n"
+           "# BOT_NAME=commented reference\n")
+    out = set_env_values(src, {"DEEPSEEK_API_KEY": "sk-1", "BOT_NAME": "New",
+                               "BRAND_NEW": "v"})
+    check("env writer: fills blank key in place", "DEEPSEEK_API_KEY=sk-1" in out, out)
+    check("env writer: replaces existing value", "BOT_NAME=New" in out, out)
+    check("env writer: preserves comments",
+          "# ==== section ====" in out and "# BOT_NAME=commented reference" in out, out)
+    check("env writer: appends missing key", "BRAND_NEW=v" in out, out)
+    check("env writer: no duplicated keys", out.count("\nBOT_NAME=") == 1, out)
+
+
 def test_sticker_marker_whitespace() -> None:
     """A stray space inside a sticker marker ('[STICKER: doge]') must still
     parse as a sticker and must NOT make the validator fail-close the reply."""
@@ -894,6 +913,7 @@ def main() -> int:
     test_sink_closed_drop()
     test_validator_accepts_prefixed_at_marker()
     test_plugin_reply_id_strip()
+    test_quickstart_set_env_values()
     test_sticker_marker_whitespace()
     test_sanitize_strips_core_update()
     test_evict_memory_prefers_auto()
