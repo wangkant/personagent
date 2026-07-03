@@ -46,6 +46,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("bootstrap")
 
+
+def _atomic_write_json(path, obj) -> None:
+    """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
+    stickers.json, or the bot's next startup _load() silently falls back to an
+    empty library (all metadata lost)."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
 # ============ NapCat history ============
 async def fetch_page(client: httpx.AsyncClient, group_id: str,
                      count: int, message_seq: int = 0) -> list[dict]:
@@ -285,10 +294,7 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
                 if new_count % 10 == 0:
                     logger.info("  seeded %d stickers...", new_count)
 
-    STICKERS_JSON.write_text(
-        json.dumps(entries, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(STICKERS_JSON, entries)
     return {
         "new_stickers": new_count,
         "contexts_recorded": ctx_count,
@@ -330,10 +336,7 @@ async def main():
 
     if not args.no_profile:
         profile = compute_owner_profile(classified)
-        OWNER_PROFILE.write_text(
-            json.dumps(profile, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_json(OWNER_PROFILE, profile)
         logger.info("owner profile written to %s", OWNER_PROFILE.name)
         if profile.get("total_msgs", 0):
             logger.info("  image rate: %.1f%% (1 image per %d msgs)",

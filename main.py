@@ -52,8 +52,9 @@ AGENT_MEMORY_MAX = int(os.getenv("AGENT_MEMORY_MAX", 50))
 OWNER_QQ = os.getenv("OWNER_QQ", "")
 OWNER_NAME = os.getenv("OWNER_NAME", "")
 OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
+# Alternate model name for private chats, served by the same OpenAI-compatible
+# primary endpoint (the "ANTHROPIC_" prefix is historical). Blank = use
+# DEEPSEEK_MODEL.
 ANTHROPIC_PRIVATE_MODEL = os.getenv("ANTHROPIC_PRIVATE_MODEL", "")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 # Defaults below match .env.example so behavior is identical whether or not a
@@ -129,8 +130,6 @@ async def lifespan(app: FastAPI):
             model=DEEPSEEK_MODEL,
             bot_qq=BOT_QQ,
             bot_name=BOT_NAME,
-            anthropic_key=ANTHROPIC_API_KEY,
-            anthropic_base_url=ANTHROPIC_BASE_URL,
             anthropic_private_model=ANTHROPIC_PRIVATE_MODEL,
             napcat_api=NAPCAT_API,
             trigger_count=AGENT_TRIGGER_COUNT,

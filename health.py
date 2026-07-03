@@ -28,10 +28,11 @@ def _get(url, timeout=10):
 
 
 def check_anthropic_chat():
-    """Private-chat model probe. Private and group chat now share the provider's
-    OpenAI-compatible endpoint (/v1/chat/completions); the anthropic SDK is no
-    longer used. Falls back to DEEPSEEK_* when ANTHROPIC_* is unset."""
-    key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("DEEPSEEK_API_KEY", "")
+    """Private-chat model probe. Private and group chat share the provider's
+    OpenAI-compatible endpoint (/v1/chat/completions); ANTHROPIC_PRIVATE_MODEL
+    is just an alternate model name on that endpoint (blank = DEEPSEEK_MODEL),
+    authenticated with the primary DEEPSEEK_API_KEY — mirroring the agent."""
+    key = os.getenv("DEEPSEEK_API_KEY", "")
     base = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("ANTHROPIC_PRIVATE_MODEL", "") or os.getenv("DEEPSEEK_MODEL", "")
     if not (key and model):
@@ -104,7 +105,12 @@ def check_eval():
     if "k2" in em:  # Some endpoints require thinking disabled (else reasoning eats the budget -> empty).
         payload["thinking"] = {"type": "disabled"}
         payload["temperature"] = 0.6
-    r = _post_json(f"{base}/chat/completions", payload, {"Authorization": f"Bearer {key}"})
+    # /v1 on the primary endpoint (mirrors the agent); GLM_BASE_URL already
+    # carries its own versioned path.
+    if base == glm_base:
+        r = _post_json(f"{base}/chat/completions", payload, {"Authorization": f"Bearer {key}"})
+    else:
+        r = _post_json(f"{base}/v1/chat/completions", payload, {"Authorization": f"Bearer {key}"})
     txt = (r["choices"][0]["message"].get("content") or "").strip()
     return True, f"{model} -> {txt[:20]!r}"
 

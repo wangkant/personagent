@@ -37,8 +37,6 @@ def _build_agent(lang: str) -> Agent:
         model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
-        anthropic_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        anthropic_base_url=os.getenv("ANTHROPIC_BASE_URL", ""),
         anthropic_private_model=os.getenv("ANTHROPIC_PRIVATE_MODEL", ""),
         owner_qq=os.getenv("OWNER_QQ", "") or "1969",
         owner_name=os.getenv("OWNER_NAME", "") or "owner",
