@@ -3483,7 +3483,12 @@ class Agent:
                 at_uid = at_match.group(1)
                 reply = reply.replace(at_match.group(0), "").strip()
                 reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
-            if not reply:
+            # Re-check PASS after post-processing: the early exact-match check
+            # doesn't catch "[CORE_UPDATE]...[/CORE_UPDATE]PASS" or a
+            # quote-wrapped '"PASS"' — post-stripping those reduce to a bare
+            # PASS that would ship to the group as literal text (bot-tell).
+            # Word-boundary form, same as _handle_inner.
+            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 continue
             # Serialize under send_lock (don't interleave chunks with a
             # concurrent normal reply), and record the opener in the buffer —

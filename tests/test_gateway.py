@@ -941,6 +941,19 @@ async def regression_proactive_group_postprocessing(tmp: Path) -> None:
     check("proactive group: mem persisted",
           "auto note about the group" in mem_texts, repr(mem_texts))
 
+    # A PASS hidden behind a CORE_UPDATE tag (or wrapped in quotes) must not
+    # ship as literal "PASS" text after post-processing strips the wrapper.
+    agent.last_proactive_at.clear()
+    agent.last_reply_at.clear()
+
+    async def fake_think_pass(group_id, mode, text="", caller_override=None):
+        return ("[CORE_UPDATE]still cats[/CORE_UPDATE]PASS", "chat", "")
+
+    agent._think = fake_think_pass
+    acted2 = await agent._maybe_proactive_groups()
+    check("proactive group: post-processed PASS not sent",
+          acted2 is False and len(sent) == 1, repr((acted2, [s[1] for s in sent])))
+
 
 async def regression_proactive_dm_saves_mem(tmp: Path) -> None:
     """A proactive DM turn's mem note must be persisted (the prompt promises
