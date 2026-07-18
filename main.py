@@ -276,7 +276,11 @@ async def gateway_webhook(request: Request):
     forwarder needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
     before returning — set the plugin's HTTP timeout accordingly."""
-    if GATEWAY_TOKEN and request.headers.get("X-Gateway-Token") != GATEWAY_TOKEN:
+    # Constant-time compare, same standard as /webhook/qq's signature check:
+    # a plain != short-circuits on the first differing byte — a timing side
+    # channel on the only credential guarding this endpoint when exposed.
+    if GATEWAY_TOKEN and not hmac.compare_digest(
+            request.headers.get("X-Gateway-Token", ""), GATEWAY_TOKEN):
         return JSONResponse(status_code=403, content={"error": "invalid gateway token"})
     try:
         event = await request.json()

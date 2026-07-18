@@ -541,7 +541,11 @@ class Agent:
             stickers_file=stickers_json,
             unknown_log=Path(__file__).parent / "unknown_stickers.jsonl",
             anthropic_caller=self._call_anthropic,
-            tagger_model="deepseek-chat",
+            # Cheap judgment model configured for THIS endpoint — a hardcoded
+            # provider literal here would 404 on Moonshot/OpenAI/Ollama
+            # deployments and arm the global error-fallback cooldown on every
+            # tagging call.
+            tagger_model=self.judge_model,
             persona_brief=persona_brief,
         )
 
@@ -1338,7 +1342,16 @@ class Agent:
             elif t == "json":
                 raw_data = d.get("data", "")
                 if raw_data:
-                    desc = await self._describe_share(raw_data)
+                    # Fail soft like every other segment parser here: the card
+                    # JSON is sender-controlled, and an exception would unwind
+                    # to handle()'s catch-all and drop the WHOLE message
+                    # (including its other text segments).
+                    try:
+                        desc = await self._describe_share(raw_data)
+                    except Exception as e:
+                        logger.warning("[Agent] _describe_share failed: %s: %s",
+                                       type(e).__name__, e)
+                        desc = ""
                     parts.append(desc if desc else "[share-card]")
                 else:
                     parts.append("[share-card]")
@@ -1537,7 +1550,14 @@ class Agent:
         if not isinstance(outer, dict):
             return ""
 
-        prompt = outer.get("prompt", "") or ""
+        # Every field below is sender-controlled and may be any JSON type
+        # (int/dict/list where a string is expected). Non-strings are treated
+        # as absent — a crafted card must degrade to a thin placeholder, not
+        # raise out of here and drop the whole inbound message.
+        def _text(v) -> str:
+            return v if isinstance(v, str) else ""
+
+        prompt = _text(outer.get("prompt"))
         meta = outer.get("meta") or {}
         if not isinstance(meta, dict):
             meta = {}
@@ -1551,13 +1571,12 @@ class Agent:
         if not isinstance(detail, dict):
             return prompt[:80]
 
-        title_field = detail.get("title", "") or ""
-        desc_field = detail.get("desc", "") or ""
+        title_field = _text(detail.get("title"))
+        desc_field = _text(detail.get("desc"))
         url = (
-            detail.get("qqdocurl")
-            or detail.get("jumpUrl")
-            or detail.get("url")
-            or ""
+            _text(detail.get("qqdocurl"))
+            or _text(detail.get("jumpUrl"))
+            or _text(detail.get("url"))
         )
 
         is_bili = (
@@ -3442,12 +3461,36 @@ class Agent:
             self.last_proactive_at[gid] = now
             if not reply or reply.strip().upper() == "PASS":
                 continue
+            # Mirror _handle_inner's post-processing — this path otherwise
+            # skips it entirely: the [CORE_UPDATE] tag would be silently
+            # stripped by _sanitize_reply instead of committed, the
+            # anti-AI-tell output filter would never run, and a model that
+            # follows the prompt's own "[AT:qq]" instruction would have the
+            # literal marker text shipped to the group.
+            reply, _pending_core = self._extract_core_update(reply)
+            filtered, blocked = self._apply_output_filter(reply)
+            if blocked:
+                # A blocked reply must not persist its core note (anti-poison).
+                logger.warning("[Agent] output_filter blocked (mode=proactive, group=%s): %s | original=%s",
+                               gid, blocked, reply[:120])
+                continue
+            reply = filtered
+            self._commit_core_memory(gid, _pending_core)
+            reply = reply.strip().strip('"').strip("「」")
+            at_uid = ""
+            at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
+            if at_match:
+                at_uid = at_match.group(1)
+                reply = reply.replace(at_match.group(0), "").strip()
+                reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+            if not reply:
+                continue
             # Serialize under send_lock (don't interleave chunks with a
             # concurrent normal reply), and record the opener in the buffer —
             # NapCat doesn't webhook the bot's own messages, so without this a
             # followup to the opener has no record and reads as off-topic.
             async with self.send_locks[gid]:
-                await self._send_qq(gid, reply)
+                await self._send_qq(gid, reply, at_uid)
             self.last_reply_at[gid] = now
             self._append_buffer(gid, self.bot_name, reply)
             if mem:
@@ -3483,6 +3526,11 @@ class Agent:
                         continue
                     # Record so the next turn has context, mirroring _handle_private.
                     self.private_history.setdefault(uid, []).append({"role": "assistant", "content": reply})
+                    # Persist the model's mem note, mirroring _handle_private and
+                    # the proactive group path — the prompt promises it will be
+                    # remembered, so dropping it here is a contract violation.
+                    if mem:
+                        self._save_auto_memory(f"private:{uid}", mem)
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
@@ -3620,6 +3668,16 @@ class Agent:
         "图片为空", "加载失败", "无法访问", "无法识别",
     )
 
+    @staticmethod
+    def _image_cache_key(url: str) -> str:
+        """Caption-cache key for an image 'url'. Gateway images with only
+        inline bytes arrive as base64://<payload> pseudo-URLs — up to several
+        MB each — so keying the cache on the raw string would park megabytes
+        of dead base64 per entry. Hash those; real URLs stay as-is."""
+        if url.startswith("base64://"):
+            return "b64:" + hashlib.md5(url.encode()).hexdigest()
+        return url
+
     def _accept_vision_caption(self, url: str, text: str, provider: str) -> str:
         # Truncated to 150 chars (a long caption is still useful); no longer
         # discard the whole caption for being "too long" — the old >80 reject
@@ -3627,7 +3685,7 @@ class Agent:
         text = (text or "").strip()[:150]
         hit = next((t for t in self._VISION_REJECT_TOKENS if t in text), "")
         if text and len(text) >= 4 and not hit:
-            self.image_caption_cache[url] = text
+            self.image_caption_cache[self._image_cache_key(url)] = text
             self._gc_image_cache()
             logger.info("[Agent] vision/%s (%s): %s", provider, url[:60], text[:60])
             return text
@@ -3909,8 +3967,9 @@ class Agent:
         fallback on miss. Filters garbage OCR (too short / single-char fragments)."""
         if not url:
             return ""
-        if url in self.image_caption_cache:
-            return self.image_caption_cache[url]
+        cache_key = self._image_cache_key(url)
+        if cache_key in self.image_caption_cache:
+            return self.image_caption_cache[cache_key]
 
         caption = ""
         if self.vision_model and self.glm_api_key and self.glm_base_url:
@@ -3944,8 +4003,9 @@ class Agent:
         from an image. Returns "" on failure or when no text is detected."""
         if not url:
             return ""
-        if url in self.image_caption_cache:
-            return self.image_caption_cache[url]
+        cache_key = self._image_cache_key(url)
+        if cache_key in self.image_caption_cache:
+            return self.image_caption_cache[cache_key]
         try:
             async with self._http(timeout=15) as client:
                 r = await client.post(
@@ -3962,7 +4022,7 @@ class Agent:
             logger.warning("[Agent] NapCat OCR failed (%s): %s: %s",
                            url[:80], type(e).__name__, str(e) or "(no message)")
             return ""
-        self.image_caption_cache[url] = text
+        self.image_caption_cache[cache_key] = text
         self._gc_image_cache()
         logger.info("[Agent] OCR (%s): %s", url[:60], text[:60] or "(no text)")
         return text

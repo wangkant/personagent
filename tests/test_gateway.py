@@ -882,6 +882,141 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     check("conv-evict: QQ group state untouched", "123456" in agent.buffers)
 
 
+def test_sticker_tagger_uses_judge_model() -> None:
+    """The sticker tagger must follow the endpoint's configured cheap model
+    (judge_model), not a hardcoded provider literal — "deepseek-chat" 404s on
+    Moonshot/OpenAI/Ollama deployments and arms the error-fallback cooldown
+    on every tagging call."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = Agent(
+            api_key="k", bot_qq="1", bot_name="B",
+            model="main-model-x", fallback_model="cheap-model-x",
+            memory_file=str(tmp / "memory.json"),
+            eval_file=str(tmp / "eval.jsonl"),
+            stickers_dir=str(tmp / "stickers"),
+            stickers_file=str(tmp / "stickers.json"),
+        )
+        a._seen_msg_file = tmp / "seen_msg_ids.json"
+        a.core_memory_file = tmp / "core_memory.json"
+        check("tagger model: follows judge_model",
+              a.stickers.tagger_model == a.judge_model,
+              repr((a.stickers.tagger_model, a.judge_model)))
+
+
+async def regression_proactive_group_postprocessing(tmp: Path) -> None:
+    """The proactive group path must run the same post-processing as reactive
+    replies: [AT:qq] extracted into at_user_id (not shipped as literal text),
+    [CORE_UPDATE] committed, and mem persisted."""
+    agent = make_agent(tmp)
+    gid = "123"
+    agent._append_buffer(gid, "Alice", "anyone up for dinner", "42")
+    agent.last_activity_at[gid] = time.time() - agent.proactive_min_silence - 100
+    agent.proactive_prob = 1.0
+    sent: list[tuple] = []
+
+    async def fake_send(group_id, text, at_user_id=""):
+        sent.append((group_id, text, at_user_id))
+        return []
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        return ("[AT:42] you all went quiet [CORE_UPDATE]group loves cats[/CORE_UPDATE]",
+                "chat", "auto note about the group")
+
+    agent._send_qq = fake_send
+    agent._think = fake_think
+    acted = await agent._maybe_proactive_groups()
+    check("proactive group: acted", acted is True, repr(acted))
+    check("proactive group: sent exactly once", len(sent) == 1, repr(sent))
+    if sent:
+        g, text, at_uid = sent[0]
+        check("proactive group: AT marker extracted, not literal text",
+              "[AT:" not in text and at_uid == "42", repr(sent[0]))
+        check("proactive group: CORE_UPDATE tag not shipped",
+              "CORE_UPDATE" not in text, repr(text))
+    check("proactive group: core memory committed",
+          agent.core_memory.get(gid) == "group loves cats",
+          repr(dict(agent.core_memory)))
+    mem_texts = [it["text"] for it in agent.memories.get(gid, [])]
+    check("proactive group: mem persisted",
+          "auto note about the group" in mem_texts, repr(mem_texts))
+
+
+async def regression_proactive_dm_saves_mem(tmp: Path) -> None:
+    """A proactive DM turn's mem note must be persisted (the prompt promises
+    the model its mem line will be remembered)."""
+    agent = make_agent(tmp)
+    agent.owner_qq = "55"
+    agent.last_dm_activity_at["55"] = time.time() - agent.proactive_dm_min_silence - 100
+    agent.proactive_dm_prob = 1.0
+    sent: list[tuple] = []
+
+    async def fake_chat_private(history, is_owner=False, proactive=False, pkey=""):
+        return "hey, how did the week go", "owner is prepping exams"
+
+    async def fake_send_private(uid, text):
+        sent.append((uid, text))
+
+    agent._chat_private = fake_chat_private
+    agent._send_private_qq = fake_send_private
+    acted = await agent._maybe_proactive_dms()
+    check("proactive dm: acted", acted is True, repr(acted))
+    mem_texts = [it["text"] for it in agent.memories.get("private:55", [])]
+    check("proactive dm: mem persisted",
+          "owner is prepping exams" in mem_texts, repr(mem_texts))
+
+
+async def regression_share_card_type_confusion(tmp: Path) -> None:
+    """Share-card JSON is fully sender-controlled: non-string fields (int
+    prompt, dict title, list url) must degrade to a placeholder instead of
+    raising out of _extract_text and dropping the whole inbound message."""
+    import json as _json
+    agent = make_agent(tmp)
+    bad_card = _json.dumps({
+        "prompt": 123,
+        "meta": {"news": {"title": {"a": 1}, "desc": 5, "qqdocurl": ["x"]}},
+    })
+    desc = await agent._describe_share(bad_card)
+    check("share card: non-string fields degrade, no crash",
+          isinstance(desc, str), repr(desc))
+    # Non-dict detail with a non-string prompt (old code: 123[:80] TypeError).
+    desc2 = await agent._describe_share(
+        _json.dumps({"prompt": 123, "meta": {"news": "notadict"}}))
+    check("share card: non-dict detail + int prompt degrades",
+          desc2 == "", repr(desc2))
+    # The whole message must survive: the text segment stays extractable.
+    payload = {
+        "post_type": "message", "message_type": "group", "group_id": "123",
+        "user_id": "42", "sender": {"nickname": "Alice"},
+        "message": [
+            {"type": "text", "data": {"text": "look at this"}},
+            {"type": "json", "data": {"data": bad_card}},
+        ],
+        "raw_message": "look at this",
+    }
+    text = await agent._extract_text(payload)
+    check("share card: sibling text segment survives a malformed card",
+          "look at this" in text, repr(text))
+
+
+async def regression_b64_caption_cache_key(tmp: Path) -> None:
+    """Gateway base64:// pseudo-URLs must be hashed before use as caption-cache
+    keys — the raw string can be multiple MB of base64 per entry."""
+    agent = make_agent(tmp)
+    big = "base64://" + "A" * 100_000
+    got = agent._accept_vision_caption(big, "a cute cat sticker", "test")
+    check("b64 cache: caption accepted", got == "a cute cat sticker", repr(got))
+    check("b64 cache: no raw base64 keys retained",
+          all(not k.startswith("base64://") for k in agent.image_caption_cache),
+          repr([k[:40] for k in agent.image_caption_cache]))
+    check("b64 cache: keys stay small",
+          all(len(k) < 200 for k in agent.image_caption_cache),
+          repr([len(k) for k in agent.image_caption_cache]))
+    # The hashed key must still round-trip as a cache hit.
+    hit = await agent._describe_image(big)
+    check("b64 cache: hashed key round-trips", hit == "a cute cat sticker", repr(hit))
+
+
 async def main_async() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -900,6 +1035,10 @@ async def main_async() -> None:
         await regression_group_whitelist_gateway_bypass(tmp / "m")
         await regression_think_full_path_search_hint(tmp / "n")
         await regression_eval_auto_append_examples(tmp / "o")
+        await regression_proactive_group_postprocessing(tmp / "p")
+        await regression_proactive_dm_saves_mem(tmp / "q")
+        await regression_share_card_type_confusion(tmp / "r")
+        await regression_b64_caption_cache_key(tmp / "s")
 
 
 def main() -> int:
@@ -920,6 +1059,7 @@ def main() -> int:
     test_host_is_internal()
     test_pick_group_model_mode_exempt()
     test_extract_core_update_no_persist()
+    test_sticker_tagger_uses_judge_model()
     asyncio.run(main_async())
     print()
     if _failures:
