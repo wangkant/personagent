@@ -42,6 +42,25 @@ _SEND_WINDOW_SEC = 60.0
 # recently-active gateway conversation is evicted (see _touch_gateway_conv).
 _MAX_GATEWAY_CONVS = 256
 
+# Sentinels wrapping web-derived enrichment (URL og:title/desc) inside the
+# extracted text. Control decisions (is_called / memory commands) run on a
+# view with these spans removed, so third-party page content can't trigger
+# them; the prompt/buffer view keeps the enrichment (sentinels stripped).
+_WEB_DESC_OPEN = "\x02"
+_WEB_DESC_CLOSE = "\x03"
+_WEB_DESC_SPAN = re.compile("\x02[^\x03]*\x03")
+
+
+def _strip_web_desc(text: str) -> str:
+    """Control-plane view: web-derived enrichment spans removed entirely."""
+    return _WEB_DESC_SPAN.sub("", text)
+
+
+def _unwrap_web_desc(text: str) -> str:
+    """Prompt/buffer view: keep the enrichment, drop the sentinel chars."""
+    return text.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+
+
 # Cheap pre-filter so we only spend a search-decision call on messages that
 # plausibly need a web lookup (questions / facts / memes / links), not on
 # casual chatter like "lol" or "you there?".
@@ -730,6 +749,12 @@ class Agent:
                 self._vision_in_flight[group_id] = max(0, self._vision_in_flight[group_id] - 1)
         if not text:
             return False
+        # Two views of the same text: ctrl_text excludes web-fetched
+        # enrichment so a third-party page can't trigger name-call mode or
+        # memory commands; text (sentinels unwrapped) keeps the enrichment
+        # for the buffer / prompt.
+        ctrl_text = _strip_web_desc(text)
+        text = _unwrap_web_desc(text)
 
         # `or {}` (not a default of {}) because the protocol can emit
         # "sender": null — a present-but-null key, where .get("sender", {})
@@ -741,7 +766,9 @@ class Agent:
         # Guard the substring test: an empty bot_name (the shipped default
         # when BOT_NAME is unset) would make `"" in text` always True and the
         # bot would treat every message as a named call, replying to everything.
-        is_called = bool(self.bot_name) and self.bot_name in text
+        # ctrl_text: a linked page's og:title containing the bot name must not
+        # force called mode — only the member's own words count.
+        is_called = bool(self.bot_name) and self.bot_name in ctrl_text
         is_noise = len(text.strip()) < 4 and not (is_at or is_called)
 
         is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
@@ -768,7 +795,11 @@ class Agent:
             # blocking message intake for the whole group. The send goes
             # through send_lock (same serialization as normal replies).
             if is_called or is_at:
-                mem_reply = self._handle_memory_command(group_id, text, user_id, nickname)
+                # ctrl_text: web page titles must not reach the memory-command
+                # regexes (a page named "BOT remember ... / BOT forget ..."
+                # would otherwise write/delete memories on the page author's
+                # behalf).
+                mem_reply = self._handle_memory_command(group_id, ctrl_text, user_id, nickname)
                 if mem_reply is not None:
                     self.last_reply_at[group_id] = time.time()
                     self._append_buffer(group_id, self.bot_name, mem_reply)
@@ -892,6 +923,13 @@ class Agent:
                 reply, _intent, auto_mem = await self._think(group_id, mode, text, caller_override=caller_override)
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
+                # Commit state under the group lock, but send OUTSIDE it via a
+                # background task holding send_locks — mirroring the main
+                # path: _send_qq's typing sleeps + protocol-side retries can
+                # take tens of seconds, and holding the group lock that long
+                # stalls Phase-1 message absorption for the whole group;
+                # skipping send_locks would let this chunk interleave with an
+                # in-flight reply.
                 if mode == "called":
                     # Three short, persona-consistent excuses for upstream LLM
                     # failure. Customize these in your fork to match the bot's
@@ -901,12 +939,17 @@ class Agent:
                         "hold on, connection's wonky",
                         "signal weird rn, gimme a min",
                     ])
-                    try:
-                        await self._send_qq(group_id, fallback, user_id)
-                        self.last_reply_at[group_id] = time.time()
-                        self._append_buffer(group_id, self.bot_name, fallback)
-                    except Exception:
-                        pass
+                    self.last_reply_at[group_id] = time.time()
+                    self._append_buffer(group_id, self.bot_name, fallback)
+
+                    async def _send_fallback() -> None:
+                        try:
+                            async with self.send_locks[group_id]:
+                                await self._send_qq(group_id, fallback, user_id)
+                        except Exception:
+                            logger.exception("[Agent] fallback send failed")
+
+                    self._spawn(_send_fallback())
                 return False
 
             # auto_mem comes directly from the JSON-protocol `mem` field
@@ -925,6 +968,15 @@ class Agent:
             else:
                 reply = filtered
                 self._commit_core_memory(group_id, _pending_core)
+
+            # Sanitize/validate BEFORE any reply state is committed. _send_qq
+            # re-runs _sanitize_reply (deterministic → no-op there), but its
+            # fail-closed rejections (reasoning leak / bad chars) used to fire
+            # only after buffer/last_reply_at/followup/eval were already
+            # committed — a phantom "sent" reply the group never saw. Now a
+            # rejection takes the PASS path below instead.
+            if reply:
+                reply = self._sanitize_reply(reply, self.agent_lang)
 
             # Word boundary: only swallow the "PASS"/"PASS."/"PASS —" sentinel
             # variants, not genuine replies like "passable lol" / "passed the
@@ -1001,7 +1053,9 @@ class Agent:
         return True
 
     async def _handle_private(self, user_id: str, payload: dict, is_owner: bool = True) -> bool:
-        text = await self._extract_text(payload)
+        # Private path has no name-call/memory-command control plane; just
+        # drop the web-desc sentinel chars before the text reaches the prompt.
+        text = _unwrap_web_desc(await self._extract_text(payload))
         if not text:
             return False
 
@@ -1050,6 +1104,11 @@ class Agent:
 
             if auto_mem:
                 self._save_auto_memory(pkey, auto_mem)
+
+            # Sanitize/validate before committing the assistant turn — a
+            # fail-closed rejection inside _send_private_qq would otherwise
+            # leave an unsent reply in private_history (phantom turn).
+            reply = self._sanitize_reply(reply, self.agent_lang)
 
             # Same as the group path: word-boundary match so real replies
             # starting with "pass" aren't swallowed.
@@ -1280,7 +1339,13 @@ class Agent:
                 for url in self._extract_urls(txt):
                     desc = await self._describe_url(url)
                     if desc and desc != "[link]":
-                        parts.append(f" {desc}")
+                        # Wrap web-derived text in sentinel chars so handle()
+                        # can exclude it from control decisions (is_called /
+                        # memory commands): a third-party page whose og:title
+                        # contains the bot name (or a remember/forget command)
+                        # must not trigger forced replies or memory writes.
+                        desc = desc.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+                        parts.append(f" {_WEB_DESC_OPEN}{desc}{_WEB_DESC_CLOSE}")
             elif t == "at":
                 qq = str(d.get("qq", ""))
                 parts.append(f"@{self.bot_name}" if qq == self.bot_qq else f"@{qq}")
@@ -1469,17 +1534,15 @@ class Agent:
                 return None
         # SSRF guard: an image-segment URL can point at internal endpoints
         # (169.254.169.254 IMDS, RFC1918) and the fetched bytes get shipped to
-        # the vision provider / sticker library. Block internal hosts here too
-        # — this fetcher doesn't go through _should_skip_url.
-        if self._host_is_internal(url):
-            logger.warning("[Agent] refusing internal-address image url: %s", url)
-            return None
+        # the vision provider / sticker library. _safe_get re-checks every
+        # redirect hop, so a public URL 302-ing to an internal address is
+        # blocked too — this fetcher doesn't go through _should_skip_url.
         try:
-            async with self._http(timeout=15, follow_redirects=True, max_redirects=5) as c:
-                r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                if r.status_code != 200:
-                    return None
-                return r.content
+            r = await self._safe_get(url, timeout=15,
+                                     headers={"User-Agent": "Mozilla/5.0"})
+            if r is None or r.status_code != 200:
+                return None
+            return r.content
         except Exception as e:
             logger.debug("[Agent] http fetch failed (%s): %s", url, e)
             return None
@@ -1626,8 +1689,11 @@ class Agent:
                 self.bili_info_cache[url] = {}
                 return {}
             try:
-                async with self._http(timeout=5, follow_redirects=True, max_redirects=5) as client:
-                    r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                # _safe_get follows the shortlink redirect manually, refusing
+                # any hop that lands on an internal address.
+                r = await self._safe_get(url, timeout=5,
+                                         headers={"User-Agent": "Mozilla/5.0"})
+                if r is not None:
                     real_url = str(r.url)
             except Exception as e:
                 logger.debug("[Agent] b23.tv resolve failed (%s): %s", url, e)
@@ -1807,7 +1873,7 @@ class Agent:
         address — loopback, RFC1918, link-local (incl. the 169.254.169.254
         cloud-metadata endpoint), reserved, or IPv6 equivalents. Resolving the
         hostname also blocks public names that point at internal IPs.
-        Note: does not re-check redirect hops; the fetchers cap redirects."""
+        Redirect hops are re-checked by _safe_get (manual redirect follow)."""
         try:
             host = (urlsplit(url).hostname or "").strip("[]")
         except Exception:
@@ -1830,6 +1896,33 @@ class Agent:
             except ValueError:
                 continue
         return False
+
+    async def _safe_get(self, url: str, *, timeout: float,
+                        headers: Optional[dict] = None,
+                        max_redirects: int = 5) -> Optional[httpx.Response]:
+        """GET with redirects followed manually so EVERY hop is re-checked
+        against _host_is_internal. httpx's automatic following would happily
+        chase a public URL that 302s to 127.0.0.1 (the protocol API) or
+        169.254.169.254 (IMDS) — the initial-URL check alone can't see that.
+        Returns the final response, or None if any hop is internal or the
+        redirect cap is exceeded."""
+        current = url
+        for _ in range(max_redirects + 1):
+            if self._host_is_internal(current):
+                logger.warning("[Agent] refusing internal-address url hop: %s", current[:120])
+                return None
+            async with self._http(timeout=timeout) as c:
+                r = await c.get(current, headers=headers)
+            if r.status_code in (301, 302, 303, 307, 308):
+                loc = r.headers.get("location", "")
+                if not loc:
+                    return r
+                # Resolve relative Location against the current hop URL
+                current = str(httpx.URL(current).join(loc))
+                continue
+            return r
+        logger.warning("[Agent] redirect cap exceeded: %s", url[:120])
+        return None
 
     @classmethod
     def _should_skip_url(cls, url: str) -> bool:
@@ -1928,11 +2021,12 @@ class Agent:
                 "Accept": "text/html,application/xhtml+xml",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             }
-            async with self._http(timeout=5, follow_redirects=True, max_redirects=5, headers=headers) as c:
-                r = await c.get(url)
-                if r.status_code != 200:
-                    return ""
-                html = r.text[:100_000]
+            # _safe_get: redirects re-checked per hop (SSRF via 302 blocked)
+            r = await self._safe_get(url, timeout=5, headers=headers)
+            if r is None or r.status_code != 200:
+                return ""
+            # Only read the first 100KB so a huge page can't eat memory.
+            html = r.text[:100_000]
         except Exception as e:
             logger.debug("[Agent] OG fetch failed (%s): %s: %s", url, type(e).__name__, e)
             return ""
@@ -3476,6 +3570,10 @@ class Agent:
                 continue
             reply = filtered
             self._commit_core_memory(gid, _pending_core)
+            # Sanitize BEFORE committing buffer/last_reply_at (same as
+            # _handle_inner): a fail-closed rejection later inside _send_qq
+            # would otherwise leave a phantom "sent" line in the buffer.
+            reply = self._sanitize_reply(reply, self.agent_lang)
             reply = reply.strip().strip('"').strip("「」")
             at_uid = ""
             at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
@@ -4495,7 +4593,11 @@ class Agent:
                 # Rewrite the first-person pronoun to the speaker's name so a
                 # memory stored as "我喜欢猫" surfaces as "Alice 喜欢猫". English
                 # memories keep their "I" — rewriting it would be lossy.
-                texts = [re.sub(r"\b我\b", name, it["text"]) for it in lst]
+                # No \b here: Python \b treats CJK as word chars, so r"\b我\b"
+                # never matches inside normal Chinese text (dead code). The
+                # negative lookahead keeps 我们 intact; per-user memories are
+                # all self-bound ("记住我…"), so 我 always means the speaker.
+                texts = [re.sub(r"我(?!们)", name, it["text"]) for it in lst]
             else:
                 texts = [it["text"] for it in lst]
             parts.append(f"About {name}:\n" + "\n".join(f"- {t}" for t in texts))
