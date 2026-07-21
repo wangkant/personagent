@@ -16,8 +16,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from agent import Agent
-from health import run_checks, all_critical_ok
+from persona_agent.agent import Agent
+from persona_agent.health import run_checks, all_critical_ok
 
 load_dotenv(override=True)
 
@@ -158,6 +158,7 @@ async def lifespan(app: FastAPI):
         _spawn(agent.check_missed_mentions())
         _spawn(agent.loop_check_missed())
         _spawn(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLE
+        _spawn(agent.loop_evolve())     # self-guards on EVOLVE_AUTO
         _spawn(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():

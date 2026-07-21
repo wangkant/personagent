@@ -16,8 +16,8 @@ from pathlib import Path
 # Make the repo root importable when invoked as `python tests/test_gateway.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gateway import GatewaySink, message_to_reply_item, synthesize_onebot_payload  # noqa: E402
-from agent import Agent  # noqa: E402
+from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.gateway import GatewaySink, message_to_reply_item, synthesize_onebot_payload  # noqa: E402
 
 BOT_QQ = "10001"
 
@@ -707,7 +707,7 @@ async def regression_auto_memory_preserves_manual(tmp: Path) -> None:
 async def regression_throttle_send(tmp: Path) -> None:
     """Outbound throttle: enforces a min interval between sends and drops beyond
     the per-target 60s cap (anti-flood). Never touches group/send locks."""
-    from agent import _SEND_MAX_PER_MIN
+    from persona_agent.agent import _SEND_MAX_PER_MIN
     agent = make_agent(tmp)
     t0 = time.monotonic()
     await agent._throttle_send("group:X")
@@ -855,7 +855,7 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     """Gateway conversation keys are LRU-capped so a runaway/malicious
     forwarder can't grow the per-conversation dicts without bound. In-flight
     (locked) conversations are skipped; QQ-path state is never touched."""
-    from agent import _MAX_GATEWAY_CONVS
+    from persona_agent.agent import _MAX_GATEWAY_CONVS
     agent = make_agent(tmp)
     agent.buffers["123456"].append({"name": "q", "text": "qq group", "user_id": "7"})
     agent.buffers["tg:0"].append({"name": "x", "text": "hi", "user_id": "9"})

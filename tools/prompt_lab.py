@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
 
 import anthropic
-from agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE, _resolve_lang_file
+from persona_agent.agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE, _resolve_lang_file
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 

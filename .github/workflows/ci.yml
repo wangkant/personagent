@@ -29,4 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run tests
-        run: python tests/test_gateway.py
+        run: |
+          python tests/test_gateway.py
+          python tests/test_evolution.py

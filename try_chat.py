@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from agent import Agent  # noqa: E402
+from persona_agent.agent import Agent  # noqa: E402
 
 GROUP_ID = "trial"
 
