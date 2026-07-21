@@ -27,7 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from agent import _resolve_lang_file
+from persona_agent.agent import _resolve_lang_file
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)

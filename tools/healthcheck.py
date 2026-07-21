@@ -16,7 +16,7 @@ try:
 except Exception:
     pass
 
-from health import run_checks, all_critical_ok
+from persona_agent.health import run_checks, all_critical_ok
 
 
 def main():

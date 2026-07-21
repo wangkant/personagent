@@ -7,7 +7,7 @@
 
 **English** | [中文](README.zh-CN.md)
 
-A **template for building persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot. The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: every reply is self-scored, successes grow the few-shot pool, and failures are self-diagnosed into preference pairs that steer the next similar reply (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
@@ -17,6 +17,7 @@ A **template for building persona-driven LLM agents** for group chats and DMs �
 ## Table of contents
 
 - [Motivation](#motivation)
+- [Self-evolution](#self-evolution)
 - [Quick start](#quick-start)
 - [Multi-platform via AstrBot](#multi-platform-via-astrbot)
 - [Language (English / 中文)](#language-english--中文)
@@ -27,6 +28,7 @@ A **template for building persona-driven LLM agents** for group chats and DMs �
 - [Iteration loop](#iteration-loop)
 - [Sticker quality pipeline](#sticker-quality-pipeline)
 - [Architecture](#architecture)
+- [Project layout](#project-layout)
 - [Components](#components)
 - [Development](#development)
 - [Privacy](#privacy)
@@ -35,12 +37,28 @@ A **template for building persona-driven LLM agents** for group chats and DMs �
 
 ## Motivation
 
-Most "LLM in a group chat" projects sound like a chatbot stuck in customer-service mode: formal, eager, always replying, never holding an opinion. This template addresses the persona problem on four fronts:
+Most "LLM in a group chat" projects sound like a chatbot stuck in customer-service mode: formal, eager, always replying, never holding an opinion. This template addresses the persona problem on five fronts:
 
 - **Output safety first.** Reasoning, intent, and reply are JSON fields rather than inline XML tags, so a malformed model output cannot leak the reasoning channel into the visible reply. A whitelist character validator rejects anything that does not resemble genuine chat for the active language (XML residue, JSON braces, provider tokens, leaked templates); previously unseen leak shapes are blocked automatically.
 - **Style as code.** `STYLE_GUIDE` encodes the persona's *register*, forbidden phrasings, identity-attack defenses, observer-position rules, and a "react to the image, do not describe it" rule — the constraints that distinguish a character from a generic assistant.
 - **Stickers as part of the voice.** The library collects new stickers seen in the group, tags them with a vision model, evaluates persona-fit twice (text and visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A conversation-driven feedback loop demotes stickers that consistently score poorly.
 - **Understand the content.** Inline URLs, Bilibili and YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context, so the model receives the underlying content rather than an opaque link.
+- **Self-evolution.** The persona is not frozen at deployment. Every reply is scored, the score routes into one of two learning channels (grow the success pool / diagnose the failure), and the result hot-reloads into the very next similar conversation — see the next section.
+
+## Self-evolution
+
+![Self-evolution loop](docs/self_evolution_loop.svg)
+
+The agent closes a full learning loop around its own output — both halves run without a restart, because `examples.jsonl` and `feedback.jsonl` are hot-reloaded into dynamic few-shot retrieval:
+
+- **Learn from successes (fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. Replies scoring a full 5 are auto-appended to `data/examples.<lang>.jsonl` (deduped, size-capped with the hand-curated head preserved), so retrieval keeps sounding like the bot at its best rather than staying frozen at bootstrap.
+- **Learn from failures (gated or unattended — your choice).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `data/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
+  - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt).
+  - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the same thing in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). Every diagnosis — applied or rejected — is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot taught itself.
+- **Stickers evolve too.** Each sent sticker gets its own score; a sustained low average demotes it out of the library (see [Sticker quality pipeline](#sticker-quality-pipeline)).
+- **The persona takes notes on itself.** A letta-style `core_memory.json` holds a per-group self-maintained note the model can update mid-conversation — standing facts about the group survive context-window turnover.
+
+Guardrails, because an unattended feedback loop can also entrench garbage: only a top score grows the example pool (generous eval models would otherwise let disliked patterns reinforce themselves), the unattended path only touches clear failures, pairs are deduped against the whole feedback file, both files are size-capped, and `candidates.jsonl` keeps the full audit trail.
 
 ## Quick start
 
@@ -209,6 +227,7 @@ All settings come from `.env`. Key fields:
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | Vision model for image / sticker understanding. Leave blank to skip (OCR-only fallback) |
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
+| `EVOLVE_AUTO` (+ `EVOLVE_*`) | Opt-in unattended eval → feedback learning loop. See [Self-evolution](#self-evolution) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | Auto-downgrade to a cheaper model when request rate spikes |
 | `JUDGE_MODEL` | Cheapest model for the "should I reply?" gate on self-initiated modes (judge/followup/proactive). The reply that's actually sent is always written by the main model. Defaults to `FALLBACK_MODEL` |
 | `EVAL_MODEL` | Model used by the async self-eval scorer (often a cheaper one is fine) |
@@ -219,7 +238,7 @@ See `.env.example` for the full list.
 
 ![Hot-reload iteration loop](docs/hot_reload_iteration_loop.svg)
 
-The agent's prompt is structured to make failures debuggable:
+The [self-evolution loop](#self-evolution) handles the automatable part of this on its own; the manual loop below is for the failures that need a human judgment call — a new failure *class* that wants a hard constraint in the prompt, not just another retrieval pair. The agent's prompt is structured to make those debuggable:
 
 ```
 observe failure (eval.jsonl LOW-SCORE / live observation)
@@ -266,7 +285,7 @@ NapCat (QQ ↔ OneBot)          AstrBot + forwarder plugin
     ▼                              ▼
 ┌──────────────────── main.py (FastAPI) ────────────────────┐
 │                                                            │
-│  ┌──────────────────── agent.py ────────────────────────┐  │
+│  ┌─────────────── persona_agent/agent.py ───────────────┐  │
 │  │  handle(payload)                                     │  │
 │  │    ├─ persistent dedup (seen_msg_ids.json)           │  │
 │  │    ├─ debounce + sticky-call inheritance             │  │
@@ -284,7 +303,7 @@ NapCat (QQ ↔ OneBot)          AstrBot + forwarder plugin
 │  │         └─ async self-eval → eval.jsonl + sticker score│ │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                            │
-│  ┌──────────────────── stickers.py ─────────────────────┐  │
+│  ┌────────────── persona_agent/stickers.py ─────────────┐  │
 │  │  steal → tag → persona-fit gate → visual aesthetic    │  │
 │  │  → eval feedback loop → freshness-biased selection    │  │
 │  └──────────────────────────────────────────────────────┘  │
@@ -300,14 +319,37 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 
 | Module | Responsibility |
 |---|---|
-| `agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl`; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
-| `stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
+| `persona_agent/agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl` with auto-append of top scorers to the example pool; the opt-in `EVOLVE_AUTO` loop; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
+| `persona_agent/evolution.py` | The eval → feedback learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
+| `persona_agent/stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
-| `gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs |
+| `persona_agent/gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
-| `tools/auto_reviewer.py` | Scans low-score entries in `eval.jsonl` and proposes `failure_mode + constraint + BAD/OK pair_draft` for prompt patches |
+| `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into `data/feedback.<lang>.jsonl` (`--yes` for unattended) |
 | `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into `data/examples.<lang>.jsonl` |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
+
+## Project layout
+
+App-style layout: one importable core package, thin entry points at the root, state files at the root (so upgrades never migrate your data).
+
+```
+persona_agent/        the application package
+  agent.py            persona pipeline: modes, output protocol, memory, retrieval, self-eval, evolve loop
+  gateway.py          platform-neutral event schema + reply sink
+  stickers.py         sticker library and its quality gates
+  evolution.py        eval -> feedback learning-loop logic
+  health.py           startup / runtime environment checks
+  paths.py            ROOT anchor — all state lives at the repo root
+main.py               FastAPI entry point (webhooks, lifespan, background loops)
+try_chat.py           terminal chat through the full reasoning path
+quickstart.py         one-command setup wizard
+tools/                offline tuning + ops CLIs (auto_reviewer, prompt_lab, ...)
+data/                 per-language datasets: persona, examples, feedback, lorebook, output_filter
+docs/                 architecture + loop diagrams (en / zh)
+tests/                stdlib-only regression suite (no pytest needed)
+integrations/         AstrBot forwarder plugin for multi-platform
+```
 
 ## Development
 
@@ -315,15 +357,16 @@ The regression suite runs without a test framework — plain standard-library Py
 
 ```bash
 python tests/test_gateway.py
+python tests/test_evolution.py
 ```
 
-It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, and the setup wizard's `.env` writer. Run it before opening a pull request.
+It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, and the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail). Run it before opening a pull request.
 
 For prompt and persona tuning:
 
 - `python try_chat.py` — interactive single-turn chat through the full reasoning path (see [Quick start](#quick-start)).
 - `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into `data/examples.<lang>.jsonl`.
-- `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt-patch suggestions.
+- `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
 
 ## Privacy
 

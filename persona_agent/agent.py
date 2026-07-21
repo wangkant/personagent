@@ -13,14 +13,17 @@ import re
 import socket
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 from urllib.parse import urlencode, urlsplit
 
 import httpx
 
-from gateway import GatewaySink, current_sink, synthesize_onebot_payload
-from stickers import StickerLibrary
+from . import evolution
+from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
+from .paths import ROOT
+from .stickers import StickerLibrary
 
 logger = logging.getLogger("agent")
 
@@ -93,7 +96,7 @@ def _load_persona(lang: str = "en") -> str:
             return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
         except Exception:
             logger.warning("read persona file failed, falling back to bundled example")
-    example = Path(__file__).resolve().parent / "data" / f"persona.example.{lang}.txt"
+    example = ROOT / "data" / f"persona.example.{lang}.txt"
     if example.is_file():
         try:
             return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
@@ -106,7 +109,7 @@ def _resolve_lang_file(stem: str, ext: str, lang: str) -> Path:
     """Resolve a bundled data file (under data/) by language: prefer
     data/<stem>.<lang>.<ext>, and fall back to the bare data/<stem>.<ext> so
     single-language or customized deployments keep working."""
-    base_dir = Path(__file__).resolve().parent / "data"
+    base_dir = ROOT / "data"
     suffixed = base_dir / f"{stem}.{lang}.{ext}"
     if suffixed.is_file():
         return suffixed
@@ -468,7 +471,7 @@ class Agent:
 
         self.memory_file = Path(memory_file)
         if not self.memory_file.is_absolute():
-            self.memory_file = Path(__file__).parent / self.memory_file
+            self.memory_file = ROOT / self.memory_file
         self.memory_max = memory_max_per_group
         self.memories: dict[str, list[dict]] = self._load_memories()
 
@@ -491,7 +494,7 @@ class Agent:
         self.eval_model = eval_model or self.fallback_model or self.model
         eval_path = Path(eval_file)
         if not eval_path.is_absolute():
-            eval_path = Path(__file__).parent / eval_path
+            eval_path = ROOT / eval_path
         self.eval_file = eval_path
 
         self.vision_model = (vision_model or "").strip()
@@ -544,12 +547,28 @@ class Agent:
         self.last_dm_activity_at: dict[str, float] = defaultdict(float)
         self.last_proactive_at: dict[str, float] = defaultdict(float)
 
+        # Self-evolution loop: opt-in background task that closes the negative
+        # half of the learning loop unattended. New low-score eval entries are
+        # self-diagnosed into BAD/OK preference pairs and appended straight to
+        # feedback.<lang>.jsonl, which hot-reloads into few-shot retrieval —
+        # the bot learns from its own misses while running. Every diagnosis is
+        # also recorded in candidates.jsonl (applied="auto"), the same audit
+        # trail tools/auto_reviewer.py uses, so the CLI and this loop never
+        # double-process an entry. Off by default: with no human gate the
+        # threshold must be strict — only clear failures (score <= 2) qualify.
+        self.evolve_auto = os.getenv("EVOLVE_AUTO", "false").lower() == "true"
+        self.evolve_interval = int(float(os.getenv("EVOLVE_INTERVAL_HOURS", 6)) * 3600)
+        self.evolve_threshold = int(os.getenv("EVOLVE_THRESHOLD", 2))
+        self.evolve_batch = int(os.getenv("EVOLVE_BATCH", 5))  # diagnoses per tick
+        self.evolve_model = os.getenv("EVOLVE_MODEL", "") or self.eval_model
+        self.candidates_file = ROOT / "candidates.jsonl"
+
         stickers_path = Path(stickers_dir)
         if not stickers_path.is_absolute():
-            stickers_path = Path(__file__).parent / stickers_path
+            stickers_path = ROOT / stickers_path
         stickers_json = Path(stickers_file)
         if not stickers_json.is_absolute():
-            stickers_json = Path(__file__).parent / stickers_json
+            stickers_json = ROOT / stickers_json
         # Pass a one-line persona digest down to the sticker library; it uses
         # this to ask the tagger whether each sticker fits the persona (so
         # off-character stickers get persona_fit=false and aren't picked).
@@ -558,7 +577,7 @@ class Agent:
         self.stickers = StickerLibrary(
             stickers_dir=stickers_path,
             stickers_file=stickers_json,
-            unknown_log=Path(__file__).parent / "unknown_stickers.jsonl",
+            unknown_log=ROOT / "unknown_stickers.jsonl",
             anthropic_caller=self._call_anthropic,
             # Cheap judgment model configured for THIS endpoint — a hardcoded
             # provider literal here would 404 on Moonshot/OpenAI/Ollama
@@ -594,7 +613,7 @@ class Agent:
         self._lorebook_mtime: float = 0.0
 
         # letta-style core memory (per-group short note, always in prompt)
-        self.core_memory_file = Path(__file__).parent / "core_memory.json"
+        self.core_memory_file = ROOT / "core_memory.json"
         self.core_memory: dict[str, str] = self._load_core_memory()
 
         self.message_debounce_sec = max(0.0, message_debounce_sec)
@@ -610,7 +629,7 @@ class Agent:
         # this, the startup check_missed_mentions sees an empty ring and may
         # treat a still-recent @ mention as new.
         self._seen_msg_ids: deque = deque(maxlen=2000)
-        self._seen_msg_file = Path(__file__).resolve().parent / "seen_msg_ids.json"
+        self._seen_msg_file = ROOT / "seen_msg_ids.json"
         try:
             if self._seen_msg_file.exists():
                 with self._seen_msg_file.open("r", encoding="utf-8") as f:
@@ -3498,6 +3517,69 @@ class Agent:
             except Exception as e:
                 logger.warning("[Agent] loop_check_missed iteration failed: %s", e)
 
+    # ---------------- Self-evolution (eval -> feedback, unattended) ----------------
+    async def loop_evolve(self) -> None:
+        """Background loop that turns the agent's own low-score evals into
+        BAD/OK preference pairs in feedback.<lang>.jsonl. Opt-in (EVOLVE_AUTO).
+        The positive half (high scores -> examples.jsonl) already runs inline
+        in _evaluate_reply; this loop closes the negative half."""
+        if not self.enabled or not self.evolve_auto:
+            return
+        if not self.eval_enable:
+            logger.warning("[Agent] EVOLVE_AUTO=true but EVAL_ENABLE=false — "
+                           "no scores are being produced, evolve loop idle")
+        logger.info("[Agent] evolve loop ON (every %.1fh, score<=%d, batch=%d, model=%s)",
+                    self.evolve_interval / 3600, self.evolve_threshold,
+                    self.evolve_batch, self.evolve_model)
+        while True:
+            try:
+                await asyncio.sleep(self.evolve_interval)
+                await self._evolve_tick()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning("[Agent] evolve tick failed: %s: %s",
+                               type(e).__name__, e)
+
+    async def _evolve_tick(self) -> int:
+        """One pass: diagnose up to evolve_batch new low-score evals, append
+        usable pairs to feedback. Returns the number of pairs added."""
+        evals = evolution.load_evals(self.eval_file, self.evolve_threshold)
+        reviewed = evolution.load_reviewed_ts(self.candidates_file)
+        pending = [e for e in evals if e.get("ts") not in reviewed][: self.evolve_batch]
+        if not pending:
+            return 0
+        existing = evolution.load_feedback_keys(self.feedback_file)
+        now = datetime.now().isoformat(timespec="seconds")
+        added = 0
+        for ev in pending:
+            prompt = evolution.build_review_prompt(ev, self.agent_lang)
+            raw = await self._call_anthropic(
+                "", [{"role": "user", "content": prompt}],
+                model=self.evolve_model, max_tokens=600, enable_search=False,
+            )
+            diag = evolution.parse_review(raw)
+            if not diag:
+                continue
+            pair = evolution.pair_from_candidate(
+                evolution.candidate_record(ev, diag), now)
+            usable = pair is not None and (pair["reply"], pair["better"]) not in existing
+            # Audit trail first, so a crash between the two writes re-reviews
+            # nothing (the entry is marked reviewed) rather than double-appends.
+            evolution.append_jsonl(
+                self.candidates_file,
+                [evolution.candidate_record(ev, diag,
+                                            applied="auto" if usable else "rejected")],
+                max_bytes=20_000_000,
+            )
+            if usable:
+                added += evolution.append_jsonl(self.feedback_file, [pair])
+                existing.add((pair["reply"], pair["better"]))
+        if added:
+            logger.info("[Agent] evolve: +%d feedback pairs from %d low-score evals",
+                        added, len(pending))
+        return added
+
     # ---------------- Proactive (self-initiated) messaging ----------------
     async def loop_proactive(self) -> None:
         """Background loop that occasionally initiates a message with no incoming
@@ -4518,7 +4600,7 @@ class Agent:
     def _owner_sticker_pattern_block(self) -> str:
         """If owner_profile.json exists, embed measured frequency as the target.
         Otherwise return a placeholder telling model to use moderate frequency."""
-        profile_file = Path(__file__).parent / "owner_profile.json"
+        profile_file = ROOT / "owner_profile.json"
         if not profile_file.exists():
             return (
                 "**Frequency reference**: haven't analyzed " + self.owner_name +

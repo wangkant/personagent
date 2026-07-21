@@ -45,7 +45,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
 
-from agent import Agent
+from persona_agent.agent import Agent
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
 
