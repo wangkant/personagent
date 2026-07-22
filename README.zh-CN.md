@@ -1,7 +1,7 @@
 # persona-llm-agent
 
-[![在线 demo](assets/live-demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
-[![CI](https://github.com/qiankangwang/persona-llm-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/qiankangwang/persona-llm-agent/actions/workflows/ci.yml)
+[![在线 demo](assets/live-demo.svg)](https://wangkant.github.io/persona-llm-agent/)
+[![CI](https://github.com/wangkant/persona-llm-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/persona-llm-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
@@ -9,7 +9,7 @@
 
 > **你打一句，它像真人一样接话——不是客服腔——而且越用越像。**
 
-[![persona-llm-agent 终端演示](assets/demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
+[![persona-llm-agent 终端演示](assets/demo.svg)](https://wangkant.github.io/persona-llm-agent/)
 
 一个**自进化的人设型 LLM agent 模板**，用于群聊和私聊，目标是让发出的消息读起来像真人闲聊，而非客服机器人——并且越用越像：每条回复都被自评分，成功样本自动扩充 few-shot 池，失败样本被自我诊断成偏好对，直接影响下一次同类回复（见[自进化](#自进化)）。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关与 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，可在人设管线零改动的前提下，将同一人设扩展到 **Telegram、Discord、Slack、飞书、KOOK**。本仓库的核心价值在于 LLM agent 与 prompt engineering 的设计模式实践；平台接入仅为演示载体，仓库内不包含任何 IM 协议实现。
 
