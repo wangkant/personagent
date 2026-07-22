@@ -1,7 +1,7 @@
 # astrbot_plugin_llm_persona_gateway
 
 An [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin that turns AstrBot into a thin
-multi-platform transport for [persona-llm-agent](https://github.com/qiankangwang/persona-llm-agent).
+multi-platform transport for [persona-llm-agent](https://github.com/wangkant/persona-llm-agent).
 
 ## What it does
 
