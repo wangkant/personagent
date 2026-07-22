@@ -7,6 +7,10 @@
 
 **English** | [中文](README.zh-CN.md)
 
+> **You type. It replies like a person — not a help desk — and it gets better at it on its own.**
+
+[![persona-llm-agent terminal demo](assets/demo.svg)](https://qiankangwang.github.io/persona-llm-agent/)
+
 A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: every reply is self-scored, successes grow the few-shot pool, and failures are self-diagnosed into preference pairs that steer the next similar reply (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
