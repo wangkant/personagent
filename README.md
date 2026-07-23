@@ -371,6 +371,7 @@ For prompt and persona tuning:
 - `python try_chat.py` — interactive single-turn chat through the full reasoning path (see [Quick start](#quick-start)).
 - `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into `data/examples.<lang>.jsonl`.
 - `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
+- `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). An independent judge (Claude) scores blind, so the learning signal and the measurement never share a model.
 
 ## Privacy
 

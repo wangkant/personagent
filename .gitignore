@@ -42,3 +42,6 @@ tools/dspy_log.md
 # Logs
 *.log
 logs/
+
+# Benchmark run artifacts
+benchmark_runs/
