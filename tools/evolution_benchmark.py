@@ -169,10 +169,17 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
     return out
 
 
-async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir, judge_model):
+async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir,
+                  judge_model, seed_state="empty"):
     if state_dir.exists():
         shutil.rmtree(state_dir)
     agent = build_isolated_agent(state_dir, bot_name, lang, eval_enable=evolve_on)
+    # Seed both arms identically (or start empty) AFTER build so the files
+    # survive the rmtree above; the agent's retrieval caches reload lazily by
+    # mtime, so files dropped in now are picked up on the first round.
+    _seed_state_files(lang, seed_state, state_dir)
+    agent._pairs_mtime = 0.0
+    agent._examples_mtime = 0.0
     arm = "evolve-on" if evolve_on else "evolve-off"
     results = []
     # Round 0: baseline, no learning even on the on-arm.
@@ -375,7 +382,8 @@ async def cmd_run(args) -> int:
     for evolve_on in (True, False):
         sd = out / ("state-on" if evolve_on else "state-off")
         arm = await run_arm(train, holdout, bot_name, args.lang, args.rounds,
-                            evolve_on, sd, judge_model=args.judge_model)
+                            evolve_on, sd, judge_model=args.judge_model,
+                            seed_state=args.seed_state)
         arms.append(arm)
     (out / "arms.json").write_text(json.dumps(arms, ensure_ascii=False, indent=2),
                                    encoding="utf-8", newline="\n")
@@ -415,7 +423,9 @@ def main() -> int:
     r = sub.add_parser("run")
     r.add_argument("--rounds", type=int, default=4)
     r.add_argument("--lang", default="en")
-    r.add_argument("--seed-state", default="synthetic", choices=["synthetic", "empty"])
+    r.add_argument("--seed-state", default="empty", choices=["synthetic", "empty"],
+                   help="empty (default) = both arms start with zero feedback, the "
+                        "cleanest control; synthetic = copy the committed starter datasets")
     r.add_argument("--holdout-votes", type=int, default=1)
     r.add_argument("--judge", default="export", choices=["export", "anthropic"])
     r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", "claude-opus-4-8"))
