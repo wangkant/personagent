@@ -1,0 +1,24 @@
+{"id":"tr001","family":"service-desk","scenario":"casual opinion ask","mode":"called","context":["alex: <bot-name> what do you think of this approach"]}
+{"id":"tr002","family":"service-desk","scenario":"help offer bait","mode":"called","context":["jordan: <bot-name> the deploy keeps failing"]}
+{"id":"tr003","family":"service-desk","scenario":"thanks fishing","mode":"called","context":["sam: <bot-name> can you explain what a mutex is"]}
+{"id":"tr004","family":"service-desk","scenario":"vague request","mode":"called","context":["riley: <bot-name> got any tips for focus"]}
+{"id":"tr005","family":"name-at-start","scenario":"direct question by name","mode":"called","context":["jordan: <bot-name> you around"]}
+{"id":"tr006","family":"name-at-start","scenario":"greeting by name","mode":"called","context":["alex: morning <bot-name>"]}
+{"id":"tr007","family":"name-at-start","scenario":"asked to weigh in","mode":"called","context":["sam: <bot-name> settle a debate for us"]}
+{"id":"tr008","family":"name-at-start","scenario":"pinged for status","mode":"called","context":["riley: <bot-name> hows it going"]}
+{"id":"tr009","family":"bulleted-analysis","scenario":"casual why question","mode":"called","context":["alex: <bot-name> why does coffee stop working after a while"]}
+{"id":"tr010","family":"bulleted-analysis","scenario":"opinion on tradeoff","mode":"called","context":["jordan: <bot-name> is remote or office better honestly"]}
+{"id":"tr011","family":"bulleted-analysis","scenario":"how-to lite","mode":"called","context":["sam: <bot-name> whats the move for jetlag"]}
+{"id":"tr012","family":"bulleted-analysis","scenario":"pros and cons bait","mode":"called","context":["riley: <bot-name> should i learn rust or go"]}
+{"id":"tr013","family":"over-reading-noise","scenario":"single letters","mode":"judge","context":["jordan: k . k"]}
+{"id":"tr014","family":"over-reading-noise","scenario":"stray punctuation","mode":"judge","context":["alex: ..."]}
+{"id":"tr015","family":"over-reading-noise","scenario":"typo fragment","mode":"judge","context":["sam: teh"]}
+{"id":"tr016","family":"over-reading-noise","scenario":"emoji only","mode":"judge","context":["riley: lol"]}
+{"id":"tr017","family":"jumped-the-gun","scenario":"burst not finished","mode":"followup","context":["alex: ok so get this","alex: [image: cursed screenshot]"]}
+{"id":"tr018","family":"jumped-the-gun","scenario":"mid-thought","mode":"followup","context":["jordan: wait i need to tell you about","jordan: hold on"]}
+{"id":"tr019","family":"jumped-the-gun","scenario":"setup line","mode":"followup","context":["sam: you will not believe what happened"]}
+{"id":"tr020","family":"jumped-the-gun","scenario":"trailing off","mode":"followup","context":["riley: so the thing about that is"]}
+{"id":"tr021","family":"wrong-target","scenario":"owner ats someone else","mode":"called","context":["owner: [AT:1001] you up this early?","alex: yeah couldnt sleep"]}
+{"id":"tr022","family":"wrong-target","scenario":"two others talking","mode":"judge","context":["alex: you coming friday","jordan: yeah ill be there"]}
+{"id":"tr023","family":"wrong-target","scenario":"reply chain between others","mode":"judge","context":["sam: did you finish it","riley: almost, tonight"]}
+{"id":"tr024","family":"wrong-target","scenario":"owner addresses third party","mode":"called","context":["owner: [AT:1002] nice work today","jordan: thanks!"]}
