@@ -11,7 +11,7 @@
 
 [![personagent terminal demo](assets/demo.svg)](https://wangkant.github.io/personagent/)
 
-A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: every reply is self-scored, successes grow the few-shot pool, and failures are self-diagnosed into preference pairs that steer the next similar reply (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: it learns primarily from **real user reactions** — a "no, I meant X" becomes a correction pair, laughter banks the reply as a proven example — with LLM self-scoring as the fallback channel (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
 > **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
 
@@ -47,22 +47,23 @@ Most "LLM in a group chat" projects sound like a chatbot stuck in customer-servi
 - **Style as code.** `STYLE_GUIDE` encodes the persona's *register*, forbidden phrasings, identity-attack defenses, observer-position rules, and a "react to the image, do not describe it" rule — the constraints that distinguish a character from a generic assistant.
 - **Stickers as part of the voice.** The library collects new stickers seen in the group, tags them with a vision model, evaluates persona-fit twice (text and visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A conversation-driven feedback loop demotes stickers that consistently score poorly.
 - **Understand the content.** Inline URLs, Bilibili and YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context, so the model receives the underlying content rather than an opaque link.
-- **Self-evolution.** The persona is not frozen at deployment. Every reply is scored, the score routes into one of two learning channels (grow the success pool / diagnose the failure), and the result hot-reloads into the very next similar conversation — see the next section.
+- **Self-evolution.** The persona is not frozen at deployment. It learns primarily from real user reactions (corrections become preference pairs, laughter banks proven replies), with LLM self-scoring as the fallback — and everything hot-reloads into the very next similar conversation. See the next section.
 
 ## Self-evolution
 
 ![Self-evolution loop](docs/self_evolution_loop.svg)
 
-The agent closes a full learning loop around its own output — both halves run without a restart, because `examples.jsonl` and `feedback.jsonl` are hot-reloaded into dynamic few-shot retrieval:
+The agent closes a full learning loop around its own output — all of it hot-reloaded into dynamic few-shot retrieval, no restart needed:
 
-- **Learn from successes (fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. Replies scoring a full 5 are auto-appended to `data/examples.<lang>.jsonl` (deduped, size-capped with the hand-curated head preserved), so retrieval keeps sounding like the bot at its best rather than staying frozen at bootstrap.
-- **Learn from failures (gated or unattended — your choice).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `data/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
+- **Learn from real user reactions (the primary signal).** Every sent reply briefly waits for a *directed* reaction — someone quoting the bot's message, @-ing it, or (in a DM) just answering. An in-process adjudicator classifies the reaction: *"no, I meant X"* is a **correction** (with the right answer inside it — it becomes a BAD → OK preference pair); re-asking the same thing in other words is a **rejection** (didn't land); laughing or riffing is a **positive** (the reply is banked into the example pool as a proven hit). The adjudicator filters banter and trolling before anything is written — the owner's corrections carry the most weight, a stranger must be self-evidently right — and every verdict is audited in `candidates.jsonl`. Reading a *reaction to a reply* is a far easier judgment than scoring "how human does this sound", which is why this channel works where naive LLM self-scoring is too lenient.
+- **Learn from successes (fallback, fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. Replies scoring a full 5 are auto-appended to `data/examples.<lang>.jsonl` (deduped, size-capped with the hand-curated head preserved), so retrieval keeps sounding like the bot at its best rather than staying frozen at bootstrap.
+- **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `data/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
   - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt).
   - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the same thing in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). Every diagnosis — applied or rejected — is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot taught itself.
 - **Stickers evolve too.** Each sent sticker gets its own score; a sustained low average demotes it out of the library (see [Sticker quality pipeline](#sticker-quality-pipeline)).
 - **The persona takes notes on itself.** A letta-style `core_memory.json` holds a per-group self-maintained note the model can update mid-conversation — standing facts about the group survive context-window turnover.
 
-Guardrails, because an unattended feedback loop can also entrench garbage: only a top score grows the example pool (generous eval models would otherwise let disliked patterns reinforce themselves), the unattended path only touches clear failures, pairs are deduped against the whole feedback file, both files are size-capped, and `candidates.jsonl` keeps the full audit trail.
+Guardrails, because an unattended feedback loop can also entrench garbage: every reaction passes the adjudicator (banter and trolling are filtered, strangers must be self-evidently right), only a top score grows the example pool (generous eval models would otherwise let disliked patterns reinforce themselves), the unattended path only touches clear failures, pairs are deduped against the whole feedback file, both files are size-capped, and `candidates.jsonl` keeps the full audit trail.
 
 ## Quick start
 
@@ -231,7 +232,8 @@ All settings come from `.env`. Key fields:
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | Vision model for image / sticker understanding. Leave blank to skip (OCR-only fallback) |
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
-| `EVOLVE_AUTO` (+ `EVOLVE_*`) | Opt-in unattended eval → feedback learning loop. See [Self-evolution](#self-evolution) |
+| `REACT_LEARN` (+ `REACT_*`) | Learn from real user reactions (on by default — the primary self-evolution signal). See [Self-evolution](#self-evolution) |
+| `EVOLVE_AUTO` (+ `EVOLVE_*`) | Opt-in unattended eval → feedback learning loop (fallback channel). See [Self-evolution](#self-evolution) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | Auto-downgrade to a cheaper model when request rate spikes |
 | `JUDGE_MODEL` | Cheapest model for the "should I reply?" gate on self-initiated modes (judge/followup/proactive). The reply that's actually sent is always written by the main model. Defaults to `FALLBACK_MODEL` |
 | `EVAL_MODEL` | Model used by the async self-eval scorer (often a cheaper one is fine) |
@@ -324,6 +326,7 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 | Module | Responsibility |
 |---|---|
 | `persona_agent/agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl` with auto-append of top scorers to the example pool; the opt-in `EVOLVE_AUTO` loop; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
+| `persona_agent/reactions.py` | Learn from real user reactions (primary signal): pending-reply table with quote/@/DM attribution, one-call adjudicator (classify + genuineness + rewrite, owner-weighted), write-shapes for the feedback/examples pipelines |
 | `persona_agent/evolution.py` | The eval → feedback learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
 | `persona_agent/stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
@@ -343,6 +346,7 @@ persona_agent/        the application package
   gateway.py          platform-neutral event schema + reply sink
   stickers.py         sticker library and its quality gates
   evolution.py        eval -> feedback learning-loop logic
+  reactions.py        learn-from-real-user-reactions logic (primary signal)
   health.py           startup / runtime environment checks
   paths.py            ROOT anchor — all state lives at the repo root
 main.py               FastAPI entry point (webhooks, lifespan, background loops)
