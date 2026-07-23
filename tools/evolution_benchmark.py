@@ -175,3 +175,69 @@ async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir, 
         results.append({"round": k, "feedback_pairs": _count_feedback(agent), "holdout": rd})
         print(f"[{arm}] round {k}/{rounds}: feedback_pairs={_count_feedback(agent)}")
     return {"arm": arm, "rounds": results}
+
+
+def build_inbox(arms: list[dict], votes: int = 1):
+    """Build a blind inbox from arm results.
+
+    Returns (inbox, key_map) where:
+    - inbox: list of {"item_id", "reply"} (blind: no arm/round/family/scenario_id)
+    - key_map: {item_id: {"arm", "round", "scenario_id", "family"}}
+    - Order shuffled deterministically by sha1(item_id) so judge can't infer arm/round from position.
+    - votes copies per reply with suffixed ids #v1, #v2, etc.
+    """
+    inbox: list[dict] = []
+    key_map: dict[str, dict] = {}
+    for arm in arms:
+        aname = arm["arm"]
+        for rd in arm["rounds"]:
+            for h in rd["holdout"]:
+                base = f"{aname}|{rd['round']}|{h['scenario_id']}"
+                for v in range(1, votes + 1):
+                    item_id = f"{base}#v{v}"
+                    inbox.append({"item_id": item_id, "reply": h["reply"]})
+                    key_map[item_id] = {"arm": aname, "round": rd["round"],
+                                        "scenario_id": h["scenario_id"],
+                                        "family": h["family"]}
+    # Deterministic shuffle: order by a hash of the id so the judge can't infer
+    # arm/round from position, but the same run reproduces the same order.
+    inbox.sort(key=lambda it: hashlib.sha1(it["item_id"].encode()).hexdigest())
+    return inbox, key_map
+
+
+def load_scores(path: Path) -> dict:
+    """Load scores from a JSONL file.
+
+    Returns {item_id: {"score", "reason"}}.
+    """
+    out: dict[str, dict] = {}
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        r = json.loads(ln)
+        out[r["item_id"]] = {"score": int(r["score"]), "reason": r.get("reason", "")}
+    return out
+
+
+def aggregate(key_map: dict, scores: dict) -> dict:
+    """Aggregate scores by (arm, round) and (arm, round, family).
+
+    Raises ValueError if any inbox item lacks a score.
+    Returns {"by_round": {(arm, round): mean_score}, "by_family": {...}}.
+    """
+    missing = [iid for iid in key_map if iid not in scores]
+    if missing:
+        raise ValueError(f"{len(missing)} inbox items have no score: {missing[:5]}")
+    from collections import defaultdict
+    by_round_vals: dict = defaultdict(list)
+    by_family_vals: dict = defaultdict(list)
+    for iid, meta in key_map.items():
+        sc = scores[iid]["score"]
+        by_round_vals[(meta["arm"], meta["round"])].append(sc)
+        by_family_vals[(meta["arm"], meta["round"], meta["family"])].append(sc)
+    mean = lambda xs: round(sum(xs) / len(xs), 3)
+    return {
+        "by_round": {k: mean(v) for k, v in by_round_vals.items()},
+        "by_family": {k: mean(v) for k, v in by_family_vals.items()},
+    }

@@ -141,11 +141,41 @@ def test_run_arm_isolation_and_growth() -> None:
               "auto_reviewer" not in real_fb.read_text(encoding="utf-8"))
 
 
+def test_inbox_is_blind_and_ingest() -> None:
+    arms = [{"arm": "evolve-on", "rounds": [
+        {"round": 0, "feedback_pairs": 0,
+         "holdout": [{"scenario_id": "ho1", "family": "f", "reply": "hello"}]},
+        {"round": 1, "feedback_pairs": 2,
+         "holdout": [{"scenario_id": "ho1", "family": "f", "reply": "sup"}]},
+    ]}]
+    inbox, key_map = bench.build_inbox(arms, votes=1)
+    leaked = [k for it in inbox for k in it
+              if k in ("arm", "round", "family", "scenario_id")]
+    check("inbox blind (no leak fields)", leaked == [])
+    check("inbox has item_id + reply only", all(set(it) == {"item_id", "reply"} for it in inbox))
+    check("key_map covers all items", set(key_map) == {it["item_id"] for it in inbox})
+
+    scores = {it["item_id"]: {"score": 3 + i, "reason": "r"} for i, it in enumerate(inbox)}
+    agg = bench.aggregate(key_map, scores)
+    check("aggregate has both rounds",
+          ("evolve-on", 0) in agg["by_round"] and ("evolve-on", 1) in agg["by_round"])
+
+    # Missing score -> error, not silent partial average.
+    partial = dict(list(scores.items())[:1])
+    raised = False
+    try:
+        bench.aggregate(key_map, partial)
+    except ValueError:
+        raised = True
+    check("aggregate errors on missing score", raised)
+
+
 def main() -> int:
     test_scenario_sets()
     test_seed_buffer()
     test_drive_scenario_stubbed()
     test_run_arm_isolation_and_growth()
+    test_inbox_is_blind_and_ingest()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
