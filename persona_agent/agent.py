@@ -23,7 +23,12 @@ import httpx
 from . import evolution
 from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
-from .paths import ROOT
+from .paths import (
+    ROOT,
+    read_jsonl,
+    resolve_runtime_lang_file,
+    resolve_seed_lang_file,
+)
 from .stickers import StickerLibrary
 
 logger = logging.getLogger("agent")
@@ -110,11 +115,7 @@ def _resolve_lang_file(stem: str, ext: str, lang: str) -> Path:
     """Resolve a bundled data file (under data/) by language: prefer
     data/<stem>.<lang>.<ext>, and fall back to the bare data/<stem>.<ext> so
     single-language or customized deployments keep working."""
-    base_dir = ROOT / "data"
-    suffixed = base_dir / f"{stem}.{lang}.{ext}"
-    if suffixed.is_file():
-        return suffixed
-    return base_dir / f"{stem}.{ext}"
+    return resolve_seed_lang_file(stem, ext, lang)
 
 
 # Common English function words filtered out of retrieval tokens so they don't
@@ -622,16 +623,22 @@ class Agent:
         # from prompt_lab.py; high-scoring replies are also auto-appended at
         # runtime (see _evaluate_reply) so the retrieval pool keeps growing
         # instead of being stuck at bootstrap size.
-        self.examples_file = _resolve_lang_file("examples", "jsonl", self.agent_lang)
+        self.examples_seed_file = _resolve_lang_file(
+            "examples", "jsonl", self.agent_lang)
+        self.examples_file = resolve_runtime_lang_file(
+            "examples", "jsonl", self.agent_lang)
         self._examples_cache: list = []
-        self._examples_mtime: float = 0.0
+        self._examples_mtime: tuple[float, float] = (-1.0, -1.0)
         # In-memory dedup for runtime-appended examples: a frequent stock
         # phrase should only land in the pool once.
         self._auto_examples_seen: set[str] = set()
 
-        self.feedback_file = _resolve_lang_file("feedback", "jsonl", self.agent_lang)
+        self.feedback_seed_file = _resolve_lang_file(
+            "feedback", "jsonl", self.agent_lang)
+        self.feedback_file = resolve_runtime_lang_file(
+            "feedback", "jsonl", self.agent_lang)
         self._pairs_cache: list = []
-        self._pairs_mtime: float = 0.0
+        self._pairs_mtime: tuple[float, float] = (-1.0, -1.0)
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
         self.output_filter_file = _resolve_lang_file("output_filter", "json", self.agent_lang)
@@ -3097,6 +3104,7 @@ class Agent:
         curated entry; drop the oldest auto entries (the ones carrying
         "score") until back under half the budget. Atomic (.tmp + replace)."""
         path = self.examples_file
+        path.parent.mkdir(parents=True, exist_ok=True)
         try:
             sz = path.stat().st_size if path.exists() else 0
         except OSError:
@@ -3660,7 +3668,8 @@ class Agent:
             if entry.get("fixes") and adj["reaction"] in ("positive", "neutral"):
                 fpair = reactions.fix_pair(entry["fixes"], entry["reply"], now)
                 if fpair is not None:
-                    existing = evolution.load_feedback_keys(self.feedback_file)
+                    existing = evolution.load_feedback_keys(
+                        [self.feedback_seed_file, self.feedback_file])
                     if (fpair["reply"], fpair["better"]) not in existing:
                         if evolution.append_jsonl(self.feedback_file, [fpair]) > 0:
                             wrote = True
@@ -3672,7 +3681,8 @@ class Agent:
             if adj["accept"]:
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
                 if pair is not None:
-                    existing = evolution.load_feedback_keys(self.feedback_file)
+                    existing = evolution.load_feedback_keys(
+                        [self.feedback_seed_file, self.feedback_file])
                     if (pair["reply"], pair["better"]) not in existing:
                         if evolution.append_jsonl(self.feedback_file, [pair]) > 0:
                             wrote = True
@@ -3788,7 +3798,8 @@ class Agent:
         pending = [e for e in evals if e.get("ts") not in reviewed][: self.evolve_batch]
         if not pending:
             return 0
-        existing = evolution.load_feedback_keys(self.feedback_file)
+        existing = evolution.load_feedback_keys(
+            [self.feedback_seed_file, self.feedback_file])
         now = datetime.now().isoformat(timespec="seconds")
         added = 0
         for ev in pending:
@@ -4474,18 +4485,16 @@ class Agent:
             logger.warning("[Agent] memory save failed: %s", e)
 
     def _reload_examples_if_stale(self) -> None:
-        try:
-            mtime = self.examples_file.stat().st_mtime
-        except FileNotFoundError:
-            self._examples_cache = []
-            self._examples_mtime = 0.0
+        paths = (self.examples_seed_file, self.examples_file)
+        mtimes = tuple(
+            p.stat().st_mtime if p.exists() else 0.0
+            for p in paths
+        )
+        if mtimes == self._examples_mtime:
             return
-        if mtime <= self._examples_mtime:
-            return
         try:
-            lines = self.examples_file.read_text(encoding="utf-8").splitlines()
-            self._examples_cache = [json.loads(l) for l in lines if l.strip()]
-            self._examples_mtime = mtime
+            self._examples_cache = read_jsonl(paths)
+            self._examples_mtime = mtimes
             # Rebuild runtime auto-append dedup set from on-disk replies so a
             # restart doesn't forget which replies are already in the pool.
             self._auto_examples_seen = {
@@ -4497,30 +4506,20 @@ class Agent:
 
     def _reload_pairs_if_stale(self) -> None:
         """Load preference pairs from feedback.jsonl (rating=better only)."""
-        try:
-            mtime = self.feedback_file.stat().st_mtime
-        except FileNotFoundError:
-            self._pairs_cache = []
-            self._pairs_mtime = 0.0
+        paths = (self.feedback_seed_file, self.feedback_file)
+        mtimes = tuple(
+            p.stat().st_mtime if p.exists() else 0.0
+            for p in paths
+        )
+        if mtimes == self._pairs_mtime:
             return
-        if mtime <= self._pairs_mtime:
-            return
         try:
-            lines = self.feedback_file.read_text(encoding="utf-8").splitlines()
-            records = []
-            for ln in lines:
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    records.append(json.loads(ln))
-                except json.JSONDecodeError:
-                    pass
+            records = read_jsonl(paths)
             self._pairs_cache = [
                 r for r in records
                 if r.get("rating") == "better" and r.get("better") and r.get("reply")
             ]
-            self._pairs_mtime = mtime
+            self._pairs_mtime = mtimes
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
 
