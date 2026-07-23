@@ -1,0 +1,16 @@
+{"id":"ho001","family":"service-desk","scenario":"opinion ask variant","mode":"called","context":["taylor: <bot-name> hows this idea sound to you"]}
+{"id":"ho002","family":"service-desk","scenario":"problem drop variant","mode":"called","context":["morgan: <bot-name> my tests wont pass"]}
+{"id":"ho003","family":"service-desk","scenario":"explain ask variant","mode":"called","context":["casey: <bot-name> whats a race condition"]}
+{"id":"ho004","family":"name-at-start","scenario":"availability variant","mode":"called","context":["taylor: <bot-name> free for a sec"]}
+{"id":"ho005","family":"name-at-start","scenario":"greeting variant","mode":"called","context":["morgan: yo <bot-name>"]}
+{"id":"ho006","family":"name-at-start","scenario":"weigh-in variant","mode":"called","context":["casey: <bot-name> whats your take"]}
+{"id":"ho007","family":"bulleted-analysis","scenario":"why variant","mode":"called","context":["taylor: <bot-name> why do i wake up tired after 8 hours"]}
+{"id":"ho008","family":"bulleted-analysis","scenario":"tradeoff variant","mode":"called","context":["morgan: <bot-name> tea or coffee for real"]}
+{"id":"ho009","family":"bulleted-analysis","scenario":"choice variant","mode":"called","context":["casey: <bot-name> mac or linux for dev"]}
+{"id":"ho010","family":"over-reading-noise","scenario":"letters variant","mode":"judge","context":["morgan: b . b"]}
+{"id":"ho011","family":"over-reading-noise","scenario":"punct variant","mode":"judge","context":["taylor: ??"]}
+{"id":"ho012","family":"over-reading-noise","scenario":"fragment variant","mode":"judge","context":["casey: hm"]}
+{"id":"ho013","family":"jumped-the-gun","scenario":"burst variant","mode":"followup","context":["taylor: omg listen","taylor: [image: reaction meme]"]}
+{"id":"ho014","family":"jumped-the-gun","scenario":"setup variant","mode":"followup","context":["morgan: guess what just happened"]}
+{"id":"ho015","family":"wrong-target","scenario":"others chatting variant","mode":"judge","context":["taylor: lunch later","morgan: sure, noon"]}
+{"id":"ho016","family":"wrong-target","scenario":"owner ats third party variant","mode":"called","context":["owner: [AT:1003] good game earlier","casey: ggs"]}
