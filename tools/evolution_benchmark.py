@@ -241,3 +241,64 @@ def aggregate(key_map: dict, scores: dict) -> dict:
         "by_round": {k: mean(v) for k, v in by_round_vals.items()},
         "by_family": {k: mean(v) for k, v in by_family_vals.items()},
     }
+
+
+def write_csv(agg: dict, path: Path) -> None:
+    """Write aggregated scores to CSV (arm, round, mean_score)."""
+    rows = ["arm,round,mean_score"]
+    for (arm, rnd), score in sorted(agg["by_round"].items()):
+        rows.append(f"{arm},{rnd},{score}")
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8", newline="\n")
+
+
+_FONT = ('font-family:"Anthropic Sans", -apple-system, BlinkMacSystemFont, '
+         '"Segoe UI", sans-serif')
+_ARM_COLOR = {"evolve-on": "rgb(15, 110, 86)", "evolve-off": "rgb(153, 60, 29)"}
+
+
+def write_svg(agg: dict, path: Path) -> None:
+    """Hand-rolled SVG chart of mean score by round for each arm."""
+    by_round = agg["by_round"]
+    arms = sorted({a for a, _ in by_round})
+    rounds = sorted({r for _, r in by_round})
+    W, H, ml, mr, mt, mb = 640, 400, 60, 140, 40, 50
+    pw, ph = W - ml - mr, H - mt - mb
+    ymin, ymax = 1.0, 5.0
+
+    def px(r):
+        return ml + (pw if len(rounds) == 1 else pw * (r - rounds[0]) / (rounds[-1] - rounds[0]))
+
+    def py(v):
+        return mt + ph * (1 - (v - ymin) / (ymax - ymin))
+
+    parts = [f'<svg width="100%" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">']
+    parts.append(f'<text x=\'{ml}\' y=\'24\' style=\'{_FONT};font-size:15px;font-weight:600;'
+                 f'fill:rgb(20,20,20)\'>Self-evolution: held-out AI-tell score by round</text>')
+    # axes
+    parts.append(f'<line x1=\'{ml}\' y1=\'{mt}\' x2=\'{ml}\' y2=\'{mt+ph}\' '
+                 f'stroke="rgb(115,114,108)" stroke-width="1"/>')
+    parts.append(f'<line x1=\'{ml}\' y1=\'{mt+ph}\' x2=\'{ml+pw}\' y2=\'{mt+ph}\' '
+                 f'stroke="rgb(115,114,108)" stroke-width="1"/>')
+    for yv in range(1, 6):
+        y = py(yv)
+        parts.append(f'<line x1=\'{ml}\' y1=\'{y}\' x2=\'{ml+pw}\' y2=\'{y}\' '
+                     f'stroke="rgb(230,229,225)" stroke-width="1"/>')
+        parts.append(f'<text x=\'{ml-10}\' y=\'{y+4}\' text-anchor="end" '
+                     f'style=\'{_FONT};font-size:12px;fill:rgb(115,114,108)\'>{yv}</text>')
+    for r in rounds:
+        parts.append(f'<text x=\'{px(r)}\' y=\'{mt+ph+20}\' text-anchor="middle" '
+                     f'style=\'{_FONT};font-size:12px;fill:rgb(115,114,108)\'>{r}</text>')
+    parts.append(f'<text x=\'{ml+pw/2}\' y=\'{H-8}\' text-anchor="middle" '
+                 f'style=\'{_FONT};font-size:12px;fill:rgb(115,114,108)\'>learning round</text>')
+    # lines
+    for i, arm in enumerate(arms):
+        color = _ARM_COLOR.get(arm, "rgb(83,74,183)")
+        pts = [(px(r), py(by_round[(arm, r)])) for r in rounds if (arm, r) in by_round]
+        d = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+        parts.append(f'<polyline points="{d}" fill="none" stroke="{color}" stroke-width="2"/>')
+        for x, y in pts:
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{color}"/>')
+        parts.append(f'<text x=\'{ml+pw+16}\' y=\'{mt+18+i*20}\' '
+                     f'style=\'{_FONT};font-size:13px;fill:{color};font-weight:500\'>{arm}</text>')
+    parts.append('</svg>')
+    path.write_text("\n".join(parts) + "\n", encoding="utf-8", newline="\n")
