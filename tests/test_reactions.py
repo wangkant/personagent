@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from persona_agent import evolution, reactions  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.agent import Agent, SendResult  # noqa: E402
 
 _failures: list[str] = []
 
@@ -270,7 +270,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
 
     async def fake_send_qq(group_id, text, at_user_id=""):
         sent.append((group_id, text, at_user_id))
-        return []
+        return SendResult(success=True)
     a._send_qq = fake_send_qq
 
     async def adj_rejection(system, messages, model, **kw):

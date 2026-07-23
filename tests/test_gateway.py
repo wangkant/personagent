@@ -17,7 +17,7 @@ from pathlib import Path
 # Make the repo root importable when invoked as `python tests/test_gateway.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.agent import Agent, SendResult  # noqa: E402
 from persona_agent.gateway import GatewaySink, message_to_reply_item, synthesize_onebot_payload  # noqa: E402
 
 BOT_QQ = "10001"
@@ -756,7 +756,7 @@ async def regression_mem_command_sends_outside_lock(tmp: Path) -> None:
 
     async def fake_send(group_id, text, at_user_id=""):
         lock_held_during_send.append(agent.locks[group_id].locked())
-        return []
+        return SendResult(success=True)
 
     agent._send_qq = fake_send
     payload = {
@@ -943,7 +943,7 @@ async def regression_proactive_group_postprocessing(tmp: Path) -> None:
 
     async def fake_send(group_id, text, at_user_id=""):
         sent.append((group_id, text, at_user_id))
-        return []
+        return SendResult(success=True)
 
     async def fake_think(group_id, mode, text="", caller_override=None):
         return ("[AT:42] you all went quiet [CORE_UPDATE]group loves cats[/CORE_UPDATE]",
@@ -995,6 +995,7 @@ async def regression_proactive_dm_saves_mem(tmp: Path) -> None:
 
     async def fake_send_private(uid, text):
         sent.append((uid, text))
+        return SendResult(success=True)
 
     agent._chat_private = fake_chat_private
     agent._send_private_qq = fake_send_private
@@ -1136,10 +1137,14 @@ async def regression_rejected_reply_not_committed(tmp: Path) -> None:
 
     async def fake_send(group_id, text, at_user_id=""):
         sends.append(text)
-        return []
+        return SendResult(success=True)
 
     async def fake_think(group_id, mode, text="", caller_override=None):
-        return "sure thing {x}", "chat", ""  # passes output filter, dies in validator
+        return (
+            "[CORE_UPDATE]group secret[/CORE_UPDATE]sure thing {x}",
+            "chat",
+            "auto memory that must be discarded",
+        )  # passes output filter, dies in validator
 
     async def on_reply(group_id, text):
         replies.append(text)
@@ -1163,6 +1168,111 @@ async def regression_rejected_reply_not_committed(tmp: Path) -> None:
     check("phantom reply: last_reply_at not advanced",
           agent.last_reply_at.get("555", 0.0) == 0.0,
           repr(agent.last_reply_at.get("555")))
+    check("phantom reply: core memory discarded",
+          "555" not in agent.core_memory, repr(dict(agent.core_memory)))
+    check("phantom reply: auto memory discarded",
+          agent.memories.get("555") in (None, []), repr(agent.memories.get("555")))
+
+
+async def regression_delivery_failure_not_committed(tmp: Path) -> None:
+    """Transport failure must not create assistant history, bot buffer lines,
+    timestamps, memory, or a handled=True result."""
+    from types import SimpleNamespace
+
+    agent = make_agent(tmp)
+    agent.allowed_groups = set()
+
+    async def fake_group_think(group_id, mode, text="", caller_override=None):
+        return (
+            "[CORE_UPDATE]unsent core[/CORE_UPDATE]hello from the void",
+            "chat",
+            "unsent auto memory",
+        )
+
+    async def fail_group_send(group_id, text, at_user_id=""):
+        return SimpleNamespace(
+            success=False, partial=False, message_ids=[], sticker_files=[])
+
+    agent._think = fake_group_think
+    agent._send_qq = fail_group_send
+    group_payload = {
+        "post_type": "message", "message_type": "group", "group_id": "558",
+        "user_id": "42", "message_id": 92004, "sender": {"nickname": "Alice"},
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": "are you there?"}}],
+        "raw_message": "are you there?",
+    }
+    group_handled = await agent.handle(group_payload)
+    bot_lines = [m for m in agent.buffers["558"] if m.get("name") == "TestBot"]
+    check("group send failure returns false", group_handled is False, repr(group_handled))
+    check("group send failure leaves no bot line", bot_lines == [], repr(bot_lines))
+    check("group send failure leaves timestamp unchanged",
+          agent.last_reply_at.get("558", 0.0) == 0.0,
+          repr(agent.last_reply_at.get("558")))
+    check("group send failure discards core memory",
+          "558" not in agent.core_memory, repr(dict(agent.core_memory)))
+    check("group send failure discards auto memory",
+          agent.memories.get("558") in (None, []), repr(agent.memories.get("558")))
+
+    async def fake_private_chat(history, is_owner=False, proactive=False, pkey=""):
+        return (
+            "[CORE_UPDATE]unsent private core[/CORE_UPDATE]private hello",
+            "unsent private memory",
+        )
+
+    async def fail_private_send(user_id, text):
+        return SimpleNamespace(
+            success=False, partial=False, message_ids=[], sticker_files=[])
+
+    agent._chat_private = fake_private_chat
+    agent._send_private_qq = fail_private_send
+    private_payload = {
+        "post_type": "message", "message_type": "private", "user_id": "42",
+        "message_id": 92005, "sender": {"nickname": "Alice"},
+        "message": [{"type": "text", "data": {"text": "hi"}}],
+        "raw_message": "hi",
+    }
+    private_handled = await agent._handle_private(
+        "42", private_payload, is_owner=False)
+    check("private send failure returns false",
+          private_handled is False, repr(private_handled))
+    check("private send failure leaves no history",
+          agent.private_history.get("42") in (None, []),
+          repr(agent.private_history.get("42")))
+    check("private send failure discards core memory",
+          "private:42" not in agent.core_memory, repr(dict(agent.core_memory)))
+    check("private send failure discards auto memory",
+          agent.memories.get("private:42") in (None, []),
+          repr(agent.memories.get("private:42")))
+
+
+async def regression_private_message_ids(tmp: Path) -> None:
+    """Private sends expose the message IDs returned by NapCat."""
+    agent = make_agent(tmp)
+    agent._typing_delay = lambda _: 0.0
+
+    class _Response:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"data": {"message_id": 123}}
+
+    class _HTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return _Response()
+
+    agent._http = lambda **kwargs: _HTTP()
+    result = await agent._send_private_qq("42", "hello")
+    check("private send succeeds", getattr(result, "success", False), repr(result))
+    check("private send returns message id",
+          getattr(result, "message_ids", None) == ["123"], repr(result))
 
 
 async def regression_llm_fail_fallback_outside_lock(tmp: Path) -> None:
@@ -1176,7 +1286,7 @@ async def regression_llm_fail_fallback_outside_lock(tmp: Path) -> None:
     async def fake_send(group_id, text, at_user_id=""):
         calls.append((agent.locks[group_id].locked(),
                       agent.send_locks[group_id].locked(), text))
-        return []
+        return SendResult(success=True)
 
     async def bad_think(group_id, mode, text="", caller_override=None):
         raise RuntimeError("boom")
@@ -1267,8 +1377,10 @@ async def main_async() -> None:
         await regression_ssrf_redirect_hops(tmp / "t")
         await regression_memory_first_person_render(tmp / "u")
         await regression_rejected_reply_not_committed(tmp / "v")
-        await regression_llm_fail_fallback_outside_lock(tmp / "w")
-        await regression_web_desc_not_control_plane(tmp / "x")
+        await regression_delivery_failure_not_committed(tmp / "w")
+        await regression_private_message_ids(tmp / "x")
+        await regression_llm_fail_fallback_outside_lock(tmp / "y")
+        await regression_web_desc_not_control_plane(tmp / "z")
 
 
 def main() -> int:
