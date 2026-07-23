@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from persona_agent.agent import Agent
 from persona_agent.health import run_checks, all_critical_ok
-
-load_dotenv(override=True)
 
 # ========== Config ==========
 # Bind loopback by default: NapCat posts events from localhost
@@ -32,6 +33,11 @@ PORT = int(os.getenv("PORT", 8080))
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
 # /webhook/qq body must carry a matching `x-signature: sha1=<hex>` header.
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
+try:
+    MAX_WEBHOOK_BODY_BYTES = max(
+        1, int(os.getenv("MAX_WEBHOOK_BODY_BYTES", "8000000")))
+except ValueError:
+    MAX_WEBHOOK_BODY_BYTES = 8_000_000
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -110,6 +116,26 @@ agent: Optional[Agent] = None
 # a task, so one suspended at an await with no other reference can be garbage
 # collected mid-flight, silently dropping the work (e.g. an inbound message).
 _bg_tasks: set[asyncio.Task] = set()
+
+
+class RequestBodyTooLarge(Exception):
+    """Raised when a webhook body exceeds the configured byte limit."""
+
+
+async def _read_body_limited(request: Request, limit: int) -> bytes:
+    """Read a request body without buffering more than ``limit`` bytes."""
+    raw_length = request.headers.get("content-length", "")
+    try:
+        if raw_length and int(raw_length) > limit:
+            raise RequestBodyTooLarge
+    except ValueError:
+        pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > limit:
+            raise RequestBodyTooLarge
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _spawn(coro) -> asyncio.Task:
@@ -234,7 +260,11 @@ async def health():
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
-    body = await request.body()
+    try:
+        body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
+    except RequestBodyTooLarge:
+        return JSONResponse(
+            status_code=413, content={"error": "request body too large"})
     # OneBot HMAC verification (opt-in via WEBHOOK_SECRET). Without it, anyone
     # who can reach this port can POST a forged event — impersonate OWNER_QQ,
     # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
@@ -277,6 +307,11 @@ async def gateway_webhook(request: Request):
     forwarder needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
     before returning — set the plugin's HTTP timeout accordingly."""
+    try:
+        body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
+    except RequestBodyTooLarge:
+        return JSONResponse(
+            status_code=413, content={"error": "request body too large"})
     # Constant-time compare, same standard as /webhook/qq's signature check:
     # a plain != short-circuits on the first differing byte — a timing side
     # channel on the only credential guarding this endpoint when exposed.
@@ -284,7 +319,7 @@ async def gateway_webhook(request: Request):
             request.headers.get("X-Gateway-Token", ""), GATEWAY_TOKEN):
         return JSONResponse(status_code=403, content={"error": "invalid gateway token"})
     try:
-        event = await request.json()
+        event = json.loads(body or b"{}")
     except Exception:
         event = {}
     if not isinstance(event, dict):

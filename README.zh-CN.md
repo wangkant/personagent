@@ -56,8 +56,8 @@
 agent 围绕自己的输出闭合了一整条学习回路——全部热加载进动态 few-shot 检索,无需重启：
 
 - **从真实用户反应中学（主信号）。** 每条发出的回复会短暂等待一次*指向它的*反应——有人引用了 bot 那条消息、@了它,或在私聊里直接接话。进程内的裁决官对反应分类：「不是,我是说X」是**纠正**（正确答案就在用户话里——直接变成 BAD → OK 偏好对）；换个说法把同一件事又问一遍是**否定**（没接住）；笑了/接梗是**正向**（这条回复作为验证过的好样本进范例池）。写入之前裁决官会过滤玩笑和恶意投喂——owner 的纠正权重最高,陌生人必须一眼就对——每次裁决都记入 `candidates.jsonl` 审计。判断「一个反应意味着什么」远比判断「这句话像不像真人」容易,这正是这条通道在朴素 LLM 自评分过于手松的地方依然有效的原因。三个机制把回路挖得更深：**重试自动配对**（用户否定回复 A,bot 重来的 B 让对方满意——(A → B) 零成本闭合成偏好对）、**延迟追问**（否定但没学到具体东西时,bot 会在等完自己的正常回复后、每小时最多一次地自然问一句对方到底想要啥;答案随即按正式纠正裁决）、**教学信誉**（按用户记录教学被采纳/被驳回的历史喂给裁决官;一贯乱教的直接硬拉黑,连裁决调用都省了）。前人脉络（诚实注明）：这是把 deployment-time learning 研究线——[Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415) 的反馈追问、[Alexa self-learning](https://arxiv.org/pdf/1911.02557) 的重述-重试信号、[BlenderBot 3x](https://arxiv.org/abs/2306.04707) 的抗投毒教师过滤——移植成 training-free、in-context 的形态。
-- **从成功中学（兜底,全自动）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分的回复自动追加进 `data/examples.<lang>.jsonl`（去重、有大小上限、手工精选的头部永远保留），检索池随真实的高光时刻增长，而不是停在 bootstrap 那一刻。
-- **从失败中学（兜底,无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。通过的改写以偏好对形式落进 `data/feedback.<lang>.jsonl`——检索里信号最强的形态——下一次同类输入就会在上下文里看到这条纠正。两种跑法：
+- **从成功中学（兜底,全自动）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分的回复自动追加进 `runtime/examples.<lang>.jsonl`（去重、有大小上限）；仓库跟踪的 `data/examples.<lang>.jsonl` 只作为只读合成种子。
+- **从失败中学（兜底,无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。通过的改写以偏好对形式落进 `runtime/feedback.<lang>.jsonl`——检索里信号最强的形态——下一次同类输入就会在上下文里看到这条纠正。两种跑法：
   - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断,批准 / 拒绝 / 编辑后才写入（`--yes` 跳过人审）。
   - **无人值守:** 设 `EVOLVE_AUTO=true`,进程内后台循环定时做同样的事,只处理明确的失败（`score <= EVOLVE_THRESHOLD`,默认 2）。每次诊断——无论采纳还是拒绝——都记录在 `candidates.jsonl`,CLI 和循环永远不会重复处理同一条,你也随时能审计 bot 教了自己什么。
 - **表情包也在进化。** 每张发出的表情有自己的评分;持续低分会被降级出库（见[表情包质量管线](#表情包质量管线)）。
@@ -224,12 +224,15 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | 变量 | 含义 |
 |---|---|
 | `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
+| `AGENT_RUNTIME_DIR` | 学到的 examples/feedback 所在的忽略目录（默认 `runtime/`） |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
 | `ANTHROPIC_PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点（前缀是历史遗留）。留空 = 私聊也用 `DEEPSEEK_MODEL` |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | bot 比较熟的人 (可选, 默认空) |
 | `QQ_GROUPS` | 监听的群号, 逗号分隔. 留空 = 所有群都听 |
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | 视觉模型 (图/表情理解). 留空 = 只走 NapCat OCR 兜底 |
+| `NAPCAT_IMAGE_DIR` / `MAX_IMAGE_BYTES` | 本地图片缓存白名单目录与最大解码图片大小；目录留空时拒绝所有 `file://` |
+| `MAX_WEBHOOK_BODY_BYTES` | 两个 webhook 接受的最大原始请求体（默认 8 MB） |
 | `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`) |
 | `PROACTIVE_ENABLE`（+ `PROACTIVE_*`）| 可选的主动发言。详见[主动发言](#主动发言可选) |
 | `REACT_LEARN`（+ `REACT_*`）| 从真实用户反应中学习（默认开——自进化主信号）。详见[自进化](#自进化) |
@@ -254,12 +257,12 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 在相近规则旁边加硬约束 + 反例,
   或往 data/output_filter.<lang>.json 里加一条语义正则
   ↓
-在 data/feedback.<lang>.jsonl 里加一条 BAD/OK pair
+在 runtime/feedback.<lang>.jsonl 里加一条 BAD/OK pair
   ↓
 下次类似输入触发, 动态 few-shot 检索把这对拿出来注入
 ```
 
-`data/examples.<lang>.jsonl` + `data/feedback.<lang>.jsonl` 的检索用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
+检索会合并 `data/{examples,feedback}.<lang>.jsonl` 里的只读合成种子与 `runtime/{examples,feedback}.<lang>.jsonl` 里的运行时学习数据。它使用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
 
 `data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
@@ -339,6 +342,7 @@ try_chat.py           走完整推理路径的终端试聊
 quickstart.py         一条命令的配置向导
 tools/                离线调优 + 运维 CLI(auto_reviewer、prompt_lab 等)
 data/                 按语言区分的数据集:persona、examples、feedback、lorebook、output_filter
+runtime/              gitignore 的运行时 examples/feedback
 docs/                 架构 + 闭环示意图(中英)
 tests/                纯标准库回归测试(不依赖 pytest)
 integrations/         AstrBot 转发插件(多平台)
@@ -348,15 +352,15 @@ integrations/         AstrBot 转发插件(多平台)
 
 | 模块 | 职责 |
 |---|---|
-| `persona_agent/agent.py` | JSON 协议输出（reasoning / intent / reply / mem 是字段不是标签）；字符白名单校验器丢掉所有不像聊天的回复；6 个 intent 标签驱动子风格；按用户的 RAG 记忆；针对 `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl` 的动态 few-shot 检索；正则前置过滤；异步自评对每条回复打 1-5 分写入 `eval.jsonl` 并把满分回复自动追加进示例池；可选的 `EVOLVE_AUTO` 循环；持久 system prompt 走 Anthropic prompt caching；跨重启 `seen_msg_ids` 去重 |
+| `persona_agent/agent.py` | JSON 协议输出；字符白名单校验；发送成功后才提交状态；有界图片输入；按用户的 RAG 记忆；合并 seed + runtime examples/feedback 的动态 few-shot 检索；正则前置过滤；异步自评；可选的 `EVOLVE_AUTO` 循环；跨重启 `seen_msg_ids` 去重 |
 | `persona_agent/reactions.py` | 从真实用户反应学习（主信号）：待反应表 + 引用/@/私聊归属、单次调用的裁决官（分类+真伪+改写,owner 加权）、feedback/examples 写入形态 |
 | `persona_agent/evolution.py` | eval → feedback 学习循环逻辑（读低分、拼诊断 prompt、草稿转偏好对、去重、审计痕迹）——进程内 `EVOLVE_AUTO` 循环和 `tools/auto_reviewer.py` 共用，不绑定任何传输层 |
 | `persona_agent/stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊 |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
-| `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`,再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 `data/feedback.<lang>.jsonl`（`--yes` 无人值守） |
-| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 `data/examples.<lang>.jsonl` |
+| `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`,再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 runtime feedback（`--yes` 无人值守） |
+| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 runtime examples |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
 
 ## 开发
@@ -366,6 +370,9 @@ integrations/         AstrBot 转发插件(多平台)
 ```bash
 python tests/test_gateway.py
 python tests/test_evolution.py
+python tests/test_benchmark.py
+python tests/test_reactions.py
+python tests/test_http.py
 ```
 
 它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑，以及自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）。提交 PR 前请先跑一遍。
@@ -373,7 +380,7 @@ python tests/test_evolution.py
 用于 prompt 与人设调优：
 
 - `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
-- `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 `data/examples.<lang>.jsonl`。
+- `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 runtime examples。
 - `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁;加 `--apply` 逐条批准写入 `feedback.jsonl`（见[自进化](#自进化)）。
 - `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。独立裁判(Claude)盲评,学习信号和测量信号不共用模型。
 
@@ -392,10 +399,11 @@ seen_msg_ids.json         # 跨重启 message-id 去重状态
 owner_profile.json        # owner 发言频率画像
 unknown_stickers.jsonl    # 下载 URL
 candidates.jsonl          # auto-reviewer 输出
+runtime/                  # 从真实对话学到的 examples/feedback
 *.log                     # 运行日志
 ```
 
-仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**纯合成**的格式示例，没有真实聊天内容。
+仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据只写进 gitignore 的 `runtime/`（或 `AGENT_RUNTIME_DIR`），避免误提交。
 
 ## License
 

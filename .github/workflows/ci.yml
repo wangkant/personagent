@@ -34,3 +34,5 @@ jobs:
           python tests/test_evolution.py
           python tests/test_benchmark.py
           python tests/test_reactions.py
+          python tests/test_http.py
+          python -m compileall -q .
