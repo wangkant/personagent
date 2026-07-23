@@ -30,6 +30,20 @@ DATA = ROOT / "data" / "benchmark"
 
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
+# Ablation: a minimal style guide that keeps the chat framing but STRIPS every
+# anti-AI-tell rule the real STYLE_GUIDE encodes (no "banned markdown", no
+# "don't open with a name", no "don't list options", no length rhythm). With
+# it, the model falls back to its default assistant voice — service-desk tone,
+# bullet lists, over-explaining — so there is genuine AI-tell for the loop to
+# catch and re-learn. Nothing is added to induce failure; the failure is just
+# the absence of the style-as-code layer. Both arms share it; only the on-arm
+# additionally evolves, so the curve isolates what the loop re-derives.
+WEAK_STYLE_GUIDE = (
+    "<style>\n"
+    "You're chatting in an IM group. Reply to the latest message.\n"
+    "</style>"
+)
+
 
 def load_scenarios(path: Path) -> list[dict]:
     out: list[dict] = []
@@ -394,10 +408,25 @@ def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
 
 async def cmd_run(args) -> int:
     bot_name = os.getenv("BOT_NAME", "Robin") or "Robin"
+    # Style ablation: with the full STYLE_GUIDE the base persona already avoids
+    # AI-tell, so the loop has no failures to learn from and both arms sit at
+    # ceiling. `--style weak` swaps in a neutral style guide (module global,
+    # read at prompt-assembly time) so the model's default assistant voice
+    # shows through and the loop has real tells to re-learn. Both arms share it.
+    if args.style == "weak":
+        import persona_agent.agent as pa
+        pa.STYLE_GUIDE = WEAK_STYLE_GUIDE
+        print("[benchmark] STYLE ABLATION ON: using weak style guide for both arms")
     train = load_scenarios(DATA / f"scenarios.train.{args.lang}.jsonl")
     holdout = load_scenarios(DATA / f"scenarios.holdout.{args.lang}.jsonl")
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
+    (out / "meta.json").write_text(json.dumps({
+        "rounds": args.rounds, "lang": args.lang, "style": args.style,
+        "seed_state": args.seed_state, "holdout_votes": args.holdout_votes,
+        "gen_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        "eval_model": os.getenv("EVAL_MODEL", ""),
+    }, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     arms = []
     for evolve_on in (True, False):
         sd = out / ("state-on" if evolve_on else "state-off")
@@ -446,6 +475,9 @@ def main() -> int:
     r.add_argument("--seed-state", default="empty", choices=["synthetic", "empty"],
                    help="empty (default) = both arms start with zero feedback, the "
                         "cleanest control; synthetic = copy the committed starter datasets")
+    r.add_argument("--style", default="full", choices=["full", "weak"],
+                   help="full (default) = real STYLE_GUIDE; weak = neutral style guide "
+                        "so the base produces AI-tell for the loop to re-learn (ablation)")
     r.add_argument("--holdout-votes", type=int, default=1)
     r.add_argument("--judge", default="export", choices=["export", "anthropic"])
     r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", "claude-opus-4-8"))
