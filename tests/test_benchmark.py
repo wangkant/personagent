@@ -6,6 +6,7 @@ Run from the repo root, no test framework:
 """
 from __future__ import annotations
 
+import asyncio  # noqa: E402
 import json
 import sys
 import tempfile
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import evolution_benchmark as bench  # noqa: E402
+from persona_agent.agent import Agent  # noqa: E402
 
 _failures: list[str] = []
 
@@ -41,8 +43,54 @@ def test_scenario_sets() -> None:
                              for s in train + holdout))
 
 
+def _make_agent(tmp: Path) -> Agent:
+    a = Agent(
+        api_key="test-key", bot_qq="10001", bot_name="Robin",
+        napcat_api="http://127.0.0.1:9",
+        memory_file=str(tmp / "memory.json"), persona="test persona",
+        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
+        message_debounce_sec=0, lang="en",
+    )
+    a._seen_msg_file = tmp / "seen_msg_ids.json"
+    a.core_memory_file = tmp / "core_memory.json"
+    a._seen_msg_ids.clear()
+    a.core_memory.clear()
+    return a
+
+
+def test_seed_buffer() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        a = _make_agent(Path(td))
+        scn = {"id": "x", "family": "f", "scenario": "s", "mode": "called",
+               "context": ["alex: morning <bot-name>", "jordan: <bot-name> you up"]}
+        latest, caller = bench.seed_buffer(a, "g1", scn, "Robin")
+        buf = list(a.buffers["g1"])
+        check("buffer filled", len(buf) == 2)
+        check("bot-name substituted", "<bot-name>" not in buf[0]["text"]
+              and "Robin" in buf[0]["text"])
+        check("name parsed", buf[0]["name"] == "alex" and buf[1]["name"] == "jordan")
+        check("latest is last text", latest == buf[-1]["text"])
+        check("caller is last speaker", caller == ("jordan", bench.NAME_QQ["jordan"]))
+
+
+def test_drive_scenario_stubbed() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        a = _make_agent(Path(td))
+
+        async def fake_think(group_id, mode, latest_text="", caller_override=None):
+            return "yo whats up", "chat", ""
+        a._think = fake_think
+        scn = {"id": "x", "family": "f", "scenario": "s", "mode": "called",
+               "context": ["alex: <bot-name> hi"]}
+        reply = asyncio.run(bench.drive_scenario(a, scn, "Robin"))
+        check("drive returns reply", reply == "yo whats up")
+
+
 def main() -> int:
     test_scenario_sets()
+    test_seed_buffer()
+    test_drive_scenario_stubbed()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
