@@ -13,6 +13,7 @@ import re
 import socket
 import time
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
@@ -32,6 +33,16 @@ from .paths import (
 from .stickers import StickerLibrary
 
 logger = logging.getLogger("agent")
+
+
+@dataclass
+class SendResult:
+    """Outcome of one logical reply, which may contain several chunks."""
+
+    success: bool = False
+    partial: bool = False
+    message_ids: list[str] = field(default_factory=list)
+    sticker_files: list[str] = field(default_factory=list)
 
 # Outbound send throttle (anti-flood / platform rate-control): a minimum gap
 # between any two outbound messages (jittered upper bound) plus a per-target
@@ -877,9 +888,6 @@ class Agent:
                 # would otherwise write/delete memories on the page author's
                 # behalf).
                 mem_reply = self._handle_memory_command(group_id, ctrl_text, user_id, nickname)
-                if mem_reply is not None:
-                    self.last_reply_at[group_id] = time.time()
-                    self._append_buffer(group_id, self.bot_name, mem_reply)
 
             # Only non-memory-command messages continue to sticky/seq (a memory
             # command returns right after the out-of-lock send below).
@@ -897,7 +905,15 @@ class Agent:
         # —— group lock released —— send the memory-command reply (send_lock serialized)
         if mem_reply is not None:
             async with self.send_locks[group_id]:
-                await self._send_qq(group_id, mem_reply, user_id if (is_at or is_called) else "")
+                send_result = await self._send_qq(
+                    group_id, mem_reply, user_id if (is_at or is_called) else "")
+            if not send_result.success:
+                logger.warning("[Agent] memory command delivery failed (group=%s)",
+                               group_id)
+                return send_result.partial
+            async with self.locks[group_id]:
+                self.last_reply_at[group_id] = time.time()
+                self._append_buffer(group_id, self.bot_name, mem_reply)
             if self.on_reply:
                 try:
                     await self.on_reply(group_id, mem_reply)
@@ -1016,13 +1032,21 @@ class Agent:
                         "hold on, connection's wonky",
                         "signal weird rn, gimme a min",
                     ])
-                    self.last_reply_at[group_id] = time.time()
-                    self._append_buffer(group_id, self.bot_name, fallback)
 
                     async def _send_fallback() -> None:
                         try:
                             async with self.send_locks[group_id]:
-                                await self._send_qq(group_id, fallback, user_id)
+                                result = await self._send_qq(
+                                    group_id, fallback, user_id)
+                            if result.success:
+                                async with self.locks[group_id]:
+                                    self.last_reply_at[group_id] = time.time()
+                                    self._append_buffer(
+                                        group_id, self.bot_name, fallback)
+                            else:
+                                logger.warning(
+                                    "[Agent] fallback delivery failed (group=%s)",
+                                    group_id)
                         except Exception:
                             logger.exception("[Agent] fallback send failed")
 
@@ -1041,10 +1065,9 @@ class Agent:
             if blocked:
                 logger.warning("[Agent] output_filter blocked (mode=%s, group=%s): %s | original=%s",
                                mode, group_id, blocked, reply[:120])
-                reply = ""  # PASS path; a blocked reply must not persist its core note (anti-poison)
-            else:
-                reply = filtered
-                self._commit_core_memory(group_id, _pending_core)
+                return False
+            reply = filtered
+            had_visible_candidate = bool(reply.strip())
 
             # Sanitize/validate BEFORE any reply state is committed. _send_qq
             # re-runs _sanitize_reply (deterministic → no-op there), but its
@@ -1054,26 +1077,6 @@ class Agent:
             # rejection takes the PASS path below instead.
             if reply:
                 reply = self._sanitize_reply(reply, self.agent_lang)
-
-            # Word boundary: only swallow the "PASS"/"PASS."/"PASS —" sentinel
-            # variants, not genuine replies like "passable lol" / "passed the
-            # vibe check" (the old prefix match silently dropped those).
-            if not reply or re.match(r"PASS\b", reply.strip(), re.IGNORECASE):
-                logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
-                if auto_mem:
-                    self._save_auto_memory(group_id, auto_mem)
-                # A followup PASS means the conversation moved on — exit
-                # followup so subsequent messages stop burning LLM calls. But
-                # don't reset to 0.0: that's the "never replied in this group"
-                # sentinel (see first_appearance / the low judge threshold), so
-                # zeroing would replay "first appearance" after every
-                # followup-PASS and bypass the sleep/cooldown pacing gates.
-                # Rewind to just past the followup window instead: exits
-                # followup, still counts as "has replied, pacing applies".
-                if mode == "followup":
-                    self.last_reply_at[group_id] = time.time() - self.followup_window - 1
-                return False
-
             reply = reply.strip().strip('"').strip("「」")
             at_uid = ""
             # Non-digit targets included: gateway user ids look like
@@ -1089,13 +1092,21 @@ class Agent:
                 reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
             if not at_uid and mode == "called":
                 at_uid = user_id
-            if auto_mem:
-                self._save_auto_memory(group_id, auto_mem)
-            # Commit state inside the group lock (last_reply_at / buffer), then
-            # release it before the slow send: _send_qq sleeps for seconds of
-            # simulated typing, and holding the group lock through it would
-            # block intake of every new message in this group for the duration.
-            self.last_reply_at[group_id] = time.time()
+            # A visible candidate that validation/normalization reduced to
+            # nothing is rejected, not treated as a state-bearing PASS.
+            if had_visible_candidate and not reply:
+                return False
+            # Word boundary: only swallow the "PASS"/"PASS."/"PASS —" sentinel
+            # variants, not genuine replies like "passable lol".
+            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
+                logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
+                self._commit_core_memory(group_id, _pending_core)
+                if auto_mem:
+                    self._save_auto_memory(group_id, auto_mem)
+                if mode == "followup":
+                    self.last_reply_at[group_id] = (
+                        time.time() - self.followup_window - 1)
+                return False
             # Eval context snapshot: must be taken before appending the bot's
             # own reply, and inside the lock. Otherwise _evaluate_reply runs
             # after the send (seconds of typing simulation), the buffer has
@@ -1103,15 +1114,25 @@ class Agent:
             # and worse, writes the mismatched context into examples.jsonl's
             # few-shot pool (slow degradation).
             eval_ctx = [f"{m['name']}: {m['text']}" for m in list(self.buffers[group_id])[-5:]]
-            self._append_buffer(group_id, self.bot_name, reply)
-            logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
         # —— group lock released ——
         # The send still runs under a per-group send lock so same-group sends
         # stay serialized (no interleaved text/sticker chunks), but new
         # messages can be absorbed while the bot is "typing".
         async with self.send_locks[group_id]:
-            sticker_files = await self._send_qq(group_id, reply, at_uid)
+            send_result = await self._send_qq(group_id, reply, at_uid)
+        if not send_result.success:
+            logger.warning("[Agent] reply delivery failed (mode=%s, group=%s, partial=%s)",
+                           mode, group_id, send_result.partial)
+            return send_result.partial
+
+        async with self.locks[group_id]:
+            self.last_reply_at[group_id] = time.time()
+            self._append_buffer(group_id, self.bot_name, reply)
+            self._commit_core_memory(group_id, _pending_core)
+            if auto_mem:
+                self._save_auto_memory(group_id, auto_mem)
+        logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
         # Reaction learning: this reply now waits (bounded, TTL) for a directed
         # user reaction — see _process_reaction.
@@ -1119,7 +1140,7 @@ class Agent:
             self.pending_reactions.record(
                 group_id, reply=reply, ctx_lines=eval_ctx, mode=mode,
                 intent=_intent, target_uid=at_uid or user_id,
-                target_name=nickname, mids=self._sent_mids.get(group_id, []),
+                target_name=nickname, mids=send_result.message_ids,
                 ts=time.time(),
             )
 
@@ -1134,7 +1155,8 @@ class Agent:
         # auto persona_fit=false → purged on next startup).
         if self.eval_enable:
             self._spawn(self._evaluate_reply(
-                group_id, mode, text, reply, sticker_files, _intent, eval_ctx,
+                group_id, mode, text, reply, send_result.sticker_files,
+                _intent, eval_ctx,
             ))
 
         return True
@@ -1160,30 +1182,18 @@ class Agent:
 
         async with self.locks[f"private:{user_id}"]:
             self.last_dm_activity_at[user_id] = time.time()  # silence tracking for the proactive loop
-            history = self.private_history.setdefault(user_id, [])
+            history = list(self.private_history.get(user_id, []))
             history.append({"role": "user", "content": text})
-            if len(history) > 40:
-                self.private_history[user_id] = history[-40:]
-                history = self.private_history[user_id]
-
-            # On any path where no assistant turn gets appended (LLM failure /
-            # empty / filtered / PASS), drop the user turn we just added so
-            # private history doesn't keep a dangling unanswered message.
-            def _drop_pending_user() -> None:
-                h = self.private_history.get(user_id)
-                if h and h[-1].get("role") == "user":
-                    h.pop()
+            history = history[-40:]
 
             try:
                 reply, auto_mem = await self._chat_private(
                     history, is_owner=is_owner, pkey=f"private:{user_id}")
             except Exception as e:
                 logger.warning("[Agent] private-chat LLM failed: %s", e)
-                _drop_pending_user()
                 return False
 
             if not reply:
-                _drop_pending_user()
                 return False
 
             # Full post-processing chain — mirror group handle() so protocol
@@ -1196,34 +1206,47 @@ class Agent:
             if blocked:
                 logger.warning("[Agent] output_filter blocked (private user=%s): %s | original=%s",
                                user_id, blocked, reply[:120])
-                _drop_pending_user()
                 return False
             reply = filtered
-            self._commit_core_memory(pkey, _pending_core)
-
-            if auto_mem:
-                self._save_auto_memory(pkey, auto_mem)
+            had_visible_candidate = bool(reply.strip())
 
             # Sanitize/validate before committing the assistant turn — a
             # fail-closed rejection inside _send_private_qq would otherwise
             # leave an unsent reply in private_history (phantom turn).
             reply = self._sanitize_reply(reply, self.agent_lang)
+            reply = reply.strip().strip('"').strip("「」")
+            reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+
+            if had_visible_candidate and not reply:
+                return False
 
             # Same as the group path: word-boundary match so real replies
             # starting with "pass" aren't swallowed.
-            if not reply or re.match(r"PASS\b", reply.strip(), re.IGNORECASE):
+            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 logger.info("[Agent] PASS (private user=%s)", user_id)
-                _drop_pending_user()
+                self._commit_core_memory(pkey, _pending_core)
+                if auto_mem:
+                    self._save_auto_memory(pkey, auto_mem)
                 return False
 
+            send_result = await self._send_private_qq(user_id, reply)
+            if not send_result.success:
+                logger.warning(
+                    "[Agent] private delivery failed (user=%s, partial=%s)",
+                    user_id, send_result.partial)
+                return send_result.partial
             history.append({"role": "assistant", "content": reply})
-            await self._send_private_qq(user_id, reply)
+            self.private_history[user_id] = history[-40:]
+            self._commit_core_memory(pkey, _pending_core)
+            if auto_mem:
+                self._save_auto_memory(pkey, auto_mem)
             if self.react_learn:
                 self.pending_reactions.record(
                     f"dm:{user_id}", reply=reply,
                     ctx_lines=[f"user: {text[:100]}"],
                     mode="owner" if is_owner else "called",
-                    target_uid=user_id, ts=time.time())
+                    target_uid=user_id, mids=send_result.message_ids,
+                    ts=time.time())
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
@@ -1382,7 +1405,8 @@ class Agent:
                     try:
                         _mid = ((r.json() or {}).get("data") or {}).get("message_id")
                         if _mid is not None:
-                            self._sent_mids.setdefault(group_id, []).append(str(_mid))
+                            self._sent_mids.setdefault(
+                                f"private:{user_id}", []).append(str(_mid))
                     except Exception:
                         pass
                     return True
@@ -1402,7 +1426,9 @@ class Agent:
                 return False
         return False
 
-    async def _send_private_qq(self, user_id: str, text: str) -> None:
+    async def _send_private_qq(self, user_id: str, text: str) -> SendResult:
+        target_key = f"private:{user_id}"
+        self._sent_mids[target_key] = []
         text = self._sanitize_reply(text, self.agent_lang)
         # Private chat is 1:1 — there's no "target someone" semantics. The
         # model still occasionally emits [AT:xxx] (STYLE_GUIDE teaches the
@@ -1410,8 +1436,12 @@ class Agent:
         # unstripped it would go out as literal text.
         text = re.sub(r'\[AT:[^\]\s]+\]', '', text).strip()
         if not text:
-            return
+            return SendResult()
         segments = self._parse_sticker_markers(text)
+        sendable = False
+        sent_any = False
+        failed = False
+        sent_stickers: list[str] = []
         for kind, value in segments:
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value)
@@ -1423,16 +1453,37 @@ class Agent:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 except Exception as e:
                     logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
+                    failed = True
                     continue
+                sendable = True
                 msg = [{"type": "image", "data": {"file": f"base64://{img_b64}"}}]
-                await self._napcat_send_private(user_id, msg)
+                if not await self._napcat_send_private(user_id, msg):
+                    failed = True
+                    break
+                sent_any = True
+                try:
+                    sent_stickers.append(
+                        str(file_path.relative_to(self.stickers.dir)).replace("\\", "/"))
+                except ValueError:
+                    pass
                 continue
             # text chunk — split for typing simulation
             chunks = self._split_text(value)
             for chunk in chunks:
+                sendable = True
                 await asyncio.sleep(self._typing_delay(chunk))
                 if not await self._napcat_send_private(user_id, chunk):
-                    return  # hard send failure — stop, don't pile on more chunks
+                    failed = True
+                    break
+                sent_any = True
+            if failed:
+                break
+        return SendResult(
+            success=sendable and not failed,
+            partial=sent_any and failed,
+            message_ids=list(self._sent_mids.get(target_key, [])),
+            sticker_files=sent_stickers,
+        )
 
     async def _extract_text(self, payload: dict) -> str:
         parts: list[str] = []
@@ -3490,19 +3541,22 @@ class Agent:
                 return False
         return False
 
-    async def _send_qq(self, group_id: str, text: str, at_user_id: str = "") -> list[str]:
+    async def _send_qq(self, group_id: str, text: str,
+                       at_user_id: str = "") -> SendResult:
         """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
-        group. Returns the list of sticker filenames (relative to
-        self.stickers.dir) that were actually sent — used by the quality
-        feedback loop so eval can attribute scores back to specific
-        stickers."""
+        group. Returns full/partial delivery state, NapCat message IDs, and
+        sticker filenames used by reaction learning and quality evaluation."""
         # Fresh mid list for this call; _napcat_send_group appends each sent
         # chunk's message_id (same-group sends are serialized by send_locks).
-        self._sent_mids[group_id] = []
+        target_key = group_id
+        self._sent_mids[target_key] = []
         text = self._sanitize_reply(text, self.agent_lang)
         sent_stickers: list[str] = []
         if not text:
-            return sent_stickers
+            return SendResult()
+        sendable = False
+        sent_any = False
+        failed = False
         # On the QQ path an at target must be a bare QQ number — a hallucinated
         # non-numeric [AT:] marker would produce a broken NapCat at segment, so
         # drop the mention (the marker text was already stripped upstream).
@@ -3524,7 +3578,9 @@ class Agent:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 except Exception as e:
                     logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
+                    failed = True
                     continue
+                sendable = True
                 msg_segs: list = []
                 if is_first and at_user_id:
                     msg_segs.append({"type": "at", "data": {"qq": str(at_user_id)}})
@@ -3532,9 +3588,11 @@ class Agent:
                 ok = await self._napcat_send_group(group_id, msg_segs)
                 is_first = False
                 if not ok:
+                    failed = True
                     logger.warning("[Agent] send aborted (sticker chunk failed), "
                                    "dropping remaining segments (group=%s)", group_id)
                     break
+                sent_any = True
                 try:
                     rel = str(file_path.relative_to(self.stickers.dir)).replace("\\", "/")
                     sent_stickers.append(rel)
@@ -3543,6 +3601,7 @@ class Agent:
                 continue
             chunks = self._split_text(value)
             for chunk in chunks:
+                sendable = True
                 # Delay before every chunk including the first — feels like typing
                 # rather than instant emit. Already had debounce + _think latency
                 # upstream, so an extra ~1-3s on first chunk reads natural.
@@ -3557,12 +3616,21 @@ class Agent:
                 ok = await self._napcat_send_group(group_id, message)
                 is_first = False
                 if not ok:
+                    failed = True
                     # Stop on a hard failure so we don't emit a reply split
                     # across a network gap (truncated / out-of-order chunks).
                     logger.warning("[Agent] send aborted (text chunk failed), "
                                    "dropping remaining chunks (group=%s)", group_id)
-                    return sent_stickers
-        return sent_stickers
+                    break
+                sent_any = True
+            if failed:
+                break
+        return SendResult(
+            success=sendable and not failed,
+            partial=sent_any and failed,
+            message_ids=list(self._sent_mids.get(target_key, [])),
+            sticker_files=sent_stickers,
+        )
 
     async def check_missed_mentions(self) -> None:
         """On startup, pull the most recent ~10 group messages; if any of them
@@ -3748,13 +3816,19 @@ class Agent:
             self._last_elicit_at[conv_id] = now_mono
             if is_private:
                 uid = conv_id.split(":", 1)[1] if ":" in conv_id else reactor_uid
-                self.private_history.setdefault(uid, []).append(
-                    {"role": "assistant", "content": ask})
-                await self._send_private_qq(uid, ask)
+                result = await self._send_private_qq(uid, ask)
+                if result.success:
+                    self.private_history.setdefault(uid, []).append(
+                        {"role": "assistant", "content": ask})
             else:
-                self._append_buffer(conv_id, self.bot_name, ask)
                 async with self.send_locks[conv_id]:
-                    await self._send_qq(conv_id, ask, reactor_uid)
+                    result = await self._send_qq(conv_id, ask, reactor_uid)
+                if result.success:
+                    self._append_buffer(conv_id, self.bot_name, ask)
+            if not result.success:
+                logger.warning("[Agent] elicitation delivery failed (conv=%s, partial=%s)",
+                               conv_id, result.partial)
+                return
             # Register the ORIGINAL rejected reply as an elicited pending
             # entry: the rejector's answer will adjudicate against it.
             self.pending_reactions.record(
@@ -3901,7 +3975,7 @@ class Agent:
                                gid, blocked, reply[:120])
                 continue
             reply = filtered
-            self._commit_core_memory(gid, _pending_core)
+            had_visible_candidate = bool(reply.strip())
             # Sanitize BEFORE committing buffer/last_reply_at (same as
             # _handle_inner): a fail-closed rejection later inside _send_qq
             # would otherwise leave a phantom "sent" line in the buffer.
@@ -3913,6 +3987,8 @@ class Agent:
                 at_uid = at_match.group(1)
                 reply = reply.replace(at_match.group(0), "").strip()
                 reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+            if had_visible_candidate and not reply:
+                continue
             # Re-check PASS after post-processing: the early exact-match check
             # doesn't catch "[CORE_UPDATE]...[/CORE_UPDATE]PASS" or a
             # quote-wrapped '"PASS"' — post-stripping those reduce to a bare
@@ -3925,9 +4001,17 @@ class Agent:
             # NapCat doesn't webhook the bot's own messages, so without this a
             # followup to the opener has no record and reads as off-topic.
             async with self.send_locks[gid]:
-                await self._send_qq(gid, reply, at_uid)
+                result = await self._send_qq(gid, reply, at_uid)
+            if not result.success:
+                logger.warning(
+                    "[Agent] proactive group delivery failed (%s, partial=%s)",
+                    gid, result.partial)
+                if result.partial:
+                    return True
+                continue
             self.last_reply_at[gid] = now
             self._append_buffer(gid, self.bot_name, reply)
+            self._commit_core_memory(gid, _pending_core)
             if mem:
                 self._save_auto_memory(gid, mem)
             logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
@@ -3959,17 +4043,21 @@ class Agent:
                     self.last_proactive_at[key] = now
                     if not reply or reply.strip().upper() == "PASS":
                         continue
-                    # Record so the next turn has context, mirroring _handle_private.
-                    self.private_history.setdefault(uid, []).append({"role": "assistant", "content": reply})
-                    # Persist the model's mem note, mirroring _handle_private and
-                    # the proactive group path — the prompt promises it will be
-                    # remembered, so dropping it here is a contract violation.
-                    if mem:
-                        self._save_auto_memory(f"private:{uid}", mem)
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
-            await self._send_private_qq(uid, reply)
+            result = await self._send_private_qq(uid, reply)
+            if not result.success:
+                logger.warning("[Agent] proactive DM delivery failed (%s, partial=%s)",
+                               uid, result.partial)
+                if result.partial:
+                    return True
+                continue
+            async with self.locks[f"private:{uid}"]:
+                self.private_history.setdefault(uid, []).append(
+                    {"role": "assistant", "content": reply})
+                if mem:
+                    self._save_auto_memory(f"private:{uid}", mem)
             logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
             return True
         return False
