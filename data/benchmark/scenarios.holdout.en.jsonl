@@ -1,16 +1,14 @@
-{"id":"ho001","family":"service-desk","scenario":"opinion ask variant","mode":"called","context":["taylor: <bot-name> hows this idea sound to you"]}
-{"id":"ho002","family":"service-desk","scenario":"problem drop variant","mode":"called","context":["morgan: <bot-name> my tests wont pass"]}
-{"id":"ho003","family":"service-desk","scenario":"explain ask variant","mode":"called","context":["casey: <bot-name> whats a race condition"]}
-{"id":"ho004","family":"name-at-start","scenario":"availability variant","mode":"called","context":["taylor: <bot-name> free for a sec"]}
-{"id":"ho005","family":"name-at-start","scenario":"greeting variant","mode":"called","context":["morgan: yo <bot-name>"]}
-{"id":"ho006","family":"name-at-start","scenario":"weigh-in variant","mode":"called","context":["casey: <bot-name> whats your take"]}
-{"id":"ho007","family":"bulleted-analysis","scenario":"why variant","mode":"called","context":["taylor: <bot-name> why do i wake up tired after 8 hours"]}
-{"id":"ho008","family":"bulleted-analysis","scenario":"tradeoff variant","mode":"called","context":["morgan: <bot-name> tea or coffee for real"]}
-{"id":"ho009","family":"bulleted-analysis","scenario":"choice variant","mode":"called","context":["casey: <bot-name> mac or linux for dev"]}
-{"id":"ho010","family":"over-reading-noise","scenario":"letters variant","mode":"judge","context":["morgan: b . b"]}
-{"id":"ho011","family":"over-reading-noise","scenario":"punct variant","mode":"judge","context":["taylor: ??"]}
-{"id":"ho012","family":"over-reading-noise","scenario":"fragment variant","mode":"judge","context":["casey: hm"]}
-{"id":"ho013","family":"jumped-the-gun","scenario":"burst variant","mode":"followup","context":["taylor: omg listen","taylor: [image: reaction meme]"]}
-{"id":"ho014","family":"jumped-the-gun","scenario":"setup variant","mode":"followup","context":["morgan: guess what just happened"]}
-{"id":"ho015","family":"wrong-target","scenario":"others chatting variant","mode":"judge","context":["taylor: lunch later","morgan: sure, noon"]}
-{"id":"ho016","family":"wrong-target","scenario":"owner ats third party variant","mode":"called","context":["owner: [AT:1003] good game earlier","casey: ggs"]}
+{"id":"ho001","family":"vent","scenario":"rejected again variant","mode":"called","context":["taylor: <bot-name> got the rejection email, was so sure about this one"]}
+{"id":"ho002","family":"vent","scenario":"burnout variant","mode":"owner","context":["owner: so tired i've reread the same line like ten times"]}
+{"id":"ho003","family":"vent","scenario":"bad day variant","mode":"called","context":["morgan: <bot-name> spilled coffee on my laptop this morning, great start"]}
+{"id":"ho004","family":"good-news","scenario":"offer variant","mode":"called","context":["casey: <bot-name> i actually got the offer!!"]}
+{"id":"ho005","family":"good-news","scenario":"pr merged variant","mode":"owner","context":["owner: they finally merged my pr after three rounds of review"]}
+{"id":"ho006","family":"banter","scenario":"tease variant","mode":"called","context":["taylor: <bot-name> back at it pretending to work i see"]}
+{"id":"ho007","family":"banter","scenario":"challenge variant","mode":"called","context":["morgan: <bot-name> is cereal a soup, defend your answer"]}
+{"id":"ho008","family":"banter","scenario":"jab variant","mode":"called","context":["casey: <bot-name> you're weirdly confident for someone always wrong"]}
+{"id":"ho009","family":"observation","scenario":"musing variant","mode":"owner","context":["owner: kinda wild that we just accept clouds are floating water"]}
+{"id":"ho010","family":"observation","scenario":"hot take variant","mode":"called","context":["taylor: <bot-name> cereal before milk is the only correct order"]}
+{"id":"ho011","family":"greeting","scenario":"hey variant","mode":"called","context":["morgan: sup <bot-name>"]}
+{"id":"ho012","family":"greeting","scenario":"evening variant","mode":"called","context":["casey: <bot-name> you still up"]}
+{"id":"ho013","family":"complaint","scenario":"grumble variant","mode":"judge","context":["taylor: why is it dark at 4pm already","morgan: winter is a scam"]}
+{"id":"ho014","family":"complaint","scenario":"gripe variant","mode":"owner","context":["owner: my back hurts and i'm not even old yet"]}
