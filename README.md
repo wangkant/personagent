@@ -56,8 +56,8 @@ Most "LLM in a group chat" projects sound like a chatbot stuck in customer-servi
 The agent closes a full learning loop around its own output — all of it hot-reloaded into dynamic few-shot retrieval, no restart needed:
 
 - **Learn from real user reactions (the primary signal).** Every sent reply briefly waits for a *directed* reaction — someone quoting the bot's message, @-ing it, or (in a DM) just answering. An in-process adjudicator classifies the reaction: *"no, I meant X"* is a **correction** (with the right answer inside it — it becomes a BAD → OK preference pair); re-asking the same thing in other words is a **rejection** (didn't land); laughing or riffing is a **positive** (the reply is banked into the example pool as a proven hit). The adjudicator filters banter and trolling before anything is written — the owner's corrections carry the most weight, a stranger must be self-evidently right — and every verdict is audited in `candidates.jsonl`. Reading a *reaction to a reply* is a far easier judgment than scoring "how human does this sound", which is why this channel works where naive LLM self-scoring is too lenient. Three mechanisms deepen the loop: **retry-completion** (user rejects reply A, the bot's retry B satisfies them — (A → B) closes into a pair with zero user effort), **delayed elicitation** (if a rejection taught nothing concrete, the bot may — after waiting out its own reply, at most once an hour — casually ask what they meant; the answer then adjudicates as a proper correction), and **teacher reputation** (per-user track record of adopted vs dismissed teachings feeds the adjudicator; persistently bad teachers get hard-blocked without costing a call). Prior art, honestly: this transplants the deployment-time learning line — [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)'s feedback elicitation, [Alexa self-learning](https://arxiv.org/pdf/1911.02557)'s rephrase-and-retry signal, [BlenderBot 3x](https://arxiv.org/abs/2306.04707)'s troll-resistant teacher filtering — into a training-free, in-context form.
-- **Learn from successes (fallback, fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. Replies scoring a full 5 are auto-appended to `data/examples.<lang>.jsonl` (deduped, size-capped with the hand-curated head preserved), so retrieval keeps sounding like the bot at its best rather than staying frozen at bootstrap.
-- **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `data/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
+- **Learn from successes (fallback, fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. Replies scoring a full 5 are auto-appended to `runtime/examples.<lang>.jsonl` (deduped and size-capped), while the tracked `data/examples.<lang>.jsonl` remains a read-only synthetic seed.
+- **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `runtime/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
   - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt).
   - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the same thing in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). Every diagnosis — applied or rejected — is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot taught itself.
 - **Stickers evolve too.** Each sent sticker gets its own score; a sustained low average demotes it out of the library (see [Sticker quality pipeline](#sticker-quality-pipeline)).
@@ -224,12 +224,15 @@ All settings come from `.env`. Key fields:
 | Variable | What |
 |---|---|
 | `AGENT_LANG` | `en` (default) or `zh`. Selects the per-language data files, validator mode, and lexicons. See [Language](#language-english--中文) |
+| `AGENT_RUNTIME_DIR` | Ignored directory for learned examples and feedback (default `runtime/`) |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Primary chat-completion model. Any OpenAI-compatible endpoint works. **The only key needed for `python try_chat.py`** |
 | `ANTHROPIC_PRIVATE_MODEL` | **Optional.** Alternate model name for 1:1 private chats, served by the same primary endpoint (the prefix is historical). Blank = `DEEPSEEK_MODEL` |
 | `BOT_QQ` / `BOT_NAME` | The bot account's QQ number and display name |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | A "favorite person" the bot is closer to (optional, all blank by default) |
 | `QQ_GROUPS` | Comma-separated group IDs to listen on. Empty = listen everywhere |
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | Vision model for image / sticker understanding. Leave blank to skip (OCR-only fallback) |
+| `NAPCAT_IMAGE_DIR` / `MAX_IMAGE_BYTES` | Allowlisted local image-cache directory and maximum decoded image size. `file://` is rejected when the directory is unset |
+| `MAX_WEBHOOK_BODY_BYTES` | Maximum raw request body accepted by either webhook (default 8 MB) |
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `REACT_LEARN` (+ `REACT_*`) | Learn from real user reactions (on by default — the primary self-evolution signal). See [Self-evolution](#self-evolution) |
@@ -254,12 +257,12 @@ locate which block owns it (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES / ou
 add a hard constraint with a counter-example next to similar rules,
   or add a semantic regex rule in data/output_filter.<lang>.json
   ↓
-write a BAD/OK pair into data/feedback.<lang>.jsonl
+write a BAD/OK pair into runtime/feedback.<lang>.jsonl
   ↓
 next time a similar input arrives, dynamic few-shot retrieval surfaces the pair
 ```
 
-The retrieval over `data/examples.<lang>.jsonl` + `data/feedback.<lang>.jsonl` uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
+Retrieval merges the read-only synthetic seeds in `data/{examples,feedback}.<lang>.jsonl` with learned rows in `runtime/{examples,feedback}.<lang>.jsonl`. It uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
 
 `data/output_filter.<lang>.json` is hot-reloaded — edit it without restarting. Same for `data/lorebook.<lang>.json` (keyword-triggered context injection à la SillyTavern World Info).
 
@@ -325,15 +328,15 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 
 | Module | Responsibility |
 |---|---|
-| `persona_agent/agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator drops any reply that doesn't look like chat; 6 intent tags drive sub-styles; per-user RAG memory; dynamic few-shot retrieval over `data/examples.<lang>.jsonl` / `data/feedback.<lang>.jsonl`; regex pre-flight; async self-eval scoring each reply 1-5 to `eval.jsonl` with auto-append of top scorers to the example pool; the opt-in `EVOLVE_AUTO` loop; Anthropic prompt caching for the persistent prompt segments; cross-restart `seen_msg_ids` dedup |
+| `persona_agent/agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator; transactional delivery/state commits; bounded image ingestion; per-user RAG memory; dynamic few-shot retrieval over seed + runtime examples/feedback; regex pre-flight; async self-eval; the opt-in `EVOLVE_AUTO` loop; cross-restart `seen_msg_ids` dedup |
 | `persona_agent/reactions.py` | Learn from real user reactions (primary signal): pending-reply table with quote/@/DM attribution, one-call adjudicator (classify + genuineness + rewrite, owner-weighted), write-shapes for the feedback/examples pipelines |
 | `persona_agent/evolution.py` | The eval → feedback learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
 | `persona_agent/stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
-| `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into `data/feedback.<lang>.jsonl` (`--yes` for unattended) |
-| `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into `data/examples.<lang>.jsonl` |
+| `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into runtime feedback (`--yes` for unattended) |
+| `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into runtime examples |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
 
 ## Project layout
@@ -354,6 +357,7 @@ try_chat.py           terminal chat through the full reasoning path
 quickstart.py         one-command setup wizard
 tools/                offline tuning + ops CLIs (auto_reviewer, prompt_lab, ...)
 data/                 per-language datasets: persona, examples, feedback, lorebook, output_filter
+runtime/              gitignored learned examples and feedback
 docs/                 architecture + loop diagrams (en / zh)
 tests/                stdlib-only regression suite (no pytest needed)
 integrations/         AstrBot forwarder plugin for multi-platform
@@ -366,6 +370,9 @@ The regression suite runs without a test framework — plain standard-library Py
 ```bash
 python tests/test_gateway.py
 python tests/test_evolution.py
+python tests/test_benchmark.py
+python tests/test_reactions.py
+python tests/test_http.py
 ```
 
 It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, and the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail). Run it before opening a pull request.
@@ -373,7 +380,7 @@ It uses a lightweight `check()` harness and covers the gateway pipeline, the rep
 For prompt and persona tuning:
 
 - `python try_chat.py` — interactive single-turn chat through the full reasoning path (see [Quick start](#quick-start)).
-- `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into `data/examples.<lang>.jsonl`.
+- `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into runtime examples.
 - `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
 - `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). An independent judge (Claude) scores blind, so the learning signal and the measurement never share a model.
 
@@ -392,10 +399,11 @@ seen_msg_ids.json         # cross-restart message dedup state
 owner_profile.json        # owner's message-frequency profile
 unknown_stickers.jsonl    # download URLs
 candidates.jsonl          # auto-reviewer output
+runtime/                  # learned examples/feedback from real conversations
 *.log                     # runtime logs
 ```
 
-The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` in this template are **fully synthetic** examples showing the format only.
+The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` are **read-only, fully synthetic seeds** showing the format only. Learning from real conversations is written under gitignored `runtime/` (or `AGENT_RUNTIME_DIR`), so it cannot be committed accidentally.
 
 ## License
 
