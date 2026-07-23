@@ -53,6 +53,31 @@ _SEND_MIN_INTERVAL = 0.6
 _SEND_JITTER = 0.5
 _SEND_MAX_PER_MIN = 20
 _SEND_WINDOW_SEC = 60.0
+try:
+    MAX_IMAGE_BYTES = max(1, int(os.getenv("MAX_IMAGE_BYTES", "5000000")))
+except ValueError:
+    MAX_IMAGE_BYTES = 5_000_000
+
+
+def _detect_image_mime(data: bytes) -> str:
+    """Return a supported image MIME type from its file signature."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"GIF8"):
+        return "image/gif"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data.startswith(b"BM"):
+        return "image/bmp"
+    if data[4:12] in (
+        b"ftypheic", b"ftypheix", b"ftyphevc", b"ftypmif1", b"ftypmsf1",
+    ):
+        return "image/heic"
+    if data[4:12] in (b"ftypavif", b"ftypavis"):
+        return "image/avif"
+    return ""
 
 # Gateway conversation cap: QQ groups/DMs are whitelisted so their key count
 # is naturally bounded, but gateway conversation keys ("<platform>:<id>") are
@@ -1663,11 +1688,19 @@ class Agent:
         if url.startswith("base64://"):
             # synthesize_onebot_payload emits a base64:// file field when the
             # forwarder had no URL — the bytes are inline, nothing to fetch.
+            encoded = url[len("base64://"):]
+            max_encoded = ((MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
+            if len(encoded) > max_encoded:
+                logger.warning("[Agent] base64 image exceeds size limit")
+                return None
             try:
-                return base64.b64decode(url[len("base64://"):])
+                data = base64.b64decode(encoded, validate=True)
             except Exception as e:
                 logger.debug("[Agent] base64 image decode failed: %s", e)
                 return None
+            if len(data) > MAX_IMAGE_BYTES or not _detect_image_mime(data):
+                return None
+            return data
         if url.startswith("file://"):
             from urllib.parse import urlparse, unquote
             parsed = urlparse(url)
@@ -1678,35 +1711,38 @@ class Agent:
                 path = Path(local).resolve()
             except Exception:
                 return None
-            # Optional containment: if NAPCAT_IMAGE_DIR is set, only read
-            # file:// paths inside it, so a malicious image segment can't point
-            # the bot at an arbitrary local file (read -> sent to the vision
-            # provider / stolen into the sticker library). Left open by default
-            # to keep NapCat's local-cache mode working out of the box.
             allowed = os.getenv("NAPCAT_IMAGE_DIR", "").strip()
-            if allowed:
-                try:
-                    if not path.is_relative_to(Path(allowed).resolve()):
-                        logger.warning("[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
-                        return None
-                except Exception:
-                    return None
+            if not allowed:
+                logger.warning("[Agent] refusing file:// because NAPCAT_IMAGE_DIR is unset")
+                return None
             try:
-                return path.read_bytes()
+                allowed_path = Path(allowed).resolve(strict=True)
+                if not path.is_relative_to(allowed_path):
+                    logger.warning("[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
+                    return None
+                stat = path.stat()
+                if not path.is_file() or stat.st_size > MAX_IMAGE_BYTES:
+                    return None
+            except (OSError, ValueError):
+                return None
+            try:
+                with path.open("rb") as fh:
+                    data = fh.read(MAX_IMAGE_BYTES + 1)
             except Exception as e:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
+            if len(data) > MAX_IMAGE_BYTES or not _detect_image_mime(data):
+                return None
+            return data
         # SSRF guard: an image-segment URL can point at internal endpoints
         # (169.254.169.254 IMDS, RFC1918) and the fetched bytes get shipped to
         # the vision provider / sticker library. _safe_get re-checks every
         # redirect hop, so a public URL 302-ing to an internal address is
         # blocked too — this fetcher doesn't go through _should_skip_url.
         try:
-            r = await self._safe_get(url, timeout=15,
-                                     headers={"User-Agent": "Mozilla/5.0"})
-            if r is None or r.status_code != 200:
-                return None
-            return r.content
+            return await self._safe_get_bytes(
+                url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
+                max_bytes=MAX_IMAGE_BYTES)
         except Exception as e:
             logger.debug("[Agent] http fetch failed (%s): %s", url, e)
             return None
@@ -2086,6 +2122,51 @@ class Agent:
                 continue
             return r
         logger.warning("[Agent] redirect cap exceeded: %s", url[:120])
+        return None
+
+    async def _safe_get_bytes(self, url: str, *, timeout: float,
+                              headers: Optional[dict] = None,
+                              max_bytes: int,
+                              max_redirects: int = 5) -> bytes | None:
+        """Stream a bounded HTTP body while validating every redirect hop."""
+        current = url
+        for _ in range(max_redirects + 1):
+            try:
+                scheme = urlsplit(current).scheme.lower()
+            except Exception:
+                return None
+            if scheme not in ("http", "https") or self._host_is_internal(current):
+                logger.warning("[Agent] refusing internal/invalid image URL hop: %s",
+                               current[:120])
+                return None
+            async with self._http(timeout=timeout) as client:
+                async with client.stream(
+                    "GET", current, headers=headers, follow_redirects=False,
+                ) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location", "")
+                        if not location:
+                            return None
+                        current = str(httpx.URL(current).join(location))
+                        continue
+                    if response.status_code != 200:
+                        return None
+                    length = response.headers.get("content-length", "")
+                    try:
+                        if length and int(length) > max_bytes:
+                            return None
+                    except (TypeError, ValueError):
+                        pass
+                    chunks: list[bytes] = []
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > max_bytes:
+                            return None
+                        chunks.append(chunk)
+                    data = b"".join(chunks)
+                    return data if _detect_image_mime(data) else None
+        logger.warning("[Agent] image redirect cap exceeded: %s", url[:120])
         return None
 
     @classmethod
@@ -4378,14 +4459,15 @@ class Agent:
             if len(img_bytes) < 200:
                 logger.debug("[Agent] GLM image too small (%d bytes), skipping", len(img_bytes))
                 return ""
-            if len(img_bytes) > 5_000_000:
+            if len(img_bytes) > MAX_IMAGE_BYTES:
                 logger.warning("[Agent] GLM image too large (%d bytes), skipping", len(img_bytes))
                 return ""
-            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-                mime = "image/png"
-            elif img_bytes[:3] == b"\xff\xd8\xff":
-                mime = "image/jpeg"
-            elif img_bytes[:4] == b"GIF8":
+            mime = _detect_image_mime(img_bytes)
+            if not mime:
+                logger.debug("[Agent] GLM unknown image magic %s",
+                             img_bytes[:12].hex())
+                return ""
+            if mime == "image/gif":
                 # GLM rejects GIFs (error 1210, format/parse). Pull the first
                 # frame as PNG so animated stickers/memes still get a caption.
                 # PIL decode/transcode is CPU-bound — run it in a thread so it
@@ -4396,22 +4478,14 @@ class Agent:
                     return ""
                 img_bytes = frame
                 mime = "image/png"
-            elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
-                mime = "image/webp"
-            elif img_bytes[:2] == b"BM":
-                mime = "image/bmp"
-            elif img_bytes[4:12] in (b"ftypheic", b"ftypheix", b"ftyphevc", b"ftypmif1", b"ftypmsf1"):
+            elif mime == "image/heic":
                 # HEIC/HEIF — GLM doesn't accept this format; let caller fall through to OCR
                 logger.info("[Agent] GLM skip HEIC/HEIF, fallback to OCR")
                 return ""
-            elif img_bytes[4:12] in (b"ftypavif", b"ftypavis"):
+            elif mime == "image/avif":
                 # AVIF — GLM doesn't accept; OCR fallback
                 logger.info("[Agent] GLM skip AVIF, fallback to OCR")
                 return ""
-            else:
-                logger.debug("[Agent] GLM unknown image magic %s, defaulting to jpeg",
-                             img_bytes[:12].hex())
-                mime = "image/jpeg"
             data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
 
             # 429 backoff retry: free-tier vision endpoints rate-limit

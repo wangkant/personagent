@@ -469,6 +469,94 @@ async def unit_b64_image_fetch(tmp: Path) -> None:
     check("b64 fetch: invalid data returns None", bad is None, repr(bad))
 
 
+async def regression_bounded_image_inputs(tmp: Path) -> None:
+    """Every image source is bounded, contained, and signature-validated."""
+    agent = make_agent(tmp)
+    png = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+    allowed_dir = tmp / "napcat-cache"
+    allowed_dir.mkdir(parents=True)
+    inside = allowed_dir / "inside.png"
+    inside.write_bytes(png)
+    outside = tmp / "outside.png"
+    outside.write_bytes(png)
+
+    old_dir = os.environ.pop("NAPCAT_IMAGE_DIR", None)
+    try:
+        data = await agent._fetch_image_bytes(outside.as_uri())
+        check("file image: unset allowlist rejects",
+              data is None, repr(data))
+
+        os.environ["NAPCAT_IMAGE_DIR"] = str(allowed_dir)
+        data = await agent._fetch_image_bytes(inside.as_uri())
+        check("file image: configured directory accepted",
+              data == png, repr(data))
+        data = await agent._fetch_image_bytes(outside.as_uri())
+        check("file image: outside configured directory rejected",
+              data is None, repr(data))
+
+        link = allowed_dir / "escape.png"
+        try:
+            link.symlink_to(outside)
+        except OSError:
+            link = None
+        if link is not None:
+            data = await agent._fetch_image_bytes(link.as_uri())
+            check("file image: symlink escape rejected",
+                  data is None, repr(data))
+    finally:
+        if old_dir is None:
+            os.environ.pop("NAPCAT_IMAGE_DIR", None)
+        else:
+            os.environ["NAPCAT_IMAGE_DIR"] = old_dir
+
+    oversized = b"\x89PNG\r\n\x1a\n" + b"x" * 5_000_000
+    encoded = base64.b64encode(oversized).decode()
+    data = await agent._fetch_image_bytes("base64://" + encoded)
+    check("base64 image: oversized payload rejected",
+          data is None, None if data is None else str(len(data)))
+
+    text_data = base64.b64encode(b"this is not an image").decode()
+    data = await agent._fetch_image_bytes("base64://" + text_data)
+    check("base64 image: unknown format rejected", data is None, repr(data))
+
+    class _StreamResponse:
+        status_code = 200
+        headers = {}
+
+        async def aiter_bytes(self):
+            yield b"\x89PNG\r\n\x1a\n"
+            yield b"x" * 3_000_000
+            yield b"x" * 3_000_000
+
+    class _StreamContext:
+        async def __aenter__(self):
+            return _StreamResponse()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeHTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return _StreamContext()
+
+        async def get(self, *args, **kwargs):
+            response = _StreamResponse()
+            response.content = (
+                b"\x89PNG\r\n\x1a\n" + b"x" * 6_000_000)
+            return response
+
+    agent._http = lambda **kwargs: _FakeHTTP()
+    data = await agent._fetch_image_bytes("https://image.invalid/large.png")
+    check("http image: streamed overflow rejected",
+          data is None, None if data is None else str(len(data)))
+
+
 async def integration_same_mid_distinct_conversations(tmp: Path) -> None:
     """F6 regression: per-chat message counters (Telegram/Slack) produce the
     same raw mid in different chats; both messages must be handled instead of
@@ -1072,6 +1160,15 @@ async def regression_ssrf_redirect_hops(tmp: Path) -> None:
             self.url = url
             self.text = ""
 
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def aiter_bytes(self):
+            yield self.content
+
     class _FakeHTTP:
         async def __aenter__(self):
             return self
@@ -1080,12 +1177,18 @@ async def regression_ssrf_redirect_hops(tmp: Path) -> None:
             return False
 
         async def get(self, url, headers=None):
+            return self._response(url)
+
+        def stream(self, method, url, headers=None, follow_redirects=False):
+            return self._response(url)
+
+        def _response(self, url):
             fetched.append(url)
             if url == "http://evil.invalid/img":  # public host, hostile redirect
                 return _Resp(302, {"location": "http://127.0.0.1:3000/send_group_msg?group_id=1"})
             if url == "http://hop.invalid/a":  # public host, relative redirect
                 return _Resp(302, {"location": "/b"})
-            return _Resp(200, content=b"IMGDATA", url=url)
+            return _Resp(200, content=b"\x89PNG\r\n\x1a\nIMGDATA", url=url)
 
     agent._http = lambda **kw: _FakeHTTP()
     data = await agent._fetch_image_bytes("http://evil.invalid/img")
@@ -1095,7 +1198,8 @@ async def regression_ssrf_redirect_hops(tmp: Path) -> None:
     fetched.clear()
     data2 = await agent._fetch_image_bytes("http://hop.invalid/a")
     check("ssrf redirect: public relative redirect still followed",
-          data2 == b"IMGDATA" and fetched == ["http://hop.invalid/a", "http://hop.invalid/b"],
+          data2 == b"\x89PNG\r\n\x1a\nIMGDATA"
+          and fetched == ["http://hop.invalid/a", "http://hop.invalid/b"],
           repr((data2, fetched)))
 
 
@@ -1360,27 +1464,28 @@ async def main_async() -> None:
         await regression_numeric_at_kept_in_payload(tmp / "c")
         await integration_second_marker_stripped(tmp / "d")
         await unit_b64_image_fetch(tmp / "e")
-        await integration_same_mid_distinct_conversations(tmp / "f")
-        await regression_forged_gateway_flag_rejected(tmp / "g")
-        await regression_forget_no_overdelete(tmp / "h")
-        await regression_auto_memory_preserves_manual(tmp / "i")
-        await regression_throttle_send(tmp / "j")
-        await regression_mem_command_sends_outside_lock(tmp / "k")
-        await regression_gateway_conv_eviction(tmp / "l")
-        await regression_group_whitelist_gateway_bypass(tmp / "m")
-        await regression_think_full_path_search_hint(tmp / "n")
-        await regression_eval_auto_append_examples(tmp / "o")
-        await regression_proactive_group_postprocessing(tmp / "p")
-        await regression_proactive_dm_saves_mem(tmp / "q")
-        await regression_share_card_type_confusion(tmp / "r")
-        await regression_b64_caption_cache_key(tmp / "s")
-        await regression_ssrf_redirect_hops(tmp / "t")
-        await regression_memory_first_person_render(tmp / "u")
-        await regression_rejected_reply_not_committed(tmp / "v")
-        await regression_delivery_failure_not_committed(tmp / "w")
-        await regression_private_message_ids(tmp / "x")
-        await regression_llm_fail_fallback_outside_lock(tmp / "y")
-        await regression_web_desc_not_control_plane(tmp / "z")
+        await regression_bounded_image_inputs(tmp / "f")
+        await integration_same_mid_distinct_conversations(tmp / "g")
+        await regression_forged_gateway_flag_rejected(tmp / "h")
+        await regression_forget_no_overdelete(tmp / "i")
+        await regression_auto_memory_preserves_manual(tmp / "j")
+        await regression_throttle_send(tmp / "k")
+        await regression_mem_command_sends_outside_lock(tmp / "l")
+        await regression_gateway_conv_eviction(tmp / "m")
+        await regression_group_whitelist_gateway_bypass(tmp / "n")
+        await regression_think_full_path_search_hint(tmp / "o")
+        await regression_eval_auto_append_examples(tmp / "p")
+        await regression_proactive_group_postprocessing(tmp / "q")
+        await regression_proactive_dm_saves_mem(tmp / "r")
+        await regression_share_card_type_confusion(tmp / "s")
+        await regression_b64_caption_cache_key(tmp / "t")
+        await regression_ssrf_redirect_hops(tmp / "u")
+        await regression_memory_first_person_render(tmp / "v")
+        await regression_rejected_reply_not_committed(tmp / "w")
+        await regression_delivery_failure_not_committed(tmp / "x")
+        await regression_private_message_ids(tmp / "y")
+        await regression_llm_fail_fallback_outside_lock(tmp / "z")
+        await regression_web_desc_not_control_plane(tmp / "zz")
 
 
 def main() -> int:
