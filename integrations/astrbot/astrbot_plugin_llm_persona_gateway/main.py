@@ -1,6 +1,6 @@
 """AstrBot plugin: forward messages to an external LLM persona agent.
 
-This plugin turns AstrBot into a thin transport for the persona-llm-agent
+This plugin turns AstrBot into a thin transport for the personagent
 gateway (POST /webhook/gateway). Every message AstrBot receives on any
 platform adapter (Telegram, Discord, Slack, ...) is mapped
 to a platform-neutral inbound event, POSTed to the agent, and the agent's

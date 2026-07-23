@@ -1,7 +1,7 @@
-# persona-llm-agent
+# personagent
 
-[![Live demo](assets/live-demo.svg)](https://wangkant.github.io/persona-llm-agent/)
-[![CI](https://github.com/wangkant/persona-llm-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/persona-llm-agent/actions/workflows/ci.yml)
+[![Live demo](assets/live-demo.svg)](https://wangkant.github.io/personagent/)
+[![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
@@ -9,7 +9,7 @@
 
 > **You type. It replies like a person — not a help desk — and it gets better at it on its own.**
 
-[![persona-llm-agent terminal demo](assets/demo.svg)](https://wangkant.github.io/persona-llm-agent/)
+[![personagent terminal demo](assets/demo.svg)](https://wangkant.github.io/personagent/)
 
 A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: every reply is self-scored, successes grow the few-shot pool, and failures are self-diagnosed into preference pairs that steer the next similar reply (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
@@ -277,7 +277,7 @@ Stickers pass through several gates before becoming eligible for selection:
 
 ## Architecture
 
-![persona-llm-agent architecture](docs/persona_llm_agent_architecture.svg)
+![personagent architecture](docs/persona_llm_agent_architecture.svg)
 
 <details>
 <summary>Implementation detail (handler call chain)</summary>
