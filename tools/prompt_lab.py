@@ -19,7 +19,12 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
 
 import anthropic
-from persona_agent.agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE, _resolve_lang_file
+from persona_agent.agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE
+from persona_agent.paths import (
+    read_jsonl,
+    resolve_runtime_lang_file,
+    resolve_seed_lang_file,
+)
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 
@@ -30,8 +35,9 @@ FIXTURES_FILE = (
 )
 # Approved replies flow into the active-language pools so they match the
 # language the agent actually runs in.
-FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)
-EXAMPLES_FILE = _resolve_lang_file("examples", "jsonl", AGENT_LANG)
+FEEDBACK_FILE = resolve_runtime_lang_file("feedback", "jsonl", AGENT_LANG)
+EXAMPLES_SEED_FILE = resolve_seed_lang_file("examples", "jsonl", AGENT_LANG)
+EXAMPLES_FILE = resolve_runtime_lang_file("examples", "jsonl", AGENT_LANG)
 
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -46,19 +52,10 @@ def dim(t): return _c(t, "2")
 def bold(t): return _c(t, "1")
 
 def load_jsonl(path: Path) -> list:
-    if not path.exists():
-        return []
-    lines = path.read_text(encoding="utf-8").splitlines()
-    out = []
-    for ln in lines:
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            out.append(json.loads(ln))
-        except json.JSONDecodeError:
-            pass
-    return out
+    return read_jsonl([path])
+
+def load_examples() -> list:
+    return read_jsonl([EXAMPLES_SEED_FILE, EXAMPLES_FILE])
 
 def append_jsonl(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -155,7 +152,7 @@ def cmd_show_examples(examples: list):
         print(f"  {green('reply:')} {e.get('reply','')}\n")
 
 async def cmd_run(fixtures: list, ids_filter: list | None = None):
-    examples = load_jsonl(EXAMPLES_FILE)
+    examples = load_examples()
     client = get_client()
     system = build_system_prompt(examples)
 
@@ -258,7 +255,7 @@ def cmd_add() -> dict | None:
     return {"id": fid, "scenario": scenario, "mode": mode, "context": context}
 
 def cmd_show_prompt():
-    examples = load_jsonl(EXAMPLES_FILE)
+    examples = load_examples()
     system = build_system_prompt(examples)
     print(f"\n{dim('--- system prompt ---')}")
     print(system)
@@ -266,7 +263,7 @@ def cmd_show_prompt():
 
 async def main():
     fixtures = load_jsonl(FIXTURES_FILE)
-    examples = load_jsonl(EXAMPLES_FILE)
+    examples = load_examples()
 
     print(bold(cyan("\n=== Prompt Lab ===")))
     print(f"fixtures: {len(fixtures)}  examples in bank: {len(examples)}")
@@ -295,7 +292,7 @@ async def main():
             if ids_list:
                 await cmd_run(fixtures, ids_list)
         elif choice == "4":
-            cmd_show_examples(load_jsonl(EXAMPLES_FILE))
+            cmd_show_examples(load_examples())
         elif choice == "5":
             new_fx = cmd_add()
             if new_fx:

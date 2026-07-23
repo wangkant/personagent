@@ -4,7 +4,7 @@ Stage 1 (review): score<=threshold entries in eval.jsonl are diagnosed by an
 LLM into candidates.jsonl (failure mode + constraint + a BAD/OK pair draft).
 
 Stage 2 (apply, opt-in): pending candidates are converted into preference
-pairs and appended to data/feedback.<lang>.jsonl, which the running agent
+pairs and appended to runtime/feedback.<lang>.jsonl, which the running agent
 hot-reloads into few-shot retrieval — no restart needed.
 
 Usage:
@@ -37,6 +37,7 @@ load_dotenv(ROOT / ".env", override=True)
 import httpx
 
 from persona_agent import evolution
+from persona_agent.paths import resolve_runtime_lang_file, resolve_seed_lang_file
 
 EVAL_FILE = ROOT / "eval.jsonl"
 CANDIDATES_FILE = ROOT / "candidates.jsonl"
@@ -62,10 +63,11 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-def _feedback_file() -> Path:
-    lang_file = ROOT / "data" / f"feedback.{AGENT_LANG}.jsonl"
-    bare = ROOT / "data" / "feedback.jsonl"
-    return bare if (bare.exists() and not lang_file.exists()) else lang_file
+def _feedback_files() -> tuple[Path, Path]:
+    return (
+        resolve_seed_lang_file("feedback", "jsonl", AGENT_LANG),
+        resolve_runtime_lang_file("feedback", "jsonl", AGENT_LANG),
+    )
 
 
 async def call_llm(prompt: str) -> str:
@@ -134,12 +136,12 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
 
 def apply_candidates(auto_yes: bool) -> None:
     """Stage 2: pending candidates -> feedback pairs, human-gated unless --yes."""
-    feedback = _feedback_file()
+    feedback_seed, feedback = _feedback_files()
     pending = evolution.load_pending_candidates(CANDIDATES_FILE)
     if not pending:
         logger.info("apply: no pending candidates")
         return
-    existing = evolution.load_feedback_keys(feedback)
+    existing = evolution.load_feedback_keys([feedback_seed, feedback])
     now = datetime.now().isoformat(timespec="seconds")
 
     approved: list[dict] = []

@@ -2,7 +2,7 @@
 
 Idea: instead of hand-tuning STYLE_GUIDE bullets, treat the prompt as a program
 and let DSPy search for better few-shot composition / instructions, using
-data/feedback.<lang>.jsonl 'better' pairs as the optimization signal.
+seed and runtime feedback 'better' pairs as the optimization signal.
 
 Status: SCAFFOLD ONLY. Tuning a chatbot persona via DSPy is fiddly because the
 metric isn't a clean accuracy number — it needs an LLM judge. Treat this as a
@@ -10,7 +10,7 @@ starting point you can iterate on; don't expect one run to give you a magical pr
 
 Quick start:
     pip install dspy-ai
-    python tools/dspy_tune.py --bootstrap   # bootstrap demos from data/feedback.<lang>.jsonl
+    python tools/dspy_tune.py --bootstrap   # bootstrap demos from seed + runtime feedback
     python tools/dspy_tune.py --tune        # run BootstrapFewShot optimizer
 
 Outputs:
@@ -27,27 +27,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from persona_agent.agent import _resolve_lang_file
+from persona_agent.paths import (
+    read_jsonl,
+    resolve_runtime_lang_file,
+    resolve_seed_lang_file,
+)
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
-FEEDBACK_FILE = _resolve_lang_file("feedback", "jsonl", AGENT_LANG)
-EXAMPLES_FILE = _resolve_lang_file("examples", "jsonl", AGENT_LANG)
+FEEDBACK_FILES = (
+    resolve_seed_lang_file("feedback", "jsonl", AGENT_LANG),
+    resolve_runtime_lang_file("feedback", "jsonl", AGENT_LANG),
+)
+EXAMPLES_FILES = (
+    resolve_seed_lang_file("examples", "jsonl", AGENT_LANG),
+    resolve_runtime_lang_file("examples", "jsonl", AGENT_LANG),
+)
 OUT_PROGRAM = Path(__file__).parent / "dspy_tuned.json"
 OUT_LOG = Path(__file__).parent / "dspy_log.md"
 
 
 def load_pairs() -> list[dict]:
-    if not FEEDBACK_FILE.exists():
-        return []
     pairs = []
-    for ln in FEEDBACK_FILE.read_text(encoding="utf-8").splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            r = json.loads(ln)
-        except Exception:
-            continue
+    for r in read_jsonl(FEEDBACK_FILES):
         if r.get("rating") == "better" and r.get("better") and r.get("reply"):
             pairs.append({
                 "context": "\n".join(r.get("context", [])),
@@ -59,17 +60,8 @@ def load_pairs() -> list[dict]:
 
 
 def load_goods() -> list[dict]:
-    if not EXAMPLES_FILE.exists():
-        return []
     out = []
-    for ln in EXAMPLES_FILE.read_text(encoding="utf-8").splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            r = json.loads(ln)
-        except Exception:
-            continue
+    for r in read_jsonl(EXAMPLES_FILES):
         if r.get("reply"):
             out.append({
                 "context": "\n".join(r.get("context", [])),
@@ -129,7 +121,7 @@ def cmd_bootstrap():
     goods = load_goods()
     print(f"Loaded {len(pairs)} pairs, {len(goods)} good examples")
     if not pairs and not goods:
-        print("Nothing to bootstrap from. Add entries to data/feedback.<lang>.jsonl first.")
+        print("Nothing to bootstrap from. Add entries to the runtime feedback file first.")
         return
     print("Pairs head:")
     for p in pairs[:3]:
@@ -146,7 +138,7 @@ def cmd_tune(judge_model: str = "deepseek-chat"):
     pairs = load_pairs()
     goods = load_goods()
     if not pairs:
-        print("No 'better' pairs in data/feedback.<lang>.jsonl — cannot run BootstrapFewShot.")
+        print("No 'better' pairs in seed or runtime feedback — cannot run BootstrapFewShot.")
         return
 
     api_key = os.getenv("DEEPSEEK_API_KEY", "")

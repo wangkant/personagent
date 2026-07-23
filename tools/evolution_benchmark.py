@@ -144,7 +144,9 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     a._seen_msg_file = state_dir / "seen_msg_ids.json"
     a.core_memory_file = state_dir / "core_memory.json"
     a.candidates_file = state_dir / "candidates.jsonl"
+    a.feedback_seed_file = state_dir / f"feedback.seed.{lang}.jsonl"
     a.feedback_file = state_dir / f"feedback.{lang}.jsonl"
+    a.examples_seed_file = state_dir / f"examples.seed.{lang}.jsonl"
     a.examples_file = state_dir / f"examples.{lang}.jsonl"
     a._seen_msg_ids.clear()
     a.core_memory.clear()
@@ -156,8 +158,8 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
         return ""
     a._decide_and_search = _no_search
     # Force retrieval caches to reload from the (empty) redirected files.
-    a._pairs_mtime = 0.0
-    a._examples_mtime = 0.0
+    a._pairs_mtime = (-1.0, -1.0)
+    a._examples_mtime = (-1.0, -1.0)
     a._pairs_cache = []
     a._examples_cache = []
     a._auto_examples_seen = set()
@@ -218,8 +220,8 @@ async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir,
     # survive the rmtree above; the agent's retrieval caches reload lazily by
     # mtime, so files dropped in now are picked up on the first round.
     _seed_state_files(lang, seed_state, state_dir)
-    agent._pairs_mtime = 0.0
-    agent._examples_mtime = 0.0
+    agent._pairs_mtime = (-1.0, -1.0)
+    agent._examples_mtime = (-1.0, -1.0)
     arm = "evolve-on" if evolve_on else "evolve-off"
     results = []
     # Round 0: baseline, no learning even on the on-arm.

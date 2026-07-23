@@ -9,7 +9,7 @@ This module owns the shared logic for the negative half:
     low-score eval entry
       -> LLM diagnosis (failure mode + a BAD/OK pair draft)
       -> candidates.jsonl (audit trail, dedup by src_eval_ts)
-      -> approved pairs appended to data/feedback.<lang>.jsonl
+      -> approved pairs appended to runtime/feedback.<lang>.jsonl
       -> the running agent hot-reloads feedback into few-shot retrieval
 
 Consumers:
@@ -26,6 +26,7 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 
 REVIEWER_PROMPTS = {
@@ -169,10 +170,13 @@ def pair_from_candidate(cand: dict, ts: str) -> dict | None:
     }
 
 
-def load_feedback_keys(path: Path) -> set[tuple[str, str]]:
+def load_feedback_keys(paths: Path | Iterable[Path]) -> set[tuple[str, str]]:
     """(reply, better) of every existing feedback pair — the apply dedup set."""
+    if isinstance(paths, Path):
+        paths = (paths,)
     return {
         (str(r.get("reply") or "").strip(), str(r.get("better") or "").strip())
+        for path in paths
         for r in _read_jsonl(path)
     }
 
@@ -187,6 +191,7 @@ def append_jsonl(path: Path, records: list[dict],
         size = path.stat().st_size if path.exists() else 0
     except OSError:
         size = 0
+    path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     with path.open("a", encoding="utf-8", newline="\n") as fh:
         for rec in records:

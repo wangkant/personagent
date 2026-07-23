@@ -185,12 +185,14 @@ def _make_agent(tmp: Path) -> Agent:
     a._seen_msg_ids.clear()
     a.core_memory.clear()
     a.candidates_file = tmp / "candidates.jsonl"
+    a.feedback_seed_file = tmp / "feedback.seed.en.jsonl"
     a.feedback_file = tmp / "feedback.en.jsonl"
+    a.examples_seed_file = tmp / "examples.seed.en.jsonl"
     a.examples_file = tmp / "examples.en.jsonl"
     a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
     a.react_elicit_delay = 0.0
-    a._pairs_mtime = 0.0
-    a._examples_mtime = 0.0
+    a._pairs_mtime = (-1.0, -1.0)
+    a._examples_mtime = (-1.0, -1.0)
     a._pairs_cache = []
     a._examples_cache = []
     a._auto_examples_seen = set()

@@ -153,6 +153,18 @@ def test_append_and_dedup(tmp: Path) -> None:
     capped = evolution.append_jsonl(fb, [pair], max_bytes=10)
     check("append: refuses past size cap", capped == 0)
 
+    seed = tmp / "feedback.seed.jsonl"
+    runtime = tmp / "feedback.runtime.jsonl"
+    seed_pair = {**pair, "reply": "seed bad", "better": "seed good"}
+    runtime_pair = {**pair, "reply": "runtime bad", "better": "runtime good"}
+    _write_jsonl(seed, [seed_pair])
+    _write_jsonl(runtime, [runtime_pair])
+    merged = evolution.load_feedback_keys([seed, runtime])
+    check("dedup keys: seed + runtime merged",
+          merged == {("seed bad", "seed good"),
+                     ("runtime bad", "runtime good")},
+          repr(merged))
+
 
 # ---------------------------------------------------------------------------
 # Unit: mark_candidates
@@ -199,6 +211,7 @@ def _make_agent(tmp: Path) -> Agent:
     a.core_memory.clear()
     # Redirect every evolve-loop file into the temp dir.
     a.candidates_file = tmp / "candidates.jsonl"
+    a.feedback_seed_file = tmp / "feedback.seed.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
     a.evolve_threshold = 2
     a.evolve_batch = 5

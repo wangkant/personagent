@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import sys
 import tempfile
 import time
@@ -358,6 +359,30 @@ def make_agent(tmp: Path) -> Agent:
     # Skip the typing-simulation sleeps so the round-trip is instant.
     a._typing_delay = lambda chunk: 0.0
     return a
+
+
+def test_runtime_learning_paths(tmp: Path) -> None:
+    old = os.environ.get("AGENT_RUNTIME_DIR")
+    os.environ["AGENT_RUNTIME_DIR"] = str(tmp / "runtime")
+    try:
+        agent = make_agent(tmp)
+        check("runtime examples outside data",
+              agent.examples_file.parent == tmp / "runtime",
+              str(agent.examples_file))
+        check("runtime feedback outside data",
+              agent.feedback_file.parent == tmp / "runtime",
+              str(agent.feedback_file))
+        check("seed examples remain under data",
+              agent.examples_seed_file.parent.name == "data",
+              str(agent.examples_seed_file))
+        check("seed feedback remain under data",
+              agent.feedback_seed_file.parent.name == "data",
+              str(agent.feedback_seed_file))
+    finally:
+        if old is None:
+            os.environ.pop("AGENT_RUNTIME_DIR", None)
+        else:
+            os.environ["AGENT_RUNTIME_DIR"] = old
 
 
 async def integration_round_trip(tmp: Path) -> None:
@@ -819,6 +844,7 @@ async def regression_eval_auto_append_examples(tmp: Path) -> None:
     (indexing the string context as dicts once made the whole self-training
     harvest silently raise TypeError)."""
     agent = make_agent(tmp)
+    agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
 
     class _FakeResp:
@@ -1264,6 +1290,8 @@ def main() -> int:
     test_pick_group_model_mode_exempt()
     test_extract_core_update_no_persist()
     test_sticker_tagger_uses_judge_model()
+    with tempfile.TemporaryDirectory() as d:
+        test_runtime_learning_paths(Path(d))
     asyncio.run(main_async())
     print()
     if _failures:
