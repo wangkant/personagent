@@ -101,14 +101,27 @@ async def drive_scenario(agent, scenario: dict, bot_name: str, group_id: str = "
 
 def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable: bool):
     """An Agent whose EVERY writable state path lives under state_dir, so a
-    benchmark run cannot touch the repo's real memory/eval/feedback files."""
+    benchmark run cannot touch the repo's real memory/eval/feedback files.
+
+    Model credentials come from the environment (the same vars main.py reads),
+    so a live run generates and self-evals against the configured endpoints.
+    They default to a fake key + api.deepseek.com, which is correct for the
+    tests — those stub `_call_anthropic`, so the key is never used."""
+    import os
     from persona_agent.agent import Agent
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="benchmark-key", bot_qq="10001", bot_name=bot_name,
+        api_key=os.getenv("DEEPSEEK_API_KEY", "") or "benchmark-key",
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        bot_qq="10001", bot_name=bot_name,
         napcat_api="http://127.0.0.1:9",
         memory_file=str(state_dir / "memory.json"), persona="benchmark persona",
         eval_enable=eval_enable, eval_file=str(state_dir / "eval.jsonl"),
+        eval_model=os.getenv("EVAL_MODEL", ""),
+        vision_model="",  # scenarios use [image: ...] markers, never real pixels
+        glm_api_key=os.getenv("GLM_API_KEY", ""),
+        glm_base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
         stickers_dir=str(state_dir / "stickers"),
         stickers_file=str(state_dir / "stickers.json"),
         message_debounce_sec=0, lang=lang,
