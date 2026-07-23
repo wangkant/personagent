@@ -578,7 +578,18 @@ class Agent:
         self.pending_reactions = reactions.PendingReplies(
             max_per_conv=int(os.getenv("REACT_MAX_PENDING", 4)),
             ttl_sec=float(os.getenv("REACT_TTL_SEC", 900)),
+            fix_window_sec=float(os.getenv("REACT_FIX_WINDOW", 600)),
         )
+        # Elicitation: after an accepted rejection with no correction content,
+        # the bot may (delayed, so it never talks over its own normal reply;
+        # cooldown-limited, so it never begs) ask what the user actually meant.
+        self.react_elicit = os.getenv("REACT_ELICIT", "true").lower() == "true"
+        self.react_elicit_delay = float(os.getenv("REACT_ELICIT_DELAY", 120))
+        self.react_elicit_cooldown = float(os.getenv("REACT_ELICIT_COOLDOWN", 3600))
+        self._last_elicit_at: dict[str, float] = defaultdict(float)
+        # Per-user teaching reputation (never the owner); consistently bad
+        # teachers are hard-blocked before any adjudicator call.
+        self.teacher_stats = reactions.TeacherStats(ROOT / "teacher_stats.json")
         # Outbound message_ids of the current _send_qq call, per group —
         # written under the per-group send lock, consumed right after it.
         self._sent_mids: dict[str, list[str]] = {}
@@ -829,7 +840,8 @@ class Agent:
                 at_bot=is_at or is_called, now=time.time())
             if _r_entry:
                 self._spawn(self._process_reaction(
-                    _r_entry, text, nickname, user_id, is_owner_msg))
+                    _r_entry, text, nickname, user_id, is_owner_msg,
+                    conv_id=group_id, is_private=False))
 
         # Memory-command reply text (settled inside the lock, sent outside) — see below.
         mem_reply = None
@@ -1136,7 +1148,8 @@ class Agent:
             if _r_entry:
                 self._spawn(self._process_reaction(
                     _r_entry, text, "owner" if is_owner else "friend",
-                    user_id, is_owner))
+                    user_id, is_owner, conv_id=f"dm:{user_id}",
+                    is_private=True))
 
         async with self.locks[f"private:{user_id}"]:
             self.last_dm_activity_at[user_id] = time.time()  # silence tracking for the proactive loop
@@ -3604,15 +3617,33 @@ class Agent:
 
     async def _process_reaction(self, entry: dict, reaction_text: str,
                                 reactor_name: str, reactor_uid: str,
-                                is_owner: bool) -> None:
+                                is_owner: bool, conv_id: str = "",
+                                is_private: bool = False) -> None:
         """Adjudicate a directed user reaction to a pending bot reply and
-        learn from it: accepted corrections/rejections become feedback pairs,
-        genuine positives bank the reply as an example. Every adjudication —
-        accepted or not — is audited in candidates.jsonl. Never raises."""
+        learn from it. Accepted corrections become feedback pairs; genuine
+        positives bank the reply as an example; accepted rejections arm two
+        recovery paths — retry-completion (the bot's next reply, if the user
+        then accepts it, closes a BAD->OK pair on its own) and a delayed,
+        cooldown-limited elicitation ask. Every adjudication is audited in
+        candidates.jsonl. Never raises."""
         try:
+            # Hard poison shield: users whose teachings are consistently
+            # dismissed stop costing adjudicator calls at all (BB3x lesson).
+            if not is_owner and self.teacher_stats.hard_block(reactor_uid):
+                evolution.append_jsonl(self.candidates_file, [{
+                    "src": "user_reaction",
+                    "ts": datetime.now().isoformat(timespec="seconds"),
+                    "reactor": reactor_name, "is_owner": False,
+                    "reaction_text": (reaction_text or "")[:120],
+                    "applied": "blocked", "reason": "hard-blocked teacher",
+                }], max_bytes=20_000_000)
+                return
+            history_line = ("" if is_owner else
+                            self.teacher_stats.history_line(reactor_uid,
+                                                            self.agent_lang))
             prompt = reactions.build_adjudicator_prompt(
                 entry, reaction_text, reactor_name, is_owner,
-                self.bot_name, self.agent_lang)
+                self.bot_name, self.agent_lang, reactor_history=history_line)
             raw = await self._call_anthropic(
                 "", [{"role": "user", "content": prompt}],
                 model=self.react_model, max_tokens=400, enable_search=False)
@@ -3621,13 +3652,30 @@ class Agent:
                 return
             now = datetime.now().isoformat(timespec="seconds")
             wrote = False
+
+            # Retry-completion: this reply was the bot's second attempt after
+            # a rejection. The user reacting positively — or just moving on —
+            # accepts the fix, closing (rejected -> retry) into a pair with
+            # zero user effort.
+            if entry.get("fixes") and adj["reaction"] in ("positive", "neutral"):
+                fpair = reactions.fix_pair(entry["fixes"], entry["reply"], now)
+                if fpair is not None:
+                    existing = evolution.load_feedback_keys(self.feedback_file)
+                    if (fpair["reply"], fpair["better"]) not in existing:
+                        if evolution.append_jsonl(self.feedback_file, [fpair]) > 0:
+                            wrote = True
+                            logger.info(
+                                "[Agent] reaction learn (retry-completion): "
+                                "BAD %r -> OK %r",
+                                fpair["reply"][:50], fpair["better"][:50])
+
             if adj["accept"]:
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
                 if pair is not None:
                     existing = evolution.load_feedback_keys(self.feedback_file)
                     if (pair["reply"], pair["better"]) not in existing:
-                        wrote = evolution.append_jsonl(self.feedback_file, [pair]) > 0
-                        if wrote:
+                        if evolution.append_jsonl(self.feedback_file, [pair]) > 0:
+                            wrote = True
                             logger.info(
                                 "[Agent] reaction learn (%s by %s): BAD %r -> OK %r",
                                 adj["reaction"], reactor_name,
@@ -3640,6 +3688,22 @@ class Agent:
                     wrote = True
                     logger.info("[Agent] reaction learn: reply banked as example (%s)",
                                 adj.get("scenario") or entry.get("mode", ""))
+                # Accepted rejection with nothing concrete learned: arm both
+                # recovery paths.
+                if adj["reaction"] == "rejection" and conv_id:
+                    self.pending_reactions.note_rejection(
+                        conv_id, entry, time.time())
+                    if self.react_elicit and adj.get("ask"):
+                        self._spawn(self._maybe_elicit(
+                            conv_id, entry, adj.get("ask", ""),
+                            reactor_uid, is_private))
+
+            # Teaching reputation: count corrective acts only (not positives),
+            # never the owner.
+            if not is_owner and adj["reaction"] in ("correction", "rejection"):
+                self.teacher_stats.update(reactor_uid, reactor_name,
+                                          accepted=adj["accept"])
+
             audit = {
                 "src": "user_reaction", "ts": now,
                 "reaction": adj["reaction"], "reactor": reactor_name,
@@ -3648,10 +3712,48 @@ class Agent:
                 "reaction_text": (reaction_text or "")[:120],
                 "applied": "auto" if wrote else "rejected",
             }
+            if entry.get("fixes"):
+                audit["via"] = "retry-completion-candidate"
             evolution.append_jsonl(self.candidates_file, [audit],
                                    max_bytes=20_000_000)
         except Exception as e:
             logger.warning("[Agent] reaction processing failed: %s: %s",
+                           type(e).__name__, e)
+
+    async def _maybe_elicit(self, conv_id: str, entry: dict, ask: str,
+                            reactor_uid: str, is_private: bool) -> None:
+        """Delayed elicitation: wait out the bot's own normal reply to the
+        rejection, then — if the user still hasn't supplied a correction and
+        the per-conversation cooldown allows — ask in the bot's voice what
+        they actually meant. The rejector's next message (even without an @)
+        is then attributed to the ORIGINAL rejected reply, so their answer
+        adjudicates as a proper correction. Never raises."""
+        try:
+            if not ask:
+                return
+            await asyncio.sleep(max(0.0, self.react_elicit_delay))
+            now_mono = time.time()
+            if now_mono - self._last_elicit_at[conv_id] < self.react_elicit_cooldown:
+                return
+            self._last_elicit_at[conv_id] = now_mono
+            if is_private:
+                uid = conv_id.split(":", 1)[1] if ":" in conv_id else reactor_uid
+                self.private_history.setdefault(uid, []).append(
+                    {"role": "assistant", "content": ask})
+                await self._send_private_qq(uid, ask)
+            else:
+                self._append_buffer(conv_id, self.bot_name, ask)
+                async with self.send_locks[conv_id]:
+                    await self._send_qq(conv_id, ask, reactor_uid)
+            # Register the ORIGINAL rejected reply as an elicited pending
+            # entry: the rejector's answer will adjudicate against it.
+            self.pending_reactions.record(
+                conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
+                mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
+                target_uid=reactor_uid, elicited_uid=reactor_uid, ts=time.time())
+            logger.info("[Agent] elicitation sent (conv=%s): %s", conv_id, ask[:60])
+        except Exception as e:
+            logger.warning("[Agent] elicitation failed: %s: %s",
                            type(e).__name__, e)
 
     # ---------------- Self-evolution (eval -> feedback, unattended) ----------------

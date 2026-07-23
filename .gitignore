@@ -45,3 +45,4 @@ logs/
 
 # Benchmark run artifacts
 benchmark_runs/
+teacher_stats.json
