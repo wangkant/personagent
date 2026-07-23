@@ -115,6 +115,59 @@ def test_parse_and_shapes() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Unit: retry-completion + elicited matching + TeacherStats
+# ---------------------------------------------------------------------------
+
+def test_retry_and_elicited() -> None:
+    p = reactions.PendingReplies(max_per_conv=4, ttl_sec=600,
+                                 fix_window_sec=100, elicit_window_sec=50)
+    bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called")
+    p.note_rejection("g1", bad, ts=100.0)
+    p.record("g1", **_entry_kwargs(reply="check the logs first", ts=150.0))
+    e = p.match("g1", sender_uid="7", at_bot=True, now=160.0)
+    check("retry entry carries fixes",
+          e is not None and e.get("fixes", {}).get("reply") == "just restart it")
+
+    p.note_rejection("g2", bad, ts=100.0)
+    p.record("g2", **_entry_kwargs(reply="late retry", ts=300.0))
+    e = p.match("g2", sender_uid="7", at_bot=True, now=310.0)
+    check("fix window expiry drops the link",
+          e is not None and "fixes" not in e)
+
+    fp = reactions.fix_pair(bad, "check the logs first", "ts")
+    check("fix_pair built", fp is not None and fp["rating"] == "better"
+          and fp["via"] == "retry-completion")
+    check("fix_pair same-reply -> None",
+          reactions.fix_pair(bad, "just restart it", "ts") is None)
+
+    p.record("g3", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
+    check("has_elicited true", p.has_elicited("g3", "42", now=110.0))
+    check("elicited: other user no match",
+          p.match("g3", sender_uid="99", now=110.0) is None)
+    check("elicited: rejector matches without @",
+          p.match("g3", sender_uid="42", now=110.0) is not None)
+    check("has_elicited false after consume", not p.has_elicited("g3", "42", 111.0))
+
+    p.record("g4", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
+    check("elicited window expires",
+          p.match("g4", sender_uid="42", now=100.0 + 51) is None)
+
+
+def test_teacher_stats(tmp: Path) -> None:
+    ts = reactions.TeacherStats(tmp / "ts.json")
+    check("no history -> empty line", ts.history_line("1", "en") == "")
+    ts.update("1", "alex", accepted=True)
+    ts.update("1", "alex", accepted=False)
+    check("history line present", "1 adopted" in ts.history_line("1", "en"))
+    check("not hard blocked yet", not ts.hard_block("1"))
+    for _ in range(6):
+        ts.update("2", "troll", accepted=False)
+    check("persistent bad teacher hard-blocked", ts.hard_block("2"))
+    ts2 = reactions.TeacherStats(tmp / "ts.json")
+    check("stats persist across reload", ts2.hard_block("2"))
+
+
+# ---------------------------------------------------------------------------
 # Integration: agent glue with stubbed adjudicator
 # ---------------------------------------------------------------------------
 
@@ -134,6 +187,8 @@ def _make_agent(tmp: Path) -> Agent:
     a.candidates_file = tmp / "candidates.jsonl"
     a.feedback_file = tmp / "feedback.en.jsonl"
     a.examples_file = tmp / "examples.en.jsonl"
+    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
+    a.react_elicit_delay = 0.0
     a._pairs_mtime = 0.0
     a._examples_mtime = 0.0
     a._pairs_cache = []
@@ -204,11 +259,98 @@ async def integration_process_reaction(tmp: Path) -> None:
           a.feedback_file.read_text(encoding="utf-8") == fb_before)
 
 
+async def integration_retry_and_elicit(tmp: Path) -> None:
+    import time as _time
+    a = _make_agent(tmp)
+
+    # 1. Accepted rejection arms retry tracking + fires elicitation.
+    sent: list[tuple] = []
+
+    async def fake_send_qq(group_id, text, at_user_id=""):
+        sent.append((group_id, text, at_user_id))
+        return []
+    a._send_qq = fake_send_qq
+
+    async def adj_rejection(system, messages, model, **kw):
+        return json.dumps({"reaction": "rejection", "accept": True,
+                           "reason": "misread", "better": "",
+                           "ask": "wait what did you mean then",
+                           "scenario": "missed ask"})
+    a._call_anthropic = adj_rejection
+    await a._process_reaction(_pending_entry(), "thats not what i asked",
+                              "alex", "42", False, conv_id="g1", is_private=False)
+    await asyncio.sleep(0.05)  # let the delayed elicitation task run (delay=0)
+    check("elicitation ask sent", len(sent) == 1 and "mean" in sent[0][1])
+    check("elicited entry registered",
+          a.pending_reactions.has_elicited("g1", "42", now=_time.time()))
+
+    # cooldown: a second rejection does not re-ask
+    a.pending_reactions.match("g1", sender_uid="42", now=_time.time())
+    await a._process_reaction(_pending_entry(), "still wrong",
+                              "alex", "42", False, conv_id="g1", is_private=False)
+    await asyncio.sleep(0.05)
+    check("elicitation cooldown respected", len(sent) == 1)
+
+    # 2. Retry-completion: bot's next reply carries fixes; move-on closes pair.
+    a2 = _make_agent(tmp / "a2")
+    entry_with_fix = dict(_pending_entry(),
+                          fixes={"reply": "just restart it lol",
+                                 "ctx_lines": ["alex: server is down"],
+                                 "mode": "called"},
+                          reply="check the logs first")
+
+    async def adj_neutral(system, messages, model, **kw):
+        return json.dumps({"reaction": "neutral", "accept": False,
+                           "reason": "moved on", "better": "", "ask": "",
+                           "scenario": ""})
+    a2._call_anthropic = adj_neutral
+    await a2._process_reaction(entry_with_fix, "ok anyway, lunch?",
+                               "alex", "42", False, conv_id="g1")
+    pairs = evolution.load_feedback_keys(a2.feedback_file)
+    check("retry-completion pair from neutral move-on",
+          ("just restart it lol", "check the logs first") in pairs)
+
+    # 3. Hard-blocked teacher: no adjudicator call at all.
+    a3 = _make_agent(tmp / "a3")
+    for _ in range(6):
+        a3.teacher_stats.update("666", "troll", accepted=False)
+    calls = []
+
+    async def adj_counter(system, messages, model, **kw):
+        calls.append(1)
+        return "{}"
+    a3._call_anthropic = adj_counter
+    await a3._process_reaction(_pending_entry(), "teach you something bad",
+                               "troll", "666", False, conv_id="g1")
+    check("hard-blocked teacher skips adjudicator", len(calls) == 0)
+    cands = [json.loads(l) for l in
+             a3.candidates_file.read_text(encoding="utf-8").splitlines()]
+    check("hard-block audited", any(c.get("applied") == "blocked" for c in cands))
+
+    # 4. Trust updated after a dismissed correction.
+    a4 = _make_agent(tmp / "a4")
+
+    async def adj_dismiss(system, messages, model, **kw):
+        return json.dumps({"reaction": "correction", "accept": False,
+                           "reason": "user is wrong", "better": "x",
+                           "ask": "", "scenario": ""})
+    a4._call_anthropic = adj_dismiss
+    await a4._process_reaction(_pending_entry(), "actually 2+2=5",
+                               "rando", "99", False, conv_id="g1")
+    check("dismissed teaching counted",
+          "dismissed" in a4.teacher_stats.history_line("99", "en"))
+
+
 def main() -> int:
     test_pending_replies()
     test_parse_and_shapes()
+    test_retry_and_elicited()
+    with tempfile.TemporaryDirectory() as td:
+        test_teacher_stats(Path(td))
     with tempfile.TemporaryDirectory() as td:
         asyncio.run(integration_process_reaction(Path(td)))
+    with tempfile.TemporaryDirectory() as td:
+        asyncio.run(integration_retry_and_elicit(Path(td)))
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")

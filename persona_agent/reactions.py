@@ -21,7 +21,9 @@ Pure logic only (no I/O, no clock reads — callers pass timestamps):
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from collections import defaultdict, deque
 
 REACTION_TYPES = {"correction", "rejection", "positive", "neutral"}
@@ -38,7 +40,7 @@ ADJUDICATOR_PROMPTS = {
 [the reaction]
 {reactor}: {reaction_text}
 
-Reactor identity: {reactor_role}.
+Reactor identity: {reactor_role}.{reactor_history}
 
 Classify the reaction:
 - "correction" — the user says the reply was wrong AND states or implies the right direction ("no, I meant X", "that's not what I asked, I wanted Y")
@@ -55,8 +57,10 @@ Then judge whether to LEARN from it (accept):
 
 If accepting a correction/rejection, write "better": how the bot SHOULD have replied — in the bot's own casual voice, short, no assistant tone, satisfying the user's actual intent. Otherwise "better" is "".
 
+If (and only if) reaction is "rejection" and accept is true, also write "ask": ONE short follow-up in the bot's casual voice asking what they actually meant (e.g. "wait what did you mean then" — no apology spam, no assistant tone). Otherwise "ask" is "".
+
 Output ONE line of JSON only, no markdown fences:
-{{"reaction":"correction|rejection|positive|neutral","accept":true|false,"reason":"<one short sentence>","better":"<improved reply or empty>","scenario":"<2-5 word scene label>"}}""",
+{{"reaction":"correction|rejection|positive|neutral","accept":true|false,"reason":"<one short sentence>","better":"<improved reply or empty>","ask":"<short follow-up or empty>","scenario":"<2-5 word scene label>"}}""",
     "zh": """你是群聊人设 bot「{bot_name}」的自审模块。bot 发了一条回复,有用户对它作出了反应。判断这个反应的含义,以及 bot 是否应该从中学习。
 
 [bot 回复前的聊天上下文]
@@ -68,7 +72,7 @@ Output ONE line of JSON only, no markdown fences:
 [用户的反应]
 {reactor}: {reaction_text}
 
-反应者身份: {reactor_role}。
+反应者身份: {reactor_role}。{reactor_history}
 
 先给反应分类:
 - "correction" — 用户说回复错了并且说出/暗示了正确方向(「不是,我是说X」「我问的不是这个,我想要Y」)
@@ -85,8 +89,10 @@ Output ONE line of JSON only, no markdown fences:
 
 如果采信 correction/rejection,写出 "better": bot 当时应该怎么回——用 bot 自己的口语人设、简短、没有助手腔、满足用户真实意图。否则 "better" 留空。
 
+如果(且仅当)reaction 是 "rejection" 且 accept 为 true,再写一个 "ask": 一句 bot 口吻的自然追问,问对方到底想要什么(比如「啊?那你是想问啥」——不堆道歉、没有助手腔)。否则 "ask" 留空。
+
 只输出一行 JSON,不要 markdown 包裹:
-{{"reaction":"correction|rejection|positive|neutral","accept":true|false,"reason":"<一句短话>","better":"<改进后的回复或空>","scenario":"<2-6字场景标签>"}}""",
+{{"reaction":"correction|rejection|positive|neutral","accept":true|false,"reason":"<一句短话>","better":"<改进后的回复或空>","ask":"<简短追问或空>","scenario":"<2-6字场景标签>"}}""",
 }
 
 
@@ -97,20 +103,31 @@ class PendingReplies:
     A successful match POPS the entry — each reply learns at most once.
     """
 
-    def __init__(self, max_per_conv: int = 4, ttl_sec: float = 900.0):
+    def __init__(self, max_per_conv: int = 4, ttl_sec: float = 900.0,
+                 fix_window_sec: float = 600.0, elicit_window_sec: float = 240.0):
         self.max_per_conv = max_per_conv
         self.ttl_sec = ttl_sec
+        # Retry-completion (Alexa-style): after an accepted rejection, the
+        # bot's next reply in that conversation is a candidate FIX for the
+        # rejected one; if the user then reacts positively (or just moves on),
+        # (rejected -> fix) becomes a preference pair with zero user effort.
+        self.fix_window_sec = fix_window_sec
+        # Elicitation (self-feeding-chatbot-style): when the bot just asked
+        # the rejector what they meant, that person's next message counts as
+        # a directed reaction even without an @ (short window, that uid only).
+        self.elicit_window_sec = elicit_window_sec
         self._by_conv: dict[str, deque] = defaultdict(
             lambda: deque(maxlen=self.max_per_conv))
+        self._awaiting_fix: dict[str, dict] = {}
 
     def record(self, conv_id: str, *, reply: str, ctx_lines: list[str],
                mode: str, intent: str = "", target_uid: str = "",
                target_name: str = "", mids: list[str] | None = None,
-               ts: float = 0.0) -> None:
+               elicited_uid: str = "", ts: float = 0.0) -> None:
         reply = (reply or "").strip()
         if not reply or reply.upper() == "PASS":
             return
-        self._by_conv[conv_id].append({
+        entry = {
             "reply": reply,
             "ctx_lines": list(ctx_lines or [])[-4:],
             "mode": mode,
@@ -118,8 +135,28 @@ class PendingReplies:
             "target_uid": str(target_uid or ""),
             "target_name": target_name or "",
             "mids": [str(m) for m in (mids or [])],
+            "elicited_uid": str(elicited_uid or ""),
             "ts": ts,
-        })
+        }
+        # Attach the rejected reply this one may be fixing (retry-completion).
+        bad = self._awaiting_fix.pop(conv_id, None)
+        if bad is not None and ts - bad.get("rejected_ts", 0.0) <= self.fix_window_sec:
+            entry["fixes"] = {"reply": bad["reply"],
+                              "ctx_lines": bad.get("ctx_lines", []),
+                              "mode": bad.get("mode", "called")}
+        self._by_conv[conv_id].append(entry)
+
+    def note_rejection(self, conv_id: str, entry: dict, ts: float) -> None:
+        """Remember that `entry`'s reply was rejected: the bot's NEXT reply in
+        this conversation becomes a candidate fix for it (latest wins)."""
+        self._awaiting_fix[conv_id] = {**entry, "rejected_ts": ts}
+
+    def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
+        """True if an elicited entry for `uid` is still pending (i.e. the user
+        has not answered the bot's what-did-you-mean ask yet)."""
+        self._expire(conv_id, now)
+        q = self._by_conv.get(conv_id)
+        return bool(q) and any(e.get("elicited_uid") == str(uid) for e in q)
 
     def _expire(self, conv_id: str, now: float) -> None:
         q = self._by_conv.get(conv_id)
@@ -155,11 +192,20 @@ class PendingReplies:
             return None
         if at_bot or (is_private and str(sender_uid) == q[-1]["target_uid"]):
             return q.pop()
+        # Elicited exception: the bot just asked THIS user what they meant, so
+        # their next message counts even without an @ (short window).
+        for i in range(len(q) - 1, -1, -1):
+            e = q[i]
+            if (e.get("elicited_uid") == str(sender_uid)
+                    and now - e["ts"] <= self.elicit_window_sec):
+                del q[i]
+                return e
         return None
 
 
 def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
-                             is_owner: bool, bot_name: str, lang: str) -> str:
+                             is_owner: bool, bot_name: str, lang: str,
+                             reactor_history: str = "") -> str:
     tmpl = ADJUDICATOR_PROMPTS.get(lang, ADJUDICATOR_PROMPTS["en"])
     if lang == "zh":
         role = "owner(bot 最信任的人)" if is_owner else "普通群友"
@@ -173,6 +219,7 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
         reactor=reactor_name or "user",
         reaction_text=(reaction_text or "")[:300],
         reactor_role=role,
+        reactor_history=(" " + reactor_history) if reactor_history else "",
     )
 
 
@@ -188,6 +235,7 @@ def parse_adjudication(raw: str) -> dict | None:
         return None
     d["accept"] = bool(d.get("accept"))
     d["better"] = str(d.get("better") or "").strip()
+    d["ask"] = str(d.get("ask") or "").strip()
     d["scenario"] = str(d.get("scenario") or "").strip()
     d["reason"] = str(d.get("reason") or "").strip()
     return d
@@ -238,3 +286,77 @@ def to_example(entry: dict, adj: dict, ts: str) -> dict | None:
         "score": 5,
         "src": "user_reaction",
     }
+
+
+def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
+    """Retry-completion pair: the rejected reply -> the bot's own retry that
+    the user then accepted. Zero user effort (Alexa-self-learning style)."""
+    reply = str(bad.get("reply") or "").strip()
+    better = (good_reply or "").strip()
+    if not reply or not better or reply == better:
+        return None
+    return {
+        "ts": ts,
+        "scenario": f"retry-fixed:{bad.get('mode', '')}",
+        "context": list(bad.get("ctx_lines") or [])[:4],
+        "mode": bad.get("mode", "called"),
+        "reply": reply,
+        "rating": "better",
+        "better": better,
+        "src": "user_reaction",
+        "via": "retry-completion",
+    }
+
+
+class TeacherStats:
+    """Per-user teaching reputation (BlenderBot-3x lesson: a third of the
+    wild is adversarial). Counts how often a user's corrections/rejections
+    were adopted vs dismissed; the adjudicator sees the track record, and
+    users with a consistently bad one are hard-blocked without an LLM call.
+    Owner is never tracked (already top priority). Persisted as a small JSON."""
+
+    def __init__(self, path):
+        self.path = path
+        self._d: dict[str, dict] = {}
+        try:
+            if path.exists():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    self._d = loaded
+        except (OSError, json.JSONDecodeError):
+            self._d = {}
+
+    def update(self, uid: str, name: str, accepted: bool) -> None:
+        rec = self._d.setdefault(str(uid), {"accepted": 0, "dismissed": 0})
+        rec["accepted" if accepted else "dismissed"] += 1
+        rec["name"] = name
+        self._save()
+
+    def _counts(self, uid: str) -> tuple[int, int]:
+        rec = self._d.get(str(uid)) or {}
+        return int(rec.get("accepted", 0)), int(rec.get("dismissed", 0))
+
+    def hard_block(self, uid: str) -> bool:
+        """Persistently bad teachers stop costing adjudicator calls at all."""
+        acc, dis = self._counts(uid)
+        total = acc + dis
+        return total >= 5 and acc / total <= 0.1
+
+    def history_line(self, uid: str, lang: str) -> str:
+        """One factual sentence for the adjudicator prompt; '' if no history."""
+        acc, dis = self._counts(uid)
+        if acc + dis == 0:
+            return ""
+        if lang == "zh":
+            return f"此人过往教学记录: {acc} 次被采纳, {dis} 次被驳回。"
+        return (f"This user's teaching track record: {acc} adopted, "
+                f"{dis} dismissed.")
+
+    def _save(self) -> None:
+        try:
+            fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(self._d, fh, ensure_ascii=False, indent=1)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
