@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import evolution_benchmark as bench  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
+from persona_agent import evolution  # noqa: E402
 
 _failures: list[str] = []
 
@@ -87,10 +88,64 @@ def test_drive_scenario_stubbed() -> None:
         check("drive returns reply", reply == "yo whats up")
 
 
+def test_run_arm_isolation_and_growth() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        train = [{"id": "tr1", "family": "service-desk", "scenario": "s",
+                  "mode": "called", "context": ["alex: <bot-name> hi"]}]
+        holdout = [{"id": "ho1", "family": "service-desk", "scenario": "s",
+                    "mode": "called", "context": ["taylor: <bot-name> yo"]}]
+
+        # Patch the Agent factory to stub the model + self-eval so no network.
+        orig = bench.build_isolated_agent
+
+        def patched(state_dir, bot_name, lang, eval_enable):
+            a = orig(state_dir, bot_name, lang, eval_enable)
+
+            async def fake_call(system, messages, model, **kw):
+                return json.dumps({"reasoning": "x", "intent": "chat",
+                                   "reply": "Great question! Let me help.", "mem": ""})
+            a._call_anthropic = fake_call
+
+            async def fake_eval(group_id, mode, user_msg, reply,
+                                sticker_files=None, intent="", ctx_msgs=None):
+                return None  # no-op self-eval; the loop is driven by fake_eval_tick
+            a._evaluate_reply = fake_eval
+
+            async def fake_eval_tick():
+                # Emulate a low score turning into one feedback pair.
+                pair = {"ts": "t", "scenario": "s", "context": ["alex: hi"],
+                        "mode": "called", "reply": "Great question! Let me help.",
+                        "rating": "better", "better": "lol what's up", "src": "auto_reviewer"}
+                evolution.append_jsonl(a.feedback_file, [pair])
+                return 1
+            a._evolve_tick = fake_eval_tick
+            return a
+        bench.build_isolated_agent = patched
+        try:
+            on = asyncio.run(bench.run_arm(train, holdout, "Robin", "en", 2,
+                                           True, tmp / "on", "claude"))
+            off = asyncio.run(bench.run_arm(train, holdout, "Robin", "en", 2,
+                                            False, tmp / "off", "claude"))
+        finally:
+            bench.build_isolated_agent = orig
+
+        check("on arm rounds recorded", len(on["rounds"]) == 3)  # round 0 + 2
+        check("on arm feedback grew", on["rounds"][-1]["feedback_pairs"] >= 1)
+        check("off arm feedback frozen", off["rounds"][-1]["feedback_pairs"] == 0)
+        check("holdout replies present",
+              all(r["holdout"] for r in on["rounds"]))
+        # Repo state untouched: the real feedback file must be unchanged.
+        real_fb = ROOT / "data" / "feedback.en.jsonl"
+        check("repo feedback untouched (no auto_reviewer rows)",
+              "auto_reviewer" not in real_fb.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     test_scenario_sets()
     test_seed_buffer()
     test_drive_scenario_stubbed()
+    test_run_arm_isolation_and_growth()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")

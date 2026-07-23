@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from persona_agent import evolution  # noqa: E402
 
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
@@ -85,3 +89,89 @@ async def drive_scenario(agent, scenario: dict, bot_name: str, group_id: str = "
     reply, _intent, _mem = await agent._think(
         group_id, scenario["mode"], latest, caller_override=caller)
     return reply or ""
+
+
+def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable: bool):
+    """An Agent whose EVERY writable state path lives under state_dir, so a
+    benchmark run cannot touch the repo's real memory/eval/feedback files."""
+    from persona_agent.agent import Agent
+    state_dir.mkdir(parents=True, exist_ok=True)
+    a = Agent(
+        api_key="benchmark-key", bot_qq="10001", bot_name=bot_name,
+        napcat_api="http://127.0.0.1:9",
+        memory_file=str(state_dir / "memory.json"), persona="benchmark persona",
+        eval_enable=eval_enable, eval_file=str(state_dir / "eval.jsonl"),
+        stickers_dir=str(state_dir / "stickers"),
+        stickers_file=str(state_dir / "stickers.json"),
+        message_debounce_sec=0, lang=lang,
+    )
+    # Paths the ctor anchors to ROOT rather than the args above — redirect them.
+    a._seen_msg_file = state_dir / "seen_msg_ids.json"
+    a.core_memory_file = state_dir / "core_memory.json"
+    a.candidates_file = state_dir / "candidates.jsonl"
+    a.feedback_file = state_dir / f"feedback.{lang}.jsonl"
+    a.examples_file = state_dir / f"examples.{lang}.jsonl"
+    a._seen_msg_ids.clear()
+    a.core_memory.clear()
+    # Force retrieval caches to reload from the (empty) redirected files.
+    a._pairs_mtime = 0.0
+    a._examples_mtime = 0.0
+    a._pairs_cache = []
+    a._examples_cache = []
+    a._auto_examples_seen = set()
+    return a
+
+
+def _count_feedback(agent) -> int:
+    return len(evolution.load_feedback_keys(agent.feedback_file))
+
+
+async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_model: str):
+    if evolve_on:
+        for scn in train:
+            try:
+                latest, _caller = seed_buffer(agent, "g1", scn, bot_name)
+                reply, intent, _mem = await agent._think(
+                    "g1", scn["mode"], latest, caller_override=_caller)
+                reply = reply or ""
+                # Self-eval writes eval.jsonl (the loop's learning signal).
+                # Real signature: _evaluate_reply(group_id, mode, user_msg,
+                # reply, sticker_files=None, intent="", ctx_msgs=None). Called
+                # directly (not _spawn) so eval.jsonl is on disk before
+                # _evolve_tick consumes it. ctx_msgs are the scenario context
+                # lines with <bot-name> substituted (the same "name: text" shape
+                # _evaluate_reply expects).
+                ctx = [ln.replace("<bot-name>", bot_name) for ln in scn["context"]]
+                await agent._evaluate_reply(
+                    "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
+            except Exception as e:
+                print(f"  [train {scn['id']}] error: {type(e).__name__}: {e}")
+        try:
+            await agent._evolve_tick()
+        except Exception as e:
+            print(f"  [evolve_tick] error: {type(e).__name__}: {e}")
+    out = []
+    for scn in holdout:
+        try:
+            reply = await drive_scenario(agent, scn, bot_name)
+        except Exception as e:
+            print(f"  [holdout {scn['id']}] error: {type(e).__name__}: {e}")
+            reply = ""
+        out.append({"scenario_id": scn["id"], "family": scn["family"], "reply": reply})
+    return out
+
+
+async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir, judge_model):
+    if state_dir.exists():
+        shutil.rmtree(state_dir)
+    agent = build_isolated_agent(state_dir, bot_name, lang, eval_enable=evolve_on)
+    arm = "evolve-on" if evolve_on else "evolve-off"
+    results = []
+    # Round 0: baseline, no learning even on the on-arm.
+    base = await run_round(agent, train, holdout, bot_name, evolve_on=False, judge_model=judge_model)
+    results.append({"round": 0, "feedback_pairs": _count_feedback(agent), "holdout": base})
+    for k in range(1, rounds + 1):
+        rd = await run_round(agent, train, holdout, bot_name, evolve_on=evolve_on, judge_model=judge_model)
+        results.append({"round": k, "feedback_pairs": _count_feedback(agent), "holdout": rd})
+        print(f"[{arm}] round {k}/{rounds}: feedback_pairs={_count_feedback(agent)}")
+    return {"arm": arm, "rounds": results}
