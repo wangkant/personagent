@@ -190,6 +190,20 @@ def test_outputs() -> None:
         check("svg parses as xml", True)
 
 
+def test_export_writes_blind_inbox() -> None:
+    arms = [{"arm": "evolve-on", "rounds": [
+        {"round": 0, "feedback_pairs": 0,
+         "holdout": [{"scenario_id": "ho1", "family": "f", "reply": "hi there"}]}]}]
+    inbox, _ = bench.build_inbox(arms, votes=1)
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        asyncio.run(bench.judge_export(inbox, out))
+        written = (out / "judge_inbox.jsonl").read_text(encoding="utf-8")
+        rec = json.loads(written.splitlines()[0])
+        check("exported item blind", set(rec) == {"item_id", "reply"})
+        check("exported reply present", rec["reply"] == "hi there")
+
+
 def main() -> int:
     test_scenario_sets()
     test_seed_buffer()
@@ -197,6 +211,7 @@ def main() -> int:
     test_run_arm_isolation_and_growth()
     test_inbox_is_blind_and_ingest()
     test_outputs()
+    test_export_writes_blind_inbox()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")

@@ -371,6 +371,7 @@ python tests/test_evolution.py
 - `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
 - `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 `data/examples.<lang>.jsonl`。
 - `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁;加 `--apply` 逐条批准写入 `feedback.jsonl`（见[自进化](#自进化)）。
+- `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。独立裁判(Claude)盲评,学习信号和测量信号不共用模型。
 
 ## 隐私
 

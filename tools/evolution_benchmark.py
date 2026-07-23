@@ -8,17 +8,25 @@ docs/superpowers/specs/2026-07-22-evolution-benchmark-design.md.
 """
 from __future__ import annotations
 
+import argparse
+import asyncio
 import hashlib
 import json
+import os
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from dotenv import load_dotenv
+
 from persona_agent import evolution  # noqa: E402
+
+load_dotenv(ROOT / ".env", override=True)
+
+DATA = ROOT / "data" / "benchmark"
 
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
@@ -302,3 +310,123 @@ def write_svg(agg: dict, path: Path) -> None:
                      f'style=\'{_FONT};font-size:13px;fill:{color};font-weight:500\'>{arm}</text>')
     parts.append('</svg>')
     path.write_text("\n".join(parts) + "\n", encoding="utf-8", newline="\n")
+
+
+async def judge_export(inbox: list[dict], out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p = out_dir / "judge_inbox.jsonl"
+    p.write_text("".join(json.dumps({"item_id": it["item_id"], "reply": it["reply"]},
+                                    ensure_ascii=False) + "\n" for it in inbox),
+                 encoding="utf-8", newline="\n")
+    print(f"\nWrote {len(inbox)} blind items to {p}")
+    print("Score each into judge_scores.jsonl (one JSON per line):")
+    print('  {"item_id": "...", "score": 1-5, "reason": "..."}')
+    print("Rubric: 5 = reads like a real person; 1 = obvious AI tell "
+          "(service-desk tone, bullet lists, name-at-start, over-explaining, "
+          "answered the wrong person, jumped in mid-burst).")
+    print(f"Then: python tools/evolution_benchmark.py ingest --outdir {out_dir}")
+
+
+async def judge_anthropic(inbox: list[dict], model: str) -> dict:
+    import anthropic
+    client = anthropic.AsyncAnthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+        base_url=os.getenv("ANTHROPIC_BASE_URL", "") or None)
+    RUBRIC = ("Rate 1-5 how much this group-chat reply reads like a real person "
+              "(5=human, 1=obvious AI tell). Reply ONLY with JSON "
+              '{"score": int, "reason": "short"}.\n\nReply: ')
+    scores: dict = {}
+    for it in inbox:
+        try:
+            resp = await client.messages.create(
+                model=model, max_tokens=120,
+                messages=[{"role": "user", "content": RUBRIC + it["reply"]}])
+            raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
+            import re
+            raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
+            d = json.loads(raw)
+            scores[it["item_id"]] = {"score": int(d["score"]), "reason": d.get("reason", "")}
+        except Exception as e:
+            print(f"  judge error {it['item_id']}: {e}")
+            scores[it["item_id"]] = {"score": 3, "reason": f"judge-failed: {e}"}
+    return scores
+
+
+def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
+    # 'synthetic' copies the committed starter datasets so both arms begin
+    # identically; 'empty' starts from nothing.
+    state_dir.mkdir(parents=True, exist_ok=True)
+    if mode != "synthetic":
+        return
+    for kind in ("examples", "feedback"):
+        src = ROOT / "data" / f"{kind}.{lang}.jsonl"
+        if src.exists():
+            (state_dir / f"{kind}.{lang}.jsonl").write_text(
+                src.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+
+
+async def cmd_run(args) -> int:
+    bot_name = os.getenv("BOT_NAME", "Robin") or "Robin"
+    train = load_scenarios(DATA / f"scenarios.train.{args.lang}.jsonl")
+    holdout = load_scenarios(DATA / f"scenarios.holdout.{args.lang}.jsonl")
+    out = Path(args.outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    arms = []
+    for evolve_on in (True, False):
+        sd = out / ("state-on" if evolve_on else "state-off")
+        arm = await run_arm(train, holdout, bot_name, args.lang, args.rounds,
+                            evolve_on, sd, judge_model=args.judge_model)
+        arms.append(arm)
+    (out / "arms.json").write_text(json.dumps(arms, ensure_ascii=False, indent=2),
+                                   encoding="utf-8", newline="\n")
+    inbox, key_map = build_inbox(arms, votes=args.holdout_votes)
+    (out / "key_map.json").write_text(json.dumps(key_map, ensure_ascii=False, indent=2),
+                                      encoding="utf-8", newline="\n")
+    if args.judge == "anthropic":
+        scores = await judge_anthropic(inbox, args.judge_model)
+        (out / "judge_scores.jsonl").write_text(
+            "".join(json.dumps({"item_id": k, **v}, ensure_ascii=False) + "\n"
+                    for k, v in scores.items()), encoding="utf-8", newline="\n")
+        return _ingest(out)
+    await judge_export(inbox, out)
+    return 0
+
+
+def _ingest(out: Path) -> int:
+    key_map = json.loads((out / "key_map.json").read_text(encoding="utf-8"))
+    # key_map JSON keys are strings; tuples were flattened — rebuild lookup.
+    sp = out / "judge_scores.jsonl"
+    if not sp.exists():
+        print(f"error: {sp} not found. Score judge_inbox.jsonl first.")
+        return 1
+    scores = load_scores(sp)
+    agg = aggregate(key_map, scores)
+    write_csv(agg, out / "results.csv")
+    write_svg(agg, out / "curve.svg")
+    print(f"\nWrote {out/'results.csv'} and {out/'curve.svg'}")
+    for (arm, rnd), sc in sorted(agg["by_round"].items()):
+        print(f"  {arm} round {rnd}: {sc}")
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run")
+    r.add_argument("--rounds", type=int, default=4)
+    r.add_argument("--lang", default="en")
+    r.add_argument("--seed-state", default="synthetic", choices=["synthetic", "empty"])
+    r.add_argument("--holdout-votes", type=int, default=1)
+    r.add_argument("--judge", default="export", choices=["export", "anthropic"])
+    r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", "claude-opus-4-8"))
+    r.add_argument("--outdir", default=str(ROOT / "benchmark_runs" / "latest"))
+    i = sub.add_parser("ingest")
+    i.add_argument("--outdir", default=str(ROOT / "benchmark_runs" / "latest"))
+    args = p.parse_args()
+    if args.cmd == "run":
+        return asyncio.run(cmd_run(args))
+    return _ingest(Path(args.outdir))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
