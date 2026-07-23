@@ -21,6 +21,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 
 from . import evolution
+from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
 from .paths import ROOT
 from .stickers import StickerLibrary
@@ -563,6 +564,25 @@ class Agent:
         self.evolve_model = os.getenv("EVOLVE_MODEL", "") or self.eval_model
         self.candidates_file = ROOT / "candidates.jsonl"
 
+        # Reaction learning: the PRIMARY self-evolution signal. Every sent
+        # reply waits (bounded, TTL) for a directed user reaction — a quote of
+        # the bot's message, an @/name-call, or the interlocutor's next DM.
+        # An in-process adjudicator (single LLM call) classifies the reaction
+        # (correction / rejection / positive / neutral), filters banter and
+        # trolling (owner-weighted), and only then writes: corrections become
+        # feedback pairs, genuine positives bank the reply as an example.
+        # LLM self-eval remains as the fallback channel for replies that never
+        # get a directed reaction.
+        self.react_learn = os.getenv("REACT_LEARN", "true").lower() == "true"
+        self.react_model = os.getenv("REACT_MODEL", "") or self.judge_model
+        self.pending_reactions = reactions.PendingReplies(
+            max_per_conv=int(os.getenv("REACT_MAX_PENDING", 4)),
+            ttl_sec=float(os.getenv("REACT_TTL_SEC", 900)),
+        )
+        # Outbound message_ids of the current _send_qq call, per group —
+        # written under the per-group send lock, consumed right after it.
+        self._sent_mids: dict[str, list[str]] = {}
+
         stickers_path = Path(stickers_dir)
         if not stickers_path.is_absolute():
             stickers_path = ROOT / stickers_path
@@ -791,6 +811,25 @@ class Agent:
         is_noise = len(text.strip()) < 4 and not (is_at or is_called)
 
         is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
+
+        # Reaction learning: is this message a directed reaction to a recent
+        # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
+        # off the hot path; the message still flows through the normal reply
+        # pipeline below.
+        if self.react_learn:
+            _quote_mid = ""
+            for _seg in payload.get("message", []) or []:
+                if isinstance(_seg, dict) and _seg.get("type") == "reply":
+                    _qid = (_seg.get("data") or {}).get("id")
+                    if _qid is not None:
+                        _quote_mid = str(_qid)
+                    break
+            _r_entry = self.pending_reactions.match(
+                group_id, sender_uid=user_id, quote_mid=_quote_mid,
+                at_bot=is_at or is_called, now=time.time())
+            if _r_entry:
+                self._spawn(self._process_reaction(
+                    _r_entry, text, nickname, user_id, is_owner_msg))
 
         # Memory-command reply text (settled inside the lock, sent outside) — see below.
         mem_reply = None
@@ -1055,6 +1094,16 @@ class Agent:
         async with self.send_locks[group_id]:
             sticker_files = await self._send_qq(group_id, reply, at_uid)
 
+        # Reaction learning: this reply now waits (bounded, TTL) for a directed
+        # user reaction — see _process_reaction.
+        if self.react_learn:
+            self.pending_reactions.record(
+                group_id, reply=reply, ctx_lines=eval_ctx, mode=mode,
+                intent=_intent, target_uid=at_uid or user_id,
+                target_name=nickname, mids=self._sent_mids.get(group_id, []),
+                ts=time.time(),
+            )
+
         if self.on_reply:
             try:
                 await self.on_reply(group_id, reply)
@@ -1077,6 +1126,17 @@ class Agent:
         text = _unwrap_web_desc(await self._extract_text(payload))
         if not text:
             return False
+
+        # Reaction learning: in a 1:1 chat the interlocutor's next message IS
+        # the reaction to the bot's last reply (no ambiguity). Runs off-path.
+        if self.react_learn:
+            _r_entry = self.pending_reactions.match(
+                f"dm:{user_id}", sender_uid=user_id, is_private=True,
+                now=time.time())
+            if _r_entry:
+                self._spawn(self._process_reaction(
+                    _r_entry, text, "owner" if is_owner else "friend",
+                    user_id, is_owner))
 
         async with self.locks[f"private:{user_id}"]:
             self.last_dm_activity_at[user_id] = time.time()  # silence tracking for the proactive loop
@@ -1138,6 +1198,12 @@ class Agent:
 
             history.append({"role": "assistant", "content": reply})
             await self._send_private_qq(user_id, reply)
+            if self.react_learn:
+                self.pending_reactions.record(
+                    f"dm:{user_id}", reply=reply,
+                    ctx_lines=[f"user: {text[:100]}"],
+                    mode="owner" if is_owner else "called",
+                    target_uid=user_id, ts=time.time())
             logger.info("[Agent] private (%s): %s", user_id, reply[:80])
             return True
 
@@ -1291,6 +1357,14 @@ class Agent:
                         json={"user_id": int(user_id), "message": message},
                     )
                 if r.status_code == 200:
+                    # Remember the outbound message_id: reaction learning needs
+                    # it to attribute later quote-replies to this bot message.
+                    try:
+                        _mid = ((r.json() or {}).get("data") or {}).get("message_id")
+                        if _mid is not None:
+                            self._sent_mids.setdefault(group_id, []).append(str(_mid))
+                    except Exception:
+                        pass
                     return True
                 # Non-200 is a server-side reject, not a transient network
                 # error — retrying rarely helps, so log and stop.
@@ -3369,6 +3443,14 @@ class Agent:
                         json={"group_id": int(group_id), "message": message},
                     )
                 if r.status_code == 200:
+                    # Remember the outbound message_id: reaction learning needs
+                    # it to attribute later quote-replies to this bot message.
+                    try:
+                        _mid = ((r.json() or {}).get("data") or {}).get("message_id")
+                        if _mid is not None:
+                            self._sent_mids.setdefault(group_id, []).append(str(_mid))
+                    except Exception:
+                        pass
                     return True
                 # Non-200 is a server-side reject, not a transient network
                 # error — retrying rarely helps, so log and stop.
@@ -3393,6 +3475,9 @@ class Agent:
         self.stickers.dir) that were actually sent — used by the quality
         feedback loop so eval can attribute scores back to specific
         stickers."""
+        # Fresh mid list for this call; _napcat_send_group appends each sent
+        # chunk's message_id (same-group sends are serialized by send_locks).
+        self._sent_mids[group_id] = []
         text = self._sanitize_reply(text, self.agent_lang)
         sent_stickers: list[str] = []
         if not text:
@@ -3516,6 +3601,58 @@ class Agent:
                 return
             except Exception as e:
                 logger.warning("[Agent] loop_check_missed iteration failed: %s", e)
+
+    async def _process_reaction(self, entry: dict, reaction_text: str,
+                                reactor_name: str, reactor_uid: str,
+                                is_owner: bool) -> None:
+        """Adjudicate a directed user reaction to a pending bot reply and
+        learn from it: accepted corrections/rejections become feedback pairs,
+        genuine positives bank the reply as an example. Every adjudication —
+        accepted or not — is audited in candidates.jsonl. Never raises."""
+        try:
+            prompt = reactions.build_adjudicator_prompt(
+                entry, reaction_text, reactor_name, is_owner,
+                self.bot_name, self.agent_lang)
+            raw = await self._call_anthropic(
+                "", [{"role": "user", "content": prompt}],
+                model=self.react_model, max_tokens=400, enable_search=False)
+            adj = reactions.parse_adjudication(raw)
+            if not adj:
+                return
+            now = datetime.now().isoformat(timespec="seconds")
+            wrote = False
+            if adj["accept"]:
+                pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
+                if pair is not None:
+                    existing = evolution.load_feedback_keys(self.feedback_file)
+                    if (pair["reply"], pair["better"]) not in existing:
+                        wrote = evolution.append_jsonl(self.feedback_file, [pair]) > 0
+                        if wrote:
+                            logger.info(
+                                "[Agent] reaction learn (%s by %s): BAD %r -> OK %r",
+                                adj["reaction"], reactor_name,
+                                pair["reply"][:50], pair["better"][:50])
+                ex = reactions.to_example(entry, adj, now)
+                if ex is not None and ex["reply"] not in self._auto_examples_seen:
+                    self._append_example_with_trim(
+                        json.dumps(ex, ensure_ascii=False) + "\n")
+                    self._auto_examples_seen.add(ex["reply"])
+                    wrote = True
+                    logger.info("[Agent] reaction learn: reply banked as example (%s)",
+                                adj.get("scenario") or entry.get("mode", ""))
+            audit = {
+                "src": "user_reaction", "ts": now,
+                "reaction": adj["reaction"], "reactor": reactor_name,
+                "is_owner": bool(is_owner), "reason": adj["reason"],
+                "bot_reply": str(entry.get("reply") or "")[:120],
+                "reaction_text": (reaction_text or "")[:120],
+                "applied": "auto" if wrote else "rejected",
+            }
+            evolution.append_jsonl(self.candidates_file, [audit],
+                                   max_bytes=20_000_000)
+        except Exception as e:
+            logger.warning("[Agent] reaction processing failed: %s: %s",
+                           type(e).__name__, e)
 
     # ---------------- Self-evolution (eval -> feedback, unattended) ----------------
     async def loop_evolve(self) -> None:
