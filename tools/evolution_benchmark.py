@@ -134,6 +134,13 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     a.examples_file = state_dir / f"examples.{lang}.jsonl"
     a._seen_msg_ids.clear()
     a.core_memory.clear()
+    # Web search is noise for a persona benchmark (and adds a decision call +
+    # an external fetch per generation). Stub it so every reply is pure
+    # persona-pipeline output. Both arms are stubbed identically, so this
+    # cannot bias the on-vs-off comparison.
+    async def _no_search(messages, hint=""):
+        return ""
+    a._decide_and_search = _no_search
     # Force retrieval caches to reload from the (empty) redirected files.
     a._pairs_mtime = 0.0
     a._examples_mtime = 0.0
