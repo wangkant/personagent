@@ -170,12 +170,33 @@ def test_inbox_is_blind_and_ingest() -> None:
     check("aggregate errors on missing score", raised)
 
 
+def test_outputs() -> None:
+    agg = {"by_round": {("evolve-on", 0): 2.5, ("evolve-on", 1): 3.4,
+                        ("evolve-off", 0): 2.5, ("evolve-off", 1): 2.6},
+           "by_family": {}}
+    with tempfile.TemporaryDirectory() as td:
+        csv_p = Path(td) / "r.csv"
+        svg_p = Path(td) / "r.svg"
+        bench.write_csv(agg, csv_p)
+        bench.write_svg(agg, svg_p)
+        csv_txt = csv_p.read_text(encoding="utf-8")
+        check("csv header", csv_txt.splitlines()[0] == "arm,round,mean_score")
+        check("csv has on row", "evolve-on,1,3.4" in csv_txt)
+        svg_txt = svg_p.read_text(encoding="utf-8")
+        check("svg is svg", svg_txt.lstrip().startswith("<svg"))
+        check("svg well-formed", svg_txt.count("<svg") == 1 and "</svg>" in svg_txt)
+        import xml.dom.minidom
+        xml.dom.minidom.parseString(svg_txt)  # raises if malformed
+        check("svg parses as xml", True)
+
+
 def main() -> int:
     test_scenario_sets()
     test_seed_buffer()
     test_drive_scenario_stubbed()
     test_run_arm_isolation_and_growth()
     test_inbox_is_blind_and_ingest()
+    test_outputs()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
