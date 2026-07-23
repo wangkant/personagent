@@ -186,6 +186,12 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                 ctx = [ln.replace("<bot-name>", bot_name) for ln in scn["context"]]
                 await agent._evaluate_reply(
                     "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
+                # Optional throttle between eval calls: a cross-vendor eval
+                # endpoint (e.g. Moonshot/kimi) rate-limits far below the tight
+                # benchmark loop. BENCH_EVAL_DELAY seconds keeps it under the cap.
+                _delay = float(os.getenv("BENCH_EVAL_DELAY", "0"))
+                if _delay:
+                    await asyncio.sleep(_delay)
             except Exception as e:
                 print(f"  [train {scn['id']}] error: {type(e).__name__}: {e}")
         try:
