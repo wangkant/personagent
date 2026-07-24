@@ -50,6 +50,9 @@ REVIEWER_MODEL = (
     or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 )
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+# Keep the newest N machine-generated pairs (0 = no cap) — mirrors the running
+# agent so both writers converge on the same pool size.
+FEEDBACK_MAX_AUTO = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
@@ -184,6 +187,16 @@ def apply_candidates(auto_yes: bool) -> None:
             verdicts[ts] = "rejected"
         # anything else: leave pending for a later run
 
+    # Same auto-pool cap the running agent applies, on the same runtime file
+    # (machine pairs carry a "src"; pairs you rated yourself don't and are
+    # never dropped, and the data/ seed is never touched), so approving a
+    # batch here can't push the pool past what retrieval wants to scan.
+    trimmed = evolution.trim_pool(
+        feedback, max_auto=FEEDBACK_MAX_AUTO,
+        is_auto=lambda r: bool(r.get("src")))
+    if trimmed:
+        logger.info("feedback auto-pool trimmed: %d -> %d pairs (cap=%d)",
+                    trimmed[0], trimmed[1], FEEDBACK_MAX_AUTO)
     n = evolution.append_jsonl(feedback, approved)
     if n < len(approved):
         logger.warning("feedback file at size cap: %d of %d pairs written",

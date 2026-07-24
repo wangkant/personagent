@@ -181,6 +181,18 @@ def load_feedback_keys(paths: Path | Iterable[Path]) -> set[tuple[str, str]]:
     }
 
 
+def _last_byte(path: Path) -> bytes:
+    """Last byte of `path`, or b"" when empty/unreadable."""
+    try:
+        with path.open("rb") as fh:
+            if fh.seek(0, 2) == 0:
+                return b""
+            fh.seek(-1, 2)
+            return fh.read(1)
+    except OSError:
+        return b""
+
+
 def append_jsonl(path: Path, records: list[dict],
                  max_bytes: int = FEEDBACK_MAX_BYTES) -> int:
     """Append records; returns how many were written. Refuses past max_bytes
@@ -194,6 +206,12 @@ def append_jsonl(path: Path, records: list[dict],
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     with path.open("a", encoding="utf-8", newline="\n") as fh:
+        # A dataset that doesn't end in a newline (hand-edited, most likely)
+        # would otherwise have its last record glued to the first appended one,
+        # destroying both.
+        if size and _last_byte(path) != b"\n":
+            fh.write("\n")
+            size += 1
         for rec in records:
             line = json.dumps(rec, ensure_ascii=False) + "\n"
             if size + len(line.encode("utf-8")) > max_bytes:
@@ -202,6 +220,64 @@ def append_jsonl(path: Path, records: list[dict],
             size += len(line.encode("utf-8"))
             written += 1
     return written
+
+
+def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
+              is_auto=lambda r: True) -> tuple[int, int] | None:
+    """Cap the machine-generated half of a growing retrieval dataset.
+
+    examples.jsonl / feedback.jsonl are scanned on the reply hot path but only
+    ever surface a handful of entries per turn (top-4 examples, top-6 pairs),
+    so an unbounded pool buys nothing. It costs a longer relevance scan, and —
+    the part that actually matters — it lets months-old auto-banked entries,
+    written under an older prompt and waved through by a self-eval that grades
+    generously, pile up and outvote the newer ones. Keeping the newest
+    `max_auto` machine entries makes retrieval track the persona as it is now.
+
+    Hand-curated entries are NEVER dropped: `is_auto` is what tells them apart
+    (examples carry a "score", machine feedback pairs carry a "src"), and the
+    curated head is the bootstrap pool a fresh checkout retrieves from.
+
+    Rewrites only once the overshoot exceeds `slack` (default 10% of the cap),
+    so a pool sitting at the cap doesn't rewrite the whole file on every single
+    append — the auto count therefore oscillates in [max_auto, max_auto+slack]
+    rather than pinning to max_auto exactly. Atomic (tmp + replace). Returns
+    (before, after) auto counts if it rewrote, else None — including when
+    there is nothing to do or max_auto <= 0 (no cap).
+    """
+    if max_auto <= 0 or not path.exists():
+        return None
+    if slack is None:
+        slack = max(8, max_auto // 10)
+    # Called on every append but rewrites once per `slack` of them, so decide
+    # without parsing: the auto count can never exceed the line count. (A file
+    # missing its final newline undercounts by one, which only ever defers a
+    # trim to the next append.)
+    try:
+        with path.open("rb") as fh:
+            if fh.read().count(b"\n") <= max_auto + max(0, slack):
+                return None
+    except OSError:
+        return None
+    records = _read_jsonl(path)
+    auto_at = [i for i, r in enumerate(records) if is_auto(r)]
+    if len(auto_at) <= max_auto + max(0, slack):
+        return None
+    dropped = set(auto_at[:len(auto_at) - max_auto])
+    kept = [r for i, r in enumerate(records) if i not in dropped]
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            for r in kept:
+                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return len(auto_at), len(auto_at) - len(dropped)
 
 
 def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:

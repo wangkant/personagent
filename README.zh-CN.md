@@ -56,7 +56,7 @@
 agent 围绕自己的输出闭合了一整条学习回路——全部热加载进动态 few-shot 检索,无需重启：
 
 - **从真实用户反应中学（主信号）。** 每条发出的回复会短暂等待一次*指向它的*反应——有人引用了 bot 那条消息、@了它,或在私聊里直接接话。进程内的裁决官对反应分类：「不是,我是说X」是**纠正**（正确答案就在用户话里——直接变成 BAD → OK 偏好对）；换个说法把同一件事又问一遍是**否定**（没接住）；笑了/接梗是**正向**（这条回复作为验证过的好样本进范例池）。写入之前裁决官会过滤玩笑和恶意投喂——owner 的纠正权重最高,陌生人必须一眼就对——每次裁决都记入 `candidates.jsonl` 审计。判断「一个反应意味着什么」远比判断「这句话像不像真人」容易,这正是这条通道在朴素 LLM 自评分过于手松的地方依然有效的原因。三个机制把回路挖得更深：**重试自动配对**（用户否定回复 A,bot 重来的 B 让对方满意——(A → B) 零成本闭合成偏好对）、**延迟追问**（否定但没学到具体东西时,bot 会在等完自己的正常回复后、每小时最多一次地自然问一句对方到底想要啥;答案随即按正式纠正裁决）、**教学信誉**（按用户记录教学被采纳/被驳回的历史喂给裁决官;一贯乱教的直接硬拉黑,连裁决调用都省了）。前人脉络（诚实注明）：这是把 deployment-time learning 研究线——[Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415) 的反馈追问、[Alexa self-learning](https://arxiv.org/pdf/1911.02557) 的重述-重试信号、[BlenderBot 3x](https://arxiv.org/abs/2306.04707) 的抗投毒教师过滤——移植成 training-free、in-context 的形态。
-- **从成功中学（兜底,全自动）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分的回复自动追加进 `runtime/examples.<lang>.jsonl`（去重、有大小上限）；仓库跟踪的 `data/examples.<lang>.jsonl` 只作为只读合成种子。
+- **从成功中学（兜底,全自动）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分的回复自动追加进 `runtime/examples.<lang>.jsonl`（去重、只保留最新 500 条机器写入的条目，见[池子大小](#自进化)）；仓库跟踪的 `data/examples.<lang>.jsonl` 只作为只读合成种子。
 - **从失败中学（兜底,无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。通过的改写以偏好对形式落进 `runtime/feedback.<lang>.jsonl`——检索里信号最强的形态——下一次同类输入就会在上下文里看到这条纠正。两种跑法：
   - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断,批准 / 拒绝 / 编辑后才写入（`--yes` 跳过人审）。
   - **无人值守:** 设 `EVOLVE_AUTO=true`,进程内后台循环定时做同样的事,只处理明确的失败（`score <= EVOLVE_THRESHOLD`,默认 2）。每次诊断——无论采纳还是拒绝——都记录在 `candidates.jsonl`,CLI 和循环永远不会重复处理同一条,你也随时能审计 bot 教了自己什么。
@@ -264,6 +264,8 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 
 检索会合并 `data/{examples,feedback}.<lang>.jsonl` 里的只读合成种子与 `runtime/{examples,feedback}.<lang>.jsonl` 里的运行时学习数据。它使用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
 
+**池子大小是有意设上限的。** 每轮只有 4 条示例 + 6 对对比样本能进 prompt，所以 `runtime/` 下的学习数据各自只保留最新的 `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` 条机器写入的条目（默认各 500，设 `0` 关闭上限）。这既是性能设置也是质量设置：几个月前攒下的条目出自更早的 prompt 和一个打分偏松的自评器，一旦堆到几千条就会把近期的条目压下去。**你自己写的或人工批准过的条目不计入上限、也永远不会被删** —— `data/` 下的种子是只读的，而你通过 `prompt_lab.py` 批准的条目虽然写在 `runtime/`，但不带机器标记，同样在每次裁剪中完整保留。
+
 `data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
 ## 表情包质量管线
@@ -373,9 +375,10 @@ python tests/test_evolution.py
 python tests/test_benchmark.py
 python tests/test_reactions.py
 python tests/test_http.py
+python tests/test_retrieval.py
 ```
 
-它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑，以及自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）。提交 PR 前请先跑一遍。
+它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习，以及少样本检索与其增量数据集加载。提交 PR 前请先跑一遍。
 
 用于 prompt 与人设调优：
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import heapq
 import ipaddress
 import json
 import logging
@@ -208,6 +209,133 @@ def _focus_tokens(text: str, lang: str = "en") -> set:
         }
         return cjk_ngrams | ascii_tokens
     return ascii_tokens
+
+
+# ---- Retrieval dataset loading (examples.jsonl / feedback.jsonl) ----
+# Both files are append-only in normal operation: _evaluate_reply banks
+# high-scoring replies, _process_reaction banks accepted reactions, and the
+# offline CLIs append reviewed pairs. They are also read on the reply hot path
+# (_examples_for_prompt runs on every LLM turn), and they grow to the 5 MB trim
+# ceiling — so "mtime moved -> reparse the whole file" made the agent's own
+# append cost the next reply a multi-MB json.loads pass on the event loop.
+# The two helpers below make the common case parse only the appended tail and
+# move the per-record string/timestamp work out of the per-turn scorer.
+
+# Bytes of the already-consumed prefix re-read to prove it is unchanged before
+# trusting a seek-and-append. Cheap, and it turns "append-only" from an
+# assumption about every present and future writer into a checked precondition.
+_JSONL_SIG_BYTES = 64
+
+
+def _parse_jsonl(blob: bytes) -> list[dict]:
+    """Parse newline-delimited JSON objects, skipping blank and malformed lines.
+
+    Skip-the-bad-line (rather than abandoning the whole file) matches what the
+    feedback loader already did, and keeps one corrupted append from freezing
+    the few-shot pool at its pre-corruption state."""
+    out: list[dict] = []
+    for ln in blob.decode("utf-8", "replace").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict):
+            out.append(rec)
+    return out
+
+
+def _read_jsonl_appended(
+    path: Path, eof: int, offset: int, sig: bytes,
+) -> tuple[list[dict], bool, int, int, bytes]:
+    """Read `path` as JSONL, reusing whatever a previous read already consumed.
+
+    Fast path (append-only): taken when the previous read consumed complete
+    lines all the way to the then-EOF (``offset == eof > 0``), the file has
+    since grown, and the last ``_JSONL_SIG_BYTES`` bytes of that consumed
+    prefix are still byte-identical. Only the appended region is parsed.
+
+    Every other shape falls back to parsing the whole file: first read, a
+    shrink (the examples trim rewrites the file in place), an in-place rewrite,
+    a prefix that no longer matches, or a dangling newline-less last line left
+    over from the previous read.
+
+    Returns ``(records, appended_only, new_eof, new_offset, new_sig)``.
+    `new_offset` is the end of the last COMPLETE line, so a torn tail from an
+    append still in flight stays unconsumed until its newline lands; on a full
+    reload the fragment is still parsed (hand-edited files may legitimately
+    lack a trailing newline) but is not claimed as consumed, which just means
+    the next change re-reads the file whole instead of double-counting it.
+    """
+    with path.open("rb") as f:
+        size = f.seek(0, 2)
+        appended_only = bool(sig) and 0 < offset == eof < size
+        if appended_only:
+            f.seek(offset - len(sig))
+            appended_only = f.read(len(sig)) == sig
+        f.seek(offset if appended_only else 0)
+        blob = f.read()
+    cut = blob.rfind(b"\n")
+    if appended_only:
+        consumed = blob[:cut + 1] if cut >= 0 else b""
+        records = _parse_jsonl(consumed)
+        new_offset = offset + len(consumed)
+        new_sig = (sig + consumed)[-_JSONL_SIG_BYTES:]
+    else:
+        records = _parse_jsonl(blob)
+        new_offset = cut + 1 if cut >= 0 else 0
+        new_sig = blob[:new_offset][-_JSONL_SIG_BYTES:]
+    return records, appended_only, size, new_offset, new_sig
+
+
+def _needs_leading_newline(path: Path) -> bool:
+    """True when `path` has content that doesn't end in a newline.
+
+    Every JSONL writer here appends ``json.dumps(...) + "\\n"``, which glues
+    the new record onto an unterminated last line and destroys both. Files can
+    legitimately arrive in that state from hand-editing — and the head of
+    examples.jsonl is the hand-curated bootstrap pool, i.e. exactly the part
+    people edit by hand and the part _append_example_with_trim goes out of its
+    way to never drop."""
+    try:
+        with path.open("rb") as f:
+            if f.seek(0, 2) == 0:
+                return False
+            f.seek(-1, 2)
+            return f.read(1) != b"\n"
+    except OSError:
+        return False
+
+
+def _retrieval_fields(rec: dict) -> tuple[str, str, float]:
+    """Precompute what the few-shot relevance scorer needs, once per record at
+    load time instead of once per record on every LLM turn: the lowercased
+    scenario / context blobs the focus tokens are matched against, and the
+    entry's timestamp as an epoch float for the recency decay.
+
+    ts_epoch is 0.0 when there is no parsable timestamp — same as the old
+    inline parse, which simply skipped the recency bonus on failure. Naive
+    timestamps keep being read as local time (``.timestamp()`` and the old
+    ``datetime.now(None) - ts`` agree on that), aware ones as absolute."""
+    epoch = 0.0
+    ts = rec.get("ts")
+    if ts:
+        try:
+            epoch = datetime.fromisoformat(
+                str(ts).replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError, OSError, OverflowError):
+            epoch = 0.0
+    ctx = rec.get("context") or []
+    if not isinstance(ctx, list):
+        ctx = [ctx]
+    return (
+        str(rec.get("scenario") or "").lower(),
+        " ".join(str(c) for c in ctx).lower(),
+        epoch,
+    )
+
 
 TOOL_GUIDE = (
     "<tools>\n"
@@ -664,7 +792,17 @@ class Agent:
         self.examples_file = resolve_runtime_lang_file(
             "examples", "jsonl", self.agent_lang)
         self._examples_cache: list = []
-        self._examples_mtime: tuple[float, float] = (-1.0, -1.0)
+        self._examples_mtime: tuple = (-1.0, -1, -1.0, -1)  # see _pool_stamp
+        # Append-aware reload bookkeeping for the RUNTIME file (see
+        # _read_jsonl_appended): its size and consumed-byte offset at the last
+        # read, plus a signature of the tail of that consumed prefix. The seed
+        # is read-only, so only the runtime side can grow incrementally.
+        # Setting _examples_mtime to anything that isn't the recorded tuple
+        # (the `= 0.0` idiom the tools and tests use) still forces a full
+        # reparse — the fast path is gated on a previous successful load.
+        self._examples_eof: int = 0
+        self._examples_offset: int = 0
+        self._examples_sig: bytes = b""
         # In-memory dedup for runtime-appended examples: a frequent stock
         # phrase should only land in the pool once.
         self._auto_examples_seen: set[str] = set()
@@ -674,7 +812,20 @@ class Agent:
         self.feedback_file = resolve_runtime_lang_file(
             "feedback", "jsonl", self.agent_lang)
         self._pairs_cache: list = []
-        self._pairs_mtime: tuple[float, float] = (-1.0, -1.0)
+        self._pairs_mtime: tuple = (-1.0, -1, -1.0, -1)  # see _pool_stamp
+        self._pairs_eof: int = 0
+        self._pairs_offset: int = 0
+        self._pairs_sig: bytes = b""
+
+        # Retrieval pool caps (see evolution.trim_pool). Both pools are scanned
+        # on every LLM turn but only ever surface 4 examples + 6 pairs, so
+        # letting the learned runtime/ files grow to the byte ceiling (~16k
+        # entries) costs a longer scan per reply and dilutes the pool with
+        # entries written under an older prompt. The data/ seeds are read-only
+        # and never touched; rows you approved yourself carry no machine marker
+        # and are never counted or dropped. 0 = no cap (pre-cap behaviour).
+        self.examples_max_auto = int(os.getenv("EXAMPLES_MAX_AUTO", 500) or 0)
+        self.feedback_max_auto = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
         self.output_filter_file = _resolve_lang_file("output_filter", "json", self.agent_lang)
@@ -3228,15 +3379,41 @@ class Agent:
             logger.debug("[Agent] sticker flush on shutdown failed: %s", e)
 
     def _append_example_with_trim(self, line: str, max_bytes: int = 5_000_000) -> None:
-        """Append an auto-harvested example. Over budget, **trim instead of
-        rotating**: _append_with_rotation moves the whole file to .old and
-        starts fresh, but the head of examples.jsonl is the hand-curated
-        bootstrap pool (no "score" field) — rotation would wipe it and the
-        few-shot retrieval pool would collapse to near-empty. Keep every
-        curated entry; drop the oldest auto entries (the ones carrying
-        "score") until back under half the budget. Atomic (.tmp + replace)."""
+        """Append an auto-harvested example to the runtime pool, keeping it
+        bounded.
+
+        Two caps, and **neither ever drops a hand-approved entry**. The data/
+        seed is a separate read-only file and is never touched at all, but the
+        runtime file is not purely machine-written either: prompt_lab.py writes
+        replies you approved into it, without the "score" the self-eval and
+        reaction channels stamp on theirs. That field is what tells the two
+        apart here — and it is why this trims rather than rotating the way
+        _append_with_rotation does.
+
+        - EXAMPLES_MAX_AUTO (primary): keep the newest N auto-banked entries.
+          Retrieval surfaces 4 per turn no matter how many are on disk, so a
+          bigger pool only lengthens the per-turn relevance scan and lets
+          entries written under an older prompt outvote recent ones.
+        - max_bytes (backstop): if the pool is somehow still over the byte
+          ceiling — no count cap configured, or pathologically long entries —
+          drop the oldest auto entries until back under half the budget, so
+          appends don't rewrite the file every time.
+
+        Both rewrites are atomic (.tmp + replace)."""
         path = self.examples_file
         path.parent.mkdir(parents=True, exist_ok=True)
+        if self.examples_max_auto > 0:
+            try:
+                trimmed = evolution.trim_pool(
+                    path, max_auto=self.examples_max_auto,
+                    is_auto=lambda r: "score" in r,
+                )
+                if trimmed:
+                    logger.info("[Agent] examples.jsonl auto-pool trimmed: "
+                                "%d -> %d entries (cap=%d)",
+                                trimmed[0], trimmed[1], self.examples_max_auto)
+            except OSError as e:
+                logger.warning("[Agent] examples auto-pool trim failed: %s", e)
         try:
             sz = path.stat().st_size if path.exists() else 0
         except OSError:
@@ -3265,9 +3442,43 @@ class Agent:
                 logger.warning("[Agent] examples trim failed: %s", e)
         try:
             with path.open("a", encoding="utf-8") as f:
+                if _needs_leading_newline(path):
+                    f.write("\n")
                 f.write(line)
         except OSError as e:
             logger.warning("[Agent] examples append failed: %s", e)
+
+    def _append_feedback_pair(self, pair: dict) -> int:
+        """Append one preference pair to the runtime feedback pool. Returns 1
+        if written.
+
+        Wraps evolution.append_jsonl with the same auto-pool cap examples get
+        (FEEDBACK_MAX_AUTO; machine pairs carry a "src", pairs you rated
+        through prompt_lab.py don't and are never dropped — nor is the data/
+        seed, which nothing writes to). Trimming first also removes a real
+        failure mode: append_jsonl REFUSES to write past FEEDBACK_MAX_BYTES,
+        so an unattended deployment would silently stop learning the day the
+        file filled up — with reaction learning as the primary signal, that is
+        the whole loop going quiet with nothing in the log to say so."""
+        self.feedback_file.parent.mkdir(parents=True, exist_ok=True)
+        if self.feedback_max_auto > 0:
+            try:
+                trimmed = evolution.trim_pool(
+                    self.feedback_file, max_auto=self.feedback_max_auto,
+                    is_auto=lambda r: bool(r.get("src")),
+                )
+                if trimmed:
+                    logger.info("[Agent] feedback.jsonl auto-pool trimmed: "
+                                "%d -> %d pairs (cap=%d)",
+                                trimmed[0], trimmed[1], self.feedback_max_auto)
+            except OSError as e:
+                logger.warning("[Agent] feedback auto-pool trim failed: %s", e)
+        written = evolution.append_jsonl(self.feedback_file, [pair])
+        if not written:
+            logger.warning("[Agent] feedback pair NOT written — %s is at its "
+                           "byte ceiling and every remaining entry is "
+                           "hand-approved", self.feedback_file.name)
+        return written
 
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
@@ -3287,6 +3498,8 @@ class Agent:
                 logger.warning("[Agent] log rotation failed for %s: %s", path, e)
         try:
             with path.open("a", encoding="utf-8") as f:
+                if _needs_leading_newline(path):
+                    f.write("\n")
                 f.write(line)
         except OSError as e:
             logger.warning("[Agent] log write failed for %s: %s", path, e)
@@ -3810,35 +4023,47 @@ class Agent:
             now = datetime.now().isoformat(timespec="seconds")
             wrote = False
 
+            # Dedup keys mean parsing the seed AND runtime feedback files,
+            # which are allowed to reach 5 MB — tens of milliseconds on the
+            # event loop. Load them at most once per adjudication (both
+            # branches below can need them), and only when a write is
+            # actually on the table.
+            fb_keys: set | None = None
+
+            def _fresh_pair(p: dict) -> bool:
+                nonlocal fb_keys
+                if fb_keys is None:
+                    fb_keys = evolution.load_feedback_keys(
+                        [self.feedback_seed_file, self.feedback_file])
+                key = (p["reply"], p["better"])
+                if key in fb_keys:
+                    return False
+                fb_keys.add(key)
+                return True
+
             # Retry-completion: this reply was the bot's second attempt after
             # a rejection. The user reacting positively — or just moving on —
             # accepts the fix, closing (rejected -> retry) into a pair with
             # zero user effort.
             if entry.get("fixes") and adj["reaction"] in ("positive", "neutral"):
                 fpair = reactions.fix_pair(entry["fixes"], entry["reply"], now)
-                if fpair is not None:
-                    existing = evolution.load_feedback_keys(
-                        [self.feedback_seed_file, self.feedback_file])
-                    if (fpair["reply"], fpair["better"]) not in existing:
-                        if evolution.append_jsonl(self.feedback_file, [fpair]) > 0:
-                            wrote = True
-                            logger.info(
-                                "[Agent] reaction learn (retry-completion): "
-                                "BAD %r -> OK %r",
-                                fpair["reply"][:50], fpair["better"][:50])
+                if fpair is not None and _fresh_pair(fpair):
+                    if self._append_feedback_pair(fpair) > 0:
+                        wrote = True
+                        logger.info(
+                            "[Agent] reaction learn (retry-completion): "
+                            "BAD %r -> OK %r",
+                            fpair["reply"][:50], fpair["better"][:50])
 
             if adj["accept"]:
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
-                if pair is not None:
-                    existing = evolution.load_feedback_keys(
-                        [self.feedback_seed_file, self.feedback_file])
-                    if (pair["reply"], pair["better"]) not in existing:
-                        if evolution.append_jsonl(self.feedback_file, [pair]) > 0:
-                            wrote = True
-                            logger.info(
-                                "[Agent] reaction learn (%s by %s): BAD %r -> OK %r",
-                                adj["reaction"], reactor_name,
-                                pair["reply"][:50], pair["better"][:50])
+                if pair is not None and _fresh_pair(pair):
+                    if self._append_feedback_pair(pair) > 0:
+                        wrote = True
+                        logger.info(
+                            "[Agent] reaction learn (%s by %s): BAD %r -> OK %r",
+                            adj["reaction"], reactor_name,
+                            pair["reply"][:50], pair["better"][:50])
                 ex = reactions.to_example(entry, adj, now)
                 if ex is not None and ex["reply"] not in self._auto_examples_seen:
                     self._append_example_with_trim(
@@ -3978,7 +4203,7 @@ class Agent:
                 max_bytes=20_000_000,
             )
             if usable:
-                added += evolution.append_jsonl(self.feedback_file, [pair])
+                added += self._append_feedback_pair(pair)
                 existing.add((pair["reply"], pair["better"]))
         if added:
             logger.info("[Agent] evolve: +%d feedback pairs from %d low-score evals",
@@ -4647,43 +4872,140 @@ class Agent:
             logger.warning("[Agent] memory save failed: %s", e)
 
     def _reload_examples_if_stale(self) -> None:
+        """Hot-reload the seed + runtime example pools.
+
+        The seed is read-only and the runtime file only ever grows, so the
+        common case (the agent just banked one of its own replies) parses the
+        appended tail alone instead of re-reading both files whole — see
+        _read_jsonl_appended. Any other shape, including a seed edit or the
+        pool-cap rewrite, falls back to a full reload."""
         paths = (self.examples_seed_file, self.examples_file)
-        mtimes = tuple(
-            p.stat().st_mtime if p.exists() else 0.0
-            for p in paths
-        )
-        if mtimes == self._examples_mtime:
+        stamp = self._pool_stamp(paths)
+        if stamp == self._examples_mtime:
             return
         try:
-            self._examples_cache = read_jsonl(paths)
-            self._examples_mtime = mtimes
-            # Rebuild runtime auto-append dedup set from on-disk replies so a
-            # restart doesn't forget which replies are already in the pool.
-            self._auto_examples_seen = {
-                ex.get("reply", "").strip() for ex in self._examples_cache
-                if ex.get("reply", "").strip()
+            records, appended = self._read_pool_delta(
+                paths, "_examples", self._examples_mtime, stamp)
+            replies = {
+                r.get("reply", "").strip() for r in records
+                if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
+            if appended:
+                self._examples_cache.extend(records)
+                # Runtime dedup set: appends only add, so update in place.
+                self._auto_examples_seen.update(replies)
+            else:
+                self._examples_cache = records
+                # Rebuild runtime auto-append dedup set from on-disk replies so
+                # a restart doesn't forget which replies are already in the pool.
+                self._auto_examples_seen = replies
+            self._examples_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] examples.jsonl reload failed: %s", e)
 
     def _reload_pairs_if_stale(self) -> None:
-        """Load preference pairs from feedback.jsonl (rating=better only)."""
+        """Load preference pairs from the seed + runtime feedback pools
+        (rating=better only). Append-aware, same as _reload_examples_if_stale."""
         paths = (self.feedback_seed_file, self.feedback_file)
-        mtimes = tuple(
-            p.stat().st_mtime if p.exists() else 0.0
-            for p in paths
-        )
-        if mtimes == self._pairs_mtime:
+        stamp = self._pool_stamp(paths)
+        if stamp == self._pairs_mtime:
             return
         try:
-            records = read_jsonl(paths)
-            self._pairs_cache = [
+            records, appended = self._read_pool_delta(
+                paths, "_pairs", self._pairs_mtime, stamp)
+            pairs = [
                 r for r in records
                 if r.get("rating") == "better" and r.get("better") and r.get("reply")
             ]
-            self._pairs_mtime = mtimes
+            if appended:
+                self._pairs_cache.extend(pairs)
+            else:
+                self._pairs_cache = pairs
+            self._pairs_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
+
+    @staticmethod
+    def _pool_stamp(paths) -> tuple:
+        """Staleness signal for a (seed, runtime) pool: mtime AND size of each
+        file.
+
+        Size is not redundant. Filesystem mtime resolution is coarse enough
+        that an append landing in the same tick as the previous read leaves
+        mtime unchanged — and for the runtime files, which the agent appends to
+        itself after every banked reply, that would mean freshly learned
+        material sitting unseen until some later write happened to move the
+        clock."""
+        out: list = []
+        for p in paths:
+            try:
+                st = p.stat()
+                out += [st.st_mtime, st.st_size]
+            except OSError:
+                out += [0.0, 0]
+        return tuple(out)
+
+    def _read_pool_delta(self, paths: tuple[Path, Path], attr: str,
+                         prev_stamp, stamp: tuple) -> tuple[list[dict], bool]:
+        """Read a (seed, runtime) retrieval pool, appended-tail-only when possible.
+
+        Returns ``(records, appended_only)``. When appended_only is True the
+        records are strictly new rows to be concatenated onto the existing
+        cache — safe because the cache is ordered seed-then-runtime and every
+        writer appends to the runtime file's tail.
+
+        The fast path needs a previous successful load whose seed is still
+        untouched; `prev_stamp` set to anything that isn't such a stamp (the
+        `= 0.0` force-reload idiom the tools and tests use) drops back to a
+        full read of both files. _read_jsonl_appended re-checks the runtime
+        prefix itself and falls back on its own if it has been rewritten.
+        """
+        seed_path, runtime_path = paths
+        can_append = (
+            isinstance(prev_stamp, tuple) and len(prev_stamp) == len(stamp)
+            and prev_stamp[:2] == stamp[:2]       # seed mtime+size untouched
+            and getattr(self, attr + "_sig")      # a prefix was consumed before
+            and runtime_path.exists()
+        )
+        if can_append:
+            records, appended, eof, offset, sig = _read_jsonl_appended(
+                runtime_path,
+                getattr(self, attr + "_eof"),
+                getattr(self, attr + "_offset"),
+                getattr(self, attr + "_sig"),
+            )
+            if appended:
+                for rec in records:
+                    rec["_rt"] = _retrieval_fields(rec)
+                setattr(self, attr + "_eof", eof)
+                setattr(self, attr + "_offset", offset)
+                setattr(self, attr + "_sig", sig)
+                return records, True
+            # _read_jsonl_appended rejected the prefix and re-read the runtime
+            # file whole; the seed still has to be prepended.
+            seed_records = read_jsonl((seed_path,))
+            for rec in records:
+                rec["_rt"] = _retrieval_fields(rec)
+            for rec in seed_records:
+                rec["_rt"] = _retrieval_fields(rec)
+            setattr(self, attr + "_eof", eof)
+            setattr(self, attr + "_offset", offset)
+            setattr(self, attr + "_sig", sig)
+            return seed_records + records, False
+
+        seed_records = read_jsonl((seed_path,))
+        if runtime_path.exists():
+            runtime_records, _, eof, offset, sig = _read_jsonl_appended(
+                runtime_path, 0, 0, b"")
+        else:
+            runtime_records, eof, offset, sig = [], 0, 0, b""
+        setattr(self, attr + "_eof", eof)
+        setattr(self, attr + "_offset", offset)
+        setattr(self, attr + "_sig", sig)
+        records = seed_records + runtime_records
+        for rec in records:
+            rec["_rt"] = _retrieval_fields(rec)
+        return records, False
 
     # -------- Output filter (SillyTavern regex-extension style) --------
     def _reload_filters_if_stale(self) -> None:
@@ -4878,11 +5200,15 @@ class Agent:
             return ""
 
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
+        now = time.time()
 
         def _score(ex: dict) -> float:
+            # scenario/context blobs and the timestamp are lowercased/parsed
+            # once at load time (_retrieval_fields); doing it here meant
+            # re-lowercasing the entire pool on every single LLM turn. The
+            # fallback covers records injected straight into the cache.
+            scenario_lc, ctx_lc, ts_epoch = ex.get("_rt") or _retrieval_fields(ex)
             s = 0.0
-            scenario_lc = ex.get("scenario", "").lower()
-            ctx_lc = " ".join(ex.get("context", [])).lower()
             for tok in focus_tokens:
                 if tok in scenario_lc:
                     s += 1.0
@@ -4893,21 +5219,17 @@ class Agent:
             # Recency: half-life 14 days, max bonus +0.3 — recent samples
             # win ties but cannot outweigh a strong content match. (The old
             # `len(ts) * 0.001` was a constant offset; all ISO timestamps
-            # are 19 chars so it gave every entry the same bump.)
-            ts = ex.get("ts", "")
-            if ts:
-                try:
-                    from datetime import datetime
-                    ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                    age_days = (datetime.now(ts_dt.tzinfo) - ts_dt).total_seconds() / 86400
-                    s += 0.3 * (0.5 ** (age_days / 14.0))
-                except Exception:
-                    pass
+            # are 19 chars so it gave every entry the same bump.) Age is
+            # clamped at 0 so a future-dated entry can't exceed the +0.3 cap.
+            if ts_epoch:
+                s += 0.3 * (0.5 ** (max(0.0, now - ts_epoch) / 86400.0 / 14.0))
             return s
 
+        # nlargest is equivalent to sorted(..., reverse=True)[:n], ties and
+        # all, but keeps a heap of n instead of sorting the whole pool.
         have_signal = bool(focus_tokens or mode)
         if have_signal:
-            pairs = sorted(self._pairs_cache, key=_score, reverse=True)[:limit_pairs]
+            pairs = heapq.nlargest(limit_pairs, self._pairs_cache, key=_score)
         else:
             pairs = self._pairs_cache[-limit_pairs:]
 
@@ -4928,11 +5250,18 @@ class Agent:
                 )
 
         pair_chosen_set = {p.get("better", "") for p in pairs}
-        candidates = [e for e in self._examples_cache if e.get("reply", "") not in pair_chosen_set]
         if have_signal:
-            goods = sorted(candidates, key=_score, reverse=True)[:limit_good]
+            # Generator, not a list: at the 5 MB trim ceiling materializing the
+            # filtered pool is thousands of dicts copied per turn for 4 picks.
+            goods = heapq.nlargest(
+                limit_good,
+                (e for e in self._examples_cache
+                 if e.get("reply", "") not in pair_chosen_set),
+                key=_score,
+            )
         else:
-            goods = candidates[-limit_good:]
+            goods = [e for e in self._examples_cache
+                     if e.get("reply", "") not in pair_chosen_set][-limit_good:]
         if goods:
             parts.append("\n[Positive examples] These replies match your voice — pick up the feel:")
             for e in goods:
