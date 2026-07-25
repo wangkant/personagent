@@ -331,12 +331,18 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 app 式布局：一个可导入的核心包，根目录只留薄薄的入口脚本，状态文件也留在根目录（升级永远不用迁移数据）。
 
 ```
-persona_agent/        应用核心包
-  agent.py            人设管线:模式、输出协议、记忆、检索、自评、进化循环
+persona_agent/        应用核心包 —— Agent 按关注点由多个 mixin 组合而成
+  agent.py            编排:消息接入、模式判定、debounce、_think、prompt 组装
+  prompts.py          人设契约:风格指南、输出协议、intent 规则(纯常量)
+  textproc.py         纯文本处理:分词、清洗、白名单校验器、分句
+  pools.py            检索数据集的增量 JSONL 加载
+  ingestion.py        链接、分享卡、图片、OCR、视觉 —— 含 SSRF 防护
+  transport.py        限流、分块、打字模拟、发送、会话 LRU
+  learning.py         自评、反应裁决、EVOLVE_AUTO 循环
+  reactions.py        真实用户反应学习逻辑(主信号)
+  evolution.py        eval -> feedback 学习循环逻辑
   gateway.py          平台无关事件 schema + 回复 sink
   stickers.py         表情包库及其质量门
-  evolution.py        eval -> feedback 学习循环逻辑
-  reactions.py        真实用户反应学习逻辑(主信号)
   health.py           启动 / 运行时环境体检
   paths.py            ROOT 锚点——所有状态文件都在仓库根
 main.py               FastAPI 入口(webhook、lifespan、后台循环)
@@ -354,7 +360,7 @@ integrations/         AstrBot 转发插件(多平台)
 
 | 模块 | 职责 |
 |---|---|
-| `persona_agent/agent.py` | JSON 协议输出；字符白名单校验；发送成功后才提交状态；有界图片输入；按用户的 RAG 记忆；合并 seed + runtime examples/feedback 的动态 few-shot 检索；正则前置过滤；异步自评；可选的 `EVOLVE_AUTO` 循环；跨重启 `seen_msg_ids` 去重 |
+| `persona_agent/agent.py` + 各 mixin | JSON 协议输出；字符白名单校验；发送成功后才提交状态；有界图片输入；按用户的 RAG 记忆；合并 seed + runtime examples/feedback 的动态 few-shot 检索；正则前置过滤；异步自评；可选的 `EVOLVE_AUTO` 循环；跨重启 `seen_msg_ids` 去重。已拆分为 `prompts` / `textproc` / `pools` / `ingestion` / `transport` / `learning`，见[项目结构](#项目结构) |
 | `persona_agent/reactions.py` | 从真实用户反应学习（主信号）：待反应表 + 引用/@/私聊归属、单次调用的裁决官（分类+真伪+改写,owner 加权）、feedback/examples 写入形态 |
 | `persona_agent/evolution.py` | eval → feedback 学习循环逻辑（读低分、拼诊断 prompt、草稿转偏好对、去重、审计痕迹）——进程内 `EVOLVE_AUTO` 循环和 `tools/auto_reviewer.py` 共用，不绑定任何传输层 |
 | `persona_agent/stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
@@ -379,6 +385,8 @@ python tests/test_retrieval.py
 ```
 
 它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习，以及少样本检索与其增量数据集加载。提交 PR 前请先跑一遍。
+
+想在自己的代码里 import 这套管线：`pip install -e .`（见 [pyproject.toml](pyproject.toml)）。版本变更记录在 [CHANGELOG.md](CHANGELOG.md)；贡献指南、模块分工表，以及「测试绝不许写仓库真实 state」这条铁律在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 用于 prompt 与人设调优：
 

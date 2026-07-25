@@ -1,15 +1,27 @@
 """persona_agent — the application package.
 
-Core modules:
-- agent      the persona pipeline (modes, JSON output protocol, validators,
-             memory, few-shot retrieval, self-eval, self-evolution loop)
+``Agent`` is composed from one mixin per concern, so the orchestration in
+agent.py stays readable and each layer is testable on its own:
+
+- agent      orchestration: intake, modes, debounce, _think, prompt assembly
+- prompts    the persona contract (style guide, output protocol, intent rules)
+- textproc   pure text: tokenising, sanitising, whitelist validator, splitting
+- pools      append-aware JSONL loading for the retrieval datasets
+- ingestion  links, share cards, images, OCR, vision — with the SSRF guard
+- transport  throttling, chunking, typing simulation, sends, conversation LRU
+- learning   self-eval, reaction adjudication, the EVOLVE_AUTO loop
+
+Supporting modules, all pure logic with no agent state:
+
+- reactions  reaction attribution + adjudicator prompts
+- evolution  eval -> feedback conversion, dedup, pool trimming
 - gateway    platform-neutral inbound event schema + reply sink
 - stickers   sticker library: steal -> tag -> persona-fit gates -> feedback
-- evolution  eval -> feedback learning-loop logic (shared by the agent's
-             EVOLVE_AUTO loop and tools/auto_reviewer.py)
 - health     startup / runtime environment checks
 
-Entry points live at the repo root (main.py, try_chat.py, quickstart.py);
-runtime state (memory.json, eval.jsonl, stickers/, ...) stays at the repo
-root too — see paths.ROOT.
+Entry points live at the repo root (main.py, try_chat.py, quickstart.py).
+Read-only seed datasets live in data/; everything the agent learns at runtime
+goes to runtime/ (gitignored) — see paths.ROOT.
 """
+
+__version__ = "0.1.0"

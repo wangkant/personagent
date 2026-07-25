@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personagent"
+version = "0.1.0"
+description = "A self-evolving persona LLM agent for group chat: learns to sound like a person from real user reactions, not from a bigger prompt."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Qiankang Wang" }]
+keywords = [
+    "llm", "agent", "persona", "chatbot", "group-chat", "onebot",
+    "prompt-engineering", "self-evolution", "few-shot", "rag",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "python-dotenv>=1.0,<2",
+    "httpx>=0.27,<1",
+    "anthropic>=0.103,<1",
+    "Pillow>=10,<13",
+    "ddgs>=9,<10",
+]
+
+[project.urls]
+Homepage = "https://github.com/wangkant/personagent"
+Demo = "https://wangkant.github.io/personagent/"
+Issues = "https://github.com/wangkant/personagent/issues"
+Changelog = "https://github.com/wangkant/personagent/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+# The library is the package; main.py / try_chat.py / quickstart.py are repo-root
+# entry points and runtime state lives at the repo root (see paths.ROOT), so an
+# installed copy is meant for importing the pipeline, not for hosting a bot.
+packages = ["persona_agent"]
+
+[tool.setuptools.package-data]
+persona_agent = ["py.typed"]

@@ -330,7 +330,7 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 
 | Module | Responsibility |
 |---|---|
-| `persona_agent/agent.py` | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator; transactional delivery/state commits; bounded image ingestion; per-user RAG memory; dynamic few-shot retrieval over seed + runtime examples/feedback; regex pre-flight; async self-eval; the opt-in `EVOLVE_AUTO` loop; cross-restart `seen_msg_ids` dedup |
+| `persona_agent/agent.py` + mixins | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator; transactional delivery/state commits; bounded image ingestion; per-user RAG memory; dynamic few-shot retrieval over seed + runtime examples/feedback; regex pre-flight; async self-eval; the opt-in `EVOLVE_AUTO` loop; cross-restart `seen_msg_ids` dedup. Split across `prompts` / `textproc` / `pools` / `ingestion` / `transport` / `learning` — see [Project structure](#project-structure) |
 | `persona_agent/reactions.py` | Learn from real user reactions (primary signal): pending-reply table with quote/@/DM attribution, one-call adjudicator (classify + genuineness + rewrite, owner-weighted), write-shapes for the feedback/examples pipelines |
 | `persona_agent/evolution.py` | The eval → feedback learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
 | `persona_agent/stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
@@ -346,12 +346,18 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 App-style layout: one importable core package, thin entry points at the root, state files at the root (so upgrades never migrate your data).
 
 ```
-persona_agent/        the application package
-  agent.py            persona pipeline: modes, output protocol, memory, retrieval, self-eval, evolve loop
+persona_agent/        the application package — Agent composes one mixin per concern
+  agent.py            orchestration: intake, modes, debounce, _think, prompt assembly
+  prompts.py          the persona contract: style guide, output protocol, intent rules
+  textproc.py         pure text: tokenising, sanitising, whitelist validator, splitting
+  pools.py            append-aware JSONL loading for the retrieval datasets
+  ingestion.py        links, share cards, images, OCR, vision — with the SSRF guard
+  transport.py        throttling, chunking, typing simulation, sends, conversation LRU
+  learning.py         self-eval, reaction adjudication, the EVOLVE_AUTO loop
+  reactions.py        learn-from-real-user-reactions logic (primary signal)
+  evolution.py        eval -> feedback learning-loop logic
   gateway.py          platform-neutral event schema + reply sink
   stickers.py         sticker library and its quality gates
-  evolution.py        eval -> feedback learning-loop logic
-  reactions.py        learn-from-real-user-reactions logic (primary signal)
   health.py           startup / runtime environment checks
   paths.py            ROOT anchor — all state lives at the repo root
 main.py               FastAPI entry point (webhooks, lifespan, background loops)
@@ -379,6 +385,8 @@ python tests/test_retrieval.py
 ```
 
 It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail), reaction learning, and few-shot retrieval with its append-aware dataset loading. Run it before opening a pull request.
+
+To import the pipeline from your own code, `pip install -e .` (see [pyproject.toml](pyproject.toml)). Release notes live in [CHANGELOG.md](CHANGELOG.md); contribution guidelines, the module map and the "never let a test write real state" rule are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 For prompt and persona tuning:
 
