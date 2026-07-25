@@ -37,3 +37,42 @@ jobs:
           python tests/test_http.py
           python tests/test_retrieval.py
           python -m compileall -q .
+
+  packaging:
+    # The test job runs from a checkout, which hides packaging breakage: a
+    # missing py.typed, a module left out of the wheel, or paths.ROOT resolving
+    # next to site-packages all still "work" in-tree. This job installs the
+    # built artifact somewhere else entirely and imports it from there.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Editable install
+        run: |
+          python -m pip install --upgrade pip build
+          pip install -e .
+          python -c "import persona_agent; print('editable', persona_agent.__version__)"
+      - name: Build wheel + sdist
+        run: python -m build
+      - name: Install the wheel into a clean venv and import from outside the checkout
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/wheelenv/bin/python -c "
+          import persona_agent
+          from persona_agent.paths import ROOT
+          from persona_agent.agent import Agent
+          assert persona_agent.__version__ == '0.1.0', persona_agent.__version__
+          # A wheel install has no data/ next to the package: ROOT must fall back
+          # to the working directory, never to site-packages.
+          assert 'site-packages' not in str(ROOT), ROOT
+          import importlib.resources as r
+          assert (r.files('persona_agent') / 'py.typed').is_file(), 'py.typed missing from wheel'
+          print('wheel import ok; ROOT =', ROOT)
+          "

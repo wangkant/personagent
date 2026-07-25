@@ -37,14 +37,15 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/wangkant/personagent"
-Demo = "https://wangkant.github.io/personagent/"
 Issues = "https://github.com/wangkant/personagent/issues"
 Changelog = "https://github.com/wangkant/personagent/blob/master/CHANGELOG.md"
 
 [tool.setuptools]
-# The library is the package; main.py / try_chat.py / quickstart.py are repo-root
-# entry points and runtime state lives at the repo root (see paths.ROOT), so an
-# installed copy is meant for importing the pipeline, not for hosting a bot.
+# personagent is an application you deploy from a checkout, not a PyPI library:
+# main.py / try_chat.py / quickstart.py are repo-root entry points, the seed
+# datasets live in data/, and runtime state is written next to them (paths.ROOT,
+# overridable with AGENT_HOME). `pip install -e .` is for importing and testing
+# the pipeline; to run a bot, clone the repo.
 packages = ["persona_agent"]
 
 [tool.setuptools.package-data]

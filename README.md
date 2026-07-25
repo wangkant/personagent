@@ -1,6 +1,5 @@
 # personagent
 
-[![Live demo](assets/live-demo.svg)](https://wangkant.github.io/personagent/)
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -9,7 +8,7 @@
 
 > **You type. It replies like a person — not a help desk — and it gets better at it on its own.**
 
-[![personagent terminal demo](assets/demo.svg)](https://wangkant.github.io/personagent/)
+[![personagent terminal demo](assets/demo.svg)](#try-it-without-qq)
 
 A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: it learns primarily from **real user reactions** — a "no, I meant X" becomes a correction pair, laughter banks the reply as a proven example — with LLM self-scoring as the fallback channel (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
 
