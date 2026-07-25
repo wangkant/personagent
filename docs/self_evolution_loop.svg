@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="500" viewBox="0 0 880 500" role="img" aria-labelledby="self-title self-desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="600" viewBox="0 0 880 600" role="img" aria-labelledby="self-title self-desc">
   <title id="self-title">Two-signal self-evolution loop</title>
-  <desc id="self-desc">Real user reactions are the primary learning signal and async self-evaluation is the fallback. Corrections become BAD to OK preference pairs, positive reactions and top scores become proven examples, and both stores hot-reload into few-shot retrieval for the next similar conversation.</desc>
+  <desc id="self-desc">Real user reactions are the primary learning signal and async self-evaluation is the fallback. Corrections become BAD to OK preference pairs. Positive reactions and score-5 self-evaluations add candidate evidence; two owner reactions, three other-user reactions, or four self-evaluations are required before a reply becomes a proven example.</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -63,75 +63,95 @@
     </marker>
   </defs>
 
-  <rect class="bg" width="880" height="500" rx="12"/>
-  <rect class="frame" x="0.5" y="0.5" width="879" height="499" rx="11.5"/>
+  <rect class="bg" width="880" height="600" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="879" height="599" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">SYSTEM / LEARNING LOOP</text>
   <text class="headline ink" x="40" y="61">Two signals, one hot-reloaded memory</text>
   <text class="small muted" x="40" y="86">Observed reactions lead; self-evaluation fills the gaps.</text>
   <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
-  <rect class="mint-region" x="160" y="126" width="500" height="130" rx="8"/>
-  <text class="eyebrow mint" x="180" y="145">01 / PRIMARY SIGNAL</text>
-  <text class="label ink" x="180" y="170">directed user reaction</text>
-  <text class="small muted" x="180" y="191">quote · @mention · DM reply</text>
-  <path class="mint-flow" d="M336 175H390" marker-end="url(#self-arrow)"/>
-  <text class="small mint" x="366" y="158" text-anchor="middle">adjudicate</text>
-  <text class="tiny muted" x="416" y="145">banter / trolling filtered</text>
-  <circle cx="406" cy="176" r="4" class="mint"/>
-  <path class="mint-flow" d="M410 176H456V160H482" marker-end="url(#self-arrow)"/>
-  <path class="mint-flow" d="M410 176H456V208H482" marker-end="url(#self-arrow)"/>
-  <text class="small ink" x="490" y="160">correction</text>
-  <text class="tiny coral" x="490" y="177">BAD → OK pair</text>
-  <text class="small ink" x="490" y="208">positive reaction</text>
-  <text class="tiny mint" x="490" y="225">proven reply</text>
-  <path class="mint-flow" d="M590 160H624V178H692" marker-end="url(#self-arrow)"/>
-  <path class="mint-flow" d="M590 208H624V244H692" marker-end="url(#self-arrow)"/>
-  <text class="tiny muted" x="180" y="238">all verdicts → candidates.jsonl audit</text>
+  <rect class="mint-region" x="150" y="126" width="430" height="150" rx="8"/>
+  <text class="eyebrow mint" x="170" y="145">01 / PRIMARY SIGNAL</text>
+  <text class="label ink" x="170" y="170">directed user reaction</text>
+  <text class="small muted" x="170" y="191">quote · @mention · DM reply</text>
+  <path class="mint-flow" d="M326 175H376" marker-end="url(#self-arrow)"/>
+  <text class="small mint" x="351" y="158" text-anchor="middle">adjudicate</text>
+  <text class="tiny muted" x="404" y="145">banter / trolling filtered</text>
+  <circle cx="392" cy="176" r="4" class="mint"/>
+  <path class="mint-flow" d="M396 176H420V170H430" marker-end="url(#self-arrow)"/>
+  <path class="mint-flow" d="M396 176H420V222H430" marker-end="url(#self-arrow)"/>
+  <text class="small ink" x="438" y="170">correction</text>
+  <text class="tiny coral" x="438" y="188">BAD → OK pair</text>
+  <text class="small ink" x="438" y="222">positive reaction</text>
+  <text class="tiny mint" x="438" y="240">adds candidate evidence</text>
+  <path class="mint-flow" d="M544 170H710V199H720" marker-end="url(#self-arrow)"/>
+  <path class="mint-flow" d="M548 222H595" marker-end="url(#self-arrow)"/>
+  <text class="tiny muted" x="170" y="260">all verdicts → candidates.jsonl audit</text>
 
-  <rect class="violet-region" x="160" y="276" width="500" height="116" rx="8"/>
-  <text class="eyebrow violet" x="180" y="295">02 / FALLBACK SIGNAL</text>
-  <text class="label ink" x="180" y="320">async self-eval</text>
-  <text class="small muted" x="180" y="341">1–5 + reason → eval.jsonl</text>
-  <path class="violet-flow" d="M325 325H378" marker-end="url(#self-arrow)"/>
-  <circle cx="394" cy="325" r="4" class="violet"/>
-  <path class="violet-flow" d="M398 325H448V308H482" marker-end="url(#self-arrow)"/>
-  <path class="violet-flow" d="M398 325H448V354H482" marker-end="url(#self-arrow)"/>
-  <text class="small mint" x="490" y="308">score 5 → proven reply</text>
-  <text class="small coral" x="490" y="354">score ≤ 2 → diagnose</text>
-  <text class="tiny muted" x="490" y="371">EVOLVE_AUTO or review --apply</text>
-  <path class="violet-flow" d="M604 308H632V262H692" marker-end="url(#self-arrow)"/>
-  <path class="violet-flow" d="M604 354H648V178H692" marker-end="url(#self-arrow)"/>
+  <rect class="violet-region" x="150" y="296" width="430" height="190" rx="8"/>
+  <text class="eyebrow violet" x="170" y="315">02 / FALLBACK SIGNAL</text>
+  <text class="label ink" x="170" y="340">async self-eval</text>
+  <text class="small muted" x="170" y="361">1–5 + reason → eval.jsonl</text>
+  <path class="violet-flow" d="M315 345H376" marker-end="url(#self-arrow)"/>
+  <circle cx="392" cy="345" r="4" class="violet"/>
+  <path class="violet-flow" d="M396 345H420V326H430" marker-end="url(#self-arrow)"/>
+  <path class="violet-flow" d="M396 345H408V424H420" marker-end="url(#self-arrow)"/>
+  <text class="small mint" x="438" y="326">score 5</text>
+  <text class="tiny mint" x="438" y="344">adds candidate evidence</text>
+  <path class="violet-flow" d="M550 326H580V314H595" marker-end="url(#self-arrow)"/>
+  <rect class="coral-region" x="420" y="374" width="145" height="106" rx="6"/>
+  <text class="eyebrow coral" x="430" y="390">FAILURE REVIEW</text>
+  <text class="tiny coral" x="430" y="409">manual · default ≤ 3</text>
+  <text class="tiny muted" x="430" y="425">python tools/</text>
+  <text class="tiny muted" x="430" y="441">auto_reviewer.py --apply</text>
+  <text class="tiny coral" x="430" y="458">unattended · default ≤ 2</text>
+  <text class="tiny muted" x="430" y="473">EVOLVE_AUTO=true</text>
+  <path class="violet-flow" d="M565 425H711V213H720" marker-end="url(#self-arrow)"/>
 
-  <rect class="surface" x="692" y="132" width="148" height="230" rx="8"/>
-  <rect class="frame" x="692.5" y="132.5" width="147" height="229" rx="7.5"/>
-  <text class="eyebrow violet" x="710" y="151">FEW-SHOT MEMORY</text>
-  <rect class="code" x="710" y="170" width="112" height="50" rx="5"/>
-  <circle class="coral" cx="722" cy="184" r="3"/>
-  <text class="tiny muted" x="732" y="184">feedback.*.jsonl</text>
-  <text class="tiny coral" x="722" y="204">BAD / OK pairs</text>
-  <rect class="code" x="710" y="230" width="112" height="50" rx="5"/>
-  <circle class="mint" cx="722" cy="244" r="3"/>
-  <text class="tiny muted" x="732" y="244">examples.*.jsonl</text>
-  <text class="tiny mint" x="722" y="264">proven replies</text>
-  <line class="rule" x1="710" y1="294" x2="822" y2="294"/>
-  <text class="label mint" x="710" y="314">hot reload</text>
-  <text class="tiny muted" x="710" y="334">relevance + recency</text>
-  <text class="tiny muted" x="710" y="349">no restart</text>
+  <rect class="surface" x="595" y="188" width="112" height="162" rx="8"/>
+  <rect class="frame" x="595.5" y="188.5" width="111" height="161" rx="7.5"/>
+  <text class="eyebrow violet" x="605" y="205">EVIDENCE GATE</text>
+  <text class="label ink" x="605" y="227">candidate pool</text>
+  <line class="rule" x1="605" y1="244" x2="697" y2="244"/>
+  <text class="tiny muted" x="605" y="260">2 owner reactions</text>
+  <text class="tiny muted" x="605" y="278">3 other-user</text>
+  <text class="tiny muted" x="605" y="293">reactions</text>
+  <text class="tiny muted" x="605" y="310">4 self-evaluations</text>
+  <text class="label mint" x="605" y="332">corroborate</text>
+  <path class="mint-flow" d="M707 281H720" marker-end="url(#self-arrow)"/>
 
-  <rect class="surface" x="40" y="172" width="94" height="66" rx="7"/>
-  <rect class="frame" x="40.5" y="172.5" width="93" height="65" rx="6.5"/>
-  <text class="eyebrow violet" x="55" y="188">OUTPUT</text>
-  <text class="label ink" x="55" y="209">reply sent</text>
-  <text class="tiny muted" x="55" y="225">persona pipeline</text>
-  <path class="flow" d="M134 205H160" marker-end="url(#self-arrow)"/>
-  <path class="flow" d="M134 205C146 205 146 334 160 334" marker-end="url(#self-arrow)"/>
+  <rect class="surface" x="720" y="132" width="120" height="310" rx="8"/>
+  <rect class="frame" x="720.5" y="132.5" width="119" height="309" rx="7.5"/>
+  <text class="eyebrow violet" x="730" y="151">FEW-SHOT MEMORY</text>
+  <rect class="code" x="730" y="170" width="100" height="60" rx="5"/>
+  <circle class="coral" cx="740" cy="185" r="3"/>
+  <text class="tiny muted" x="749" y="185">feedback.*</text>
+  <text class="tiny muted" x="749" y="201">.jsonl</text>
+  <text class="tiny coral" x="740" y="216">BAD / OK pairs</text>
+  <rect class="code" x="730" y="250" width="100" height="62" rx="5"/>
+  <circle class="mint" cx="740" cy="266" r="3"/>
+  <text class="tiny muted" x="749" y="266">examples.*</text>
+  <text class="tiny muted" x="749" y="282">.jsonl</text>
+  <text class="tiny mint" x="740" y="298">proven replies</text>
+  <line class="rule" x1="730" y1="332" x2="830" y2="332"/>
+  <text class="label mint" x="730" y="352">hot reload</text>
+  <text class="tiny muted" x="730" y="373">relevance + recency</text>
+  <text class="tiny muted" x="730" y="389">no restart</text>
 
-  <path class="mint-flow" d="M766 362V430H98V241" marker-end="url(#self-arrow)"/>
-  <rect class="mint-region" x="330" y="414" width="250" height="32" rx="16"/>
-  <text class="label mint" x="455" y="431" text-anchor="middle">next similar conversation</text>
+  <rect class="surface" x="40" y="182" width="90" height="68" rx="7"/>
+  <rect class="frame" x="40.5" y="182.5" width="89" height="67" rx="6.5"/>
+  <text class="eyebrow violet" x="54" y="198">OUTPUT</text>
+  <text class="label ink" x="54" y="219">reply sent</text>
+  <text class="tiny muted" x="54" y="236">persona pipeline</text>
+  <path class="flow" d="M130 215H150" marker-end="url(#self-arrow)"/>
+  <path class="flow" d="M130 215C140 215 140 393 150 393" marker-end="url(#self-arrow)"/>
 
-  <line class="rule" x1="40" y1="468" x2="840" y2="468"/>
-  <text class="tiny muted" x="40" y="483">SIDE LOOP</text>
-  <text class="tiny coral" x="112" y="483">sticker sustained low average → persona_fit=false</text>
+  <path class="mint-flow" d="M780 442V525H95V253" marker-end="url(#self-arrow)"/>
+  <rect class="mint-region" x="330" y="509" width="250" height="32" rx="16"/>
+  <text class="label mint" x="455" y="526" text-anchor="middle">next similar conversation</text>
+
+  <line class="rule" x1="40" y1="565" x2="840" y2="565"/>
+  <text class="tiny muted" x="40" y="582">SIDE LOOP</text>
+  <text class="tiny coral" x="112" y="582">sticker sustained low average → persona_fit=false</text>
 </svg>

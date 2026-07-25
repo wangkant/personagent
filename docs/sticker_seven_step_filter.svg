@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="500" viewBox="0 0 880 500" role="img" aria-labelledby="sticker-title sticker-desc">
   <title id="sticker-title">Seven-stage sticker library funnel</title>
-  <desc id="sticker-desc">Raw non-bot images narrow through text tagging, persona fit, visual aesthetics, evaluation feedback, tag selection, orphan removal, and startup purging before an in-character sticker can reach selection.</desc>
+  <desc id="sticker-desc">Raw non-bot images narrow through text tagging, persona fit, visual aesthetics, evaluation feedback, tag selection, orphan skipping during selection, and startup purging before an in-character sticker can be sent.</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -60,7 +60,7 @@
 
   <text class="eyebrow violet" x="40" y="32">STICKERS / EVIDENCE FUNNEL</text>
   <text class="headline ink" x="40" y="61">Seven checks before a sticker can speak</text>
-  <text class="small muted" x="40" y="86">Every stage removes weak, off-persona, or missing candidates.</text>
+  <text class="small muted" x="40" y="86">Stages filter weak candidates; missing files are skipped during selection.</text>
   <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
   <text class="eyebrow muted" x="100" y="120">RAW NON-BOT IMAGES</text>
@@ -100,7 +100,7 @@
   <text class="label mint" x="340" y="350" text-anchor="middle">06 / orphan skip</text>
   <path class="flow" d="M438 350H610"/>
   <circle class="mint" cx="610" cy="350" r="2.5"/>
-  <text class="small ink" x="624" y="350">missing-file entries are removed</text>
+  <text class="small ink" x="624" y="350">missing-file entries are skipped</text>
 
   <path class="coral-stage" d="M244 372H436L414 408H266Z"/>
   <text class="label coral" x="340" y="390" text-anchor="middle">07 / startup purge</text>

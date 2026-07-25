@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="500" viewBox="0 0 880 500" role="img" aria-labelledby="sticker-title sticker-desc">
   <title id="sticker-title">表情包库七级漏斗</title>
-  <desc id="sticker-desc">非机器人图片依次经过文字打标、人设匹配、视觉审美、评估反馈、标签选取、孤儿清理和启动清退，最后只有合人设的表情才能进入候选池。</desc>
+  <desc id="sticker-desc">非机器人图片依次经过文字打标、人设匹配、视觉审美、评估反馈、标签选取、选用时跳过孤儿条目和启动清退，最后只有合人设的表情才能发送。</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -60,7 +60,7 @@
 
   <text class="eyebrow violet" x="40" y="32">表情包 / 证据漏斗</text>
   <text class="headline ink" x="40" y="61">一张表情开口前，要过七道检查</text>
-  <text class="small muted" x="40" y="86">每一级都会剔除薄弱、出戏或文件缺失的候选。</text>
+  <text class="small muted" x="40" y="86">各级过滤薄弱或出戏候选；文件缺失时只在选用时跳过。</text>
   <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
   <text class="eyebrow muted" x="100" y="120">非机器人原图</text>
@@ -100,7 +100,7 @@
   <text class="label mint" x="340" y="350" text-anchor="middle">06 / 孤儿条目跳过</text>
   <path class="flow" d="M438 350H610"/>
   <circle class="mint" cx="610" cy="350" r="2.5"/>
-  <text class="small ink" x="624" y="350">文件丢失的条目会被移除</text>
+  <text class="small ink" x="624" y="350">文件丢失的条目在选用时跳过</text>
 
   <path class="coral-stage" d="M244 372H436L414 408H266Z"/>
   <text class="label coral" x="340" y="390" text-anchor="middle">07 / 启动清退</text>
