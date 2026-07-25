@@ -1,66 +1,168 @@
-<svg width="100%" viewBox="0 0 720 560" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>persona-llm-agent 架构</title>
-<desc>双入站路径汇入同一条共享 agent 管线：QQ 经 OneBot 协议端走 /webhook/qq，其他平台经 AstrBot 网关走 /webhook/gateway。</desc>
-<defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
-</defs>
-<g font-family="'Anthropic Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">persona-llm-agent 消息路径与学习闭环</title>
+  <desc id="architecture-desc">QQ 经 OneBot、其他平台经 AstrBot 进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估写入审计学习库，再热加载到 few-shot 检索。</desc>
+  <style>
+    svg {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --line-strong: #98a2b3;
+      --blue: #1769aa;
+      --blue-soft: #eaf3fb;
+      --mint: #087f5b;
+      --mint-soft: #eaf8f2;
+      --violet: #7047b8;
+      --violet-soft: #f3effb;
+      --coral: #b5472f;
+      --coral-soft: #fdf0ec;
+    }
+    text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Microsoft YaHei", "PingFang SC", monospace;
+      dominant-baseline: middle;
+    }
+    .bg { fill: var(--bg); }
+    .surface { fill: var(--surface); }
+    .frame, .rule { fill: none; stroke: var(--line); }
+    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
+    .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
+    .blue-region { fill: var(--blue-soft); }
+    .mint-region { fill: var(--mint-soft); }
+    .violet-region { fill: var(--violet-soft); }
+    .coral-region { fill: var(--coral-soft); }
+    .code { fill: var(--surface); stroke: var(--line); }
+    .ink { fill: var(--ink); }
+    .muted { fill: var(--muted); }
+    .blue { fill: var(--blue); }
+    .mint { fill: var(--mint); }
+    .violet { fill: var(--violet); }
+    .coral { fill: var(--coral); }
+    .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
+    .eyebrow { font-size: 10.5px; font-weight: 650; letter-spacing: 1.2px; }
+    .label { font-size: 12.5px; font-weight: 650; }
+    .small { font-size: 10.5px; }
+    .tiny { font-size: 9.5px; }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --bg: #0d1117;
+        --surface: #111821;
+        --ink: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --line-strong: #59636e;
+        --blue: #58a6ff;
+        --blue-soft: #101f30;
+        --mint: #56d49b;
+        --mint-soft: #10241d;
+        --violet: #bc8cff;
+        --violet-soft: #1c1726;
+        --coral: #ff8b73;
+        --coral-soft: #2a1714;
+      }
+    }
+  </style>
+  <defs>
+    <marker id="architecture-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
 
-<!-- 入站：两条路径 -->
-<rect x="40" y="16" width="300" height="54" rx="10" fill="#f1efe8" stroke="#5f5e5a" stroke-width="0.5"/>
-<text x="190" y="37" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#444441">QQ &#8212; OneBot 协议端</text>
-<text x="190" y="55" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5f5e5a">NapCat / Lagrange（直连）</text>
+  <rect class="bg" width="980" height="520" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
 
-<rect x="380" y="16" width="300" height="54" rx="10" fill="#f1efe8" stroke="#5f5e5a" stroke-width="0.5"/>
-<text x="530" y="37" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#444441">其他平台 &#8212; AstrBot</text>
-<text x="530" y="55" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5f5e5a">Telegram &#183; Discord &#183; Slack &#183; &#8230; + 转发插件</text>
+  <text class="eyebrow violet" x="40" y="32">系统 / 消息路径</text>
+  <text class="headline ink" x="40" y="61">一个 agent 路径，接入任意聊天平台</text>
+  <text class="small muted" x="40" y="86">两端只替换传输层；人设、安全和学习机制始终共享。</text>
+  <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
 
-<line x1="190" y1="70" x2="190" y2="104" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
-<text x="200" y="88" dominant-baseline="central" font-size="12" fill="#3d3d3a">/webhook/qq</text>
-<line x1="530" y1="70" x2="530" y2="104" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
-<text x="540" y="88" dominant-baseline="central" font-size="12" fill="#3d3d3a">/webhook/gateway</text>
+  <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
+  <text class="eyebrow violet" x="220" y="143">共享 FASTAPI AGENT</text>
+  <text class="tiny muted" x="920" y="143" text-anchor="end">一条管线 / 任意平台</text>
 
-<!-- 共享 agent 管线 -->
-<rect x="40" y="108" width="640" height="374" rx="14" fill="#eeedfe" stroke="#534ab7" stroke-width="0.5"/>
-<text x="60" y="130" dominant-baseline="central" font-size="14" font-weight="500" fill="#3c3489">FastAPI agent &#8212; 一条管线，任意平台</text>
+  <rect class="surface" x="40" y="152" width="126" height="52" rx="7"/>
+  <rect class="frame" x="40.5" y="152.5" width="125" height="51" rx="6.5"/>
+  <text class="label ink" x="54" y="170">QQ / OneBot</text>
+  <text class="tiny muted" x="54" y="189">NapCat · Lagrange</text>
 
-<rect x="90" y="150" width="540" height="46" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="0.5"/>
-<text x="360" y="168" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0c447c">去重 / 防抖 / sticky-call</text>
-<text x="360" y="184" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185fa5">跨重启 message id 去重</text>
-<line x1="360" y1="196" x2="360" y2="210" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect class="surface" x="40" y="228" width="126" height="52" rx="7"/>
+  <rect class="frame" x="40.5" y="228.5" width="125" height="51" rx="6.5"/>
+  <text class="label ink" x="54" y="246">其他平台 / AstrBot</text>
+  <text class="tiny muted" x="54" y="265">Telegram · Discord · …</text>
 
-<rect x="90" y="210" width="540" height="46" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="0.5"/>
-<text x="360" y="228" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0c447c">视觉 + URL 元信息</text>
-<text x="360" y="244" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185fa5">表情 caption / 分享卡解析</text>
-<line x1="360" y1="256" x2="360" y2="270" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path class="flow" d="M166 178H220" marker-end="url(#architecture-arrow)"/>
+  <path class="flow" d="M166 254H220" marker-end="url(#architecture-arrow)"/>
 
-<rect x="90" y="270" width="540" height="46" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="0.5"/>
-<text x="360" y="288" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0c447c">模式判定</text>
-<text x="360" y="304" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185fa5">owner / called / followup / judge</text>
-<line x1="360" y1="316" x2="360" y2="330" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect class="code" x="220" y="152" width="126" height="52" rx="6"/>
+  <text class="eyebrow blue" x="234" y="168">QQ 直连接入</text>
+  <text class="tiny ink" x="234" y="187">/webhook/qq</text>
+  <rect class="code" x="220" y="228" width="126" height="52" rx="6"/>
+  <text class="eyebrow blue" x="234" y="244">网关接入</text>
+  <text class="tiny ink" x="234" y="263">/webhook/gateway</text>
 
-<rect x="90" y="330" width="540" height="46" rx="8" fill="#e1f5ee" stroke="#0f6e56" stroke-width="0.5"/>
-<text x="360" y="348" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">LLM 调用（JSON 协议）</text>
-<text x="360" y="364" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0f6e56">Prompt caching、fail-closed 解析</text>
-<line x1="360" y1="376" x2="360" y2="390" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path class="flow" d="M346 178H362V216H380" marker-end="url(#architecture-arrow)"/>
+  <path class="flow" d="M346 254H362V216"/>
+  <circle class="blue" cx="362" cy="216" r="3"/>
 
-<rect x="90" y="390" width="540" height="46" rx="8" fill="#faece7" stroke="#993c1d" stroke-width="0.5"/>
-<text x="360" y="408" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#712b13">输出过滤 + 校验</text>
-<text x="360" y="424" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#993c1d">语义正则 + 字符白名单</text>
-<line x1="360" y1="436" x2="360" y2="450" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect class="blue-region" x="380" y="160" width="140" height="112" rx="7"/>
+  <text class="eyebrow blue" x="394" y="178">预处理 + 上下文</text>
+  <text class="small ink" x="394" y="201">去重 · 防抖</text>
+  <text class="small ink" x="394" y="222">sticky-call</text>
+  <line class="rule" x1="394" y1="238" x2="506" y2="238"/>
+  <text class="tiny muted" x="394" y="253">视觉 + URL 元信息</text>
 
-<rect x="90" y="450" width="540" height="20" rx="6" fill="#e1f5ee" stroke="#0f6e56" stroke-width="0.5"/>
-<text x="360" y="460" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0f6e56">异步自评 &#8594; eval.jsonl</text>
+  <path class="flow" d="M520 216H550" marker-end="url(#architecture-arrow)"/>
+  <rect class="blue-region" x="550" y="160" width="112" height="112" rx="7"/>
+  <text class="eyebrow blue" x="564" y="178">模式</text>
+  <text class="label ink" x="564" y="202">判定</text>
+  <text class="tiny muted" x="564" y="226">owner · called</text>
+  <text class="tiny muted" x="564" y="244">followup · judge</text>
 
-<!-- 出站：两条路径 -->
-<line x1="190" y1="482" x2="190" y2="512" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
-<text x="200" y="500" dominant-baseline="central" font-size="12" fill="#3d3d3a">/send_group_msg</text>
-<line x1="530" y1="482" x2="530" y2="512" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
-<text x="540" y="500" dominant-baseline="central" font-size="12" fill="#3d3d3a">网关回复</text>
+  <path class="flow" d="M662 216H692" marker-end="url(#architecture-arrow)"/>
+  <rect class="mint-region" x="692" y="160" width="108" height="112" rx="7"/>
+  <text class="eyebrow mint" x="706" y="178">LLM</text>
+  <text class="label ink" x="706" y="202">JSON 调用</text>
+  <text class="tiny muted" x="706" y="226">提示词缓存</text>
+  <text class="tiny muted" x="706" y="244">失败即关闭</text>
 
-<rect x="40" y="514" width="300" height="34" rx="10" fill="#f1efe8" stroke="#5f5e5a" stroke-width="0.5"/>
-<text x="190" y="531" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#444441">QQ 群聊 / 私聊</text>
-<rect x="380" y="514" width="300" height="34" rx="10" fill="#f1efe8" stroke="#5f5e5a" stroke-width="0.5"/>
-<text x="530" y="531" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#444441">Telegram / Discord / Slack / &#8230;</text>
-</g>
+  <path class="flow" d="M800 216H830" marker-end="url(#architecture-arrow)"/>
+  <rect class="coral-region" x="830" y="160" width="110" height="112" rx="7"/>
+  <text class="eyebrow coral" x="844" y="178">校验 + 发送</text>
+  <text class="tiny ink" x="844" y="199">语义正则</text>
+  <text class="tiny ink" x="844" y="215">字符白名单</text>
+  <line class="rule" x1="844" y1="230" x2="926" y2="230"/>
+  <text class="tiny muted" x="844" y="244">/send_group_msg</text>
+  <text class="tiny muted" x="844" y="259">网关回复</text>
+
+  <rect class="surface" x="200" y="348" width="740" height="122" rx="10"/>
+  <rect class="frame" x="200.5" y="348.5" width="739" height="121" rx="9.5"/>
+  <text class="eyebrow mint" x="220" y="364">学习闭环 / 位于消息路径下方</text>
+
+  <rect class="mint-region" x="230" y="376" width="150" height="58" rx="7"/>
+  <text class="label mint" x="246" y="395">few-shot 检索</text>
+  <text class="tiny muted" x="246" y="416">相关度 + 新近度</text>
+
+  <rect class="code" x="410" y="376" width="140" height="58" rx="7"/>
+  <text class="label ink" x="426" y="395">学习数据池</text>
+  <text class="tiny muted" x="426" y="416">反馈 + 通过示例</text>
+
+  <rect class="code" x="590" y="376" width="130" height="58" rx="7"/>
+  <text class="label ink" x="606" y="395">审计轨迹</text>
+  <text class="tiny muted" x="606" y="416">候选 / 评估</text>
+
+  <rect class="mint-region" x="760" y="376" width="120" height="58" rx="7"/>
+  <text class="label mint" x="776" y="395">学习信号</text>
+  <text class="tiny muted" x="776" y="416">用户反应 + 自评</text>
+
+  <path class="mint-flow" d="M885 272V348H820V376" marker-end="url(#architecture-arrow)"/>
+  <path class="mint-flow" d="M760 405H720" marker-end="url(#architecture-arrow)"/>
+  <path class="mint-flow" d="M590 405H550" marker-end="url(#architecture-arrow)"/>
+  <path class="mint-flow" d="M410 405H380" marker-end="url(#architecture-arrow)"/>
+  <path class="mint-flow" d="M305 376V326H746V272" marker-end="url(#architecture-arrow)"/>
+  <text class="tiny mint" x="500" y="326" text-anchor="middle">热加载 · 无需重启</text>
+
+  <text class="tiny muted" x="220" y="453">主信号：定向用户反应 · 兜底信号：异步 1–5 分自评</text>
+  <line class="rule" x1="40" y1="490" x2="940" y2="490"/>
+  <circle class="mint" cx="48" cy="506" r="3"/>
+  <text class="small muted" x="60" y="506">下一条相似消息会在 JSON 调用前继承经审计的修正。</text>
 </svg>
