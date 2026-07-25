@@ -25,6 +25,7 @@ python tests/test_benchmark.py
 python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
+python tests/test_promotion.py
 python -m compileall -q .
 ```
 
@@ -52,6 +53,7 @@ from `tests/test_retrieval.py`, which redirects every path into a temp dir.
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
 | `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, conversation LRU |
 | `persona_agent/learning.py` | Self-eval, reaction adjudication, the evolution loop |
+| `persona_agent/promotion.py` | The evidence gate: what may be banked as an example, and what gets retracted |
 | `persona_agent/reactions.py` | Reaction attribution + adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | eval → feedback conversion, dedup, pool trimming (pure logic) |
 

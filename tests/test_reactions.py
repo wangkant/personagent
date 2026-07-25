@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 import tempfile
 from pathlib import Path
 
@@ -233,13 +234,38 @@ async def integration_process_reaction(tmp: Path) -> None:
         return json.dumps({"reaction": "positive", "accept": True, "reason": "laughed",
                            "better": "", "scenario": "landed"})
     a._call_anthropic = adj_positive
+    # One stranger laughing is evidence, not proof: it must NOT bank an
+    # example (promotion.py requires three non-owner positives).
     await a._process_reaction(_pending_entry(), "lmaooo real", "alex", "42", False)
-    ex_lines = a.examples_file.read_text(encoding="utf-8").splitlines()
-    check("positive -> example appended",
-          len(ex_lines) == 1 and json.loads(ex_lines[0])["src"] == "user_reaction")
+    check("single positive does not bank an example",
+          not a.examples_file.exists(),
+          "a lone reaction reached the example pool")
+    check("single positive is held as a candidate",
+          a.example_candidates.confidence(_pending_entry()["reply"], time.time()) > 0)
+
     await a._process_reaction(_pending_entry(), "lmaooo again", "alex", "42", False)
-    ex_lines2 = a.examples_file.read_text(encoding="utf-8").splitlines()
-    check("positive deduped by reply text", len(ex_lines2) == 1)
+    check("second positive still short of the bar", not a.examples_file.exists())
+    await a._process_reaction(_pending_entry(), "still funny", "alex", "42", False)
+    ex_lines = a.examples_file.read_text(encoding="utf-8").splitlines()
+    check("third positive promotes",
+          len(ex_lines) == 1 and json.loads(ex_lines[0])["src"] == "user_reaction")
+    await a._process_reaction(_pending_entry(), "ok enough", "alex", "42", False)
+    check("promoted reply is not banked twice",
+          len(a.examples_file.read_text(encoding="utf-8").splitlines()) == 1)
+
+    # Evidence runs both ways: a later accepted correction pulls the banked
+    # reply back out so it stops being retrieved as a model answer.
+    async def adj_correct(system, messages, model, **kw):
+        return json.dumps({"reaction": "correction", "accept": True,
+                           "reason": "actually wrong", "better": "the better line",
+                           "scenario": "fixed"})
+    a._call_anthropic = adj_correct
+    await a._process_reaction(_pending_entry(), "no i meant the other thing",
+                              "alex", "42", False)
+    check("a later correction retracts the banked example",
+          not [l for l in a.examples_file.read_text(encoding="utf-8").splitlines()
+               if l.strip() and json.loads(l)["reply"] == _pending_entry()["reply"]])
+    a._call_anthropic = adj_positive
 
     async def adj_reject(system, messages, model, **kw):
         return json.dumps({"reaction": "correction", "accept": False,

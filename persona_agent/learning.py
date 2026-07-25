@@ -27,7 +27,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
-from . import evolution, reactions
+from . import evolution, promotion, reactions
 from .pools import _needs_leading_newline
 
 logger = logging.getLogger("agent")
@@ -236,18 +236,65 @@ class Learning:
                     "reply": reply_clean,
                     "score": score,
                 }
-                self._append_example_with_trim(
-                    json.dumps(ex, ensure_ascii=False) + "\n",
-                )
-                self._auto_examples_seen.add(reply_clean)
-                # Cap the in-memory dedup set; on reload from disk the full
-                # set is rebuilt, so light pruning here is harmless.
-                if len(self._auto_examples_seen) > 2000:
-                    self._auto_examples_seen = set(
-                        list(self._auto_examples_seen)[-1000:]
-                    )
+                # Not banked yet: a top self-eval score is the weakest of the
+                # three signals (this evaluator is documented above as
+                # generous), so it only adds evidence. See promotion.py.
+                self._bank_if_corroborated(ex, "self_eval")
         except Exception as e:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
+                           type(e).__name__, e)
+
+    def _bank_if_corroborated(self, example: dict, source: str,
+                              scenario: str = "") -> bool:
+        """Add evidence for a reply; bank it only once corroborated.
+
+        Returns True when this call actually promoted the reply into the
+        example pool. See promotion.py for why nothing is banked on a single
+        signal."""
+        reply = str(example.get("reply") or "").strip()
+        if not reply or reply.upper() == "PASS":
+            return False
+        if reply in self._auto_examples_seen:
+            return False  # already in the pool
+        try:
+            promote, conf = self.example_candidates.record(
+                example, source, time.time())
+        except Exception as e:
+            logger.warning("[Agent] candidate pool failed: %s: %s",
+                           type(e).__name__, e)
+            return False
+        if not promote:
+            logger.info("[Agent] example candidate (%s, confidence %.2f/%.2f): %r",
+                        source, conf, promotion.PROMOTE_AT, reply[:50])
+            return False
+        self._append_example_with_trim(
+            json.dumps(example, ensure_ascii=False) + "\n")
+        self._auto_examples_seen.add(reply)
+        if len(self._auto_examples_seen) > 2000:
+            # Cap the in-memory dedup set; a reload from disk rebuilds the
+            # full set, so light pruning here is harmless.
+            self._auto_examples_seen = set(
+                list(self._auto_examples_seen)[-1000:])
+        logger.info("[Agent] example PROMOTED (confidence %.2f, %s): %r",
+                    conf, scenario or example.get("scenario", ""), reply[:50])
+        return True
+
+    def _retract_reply(self, reply: str) -> None:
+        """A human disagreed with this reply — stop imitating it."""
+        reply = (reply or "").strip()
+        if not reply:
+            return
+        try:
+            if self.example_candidates.withdraw(reply):
+                logger.info("[Agent] example candidate withdrawn: %r", reply[:50])
+            removed = promotion.retract_example(self.examples_file, reply)
+            if removed:
+                self._auto_examples_seen.discard(reply)
+                self._examples_mtime = 0.0  # force a full reload
+                logger.info("[Agent] retracted %d banked example(s): %r",
+                            removed, reply[:50])
+        except Exception as e:
+            logger.warning("[Agent] retraction failed: %s: %s",
                            type(e).__name__, e)
 
     def _append_example_with_trim(self, line: str, max_bytes: int = 5_000_000) -> None:
@@ -456,13 +503,19 @@ class Learning:
                             adj["reaction"], reactor_name,
                             pair["reply"][:50], pair["better"][:50])
                 ex = reactions.to_example(entry, adj, now)
-                if ex is not None and ex["reply"] not in self._auto_examples_seen:
-                    self._append_example_with_trim(
-                        json.dumps(ex, ensure_ascii=False) + "\n")
-                    self._auto_examples_seen.add(ex["reply"])
-                    wrote = True
-                    logger.info("[Agent] reaction learn: reply banked as example (%s)",
-                                adj.get("scenario") or entry.get("mode", ""))
+                if ex is not None:
+                    # One laugh is not proof. Owner reactions count for nearly
+                    # twice a stranger's, but neither promotes alone.
+                    src = "reaction_owner" if is_owner else "reaction_other"
+                    if self._bank_if_corroborated(ex, src, scenario=adj.get("scenario")):
+                        wrote = True
+
+                # A rejected or corrected reply must stop being imitated —
+                # withdraw whatever evidence it had accumulated, and pull it
+                # back out of the live pool if it was already promoted.
+                if adj["reaction"] in ("rejection", "correction"):
+                    self._retract_reply(str(entry.get("reply") or ""))
+
                 # Accepted rejection with nothing concrete learned: arm both
                 # recovery paths.
                 if adj["reaction"] == "rejection" and conv_id:

@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **A single positive signal no longer banks an example.** One `haha` could
+  previously mint a permanent few-shot example, and the LLM self-evaluator —
+  documented in-code as generous — could do the same on its own score. Replies
+  now enter a candidate pool (`persona_agent/promotion.py`) carrying a weight
+  chosen by how much the source is worth, and are promoted only once
+  corroboration passes the threshold: two owner reactions, three from other
+  members, or four top self-eval scores. Confidence decays with a 21-day
+  half-life, so a reply that landed once and never again fades instead of
+  waiting at the threshold forever.
+
+### Added
+
+- **Retraction.** An accepted rejection or correction now withdraws the reply
+  from the candidate pool *and* deletes it from the live example pool — the
+  strongest evidence about a reply is a human disagreeing with it, and until
+  now that evidence was discarded.
+- `tests/test_promotion.py` (23 checks) covering the weights, the decay curve,
+  promotion consuming its candidate, retraction, persistence and pool bounds.
+
 ## [0.1.0] — 2026-07-25
 
 First tagged release. The agent has been running against real group chats for

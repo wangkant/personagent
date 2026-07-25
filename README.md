@@ -381,6 +381,7 @@ python tests/test_benchmark.py
 python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
+python tests/test_promotion.py
 ```
 
 It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail), reaction learning, and few-shot retrieval with its append-aware dataset loading. Run it before opening a pull request.

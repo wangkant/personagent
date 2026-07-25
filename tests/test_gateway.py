@@ -17,6 +17,7 @@ from pathlib import Path
 # Make the repo root importable when invoked as `python tests/test_gateway.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from persona_agent import promotion  # noqa: E402
 from persona_agent.agent import Agent, SendResult  # noqa: E402
 from persona_agent.gateway import GatewaySink, message_to_reply_item, synthesize_onebot_payload  # noqa: E402
 
@@ -350,6 +351,7 @@ def make_agent(tmp: Path) -> Agent:
     )
     # Keep runtime state files out of the repo during tests.
     a._seen_msg_file = tmp / "seen_msg_ids.json"
+    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
     # into memory BEFORE we redirected the paths above. Clear them so tests run
@@ -934,6 +936,8 @@ async def regression_eval_auto_append_examples(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
+    agent.example_candidates = promotion.CandidatePool(
+        tmp / "example_candidates.json")  # nor the repo-real candidate pool
 
     class _FakeResp:
         def raise_for_status(self):
@@ -955,8 +959,19 @@ async def regression_eval_auto_append_examples(tmp: Path) -> None:
     agent._http = lambda **kw: _FakeHTTP()
     await agent._evaluate_reply("g", "called", "question", "a really sharp reply",
                                 None, "chat", ["Alice: question"])
-    check("eval: examples file created", agent.examples_file.exists(),
-          "auto-append never ran")
+    # A top self-eval score is the weakest of the three signals, so one is not
+    # enough to bank: it only becomes a candidate (promotion.py needs four).
+    check("eval: single top score does not bank an example",
+          not agent.examples_file.exists(),
+          "one lenient self-score reached the example pool")
+    check("eval: top score recorded as a candidate",
+          agent.example_candidates.confidence("a really sharp reply", time.time()) > 0)
+
+    for _ in range(3):
+        await agent._evaluate_reply("g", "called", "question", "a really sharp reply",
+                                    None, "chat", ["Alice: question"])
+    check("eval: examples file created once corroborated", agent.examples_file.exists(),
+          "four top scores still did not promote")
     if agent.examples_file.exists():
         import json as _json
         ex = _json.loads(agent.examples_file.read_text(encoding="utf-8").strip().splitlines()[-1])

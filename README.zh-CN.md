@@ -381,6 +381,7 @@ python tests/test_benchmark.py
 python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
+python tests/test_promotion.py
 ```
 
 它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习，以及少样本检索与其增量数据集加载。提交 PR 前请先跑一遍。

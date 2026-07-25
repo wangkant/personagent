@@ -29,6 +29,7 @@ from .paths import (
     ROOT,
     read_jsonl,
     resolve_runtime_lang_file,
+    runtime_dir,
     resolve_seed_lang_file,
 )
 from .ingestion import ContentIngestion
@@ -39,6 +40,7 @@ from .pools import (
     _read_jsonl_appended,
     _retrieval_fields,
 )
+from . import promotion
 from .prompts import (
     DEFAULT_PERSONA,
     INTENT_RULES,
@@ -527,6 +529,26 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if self.enabled and not self.bot_name:
             logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
                            "explicit @-mentions (set BOT_NAME so it answers to its name)")
+
+    @property
+    def example_candidates(self) -> promotion.CandidatePool:
+        """Evidence gate in front of the example pool (see promotion.py).
+
+        Resolved lazily as a sidecar of examples_file rather than fixed at
+        construction: the pool is meaningless apart from the example file it
+        guards, and anything that repoints one — a test harness, a benchmark
+        arm, an AGENT_RUNTIME_DIR override — must move both together or it
+        will silently accumulate evidence against the wrong pool."""
+        want = self.examples_file.parent / "example_candidates.json"
+        pool = getattr(self, "_example_candidates", None)
+        if pool is None or pool.path != want:
+            pool = promotion.CandidatePool(want)
+            self._example_candidates = pool
+        return pool
+
+    @example_candidates.setter
+    def example_candidates(self, pool: promotion.CandidatePool) -> None:
+        self._example_candidates = pool
 
     def _spawn(self, coro) -> asyncio.Task:
         """Launch a background task and keep a strong reference to it until it
