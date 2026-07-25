@@ -1,56 +1,121 @@
-<svg width="100%" viewBox="0 0 680 460" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>热加载迭代闭环</title>
-<desc>eval.jsonl 里的低分回复推动 prompt 补丁，通过动态 few-shot 检索在下次类似输入时注入。</desc>
-<defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
-</defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-labelledby="reload-title reload-desc">
+  <title id="reload-title">紧凑的热重载纠错循环</title>
+  <desc id="reload-desc">从低分或线上观察定位到对应的 prompt 分块，再加入硬约束、反例、语义输出过滤规则或 BAD 到 OK 偏好对。按语言检索会在下次相似输入时注入纠正，无需重启。</desc>
+  <style>
+    svg {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --line-strong: #98a2b3;
+      --mint: #087f5b;
+      --mint-soft: #eaf8f2;
+      --violet: #7047b8;
+      --violet-soft: #f3effb;
+      --coral: #b5472f;
+      --coral-soft: #fdf0ec;
+    }
+    text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", "Microsoft YaHei", monospace;
+      dominant-baseline: middle;
+    }
+    .bg { fill: var(--bg); }
+    .surface { fill: var(--surface); }
+    .frame, .rule { fill: none; stroke: var(--line); }
+    .loop { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
+    .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
+    .ink { fill: var(--ink); }
+    .muted { fill: var(--muted); }
+    .mint { fill: var(--mint); }
+    .violet { fill: var(--violet); }
+    .coral { fill: var(--coral); }
+    .mint-region { fill: var(--mint-soft); }
+    .violet-region { fill: var(--violet-soft); }
+    .coral-region { fill: var(--coral-soft); }
+    .code { fill: var(--surface); stroke: var(--line); }
+    .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
+    .eyebrow { font-size: 10.5px; font-weight: 650; letter-spacing: 1.2px; }
+    .label { font-size: 12.5px; font-weight: 650; }
+    .small { font-size: 10.5px; }
+    .tiny { font-size: 9.5px; }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --bg: #0d1117;
+        --surface: #111821;
+        --ink: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --line-strong: #59636e;
+        --mint: #56d49b;
+        --mint-soft: #10241d;
+        --violet: #bc8cff;
+        --violet-soft: #1c1726;
+        --coral: #ff8b73;
+        --coral-soft: #2a1714;
+      }
+    }
+  </style>
+  <defs>
+    <marker id="reload-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
 
-<style>
-text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-</style>
+  <rect class="bg" width="880" height="420" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="879" height="419" rx="11.5"/>
 
-<g>
-<rect x="240" y="40" width="200" height="60" rx="8" stroke-width="0.5" fill="rgb(250, 236, 231)" stroke="rgb(153, 60, 29)"/>
-<text x="340" y="62" text-anchor="middle" dominant-baseline="central" fill="rgb(113, 43, 19)" font-size="14" font-weight="500">eval.jsonl 低分</text>
-<text x="340" y="82" text-anchor="middle" dominant-baseline="central" fill="rgb(153, 60, 29)" font-size="12">异步自评低于 2 分</text>
-</g>
+  <text class="eyebrow violet" x="40" y="32">运维 / 纠错循环</text>
+  <text class="headline ink" x="40" y="61">修补失败类型，下一轮即时重载</text>
+  <text class="small muted" x="40" y="86">需要人工判断的失败走这条手动路径。</text>
+  <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
-<line x1="440" y1="70" x2="510" y2="140" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
+  <path class="loop" d="M88 238C88 157 166 130 250 130H630C724 130 792 167 792 238S724 346 630 346H250C156 346 88 312 88 238" marker-end="url(#reload-arrow)"/>
 
-<g>
-<rect x="460" y="140" width="200" height="60" rx="8" stroke-width="0.5" fill="rgb(238, 237, 254)" stroke="rgb(83, 74, 183)"/>
-<text x="560" y="162" text-anchor="middle" dominant-baseline="central" fill="rgb(60, 52, 137)" font-size="14" font-weight="500">定位归属块</text>
-<text x="560" y="182" text-anchor="middle" dominant-baseline="central" fill="rgb(83, 74, 183)" font-size="12">STYLE_GUIDE / output_filter</text>
-</g>
+  <circle class="coral-region" cx="88" cy="238" r="18"/>
+  <text class="label coral" x="88" y="239" text-anchor="middle">01</text>
+  <text class="label ink" x="40" y="194">观察</text>
+  <text class="tiny coral" x="40" y="211">低分</text>
+  <text class="tiny muted" x="40" y="278">eval.jsonl</text>
+  <text class="tiny muted" x="40" y="293">或线上失败</text>
 
-<line x1="560" y1="200" x2="490" y2="270" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
+  <circle class="violet-region" cx="250" cy="130" r="18"/>
+  <text class="label violet" x="250" y="131" text-anchor="middle">02</text>
+  <text class="label ink" x="250" y="155" text-anchor="middle">定位归属块</text>
+  <text class="tiny muted" x="250" y="171" text-anchor="middle">STYLE_GUIDE · INTENT_RULES</text>
 
-<g>
-<rect x="300" y="270" width="220" height="60" rx="8" stroke-width="0.5" fill="rgb(238, 237, 254)" stroke="rgb(83, 74, 183)"/>
-<text x="410" y="292" text-anchor="middle" dominant-baseline="central" fill="rgb(60, 52, 137)" font-size="14" font-weight="500">打 prompt 补丁</text>
-<text x="410" y="312" text-anchor="middle" dominant-baseline="central" fill="rgb(83, 74, 183)" font-size="12">热加载或 feedback.jsonl 样例对</text>
-</g>
+  <circle class="violet-region" cx="630" cy="130" r="18"/>
+  <text class="label violet" x="630" y="131" text-anchor="middle">03</text>
+  <text class="label ink" x="630" y="155" text-anchor="middle">就近修补</text>
+  <text class="tiny muted" x="630" y="171" text-anchor="middle">硬约束 · 反例</text>
 
-<line x1="300" y1="300" x2="220" y2="270" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
+  <circle class="coral-region" cx="792" cy="238" r="18"/>
+  <text class="label coral" x="792" y="239" text-anchor="middle">04</text>
+  <text class="label ink" x="724" y="194">写入偏好对</text>
+  <text class="tiny coral" x="724" y="211">BAD / OK</text>
+  <text class="tiny muted" x="724" y="278">runtime/</text>
+  <text class="tiny muted" x="724" y="293">feedback.*.jsonl</text>
 
-<g>
-<rect x="20" y="240" width="200" height="60" rx="8" stroke-width="0.5" fill="rgb(225, 245, 238)" stroke="rgb(15, 110, 86)"/>
-<text x="120" y="262" text-anchor="middle" dominant-baseline="central" fill="rgb(8, 80, 65)" font-size="14" font-weight="500">Few-shot 检索</text>
-<text x="120" y="282" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">2 字 ngram + 时间衰减</text>
-</g>
+  <circle class="mint-region" cx="630" cy="346" r="18"/>
+  <text class="label mint" x="630" y="347" text-anchor="middle">05</text>
+  <text class="label ink" x="630" y="306" text-anchor="middle">检索</text>
+  <text class="tiny muted" x="630" y="322" text-anchor="middle">token + 场景 tag + 时近度</text>
 
-<line x1="120" y1="240" x2="120" y2="170" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
+  <circle class="mint-region" cx="250" cy="346" r="18"/>
+  <path class="mint-flow" d="M238 346H262" marker-end="url(#reload-arrow)"/>
+  <text class="label mint" x="250" y="306" text-anchor="middle">下一次相似输入</text>
+  <text class="tiny muted" x="250" y="322" text-anchor="middle">偏好对进入 few-shot 上下文</text>
 
-<g>
-<rect x="20" y="110" width="200" height="60" rx="8" stroke-width="0.5" fill="rgb(225, 245, 238)" stroke="rgb(15, 110, 86)"/>
-<text x="120" y="132" text-anchor="middle" dominant-baseline="central" fill="rgb(8, 80, 65)" font-size="14" font-weight="500">下次匹配注入</text>
-<text x="120" y="152" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">类似输入触发样例对</text>
-</g>
+  <rect class="surface" x="278" y="194" width="324" height="92" rx="8"/>
+  <rect class="frame" x="278.5" y="194.5" width="323" height="91" rx="7.5"/>
+  <text class="eyebrow muted" x="296" y="211">补丁集</text>
+  <text class="small violet" x="296" y="232">+ 在相近规则旁加入硬约束</text>
+  <text class="small violet" x="296" y="250">+ 反例</text>
+  <text class="small mint" x="296" y="268">+ data/output_filter.&lt;lang&gt;.json</text>
 
-<line x1="220" y1="130" x2="240" y2="80" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
-
-<g>
-<rect x="200" y="380" width="280" height="50" rx="8" stroke-width="0.5" fill="rgb(241, 239, 232)" stroke="rgb(95, 94, 90)"/>
-<text x="340" y="405" text-anchor="middle" dominant-baseline="central" fill="rgb(95, 94, 90)" font-size="12">output_filter.json 与 lorebook.json 热加载</text>
-</g>
+  <line class="rule" x1="40" y1="382" x2="840" y2="382"/>
+  <text class="eyebrow mint" x="40" y="400">热重载 / 无需重启</text>
+  <text class="tiny muted" x="178" y="400">output_filter.&lt;lang&gt;.json</text>
+  <text class="tiny muted" x="366" y="400">lorebook.&lt;lang&gt;.json</text>
+  <text class="tiny mint" x="540" y="400">动态 few-shot 记忆</text>
 </svg>

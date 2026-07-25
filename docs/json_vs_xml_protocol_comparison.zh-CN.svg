@@ -1,72 +1,117 @@
-<svg width="100%" viewBox="0 0 680 480" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>JSON 与 XML 输出协议对比</title>
-<desc>XML 协议在标签拼错时会漏出推理；JSON 协议失败关闭，整条回复丢弃。</desc>
-<defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
-</defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="430" viewBox="0 0 880 430" role="img" aria-labelledby="protocol-title protocol-desc">
+  <title id="protocol-title">JSON 与 XML 的发送边界对比</title>
+  <desc id="protocol-desc">畸形的 XML 风格回复可能降级为原始文本，把内部推理带过发送边界。不完整的 JSON 对象会触发解析错误，并在任何内容进入公开聊天前被丢弃。</desc>
+  <style>
+    svg {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --line-strong: #98a2b3;
+      --mint: #087f5b;
+      --mint-soft: #eaf8f2;
+      --violet: #7047b8;
+      --violet-soft: #f3effb;
+      --coral: #b5472f;
+      --coral-soft: #fdf0ec;
+    }
+    text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", "Microsoft YaHei", monospace;
+      dominant-baseline: middle;
+    }
+    .bg { fill: var(--bg); }
+    .surface { fill: var(--surface); }
+    .frame, .rule { fill: none; stroke: var(--line); }
+    .boundary { fill: none; stroke: var(--line-strong); stroke-width: 1.25; stroke-dasharray: 3 5; }
+    .coral-flow { fill: none; stroke: var(--coral); stroke-width: 1.5; }
+    .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
+    .ink { fill: var(--ink); }
+    .muted { fill: var(--muted); }
+    .mint { fill: var(--mint); }
+    .violet { fill: var(--violet); }
+    .coral { fill: var(--coral); }
+    .mint-region { fill: var(--mint-soft); }
+    .violet-region { fill: var(--violet-soft); }
+    .coral-region { fill: var(--coral-soft); }
+    .code { fill: var(--surface); stroke: var(--line); }
+    .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
+    .eyebrow { font-size: 10.5px; font-weight: 650; letter-spacing: 1.2px; }
+    .label { font-size: 12.5px; font-weight: 650; }
+    .small { font-size: 10.5px; }
+    .tiny { font-size: 9.5px; }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --bg: #0d1117;
+        --surface: #111821;
+        --ink: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --line-strong: #59636e;
+        --mint: #56d49b;
+        --mint-soft: #10241d;
+        --violet: #bc8cff;
+        --violet-soft: #1c1726;
+        --coral: #ff8b73;
+        --coral-soft: #2a1714;
+      }
+    }
+  </style>
+  <defs>
+    <marker id="protocol-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
 
-<style>
-text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-</style>
+  <rect class="bg" width="880" height="430" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="879" height="429" rx="11.5"/>
 
-<text x="170" y="30" text-anchor="middle" dominant-baseline="central" fill="rgb(20, 20, 19)" font-size="14" font-weight="500">XML 协议</text>
-<text x="510" y="30" text-anchor="middle" dominant-baseline="central" fill="rgb(20, 20, 19)" font-size="14" font-weight="500">JSON 协议</text>
+  <text class="eyebrow violet" x="40" y="32">协议 / 失败边界</text>
+  <text class="headline ink" x="40" y="61">什么会越界进入公开聊天？</text>
+  <text class="small muted" x="40" y="86">同样被截断，暴露面完全不同。</text>
+  <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
-<g>
-<rect x="40" y="50" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(241, 239, 232)" stroke="rgb(95, 94, 90)"/>
-<text x="170" y="72" text-anchor="middle" dominant-baseline="central" fill="rgb(95, 94, 90)" font-size="12">模型输出被截断</text>
-<text x="170" y="92" text-anchor="middle" dominant-baseline="central" fill="rgb(95, 94, 90)" font-size="12">reply 标签未闭合</text>
-</g>
+  <text class="eyebrow muted" x="62" y="124">模型输出</text>
+  <text class="eyebrow muted" x="352" y="124">解析 / 降级</text>
+  <text class="eyebrow muted" x="715" y="124">公开聊天</text>
+  <line class="boundary" x1="674" y1="116" x2="674" y2="382"/>
+  <rect class="surface" x="696" y="138" width="144" height="232" rx="8"/>
+  <rect class="frame" x="696.5" y="138.5" width="143" height="231" rx="7.5"/>
+  <text class="tiny muted" x="713" y="154"># 群聊</text>
+  <line class="rule" x1="712" y1="167" x2="824" y2="167"/>
 
-<g>
-<rect x="380" y="50" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(241, 239, 232)" stroke="rgb(95, 94, 90)"/>
-<text x="510" y="72" text-anchor="middle" dominant-baseline="central" fill="rgb(95, 94, 90)" font-size="12">模型输出被截断</text>
-<text x="510" y="92" text-anchor="middle" dominant-baseline="central" fill="rgb(95, 94, 90)" font-size="12">JSON 对象不完整</text>
-</g>
+  <rect class="coral-region" x="40" y="138" width="626" height="106" rx="8"/>
+  <text class="eyebrow coral" x="58" y="157">XML 风格 / 开放失败</text>
+  <rect class="code" x="58" y="174" width="256" height="50" rx="5"/>
+  <text class="tiny violet" x="70" y="188">&lt;reasoning&gt;用户正在吐槽…&lt;/reasoning&gt;</text>
+  <text class="tiny coral" x="70" y="207">&lt;reply&gt;对啊，匹配机制太烂了…</text>
+  <path class="coral-flow" d="M314 199H352" marker-end="url(#protocol-arrow)"/>
+  <text class="label coral" x="370" y="188">正则降级</text>
+  <text class="small ink" x="370" y="209">返回原始文本</text>
+  <path class="coral-flow" d="M492 199H674H710" marker-end="url(#protocol-arrow)"/>
+  <text class="tiny coral" x="578" y="184" text-anchor="middle">推理 + 回复</text>
+  <text class="tiny muted" x="712" y="187">bot</text>
+  <text class="tiny coral" x="712" y="207">用户正在吐槽…</text>
+  <text class="tiny ink" x="712" y="223">对啊，匹配机制…</text>
 
-<line x1="170" y1="110" x2="170" y2="138" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
-<line x1="510" y1="110" x2="510" y2="138" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
+  <rect class="mint-region" x="40" y="260" width="626" height="110" rx="8"/>
+  <text class="eyebrow mint" x="58" y="279">JSON / 封闭失败</text>
+  <rect class="code" x="58" y="296" width="256" height="54" rx="5"/>
+  <text class="tiny violet" x="70" y="311">{ &quot;reasoning&quot;: &quot;用户正在吐槽…&quot;,</text>
+  <text class="tiny mint" x="70" y="329">  &quot;reply&quot;: &quot;对啊，匹配机制太烂了…</text>
+  <text class="tiny coral" x="292" y="343" text-anchor="end">∅ 截断</text>
+  <path class="mint-flow" d="M314 323H352" marker-end="url(#protocol-arrow)"/>
+  <text class="label mint" x="370" y="311">json.loads</text>
+  <text class="small ink" x="370" y="332">抛异常 → 丢弃回复</text>
+  <path class="mint-flow" d="M508 323H638"/>
+  <circle class="coral-region" cx="650" cy="323" r="12"/>
+  <path class="coral-flow" d="M644 317L656 329M656 317L644 329"/>
+  <text class="tiny coral" x="650" y="347" text-anchor="middle">丢弃</text>
+  <text class="tiny muted" x="712" y="309">bot</text>
+  <text class="label mint" x="712" y="332">— 静默 —</text>
+  <text class="tiny muted" x="712" y="350">推理留在边界内</text>
 
-<g>
-<rect x="40" y="138" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(250, 238, 218)" stroke="rgb(133, 79, 11)"/>
-<text x="170" y="160" text-anchor="middle" dominant-baseline="central" fill="rgb(133, 79, 11)" font-size="12">正则降级到原始文本</text>
-<text x="170" y="180" text-anchor="middle" dominant-baseline="central" fill="rgb(133, 79, 11)" font-size="12">reasoning 被拼到 reply</text>
-</g>
-
-<g>
-<rect x="380" y="138" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(225, 245, 238)" stroke="rgb(15, 110, 86)"/>
-<text x="510" y="160" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">json.loads 抛异常</text>
-<text x="510" y="180" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">整条回复直接丢弃</text>
-</g>
-
-<line x1="170" y1="198" x2="170" y2="226" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
-<line x1="510" y1="198" x2="510" y2="226" marker-end="url(#arrow)" fill="none" stroke="rgb(115, 114, 108)" stroke-width="1.5"/>
-
-<g>
-<rect x="40" y="226" width="260" height="120" rx="8" stroke-width="0.5" fill="rgb(250, 236, 231)" stroke="rgb(153, 60, 29)"/>
-<text x="170" y="248" text-anchor="middle" dominant-baseline="central" fill="rgb(113, 43, 19)" font-size="14" font-weight="500">发到群里</text>
-<text x="170" y="280" text-anchor="middle" dominant-baseline="central" fill="rgb(153, 60, 29)" font-size="12">用户在吐槽匹配机制，</text>
-<text x="170" y="298" text-anchor="middle" dominant-baseline="central" fill="rgb(153, 60, 29)" font-size="12">应该共情，发：</text>
-<text x="170" y="320" text-anchor="middle" dominant-baseline="central" fill="rgb(153, 60, 29)" font-size="12">对啊匹配机制烂死了</text>
-</g>
-
-<g>
-<rect x="380" y="226" width="260" height="120" rx="8" stroke-width="0.5" fill="rgb(225, 245, 238)" stroke="rgb(15, 110, 86)"/>
-<text x="510" y="248" text-anchor="middle" dominant-baseline="central" fill="rgb(8, 80, 65)" font-size="14" font-weight="500">什么也不发</text>
-<text x="510" y="280" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">Bot 本轮直接静默</text>
-<text x="510" y="300" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">推理永不漏出</text>
-<text x="510" y="320" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">最坏只是漏一条回复</text>
-</g>
-
-<g>
-<rect x="40" y="380" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(250, 236, 231)" stroke="rgb(153, 60, 29)"/>
-<text x="170" y="402" text-anchor="middle" dominant-baseline="central" fill="rgb(113, 43, 19)" font-size="14" font-weight="500">结果</text>
-<text x="170" y="422" text-anchor="middle" dominant-baseline="central" fill="rgb(153, 60, 29)" font-size="12">内部思考被群友看到</text>
-</g>
-
-<g>
-<rect x="380" y="380" width="260" height="60" rx="8" stroke-width="0.5" fill="rgb(225, 245, 238)" stroke="rgb(15, 110, 86)"/>
-<text x="510" y="402" text-anchor="middle" dominant-baseline="central" fill="rgb(8, 80, 65)" font-size="14" font-weight="500">结果</text>
-<text x="510" y="422" text-anchor="middle" dominant-baseline="central" fill="rgb(15, 110, 86)" font-size="12">默认 fail-closed</text>
-</g>
+  <line class="rule" x1="40" y1="395" x2="840" y2="395"/>
+  <circle class="mint" cx="48" cy="412" r="3"/>
+  <text class="small muted" x="60" y="412">只有解析成功并通过验证的回复才可跨越发送边界。</text>
 </svg>
