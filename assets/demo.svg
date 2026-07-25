@@ -1,1 +1,190 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="469" viewBox="0 0 760 469" role="img" aria-label="personagent try_chat.py demo"><title>personagent — one turn, with the model's JSON shown</title><desc>A looping terminal session. Each turn shows the three JSON fields the model returns — reasoning, intent, reply — and then the single line the group actually sees. In the second turn the reply is PASS, so nothing is sent at all.</desc><style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;dominant-baseline:middle;white-space:pre}@keyframes r0{0%,4.18%{opacity:0}4.78%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r0{animation:r0 20.0s steps(1,end) infinite}@keyframes r1{0%,8.96%{opacity:0}9.56%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r1{animation:r1 20.0s steps(1,end) infinite}@keyframes r2{0%,13.73%{opacity:0}14.33%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r2{animation:r2 20.0s steps(1,end) infinite}@keyframes r3{0%,23.29%{opacity:0}23.89%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r3{animation:r3 20.0s steps(1,end) infinite}@keyframes r4{0%,32.84%{opacity:0}33.44%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r4{animation:r4 20.0s steps(1,end) infinite}@keyframes r5{0%,37.62%{opacity:0}38.22%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r5{animation:r5 20.0s steps(1,end) infinite}@keyframes r6{0%,42.40%{opacity:0}43.00%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r6{animation:r6 20.0s steps(1,end) infinite}@keyframes r7{0%,47.18%{opacity:0}47.78%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r7{animation:r7 20.0s steps(1,end) infinite}@keyframes r8{0%,51.96%{opacity:0}52.56%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r8{animation:r8 20.0s steps(1,end) infinite}@keyframes r9{0%,61.51%{opacity:0}62.11%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r9{animation:r9 20.0s steps(1,end) infinite}@keyframes r10{0%,71.07%{opacity:0}71.67%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r10{animation:r10 20.0s steps(1,end) infinite}@keyframes r11{0%,75.84%{opacity:0}76.44%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r11{animation:r11 20.0s steps(1,end) infinite}@keyframes r12{0%,80.62%{opacity:0}81.22%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r12{animation:r12 20.0s steps(1,end) infinite}@keyframes r13{0%,85.40%{opacity:0}86.00%,93.0%{opacity:1}98.0%,100%{opacity:0}}.r13{animation:r13 20.0s steps(1,end) infinite}@keyframes cur{0%,49%{opacity:1}50%,100%{opacity:0}}.cur{animation:cur 1.06s steps(1,end) infinite}</style><rect width="760" height="469" rx="9" fill="#0d1117"/><rect x="0.5" y="0.5" width="759" height="468" rx="9" fill="none" stroke="#30363d"/><circle cx="22" cy="21" r="6" fill="#ff5f56"/><circle cx="40" cy="21" r="6" fill="#ffbd2e"/><circle cx="58" cy="21" r="6" fill="#27c93f"/><text x="380.0" y="21" fill="#6e7681" font-size="12.5" text-anchor="middle">try_chat.py — personagent</text><line x1="0" y1="40" x2="760" y2="40" stroke="#30363d"/><text class="r0" x="20" y="62" fill="#3fb950" font-size="12.5">$</text><text class="r0" x="92" y="62" fill="#c9d1d9" font-size="13.5">python try_chat.py --show-json</text><text class="r1" x="20" y="87" fill="#6e7681" font-size="13.5">the JSON below is what the model returns; only 'sent' reaches the group</text><text class="r3" x="20" y="137" fill="#58a6ff" font-size="12.5">you</text><text class="r3" x="92" y="137" fill="#c9d1d9" font-size="13.5">spent 3 hours on this and ctrl+z'd it into the void</text><text class="r4" x="20" y="162" fill="#6e7681" font-size="12.5">json</text><text class="r4" x="92" y="162" fill="#a371f7" font-size="13.5">reasoning</text><text class="r4" x="180" y="162" fill="#c9d1d9" font-size="13.5">not addressed to me - a beat of empathy, not a fix-it list</text><text class="r5" x="20" y="187" fill="#6e7681" font-size="12.5">json</text><text class="r5" x="92" y="187" fill="#a371f7" font-size="13.5">intent</text><text class="r5" x="180" y="187" fill="#c9d1d9" font-size="13.5">vent</text><text class="r6" x="20" y="212" fill="#6e7681" font-size="12.5">json</text><text class="r6" x="92" y="212" fill="#a371f7" font-size="13.5">reply</text><text class="r6" x="180" y="212" fill="#c9d1d9" font-size="13.5">"rip. take five before you go back in"</text><text class="r7" x="20" y="237" fill="#3fb950" font-size="12.5">sent</text><text class="r7" x="92" y="237" fill="#e6edf3" font-size="13.5">rip. take five before you go back in</text><text class="r9" x="20" y="287" fill="#58a6ff" font-size="12.5">you</text><text class="r9" x="92" y="287" fill="#c9d1d9" font-size="13.5">D . e</text><text class="r10" x="20" y="312" fill="#6e7681" font-size="12.5">json</text><text class="r10" x="92" y="312" fill="#a371f7" font-size="13.5">reasoning</text><text class="r10" x="180" y="312" fill="#c9d1d9" font-size="13.5">single letters + spaces - noise, nothing to engage with</text><text class="r11" x="20" y="337" fill="#6e7681" font-size="12.5">json</text><text class="r11" x="92" y="337" fill="#a371f7" font-size="13.5">intent</text><text class="r11" x="180" y="337" fill="#c9d1d9" font-size="13.5">chat</text><text class="r12" x="20" y="362" fill="#6e7681" font-size="12.5">json</text><text class="r12" x="92" y="362" fill="#a371f7" font-size="13.5">reply</text><text class="r12" x="180" y="362" fill="#c9d1d9" font-size="13.5">"PASS"</text><text class="r13" x="20" y="387" fill="#d29922" font-size="12.5">--</text><text class="r13" x="92" y="387" fill="#d29922" font-size="13.5">nothing sent - it decided this one wasn't for it</text><text class="cur" x="20" y="412" fill="#3fb950" font-size="13.5">$ &#9608;</text><line x1="0" y1="432" x2="760" y2="432" stroke="#30363d"/><text x="20" y="451" fill="#6e7681" font-size="11.5">reasoning / intent / reply are JSON fields, not inline tags — a truncated generation cannot leak thinking into what the group sees</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="598" viewBox="0 0 820 598" role="img" aria-labelledby="title desc">
+  <title id="title">personagent animated protocol trace</title>
+  <desc id="desc">An illustrated two-turn terminal trace. Each user message stays on the main alignment. The model's complete JSON return is indented as an internal diagnostic block. The first reply reaches the main sent line; the second returns PASS, so the sent line remains empty.</desc>
+  <style>
+    svg {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --blue: #1769aa;
+      --violet: #7047b8;
+      --violet-soft: #f3effb;
+      --mint: #087f5b;
+      --mint-soft: #eaf8f2;
+      --amber: #9a5b00;
+      --amber-soft: #fff5dc;
+    }
+    text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      dominant-baseline: middle;
+      white-space: pre;
+    }
+    .bg { fill: var(--bg); }
+    .surface { fill: var(--surface); }
+    .frame, .rule { stroke: var(--line); }
+    .ink { fill: var(--ink); }
+    .muted { fill: var(--muted); }
+    .user { fill: var(--blue); }
+    .model { fill: var(--violet); }
+    .model-panel {
+      fill: var(--violet-soft);
+      stroke: var(--line);
+    }
+    .sent-panel { fill: var(--mint-soft); }
+    .sent { fill: var(--mint); }
+    .pass-panel { fill: var(--amber-soft); }
+    .pass { fill: var(--amber); }
+    .row {
+      opacity: 0;
+      animation-duration: 18s;
+      animation-timing-function: steps(1, end);
+      animation-iteration-count: infinite;
+    }
+    .r0 { animation-name: r0; }
+    .r1 { animation-name: r1; }
+    .r2 { animation-name: r2; }
+    .r3 { animation-name: r3; }
+    .r4 { animation-name: r4; }
+    .r5 { animation-name: r5; }
+    .r6 { animation-name: r6; }
+    .r7 { animation-name: r7; }
+    .r8 { animation-name: r8; }
+    .r9 { animation-name: r9; }
+    .r10 { animation-name: r10; }
+    .r11 { animation-name: r11; }
+    .r12 { animation-name: r12; }
+    .r13 { animation-name: r13; }
+    .r14 { animation-name: r14; }
+    .r15 { animation-name: r15; }
+    .r16 { animation-name: r16; }
+    .r17 { animation-name: r17; }
+    @keyframes r0 { 0%,2%{opacity:0} 3%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r1 { 0%,6%{opacity:0} 7%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r2 { 0%,11%{opacity:0} 12%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r3 { 0%,17%{opacity:0} 18%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r4 { 0%,21%{opacity:0} 22%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r5 { 0%,25%{opacity:0} 26%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r6 { 0%,29%{opacity:0} 30%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r7 { 0%,33%{opacity:0} 34%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r8 { 0%,37%{opacity:0} 38%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r9 { 0%,43%{opacity:0} 44%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r10 { 0%,51%{opacity:0} 52%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r11 { 0%,57%{opacity:0} 58%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r12 { 0%,61%{opacity:0} 62%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r13 { 0%,65%{opacity:0} 66%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r14 { 0%,69%{opacity:0} 70%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r15 { 0%,73%{opacity:0} 74%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r16 { 0%,77%{opacity:0} 78%,94%{opacity:1} 98%,100%{opacity:0} }
+    @keyframes r17 { 0%,83%{opacity:0} 84%,94%{opacity:1} 98%,100%{opacity:0} }
+    .cursor { animation: blink 1.05s steps(1, end) infinite; }
+    @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --bg: #0d1117;
+        --surface: #111821;
+        --ink: #e6edf3;
+        --muted: #8b949e;
+        --line: #30363d;
+        --blue: #58a6ff;
+        --violet: #bc8cff;
+        --violet-soft: #1c1726;
+        --mint: #56d49b;
+        --mint-soft: #10241d;
+        --amber: #e3b341;
+        --amber-soft: #2a210f;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .row { animation: none !important; opacity: 1; }
+      .cursor { animation: none !important; opacity: 1; }
+    }
+  </style>
+
+  <rect class="bg" width="820" height="598" rx="10"/>
+  <rect class="surface" x="0.5" y="0.5" width="819" height="42" rx="9"/>
+  <rect class="frame" x="0.5" y="0.5" width="819" height="597" rx="9" fill="none"/>
+  <circle cx="22" cy="21" r="5.5" fill="#e66555"/>
+  <circle cx="40" cy="21" r="5.5" fill="#d99b22"/>
+  <circle cx="58" cy="21" r="5.5" fill="#28a36a"/>
+  <text class="muted" x="410" y="21" font-size="12.5" text-anchor="middle">try_chat.py · illustrated protocol trace</text>
+  <line class="rule" x1="0" y1="42" x2="820" y2="42"/>
+
+  <g class="row r0">
+    <text class="sent" x="20" y="66" font-size="12.5">$</text>
+    <text class="ink" x="46" y="66" font-size="13.5">python try_chat.py</text>
+  </g>
+  <text class="row r1 muted" x="20" y="92" font-size="12.5">internal JSON is expanded here · the real trial prints only reply, intent, and mem</text>
+
+  <g class="row r2">
+    <text class="user" x="20" y="128" font-size="12.5">you</text>
+    <text class="ink" x="92" y="128" font-size="13.5">spent 3 hours on this and ctrl+z'd it into the void</text>
+  </g>
+
+  <g class="row r3" data-role="model-trace">
+    <rect class="model-panel" x="52" y="148" width="748" height="142" rx="7"/>
+    <line class="rule" x1="52" y1="148" x2="52" y2="290"/>
+    <text class="model" x="70" y="166" font-size="12.5">model</text>
+    <text class="muted" x="154" y="166" font-size="13.5">{</text>
+  </g>
+  <g class="row r4">
+    <text class="model" x="154" y="190" font-size="13">&quot;reasoning&quot;:</text>
+    <text class="ink" x="278" y="190" font-size="13">&quot;a beat of empathy, not a fix-it list&quot;,</text>
+  </g>
+  <g class="row r5">
+    <text class="model" x="154" y="214" font-size="13">&quot;intent&quot;:</text>
+    <text class="ink" x="278" y="214" font-size="13">&quot;vent&quot;,</text>
+  </g>
+  <g class="row r6">
+    <text class="model" x="154" y="238" font-size="13">&quot;reply&quot;:</text>
+    <text class="ink" x="278" y="238" font-size="13">&quot;rip. take five before you go back in&quot;,</text>
+  </g>
+  <g class="row r7">
+    <text class="model" x="154" y="262" font-size="13">&quot;mem&quot;:</text>
+    <text class="ink" x="278" y="262" font-size="13">&quot;&quot;</text>
+  </g>
+  <text class="row r8 muted" x="154" y="282" font-size="13.5">}</text>
+
+  <g class="row r9" data-role="sent">
+    <rect class="sent-panel" x="12" y="304" width="796" height="42" rx="7"/>
+    <text class="sent" x="20" y="326" font-size="12.5">sent</text>
+    <text class="ink" x="92" y="326" font-size="13.5">rip. take five before you go back in</text>
+  </g>
+
+  <g class="row r10">
+    <text class="user" x="20" y="370" font-size="12.5">you</text>
+    <text class="ink" x="92" y="370" font-size="13.5">D . e</text>
+  </g>
+
+  <g class="row r11" data-role="model-trace">
+    <rect class="model-panel" x="52" y="390" width="748" height="142" rx="7"/>
+    <line class="rule" x1="52" y1="390" x2="52" y2="532"/>
+    <text class="model" x="70" y="408" font-size="12.5">model</text>
+    <text class="muted" x="154" y="408" font-size="13.5">{</text>
+  </g>
+  <g class="row r12">
+    <text class="model" x="154" y="432" font-size="13">&quot;reasoning&quot;:</text>
+    <text class="ink" x="278" y="432" font-size="13">&quot;noise — nothing here asks for a reply&quot;,</text>
+  </g>
+  <g class="row r13">
+    <text class="model" x="154" y="456" font-size="13">&quot;intent&quot;:</text>
+    <text class="ink" x="278" y="456" font-size="13">&quot;chat&quot;,</text>
+  </g>
+  <g class="row r14">
+    <text class="model" x="154" y="480" font-size="13">&quot;reply&quot;:</text>
+    <text class="pass" x="278" y="480" font-size="13">&quot;PASS&quot;,</text>
+  </g>
+  <g class="row r15">
+    <text class="model" x="154" y="504" font-size="13">&quot;mem&quot;:</text>
+    <text class="ink" x="278" y="504" font-size="13">&quot;&quot;</text>
+  </g>
+  <text class="row r16 muted" x="154" y="524" font-size="13.5">}</text>
+
+  <g class="row r17" data-role="sent">
+    <rect class="pass-panel" x="12" y="546" width="796" height="40" rx="7"/>
+    <text class="pass" x="20" y="567" font-size="12.5">sent</text>
+    <text class="pass" x="92" y="567" font-size="13.5">∅ · PASS keeps this turn inside the agent pipeline</text>
+    <text class="cursor sent" x="786" y="567" font-size="13">█</text>
+  </g>
+</svg>

@@ -6,16 +6,35 @@
 
 **English** | [中文](README.zh-CN.md)
 
-> **You type. It replies like a person — not a help desk — and it gets better at it on its own.**
+> **A self-evolving persona agent for group chats and DMs — built to sound like a regular, not a help desk.**
+
+`personagent` turns an OpenAI-compatible model into a selective, bilingual chat persona that learns from the room.
+
+- **Human-shaped conversation.** Persona and style constraints, content understanding, stickers, proactive messages, and the option to stay quiet.
+- **Feedback that hot-reloads.** Corrections become preference pairs; good reactions become proven examples; LLM self-evaluation is the fallback.
+- **One guarded pipeline.** Structured JSON is parsed and validated before a reply is sent through OneBot / QQ or the AstrBot gateway to Telegram, Discord, Slack, Lark, and KOOK.
+
+### Try it in 60 seconds
+
+Bring Python 3.10+ and one OpenAI-compatible API key. QQ and NapCat are not required:
+
+```bash
+python quickstart.py
+python try_chat.py
+```
+
+The setup wizard writes `.env` and can open the trial immediately; use the second command to return later. English is the default, and `python try_chat.py --lang zh` runs the Chinese persona. [See the full quick start](#quick-start).
 
 [![personagent terminal demo](assets/demo.svg)](#try-it-without-qq)
 
-A **template for building self-evolving, persona-driven LLM agents** for group chats and DMs — designed to send messages that read like a real person rather than a customer-service bot, and to keep getting better at it on its own: it learns primarily from **real user reactions** — a "no, I meant X" becomes a correction pair, laughter banks the reply as a proven example — with LLM self-scoring as the fallback channel (see [Self-evolution](#self-evolution)). The primary carrier is **OneBot v11 / QQ** (via NapCat); a bundled platform-neutral gateway plus an [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin extend the same persona to **Telegram, Discord, Slack, Lark, and KOOK** with no changes to the persona pipeline. This repository is primarily a study of LLM-agent and prompt-engineering design patterns; the platform integration is a demonstration carrier and contains no proprietary IM protocol code.
+*Illustrated protocol trace: the indented block is the model's structured return; only the main-aligned `sent` line reaches the chat. The real terminal trial stays compact.*
 
-> **English-first, bilingual.** The agent ships English by default and runs Chinese with one switch (`AGENT_LANG=zh`). See [Language](#language-english--中文). Want to try it in 30 seconds with no QQ account? Jump to [Try it without QQ](#try-it-without-qq).
+<details>
+<summary><strong>Deployment disclaimer</strong></summary>
 
-> **Educational / research project. Not affiliated with, endorsed by, or sponsored by any IM platform vendor.**
-> Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party OneBot protocol clients (such as NapCat for QQ) are not sanctioned by their upstream IM platforms; if you choose to deploy against QQ, use a secondary account and run from a residential IP. The repository authors accept no responsibility for downstream protocol-client choices.
+This is an educational / research project, unaffiliated with and neither endorsed nor sponsored by any IM platform vendor. Read [DISCLAIMER.md](DISCLAIMER.md) before deploying. Third-party OneBot clients such as NapCat are not sanctioned by their upstream IM platforms; if you deploy against QQ, use a secondary account and a residential IP. The repository authors accept no responsibility for downstream protocol-client choices.
+
+</details>
 
 ## Table of contents
 
@@ -87,7 +106,7 @@ python try_chat.py --lang zh   # Chinese variant
 python try_chat.py --owner     # speak as the configured owner
 ```
 
-You type a line, the bot replies — through the **same** reasoning path the live bot uses (persona + style guide + JSON output protocol + the character-whitelist validator). It also prints the chosen `intent` and any extracted `mem`, so you can watch the protocol work. For batch/offline tuning against fixtures (rate replies, grow the few-shot bank), use `python tools/prompt_lab.py`.
+You type a line, the bot replies — through the **same** reasoning path the live bot uses (persona + style guide + JSON output protocol + the character-whitelist validator). The trial prints the final reply plus the chosen `intent` and any extracted `mem`; the animated trace above expands the model-return → sent boundary so the protocol is easier to inspect. For batch/offline tuning against fixtures (rate replies, grow the few-shot bank), use `python tools/prompt_lab.py`.
 
 ### Run live on a group
 

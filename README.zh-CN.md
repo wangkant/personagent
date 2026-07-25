@@ -6,16 +6,35 @@
 
 [English](README.md) | **中文**
 
-> **你打一句，它像真人一样接话——不是客服腔——而且越用越像。**
+> **一个用于群聊和私聊的自进化人设 agent——像群里的熟人，而不是客服。**
+
+`personagent` 把 OpenAI 兼容模型变成一个懂得选择性接话、支持中英双语、还能从群聊现场学习的人设。
+
+- **像真人一样聊天。** 人设与风格约束、内容理解、表情包、主动发言，以及选择沉默的能力。
+- **反馈即时热加载。** 纠正会变成偏好对；良好反应会变成验证过的范例；LLM 自评分只作兜底。
+- **一条受保护的管线。** 结构化 JSON 经过解析与校验后，回复才会通过 OneBot / QQ 或 AstrBot 网关发往 Telegram、Discord、Slack、飞书和 KOOK。
+
+### 60 秒试用
+
+只需 Python 3.10+ 和一个 OpenAI 兼容 API key；不需要 QQ 或 NapCat：
+
+```bash
+python quickstart.py
+python try_chat.py
+```
+
+设置向导会写入 `.env`，并可直接进入试聊；之后可用第二条命令再次启动。默认使用英文人设，`python try_chat.py --lang zh` 可运行中文人设。[查看完整快速开始](#快速开始)。
 
 [![personagent 终端演示](assets/demo.svg)](#免-qq-试用)
 
-一个**自进化的人设型 LLM agent 模板**，用于群聊和私聊，目标是让发出的消息读起来像真人闲聊，而非客服机器人——并且越用越像：它主要从**真实用户反应**中学习——一句「不是,我是说X」变成纠正偏好对,一阵笑把回复存为验证过的范例——LLM 自评分只作兜底通道（见[自进化](#自进化)）。主载体是 **OneBot v11 / QQ**（经 NapCat）；内置一个平台无关网关与 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，可在人设管线零改动的前提下，将同一人设扩展到 **Telegram、Discord、Slack、飞书、KOOK**。本仓库的核心价值在于 LLM agent 与 prompt engineering 的设计模式实践；平台接入仅为演示载体，仓库内不包含任何 IM 协议实现。
+*协议示意动画：缩进块是模型的结构化返回；只有与主线对齐的 `sent` 行会进入聊天。实际终端试聊保持简洁。*
 
-> **英文优先，中英双语。** agent 默认运行英文，通过一个开关（`AGENT_LANG=zh`）即可切换至中文。详见[语言](#语言english--中文)。想在 30 秒内上手、且无需 QQ 账号？请直接查看[免 QQ 试用](#免-qq-试用)。
+<details>
+<summary><strong>部署免责声明</strong></summary>
 
-> **教育/研究用途。本项目与任何 IM 平台厂商无关联，未获任何平台授权或赞助。**
-> 部署之前先看 [DISCLAIMER.md](DISCLAIMER.md)。第三方 OneBot 协议端 (例如 QQ 的 NapCat) 没有上游 IM 平台背书；如果你选择部署到 QQ，建议用小号 + 家庭/居民 IP 跑。仓库作者不对你选择的协议端承担任何责任。
+本项目仅供教育 / 研究，与任何 IM 平台厂商无关联，也未获任何平台授权或赞助。部署前请阅读 [DISCLAIMER.md](DISCLAIMER.md)。NapCat 等第三方 OneBot 客户端不受其上游 IM 平台认可；如果部署到 QQ，请使用小号和家庭 / 居民 IP。仓库作者不对下游协议客户端的选择承担责任。
+
+</details>
 
 ## 目录
 
@@ -87,7 +106,7 @@ python try_chat.py --lang zh   # 中文变体
 python try_chat.py --owner     # 以配置的 owner 身份说话
 ```
 
-你输入一行，bot 回复一句——走的是与线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。它还会一并打印选中的 `intent` 与抽取到的 `mem`，便于观察协议的运作。若需针对 fixture 做批量 / 离线调优（为回复打分、扩充 few-shot 库），使用 `python tools/prompt_lab.py`。
+你输入一行，bot 回复一句——走的是与线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。试聊会打印最终回复、选中的 `intent` 与抽取到的 `mem`；上方动画则把“模型返回 → 实际发送”的边界展开，便于观察协议。若需针对 fixture 做批量 / 离线调优（为回复打分、扩充 few-shot 库），使用 `python tools/prompt_lab.py`。
 
 ### 在群里实际运行
 
