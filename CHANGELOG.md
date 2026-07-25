@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] — 2026-07-25
 
 ### Changed
 
@@ -26,6 +26,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now that evidence was discarded.
 - `tests/test_promotion.py` (23 checks) covering the weights, the decay curve,
   promotion consuming its candidate, retraction, persistence and pool bounds.
+
+### Removed
+
+- `docs/superpowers/` — 2,000 lines of development-process notes that were
+  never project documentation. `docs/` now holds only the architecture and
+  loop diagrams.
+- The GitHub Pages demo. Its one irreplaceable idea — that the visible reply is
+  a single field of a larger decision — now animates in the README itself,
+  including a PASS beat where the agent decides not to speak.
+
+### Fixed
+
+- `paths.ROOT` anchored state next to `site-packages` when installed as a
+  wheel; it now honours `AGENT_HOME`, else whichever of the package parent /
+  cwd actually looks like a deployment root.
+- `persona_agent/py.typed` was declared in `pyproject.toml` but never existed.
+  CI now asserts it is present inside the built wheel.
+- Benchmark and README no longer name a specific vendor as "the judge" — the
+  judge is configurable and naming one was both a leftover and inaccurate.
 
 ## [0.1.0] — 2026-07-25
 
@@ -111,4 +130,5 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[0.1.1]: https://github.com/wangkant/personagent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/wangkant/personagent/releases/tag/v0.1.0

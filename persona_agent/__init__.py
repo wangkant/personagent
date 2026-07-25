@@ -10,6 +10,7 @@ agent.py stays readable and each layer is testable on its own:
 - ingestion  links, share cards, images, OCR, vision — with the SSRF guard
 - transport  throttling, chunking, typing simulation, sends, conversation LRU
 - learning   self-eval, reaction adjudication, the EVOLVE_AUTO loop
+- promotion  the evidence gate: what may be banked as an example
 
 Supporting modules, all pure logic with no agent state:
 
@@ -24,4 +25,4 @@ Read-only seed datasets live in data/; everything the agent learns at runtime
 goes to runtime/ (gitignored) — see paths.ROOT.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

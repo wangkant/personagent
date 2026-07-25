@@ -2,9 +2,13 @@
 
 Drives the real Agent over synthetic train / held-out scenario sets across N
 rounds and two arms (evolve-on, evolve-off control), each in an isolated temp
-state dir, then exports blind held-out replies for an independent judge
-(Claude) and plots mean score vs round. See
-docs/superpowers/specs/2026-07-22-evolution-benchmark-design.md.
+state dir, then exports blind held-out replies for an independent judge and
+plots mean score vs round.
+
+The judge must not be the model being measured, or the loop grades its own
+homework: `--judge export` writes a blind inbox for a human or a separate
+model to score, `--judge anthropic --judge-model ...` routes it to a different
+vendor. Neither ever feeds the learning loop.
 """
 from __future__ import annotations
 

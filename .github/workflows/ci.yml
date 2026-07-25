@@ -69,7 +69,7 @@ jobs:
           import persona_agent
           from persona_agent.paths import ROOT
           from persona_agent.agent import Agent
-          assert persona_agent.__version__ == '0.1.0', persona_agent.__version__
+          assert persona_agent.__version__.startswith('0.1.'), persona_agent.__version__
           # A wheel install has no data/ next to the package: ROOT must fall back
           # to the working directory, never to site-packages.
           assert 'site-packages' not in str(ROOT), ROOT
