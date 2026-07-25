@@ -86,7 +86,7 @@
   <text class="small ink" x="490" y="208">正向反应</text>
   <text class="tiny mint" x="490" y="225">已验证回复</text>
   <path class="mint-flow" d="M590 160H624V178H692" marker-end="url(#self-arrow)"/>
-  <path class="mint-flow" d="M590 208H624V196H692" marker-end="url(#self-arrow)"/>
+  <path class="mint-flow" d="M590 208H624V244H692" marker-end="url(#self-arrow)"/>
   <text class="tiny muted" x="180" y="238">全部裁决 → candidates.jsonl 审计</text>
 
   <rect class="violet-region" x="160" y="276" width="500" height="116" rx="8"/>
@@ -100,7 +100,7 @@
   <text class="small mint" x="490" y="308">5 分 → 已验证回复</text>
   <text class="small coral" x="490" y="354">≤ 2 分 → 自诊断</text>
   <text class="tiny muted" x="490" y="371">EVOLVE_AUTO 或 review --apply</text>
-  <path class="violet-flow" d="M604 308H632V196H692" marker-end="url(#self-arrow)"/>
+  <path class="violet-flow" d="M604 308H632V262H692" marker-end="url(#self-arrow)"/>
   <path class="violet-flow" d="M604 354H648V178H692" marker-end="url(#self-arrow)"/>
 
   <rect class="surface" x="692" y="132" width="148" height="230" rx="8"/>

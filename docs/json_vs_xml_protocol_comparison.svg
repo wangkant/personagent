@@ -13,6 +13,8 @@
       --mint-soft: #eaf8f2;
       --violet: #7047b8;
       --violet-soft: #f3effb;
+      --amber: #9a5b00;
+      --amber-soft: #fff5dc;
       --coral: #b5472f;
       --coral-soft: #fdf0ec;
     }
@@ -26,13 +28,16 @@
     .boundary { fill: none; stroke: var(--line-strong); stroke-width: 1.25; stroke-dasharray: 3 5; }
     .coral-flow { fill: none; stroke: var(--coral); stroke-width: 1.5; }
     .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
+    .amber-flow { fill: none; stroke: var(--amber); stroke-width: 1.5; }
     .ink { fill: var(--ink); }
     .muted { fill: var(--muted); }
     .mint { fill: var(--mint); }
     .violet { fill: var(--violet); }
+    .amber { fill: var(--amber); }
     .coral { fill: var(--coral); }
     .mint-region { fill: var(--mint-soft); }
     .violet-region { fill: var(--violet-soft); }
+    .amber-region { fill: var(--amber-soft); }
     .coral-region { fill: var(--coral-soft); }
     .code { fill: var(--surface); stroke: var(--line); }
     .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
@@ -52,6 +57,8 @@
         --mint-soft: #10241d;
         --violet: #bc8cff;
         --violet-soft: #1c1726;
+        --amber: #e3b341;
+        --amber-soft: #2a210f;
         --coral: #ff8b73;
         --coral-soft: #2a1714;
       }
@@ -95,18 +102,18 @@
   <text class="tiny ink" x="712" y="223">yeah, matchmaking…</text>
 
   <rect class="mint-region" x="40" y="260" width="626" height="110" rx="8"/>
-  <text class="eyebrow mint" x="58" y="279">JSON / FAILS CLOSED</text>
+  <text class="eyebrow amber" x="58" y="279">JSON / FAILS CLOSED</text>
   <rect class="code" x="58" y="296" width="256" height="54" rx="5"/>
   <text class="tiny violet" x="70" y="311">{ &quot;reasoning&quot;: &quot;user is venting…&quot;,</text>
   <text class="tiny mint" x="70" y="329">  &quot;reply&quot;: &quot;yeah, matchmaking is rigged…</text>
   <text class="tiny coral" x="292" y="343" text-anchor="end">∅ truncated</text>
   <path class="mint-flow" d="M314 323H352" marker-end="url(#protocol-arrow)"/>
-  <text class="label mint" x="370" y="311">json.loads</text>
+  <text class="label amber" x="370" y="311">json.loads</text>
   <text class="small ink" x="370" y="332">raises → discard reply</text>
-  <path class="mint-flow" d="M508 323H638"/>
-  <circle class="coral-region" cx="650" cy="323" r="12"/>
-  <path class="coral-flow" d="M644 317L656 329M656 317L644 329"/>
-  <text class="tiny coral" x="650" y="347" text-anchor="middle">DROP</text>
+  <path class="amber-flow" d="M508 323H638"/>
+  <circle class="amber-region" cx="650" cy="323" r="12"/>
+  <path class="amber-flow" d="M644 317L656 329M656 317L644 329"/>
+  <text class="tiny amber" x="650" y="347" text-anchor="middle">DROP</text>
   <text class="tiny muted" x="712" y="309">bot</text>
   <text class="label mint" x="712" y="332">— silent —</text>
   <text class="tiny muted" x="712" y="350">reasoning stays inside</text>
