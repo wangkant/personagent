@@ -56,6 +56,10 @@ bot 回复: {reply}
 
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
+# Stamped onto evidence produced by REVIEWER_PROMPTS; bump on meaning changes
+# (see reactions.ADJUDICATOR_VERSION).
+REVIEWER_VERSION = "self-reviewer/1"
+
 # Feedback is a curated dataset, not a log — refuse to grow it unbounded.
 FEEDBACK_MAX_BYTES = 5_000_000
 

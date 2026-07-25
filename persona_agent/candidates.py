@@ -1,0 +1,437 @@
+"""Versioned behaviour candidates and the append-only ledger that owns them.
+
+A candidate is a *proposal*: "replace this reply with that one", "this reply is
+worth imitating". Adjudicating evidence (evidence.py) mints candidates; nothing
+else may. A candidate on its own changes nothing — it sits in ``proposed``
+until something grants it authority.
+
+Authority is a lifecycle event, not a field:
+
+    proposed --promote--> promoted --rollback--> rolled_back
+        |                     |
+        |                     +--supersede--> superseded  (replacement promoted)
+        +--reject---------> rejected
+
+Every transition is appended to the ledger; no earlier row is ever edited or
+deleted, so "why is the agent talking like this" always has an answer, and so
+does "why did it stop". The current state of the world is a *projection* — a
+replay of the log from the beginning — which is why a restart cannot disagree
+with the process that wrote it.
+
+Retrieval never reads this ledger directly. Promoted-and-active candidates are
+materialized into small view files (``rebuild_views``) that the agent loads on
+the hot path; the view is a cache and may be rewritten atomically at any time,
+because it can always be rebuilt from the log.
+
+Pure logic — no clock reads, no LLM. Callers pass timestamps.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import tempfile
+from pathlib import Path
+
+SCHEMA = 1
+
+TYPE_PAIR = "preference_pair"
+TYPE_EXAMPLE = "positive_example"
+TYPES = (TYPE_PAIR, TYPE_EXAMPLE)
+
+STATE_PROPOSED = "proposed"
+STATE_PROMOTED = "promoted"
+STATE_REJECTED = "rejected"
+STATE_SUPERSEDED = "superseded"
+STATE_ROLLED_BACK = "rolled_back"
+STATES = (STATE_PROPOSED, STATE_PROMOTED, STATE_REJECTED,
+          STATE_SUPERSEDED, STATE_ROLLED_BACK)
+
+# Ledger row kinds.
+ROW_CANDIDATE = "candidate"
+ROW_LIFECYCLE = "lifecycle"
+ROW_EVIDENCE = "evidence_link"
+
+# Which states a transition may be written from. The ledger replays whatever it
+# contains — this is a write-time guard, so a mistaken admin command is refused
+# instead of becoming permanent history.
+_ALLOWED_FROM = {
+    STATE_PROMOTED: (STATE_PROPOSED, STATE_ROLLED_BACK),
+    STATE_REJECTED: (STATE_PROPOSED, STATE_PROMOTED, STATE_ROLLED_BACK),
+    STATE_ROLLED_BACK: (STATE_PROMOTED,),
+    STATE_SUPERSEDED: (STATE_PROPOSED, STATE_PROMOTED),
+}
+
+# Identity fields: what makes two proposals the same proposal. Scenario labels
+# and modes are deliberately excluded — the adjudicator writes a free-text
+# scene label per call, and letting it split identity would strand each event
+# on its own candidate where none ever reaches the corroboration threshold.
+_ID_FIELDS = ("type", "lang", "persona_hash", "persona_version", "conv_id",
+              "reply", "better")
+
+
+def scope_from_event(event: dict) -> dict:
+    """The compatibility scope of an event: who, where, in what language."""
+    adj = event.get("adjudication") or {}
+    return {
+        "lang": str(event.get("lang") or ""),
+        "platform": str(event.get("platform") or ""),
+        "conv_id": str(event.get("conv_id") or ""),
+        "persona": str(event.get("persona") or ""),
+        "persona_hash": str(event.get("persona_hash") or ""),
+        "persona_version": str(event.get("persona_version") or ""),
+        "scenario": str(adj.get("scenario") or ""),
+        "mode": str(adj.get("mode") or ""),
+    }
+
+
+def candidate_id(ctype: str, scope: dict, reply: str, better: str = "") -> str:
+    payload = {
+        "type": ctype,
+        "lang": scope.get("lang", ""),
+        "persona_hash": scope.get("persona_hash", ""),
+        "persona_version": scope.get("persona_version", ""),
+        "conv_id": scope.get("conv_id", ""),
+        "reply": (reply or "").strip(),
+        "better": (better or "").strip(),
+    }
+    blob = json.dumps({k: payload[k] for k in _ID_FIELDS}, ensure_ascii=False,
+                      sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def make_candidate(*, ctype: str, scope: dict, payload: dict,
+                   evidence=(), created_at: str = "",
+                   adjudication_version: str = "") -> dict:
+    """Build a candidate record from a retrieval-shaped payload.
+
+    ``payload`` is the row the pools already understand — what
+    ``reactions.to_feedback_pair`` / ``reactions.to_example`` produce. Storing
+    it verbatim means a promoted candidate materializes into exactly the row
+    shape retrieval has always read, with no second format to keep in sync.
+    """
+    reply = str(payload.get("reply") or "").strip()
+    better = str(payload.get("better") or "").strip()
+    return {
+        "schema": SCHEMA,
+        "kind": ROW_CANDIDATE,
+        "candidate_id": candidate_id(ctype, scope, reply, better),
+        "type": ctype,
+        "scope": dict(scope),
+        "reply": reply,
+        "better": better,
+        "payload": dict(payload),
+        "evidence": [str(e) for e in (evidence or ())],
+        "created_at": created_at,
+        "adjudication_version": adjudication_version,
+        "state": STATE_PROPOSED,
+    }
+
+
+def view_row(cand: dict) -> dict:
+    """The retrieval row a promoted candidate contributes."""
+    row = dict(cand.get("payload") or {})
+    row["candidate_id"] = cand.get("candidate_id", "")
+    if not row.get("src"):
+        row["src"] = "promoted_candidate"
+    return row
+
+
+class CandidateLedger:
+    """Append-only candidate + lifecycle log, projected into current state."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self._by_id: dict[str, dict] | None = None
+
+    # -- projection --------------------------------------------------------
+    def _rows(self) -> list[dict]:
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        except (FileNotFoundError, OSError):
+            return []
+        rows: list[dict] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(rec, dict) and rec.get("candidate_id"):
+                rows.append(rec)
+        return rows
+
+    def _project(self) -> dict[str, dict]:
+        """Replay the log into current candidate state.
+
+        Deterministic and order-only: the same file always yields the same
+        projection, which is what makes "restart and replay produce identical
+        state" a property of the design rather than a hope.
+        """
+        if self._by_id is not None:
+            return self._by_id
+        out: dict[str, dict] = {}
+        for row in self._rows():
+            cid = row["candidate_id"]
+            kind = row.get("kind")
+            if kind == ROW_CANDIDATE:
+                if cid in out:
+                    # A re-proposal of an existing candidate adds evidence, it
+                    # does not reset the lifecycle.
+                    self._merge_evidence(out[cid], row.get("evidence"))
+                    continue
+                cand = dict(row)
+                cand["evidence"] = [str(e) for e in (row.get("evidence") or [])]
+                cand["state"] = STATE_PROPOSED
+                cand["history"] = []
+                out[cid] = cand
+                continue
+            cand = out.get(cid)
+            if cand is None:
+                # Lifecycle row for an unknown candidate: keep the history
+                # rather than drop it, so a hand-repaired log stays inspectable.
+                cand = {"candidate_id": cid, "type": "", "scope": {},
+                        "payload": {}, "evidence": [], "state": STATE_PROPOSED,
+                        "history": [], "orphan": True}
+                out[cid] = cand
+            if kind == ROW_EVIDENCE:
+                self._merge_evidence(cand, row.get("evidence"))
+                continue
+            if kind == ROW_LIFECYCLE:
+                state = row.get("state")
+                if state in STATES:
+                    cand["state"] = state
+                self._merge_evidence(cand, row.get("evidence"))
+                if row.get("superseded_by"):
+                    cand["superseded_by"] = row["superseded_by"]
+                if row.get("supersedes"):
+                    cand["supersedes"] = row["supersedes"]
+                cand["history"].append({
+                    "state": row.get("state", ""), "ts": row.get("ts", ""),
+                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+                })
+        self._by_id = out
+        return out
+
+    @staticmethod
+    def _merge_evidence(cand: dict, ids) -> None:
+        known = cand.setdefault("evidence", [])
+        seen = set(known)
+        for eid in ids or ():
+            eid = str(eid)
+            if eid and eid not in seen:
+                known.append(eid)
+                seen.add(eid)
+
+    def reload(self) -> None:
+        self._by_id = None
+
+    # -- queries -----------------------------------------------------------
+    def all(self) -> list[dict]:
+        return list(self._project().values())
+
+    def get(self, cid: str) -> dict | None:
+        return self._project().get(cid)
+
+    def by_state(self, state: str) -> list[dict]:
+        return [c for c in self._project().values() if c.get("state") == state]
+
+    def pending(self) -> list[dict]:
+        return self.by_state(STATE_PROPOSED)
+
+    def active(self) -> list[dict]:
+        """Promoted and not since rolled back or superseded — the only
+        candidates allowed to influence retrieval."""
+        return self.by_state(STATE_PROMOTED)
+
+    def history(self, cid: str) -> list[dict]:
+        cand = self.get(cid)
+        return list(cand.get("history") or []) if cand else []
+
+    # -- writes ------------------------------------------------------------
+    def _append(self, row: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8", newline="\n") as fh:
+            try:
+                if self.path.stat().st_size and not _ends_with_newline(self.path):
+                    fh.write("\n")
+            except OSError:
+                pass
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    def propose(self, cand: dict) -> tuple[dict, bool]:
+        """Record a candidate. Returns ``(projected, created)``.
+
+        Idempotent: proposing an existing candidate again only links whatever
+        new evidence came with it, so a repeated reaction cannot resurrect a
+        rejected proposal or restart a promoted one.
+        """
+        cid = cand["candidate_id"]
+        existing = self.get(cid)
+        if existing is not None:
+            new = [e for e in (cand.get("evidence") or [])
+                   if e not in (existing.get("evidence") or [])]
+            if new:
+                self.link_evidence(cid, new, ts=cand.get("created_at", ""))
+            return self.get(cid), False
+        self._append(cand)
+        projected = dict(cand)
+        projected["state"] = STATE_PROPOSED
+        projected["history"] = []
+        projected["evidence"] = list(cand.get("evidence") or [])
+        self._project()[cid] = projected
+        return projected, True
+
+    def link_evidence(self, cid: str, event_ids, ts: str = "",
+                      note: str = "") -> list[str]:
+        """Attach further evidence to an existing candidate. Returns the ids
+        that were actually new."""
+        cand = self.get(cid)
+        if cand is None:
+            return []
+        known = set(cand.get("evidence") or [])
+        fresh = [str(e) for e in (event_ids or []) if str(e) and str(e) not in known]
+        if not fresh:
+            return []
+        self._append({"schema": SCHEMA, "kind": ROW_EVIDENCE,
+                      "candidate_id": cid, "ts": ts, "evidence": fresh,
+                      "note": note})
+        self._merge_evidence(cand, fresh)
+        return fresh
+
+    def transition(self, cid: str, state: str, *, ts: str, actor: str,
+                   reason: str = "", evidence=(), supersedes: str = "",
+                   superseded_by: str = "") -> bool:
+        """Append one lifecycle event. False when the transition is not legal
+        from the candidate's current state (nothing is written)."""
+        cand = self.get(cid)
+        if cand is None or state not in _ALLOWED_FROM:
+            return False
+        if cand.get("state") not in _ALLOWED_FROM[state]:
+            return False
+        row = {"schema": SCHEMA, "kind": ROW_LIFECYCLE, "candidate_id": cid,
+               "state": state, "ts": ts, "actor": actor,
+               "reason": str(reason or "")[:300],
+               "evidence": [str(e) for e in (evidence or ())]}
+        if supersedes:
+            row["supersedes"] = supersedes
+        if superseded_by:
+            row["superseded_by"] = superseded_by
+        self._append(row)
+        cand["state"] = state
+        self._merge_evidence(cand, row["evidence"])
+        if supersedes:
+            cand["supersedes"] = supersedes
+        if superseded_by:
+            cand["superseded_by"] = superseded_by
+        cand.setdefault("history", []).append(
+            {"state": state, "ts": ts, "actor": actor, "reason": row["reason"]})
+        return True
+
+    def promote(self, cid: str, *, ts: str, actor: str, reason: str = "",
+                evidence=()) -> bool:
+        return self.transition(cid, STATE_PROMOTED, ts=ts, actor=actor,
+                               reason=reason, evidence=evidence)
+
+    def reject(self, cid: str, *, ts: str, actor: str, reason: str = "") -> bool:
+        return self.transition(cid, STATE_REJECTED, ts=ts, actor=actor,
+                               reason=reason)
+
+    def rollback(self, cid: str, *, ts: str, actor: str, reason: str = "",
+                 evidence=()) -> bool:
+        """Revoke a promoted candidate's authority. History is untouched."""
+        return self.transition(cid, STATE_ROLLED_BACK, ts=ts, actor=actor,
+                               reason=reason, evidence=evidence)
+
+    def supersede(self, old_cid: str, new_cid: str, *, ts: str, actor: str,
+                  reason: str = "") -> bool:
+        """Deactivate `old_cid` and activate `new_cid`, keeping both records.
+
+        Either half failing leaves nothing written: a half-applied supersession
+        would either drop both replies out of retrieval or leave two
+        contradictory ones in it.
+        """
+        old, new = self.get(old_cid), self.get(new_cid)
+        if old is None or new is None or old_cid == new_cid:
+            return False
+        if old.get("state") not in _ALLOWED_FROM[STATE_SUPERSEDED]:
+            return False
+        if new.get("state") not in _ALLOWED_FROM[STATE_PROMOTED]:
+            return False
+        self.transition(old_cid, STATE_SUPERSEDED, ts=ts, actor=actor,
+                        reason=reason, superseded_by=new_cid)
+        self.transition(new_cid, STATE_PROMOTED, ts=ts, actor=actor,
+                        reason=reason or f"supersedes {old_cid}",
+                        supersedes=old_cid)
+        return True
+
+
+def _ends_with_newline(path: Path) -> bool:
+    try:
+        with path.open("rb") as fh:
+            if fh.seek(0, 2) == 0:
+                return True
+            fh.seek(-1, 2)
+            return fh.read(1) == b"\n"
+    except OSError:
+        return True
+
+
+def view_rows(ledger: CandidateLedger) -> tuple[list[dict], list[dict]]:
+    """(example rows, preference-pair rows) for every active candidate."""
+    examples, pairs = [], []
+    for cand in sorted(ledger.active(), key=lambda c: str(c.get("created_at") or "")):
+        row = view_row(cand)
+        if cand.get("type") == TYPE_PAIR:
+            pairs.append(row)
+        elif cand.get("type") == TYPE_EXAMPLE:
+            examples.append(row)
+    return examples, pairs
+
+
+def _write_view(path: Path, rows: list[dict]) -> int:
+    """Rewrite a materialized view atomically.
+
+    Rewriting (rather than appending) is safe precisely because this file is
+    derived: the ledger is the source of truth and this is a cache of its
+    current projection.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return len(rows)
+
+
+def rebuild_views(ledger: CandidateLedger, examples_view: Path,
+                  feedback_view: Path, *, max_examples: int = 0,
+                  max_pairs: int = 0) -> tuple[int, int]:
+    """Rebuild both retrieval views from the ledger. Returns (examples, pairs).
+
+    The caps keep the newest N rows per view (0 = unbounded) — the same
+    EXAMPLES_MAX_AUTO / FEEDBACK_MAX_AUTO limits the learned pools carry, for
+    the same reason: only a handful of rows reach a prompt per turn, and
+    material promoted under an older persona should not outvote recent material.
+
+    Dropping a row from a view is not a lifecycle change. The candidate stays
+    promoted in the ledger and returns to the view if newer rows are rolled
+    back — the cap is about how much retrieval scans, not about authority.
+    """
+    examples, pairs = view_rows(ledger)
+    if max_examples > 0:
+        examples = examples[-max_examples:]
+    if max_pairs > 0:
+        pairs = pairs[-max_pairs:]
+    return (_write_view(Path(examples_view), examples),
+            _write_view(Path(feedback_view), pairs))

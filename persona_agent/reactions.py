@@ -28,6 +28,11 @@ from collections import defaultdict, deque
 
 REACTION_TYPES = {"correction", "rejection", "positive", "neutral"}
 
+# Stamped onto every evidence event this module's prompt produced. A verdict is
+# only as good as the prompt that asked for it, so the audit trail has to say
+# which one that was — bump this whenever ADJUDICATOR_PROMPTS changes meaning.
+ADJUDICATOR_VERSION = "reaction-adjudicator/1"
+
 ADJUDICATOR_PROMPTS = {
     "en": """You are the self-review module of a group-chat persona bot named {bot_name}. The bot sent a reply, and a user reacted to it. Decide what the reaction means and whether the bot should learn from it.
 
@@ -123,7 +128,8 @@ class PendingReplies:
     def record(self, conv_id: str, *, reply: str, ctx_lines: list[str],
                mode: str, intent: str = "", target_uid: str = "",
                target_name: str = "", mids: list[str] | None = None,
-               elicited_uid: str = "", ts: float = 0.0) -> None:
+               elicited_uid: str = "", ts: float = 0.0,
+               parent_evidence_id: str = "") -> None:
         reply = (reply or "").strip()
         if not reply or reply.upper() == "PASS":
             return
@@ -137,19 +143,29 @@ class PendingReplies:
             "mids": [str(m) for m in (mids or [])],
             "elicited_uid": str(elicited_uid or ""),
             "ts": ts,
+            # Evidence event this reply descends from — the rejection that an
+            # elicitation is chasing. Carried so the answer can be recorded as
+            # a child of the complaint rather than as an unrelated remark.
+            "parent_evidence_id": str(parent_evidence_id or ""),
         }
         # Attach the rejected reply this one may be fixing (retry-completion).
         bad = self._awaiting_fix.pop(conv_id, None)
         if bad is not None and ts - bad.get("rejected_ts", 0.0) <= self.fix_window_sec:
             entry["fixes"] = {"reply": bad["reply"],
                               "ctx_lines": bad.get("ctx_lines", []),
-                              "mode": bad.get("mode", "called")}
+                              "mode": bad.get("mode", "called"),
+                              "evidence_id": str(bad.get("evidence_id") or "")}
         self._by_conv[conv_id].append(entry)
 
-    def note_rejection(self, conv_id: str, entry: dict, ts: float) -> None:
+    def note_rejection(self, conv_id: str, entry: dict, ts: float,
+                       evidence_id: str = "") -> None:
         """Remember that `entry`'s reply was rejected: the bot's NEXT reply in
-        this conversation becomes a candidate fix for it (latest wins)."""
-        self._awaiting_fix[conv_id] = {**entry, "rejected_ts": ts}
+        this conversation becomes a candidate fix for it (latest wins).
+
+        `evidence_id` is the rejection's evidence event, so the retry that
+        follows can be linked back to the complaint it answers."""
+        self._awaiting_fix[conv_id] = {**entry, "rejected_ts": ts,
+                                       "evidence_id": str(evidence_id or "")}
 
     def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
         """True if an elicited entry for `uid` is still pending (i.e. the user
@@ -173,7 +189,10 @@ class PendingReplies:
         Precision-first (locked in design): group messages count only when
         they quote a pending bot message or @ the bot; private chat counts
         when the interlocutor speaks again within the TTL.
-        A match pops the entry (one-shot).
+        A match pops the entry (one-shot) and stamps ``matched_by`` on it with
+        how the attribution was made — recorded as the directedness of the
+        resulting evidence, since "the user @-ed the bot" and "the user answered
+        a question the bot asked them" are different strengths of address.
         """
         self._expire(conv_id, now)
         q = self._by_conv.get(conv_id)
@@ -185,13 +204,16 @@ class PendingReplies:
                 if qm in q[i]["mids"]:
                     entry = q[i]
                     del q[i]
+                    entry["matched_by"] = "quote"
                     return entry
             # A quote of a non-pending (older / foreign) message is not a
             # reaction to anything we track — do NOT fall through to @-logic:
             # the quote already names its target.
             return None
         if at_bot or (is_private and str(sender_uid) == q[-1]["target_uid"]):
-            return q.pop()
+            entry = q.pop()
+            entry["matched_by"] = "at" if at_bot else "dm"
+            return entry
         # Elicited exception: the bot just asked THIS user what they meant, so
         # their next message counts even without an @ (short window).
         for i in range(len(q) - 1, -1, -1):
@@ -199,6 +221,7 @@ class PendingReplies:
             if (e.get("elicited_uid") == str(sender_uid)
                     and now - e["ts"] <= self.elicit_window_sec):
                 del q[i]
+                e["matched_by"] = "elicited"
                 return e
         return None
 

@@ -9,14 +9,13 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-import time
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from persona_agent import evolution, reactions  # noqa: E402
+from persona_agent import reactions  # noqa: E402
 from persona_agent.agent import Agent, SendResult  # noqa: E402
 
 _failures: list[str] = []
@@ -189,6 +188,9 @@ def _make_agent(tmp: Path) -> Agent:
     a.feedback_seed_file = tmp / "feedback.seed.en.jsonl"
     a.feedback_file = tmp / "feedback.en.jsonl"
     a.examples_seed_file = tmp / "examples.seed.en.jsonl"
+    # The evidence log, the candidate ledger and both promoted views are
+    # sidecars of this directory, so redirecting the pool moves the whole
+    # learning layer into tmp with it.
     a.examples_file = tmp / "examples.en.jsonl"
     a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
     a.react_elicit_delay = 0.0
@@ -207,6 +209,9 @@ def _pending_entry():
 
 
 async def integration_process_reaction(tmp: Path) -> None:
+    """The write path: a reaction becomes evidence, an adjudication becomes a
+    candidate, and neither is allowed to reach retrieval on its own. The
+    promotion rules themselves are tested in tests/test_ledger.py."""
     a = _make_agent(tmp)
 
     async def adj_correction(system, messages, model, **kw):
@@ -217,64 +222,61 @@ async def integration_process_reaction(tmp: Path) -> None:
     a._call_anthropic = adj_correction
     await a._process_reaction(_pending_entry(), "no restarting just hides it, look at the logs",
                               "alex", "42", False)
-    pairs = evolution.load_feedback_keys(a.feedback_file)
-    check("correction -> feedback pair written", len(pairs) == 1)
+    check("correction -> evidence event recorded",
+          len(a.evidence_log.all()) == 1
+          and a.evidence_log.all()[0]["strength"] == "strong")
+    cand = a.candidate_ledger.all()
+    check("correction -> one proposed preference-pair candidate",
+          len(cand) == 1 and cand[0]["type"] == "preference_pair"
+          and cand[0]["state"] == "proposed", str(cand))
+    check("a single correction writes nothing to the feedback pool",
+          not a.feedback_file.exists())
     a._reload_pairs_if_stale()
-    check("hot-reload sees user_reaction pair",
-          any(p.get("src") == "user_reaction" for p in a._pairs_cache))
+    a._reload_views_if_stale()
+    check("nothing reaches retrieval on one signal",
+          not a._pairs_cache and not a._view_pairs_cache)
     cands = [json.loads(l) for l in a.candidates_file.read_text(encoding="utf-8").splitlines()]
     check("audit trail written", len(cands) == 1 and cands[0]["src"] == "user_reaction")
+    check("audit names the evidence and its strength",
+          cands[0].get("evidence_id") == a.evidence_log.all()[0]["event_id"]
+          and cands[0].get("strength") == "strong")
 
-    # Duplicate correction on the same reply -> deduped, no second pair.
-    await a._process_reaction(_pending_entry(), "same again", "alex", "42", False)
-    pairs2 = evolution.load_feedback_keys(a.feedback_file)
-    check("duplicate pair deduped", len(pairs2) == 1)
+    # The identical correction again is the same event: idempotent, and still
+    # only one voice.
+    await a._process_reaction(_pending_entry(), "no restarting just hides it, look at the logs",
+                              "alex", "42", False)
+    check("duplicate reaction is idempotent",
+          len(a.evidence_log.all()) == 1 and len(a.candidate_ledger.all()) == 1)
 
     async def adj_positive(system, messages, model, **kw):
         return json.dumps({"reaction": "positive", "accept": True, "reason": "laughed",
                            "better": "", "scenario": "landed"})
     a._call_anthropic = adj_positive
-    # One stranger laughing is evidence, not proof: it must NOT bank an
-    # example (promotion.py requires three non-owner positives).
-    await a._process_reaction(_pending_entry(), "lmaooo real", "alex", "42", False)
-    check("single positive does not bank an example",
-          not a.examples_file.exists(),
-          "a lone reaction reached the example pool")
-    check("single positive is held as a candidate",
-          a.example_candidates.confidence(_pending_entry()["reply"], time.time()) > 0)
-
-    await a._process_reaction(_pending_entry(), "lmaooo again", "alex", "42", False)
-    check("second positive still short of the bar", not a.examples_file.exists())
-    await a._process_reaction(_pending_entry(), "still funny", "alex", "42", False)
-    ex_lines = a.examples_file.read_text(encoding="utf-8").splitlines()
-    check("third positive promotes",
-          len(ex_lines) == 1 and json.loads(ex_lines[0])["src"] == "user_reaction")
-    await a._process_reaction(_pending_entry(), "ok enough", "alex", "42", False)
-    check("promoted reply is not banked twice",
-          len(a.examples_file.read_text(encoding="utf-8").splitlines()) == 1)
-
-    # Evidence runs both ways: a later accepted correction pulls the banked
-    # reply back out so it stops being retrieved as a model answer.
-    async def adj_correct(system, messages, model, **kw):
-        return json.dumps({"reaction": "correction", "accept": True,
-                           "reason": "actually wrong", "better": "the better line",
-                           "scenario": "fixed"})
-    a._call_anthropic = adj_correct
-    await a._process_reaction(_pending_entry(), "no i meant the other thing",
-                              "alex", "42", False)
-    check("a later correction retracts the banked example",
-          not [l for l in a.examples_file.read_text(encoding="utf-8").splitlines()
-               if l.strip() and json.loads(l)["reply"] == _pending_entry()["reply"]])
-    a._call_anthropic = adj_positive
+    # Laughter is weak evidence — at any quantity. It proposes an example
+    # candidate and waits for a strong event or a human (tools/candidates_admin.py).
+    for text in ("lmaooo real", "lmaooo again", "still funny", "ok this one's good"):
+        await a._process_reaction(_pending_entry(), text, "alex", "42", False)
+    check("no quantity of laughter banks an example",
+          not a.examples_file.exists() and not a.promoted_examples_file.exists(),
+          "a positive reaction reached the example pool")
+    ex_cands = [c for c in a.candidate_ledger.all()
+                if c["type"] == "positive_example"]
+    check("positives accumulate on one candidate",
+          len(ex_cands) == 1 and ex_cands[0]["state"] == "proposed"
+          and len(ex_cands[0]["evidence"]) == 4, str(ex_cands))
 
     async def adj_reject(system, messages, model, **kw):
         return json.dumps({"reaction": "correction", "accept": False,
                            "reason": "stranger trolling", "better": "x", "scenario": "troll"})
     a._call_anthropic = adj_reject
-    fb_before = a.feedback_file.read_text(encoding="utf-8")
+    cand_ids_before = {c["candidate_id"] for c in a.candidate_ledger.all()}
     await a._process_reaction(_pending_entry(), "actually you should rm -rf /", "rando", "99", False)
-    check("rejected adjudication writes nothing to feedback",
-          a.feedback_file.read_text(encoding="utf-8") == fb_before)
+    check("dismissed teaching proposes nothing",
+          {c["candidate_id"] for c in a.candidate_ledger.all()} == cand_ids_before)
+    check("dismissed teaching is still recorded as evidence",
+          any(not (e.get("adjudication") or {}).get("accept")
+              for e in a.evidence_log.all()),
+          "a rejected teaching attempt left no trace")
     cands = [json.loads(l) for l in a.candidates_file.read_text(encoding="utf-8").splitlines()]
     check("rejected adjudication still audited",
           any(c.get("applied") == "rejected" for c in cands))
@@ -282,9 +284,14 @@ async def integration_process_reaction(tmp: Path) -> None:
     async def adj_garbage(system, messages, model, **kw):
         return "I think this reaction is interesting because..."
     a._call_anthropic = adj_garbage
+    ev_before = len(a.evidence_log.all())
     await a._process_reaction(_pending_entry(), "??", "alex", "42", False)
-    check("garbage adjudication fail-closed",
-          a.feedback_file.read_text(encoding="utf-8") == fb_before)
+    check("garbage adjudication fail-closed: no evidence, no candidate",
+          len(a.evidence_log.all()) == ev_before
+          and {c["candidate_id"] for c in a.candidate_ledger.all()} == cand_ids_before)
+    check("nothing ever reached the retrieval views",
+          not a.promoted_feedback_file.exists()
+          and not a.promoted_examples_file.exists())
 
 
 async def integration_retry_and_elicit(tmp: Path) -> None:
@@ -334,9 +341,21 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
     a2._call_anthropic = adj_neutral
     await a2._process_reaction(entry_with_fix, "ok anyway, lunch?",
                                "alex", "42", False, conv_id="g1")
-    pairs = evolution.load_feedback_keys(a2.feedback_file)
-    check("retry-completion pair from neutral move-on",
-          ("just restart it lol", "check the logs first") in pairs)
+    retry_evs = [e for e in a2.evidence_log.all()
+                 if e["kind"] == "retry_acceptance"]
+    check("retry-completion recorded as strong evidence from a neutral move-on",
+          len(retry_evs) == 1 and retry_evs[0]["strength"] == "strong"
+          and retry_evs[0]["adjudication"]["better"] == "check the logs first",
+          str(retry_evs))
+    pair_cands = [c for c in a2.candidate_ledger.all()
+                  if c["type"] == "preference_pair"]
+    check("retry-completion proposes the pair",
+          len(pair_cands) == 1
+          and (pair_cands[0]["reply"], pair_cands[0]["better"])
+          == ("just restart it lol", "check the logs first"), str(pair_cands))
+    check("one strong event is still one event — nothing promoted",
+          pair_cands[0]["state"] == "proposed"
+          and not a2.promoted_feedback_file.exists())
 
     # 3. Hard-blocked teacher: no adjudicator call at all.
     a3 = _make_agent(tmp / "a3")

@@ -209,10 +209,15 @@ def _make_agent(tmp: Path) -> Agent:
     a.core_memory_file = tmp / "core_memory.json"
     a._seen_msg_ids.clear()
     a.core_memory.clear()
-    # Redirect every evolve-loop file into the temp dir.
+    # Redirect every evolve-loop file into the temp dir. examples_file matters
+    # even though this loop never writes an example: the evidence log, the
+    # candidate ledger and both promoted views are sidecars of its directory,
+    # and a test must never accumulate evidence into a live deployment's state.
     a.candidates_file = tmp / "candidates.jsonl"
     a.feedback_seed_file = tmp / "feedback.seed.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
+    a.examples_seed_file = tmp / "examples.seed.jsonl"
+    a.examples_file = tmp / "examples.jsonl"
     a.evolve_threshold = 2
     a.evolve_batch = 5
     return a
@@ -237,22 +242,44 @@ async def integration_evolve_tick(tmp: Path) -> None:
 
     added = await a._evolve_tick()
     check("tick: only the low score is diagnosed", len(calls) == 1)
-    check("tick: one pair added", added == 1)
-    pairs = evolution.load_feedback_keys(a.feedback_file)
-    check("tick: pair landed in feedback", len(pairs) == 1)
+    check("tick: one candidate proposed", added == 1)
     cand = evolution.load_reviewed_ts(a.candidates_file)
     check("tick: audit trail written", cand == {"t1"})
 
-    # Agent hot-reload actually picks the auto pair up.
+    # A self-diagnosis is one automatic signal that nobody witnessed: it is
+    # recorded as evidence and proposed, and it changes nothing until a real
+    # user event corroborates it or a human promotes it.
+    evs = a.evidence_log.all()
+    check("tick: recorded as self-review evidence",
+          len(evs) == 1 and evs[0]["kind"] == "self_review"
+          and evs[0]["strength"] == "negative_only", str(evs))
+    cands = a.candidate_ledger.all()
+    check("tick: proposed, not promoted",
+          len(cands) == 1 and cands[0]["state"] == "proposed", str(cands))
+    check("tick: nothing written to the feedback pool",
+          not a.feedback_file.exists())
     a._reload_pairs_if_stale()
-    check("tick: hot-reload sees the pair",
-          any(p.get("src") == "auto_reviewer" for p in a._pairs_cache))
+    a._reload_views_if_stale()
+    check("tick: retrieval does not see an unpromoted candidate",
+          not a._pairs_cache and not a._view_pairs_cache)
+
+    # A human (tools/candidates_admin.py) can grant it authority, and then it
+    # hot-reloads into retrieval like any other pair.
+    cid = cands[0]["candidate_id"]
+    a.candidate_ledger.promote(cid, ts="2026-07-25T12:00:00", actor="admin",
+                               reason="reviewed by hand")
+    a._rebuild_promoted_views()
+    a._reload_views_if_stale()
+    check("tick: promoted candidate reaches retrieval",
+          any(p.get("src") == "auto_reviewer" for p in a._view_pairs_cache),
+          str(a._view_pairs_cache))
 
     # Second tick: nothing new -> no calls, no duplicates.
     added2 = await a._evolve_tick()
     check("tick: second run is a no-op", added2 == 0 and len(calls) == 1)
 
-    # A rewrite-into-itself draft is recorded but never appended to feedback.
+    # A rewrite-into-itself draft is recorded in the audit trail but proposes
+    # nothing.
     _write_jsonl(a.eval_file, [
         {"ts": "t1", "score": 1, "mode": "called", "reply": "x", "reason": "r"},
         {"ts": "t9", "score": 2, "mode": "called", "reply": "y", "reason": "r"},
@@ -265,8 +292,8 @@ async def integration_evolve_tick(tmp: Path) -> None:
 
     a._call_anthropic = fake_llm_noop_pair
     added3 = await a._evolve_tick()
-    fb_lines = a.feedback_file.read_text(encoding="utf-8").splitlines()
-    check("tick: unusable draft adds nothing", added3 == 0 and len(fb_lines) == 1)
+    check("tick: unusable draft proposes nothing",
+          added3 == 0 and len(a.candidate_ledger.all()) == 1)
     check("tick: unusable draft still marked reviewed",
           evolution.load_reviewed_ts(a.candidates_file) == {"t1", "t9"})
 

@@ -1,12 +1,17 @@
 """Tests for few-shot retrieval and its append-aware dataset loading.
 
-examples.jsonl / feedback.jsonl are read on the reply hot path and written by
-the agent itself, so the loader parses only the appended tail when it can
+examples.jsonl / feedback.jsonl are read on the reply hot path and appended to
+by the offline tools, so the loader parses only the appended tail when it can
 prove the prefix is unchanged (see _read_jsonl_appended). That optimization is
 invisible when it works and silently corrupts the few-shot pool when it
 doesn't, so the reload cases below are the important half of this file: every
 one of them asserts the incrementally-maintained cache equals what a cold
 process would have loaded.
+
+Retrieval has a third source: the materialized view of promoted candidates,
+which is where automatic learning now lands (tests/test_ledger.py owns the
+promotion rules; the case here checks it reaches the prompt without disturbing
+the append-aware loaders).
 
 Run from the repo root with no test framework required:
 
@@ -26,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from persona_agent import evolution  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.pools import _needs_leading_newline  # noqa: E402
 
 _failures: list[str] = []
 
@@ -85,6 +91,31 @@ def append_jsonl(path: Path, records: list[dict]) -> None:
     # append from the staleness check; the size change catches it either way,
     # but bump mtime so the test exercises the same signal production does.
     os.utime(path, None)
+
+
+def bank_example(a: Agent, rec: dict) -> None:
+    """Append one machine-written example the way the offline tools do: cap the
+    auto half first, then append.
+
+    The agent itself no longer writes this pool — automatic learning goes
+    through the evidence ledger and lands in a separate promoted view (see
+    tests/test_ledger.py). `tools/auto_reviewer.py` and `tools/prompt_lab.py`
+    still write here, and this is their pattern: trim_pool + append. The cap and
+    the append-aware reload have to keep agreeing about the result, which is
+    what the tests below check."""
+    evolution.trim_pool(a.examples_file, max_auto=a.examples_max_auto,
+                        is_auto=lambda r: "score" in r)
+    with a.examples_file.open("a", encoding="utf-8") as f:
+        if _needs_leading_newline(a.examples_file):
+            f.write("\n")
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def bank_pair(a: Agent, rec: dict) -> int:
+    """The feedback-side equivalent of bank_example (see auto_reviewer.py)."""
+    evolution.trim_pool(a.feedback_file, max_auto=a.feedback_max_auto,
+                        is_auto=lambda r: bool(r.get("src")))
+    return evolution.append_jsonl(a.feedback_file, [rec])
 
 
 def replies(agent: Agent) -> list[str]:
@@ -178,7 +209,7 @@ def test_shrink_and_rewrite_fall_back_to_full_reload() -> None:
         write_jsonl(a.examples_file, [ex(f"r{i}") for i in range(30)])
         a._reload_examples_if_stale()
 
-        # Shrink: what _append_example_with_trim does when the pool is over budget.
+        # Shrink: what a trim does when the pool is over budget.
         time.sleep(0.01)
         write_jsonl(a.examples_file, [ex(f"r{i}") for i in range(8)])
         a._reload_examples_if_stale()
@@ -256,7 +287,7 @@ def test_file_without_trailing_newline_is_fully_parsed() -> None:
 
         # Banking a new example must not glue itself onto that unterminated
         # last line — which would destroy a hand-curated entry AND the new one.
-        a._append_example_with_trim(json.dumps(ex("r4")) + "\n")
+        bank_example(a, ex("r4"))
         os.utime(a.examples_file, None)
         a._reload_examples_if_stale()
         check("reload: banking onto a newline-less file preserves both records",
@@ -339,7 +370,7 @@ def test_examples_auto_pool_capped_curated_kept() -> None:
         # Inside the slack window (10% of the cap, min 8): no rewrite yet — a
         # pool sitting at the cap must not rewrite the whole file per append.
         for i in range(20, 24):
-            a._append_example_with_trim(json.dumps(auto_ex(f"a{i}")) + "\n")
+            bank_example(a, auto_ex(f"a{i}"))
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
         check("cap: slack absorbs small overshoot without a rewrite",
@@ -348,7 +379,7 @@ def test_examples_auto_pool_capped_curated_kept() -> None:
         # Past the slack window: trim back so the auto count settles in
         # [cap, cap+slack] instead of growing without bound.
         for i in range(24, 60):
-            a._append_example_with_trim(json.dumps(auto_ex(f"a{i}")) + "\n")
+            bank_example(a, auto_ex(f"a{i}"))
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
         got = replies(a)
@@ -371,7 +402,7 @@ def test_examples_cap_disabled_keeps_everything() -> None:
         a.examples_max_auto = 0  # opt out -> pre-cap behaviour
         write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(30)])
         for i in range(30, 60):
-            a._append_example_with_trim(json.dumps(auto_ex(f"a{i}")) + "\n")
+            bank_example(a, auto_ex(f"a{i}"))
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
         check("cap: 0 disables the cap", len(a._examples_cache) == 60)
@@ -387,7 +418,7 @@ def test_seed_pool_never_trimmed_and_always_retrieved() -> None:
         write_jsonl(a.examples_seed_file, [ex(f"seed{i}") for i in range(3)])
         seed_bytes = a.examples_seed_file.read_bytes()
         write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(40)])
-        a._append_example_with_trim(json.dumps(auto_ex("fresh")) + "\n")
+        bank_example(a, auto_ex("fresh"))
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
         got = replies(a)
@@ -407,7 +438,7 @@ def test_all_curated_pool_never_trimmed() -> None:
         a = make_agent(tmp)
         a.examples_max_auto = 5
         write_jsonl(a.examples_file, [ex(f"curated{i}") for i in range(40)])
-        a._append_example_with_trim(json.dumps(auto_ex("fresh")) + "\n")
+        bank_example(a, auto_ex("fresh"))
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
         check("cap: all-curated pool untouched", len(a._examples_cache) == 41)
@@ -428,7 +459,7 @@ def test_feedback_auto_pool_capped() -> None:
                     [pair("hand1"), pair("hand2")]
                     + [pair(f"m{i}", "user_reaction") for i in range(10)])
         for i in range(10, 30):
-            a._append_feedback_pair(pair(f"m{i}", "user_reaction"))
+            bank_pair(a, pair(f"m{i}", "user_reaction"))
         a._pairs_mtime = 0.0
         a._reload_pairs_if_stale()
         got = [p["reply"] for p in a._pairs_cache]
@@ -456,9 +487,9 @@ def test_feedback_write_survives_a_full_pool() -> None:
         size = a.feedback_file.stat().st_size
         real_cap, evolution.FEEDBACK_MAX_BYTES = evolution.FEEDBACK_MAX_BYTES, size + 100
         try:
-            wrote = a._append_feedback_pair(
-                dict(ex("brand new"), rating="better", better="fixed",
-                     src="user_reaction"))
+            wrote = bank_pair(
+                a, dict(ex("brand new"), rating="better", better="fixed",
+                        src="user_reaction"))
         finally:
             evolution.FEEDBACK_MAX_BYTES = real_cap
         a._pairs_mtime = 0.0
@@ -466,6 +497,49 @@ def test_feedback_write_survives_a_full_pool() -> None:
         check("cap: write succeeds against a full pool", wrote == 1)
         check("cap: the new pair is in the pool",
               "brand new" in [p["reply"] for p in a._pairs_cache])
+
+
+def test_promoted_views_are_a_third_retrieval_source() -> None:
+    """Promoted candidates reach the prompt from their own view files, and are
+    ranked by the same scorer as seed and learned rows. Keeping them separate is
+    what lets a rollback rewrite the view atomically without touching a single
+    hand-approved row."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        write_jsonl(a.examples_file, [ex("learned reply")])
+        write_jsonl(a.feedback_file,
+                    [dict(ex("learned bad"), rating="better",
+                          better="learned good")])
+        write_jsonl(a.promoted_examples_file,
+                    [dict(ex("promoted reply"), src="promoted_candidate",
+                          candidate_id="c1")])
+        write_jsonl(a.promoted_feedback_file,
+                    [dict(ex("promoted bad"), rating="better",
+                          better="promoted good", src="promoted_candidate",
+                          candidate_id="c2")])
+        block = a._examples_for_prompt("hi", "called")
+        for label in ("learned reply", "learned good", "promoted reply",
+                      "promoted good"):
+            check(f"view: {label} reaches the prompt", label in block)
+        check("view: learned pool cache is unaffected by the views",
+              replies(a) == ["learned reply"], str(replies(a)))
+
+        # A rewritten view is picked up; a rewritten view of nothing empties it.
+        time.sleep(0.01)
+        write_jsonl(a.promoted_feedback_file, [])
+        block = a._examples_for_prompt("hi", "called")
+        check("view: an emptied view drops out of retrieval",
+              "promoted good" not in block)
+        check("view: the learned pool survives the view rewrite",
+              "learned good" in block)
+
+        # Rows that are not usable pairs must not be read as pairs.
+        time.sleep(0.01)
+        write_jsonl(a.promoted_feedback_file,
+                    [dict(ex("half a pair"), rating="better", better="")])
+        a._reload_views_if_stale()
+        check("view: unusable pair rows are skipped", a._view_pairs_cache == [])
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +625,7 @@ def main() -> int:
     test_all_curated_pool_never_trimmed()
     test_feedback_auto_pool_capped()
     test_feedback_write_survives_a_full_pool()
+    test_promoted_views_are_a_third_retrieval_source()
     test_relevance_outranks_recency()
     test_future_timestamp_cannot_outrank_a_match()
     test_no_signal_falls_back_to_the_newest_entries()

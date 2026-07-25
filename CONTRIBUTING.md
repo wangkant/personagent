@@ -26,6 +26,7 @@ python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
 python tests/test_promotion.py
+python tests/test_ledger.py
 python -m compileall -q .
 ```
 
@@ -40,6 +41,40 @@ live at the repo root; a test that forgets to redirect them will quietly
 overwrite a running deployment's learned data. Copy the `make_agent()` helper
 from `tests/test_retrieval.py`, which redirects every path into a temp dir.
 
+The evidence log, the candidate ledger and both promoted views resolve from
+`examples_file.parent`, so redirecting the example pool moves the whole learning
+layer with it — deliberately, so one forgotten line in a test harness cannot
+accumulate evidence against a live deployment. If you add another piece of
+learned state, hang it off the same directory rather than off `ROOT`.
+
+## The learning path: evidence, candidates, promotion
+
+Four words, used in exactly this sense in code, tests and docs. If a PR blurs
+them, it will be asked to un-blur them:
+
+- **Evidence** — an append-only record of something that happened in a
+  conversation. A reaction is evidence. It carries no authority.
+- **Candidate** — a versioned, proposed behaviour change produced by adjudicating
+  evidence. Inert until promoted.
+- **Promotion** — granting a candidate authority to affect future behaviour.
+- **Rollback / supersession** — removing that authority later, without erasing
+  history.
+
+Two rules the design exists to enforce, both load-bearing:
+
+1. **Nothing in the automatic path writes a retrieval pool.** It records
+   evidence, proposes a candidate, and asks `promotion.decide`. If you find
+   yourself appending to `examples_file` or `feedback_file` from the agent, the
+   change is in the wrong layer.
+2. **A single automatic signal must never permanently change behaviour.** Two
+   distinct compatible events, at least one strong. A new signal source belongs
+   in `evidence.classify_strength` with a written justification for its class —
+   and "the owner said so" is not a substitute for being the affected recipient.
+
+Both logs are append-only. Correcting a mistake means appending a lifecycle
+event, never editing a row: the point of the ledger is that "why does it talk
+like this" and "why did it stop" both have answers.
+
 ## Code layout
 
 `Agent` is composed from mixins, one per concern:
@@ -52,10 +87,12 @@ from `tests/test_retrieval.py`, which redirects every path into a temp dir.
 | `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
 | `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, conversation LRU |
-| `persona_agent/learning.py` | Self-eval, reaction adjudication, the evolution loop |
-| `persona_agent/promotion.py` | The evidence gate: what may be banked as an example, and what gets retracted |
+| `persona_agent/learning.py` | Self-eval, reaction adjudication, the evolution loop — the glue that records evidence and proposes candidates |
+| `persona_agent/evidence.py` | The append-only evidence log: schema, strength classification, idempotent appends (pure logic) |
+| `persona_agent/candidates.py` | Versioned candidates, the append-only lifecycle ledger, the materialized retrieval views (pure logic) |
+| `persona_agent/promotion.py` | The promotion policy: strength, scope compatibility, conflicts, thresholds — plus the pre-ledger gate kept for compatibility |
 | `persona_agent/reactions.py` | Reaction attribution + adjudicator prompts (pure logic) |
-| `persona_agent/evolution.py` | eval → feedback conversion, dedup, pool trimming (pure logic) |
+| `persona_agent/evolution.py` | eval → candidate conversion, dedup, pool trimming (pure logic) |
 
 New behaviour goes in the mixin that owns the concern. If a change needs state
 from two mixins, it probably belongs in `agent.py`.
@@ -87,4 +124,7 @@ and can often be dropped straight into `data/feedback.<lang>.jsonl` as a fix.
 
 Never attach real group chat logs, QQ numbers, or API keys to an issue.
 `runtime/`, `eval.jsonl`, `memory.json` and the sticker library are gitignored
-for this reason — check `git status` before committing.
+for this reason — check `git status` before committing. The evidence log quotes
+real reactions verbatim, so it lives under `runtime/` with the rest, and it
+stores only the structured verdict plus a one-sentence reason: **never a model's
+chain of thought.** Don't add a field that would change that.

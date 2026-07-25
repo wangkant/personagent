@@ -930,9 +930,15 @@ async def regression_think_full_path_search_hint(tmp: Path) -> None:
 
 
 async def regression_eval_auto_append_examples(tmp: Path) -> None:
-    """A score-5 reply must actually land in the examples.jsonl few-shot pool
-    (indexing the string context as dicts once made the whole self-training
-    harvest silently raise TypeError)."""
+    """A score-5 reply must be recorded as evidence and proposed as a candidate
+    — and must never reach the few-shot pool on its own.
+
+    Two regressions live here. The original one: indexing the string context as
+    dicts made the whole self-training harvest silently raise TypeError, so the
+    payload has to be checked, not just the fact that something happened. The
+    second: the agent's own score is the weakest signal in the system (a
+    generous grader marking its own homework), so no quantity of it may
+    promote."""
     agent = make_agent(tmp)
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
@@ -959,25 +965,33 @@ async def regression_eval_auto_append_examples(tmp: Path) -> None:
     agent._http = lambda **kw: _FakeHTTP()
     await agent._evaluate_reply("g", "called", "question", "a really sharp reply",
                                 None, "chat", ["Alice: question"])
-    # A top self-eval score is the weakest of the three signals, so one is not
-    # enough to bank: it only becomes a candidate (promotion.py needs four).
     check("eval: single top score does not bank an example",
           not agent.examples_file.exists(),
           "one lenient self-score reached the example pool")
-    check("eval: top score recorded as a candidate",
-          agent.example_candidates.confidence("a really sharp reply", time.time()) > 0)
+    evs = agent.evidence_log.all()
+    check("eval: top score recorded as weak evidence",
+          len(evs) == 1 and evs[0]["kind"] == "self_eval"
+          and evs[0]["strength"] == "weak", repr(evs))
+    check("eval: snapshot context stored as strings",
+          evs and evs[0].get("context") == ["Alice: question"],
+          repr(evs[0].get("context") if evs else None))
+    cands = agent.candidate_ledger.all()
+    check("eval: proposed as a positive-example candidate",
+          len(cands) == 1 and cands[0]["type"] == "positive_example"
+          and cands[0]["state"] == "proposed", repr(cands))
+    check("eval: candidate payload carries the reply and its context",
+          cands and cands[0]["reply"] == "a really sharp reply"
+          and (cands[0]["payload"].get("context") == ["Alice: question"]),
+          repr(cands[0]["payload"] if cands else None))
 
     for _ in range(3):
         await agent._evaluate_reply("g", "called", "question", "a really sharp reply",
                                     None, "chat", ["Alice: question"])
-    check("eval: examples file created once corroborated", agent.examples_file.exists(),
-          "four top scores still did not promote")
-    if agent.examples_file.exists():
-        import json as _json
-        ex = _json.loads(agent.examples_file.read_text(encoding="utf-8").strip().splitlines()[-1])
-        check("eval: high-score reply appended", ex.get("reply") == "a really sharp reply", repr(ex))
-        check("eval: snapshot context stored as strings",
-              ex.get("context") == ["Alice: question"], repr(ex.get("context")))
+    check("eval: no quantity of self-scoring promotes",
+          not agent.examples_file.exists()
+          and not agent.promoted_examples_file.exists()
+          and agent.candidate_ledger.all()[0]["state"] == "proposed",
+          "the agent promoted its own homework")
 
 
 async def regression_gateway_conv_eviction(tmp: Path) -> None:

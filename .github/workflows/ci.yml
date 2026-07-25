@@ -37,6 +37,7 @@ jobs:
           python tests/test_http.py
           python tests/test_retrieval.py
           python tests/test_promotion.py
+          python tests/test_ledger.py
           python -m compileall -q .
 
   packaging:

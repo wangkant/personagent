@@ -9,6 +9,14 @@ The judge must not be the model being measured, or the loop grades its own
 homework: `--judge export` writes a blind inbox for a human or a separate
 model to score, `--judge anthropic --judge-model ...` routes it to a different
 vendor. Neither ever feeds the learning loop.
+
+**What the evolve-on arm measures.** The agent's self-review proposes candidates
+and will not promote them unattended — a single automatic signal must never
+change behaviour (persona_agent/promotion.py). This harness therefore stubs the
+human gate: after each tick it promotes what was proposed, marked actor=
+"benchmark" in the ledger. So a curve here measures *the value of the material
+the loop drafts*, not the automatic path's willingness to adopt it. Nothing here
+is evidence about how much a deployment learns on its own.
 """
 from __future__ import annotations
 
@@ -161,17 +169,51 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     async def _no_search(messages, hint=""):
         return ""
     a._decide_and_search = _no_search
-    # Force retrieval caches to reload from the (empty) redirected files.
+    # Force retrieval caches to reload from the (empty) redirected files. The
+    # evidence log, the candidate ledger and both promoted views are sidecars of
+    # examples_file's directory, so they followed the redirect above.
     a._pairs_mtime = (-1.0, -1.0)
     a._examples_mtime = (-1.0, -1.0)
     a._pairs_cache = []
     a._examples_cache = []
+    a._view_pairs_stamp = (-1.0, -1)
+    a._view_examples_stamp = (-1.0, -1)
+    a._view_pairs_cache = []
+    a._view_examples_cache = []
     a._auto_examples_seen = set()
     return a
 
 
 def _count_feedback(agent) -> int:
-    return len(evolution.load_feedback_keys(agent.feedback_file))
+    """Pairs retrieval can actually see: the learned pool plus the promoted
+    view."""
+    return len(evolution.load_feedback_keys(
+        [agent.feedback_file, agent.promoted_feedback_file]))
+
+
+def _promote_pending(agent) -> int:
+    """Stand in for the human gate, explicitly.
+
+    The agent's self-review proposes candidates and refuses to promote them on
+    its own — one unwitnessed automatic signal must not change behaviour (see
+    persona_agent/promotion.py). A benchmark of the learning loop needs the loop
+    to close, so this arm promotes what the tick proposed, the way an operator
+    would with `tools/candidates_admin.py promote`. Every promotion is a
+    lifecycle event in the ledger with actor="benchmark", so a run's state says
+    plainly that the corroboration requirement was bypassed by the harness and
+    the numbers are not evidence about the automatic path."""
+    from datetime import datetime
+
+    ledger = agent.candidate_ledger
+    now = datetime.now().isoformat(timespec="seconds")
+    n = 0
+    for cand in ledger.pending():
+        if ledger.promote(cand["candidate_id"], ts=now, actor="benchmark",
+                          reason="benchmark arm: operator gate stubbed"):
+            n += 1
+    if n:
+        agent._rebuild_promoted_views()
+    return n
 
 
 async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_model: str):
@@ -202,6 +244,10 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                 print(f"  [train {scn['id']}] error: {type(e).__name__}: {e}")
         try:
             await agent._evolve_tick()
+            promoted = _promote_pending(agent)
+            if promoted:
+                print(f"  [evolve_tick] {promoted} candidate(s) promoted by the "
+                      f"benchmark gate (see _promote_pending)")
         except Exception as e:
             print(f"  [evolve_tick] error: {type(e).__name__}: {e}")
     out = []

@@ -1,8 +1,17 @@
 """The learning loops: self-eval, reaction adjudication, evolution.
 
-Everything that turns a sent reply into training material for the next
-one. All of it runs off the hot path and must never raise into the
-reply pipeline."""
+Everything that turns a sent reply into training material for the next one. All
+of it runs off the hot path and must never raise into the reply pipeline.
+
+Nothing in here writes a retrieval pool directly. Every automatic signal takes
+the same three steps, and the order is the point:
+
+    1. record what happened          -> evidence.py   (append-only, immutable)
+    2. propose what should change     -> candidates.py (versioned, inert)
+    3. ask whether it may             -> promotion.py  (corroboration required)
+
+Only step 3 succeeding materializes anything a future reply can see. A reaction
+on its own is testimony, not instruction."""
 
 from __future__ import annotations
 
@@ -27,7 +36,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
-from . import evolution, promotion, reactions
+from . import candidates, evidence, evolution, promotion, reactions
 from .pools import _needs_leading_newline
 
 logger = logging.getLogger("agent")
@@ -37,6 +46,212 @@ logger = logging.getLogger("agent")
 
 class Learning:
     """Mixed into Agent; see agent.py."""
+
+    # ---------------- Evidence -> candidate -> promotion ----------------
+
+    @staticmethod
+    def _conv_platform(conv_id: str) -> str:
+        """Platform namespace of a conversation id.
+
+        Gateway conversations are namespaced ``<platform>:<id>`` (gateway.py);
+        QQ group ids are bare numbers and QQ DMs are ``dm:<uid>``. Evidence from
+        two platforms is never combined, so this has to be right rather than
+        merely plausible."""
+        parts = str(conv_id or "").split(":")
+        head = parts[0]
+        if head == "dm" and len(parts) > 1:
+            head = parts[1]
+        return "qq" if not head or head.isdigit() else head
+
+    def _scope_fields(self, conv_id: str) -> dict:
+        """The scope every evidence event carries: which character, which
+        language, which room. Two events may only corroborate each other when
+        these agree (see promotion.scope_compatible)."""
+        return {
+            "lang": self.agent_lang,
+            "platform": self._conv_platform(conv_id),
+            "conv_id": str(conv_id or ""),
+            "persona": self.bot_name or "",
+            "persona_hash": self.persona_hash,
+            "persona_version": self.persona_version,
+        }
+
+    def _record_evidence(self, event: dict) -> bool:
+        """Append one immutable evidence event. False when already recorded.
+
+        Called for every adjudicated reaction, accepted or not: the log is a
+        record of what happened, and "a stranger tried to teach the bot
+        something and was dismissed" is exactly the kind of thing worth being
+        able to look up later."""
+        try:
+            return self.evidence_log.append(event)
+        except Exception as e:
+            logger.warning("[Agent] evidence append failed: %s: %s",
+                           type(e).__name__, e)
+            return False
+
+    def _corroborate_existing(self, event: dict, ts: str) -> list[str]:
+        """Offer a new event to every proposal already waiting for a second voice.
+
+        Without this, corroboration would only ever be noticed by the call that
+        *proposes* something — so a rejection arriving after a correction, which
+        is the ordinary shape of "no. no, still wrong", would be recorded and
+        then ignored. The event is linked to each pending candidate it supports
+        and the policy is re-run. Returns the ids promoted as a result."""
+        ledger = self.candidate_ledger
+        promoted: list[str] = []
+        try:
+            for cand in ledger.pending():
+                if not promotion.supports_candidate(event, cand,
+                                                   policy=self.promotion_policy):
+                    continue
+                cid = cand["candidate_id"]
+                if not ledger.link_evidence(cid, [event["event_id"]], ts=ts,
+                                            note="late corroboration"):
+                    continue
+                decision = self._decide_promotion(cid)
+                if decision.promote and ledger.promote(
+                        cid, ts=ts, actor="auto", reason=decision.reason,
+                        evidence=[event["event_id"]]):
+                    promoted.append(cid)
+                    logger.info("[Agent] candidate PROMOTED %s (corroborated): "
+                                "%s", cid, decision.reason)
+            if promoted:
+                self._rebuild_promoted_views()
+        except Exception as e:
+            logger.warning("[Agent] corroboration scan failed: %s: %s",
+                           type(e).__name__, e)
+        return promoted
+
+    def _record_and_corroborate(self, event: dict, ts: str) -> bool:
+        """Record an event, then let it speak for whatever is already waiting."""
+        fresh = self._record_evidence(event)
+        if fresh:
+            self._corroborate_existing(event, ts)
+        return fresh
+
+    def _propose_candidate(self, event: dict, ctype: str, payload: dict,
+                           ts: str) -> str:
+        """Propose (or refresh) a candidate for `event`, then let the policy
+        decide whether it may take effect. Returns a short outcome label:
+        ``promoted`` / ``proposed`` / ``held`` / ``blocked`` / ``error``.
+
+        Corroboration is *discovered*, not threaded through call sites: every
+        compatible event already in the log that argues for this same proposal
+        is linked here. That is what lets an explicit correction be backed by
+        the rejection that preceded it two messages earlier — the two arrived in
+        different adjudicator calls and neither knew about the other."""
+        try:
+            ledger = self.candidate_ledger
+            scope = candidates.scope_from_event(event)
+            cand = candidates.make_candidate(
+                ctype=ctype, scope=scope, payload=payload,
+                evidence=[event["event_id"]], created_at=ts,
+                adjudication_version=event.get("adjudicator_prompt_version", ""))
+            cid = cand["candidate_id"]
+            before = ledger.get(cid)
+            already = bool(before) and event["event_id"] in (before.get("evidence") or [])
+            projected, created = ledger.propose(cand)
+            if already and not created:
+                return "held"  # nothing new to weigh
+            support = [
+                e["event_id"] for e in self.evidence_log.all()
+                if promotion.supports_candidate(e, projected,
+                                                policy=self.promotion_policy)
+            ]
+            ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
+            decision = self._decide_promotion(cid)
+            label = "proposed" if created else "held"
+            if decision.promote:
+                if ledger.promote(cid, ts=ts, actor="auto",
+                                  reason=decision.reason,
+                                  evidence=[event["event_id"]]):
+                    self._rebuild_promoted_views()
+                    logger.info("[Agent] candidate PROMOTED %s (%s): %s — %r",
+                                cid, ctype, decision.reason,
+                                str(payload.get("reply") or "")[:50])
+                    return "promoted"
+                return label
+            if decision.blocked_by:
+                logger.info("[Agent] candidate %s BLOCKED (%s): %s [%s]",
+                            cid, ctype, decision.reason, decision.blocked_by)
+                return "blocked"
+            logger.info("[Agent] candidate %s %s (%s): %s",
+                        cid, label, ctype, decision.reason)
+            return label
+        except Exception as e:
+            logger.warning("[Agent] candidate proposal failed: %s: %s",
+                           type(e).__name__, e)
+            return "error"
+
+    def _decide_promotion(self, cid: str) -> promotion.Decision:
+        """Run the promotion policy against everything currently known."""
+        ledger = self.candidate_ledger
+        cand = ledger.get(cid)
+        if cand is None:
+            return promotion.Decision(False, "unknown candidate")
+        log = self.evidence_log
+        reply = str(cand.get("reply") or "").strip()
+        related = [e for e in log.all()
+                   if str(e.get("reply") or "").strip() == reply]
+        return promotion.decide(
+            cand,
+            linked_events=log.many(cand.get("evidence") or []),
+            related_events=related,
+            peers=ledger.all(),
+            now=time.time(),
+            policy=self.promotion_policy,
+        )
+
+    def _rebuild_promoted_views(self) -> tuple[int, int]:
+        """Re-materialize the retrieval views from the ledger.
+
+        Derived state, so a whole-file atomic rewrite is safe — and it is the
+        only write in the learning path that is not an append."""
+        try:
+            counts = candidates.rebuild_views(
+                self.candidate_ledger, self.promoted_examples_file,
+                self.promoted_feedback_file,
+                max_examples=self.examples_max_auto,
+                max_pairs=self.feedback_max_auto)
+            logger.info("[Agent] promoted views rebuilt: %d examples, %d pairs",
+                        counts[0], counts[1])
+            return counts
+        except OSError as e:
+            logger.warning("[Agent] promoted view rebuild failed: %s", e)
+            return (-1, -1)
+
+    def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
+                               reason: str = "") -> int:
+        """A human disagreed with `reply`: revoke every promoted candidate that
+        teaches it. The records stay; only their authority is withdrawn, and it
+        is withdrawn from retrieval on the next turn.
+
+        Both directions count. A promoted example *of* the reply obviously has
+        to go, and so does a promoted rewrite that proposed this reply as the
+        improvement — continuing to teach a fix the user just rejected is the
+        same mistake wearing the opposite sign."""
+        ledger = self.candidate_ledger
+        reply = (reply or "").strip()
+        rolled = 0
+        for cand in ledger.active():
+            teaches = (
+                (cand.get("type") == candidates.TYPE_EXAMPLE
+                 and str(cand.get("reply") or "").strip() == reply)
+                or (cand.get("type") == candidates.TYPE_PAIR
+                    and str(cand.get("better") or "").strip() == reply)
+            )
+            if not teaches:
+                continue
+            if ledger.rollback(cand["candidate_id"], ts=ts, actor="auto",
+                               reason=reason or "recipient disagreed",
+                               evidence=[event_id] if event_id else ()):
+                rolled += 1
+                logger.info("[Agent] candidate ROLLED BACK %s: %r",
+                            cand["candidate_id"], reply[:50])
+        if rolled:
+            self._rebuild_promoted_views()
+        return rolled
 
     async def _evaluate_reply(
         self, group_id: str, mode: str, user_msg: str, reply: str,
@@ -54,10 +269,10 @@ class Learning:
         signal beats a one-shot LLM judgment for catching off-persona
         stickers.
 
-        High-scoring replies (score >= 4) are also auto-appended to
-        examples.jsonl with dedup, so the dynamic few-shot retrieval pool
-        grows from real successes rather than staying frozen at bootstrap
-        size."""
+        A top score is recorded as *evidence* and proposes a candidate; it can
+        no longer append anything to a retrieval pool by itself. This evaluator
+        is documented below as generous, and a generous grader marking its own
+        homework is the weakest signal in the system — see promotion.py."""
         try:
             # Context snapshotted at reply time (inside the group lock),
             # EXCLUDING the bot reply. Fall back to a live buffer read only if
@@ -212,18 +427,14 @@ class Learning:
             else:
                 logger.debug("[Agent] eval %d/5 mode=%s: %s", score, mode, reason)
 
-            # High-score replies feed back into examples.jsonl so the dynamic
-            # few-shot retrieval pool grows from real successes. Without this,
-            # examples.jsonl is frozen at bootstrap and "dynamic retrieval" is
-            # a scaffold over a static dataset. PASS (skip-reply marker) and
-            # already-seen replies are filtered to keep the pool clean.
+            # A top self-score becomes evidence about the reply, and proposes a
+            # positive-example candidate that will sit in `proposed` until
+            # something stronger corroborates it. Threshold is 5 (not 4): a
+            # production audit had 97% of replies landing at >=4, so anything
+            # looser would file a candidate for nearly every reply sent.
             #
-            # Threshold is 5 (not 4) by default. Production audit showed many
-            # eval models score generously — 97% of replies landing at >=4 in
-            # one observation — which lets reply patterns the user explicitly
-            # disliked sneak into the example pool and reinforce themselves
-            # through retrieval. Requiring a top score keeps the bar high; if
-            # your eval model scores conservatively you can lower this.
+            # PASS (the skip-reply marker) and replies already retrievable from
+            # a pool are skipped — there is nothing to propose.
             reply_clean = reply.strip()
             if (score >= 5 and reply_clean and reply_clean.upper() != "PASS"
                     and reply_clean not in self._auto_examples_seen):
@@ -235,169 +446,64 @@ class Learning:
                     "context": ctx_lines,
                     "reply": reply_clean,
                     "score": score,
+                    "src": "self_eval",
                 }
-                # Not banked yet: a top self-eval score is the weakest of the
-                # three signals (this evaluator is documented above as
-                # generous), so it only adds evidence. See promotion.py.
-                self._bank_if_corroborated(ex, "self_eval")
+                ev = evidence.make_event(
+                    kind=evidence.KIND_SELF_EVAL,
+                    ts=record["ts"],
+                    **self._scope_fields(group_id),
+                    reply=reply_clean,
+                    context=ctx_lines,
+                    adjudication={"accept": True, "score": score,
+                                  "scenario": ex["scenario"], "mode": mode,
+                                  "intent": intent, "reason": reason},
+                    adjudicator_model=self.eval_model,
+                    adjudicator_prompt_version="self-eval/1",
+                )
+                self._record_and_corroborate(ev, record["ts"])
+                self._propose_candidate(ev, candidates.TYPE_EXAMPLE, ex,
+                                        record["ts"])
         except Exception as e:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
 
-    def _bank_if_corroborated(self, example: dict, source: str,
-                              scenario: str = "") -> bool:
-        """Add evidence for a reply; bank it only once corroborated.
+    def _retract_reply(self, reply: str, ts: str = "",
+                       event_id: str = "") -> None:
+        """A human disagreed with this reply — stop imitating it, everywhere.
 
-        Returns True when this call actually promoted the reply into the
-        example pool. See promotion.py for why nothing is banked on a single
-        signal."""
-        reply = str(example.get("reply") or "").strip()
-        if not reply or reply.upper() == "PASS":
-            return False
-        if reply in self._auto_examples_seen:
-            return False  # already in the pool
-        try:
-            promote, conf = self.example_candidates.record(
-                example, source, time.time())
-        except Exception as e:
-            logger.warning("[Agent] candidate pool failed: %s: %s",
-                           type(e).__name__, e)
-            return False
-        if not promote:
-            logger.info("[Agent] example candidate (%s, confidence %.2f/%.2f): %r",
-                        source, conf, promotion.PROMOTE_AT, reply[:50])
-            return False
-        self._append_example_with_trim(
-            json.dumps(example, ensure_ascii=False) + "\n")
-        self._auto_examples_seen.add(reply)
-        if len(self._auto_examples_seen) > 2000:
-            # Cap the in-memory dedup set; a reload from disk rebuilds the
-            # full set, so light pruning here is harmless.
-            self._auto_examples_seen = set(
-                list(self._auto_examples_seen)[-1000:])
-        logger.info("[Agent] example PROMOTED (confidence %.2f, %s): %r",
-                    conf, scenario or example.get("scenario", ""), reply[:50])
-        return True
+        Two eras have to be handled, because a deployment that has been running
+        for months contains both:
 
-    def _retract_reply(self, reply: str) -> None:
-        """A human disagreed with this reply — stop imitating it."""
+        - **Ledger era.** Promoted candidates lose their authority (append-only
+          rollback) and drop out of the materialized views. Nothing is erased.
+        - **Pre-ledger era.** Rows banked directly into the learned pool by an
+          older build, and whatever weight the old candidate pool had
+          accumulated, are still live retrieval material — so the row is
+          removed and the weight withdrawn. That deletion is the pre-ledger
+          design's only way to revoke, which is precisely why the ledger
+          replaced it."""
         reply = (reply or "").strip()
         if not reply:
             return
+        ts = ts or datetime.now().isoformat(timespec="seconds")
+        try:
+            self._rollback_promoted_for(reply, ts, event_id=event_id)
+        except Exception as e:
+            logger.warning("[Agent] candidate rollback failed: %s: %s",
+                           type(e).__name__, e)
         try:
             if self.example_candidates.withdraw(reply):
-                logger.info("[Agent] example candidate withdrawn: %r", reply[:50])
+                logger.info("[Agent] legacy example candidate withdrawn: %r",
+                            reply[:50])
             removed = promotion.retract_example(self.examples_file, reply)
             if removed:
                 self._auto_examples_seen.discard(reply)
                 self._examples_mtime = 0.0  # force a full reload
-                logger.info("[Agent] retracted %d banked example(s): %r",
+                logger.info("[Agent] retracted %d legacy banked example(s): %r",
                             removed, reply[:50])
         except Exception as e:
             logger.warning("[Agent] retraction failed: %s: %s",
                            type(e).__name__, e)
-
-    def _append_example_with_trim(self, line: str, max_bytes: int = 5_000_000) -> None:
-        """Append an auto-harvested example to the runtime pool, keeping it
-        bounded.
-
-        Two caps, and **neither ever drops a hand-approved entry**. The data/
-        seed is a separate read-only file and is never touched at all, but the
-        runtime file is not purely machine-written either: prompt_lab.py writes
-        replies you approved into it, without the "score" the self-eval and
-        reaction channels stamp on theirs. That field is what tells the two
-        apart here — and it is why this trims rather than rotating the way
-        _append_with_rotation does.
-
-        - EXAMPLES_MAX_AUTO (primary): keep the newest N auto-banked entries.
-          Retrieval surfaces 4 per turn no matter how many are on disk, so a
-          bigger pool only lengthens the per-turn relevance scan and lets
-          entries written under an older prompt outvote recent ones.
-        - max_bytes (backstop): if the pool is somehow still over the byte
-          ceiling — no count cap configured, or pathologically long entries —
-          drop the oldest auto entries until back under half the budget, so
-          appends don't rewrite the file every time.
-
-        Both rewrites are atomic (.tmp + replace)."""
-        path = self.examples_file
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if self.examples_max_auto > 0:
-            try:
-                trimmed = evolution.trim_pool(
-                    path, max_auto=self.examples_max_auto,
-                    is_auto=lambda r: "score" in r,
-                )
-                if trimmed:
-                    logger.info("[Agent] examples.jsonl auto-pool trimmed: "
-                                "%d -> %d entries (cap=%d)",
-                                trimmed[0], trimmed[1], self.examples_max_auto)
-            except OSError as e:
-                logger.warning("[Agent] examples auto-pool trim failed: %s", e)
-        try:
-            sz = path.stat().st_size if path.exists() else 0
-        except OSError:
-            sz = 0
-        if path.exists() and sz + len(line.encode("utf-8")) > max_bytes:
-            try:
-                lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
-                curated = [l for l in lines if '"score"' not in l]
-                auto = [l for l in lines if '"score"' in l]
-                budget = max_bytes // 2  # trim to half budget so appends don't rewrite every time
-                kept: list[str] = []
-                used = sum(len(l.encode("utf-8")) + 1 for l in curated)
-                for l in reversed(auto):  # newest first
-                    b = len(l.encode("utf-8")) + 1
-                    if used + b > budget:
-                        break
-                    kept.append(l)
-                    used += b
-                new_lines = curated + list(reversed(kept))
-                tmp = path.with_suffix(path.suffix + ".tmp")
-                tmp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-                tmp.replace(path)
-                logger.info("[Agent] examples.jsonl trimmed: %d -> %d lines (%d curated kept)",
-                            len(lines), len(new_lines), len(curated))
-            except OSError as e:
-                logger.warning("[Agent] examples trim failed: %s", e)
-        try:
-            with path.open("a", encoding="utf-8") as f:
-                if _needs_leading_newline(path):
-                    f.write("\n")
-                f.write(line)
-        except OSError as e:
-            logger.warning("[Agent] examples append failed: %s", e)
-
-    def _append_feedback_pair(self, pair: dict) -> int:
-        """Append one preference pair to the runtime feedback pool. Returns 1
-        if written.
-
-        Wraps evolution.append_jsonl with the same auto-pool cap examples get
-        (FEEDBACK_MAX_AUTO; machine pairs carry a "src", pairs you rated
-        through prompt_lab.py don't and are never dropped — nor is the data/
-        seed, which nothing writes to). Trimming first also removes a real
-        failure mode: append_jsonl REFUSES to write past FEEDBACK_MAX_BYTES,
-        so an unattended deployment would silently stop learning the day the
-        file filled up — with reaction learning as the primary signal, that is
-        the whole loop going quiet with nothing in the log to say so."""
-        self.feedback_file.parent.mkdir(parents=True, exist_ok=True)
-        if self.feedback_max_auto > 0:
-            try:
-                trimmed = evolution.trim_pool(
-                    self.feedback_file, max_auto=self.feedback_max_auto,
-                    is_auto=lambda r: bool(r.get("src")),
-                )
-                if trimmed:
-                    logger.info("[Agent] feedback.jsonl auto-pool trimmed: "
-                                "%d -> %d pairs (cap=%d)",
-                                trimmed[0], trimmed[1], self.feedback_max_auto)
-            except OSError as e:
-                logger.warning("[Agent] feedback auto-pool trim failed: %s", e)
-        written = evolution.append_jsonl(self.feedback_file, [pair])
-        if not written:
-            logger.warning("[Agent] feedback pair NOT written — %s is at its "
-                           "byte ceiling and every remaining entry is "
-                           "hand-approved", self.feedback_file.name)
-        return written
 
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
@@ -427,13 +533,21 @@ class Learning:
                                 reactor_name: str, reactor_uid: str,
                                 is_owner: bool, conv_id: str = "",
                                 is_private: bool = False) -> None:
-        """Adjudicate a directed user reaction to a pending bot reply and
-        learn from it. Accepted corrections become feedback pairs; genuine
-        positives bank the reply as an example; accepted rejections arm two
-        recovery paths — retry-completion (the bot's next reply, if the user
-        then accepts it, closes a BAD->OK pair on its own) and a delayed,
-        cooldown-limited elicitation ask. Every adjudication is audited in
-        candidates.jsonl. Never raises."""
+        """Adjudicate a directed user reaction and record what it proves.
+
+        The reaction is written to the evidence log first, and unconditionally:
+        accepted or dismissed, it happened, and a dismissed teaching attempt is
+        worth being able to look up. Only then is anything *proposed* —
+        corrections and accepted retries as BAD->OK candidates, genuine
+        positives as example candidates — and a proposal changes nothing until
+        the promotion policy finds a second compatible event with at least one
+        strong among them.
+
+        Accepted rejections still arm both recovery paths (retry-completion and
+        the delayed elicitation ask), and an accepted rejection or correction
+        rolls back whatever the reply had previously been promoted for.
+
+        Every adjudication is audited in candidates.jsonl. Never raises."""
         try:
             # Hard poison shield: users whose teachings are consistently
             # dismissed stop costing adjudicator calls at all (BB3x lesson).
@@ -459,72 +573,115 @@ class Learning:
             if not adj:
                 return
             now = datetime.now().isoformat(timespec="seconds")
-            wrote = False
+            mode = entry.get("mode", "called")
+            outcomes: list[str] = []
 
-            # Dedup keys mean parsing the seed AND runtime feedback files,
-            # which are allowed to reach 5 MB — tens of milliseconds on the
-            # event loop. Load them at most once per adjudication (both
-            # branches below can need them), and only when a write is
-            # actually on the table.
+            # Shared scope + provenance for every event this adjudication
+            # produces. recipient_id is who the reply was aimed at: it is what
+            # decides whether a correction is strong, and it is deliberately not
+            # "whoever is most trusted" (see evidence.classify_strength).
+            base = dict(
+                self._scope_fields(conv_id),
+                speaker_id=str(reactor_uid or ""),
+                speaker_name=reactor_name or "",
+                recipient_id=str(entry.get("target_uid") or ""),
+                context=entry.get("ctx_lines"),
+                reaction_text=reaction_text,
+                directed=True,
+                direction=str(entry.get("matched_by") or ("dm" if is_private else "at")),
+                adjudicator_model=self.react_model,
+                adjudicator_prompt_version=reactions.ADJUDICATOR_VERSION,
+            )
+
+            # The reaction happened. Record it before deciding what it means:
+            # `accept` is the adjudicator's verdict about *learning*, not a
+            # filter on what is worth remembering.
+            reaction_ev = evidence.make_event(
+                kind=evidence.KIND_REACTION, ts=now, **base,
+                reply=str(entry.get("reply") or ""),
+                reaction_type=adj["reaction"],
+                adjudication={**adj, "mode": mode,
+                              "intent": entry.get("intent", "")},
+                parent_event_id=str(entry.get("parent_evidence_id") or ""),
+            )
+            self._record_and_corroborate(reaction_ev, now)
+
+            # Dedup keys mean parsing the seed AND learned feedback pools, which
+            # are allowed to reach 5 MB — tens of milliseconds on the event
+            # loop. Load them at most once per adjudication, and only when a
+            # proposal is actually on the table. The promoted view is included:
+            # a pair already carrying authority needs no second candidate.
             fb_keys: set | None = None
 
             def _fresh_pair(p: dict) -> bool:
                 nonlocal fb_keys
                 if fb_keys is None:
                     fb_keys = evolution.load_feedback_keys(
-                        [self.feedback_seed_file, self.feedback_file])
+                        [self.feedback_seed_file, self.feedback_file,
+                         self.promoted_feedback_file])
                 key = (p["reply"], p["better"])
                 if key in fb_keys:
                     return False
                 fb_keys.add(key)
                 return True
 
-            # Retry-completion: this reply was the bot's second attempt after
-            # a rejection. The user reacting positively — or just moving on —
-            # accepts the fix, closing (rejected -> retry) into a pair with
-            # zero user effort.
+            # Retry-completion: this reply was the bot's second attempt after a
+            # rejection. The user reacting positively — or just moving on —
+            # accepts the fix, which is strong evidence for (rejected -> retry)
+            # with zero user effort. Strong, but still one event.
             if entry.get("fixes") and adj["reaction"] in ("positive", "neutral"):
-                fpair = reactions.fix_pair(entry["fixes"], entry["reply"], now)
+                fix = entry["fixes"]
+                fpair = reactions.fix_pair(fix, entry["reply"], now)
                 if fpair is not None and _fresh_pair(fpair):
-                    if self._append_feedback_pair(fpair) > 0:
-                        wrote = True
-                        logger.info(
-                            "[Agent] reaction learn (retry-completion): "
-                            "BAD %r -> OK %r",
-                            fpair["reply"][:50], fpair["better"][:50])
+                    retry_ev = evidence.make_event(
+                        kind=evidence.KIND_RETRY_ACCEPTANCE, ts=now,
+                        **{**base, "context": fix.get("ctx_lines")},
+                        reply=fpair["reply"],
+                        reaction_type=adj["reaction"],
+                        adjudication={
+                            "accept": True, "better": fpair["better"],
+                            "scenario": fpair.get("scenario", ""),
+                            "mode": fix.get("mode", mode),
+                            "reason": "user accepted the bot's retry",
+                        },
+                        # The complaint this answers, so the chain reads
+                        # rejection -> retry -> acceptance.
+                        parent_event_id=str(fix.get("evidence_id")
+                                            or reaction_ev["event_id"]),
+                    )
+                    self._record_and_corroborate(retry_ev, now)
+                    outcomes.append("retry:" + self._propose_candidate(
+                        retry_ev, candidates.TYPE_PAIR, fpair, now))
 
             if adj["accept"]:
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
                 if pair is not None and _fresh_pair(pair):
-                    if self._append_feedback_pair(pair) > 0:
-                        wrote = True
-                        logger.info(
-                            "[Agent] reaction learn (%s by %s): BAD %r -> OK %r",
-                            adj["reaction"], reactor_name,
-                            pair["reply"][:50], pair["better"][:50])
+                    outcomes.append("pair:" + self._propose_candidate(
+                        reaction_ev, candidates.TYPE_PAIR, pair, now))
                 ex = reactions.to_example(entry, adj, now)
                 if ex is not None:
-                    # One laugh is not proof. Owner reactions count for nearly
-                    # twice a stranger's, but neither promotes alone.
-                    src = "reaction_owner" if is_owner else "reaction_other"
-                    if self._bank_if_corroborated(ex, src, scenario=adj.get("scenario")):
-                        wrote = True
+                    # One laugh is not proof, and no quantity of laughter is:
+                    # positive reactions are weak evidence, so an example
+                    # candidate waits for a strong event or a human.
+                    outcomes.append("example:" + self._propose_candidate(
+                        reaction_ev, candidates.TYPE_EXAMPLE, ex, now))
 
-                # A rejected or corrected reply must stop being imitated —
-                # withdraw whatever evidence it had accumulated, and pull it
-                # back out of the live pool if it was already promoted.
+                # A rejected or corrected reply must stop being imitated.
                 if adj["reaction"] in ("rejection", "correction"):
-                    self._retract_reply(str(entry.get("reply") or ""))
+                    self._retract_reply(str(entry.get("reply") or ""), ts=now,
+                                        event_id=reaction_ev["event_id"])
 
                 # Accepted rejection with nothing concrete learned: arm both
                 # recovery paths.
                 if adj["reaction"] == "rejection" and conv_id:
                     self.pending_reactions.note_rejection(
-                        conv_id, entry, time.time())
+                        conv_id, entry, time.time(),
+                        evidence_id=reaction_ev["event_id"])
                     if self.react_elicit and adj.get("ask"):
                         self._spawn(self._maybe_elicit(
                             conv_id, entry, adj.get("ask", ""),
-                            reactor_uid, is_private))
+                            reactor_uid, is_private,
+                            parent_evidence_id=reaction_ev["event_id"]))
 
             # Teaching reputation: count corrective acts only (not positives),
             # never the owner.
@@ -538,7 +695,9 @@ class Learning:
                 "is_owner": bool(is_owner), "reason": adj["reason"],
                 "bot_reply": str(entry.get("reply") or "")[:120],
                 "reaction_text": (reaction_text or "")[:120],
-                "applied": "auto" if wrote else "rejected",
+                "applied": ",".join(outcomes) if outcomes else "rejected",
+                "evidence_id": reaction_ev["event_id"],
+                "strength": reaction_ev["strength"],
             }
             if entry.get("fixes"):
                 audit["via"] = "retry-completion-candidate"
@@ -549,7 +708,8 @@ class Learning:
                            type(e).__name__, e)
 
     async def _maybe_elicit(self, conv_id: str, entry: dict, ask: str,
-                            reactor_uid: str, is_private: bool) -> None:
+                            reactor_uid: str, is_private: bool,
+                            parent_evidence_id: str = "") -> None:
         """Delayed elicitation: wait out the bot's own normal reply to the
         rejection, then — if the user still hasn't supplied a correction and
         the per-conversation cooldown allows — ask in the bot's voice what
@@ -580,11 +740,13 @@ class Learning:
                                conv_id, result.partial)
                 return
             # Register the ORIGINAL rejected reply as an elicited pending
-            # entry: the rejector's answer will adjudicate against it.
+            # entry: the rejector's answer will adjudicate against it, and is
+            # recorded as a child of the rejection that prompted the ask.
             self.pending_reactions.record(
                 conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
                 mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
-                target_uid=reactor_uid, elicited_uid=reactor_uid, ts=time.time())
+                target_uid=reactor_uid, elicited_uid=reactor_uid, ts=time.time(),
+                parent_evidence_id=parent_evidence_id)
             logger.info("[Agent] elicitation sent (conv=%s): %s", conv_id, ask[:60])
         except Exception as e:
             logger.warning("[Agent] elicitation failed: %s: %s",
@@ -593,9 +755,12 @@ class Learning:
     # ---------------- Self-evolution (eval -> feedback, unattended) ----------------
     async def loop_evolve(self) -> None:
         """Background loop that turns the agent's own low-score evals into
-        BAD/OK preference pairs in feedback.<lang>.jsonl. Opt-in (EVOLVE_AUTO).
-        The positive half (high scores -> examples.jsonl) already runs inline
-        in _evaluate_reply; this loop closes the negative half."""
+        BAD/OK preference *candidates*. Opt-in (EVOLVE_AUTO).
+
+        A self-diagnosis is one automatic signal that nobody witnessed, so it
+        proposes and waits like everything else: promotion needs a real user
+        event to corroborate it, or a human at tools/candidates_admin.py. What
+        used to be an unattended writer is now an unattended *proposer*."""
         if not self.enabled or not self.evolve_auto:
             return
         if not self.eval_enable:
@@ -615,17 +780,18 @@ class Learning:
                                type(e).__name__, e)
 
     async def _evolve_tick(self) -> int:
-        """One pass: diagnose up to evolve_batch new low-score evals, append
-        usable pairs to feedback. Returns the number of pairs added."""
+        """One pass: diagnose up to evolve_batch new low-score evals into
+        preference candidates. Returns the number of candidates proposed."""
         evals = evolution.load_evals(self.eval_file, self.evolve_threshold)
         reviewed = evolution.load_reviewed_ts(self.candidates_file)
         pending = [e for e in evals if e.get("ts") not in reviewed][: self.evolve_batch]
         if not pending:
             return 0
         existing = evolution.load_feedback_keys(
-            [self.feedback_seed_file, self.feedback_file])
+            [self.feedback_seed_file, self.feedback_file,
+             self.promoted_feedback_file])
         now = datetime.now().isoformat(timespec="seconds")
-        added = 0
+        proposed = 0
         for ev in pending:
             prompt = evolution.build_review_prompt(ev, self.agent_lang)
             raw = await self._call_anthropic(
@@ -638,18 +804,41 @@ class Learning:
             pair = evolution.pair_from_candidate(
                 evolution.candidate_record(ev, diag), now)
             usable = pair is not None and (pair["reply"], pair["better"]) not in existing
-            # Audit trail first, so a crash between the two writes re-reviews
-            # nothing (the entry is marked reviewed) rather than double-appends.
+            outcome = "rejected"
+            if usable:
+                event = evidence.make_event(
+                    kind=evidence.KIND_SELF_REVIEW, ts=now,
+                    **self._scope_fields(str(ev.get("group_id") or "")),
+                    reply=pair["reply"],
+                    context=pair.get("context"),
+                    directed=False, direction="self",
+                    adjudication={
+                        "accept": True, "better": pair["better"],
+                        "scenario": pair.get("scenario", ""),
+                        "mode": pair.get("mode", ""),
+                        "score": ev.get("score") if isinstance(ev.get("score"), int) else None,
+                        # The diagnosis, not the reasoning that produced it.
+                        "reason": str(diag.get("bad_diagnosis") or "")[:200],
+                    },
+                    adjudicator_model=self.evolve_model,
+                    adjudicator_prompt_version=evolution.REVIEWER_VERSION,
+                )
+                self._record_and_corroborate(event, now)
+                outcome = self._propose_candidate(
+                    event, candidates.TYPE_PAIR, pair, now)
+                if outcome in ("proposed", "promoted"):
+                    proposed += 1
+                existing.add((pair["reply"], pair["better"]))
+            # Audit trail after the proposal, but keyed so a crash in between
+            # re-reviews the entry rather than losing it: the ledger's own
+            # dedup makes a repeated proposal a no-op.
             evolution.append_jsonl(
                 self.candidates_file,
-                [evolution.candidate_record(ev, diag,
-                                            applied="auto" if usable else "rejected")],
+                [evolution.candidate_record(ev, diag, applied=outcome)],
                 max_bytes=20_000_000,
             )
-            if usable:
-                added += self._append_feedback_pair(pair)
-                existing.add((pair["reply"], pair["better"]))
-        if added:
-            logger.info("[Agent] evolve: +%d feedback pairs from %d low-score evals",
-                        added, len(pending))
-        return added
+        if proposed:
+            logger.info("[Agent] evolve: +%d preference candidates from %d "
+                        "low-score evals (awaiting corroboration)",
+                        proposed, len(pending))
+        return proposed

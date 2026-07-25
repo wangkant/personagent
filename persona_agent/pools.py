@@ -103,8 +103,7 @@ def _needs_leading_newline(path: Path) -> bool:
     the new record onto an unterminated last line and destroys both. Files can
     legitimately arrive in that state from hand-editing — and the head of
     examples.jsonl is the hand-curated bootstrap pool, i.e. exactly the part
-    people edit by hand and the part _append_example_with_trim goes out of its
-    way to never drop."""
+    people edit by hand and the part nothing is ever allowed to drop."""
     try:
         with path.open("rb") as f:
             if f.seek(0, 2) == 0:

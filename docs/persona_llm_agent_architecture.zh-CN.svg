@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent 消息路径与学习闭环</title>
-  <desc id="architecture-desc">QQ 经 OneBot、其他平台经 AstrBot 进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估写入审计学习库，再热加载到 few-shot 检索。</desc>
+  <desc id="architecture-desc">QQ 经 OneBot、其他平台经 AstrBot 进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -143,12 +143,12 @@
   <text class="tiny muted" x="246" y="416">相关度 + 新近度</text>
 
   <rect class="code" x="410" y="376" width="140" height="58" rx="7"/>
-  <text class="label ink" x="426" y="395">学习数据池</text>
-  <text class="tiny muted" x="426" y="416">反馈 + 通过示例</text>
+  <text class="label ink" x="426" y="395">晋升闸门</text>
+  <text class="tiny muted" x="426" y="416">2 条证据 · 1 条强</text>
 
   <rect class="code" x="590" y="376" width="130" height="58" rx="7"/>
-  <text class="label ink" x="606" y="395">审计轨迹</text>
-  <text class="tiny muted" x="606" y="416">候选 / 评估</text>
+  <text class="label ink" x="606" y="395">证据日志</text>
+  <text class="tiny muted" x="606" y="416">只追加事件</text>
 
   <rect class="mint-region" x="760" y="376" width="120" height="58" rx="7"/>
   <text class="label mint" x="776" y="395">学习信号</text>
@@ -164,5 +164,5 @@
   <text class="tiny muted" x="220" y="453">主信号：定向用户反应 · 兜底信号：异步 1–5 分自评</text>
   <line class="rule" x1="40" y1="490" x2="940" y2="490"/>
   <circle class="mint" cx="48" cy="506" r="3"/>
-  <text class="small muted" x="60" y="506">下一条相似消息会在 JSON 调用前继承经审计的修正。</text>
+  <text class="small muted" x="60" y="506">下一条相似消息只继承被晋升的那部分；单有证据什么都不会改变。</text>
 </svg>

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent message path and learning loop</title>
-  <desc id="architecture-desc">QQ through OneBot and other platforms through AstrBot enter one FastAPI agent. Messages move left to right through ingestion, context enrichment, mode selection, JSON generation, validation, and platform routing. Reactions and asynchronous evaluation feed audited learning stores and hot-reload few-shot retrieval beneath the main path.</desc>
+  <desc id="architecture-desc">QQ through OneBot and other platforms through AstrBot enter one FastAPI agent. Messages move left to right through ingestion, context enrichment, mode selection, JSON generation, validation, and platform routing. Beneath the main path, reactions and asynchronous evaluation are recorded as append-only evidence; only the candidates the promotion policy approves are materialized and hot-reloaded into few-shot retrieval.</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -143,12 +143,12 @@
   <text class="tiny muted" x="246" y="416">relevance + recency</text>
 
   <rect class="code" x="410" y="376" width="140" height="58" rx="7"/>
-  <text class="label ink" x="426" y="395">learning stores</text>
-  <text class="tiny muted" x="426" y="416">feedback + examples</text>
+  <text class="label ink" x="426" y="395">promotion</text>
+  <text class="tiny muted" x="426" y="416">2 events, 1 strong</text>
 
   <rect class="code" x="590" y="376" width="130" height="58" rx="7"/>
-  <text class="label ink" x="606" y="395">audit trail</text>
-  <text class="tiny muted" x="606" y="416">candidates / eval</text>
+  <text class="label ink" x="606" y="395">evidence</text>
+  <text class="tiny muted" x="606" y="416">append-only log</text>
 
   <rect class="mint-region" x="760" y="376" width="120" height="58" rx="7"/>
   <text class="label mint" x="776" y="395">signals</text>
@@ -164,5 +164,5 @@
   <text class="tiny muted" x="220" y="453">Primary: directed user reactions · fallback: async 1–5 self-evaluation</text>
   <line class="rule" x1="40" y1="490" x2="940" y2="490"/>
   <circle class="mint" cx="48" cy="506" r="3"/>
-  <text class="small muted" x="60" y="506">The next similar message inherits audited corrections before the JSON call.</text>
+  <text class="small muted" x="60" y="506">The next similar message inherits only what promotion approved; evidence alone changes nothing.</text>
 </svg>

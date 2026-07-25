@@ -10,7 +10,13 @@ agent.py stays readable and each layer is testable on its own:
 - ingestion  links, share cards, images, OCR, vision — with the SSRF guard
 - transport  throttling, chunking, typing simulation, sends, conversation LRU
 - learning   self-eval, reaction adjudication, the EVOLVE_AUTO loop
-- promotion  the evidence gate: what may be banked as an example
+
+The learning path is three layers on purpose, so that recording something and
+being changed by it are separate acts:
+
+- evidence   append-only record of what happened; carries no authority
+- candidates versioned proposals + the append-only lifecycle that owns them
+- promotion  when evidence may grant a candidate authority (+ the legacy gate)
 
 Supporting modules, all pure logic with no agent state:
 

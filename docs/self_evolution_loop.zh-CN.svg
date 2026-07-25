@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="600" viewBox="0 0 880 600" role="img" aria-labelledby="self-title self-desc">
-  <title id="self-title">双信号自进化闭环</title>
-  <desc id="self-desc">真实用户反应是主要学习信号，异步自评是兜底。纠正会成为 BAD 到 OK 偏好对；正向反应和满分自评只会增加候选证据，累计两次 owner 反应、三次其他用户反应或四次自评后，回复才会成为验证过的示例。</desc>
+  <title id="self-title">证据驱动的自进化闭环</title>
+  <desc id="self-desc">真实用户反应是主要学习信号，异步自评是兜底。每个信号都被记为只追加的证据，并可能提出一个带版本的候选；候选在被晋升之前不会改变任何行为。晋升要求至少两条互不相同、彼此兼容的证据，其中至少一条是强证据，且没有相互矛盾的证据。只有被晋升的候选会物化进检索读取的 few-shot 视图；回滚或取代可以再把这份影响收回，同时不擦除历史。</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -67,8 +67,8 @@
   <rect class="frame" x="0.5" y="0.5" width="879" height="599" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">系统 / 学习闭环</text>
-  <text class="headline ink" x="40" y="61">双信号，共用一份热重载记忆</text>
-  <text class="small muted" x="40" y="86">真实反应优先，自我评估补足空白。</text>
+  <text class="headline ink" x="40" y="61">证据进来，晋升出去</text>
+  <text class="small muted" x="40" y="86">反应只是证据。只有被晋升的候选才会改变回复。</text>
   <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
   <rect class="mint-region" x="150" y="126" width="430" height="150" rx="8"/>
@@ -82,12 +82,12 @@
   <path class="mint-flow" d="M396 176H420V170H430" marker-end="url(#self-arrow)"/>
   <path class="mint-flow" d="M396 176H420V222H430" marker-end="url(#self-arrow)"/>
   <text class="small ink" x="438" y="170">纠正</text>
-  <text class="tiny coral" x="438" y="188">BAD → OK 偏好对</text>
+  <text class="tiny coral" x="438" y="188">强证据 · BAD → OK</text>
   <text class="small ink" x="438" y="222">正向反应</text>
-  <text class="tiny mint" x="438" y="240">增加候选证据</text>
-  <path class="mint-flow" d="M544 170H710V199H720" marker-end="url(#self-arrow)"/>
-  <path class="mint-flow" d="M548 222H595" marker-end="url(#self-arrow)"/>
-  <text class="tiny muted" x="170" y="260">全部裁决 → candidates.jsonl 审计</text>
+  <text class="tiny mint" x="438" y="240">只算弱证据</text>
+  <path class="mint-flow" d="M552 170H572V208H595" marker-end="url(#self-arrow)"/>
+  <path class="mint-flow" d="M552 222H595" marker-end="url(#self-arrow)"/>
+  <text class="tiny muted" x="170" y="260">每个反应 → evidence.*.jsonl（只追加）</text>
 
   <rect class="violet-region" x="150" y="296" width="430" height="190" rx="8"/>
   <text class="eyebrow violet" x="170" y="315">02 / 兜底信号</text>
@@ -98,7 +98,7 @@
   <path class="violet-flow" d="M396 345H420V326H430" marker-end="url(#self-arrow)"/>
   <path class="violet-flow" d="M396 345H408V424H420" marker-end="url(#self-arrow)"/>
   <text class="small mint" x="438" y="326">5 分</text>
-  <text class="tiny mint" x="438" y="344">增加候选证据</text>
+  <text class="tiny mint" x="438" y="344">只算弱证据</text>
   <path class="violet-flow" d="M550 326H580V314H595" marker-end="url(#self-arrow)"/>
   <rect class="coral-region" x="420" y="374" width="145" height="106" rx="6"/>
   <text class="eyebrow coral" x="430" y="390">失败复盘</text>
@@ -106,38 +106,42 @@
   <text class="tiny muted" x="430" y="425">python tools/</text>
   <text class="tiny muted" x="430" y="441">auto_reviewer.py --apply</text>
   <text class="tiny coral" x="430" y="458">无人值守 · 默认 ≤ 2 分</text>
-  <text class="tiny muted" x="430" y="473">EVOLVE_AUTO=true</text>
-  <path class="violet-flow" d="M565 425H711V213H720" marker-end="url(#self-arrow)"/>
+  <text class="tiny muted" x="430" y="473">EVOLVE_AUTO → 候选</text>
+  <path class="violet-flow" d="M565 425H578V340H595" marker-end="url(#self-arrow)"/>
 
   <rect class="surface" x="595" y="188" width="112" height="162" rx="8"/>
   <rect class="frame" x="595.5" y="188.5" width="111" height="161" rx="7.5"/>
-  <text class="eyebrow violet" x="605" y="205">证据门</text>
-  <text class="label ink" x="605" y="227">候选池</text>
+  <text class="eyebrow violet" x="605" y="205">晋升闸门</text>
+  <text class="label ink" x="605" y="227">候选账本</text>
   <line class="rule" x1="605" y1="244" x2="697" y2="244"/>
-  <text class="tiny muted" x="605" y="260">2 次 owner 反应</text>
-  <text class="tiny muted" x="605" y="278">3 次其他用户</text>
-  <text class="tiny muted" x="605" y="293">正向反应</text>
-  <text class="tiny muted" x="605" y="310">4 次自评</text>
-  <text class="label mint" x="605" y="332">佐证通过</text>
+  <text class="tiny muted" x="605" y="260">2 条以上证据</text>
+  <text class="tiny muted" x="605" y="278">至少 1 条强</text>
+  <text class="tiny muted" x="605" y="296">同一作用域</text>
+  <text class="tiny muted" x="605" y="314">无矛盾证据</text>
+  <text class="label mint" x="605" y="334">晋升</text>
   <path class="mint-flow" d="M707 281H720" marker-end="url(#self-arrow)"/>
+  <text class="tiny coral" x="595" y="466">回滚 / 取代</text>
+  <text class="tiny muted" x="595" y="481">再把影响收回</text>
 
   <rect class="surface" x="720" y="132" width="120" height="310" rx="8"/>
   <rect class="frame" x="720.5" y="132.5" width="119" height="309" rx="7.5"/>
   <text class="eyebrow violet" x="730" y="151">FEW-SHOT 记忆</text>
   <rect class="code" x="730" y="170" width="100" height="60" rx="5"/>
   <circle class="coral" cx="740" cy="185" r="3"/>
-  <text class="tiny muted" x="749" y="185">feedback.*</text>
-  <text class="tiny muted" x="749" y="201">.jsonl</text>
+  <text class="tiny muted" x="749" y="185">promoted.</text>
+  <text class="tiny muted" x="749" y="201">feedback.*</text>
   <text class="tiny coral" x="740" y="216">BAD / OK 偏好对</text>
   <rect class="code" x="730" y="250" width="100" height="62" rx="5"/>
   <circle class="mint" cx="740" cy="266" r="3"/>
-  <text class="tiny muted" x="749" y="266">examples.*</text>
-  <text class="tiny muted" x="749" y="282">.jsonl</text>
+  <text class="tiny muted" x="749" y="266">promoted.</text>
+  <text class="tiny muted" x="749" y="282">examples.*</text>
   <text class="tiny mint" x="740" y="298">已验证回复</text>
   <line class="rule" x1="730" y1="332" x2="830" y2="332"/>
   <text class="label mint" x="730" y="352">热重载</text>
   <text class="tiny muted" x="730" y="373">相关度 + 时近度</text>
   <text class="tiny muted" x="730" y="389">无需重启</text>
+  <text class="tiny muted" x="730" y="411">与种子和你</text>
+  <text class="tiny muted" x="730" y="427">自己的行同读</text>
 
   <rect class="surface" x="40" y="182" width="90" height="68" rx="7"/>
   <rect class="frame" x="40.5" y="182.5" width="89" height="67" rx="6.5"/>

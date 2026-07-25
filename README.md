@@ -11,7 +11,7 @@
 `personagent` turns an OpenAI-compatible model into a selective, bilingual chat persona that learns from the room.
 
 - **Human-shaped conversation.** Persona and style constraints, content understanding, stickers, proactive messages, and the option to stay quiet.
-- **Feedback that hot-reloads.** Corrections become preference pairs; good reactions add evidence, and only corroborated replies become proven examples; LLM self-evaluation is the fallback.
+- **Feedback that hot-reloads — behind a gate.** A reaction is recorded as evidence; adjudicating it proposes a candidate; only a *promoted* candidate reaches retrieval, and promotion can be rolled back. One correction, one laugh, or one self-score changes nothing.
 - **One guarded pipeline.** Structured JSON is parsed and validated before a reply is sent through OneBot / QQ or the AstrBot gateway to Telegram, Discord, Slack, Lark, and KOOK.
 
 ### Try it in 60 seconds
@@ -64,23 +64,42 @@ Most "LLM in a group chat" projects sound like a chatbot stuck in customer-servi
 - **Style as code.** `STYLE_GUIDE` encodes the persona's *register*, forbidden phrasings, identity-attack defenses, observer-position rules, and a "react to the image, do not describe it" rule — the constraints that distinguish a character from a generic assistant.
 - **Stickers as part of the voice.** The library collects new stickers seen in the group, tags them with a vision model, evaluates persona-fit twice (text and visual aesthetic), and lets the model send them inline via `[STICKER:<tag>]`. A conversation-driven feedback loop demotes stickers that consistently score poorly.
 - **Understand the content.** Inline URLs, Bilibili and YouTube videos, and arbitrary mini-app share cards are fetched, parsed, and surfaced as structured context, so the model receives the underlying content rather than an opaque link.
-- **Self-evolution.** The persona is not frozen at deployment. It learns primarily from real user reactions (corrections become preference pairs, laughter adds weighted evidence, and corroborated replies enter the example pool), with LLM self-scoring as the fallback — and everything hot-reloads into the very next similar conversation. See the next section.
+- **Self-evolution, with authority separated from evidence.** The persona is not frozen at deployment. It learns primarily from real user reactions — but a reaction is only *evidence*, and evidence has to be corroborated before it can change how the bot talks. Promoted material hot-reloads into the very next similar conversation, and can be revoked just as fast. See the next section.
 
 ## Self-evolution
 
 ![Self-evolution loop](docs/self_evolution_loop.svg)
 
-The agent closes a full learning loop around its own output — all of it hot-reloaded into dynamic few-shot retrieval, no restart needed:
+The agent closes a full learning loop around its own output. Four words carry the whole design, and they are used in exactly this sense everywhere in the code, tests and docs:
 
-- **Learn from real user reactions (the primary signal).** Every sent reply briefly waits for a *directed* reaction — someone quoting the bot's message, @-ing it, or (in a DM) just answering. An in-process adjudicator classifies the reaction: *"no, I meant X"* is a **correction** (with the right answer inside it — it becomes a BAD → OK preference pair); re-asking the same thing in other words is a **rejection** (didn't land); laughing or riffing is a **positive** (the reply adds weighted evidence to `runtime/example_candidates.json`). The evidence gate requires two owner positives or three other-user positives before the reply is banked as a proven example. The adjudicator filters banter and trolling before anything is written — the owner's corrections carry the most weight, a stranger must be self-evidently right — and every verdict is audited in `candidates.jsonl`. Reading a *reaction to a reply* is a far easier judgment than scoring "how human does this sound", which is why this channel works where naive LLM self-scoring is too lenient. Three mechanisms deepen the loop: **retry-completion** (user rejects reply A, the bot's retry B satisfies them — (A → B) closes into a pair with zero user effort), **delayed elicitation** (if a rejection taught nothing concrete, the bot may — after waiting out its own reply, at most once an hour — casually ask what they meant; the answer then adjudicates as a proper correction), and **teacher reputation** (per-user track record of adopted vs dismissed teachings feeds the adjudicator; persistently bad teachers get hard-blocked without costing a call). Prior art, honestly: this transplants the deployment-time learning line — [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)'s feedback elicitation, [Alexa self-learning](https://arxiv.org/pdf/1911.02557)'s rephrase-and-retry signal, [BlenderBot 3x](https://arxiv.org/abs/2306.04707)'s troll-resistant teacher filtering — into a training-free, in-context form.
-- **Learn from successes (fallback, fully automatic).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. A full 5 adds the weakest kind of candidate evidence; four corroborating score-5 evaluations are required before a reply is auto-appended to `runtime/examples.<lang>.jsonl` (deduped, and capped at the newest 500 machine-written entries — see [pool size](#self-evolution)), while the tracked `data/examples.<lang>.jsonl` remains a read-only synthetic seed.
-- **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Approved rewrites land in `runtime/feedback.<lang>.jsonl` as preference pairs — the strongest retrieval signal — so the next similar input surfaces the correction in-context. Two ways to run it:
-  - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt).
-  - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the same thing in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). Every diagnosis — applied or rejected — is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot taught itself.
+| | |
+|---|---|
+| **Evidence** | An append-only record of something that happened in a conversation. A reaction is evidence — nothing more. |
+| **Candidate** | A versioned, proposed behaviour change produced by adjudicating evidence. |
+| **Promotion** | Granting a candidate authority to affect future behaviour. |
+| **Rollback / supersession** | Removing that authority later, without erasing history. |
+
+Only promoted candidates enter dynamic few-shot retrieval, and they hot-reload into the very next similar conversation with no restart.
+
+- **Learn from real user reactions (the primary signal).** Every sent reply briefly waits for a *directed* reaction — someone quoting the bot's message, @-ing it, or (in a DM) just answering. An in-process adjudicator classifies it: *"no, I meant X"* is a **correction** (with the right answer inside it), re-asking the same thing in other words is a **rejection** (didn't land), laughing or riffing is a **positive**. The reaction is then written to `runtime/evidence.<lang>.jsonl` — always, accepted or dismissed, because a teaching attempt that was refused is worth being able to look up — and may propose a candidate in `runtime/candidate_ledger.<lang>.jsonl`. Neither changes a single reply. Reading a *reaction to a reply* is a far easier judgment than scoring "how human does this sound", which is why this channel works where naive LLM self-scoring is too lenient. Three mechanisms deepen it: **retry-completion** (user rejects reply A, the bot's retry B satisfies them — (A → B) becomes strong evidence with zero user effort), **delayed elicitation** (if a rejection taught nothing concrete, the bot may — after waiting out its own reply, at most once an hour — casually ask what they meant; the answer adjudicates as a proper correction and is linked to the complaint that prompted it), and **teacher reputation** (per-user track record of adopted vs dismissed teachings feeds the adjudicator; persistently bad teachers are hard-blocked without costing a call). Prior art, honestly: this transplants the deployment-time learning line — [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)'s feedback elicitation, [Alexa self-learning](https://arxiv.org/pdf/1911.02557)'s rephrase-and-retry signal, [BlenderBot 3x](https://arxiv.org/abs/2306.04707)'s troll-resistant teacher filtering — into a training-free, in-context form.
+- **Promotion is where authority is granted, and it is deliberately hard.** A candidate needs **two distinct compatible events, at least one of them strong**:
+  - **Strong** — an explicit correction from the person the reply was aimed at, with a concrete replacement in it; or a retry that same person then accepted.
+  - **Weaker** — a rejection with nothing concrete in it, a correction from a bystander, or the bot's own self-review. Real evidence that something was off; not a mandate to rewrite.
+  - **Weak** — laughter, agreement, continued banter, the bot's own score. Never sufficient, *at any quantity*.
+
+  Evidence combines only within one persona, persona version, language, conversation and mode. **Owner status does not substitute for being the affected recipient** — the owner's correction of a reply aimed at someone else is supporting evidence, not authority. If compatible evidence points two ways at once, automatic promotion is blocked and both candidates are left for a human. Because no positive signal is strong, **laughter alone can no longer grow the example pool at all**: it accumulates on a candidate and waits for you. All thresholds are named `.env` values (`PROMOTE_*`) with conservative defaults; `PROMOTE_AUTO=false` turns automatic promotion off entirely.
+- **Rollback and supersession.** Rolling a candidate back removes its influence from retrieval immediately, without deleting anything. Superseding deactivates the old candidate and activates its replacement, preserving both records. An accepted rejection or correction of a reply does this automatically for whatever that reply had been promoted for.
+- **You are the other half of the loop.** `python tools/candidates_admin.py list` shows what is waiting and *why the policy is holding it*; `show <id>` prints a candidate with every piece of evidence behind it, who said it, and whether it counts; `promote` / `reject` / `rollback` / `supersede` / `rebuild` do the rest. Every action appends a lifecycle event — nothing in the log is ever edited or removed.
+- **Learn from successes (fallback).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. A full 5 is recorded as weak evidence and proposes a positive-example candidate. It will not promote itself: the evaluator is documented in-code as generous, and a generous grader marking its own homework is the weakest signal in the system.
+- **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Two ways to run it:
+  - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt). You are the authority here, so approved pairs are written directly.
+  - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the diagnosis in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). It files candidates rather than applying them — one automatic signal that nobody witnessed does not get to change behaviour. Every diagnosis is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot proposed for itself.
 - **Stickers evolve too.** Each sent sticker gets its own score; a sustained low average demotes it out of the library (see [Sticker quality pipeline](#sticker-quality-pipeline)).
 - **The persona takes notes on itself.** A letta-style `core_memory.json` holds a per-group self-maintained note the model can update mid-conversation — standing facts about the group survive context-window turnover.
 
-Guardrails, because an unattended feedback loop can also entrench garbage: every reaction passes the adjudicator (banter and trolling are filtered, strangers must be self-evidently right), no single positive reaction or top score grows the example pool, candidate evidence decays unless it is corroborated, the unattended path only touches clear failures, pairs are deduped against the whole feedback file, both files are size-capped, and `candidates.jsonl` keeps the full audit trail.
+**Where the material actually lives.** The append-only event log is the single source of truth. Promoted candidates are materialized into `runtime/promoted.{examples,feedback}.<lang>.jsonl`, which retrieval reads alongside the `data/` seeds and the learned pools. That view is a cache: it is rewritten atomically on every promotion or rollback and can be rebuilt from the log at any time (`candidates_admin.py rebuild`). Keeping it separate is what makes rollback cheap and guarantees a rebuild can never disturb a row you wrote or approved yourself.
+
+Guardrails, because an unattended feedback loop can also entrench garbage: every reaction passes the adjudicator (banter and trolling filtered, strangers must be self-evidently right); no single automatic signal of any kind can promote; evidence expires (`PROMOTE_EVIDENCE_MAX_AGE_DAYS`) and never crosses persona, language or conversation boundaries; contradictions block promotion instead of resolving themselves; the unattended path only touches clear failures; pairs are deduped against every pool; the views are size-capped; and both the evidence log and the candidate ledger are append-only, so every behaviour change has a traceable reason and a reversible decision behind it.
 
 ## Quick start
 
@@ -259,7 +278,9 @@ All settings come from `.env`. Key fields:
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `REACT_LEARN` (+ `REACT_*`) | Learn from real user reactions (on by default — the primary self-evolution signal). See [Self-evolution](#self-evolution) |
-| `EVOLVE_AUTO` (+ `EVOLVE_*`) | Opt-in unattended eval → feedback learning loop (fallback channel). See [Self-evolution](#self-evolution) |
+| `PROMOTE_AUTO` (+ `PROMOTE_*`) | When a candidate may gain authority over future replies: how many compatible events, how many strong, how old, and whether one conversation's evidence may speak for another. Conservative defaults; `PROMOTE_AUTO=false` leaves everything for human review. See [Self-evolution](#self-evolution) |
+| `PERSONA_VERSION` | Optional label recorded with every evidence event next to a hash of your persona text. Both scope evidence, so a persona rewrite stops old evidence from authorizing changes to the new character |
+| `EVOLVE_AUTO` (+ `EVOLVE_*`) | Opt-in unattended self-review loop; it files candidates rather than applying them (fallback channel). See [Self-evolution](#self-evolution) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | Auto-downgrade to a cheaper model when request rate spikes |
 | `JUDGE_MODEL` | Cheapest model for the "should I reply?" gate on self-initiated modes (judge/followup/proactive). The reply that's actually sent is always written by the main model. Defaults to `FALLBACK_MODEL` |
 | `EVAL_MODEL` | Model used by the async self-eval scorer (often a cheaper one is fine) |
@@ -285,9 +306,11 @@ write a BAD/OK pair into runtime/feedback.<lang>.jsonl
 next time a similar input arrives, dynamic few-shot retrieval surfaces the pair
 ```
 
-Retrieval merges the read-only synthetic seeds in `data/{examples,feedback}.<lang>.jsonl` with learned rows in `runtime/{examples,feedback}.<lang>.jsonl`. It uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
+What you write or approve by hand needs no promotion — you are the authority, so it is trusted immediately. The evidence-and-promotion machinery exists to gate what the *agent* proposes about itself.
 
-**Pool size is capped on purpose.** Only 4 examples + 6 pairs reach the prompt per turn, so the learned `runtime/` files keep the newest `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` machine-written entries (500 each by default; `0` disables the cap). This is a quality setting as much as a performance one: entries banked months ago came out of an older prompt and a self-eval that scores generously, and once thousands of them accumulate they outvote the recent ones. **Nothing you wrote or approved yourself is ever counted or dropped** — the `data/` seeds are read-only, and rows you approved through `prompt_lab.py` carry no machine marker, so they survive every trim even though they live in `runtime/`.
+Retrieval merges three sources: the read-only synthetic seeds in `data/{examples,feedback}.<lang>.jsonl`, learned rows in `runtime/{examples,feedback}.<lang>.jsonl`, and the promoted-candidate views in `runtime/promoted.{examples,feedback}.<lang>.jsonl`. It uses language-aware tokens (English words minus stopwords, or Chinese 2-char ngrams) + scenario tags + recency decay, so even small datasets (5-10 entries per failure mode) start helping immediately.
+
+**Pool size is capped on purpose.** Only 4 examples + 6 pairs reach the prompt per turn, so the machine-written half keeps the newest `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` entries (500 each by default; `0` disables the cap). This bounds the promoted views, and the offline tools apply the same caps to what they write. It is a quality setting as much as a performance one: material promoted months ago came out of an older prompt, and once thousands of rows accumulate they outvote the recent ones. **Nothing you wrote or approved yourself is ever counted or dropped** — the `data/` seeds are read-only, rows you approved through `prompt_lab.py` carry no machine marker, and rows learned by a pre-ledger version are left exactly as they are. Dropping a row from a view is not a lifecycle change either: the candidate stays promoted in the ledger.
 
 `data/output_filter.<lang>.json` is hot-reloaded — edit it without restarting. Same for `data/lorebook.<lang>.json` (keyword-triggered context injection à la SillyTavern World Info).
 
@@ -337,6 +360,18 @@ NapCat (QQ ↔ OneBot)          AstrBot + forwarder plugin
 │  │         └─ async self-eval → eval.jsonl + sticker score│ │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                            │
+│  ┌────────── the learning path (off the hot path) ──────┐  │
+│  │  a reaction / an accepted retry / a self-eval score  │  │
+│  │    ├─ evidence.py     append-only event, no authority│  │
+│  │    ├─ candidates.py   versioned proposal, inert      │  │
+│  │    └─ promotion.py    2+ events, 1+ strong?          │  │
+│  │         ├─ no  → stays proposed (candidates_admin.py)│  │
+│  │         └─ yes → lifecycle event + view rebuild:     │  │
+│  │             promoted.{examples,feedback}.<lang>.jsonl│  │
+│  │              which _examples_for_prompt reads next   │  │
+│  │  rollback / supersede → rebuild → influence removed  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
 │  ┌────────────── persona_agent/stickers.py ─────────────┐  │
 │  │  steal → tag → persona-fit gate → visual aesthetic    │  │
 │  │  → eval feedback loop → freshness-biased selection    │  │
@@ -354,13 +389,17 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 | Module | Responsibility |
 |---|---|
 | `persona_agent/agent.py` + mixins | JSON-protocol output (`reasoning` / `intent` / `reply` / `mem` as fields, not tags); whitelist character validator; transactional delivery/state commits; bounded image ingestion; per-user RAG memory; dynamic few-shot retrieval over seed + runtime examples/feedback; regex pre-flight; async self-eval; the opt-in `EVOLVE_AUTO` loop; cross-restart `seen_msg_ids` dedup. Split across `prompts` / `textproc` / `pools` / `ingestion` / `transport` / `learning` — see [Project layout](#project-layout) |
-| `persona_agent/reactions.py` | Learn from real user reactions (primary signal): pending-reply table with quote/@/DM attribution, one-call adjudicator (classify + genuineness + rewrite, owner-weighted), write-shapes for the feedback/examples pipelines |
-| `persona_agent/evolution.py` | The eval → feedback learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
+| `persona_agent/reactions.py` | Learn from real user reactions (primary signal): pending-reply table with quote/@/DM attribution, one-call adjudicator (classify + genuineness + rewrite), write-shapes for the feedback/examples pipelines |
+| `persona_agent/evidence.py` | The append-only evidence log: what happened, with its scope, speaker and recipient, the structured verdict and the adjudicator's identity. Content-addressed ids make duplicates idempotent. No chain of thought is ever stored |
+| `persona_agent/candidates.py` | Versioned candidates and the append-only lifecycle ledger that owns them (`proposed` / `promoted` / `rejected` / `superseded` / `rolled_back`), plus the materialized retrieval views. Current state is a replay of the log |
+| `persona_agent/promotion.py` | The promotion policy: evidence strength, scope compatibility, conflict detection, thresholds — and the pre-ledger gate kept working for deployments that learned before it existed |
+| `persona_agent/evolution.py` | The eval → candidate learning-loop logic (load low scores, build the diagnosis prompt, convert drafts to preference pairs, dedup, audit trail) — shared by the in-process `EVOLVE_AUTO` loop and `tools/auto_reviewer.py`, transport-agnostic |
 | `persona_agent/stickers.py` | md5-deduped library; auto-steals new stickers seen in group; vision-tags them once context accumulates; persona-fit gate from both text (meaning/tags) and visual aesthetic; eval-driven quality feedback loop demotes stickers that score consistently low; freshness bonus rotates in newer picks; orphan-record skip during selection |
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
 | `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into runtime feedback (`--yes` for unattended) |
+| `tools/candidates_admin.py` | The human half of the promotion gate: list what is waiting and why, show a candidate with the evidence behind it, promote / reject / roll back / supersede, rebuild the retrieval views. Append-only — no action edits history |
 | `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into runtime examples |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
 
@@ -377,8 +416,11 @@ persona_agent/        the application package — Agent composes one mixin per c
   ingestion.py        links, share cards, images, OCR, vision — with the SSRF guard
   transport.py        throttling, chunking, typing simulation, sends, conversation LRU
   learning.py         self-eval, reaction adjudication, the EVOLVE_AUTO loop
+  evidence.py         append-only record of what happened; carries no authority
+  candidates.py       versioned proposals + their append-only lifecycle ledger
+  promotion.py        when evidence may grant a candidate authority
   reactions.py        learn-from-real-user-reactions logic (primary signal)
-  evolution.py        eval -> feedback learning-loop logic
+  evolution.py        eval -> candidate learning-loop logic
   gateway.py          platform-neutral event schema + reply sink
   stickers.py         sticker library and its quality gates
   health.py           startup / runtime environment checks
@@ -386,9 +428,9 @@ persona_agent/        the application package — Agent composes one mixin per c
 main.py               FastAPI entry point (webhooks, lifespan, background loops)
 try_chat.py           terminal chat through the full reasoning path
 quickstart.py         one-command setup wizard
-tools/                offline tuning + ops CLIs (auto_reviewer, prompt_lab, ...)
+tools/                offline tuning + ops CLIs (auto_reviewer, candidates_admin, prompt_lab, ...)
 data/                 per-language datasets: persona, examples, feedback, lorebook, output_filter
-runtime/              gitignored learned examples and feedback
+runtime/              gitignored: evidence log, candidate ledger, promoted views, learned pools
 docs/                 architecture + loop diagrams (en / zh)
 tests/                stdlib-only regression suite (no pytest needed)
 integrations/         AstrBot forwarder plugin for multi-platform
@@ -406,9 +448,10 @@ python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
 python tests/test_promotion.py
+python tests/test_ledger.py
 ```
 
-It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail), reaction learning, and few-shot retrieval with its append-aware dataset loading. Run it before opening a pull request.
+It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail), reaction learning, few-shot retrieval with its append-aware dataset loading, and the evidence → candidate → promotion path (what one signal may and may not do, scope isolation, contradictions, replay, rollback, supersession, append-only logs, legacy compatibility). Run it before opening a pull request.
 
 To import the pipeline from your own code, `pip install -e .` (see [pyproject.toml](pyproject.toml)). Release notes live in [CHANGELOG.md](CHANGELOG.md); contribution guidelines, the module map and the "never let a test write real state" rule are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -417,6 +460,7 @@ For prompt and persona tuning:
 - `python try_chat.py` — interactive single-turn chat through the full reasoning path (see [Quick start](#quick-start)).
 - `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into runtime examples.
 - `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
+- `python tools/candidates_admin.py list` — what the learning loop is proposing and why it is being held; then `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild` (see [Self-evolution](#self-evolution)).
 - `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). A separate judge scores the replies blind — `--judge export` writes an unlabelled inbox for a human or another model, `--judge anthropic` routes it to a different vendor — so the learning signal and the measurement never share a model.
 
 ## Privacy
@@ -433,12 +477,12 @@ stickers/auto/            # downloaded sticker binaries
 seen_msg_ids.json         # cross-restart message dedup state
 owner_profile.json        # owner's message-frequency profile
 unknown_stickers.jsonl    # download URLs
-candidates.jsonl          # auto-reviewer output
-runtime/                  # learned examples/feedback from real conversations
+candidates.jsonl          # auto-reviewer output + reaction adjudication audit
+runtime/                  # evidence log, candidate ledger, promoted views, learned pools
 *.log                     # runtime logs
 ```
 
-The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` are **read-only, fully synthetic seeds** showing the format only. Learning from real conversations is written under gitignored `runtime/` (or `AGENT_RUNTIME_DIR`), so it cannot be committed accidentally.
+The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` are **read-only, fully synthetic seeds** showing the format only. Learning from real conversations is written under gitignored `runtime/` (or `AGENT_RUNTIME_DIR`), so it cannot be committed accidentally. That includes the evidence log, which quotes real reactions verbatim — it records the structured verdict and a one-sentence reason, never a model's chain of thought.
 
 ## License
 

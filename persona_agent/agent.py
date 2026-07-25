@@ -22,6 +22,8 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from . import candidates as candidate_ledger_mod
+from . import evidence as evidence_mod
 from . import evolution
 from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
@@ -377,11 +379,11 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # reply waits (bounded, TTL) for a directed user reaction — a quote of
         # the bot's message, an @/name-call, or the interlocutor's next DM.
         # An in-process adjudicator (single LLM call) classifies the reaction
-        # (correction / rejection / positive / neutral), filters banter and
-        # trolling (owner-weighted), and only then writes: corrections become
-        # feedback pairs, genuine positives bank the reply as an example.
-        # LLM self-eval remains as the fallback channel for replies that never
-        # get a directed reaction.
+        # (correction / rejection / positive / neutral) and filters banter and
+        # trolling. The verdict is recorded as evidence and may propose a
+        # candidate; it does not write a retrieval pool — see the promotion
+        # block below. LLM self-eval remains the fallback channel for replies
+        # that never get a directed reaction.
         self.react_learn = os.getenv("REACT_LEARN", "true").lower() == "true"
         self.react_model = os.getenv("REACT_MODEL", "") or self.judge_model
         self.pending_reactions = reactions.PendingReplies(
@@ -461,15 +463,36 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._pairs_offset: int = 0
         self._pairs_sig: bytes = b""
 
-        # Retrieval pool caps (see evolution.trim_pool). Both pools are scanned
-        # on every LLM turn but only ever surface 4 examples + 6 pairs, so
-        # letting the learned runtime/ files grow to the byte ceiling (~16k
-        # entries) costs a longer scan per reply and dilutes the pool with
-        # entries written under an older prompt. The data/ seeds are read-only
-        # and never touched; rows you approved yourself carry no machine marker
-        # and are never counted or dropped. 0 = no cap (pre-cap behaviour).
+        # Retrieval pool caps. Both pools are scanned on every LLM turn but only
+        # ever surface 4 examples + 6 pairs, so an unbounded pool costs a longer
+        # scan per reply and dilutes retrieval with entries written under an
+        # older prompt. These now bound the materialized views of promoted
+        # candidates (candidates.rebuild_views) — the only rows the automatic
+        # path can add. The data/ seeds and the pre-ledger learned pools are
+        # left exactly as they are; the offline tools still trim what they
+        # write (see evolution.trim_pool). 0 = no cap.
         self.examples_max_auto = int(os.getenv("EXAMPLES_MAX_AUTO", 500) or 0)
         self.feedback_max_auto = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
+
+        # Evidence -> candidate -> promotion. A reaction is recorded as
+        # evidence (append-only, immutable); adjudicating it proposes a
+        # versioned candidate; only a promoted candidate is materialized into
+        # the views retrieval reads. Nothing here writes examples_file or
+        # feedback_file: those hold the seed-era and hand-approved rows, which
+        # stay exactly as they are. See evidence.py / candidates.py /
+        # promotion.py, and tools/candidates_admin.py for the human controls.
+        self.promotion_policy = promotion.Policy.from_env()
+        # Scope identity of the current persona. The hash is always available;
+        # PERSONA_VERSION is an optional operator-set label recorded alongside
+        # it. Both are part of evidence-combination scope, so a persona rewrite
+        # stops old evidence from authorizing changes to the new character.
+        self.persona_version = os.getenv("PERSONA_VERSION", "").strip()
+        self.persona_hash = hashlib.sha256(
+            (self.persona or "").encode("utf-8")).hexdigest()[:12]
+        self._view_examples_cache: list = []
+        self._view_examples_stamp: tuple = (-1.0, -1)
+        self._view_pairs_cache: list = []
+        self._view_pairs_stamp: tuple = (-1.0, -1)
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
         self.output_filter_file = _resolve_lang_file("output_filter", "json", self.agent_lang)
@@ -549,6 +572,59 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
     @example_candidates.setter
     def example_candidates(self, pool: promotion.CandidatePool) -> None:
         self._example_candidates = pool
+
+    # ---- Evidence ledger (sidecars of the learned example pool) ----------
+    # Resolved from examples_file's directory for the same reason
+    # example_candidates is: the log, the ledger and the views are only
+    # meaningful together with the pool they feed. Anything that repoints one —
+    # a test harness, a benchmark arm, AGENT_RUNTIME_DIR — moves all of them,
+    # so a test can never accumulate evidence into a live deployment's state.
+
+    @property
+    def learning_dir(self) -> Path:
+        return self.examples_file.parent
+
+    @property
+    def evidence_file(self) -> Path:
+        return self.learning_dir / f"evidence.{self.agent_lang}.jsonl"
+
+    @property
+    def candidate_ledger_file(self) -> Path:
+        return self.learning_dir / f"candidate_ledger.{self.agent_lang}.jsonl"
+
+    @property
+    def promoted_examples_file(self) -> Path:
+        return self.learning_dir / f"promoted.examples.{self.agent_lang}.jsonl"
+
+    @property
+    def promoted_feedback_file(self) -> Path:
+        return self.learning_dir / f"promoted.feedback.{self.agent_lang}.jsonl"
+
+    @property
+    def evidence_log(self) -> evidence_mod.EvidenceLog:
+        want = self.evidence_file
+        log = getattr(self, "_evidence_log", None)
+        if log is None or log.path != want:
+            log = evidence_mod.EvidenceLog(want)
+            self._evidence_log = log
+        return log
+
+    @evidence_log.setter
+    def evidence_log(self, log: evidence_mod.EvidenceLog) -> None:
+        self._evidence_log = log
+
+    @property
+    def candidate_ledger(self) -> candidate_ledger_mod.CandidateLedger:
+        want = self.candidate_ledger_file
+        ledger = getattr(self, "_candidate_ledger", None)
+        if ledger is None or ledger.path != want:
+            ledger = candidate_ledger_mod.CandidateLedger(want)
+            self._candidate_ledger = ledger
+        return ledger
+
+    @candidate_ledger.setter
+    def candidate_ledger(self, ledger: candidate_ledger_mod.CandidateLedger) -> None:
+        self._candidate_ledger = ledger
 
     def _spawn(self, coro) -> asyncio.Task:
         """Launch a background task and keep a strong reference to it until it
@@ -2519,6 +2595,35 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
 
+    def _reload_views_if_stale(self) -> None:
+        """Hot-reload the materialized views of promoted candidates.
+
+        These are the *only* rows the automatic learning path can put in front
+        of the model. They are small (capped), derived, and rewritten whole on
+        every promotion or rollback, so there is no append-only fast path to
+        preserve here — a plain mtime+size check and a full reparse is both
+        correct and cheap. A rollback therefore takes effect on the next turn
+        without a restart, which is the point of keeping the view separate."""
+        for path, attr, pairs_only in (
+            (self.promoted_examples_file, "_view_examples", False),
+            (self.promoted_feedback_file, "_view_pairs", True),
+        ):
+            stamp = self._pool_stamp((path,))
+            if stamp == getattr(self, attr + "_stamp"):
+                continue
+            try:
+                rows = read_jsonl((path,))
+                if pairs_only:
+                    rows = [r for r in rows
+                            if r.get("rating") == "better" and r.get("better")
+                            and r.get("reply")]
+                for rec in rows:
+                    rec["_rt"] = _retrieval_fields(rec)
+                setattr(self, attr + "_cache", rows)
+                setattr(self, attr + "_stamp", stamp)
+            except Exception as e:
+                logger.warning("[Agent] %s reload failed: %s", path.name, e)
+
     @staticmethod
     def _pool_stamp(paths) -> tuple:
         """Staleness signal for a (seed, runtime) pool: mtime AND size of each
@@ -2789,8 +2894,17 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         feedback.jsonl entries the user rated 'better'."""
         self._reload_examples_if_stale()
         self._reload_pairs_if_stale()
+        self._reload_views_if_stale()
 
-        if not self._examples_cache and not self._pairs_cache:
+        # Seed + legacy/hand-approved rows, plus the promoted-candidate views.
+        # Concatenated only when a view is non-empty: on a fresh deployment
+        # that is two list copies per turn saved on the hot path.
+        pairs_pool = (self._pairs_cache + self._view_pairs_cache
+                      if self._view_pairs_cache else self._pairs_cache)
+        examples_pool = (self._examples_cache + self._view_examples_cache
+                         if self._view_examples_cache else self._examples_cache)
+
+        if not examples_pool and not pairs_pool:
             return ""
 
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
@@ -2823,9 +2937,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # all, but keeps a heap of n instead of sorting the whole pool.
         have_signal = bool(focus_tokens or mode)
         if have_signal:
-            pairs = heapq.nlargest(limit_pairs, self._pairs_cache, key=_score)
+            pairs = heapq.nlargest(limit_pairs, pairs_pool, key=_score)
         else:
-            pairs = self._pairs_cache[-limit_pairs:]
+            pairs = pairs_pool[-limit_pairs:]
 
         parts = ["\n\n<examples>"]
 
@@ -2849,12 +2963,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # filtered pool is thousands of dicts copied per turn for 4 picks.
             goods = heapq.nlargest(
                 limit_good,
-                (e for e in self._examples_cache
+                (e for e in examples_pool
                  if e.get("reply", "") not in pair_chosen_set),
                 key=_score,
             )
         else:
-            goods = [e for e in self._examples_cache
+            goods = [e for e in examples_pool
                      if e.get("reply", "") not in pair_chosen_set][-limit_good:]
         if goods:
             parts.append("\n[Positive examples] These replies match your voice — pick up the feel:")

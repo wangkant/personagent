@@ -11,7 +11,7 @@
 `personagent` 把 OpenAI 兼容模型变成一个懂得选择性接话、支持中英双语、还能从群聊现场学习的人设。
 
 - **像真人一样聊天。** 人设与风格约束、内容理解、表情包、主动发言，以及选择沉默的能力。
-- **反馈即时热加载。** 纠正会变成偏好对；良好反应先积累证据，只有得到佐证的回复才会变成验证过的范例；LLM 自评分只作兜底。
+- **反馈即时热加载，但先过一道闸。** 反应只被记为证据；裁决证据只产出候选；只有被**晋升**的候选才进入检索，而晋升随时可以撤销。单独一次纠正、一次笑、一次自评满分，什么都不会改变。
 - **一条受保护的管线。** 结构化 JSON 经过解析与校验后，回复才会通过 OneBot / QQ 或 AstrBot 网关发往 Telegram、Discord、Slack、飞书和 KOOK。
 
 ### 60 秒试用
@@ -64,23 +64,42 @@ python quickstart.py
 - **将风格作为代码维护。** `STYLE_GUIDE` 将人设的*口吻*、禁用句式、身份攻击防御、旁观者位规则以及"看图而不复述图"等规则编码进 prompt——这些约束正是让 agent 具备人格、而非通用助手的关键。
 - **表情包是语气的一部分。** 表情库自动收集群内新表情，用视觉模型打标，进行文字与视觉两层 persona-fit 评估，并允许模型通过 `[STICKER:<tag>]` 内联发送。基于真实对话的反馈闭环会将持续表现不佳的表情降级。
 - **理解实际内容。** 文本中的链接、B 站 / YouTube 视频以及各类小程序分享卡都会被抓取、解析，并以结构化上下文提供给模型，使其接收到底层内容，而非一个不透明的 URL。
-- **自进化。** 人设不是部署完就冻结的。它主要从真实用户反应中学习（纠正变偏好对、被笑到的回复积累加权证据、得到佐证后才进入范例池）,LLM 自评分只作兜底——全部热加载进下一次同类对话。见下一节。
+- **自进化：证据与权限分开。** 人设不是部署完就冻结的。它主要从真实用户反应中学习——但一个反应只是*证据*，证据必须得到佐证，才有资格改变 bot 说话的方式。被晋升的材料会热加载进下一次同类对话，也能同样快地被收回。见下一节。
 
 ## 自进化
 
 ![自进化闭环](docs/self_evolution_loop.zh-CN.svg)
 
-agent 围绕自己的输出闭合了一整条学习回路——全部热加载进动态 few-shot 检索,无需重启：
+agent 围绕自己的输出闭合了一整条学习回路。整个设计由四个词撑起来，代码、测试和文档里一律按这个含义使用：
 
-- **从真实用户反应中学（主信号）。** 每条发出的回复会短暂等待一次*指向它的*反应——有人引用了 bot 那条消息、@了它,或在私聊里直接接话。进程内的裁决官对反应分类：「不是,我是说X」是**纠正**（正确答案就在用户话里——直接变成 BAD → OK 偏好对）；换个说法把同一件事又问一遍是**否定**（没接住）；笑了/接梗是**正向**（这条回复会给 `runtime/example_candidates.json` 增加加权证据）。证据门要求累计两次 owner 正向反应，或三次其他用户正向反应，才会把回复作为验证过的范例入库。写入之前裁决官会过滤玩笑和恶意投喂——owner 的纠正权重最高,陌生人必须一眼就对——每次裁决都记入 `candidates.jsonl` 审计。判断「一个反应意味着什么」远比判断「这句话像不像真人」容易,这正是这条通道在朴素 LLM 自评分过于手松的地方依然有效的原因。三个机制把回路挖得更深：**重试自动配对**（用户否定回复 A,bot 重来的 B 让对方满意——(A → B) 零成本闭合成偏好对）、**延迟追问**（否定但没学到具体东西时,bot 会在等完自己的正常回复后、每小时最多一次地自然问一句对方到底想要啥;答案随即按正式纠正裁决）、**教学信誉**（按用户记录教学被采纳/被驳回的历史喂给裁决官;一贯乱教的直接硬拉黑,连裁决调用都省了）。前人脉络（诚实注明）：这是把 deployment-time learning 研究线——[Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415) 的反馈追问、[Alexa self-learning](https://arxiv.org/pdf/1911.02557) 的重述-重试信号、[BlenderBot 3x](https://arxiv.org/abs/2306.04707) 的抗投毒教师过滤——移植成 training-free、in-context 的形态。
-- **从成功中学（兜底,全自动）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分只会增加最弱的一档候选证据；同一回复需要四次满分自评佐证，才会自动追加进 `runtime/examples.<lang>.jsonl`（去重、只保留最新 500 条机器写入的条目，见[池子大小](#自进化)）；仓库跟踪的 `data/examples.<lang>.jsonl` 只作为只读合成种子。
-- **从失败中学（兜底,无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。通过的改写以偏好对形式落进 `runtime/feedback.<lang>.jsonl`——检索里信号最强的形态——下一次同类输入就会在上下文里看到这条纠正。两种跑法：
-  - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断,批准 / 拒绝 / 编辑后才写入（`--yes` 跳过人审）。
-  - **无人值守:** 设 `EVOLVE_AUTO=true`,进程内后台循环定时做同样的事,只处理明确的失败（`score <= EVOLVE_THRESHOLD`,默认 2）。每次诊断——无论采纳还是拒绝——都记录在 `candidates.jsonl`,CLI 和循环永远不会重复处理同一条,你也随时能审计 bot 教了自己什么。
-- **表情包也在进化。** 每张发出的表情有自己的评分;持续低分会被降级出库（见[表情包质量管线](#表情包质量管线)）。
+| | |
+|---|---|
+| **证据（evidence）** | 对话里确实发生过某件事的只追加记录。一个反应就是一条证据——仅此而已。 |
+| **候选（candidate）** | 裁决证据后产出的、带版本的行为变更提案。 |
+| **晋升（promotion）** | 授予某个候选影响未来行为的权限。 |
+| **回滚 / 取代（rollback / supersession）** | 事后收回这个权限，同时不擦除历史。 |
+
+只有被晋升的候选才进入动态 few-shot 检索，且无需重启就会热加载进下一次同类对话。
+
+- **从真实用户反应中学（主信号）。** 每条发出的回复会短暂等待一次*指向它的*反应——有人引用了 bot 那条消息、@了它，或在私聊里直接接话。进程内的裁决官对反应分类：「不是，我是说X」是**纠正**（正确答案就在用户话里）；换个说法把同一件事又问一遍是**否定**（没接住）；笑了/接梗是**正向**。随后这个反应被写进 `runtime/evidence.<lang>.jsonl`——无论采信还是驳回都写，因为「有人试图教它、但被驳回了」本身就值得日后查得到——并且*可能*在 `runtime/candidate_ledger.<lang>.jsonl` 里提出一个候选。这两步都不会改动任何一条回复。判断「一个反应意味着什么」远比判断「这句话像不像真人」容易，这正是这条通道在朴素 LLM 自评分过于手松的地方依然有效的原因。三个机制把回路挖得更深：**重试自动配对**（用户否定回复 A，bot 重来的 B 让对方满意——(A → B) 零成本形成强证据）、**延迟追问**（否定但没学到具体东西时，bot 会在等完自己的正常回复后、每小时最多一次地自然问一句对方到底想要啥；答案按正式纠正裁决，并链回引发追问的那条抱怨）、**教学信誉**（按用户记录教学被采纳/被驳回的历史喂给裁决官；一贯乱教的直接硬拉黑，连裁决调用都省了）。前人脉络（诚实注明）：这是把 deployment-time learning 研究线——[Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415) 的反馈追问、[Alexa self-learning](https://arxiv.org/pdf/1911.02557) 的重述-重试信号、[BlenderBot 3x](https://arxiv.org/abs/2306.04707) 的抗投毒教师过滤——移植成 training-free、in-context 的形态。
+- **晋升是授予权限的那一步，门槛是刻意设高的。** 一个候选需要**两条互不相同、彼此兼容的证据，其中至少一条是强证据**：
+  - **强（strong）** —— 回复所指向的那个人明确纠正了它，并给出了具体的替代说法；或者同一个人接受了 bot 的重试。
+  - **较弱** —— 没给出具体内容的否定、旁观者的纠正，或 bot 自己的复盘。是「确实有点不对」的真实证据，但不构成改写授权。
+  - **弱（weak）** —— 笑、认同、接着聊，以及 bot 自己的评分。**无论多少条都不足以晋升**。
+
+  证据只在同一人设、同一人设版本、同一语言、同一会话、同一 mode 内合并。**owner 身份不能替代「回复所指向的人」**——owner 纠正一条本来是回给别人的回复，只算支持性证据，不算权限。如果彼此兼容的证据指向两个相反的方向，自动晋升直接被拦下，两个候选都留给人判断。由于没有任何正向信号属于强证据，**单靠被笑到已经完全不能再扩充示例池**：它只会在候选上累积，等你来定。所有阈值都是 `.env` 里有名字的配置项（`PROMOTE_*`），默认值保守；`PROMOTE_AUTO=false` 可彻底关掉自动晋升。
+- **回滚与取代。** 回滚一个候选会立刻把它的影响从检索里移除，且不删除任何记录。取代会停用旧候选、启用替代者，两份记录都保留。当一条回复被采信的否定或纠正命中时，它此前被晋升的东西会自动走这条路。
+- **你是这条回路的另一半。** `python tools/candidates_admin.py list` 列出正在等待的候选，以及*策略为什么按着它*；`show <id>` 打印一个候选背后的每一条证据、是谁说的、算不算数；`promote` / `reject` / `rollback` / `supersede` / `rebuild` 完成其余操作。每个动作都只追加一条生命周期事件——日志里的任何一行永远不会被改写或删除。
+- **从成功中学（兜底）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分被记为弱证据，并提出一个正向范例候选。它不会自我晋升：这个评分器在代码注释里就写明手松，而手松的评分者给自己批作业是整个系统里最弱的信号。
+- **从失败中学（兜底，无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。两种跑法：
+  - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断，批准 / 拒绝 / 编辑后才写入（`--yes` 跳过人审）。这里权限在你手上，所以批准的偏好对直接写入。
+  - **无人值守:** 设 `EVOLVE_AUTO=true`，进程内后台循环定时做诊断，只处理明确的失败（`score <= EVOLVE_THRESHOLD`，默认 2）。它只提出候选、不直接应用——一个没有任何人在场见证的自动信号，没资格改变行为。每次诊断都记录在 `candidates.jsonl`，CLI 和循环永远不会重复处理同一条，你也随时能审计 bot 给自己提了什么。
+- **表情包也在进化。** 每张发出的表情有自己的评分；持续低分会被降级出库（见[表情包质量管线](#表情包质量管线)）。
 - **人设给自己记笔记。** letta 风格的 `core_memory.json` 按群维护一条模型可以在对话中更新的自留笔记——群里的长期事实不随上下文窗口滚动而丢失。
 
-护栏（无人值守的反馈回路同样可能固化垃圾）：每个反应都要过裁决官（玩笑和恶意投喂被过滤,陌生人必须一眼就对）、单次正向反应或单次满分都不能扩充示例池、候选证据若迟迟得不到佐证会逐渐衰减、无人值守只碰明确失败、偏好对对整个 feedback 文件去重、两个文件都有大小上限、`candidates.jsonl` 保留完整审计痕迹。
+**这些材料实际存在哪里。** 只追加的事件日志是唯一事实源。被晋升的候选会物化成 `runtime/promoted.{examples,feedback}.<lang>.jsonl`，检索会连同 `data/` 种子和已学到的池子一起读它。这个视图只是缓存：每次晋升或回滚都会原子重写，也随时能从日志重建（`candidates_admin.py rebuild`）。把它单独放开，正是回滚成本极低的原因，也保证了任何一次重建都不会碰到你自己写下或批准过的行。
+
+护栏（无人值守的反馈回路同样可能固化垃圾）：每个反应都要过裁决官（玩笑和恶意投喂被过滤，陌生人必须一眼就对）；任何单一自动信号都无法完成晋升；证据会过期（`PROMOTE_EVIDENCE_MAX_AGE_DAYS`），且从不跨人设、跨语言、跨会话合并；出现矛盾时直接拦停而不是自作主张；无人值守只碰明确失败；偏好对对所有池子去重；视图有大小上限；证据日志和候选账本都是只追加的——因此每一次行为变化都有可追溯的理由，和一个可撤销的决定。
 
 ## 快速开始
 
@@ -247,7 +266,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | 变量 | 含义 |
 |---|---|
 | `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
-| `AGENT_RUNTIME_DIR` | 学到的 examples/feedback 所在的忽略目录（默认 `runtime/`） |
+| `AGENT_RUNTIME_DIR` | 证据日志、候选账本、晋升视图和学到的 examples/feedback 所在的忽略目录（默认 `runtime/`） |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
 | `ANTHROPIC_PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点（前缀是历史遗留）。留空 = 私聊也用 `DEEPSEEK_MODEL` |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
@@ -259,7 +278,9 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`) |
 | `PROACTIVE_ENABLE`（+ `PROACTIVE_*`）| 可选的主动发言。详见[主动发言](#主动发言可选) |
 | `REACT_LEARN`（+ `REACT_*`）| 从真实用户反应中学习（默认开——自进化主信号）。详见[自进化](#自进化) |
-| `EVOLVE_AUTO`（+ `EVOLVE_*`）| 可选的无人值守 eval → feedback 学习循环。详见[自进化](#自进化) |
+| `PROMOTE_AUTO`（+ `PROMOTE_*`）| 候选何时可以获得影响未来回复的权限：需要几条兼容证据、其中几条必须是强证据、证据多久过期、以及一个会话的证据能否替另一个会话说话。默认保守；`PROMOTE_AUTO=false` 则一切都留给人审。详见[自进化](#自进化) |
+| `PERSONA_VERSION` | 可选标签，与人设文本的哈希一起记进每条证据。两者都参与证据作用域，所以重写人设后，旧证据无法再为新角色的改动授权 |
+| `EVOLVE_AUTO`（+ `EVOLVE_*`）| 可选的无人值守自我复盘循环；它只提出候选，不直接应用（兜底通道）。详见[自进化](#自进化) |
 | `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | 请求过密时自动降级到便宜模型 |
 | `JUDGE_MODEL` | 最便宜的模型，只用于自发模式（judge/followup/proactive）「要不要回」的判断门；真正发出去的回复永远由主模型写。留空 = 用 `FALLBACK_MODEL` |
 | `EVAL_MODEL` | 异步自评打分用的模型 (用便宜的就行) |
@@ -285,9 +306,11 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 下次类似输入触发, 动态 few-shot 检索把这对拿出来注入
 ```
 
-检索会合并 `data/{examples,feedback}.<lang>.jsonl` 里的只读合成种子与 `runtime/{examples,feedback}.<lang>.jsonl` 里的运行时学习数据。它使用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
+你亲手写下或批准的东西不需要晋升——权限本来就在你手上，写完立即生效。整套证据与晋升机制针对的是 *agent* 对自己提出的东西。
 
-**池子大小是有意设上限的。** 每轮只有 4 条示例 + 6 对对比样本能进 prompt，所以 `runtime/` 下的学习数据各自只保留最新的 `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` 条机器写入的条目（默认各 500，设 `0` 关闭上限）。这既是性能设置也是质量设置：几个月前攒下的条目出自更早的 prompt 和一个打分偏松的自评器，一旦堆到几千条就会把近期的条目压下去。**你自己写的或人工批准过的条目不计入上限、也永远不会被删** —— `data/` 下的种子是只读的，而你通过 `prompt_lab.py` 批准的条目虽然写在 `runtime/`，但不带机器标记，同样在每次裁剪中完整保留。
+检索会合并三个来源：`data/{examples,feedback}.<lang>.jsonl` 里的只读合成种子、`runtime/{examples,feedback}.<lang>.jsonl` 里的运行时学习数据，以及 `runtime/promoted.{examples,feedback}.<lang>.jsonl` 里被晋升的候选。它使用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
+
+**池子大小是有意设上限的。** 每轮只有 4 条示例 + 6 对对比样本能进 prompt，所以机器写入的那一半只保留最新的 `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` 条（默认各 500，设 `0` 关闭上限）。它给晋升视图定大小，离线工具也按同样的上限裁剪自己写入的内容。这既是性能设置也是质量设置：几个月前晋升的材料出自更早的 prompt，一旦堆到几千条就会把近期的条目压下去。**你自己写的或人工批准过的条目不计入上限、也永远不会被删** —— `data/` 下的种子是只读的，你通过 `prompt_lab.py` 批准的条目不带机器标记，旧版本（引入账本之前）学到的行也原样保留。视图里被裁掉一行并不改变生命周期：该候选在账本里仍然是已晋升状态。
 
 `data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
 
@@ -337,6 +360,18 @@ NapCat (QQ ↔ OneBot)          AstrBot + 转发插件
 │  │         └─ 异步自评 → eval.jsonl + sticker 评分        │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                            │
+│  ┌────────────── 学习路径（在热路径之外） ──────────────┐  │
+│  │  一个反应 / 一次被接受的重试 / 一次自评满分          │  │
+│  │    ├─ evidence.py     只追加事件，不带任何权限       │  │
+│  │    ├─ candidates.py   带版本的提案，惰性无效         │  │
+│  │    └─ promotion.py    2 条证据、至少 1 条强？        │  │
+│  │         否 → 留在 proposed（candidates_admin.py）    │  │
+│  │         是 → 生命周期事件 + 重建视图：               │  │
+│  │             promoted.{examples,feedback}.<lang>.jsonl│  │
+│  │             下一轮由 _examples_for_prompt 读到       │  │
+│  │  回滚 / 取代 → 重建 → 影响被移除                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
 │  ┌────────────── persona_agent/stickers.py ─────────────┐  │
 │  │  偷 → 打标 → persona-fit 文字门 → 视觉审美门            │  │
 │  │  → eval 反馈闭环 → 偏向新鲜度的选择                     │  │
@@ -362,8 +397,11 @@ persona_agent/        应用核心包 —— Agent 按关注点由多个 mixin �
   ingestion.py        链接、分享卡、图片、OCR、视觉 —— 含 SSRF 防护
   transport.py        限流、分块、打字模拟、发送、会话 LRU
   learning.py         自评、反应裁决、EVOLVE_AUTO 循环
+  evidence.py         只追加的「发生了什么」记录，本身不带任何权限
+  candidates.py       带版本的提案 + 只追加的生命周期账本
+  promotion.py        证据何时可以授予候选权限
   reactions.py        真实用户反应学习逻辑(主信号)
-  evolution.py        eval -> feedback 学习循环逻辑
+  evolution.py        eval -> 候选 学习循环逻辑
   gateway.py          平台无关事件 schema + 回复 sink
   stickers.py         表情包库及其质量门
   health.py           启动 / 运行时环境体检
@@ -371,9 +409,9 @@ persona_agent/        应用核心包 —— Agent 按关注点由多个 mixin �
 main.py               FastAPI 入口(webhook、lifespan、后台循环)
 try_chat.py           走完整推理路径的终端试聊
 quickstart.py         一条命令的配置向导
-tools/                离线调优 + 运维 CLI(auto_reviewer、prompt_lab 等)
+tools/                离线调优 + 运维 CLI(auto_reviewer、candidates_admin、prompt_lab 等)
 data/                 按语言区分的数据集:persona、examples、feedback、lorebook、output_filter
-runtime/              gitignore 的运行时 examples/feedback
+runtime/              gitignore：证据日志、候选账本、晋升视图、学到的池子
 docs/                 架构 + 闭环示意图(中英)
 tests/                纯标准库回归测试(不依赖 pytest)
 integrations/         AstrBot 转发插件(多平台)
@@ -384,13 +422,17 @@ integrations/         AstrBot 转发插件(多平台)
 | 模块 | 职责 |
 |---|---|
 | `persona_agent/agent.py` + 各 mixin | JSON 协议输出；字符白名单校验；发送成功后才提交状态；有界图片输入；按用户的 RAG 记忆；合并 seed + runtime examples/feedback 的动态 few-shot 检索；正则前置过滤；异步自评；可选的 `EVOLVE_AUTO` 循环；跨重启 `seen_msg_ids` 去重。已拆分为 `prompts` / `textproc` / `pools` / `ingestion` / `transport` / `learning`，见[项目结构](#项目结构) |
-| `persona_agent/reactions.py` | 从真实用户反应学习（主信号）：待反应表 + 引用/@/私聊归属、单次调用的裁决官（分类+真伪+改写,owner 加权）、feedback/examples 写入形态 |
-| `persona_agent/evolution.py` | eval → feedback 学习循环逻辑（读低分、拼诊断 prompt、草稿转偏好对、去重、审计痕迹）——进程内 `EVOLVE_AUTO` 循环和 `tools/auto_reviewer.py` 共用，不绑定任何传输层 |
+| `persona_agent/reactions.py` | 从真实用户反应学习（主信号）：待反应表 + 引用/@/私聊归属、单次调用的裁决官（分类+真伪+改写）、feedback/examples 写入形态 |
+| `persona_agent/evidence.py` | 只追加的证据日志：发生了什么，连同作用域、说话人与被回复人、结构化裁决结论、裁决模型与 prompt 版本。事件 id 由内容哈希得出，因此重复事件是幂等的。**从不存储思维链** |
+| `persona_agent/candidates.py` | 带版本的候选，以及拥有其生命周期的只追加账本（`proposed` / `promoted` / `rejected` / `superseded` / `rolled_back`），外加物化出的检索视图。当前状态由重放日志得出 |
+| `persona_agent/promotion.py` | 晋升策略：证据强度、作用域兼容性、冲突检测、阈值——以及为引入账本之前就已在学习的部署保留的旧版闸门 |
+| `persona_agent/evolution.py` | eval → 候选 学习循环逻辑（读低分、拼诊断 prompt、草稿转偏好对、去重、审计痕迹）——进程内 `EVOLVE_AUTO` 循环和 `tools/auto_reviewer.py` 共用，不绑定任何传输层 |
 | `persona_agent/stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊 |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
 | `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`,再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 runtime feedback（`--yes` 无人值守） |
+| `tools/candidates_admin.py` | 晋升闸门的人工那一半：列出正在等待的候选及策略为何按着它、展示某个候选背后的全部证据、晋升 / 拒绝 / 回滚 / 取代、重建检索视图。只追加——任何动作都不改写历史 |
 | `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 runtime examples |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
 
@@ -406,9 +448,10 @@ python tests/test_reactions.py
 python tests/test_http.py
 python tests/test_retrieval.py
 python tests/test_promotion.py
+python tests/test_ledger.py
 ```
 
-它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习，以及少样本检索与其增量数据集加载。提交 PR 前请先跑一遍。
+它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习、少样本检索与其增量数据集加载，以及「证据 → 候选 → 晋升」这条路径（单一信号能做什么、不能做什么、作用域隔离、矛盾拦停、重放、回滚、取代、日志只追加、旧数据兼容）。提交 PR 前请先跑一遍。
 
 想在自己的代码里 import 这套管线：`pip install -e .`（见 [pyproject.toml](pyproject.toml)）。版本变更记录在 [CHANGELOG.md](CHANGELOG.md)；贡献指南、模块分工表，以及「测试绝不许写仓库真实 state」这条铁律在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
@@ -417,6 +460,7 @@ python tests/test_promotion.py
 - `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
 - `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 runtime examples。
 - `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁;加 `--apply` 逐条批准写入 `feedback.jsonl`（见[自进化](#自进化)）。
+- `python tools/candidates_admin.py list`——学习循环正在提什么、策略为何按着它；随后可用 `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild`（见[自进化](#自进化)）。
 - `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。由独立裁判盲评 —— `--judge export` 导出不带标签的清单交给人或另一个模型打分,`--judge anthropic` 走另一家厂商 —— 学习信号和测量信号不共用模型。
 
 ## 隐私
@@ -433,12 +477,12 @@ stickers/auto/            # 下载的表情图片
 seen_msg_ids.json         # 跨重启 message-id 去重状态
 owner_profile.json        # owner 发言频率画像
 unknown_stickers.jsonl    # 下载 URL
-candidates.jsonl          # auto-reviewer 输出
-runtime/                  # 从真实对话学到的 examples/feedback
+candidates.jsonl          # auto-reviewer 输出 + 反应裁决审计
+runtime/                  # 证据日志、候选账本、晋升视图、学到的池子
 *.log                     # 运行日志
 ```
 
-仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据只写进 gitignore 的 `runtime/`（或 `AGENT_RUNTIME_DIR`），避免误提交。
+仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据只写进 gitignore 的 `runtime/`（或 `AGENT_RUNTIME_DIR`），避免误提交——证据日志也在其中，它会原样引用真实反应，但只记结构化裁决结论和一句话理由，绝不记模型的思维链。
 
 ## License
 

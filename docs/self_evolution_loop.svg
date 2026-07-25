@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="600" viewBox="0 0 880 600" role="img" aria-labelledby="self-title self-desc">
-  <title id="self-title">Two-signal self-evolution loop</title>
-  <desc id="self-desc">Real user reactions are the primary learning signal and async self-evaluation is the fallback. Corrections become BAD to OK preference pairs. Positive reactions and score-5 self-evaluations add candidate evidence; two owner reactions, three other-user reactions, or four self-evaluations are required before a reply becomes a proven example.</desc>
+  <title id="self-title">Evidence-gated self-evolution loop</title>
+  <desc id="self-desc">Real user reactions are the primary learning signal and async self-evaluation is the fallback. Every signal is recorded as append-only evidence and may propose a versioned candidate; a candidate changes nothing until it is promoted. Promotion requires at least two distinct compatible evidence events including at least one strong one, with no conflicting evidence. Only promoted candidates are materialized into the few-shot views retrieval reads, and rollback or supersession removes that influence again without erasing history.</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -67,8 +67,8 @@
   <rect class="frame" x="0.5" y="0.5" width="879" height="599" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">SYSTEM / LEARNING LOOP</text>
-  <text class="headline ink" x="40" y="61">Two signals, one hot-reloaded memory</text>
-  <text class="small muted" x="40" y="86">Observed reactions lead; self-evaluation fills the gaps.</text>
+  <text class="headline ink" x="40" y="61">Evidence in, promotion out</text>
+  <text class="small muted" x="40" y="86">A reaction is evidence. Only a promoted candidate changes a reply.</text>
   <line class="rule" x1="40" y1="106" x2="840" y2="106"/>
 
   <rect class="mint-region" x="150" y="126" width="430" height="150" rx="8"/>
@@ -82,12 +82,12 @@
   <path class="mint-flow" d="M396 176H420V170H430" marker-end="url(#self-arrow)"/>
   <path class="mint-flow" d="M396 176H420V222H430" marker-end="url(#self-arrow)"/>
   <text class="small ink" x="438" y="170">correction</text>
-  <text class="tiny coral" x="438" y="188">BAD → OK pair</text>
+  <text class="tiny coral" x="438" y="188">strong · BAD → OK</text>
   <text class="small ink" x="438" y="222">positive reaction</text>
-  <text class="tiny mint" x="438" y="240">adds candidate evidence</text>
-  <path class="mint-flow" d="M544 170H710V199H720" marker-end="url(#self-arrow)"/>
-  <path class="mint-flow" d="M548 222H595" marker-end="url(#self-arrow)"/>
-  <text class="tiny muted" x="170" y="260">all verdicts → candidates.jsonl audit</text>
+  <text class="tiny mint" x="438" y="240">weak evidence only</text>
+  <path class="mint-flow" d="M552 170H572V208H595" marker-end="url(#self-arrow)"/>
+  <path class="mint-flow" d="M552 222H595" marker-end="url(#self-arrow)"/>
+  <text class="tiny muted" x="170" y="260">every reaction → evidence.*.jsonl (append-only)</text>
 
   <rect class="violet-region" x="150" y="296" width="430" height="190" rx="8"/>
   <text class="eyebrow violet" x="170" y="315">02 / FALLBACK SIGNAL</text>
@@ -98,7 +98,7 @@
   <path class="violet-flow" d="M396 345H420V326H430" marker-end="url(#self-arrow)"/>
   <path class="violet-flow" d="M396 345H408V424H420" marker-end="url(#self-arrow)"/>
   <text class="small mint" x="438" y="326">score 5</text>
-  <text class="tiny mint" x="438" y="344">adds candidate evidence</text>
+  <text class="tiny mint" x="438" y="344">weak evidence only</text>
   <path class="violet-flow" d="M550 326H580V314H595" marker-end="url(#self-arrow)"/>
   <rect class="coral-region" x="420" y="374" width="145" height="106" rx="6"/>
   <text class="eyebrow coral" x="430" y="390">FAILURE REVIEW</text>
@@ -106,38 +106,42 @@
   <text class="tiny muted" x="430" y="425">python tools/</text>
   <text class="tiny muted" x="430" y="441">auto_reviewer.py --apply</text>
   <text class="tiny coral" x="430" y="458">unattended · default ≤ 2</text>
-  <text class="tiny muted" x="430" y="473">EVOLVE_AUTO=true</text>
-  <path class="violet-flow" d="M565 425H711V213H720" marker-end="url(#self-arrow)"/>
+  <text class="tiny muted" x="430" y="473">EVOLVE_AUTO → candidate</text>
+  <path class="violet-flow" d="M565 425H578V340H595" marker-end="url(#self-arrow)"/>
 
   <rect class="surface" x="595" y="188" width="112" height="162" rx="8"/>
   <rect class="frame" x="595.5" y="188.5" width="111" height="161" rx="7.5"/>
-  <text class="eyebrow violet" x="605" y="205">EVIDENCE GATE</text>
-  <text class="label ink" x="605" y="227">candidate pool</text>
+  <text class="eyebrow violet" x="605" y="205">PROMOTION</text>
+  <text class="label ink" x="605" y="227">candidates</text>
   <line class="rule" x1="605" y1="244" x2="697" y2="244"/>
-  <text class="tiny muted" x="605" y="260">2 owner reactions</text>
-  <text class="tiny muted" x="605" y="278">3 other-user</text>
-  <text class="tiny muted" x="605" y="293">reactions</text>
-  <text class="tiny muted" x="605" y="310">4 self-evaluations</text>
-  <text class="label mint" x="605" y="332">corroborate</text>
+  <text class="tiny muted" x="605" y="260">2+ events</text>
+  <text class="tiny muted" x="605" y="278">1+ strong</text>
+  <text class="tiny muted" x="605" y="296">same scope</text>
+  <text class="tiny muted" x="605" y="314">no conflict</text>
+  <text class="label mint" x="605" y="334">promote</text>
   <path class="mint-flow" d="M707 281H720" marker-end="url(#self-arrow)"/>
+  <text class="tiny coral" x="595" y="466">rollback / supersede</text>
+  <text class="tiny muted" x="595" y="481">revokes it again</text>
 
   <rect class="surface" x="720" y="132" width="120" height="310" rx="8"/>
   <rect class="frame" x="720.5" y="132.5" width="119" height="309" rx="7.5"/>
   <text class="eyebrow violet" x="730" y="151">FEW-SHOT MEMORY</text>
   <rect class="code" x="730" y="170" width="100" height="60" rx="5"/>
   <circle class="coral" cx="740" cy="185" r="3"/>
-  <text class="tiny muted" x="749" y="185">feedback.*</text>
-  <text class="tiny muted" x="749" y="201">.jsonl</text>
+  <text class="tiny muted" x="749" y="185">promoted.</text>
+  <text class="tiny muted" x="749" y="201">feedback.*</text>
   <text class="tiny coral" x="740" y="216">BAD / OK pairs</text>
   <rect class="code" x="730" y="250" width="100" height="62" rx="5"/>
   <circle class="mint" cx="740" cy="266" r="3"/>
-  <text class="tiny muted" x="749" y="266">examples.*</text>
-  <text class="tiny muted" x="749" y="282">.jsonl</text>
+  <text class="tiny muted" x="749" y="266">promoted.</text>
+  <text class="tiny muted" x="749" y="282">examples.*</text>
   <text class="tiny mint" x="740" y="298">proven replies</text>
   <line class="rule" x1="730" y1="332" x2="830" y2="332"/>
   <text class="label mint" x="730" y="352">hot reload</text>
   <text class="tiny muted" x="730" y="373">relevance + recency</text>
   <text class="tiny muted" x="730" y="389">no restart</text>
+  <text class="tiny muted" x="730" y="411">read with the</text>
+  <text class="tiny muted" x="730" y="427">seeds + your own</text>
 
   <rect class="surface" x="40" y="182" width="90" height="68" rx="7"/>
   <rect class="frame" x="40.5" y="182.5" width="89" height="67" rx="6.5"/>
