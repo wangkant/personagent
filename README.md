@@ -490,6 +490,12 @@ The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `t
 
 ## Acknowledgements
 
-- The `<reasoning>` / `<intent>` / `<reply>` separation idea predates this repository; the JSON-field rewrite here keeps the spirit while removing a class of leak bugs.
-- NapCat / OneBot v11 ecosystem for the QQ protocol layer.
-- SillyTavern's World Info + regex extension model inspired the lorebook and output filter design.
+- The reasoning / intent / reply separation predates this repository — thinking before speaking, in channels the reader never sees, is a long-standing character-prompting convention. The rewrite here only moves it from inline tags to JSON fields, which removes a class of leak bugs.
+- [NapCat](https://github.com/NapNeko/NapCatQQ) and the [OneBot v11](https://github.com/botuniverse/onebot-11) standard — the QQ protocol layer, and the event/action schema the primary transport speaks (`persona_agent/transport.py`, `ingestion.py`).
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) — its platform adapters are what let the same persona sit in Telegram / Discord / Slack / Lark / KOOK, via the forwarder plugin bundled in `integrations/astrbot/`.
+- [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info + regex extension model inspired `lorebook.json` (keyword-triggered context entries, hot-reloaded) and `output_filter.json` (compiled regex rules applied to every outgoing reply).
+- The OpenAI-compatible `/v1/chat/completions` convention — every LLM call (chat, judge, vision, sticker tagging) goes through it over plain [httpx](https://github.com/encode/httpx), which is what makes DeepSeek / Zhipu GLM / Moonshot / OpenAI / a local Ollama or llama.cpp server interchangeable by editing `.env`.
+- [FastAPI](https://github.com/fastapi/fastapi) + [Uvicorn](https://github.com/encode/uvicorn) for the webhook service, and [Pillow](https://github.com/python-pillow/Pillow) for GIF → PNG first-frame extraction (most vision endpoints reject GIFs outright).
+- [ddgs](https://github.com/deedy5/ddgs) (no-key DuckDuckGo, the default) and [Tavily](https://tavily.com) (optional, keyed) back the agent's auto-lookup when it meets something it doesn't recognize.
+- bilibili's public `web-interface` API and YouTube's oEmbed endpoint — title, uploader and bilibili's own AI summary are what turn a bare share link into something the persona can actually react to.
+- [DSPy](https://github.com/stanfordnlp/dspy)'s "a prompt is a program you optimize, not a string you tweak" framing is behind the `tools/dspy_tune.py` scaffold.

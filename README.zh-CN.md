@@ -490,6 +490,12 @@ runtime/                  # 证据日志、候选账本、晋升视图、学到�
 
 ## 致谢
 
-- `<reasoning>` / `<intent>` / `<reply>` 分离的想法早于本仓库；这里改写成 JSON 字段是为了消掉一类漏出 bug，保留原思路。
-- NapCat / OneBot v11 生态提供 QQ 协议层。
-- SillyTavern 的 World Info + regex extension 启发了这里的 lorebook 和 output_filter 设计。
+- reasoning / intent / reply 分离的想法早于本仓库——先思考再开口、思考过程读者看不到，是角色扮演类 prompt 由来已久的做法。这里只是把它从内嵌标签改写成 JSON 字段，消掉了一类泄露 bug。
+- [NapCat](https://github.com/NapNeko/NapCatQQ) 与 [OneBot v11](https://github.com/botuniverse/onebot-11) 标准——QQ 协议层，以及主传输层所使用的事件 / 动作 schema（`persona_agent/transport.py`、`ingestion.py`）。
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot)——它的平台适配器让同一个人设能出现在 Telegram / Discord / Slack / Lark / KOOK，接入方式是 `integrations/astrbot/` 里附带的转发插件。
+- [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info + regex extension 启发了 `lorebook.json`（关键词触发的上下文条目，热加载）和 `output_filter.json`（编译成正则、逐条作用于每条外发回复）。
+- OpenAI 兼容的 `/v1/chat/completions` 约定——所有 LLM 调用（主聊、裁判、视觉、表情打标）都走它，用的是裸 [httpx](https://github.com/encode/httpx)；正因如此，DeepSeek / 智谱 GLM / Moonshot / OpenAI / 本地 Ollama 或 llama.cpp 之间只需改 `.env` 就能互换。
+- [FastAPI](https://github.com/fastapi/fastapi) + [Uvicorn](https://github.com/encode/uvicorn) 提供 webhook 服务，[Pillow](https://github.com/python-pillow/Pillow) 负责把 GIF 抽首帧转 PNG（多数视觉端点直接拒收 GIF）。
+- [ddgs](https://github.com/deedy5/ddgs)（免 key 的 DuckDuckGo，默认）与 [Tavily](https://tavily.com)（可选，需 key）支撑 agent 遇到不认识的东西时的自动查证。
+- bilibili 的公开 `web-interface` API 和 YouTube 的 oEmbed 接口——标题、UP 主以及 B 站自带的 AI 总结，是把一个光秃秃的分享链接变成人设真能接话的内容的关键。
+- [DSPy](https://github.com/stanfordnlp/dspy) 的「prompt 是可优化的程序，而不是一段反复手改的字符串」这一思路，是 `tools/dspy_tune.py` 脚手架的来源。
