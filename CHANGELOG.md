@@ -116,9 +116,8 @@ authority away without erasing the history.
 
 ### Removed
 
-- `docs/superpowers/` — 2,000 lines of development-process notes that were
-  never project documentation. `docs/` now holds only the architecture and
-  loop diagrams.
+- Development-process notes that were never project documentation. `docs/` now
+  holds only the architecture and loop diagrams.
 - The GitHub Pages demo. Its one irreplaceable idea — that the visible reply is
   a single field of a larger decision — now animates in the README itself,
   including a PASS beat where the agent decides not to speak.
