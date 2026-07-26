@@ -105,7 +105,7 @@ def test_run_arm_isolation_and_growth() -> None:
             async def fake_call(system, messages, model, **kw):
                 return json.dumps({"reasoning": "x", "intent": "chat",
                                    "reply": "Great question! Let me help.", "mem": ""})
-            a._call_anthropic = fake_call
+            a._call_llm = fake_call
 
             async def fake_eval(group_id, mode, user_msg, reply,
                                 sticker_files=None, intent="", ctx_msgs=None):

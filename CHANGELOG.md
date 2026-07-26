@@ -91,6 +91,32 @@ authority away without erasing the history.
   the ledger) so the arm still measures something. No new benchmark numbers are
   claimed for this change.
 
+### Naming and dependencies
+
+The agent talks to one thing: the provider's OpenAI-compatible
+`/v1/chat/completions` endpoint, over plain `httpx`. Several names still claimed
+otherwise, and one dependency was installed for a vendor SDK the bot never
+imports.
+
+- **`ANTHROPIC_PRIVATE_MODEL` is now `PRIVATE_MODEL`.** It was only ever an
+  alternate *model name* on the primary endpoint — no Anthropic endpoint was
+  involved. The old name is still read as a fallback, so existing `.env` files
+  keep working; grep `pre-0.1.2` to find every shim when dropping them.
+- **Internals renamed to match what they do:** `_call_anthropic` → `_call_llm`,
+  `anthropic_caller` → `llm_caller`, `check_anthropic_chat` → `check_private_chat`.
+  Stale comments about the Anthropic SDK, its exception shape and its prompt
+  caching were corrected to describe the httpx/OpenAI-compatible path actually
+  in use.
+- **`anthropic` is no longer a runtime dependency.** Nothing under
+  `persona_agent/` imports it. It is now the optional `[judge]` extra, needed
+  only by `tools/prompt_lab.py` and `evolution_benchmark.py --judge anthropic`,
+  which both fail with an install hint instead of a traceback. Install with
+  `pip install -e ".[judge]"`.
+- **`start.sh` / `start.ps1` no longer probe for `anthropic`.** The preflight
+  import gates the "installing dependencies…" reinstall, so a complete
+  environment without the unused SDK triggered a pointless `pip install` on
+  every launch. It now checks `PIL` and `ddgs`, which the bot does use.
+
 ## [0.1.1] — 2026-07-25
 
 ### Changed

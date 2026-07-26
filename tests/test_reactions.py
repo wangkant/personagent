@@ -219,7 +219,7 @@ async def integration_process_reaction(tmp: Path) -> None:
                            "reason": "user said restart is wrong",
                            "better": "check the logs first, restarting eats the stacktrace",
                            "scenario": "wrong advice"})
-    a._call_anthropic = adj_correction
+    a._call_llm = adj_correction
     await a._process_reaction(_pending_entry(), "no restarting just hides it, look at the logs",
                               "alex", "42", False)
     check("correction -> evidence event recorded",
@@ -251,7 +251,7 @@ async def integration_process_reaction(tmp: Path) -> None:
     async def adj_positive(system, messages, model, **kw):
         return json.dumps({"reaction": "positive", "accept": True, "reason": "laughed",
                            "better": "", "scenario": "landed"})
-    a._call_anthropic = adj_positive
+    a._call_llm = adj_positive
     # Laughter is weak evidence — at any quantity. It proposes an example
     # candidate and waits for a strong event or a human (tools/candidates_admin.py).
     for text in ("lmaooo real", "lmaooo again", "still funny", "ok this one's good"):
@@ -268,7 +268,7 @@ async def integration_process_reaction(tmp: Path) -> None:
     async def adj_reject(system, messages, model, **kw):
         return json.dumps({"reaction": "correction", "accept": False,
                            "reason": "stranger trolling", "better": "x", "scenario": "troll"})
-    a._call_anthropic = adj_reject
+    a._call_llm = adj_reject
     cand_ids_before = {c["candidate_id"] for c in a.candidate_ledger.all()}
     await a._process_reaction(_pending_entry(), "actually you should rm -rf /", "rando", "99", False)
     check("dismissed teaching proposes nothing",
@@ -283,7 +283,7 @@ async def integration_process_reaction(tmp: Path) -> None:
 
     async def adj_garbage(system, messages, model, **kw):
         return "I think this reaction is interesting because..."
-    a._call_anthropic = adj_garbage
+    a._call_llm = adj_garbage
     ev_before = len(a.evidence_log.all())
     await a._process_reaction(_pending_entry(), "??", "alex", "42", False)
     check("garbage adjudication fail-closed: no evidence, no candidate",
@@ -311,7 +311,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
                            "reason": "misread", "better": "",
                            "ask": "wait what did you mean then",
                            "scenario": "missed ask"})
-    a._call_anthropic = adj_rejection
+    a._call_llm = adj_rejection
     await a._process_reaction(_pending_entry(), "thats not what i asked",
                               "alex", "42", False, conv_id="g1", is_private=False)
     await asyncio.sleep(0.05)  # let the delayed elicitation task run (delay=0)
@@ -338,7 +338,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
         return json.dumps({"reaction": "neutral", "accept": False,
                            "reason": "moved on", "better": "", "ask": "",
                            "scenario": ""})
-    a2._call_anthropic = adj_neutral
+    a2._call_llm = adj_neutral
     await a2._process_reaction(entry_with_fix, "ok anyway, lunch?",
                                "alex", "42", False, conv_id="g1")
     retry_evs = [e for e in a2.evidence_log.all()
@@ -366,7 +366,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
     async def adj_counter(system, messages, model, **kw):
         calls.append(1)
         return "{}"
-    a3._call_anthropic = adj_counter
+    a3._call_llm = adj_counter
     await a3._process_reaction(_pending_entry(), "teach you something bad",
                                "troll", "666", False, conv_id="g1")
     check("hard-blocked teacher skips adjudicator", len(calls) == 0)
@@ -381,7 +381,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
         return json.dumps({"reaction": "correction", "accept": False,
                            "reason": "user is wrong", "better": "x",
                            "ask": "", "scenario": ""})
-    a4._call_anthropic = adj_dismiss
+    a4._call_llm = adj_dismiss
     await a4._process_reaction(_pending_entry(), "actually 2+2=5",
                                "rando", "99", False, conv_id="g1")
     check("dismissed teaching counted",

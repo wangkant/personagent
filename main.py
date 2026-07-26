@@ -59,9 +59,11 @@ OWNER_QQ = os.getenv("OWNER_QQ", "")
 OWNER_NAME = os.getenv("OWNER_NAME", "")
 OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
 # Alternate model name for private chats, served by the same OpenAI-compatible
-# primary endpoint (the "ANTHROPIC_" prefix is historical). Blank = use
-# DEEPSEEK_MODEL.
-ANTHROPIC_PRIVATE_MODEL = os.getenv("ANTHROPIC_PRIVATE_MODEL", "")
+# primary endpoint. Blank = use DEEPSEEK_MODEL.
+# ANTHROPIC_PRIVATE_MODEL is the pre-0.1.2 name — still honored so an existing
+# .env keeps working. It never meant an Anthropic endpoint.
+PRIVATE_MODEL = (os.getenv("PRIVATE_MODEL", "")
+                 or os.getenv("ANTHROPIC_PRIVATE_MODEL", ""))
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 # Defaults below match .env.example so behavior is identical whether or not a
 # .env is present (no silent drift between the template and the code).
@@ -156,7 +158,7 @@ async def lifespan(app: FastAPI):
             model=DEEPSEEK_MODEL,
             bot_qq=BOT_QQ,
             bot_name=BOT_NAME,
-            anthropic_private_model=ANTHROPIC_PRIVATE_MODEL,
+            private_model=PRIVATE_MODEL,
             napcat_api=NAPCAT_API,
             trigger_count=AGENT_TRIGGER_COUNT,
             context_len=AGENT_CONTEXT_LEN,

@@ -182,7 +182,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         model: str = "deepseek-chat",
         bot_qq: str = "",
         bot_name: str = "",
-        anthropic_private_model: str = "",
+        private_model: str = "",
         napcat_api: str = "http://127.0.0.1:3000",
         trigger_count: int = 30,
         context_len: int = 120,
@@ -257,12 +257,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
         # _spawn pattern main.py already uses for webhook tasks.
         self._bg_tasks: set[asyncio.Task] = set()
-        # Empty-model fallback: a blank ANTHROPIC_PRIVATE_MODEL in .env would
+        # Empty-model fallback: a blank PRIVATE_MODEL in .env would
         # otherwise send {"model": ""} on every DM — a guaranteed 400 that also
         # arms the global fallback cooldown and downgrades group replies.
-        # (The name is historical: it's just an alternate model name served by
-        # the same OpenAI-compatible primary endpoint.)
-        self.anthropic_private_model = anthropic_private_model or model
+        # It's just an alternate model name served by the same OpenAI-compatible
+        # primary endpoint — not a second provider.
+        self.private_model = private_model or model
         self.napcat_api = napcat_api.rstrip("/")
         self.trigger_count = trigger_count
         self.context_len = context_len
@@ -420,7 +420,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             stickers_dir=stickers_path,
             stickers_file=stickers_json,
             unknown_log=ROOT / "unknown_stickers.jsonl",
-            anthropic_caller=self._call_anthropic,
+            llm_caller=self._call_llm,
             # Cheap judgment model configured for THIS endpoint — a hardcoded
             # provider literal here would 404 on Moonshot/OpenAI/Ollama
             # deployments and arm the global error-fallback cooldown on every
@@ -1167,7 +1167,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             return True
 
     async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "") -> tuple[str, str]:
-        """Private chat. Uses Anthropic SDK + DeepSeek anthropic endpoint.
+        """Private chat. Same OpenAI-compatible endpoint as group chat, with
+        PRIVATE_MODEL as an optional alternate model name.
 
         is_owner=True  → owner-style override (very close, all defenses off)
         is_owner=False → ordinary-friend override (looser than group chat,
@@ -1214,7 +1215,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             )
         # Mirror the group path: split system into a cache_control=ephemeral
         # stable head + an uncached dynamic tail, so the ~4-5K persona / rules
-        # prefix is billed at ~10% on cache hits. _call_anthropic accepts a
+        # prefix is billed at ~10% on cache hits. _call_llm accepts a
         # list system and flattens it back to a string if the endpoint doesn't
         # support cache_control.
         # - static_block (cache): persona + STYLE_GUIDE + INTENT_RULES +
@@ -1275,15 +1276,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         ]
         messages = list(history)
         if proactive and (not messages or messages[-1].get("role") == "assistant"):
-            # Anthropic needs a trailing user turn; supply an explicit internal cue.
+            # Chat endpoints want a trailing user turn; supply an explicit internal cue.
             messages = messages + [{
                 "role": "user",
                 "content": "(internal proactive cue — open the chat if you genuinely want to, otherwise reply only: PASS)",
             }]
-        raw = await self._call_anthropic(
+        raw = await self._call_llm(
             system=system,
             messages=messages,
-            model=self.anthropic_private_model,
+            model=self.private_model,
             max_tokens=2048,
             enable_search=not proactive,
         )
@@ -1524,8 +1525,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 return True
         return False
 
-    # _get_anthropic_client removed: all LLM calls now go through the provider's
-    # OpenAI-compatible endpoint (/v1/chat/completions) via httpx; no anthropic SDK.
+    # Every LLM call in this file goes through the provider's OpenAI-compatible
+    # endpoint (/v1/chat/completions) over plain httpx — no vendor SDK. That is
+    # what keeps DeepSeek / GLM / Moonshot / OpenAI / Ollama interchangeable.
 
     def _http(self, **kwargs) -> "_PooledHTTP":
         """Pooled httpx client. Use exactly like a native ``AsyncClient`` context.
@@ -1557,9 +1559,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         """
         msg = str(e).lower()
         name = type(e).__name__.lower()
-        # Prefer a structured HTTP status code when the SDK exposes one
-        # (anthropic.APIStatusError.status_code, or .response.status_code) so a
-        # number inside a request id / token count isn't read as a status code.
+        # Prefer a structured HTTP status code when the exception exposes one
+        # (httpx.HTTPStatusError.response.status_code, or a bare .status_code) so
+        # a number inside a request id / token count isn't read as a status code.
         status = getattr(e, "status_code", None)
         if status is None:
             status = getattr(getattr(e, "response", None), "status_code", None)
@@ -1592,7 +1594,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             return "transient"
         return "transient"
 
-    async def _call_anthropic(
+    async def _call_llm(
         self,
         system,  # str | list[dict] — list form enables cache_control segmentation
         messages: list[dict],
@@ -1604,8 +1606,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         search_hint: str = "",
     ) -> str:
         """Unified LLM call → the provider's OpenAI-compatible endpoint
-        (/v1/chat/completions). No anthropic SDK. Carries web_search, jittered
-        retry + error-driven fallback, and empty-reply logging.
+        (/v1/chat/completions), over plain httpx — no vendor SDK. Carries
+        web_search, jittered retry + error-driven fallback, and empty-reply
+        logging.
 
         `system` may be a plain string OR a list of `{"type":"text", "text":...}`
         blocks (the old cache_control segmentation form); it is flattened into a
@@ -2058,7 +2061,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 f"Engage naturally — a touch more attentive than to others, lean towards replying — but **don't overdo intimacy, don't get cutesy, don't be clingy**.\n"
                 f"When they say something wrong or do something dumb, light teasing is fine (leave them an out), but **don't reverse-tease every time** — a flat acknowledgement, a lazy reply, or a sticker work too."
             )
-        # System prompt split into three blocks for Anthropic prompt caching.
+        # System prompt split into three blocks for provider prefix caching.
         # The first two carry cache_control=ephemeral so persistent content
         # is billed at ~10% on cache hits (5min TTL); the third stays
         # uncached because it changes per call.
@@ -2116,7 +2119,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # Net: cheap, high-frequency gating; every reply the group sees is pro.
         gated = mode in ("judge", "followup", "proactive")
         if gated:
-            gate_raw = await self._call_anthropic(
+            gate_raw = await self._call_llm(
                 system=gate_system_content,
                 messages=[{"role": "user", "content": user_prompt}],
                 model=self.judge_model,
@@ -2140,7 +2143,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         model_to_use = self._pick_group_model(mode)
         self.model_calls.append(time.time())
         enable_search = mode in ("called", "owner", "followup")
-        raw = await self._call_anthropic(
+        raw = await self._call_llm(
             system=system_content,
             messages=[{"role": "user", "content": user_prompt}],
             model=model_to_use,
@@ -2403,9 +2406,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] group model probe failed: %s", e)
 
-        # Private and group chat now share the same OpenAI-compatible endpoint
-        # (anthropic_private_model is just a model name); the group probe above
-        # already covers it, so no separate anthropic-endpoint probe.
+        # Private and group chat share the same OpenAI-compatible endpoint
+        # (private_model is just a model name), so the group probe above already
+        # covers it — no separate private-endpoint probe.
 
     def _pick_group_model(self, mode: str = "") -> str:
         """Pick primary or fallback model based on recent call frequency.

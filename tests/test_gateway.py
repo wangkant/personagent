@@ -921,7 +921,7 @@ async def regression_think_full_path_search_hint(tmp: Path) -> None:
         captured.update(kw)
         return '{"reasoning": "r", "intent": "chat", "reply": "sounds right", "mem": ""}'
 
-    agent._call_anthropic = fake_call
+    agent._call_llm = fake_call
     agent._append_buffer("g", "Alice", "TestBot what is black myth wukong", "42")
     reply, intent, mem = await agent._think("g", "called", "what is black myth wukong")
     check("think: full prompt path runs (no NameError)", reply == "sounds right", repr(reply))

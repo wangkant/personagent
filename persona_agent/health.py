@@ -27,14 +27,16 @@ def _get(url, timeout=10):
         return json.load(r)
 
 
-def check_anthropic_chat():
+def check_private_chat():
     """Private-chat model probe. Private and group chat share the provider's
-    OpenAI-compatible endpoint (/v1/chat/completions); ANTHROPIC_PRIVATE_MODEL
+    OpenAI-compatible endpoint (/v1/chat/completions); PRIVATE_MODEL
     is just an alternate model name on that endpoint (blank = DEEPSEEK_MODEL),
     authenticated with the primary DEEPSEEK_API_KEY — mirroring the agent."""
     key = os.getenv("DEEPSEEK_API_KEY", "")
     base = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("ANTHROPIC_PRIVATE_MODEL", "") or os.getenv("DEEPSEEK_MODEL", "")
+    model = (os.getenv("PRIVATE_MODEL", "")
+             or os.getenv("ANTHROPIC_PRIVATE_MODEL", "")  # pre-0.1.2 name
+             or os.getenv("DEEPSEEK_MODEL", ""))
     if not (key and model):
         return None, "not configured"
     payload = {"model": model, "max_tokens": 8,
@@ -136,7 +138,7 @@ def check_onebot():
 
 # (name, probe, is_critical)
 CHECKS = [
-    ("Private chat (openai)",   check_anthropic_chat,     True),
+    ("Private chat (openai)",   check_private_chat,     True),
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),

@@ -268,7 +268,7 @@ All settings come from `.env`. Key fields:
 | `AGENT_LANG` | `en` (default) or `zh`. Selects the per-language data files, validator mode, and lexicons. See [Language](#language-english--中文) |
 | `AGENT_RUNTIME_DIR` | Ignored directory for learned examples and feedback (default `runtime/`) |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Primary chat-completion model. Any OpenAI-compatible endpoint works. **The only key needed for `python try_chat.py`** |
-| `ANTHROPIC_PRIVATE_MODEL` | **Optional.** Alternate model name for 1:1 private chats, served by the same primary endpoint (the prefix is historical). Blank = `DEEPSEEK_MODEL` |
+| `PRIVATE_MODEL` | **Optional.** Alternate model name for 1:1 private chats, served by the same primary endpoint. Blank = `DEEPSEEK_MODEL`. (Was `ANTHROPIC_PRIVATE_MODEL` before 0.1.2 — the old name still works) |
 | `BOT_QQ` / `BOT_NAME` | The bot account's QQ number and display name |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | A "favorite person" the bot is closer to (optional, all blank by default) |
 | `QQ_GROUPS` | Comma-separated group IDs to listen on. Empty = listen everywhere |
@@ -461,7 +461,7 @@ For prompt and persona tuning:
 - `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into runtime examples.
 - `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
 - `python tools/candidates_admin.py list` — what the learning loop is proposing and why it is being held; then `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild` (see [Self-evolution](#self-evolution)).
-- `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). A separate judge scores the replies blind — `--judge export` writes an unlabelled inbox for a human or another model, `--judge anthropic` routes it to a different vendor — so the learning signal and the measurement never share a model.
+- `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). A separate judge scores the replies blind — `--judge export` writes an unlabelled inbox for a human or another model, `--judge anthropic` routes it to a different vendor (needs `pip install -e ".[judge]"`; the bot itself has no vendor SDK) — so the learning signal and the measurement never share a model.
 
 ## Privacy
 

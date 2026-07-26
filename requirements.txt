@@ -2,7 +2,6 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.34,<1
 python-dotenv>=1.0,<2
 httpx>=0.27,<1
-anthropic>=0.103,<1
 # Used by the vision pipeline to extract the first frame of a GIF as PNG
 # (most vision endpoints, including Zhipu GLM-4V, reject GIFs directly).
 Pillow>=10,<13
@@ -10,3 +9,9 @@ Pillow>=10,<13
 # decides the query via /v1 function-calling; ddgs fetches via DuckDuckGo).
 # Swappable for Tavily/Serper later by editing _web_search.
 ddgs>=9,<10
+
+# NOT required to run the bot. The agent itself speaks only the OpenAI-compatible
+# /v1 endpoint over httpx, with no vendor SDK. `anthropic` is needed solely by two
+# optional dev tools — tools/prompt_lab.py and `evolution_benchmark.py --judge
+# anthropic`, which deliberately score replies with a DIFFERENT vendor than the one
+# being measured. Install it only if you use them:  pip install -e ".[judge]"

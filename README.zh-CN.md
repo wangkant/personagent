@@ -268,7 +268,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
 | `AGENT_RUNTIME_DIR` | 证据日志、候选账本、晋升视图和学到的 examples/feedback 所在的忽略目录（默认 `runtime/`） |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
-| `ANTHROPIC_PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点（前缀是历史遗留）。留空 = 私聊也用 `DEEPSEEK_MODEL` |
+| `PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点。留空 = 私聊也用 `DEEPSEEK_MODEL`。（0.1.2 之前叫 `ANTHROPIC_PRIVATE_MODEL`，旧名仍然可用） |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
 | `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | bot 比较熟的人 (可选, 默认空) |
 | `QQ_GROUPS` | 监听的群号, 逗号分隔. 留空 = 所有群都听 |
@@ -461,7 +461,7 @@ python tests/test_ledger.py
 - `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 runtime examples。
 - `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁;加 `--apply` 逐条批准写入 `feedback.jsonl`（见[自进化](#自进化)）。
 - `python tools/candidates_admin.py list`——学习循环正在提什么、策略为何按着它；随后可用 `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild`（见[自进化](#自进化)）。
-- `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。由独立裁判盲评 —— `--judge export` 导出不带标签的清单交给人或另一个模型打分,`--judge anthropic` 走另一家厂商 —— 学习信号和测量信号不共用模型。
+- `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。由独立裁判盲评 —— `--judge export` 导出不带标签的清单交给人或另一个模型打分,`--judge anthropic` 走另一家厂商（需要 `pip install -e ".[judge]"`；bot 本体不带任何厂商 SDK）—— 学习信号和测量信号不共用模型。
 
 ## 隐私
 

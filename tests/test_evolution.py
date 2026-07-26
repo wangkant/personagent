@@ -238,7 +238,7 @@ async def integration_evolve_tick(tmp: Path) -> None:
         calls.append(messages[-1]["content"])
         return json.dumps(GOOD_DIAG)
 
-    a._call_anthropic = fake_llm
+    a._call_llm = fake_llm
 
     added = await a._evolve_tick()
     check("tick: only the low score is diagnosed", len(calls) == 1)
@@ -290,7 +290,7 @@ async def integration_evolve_tick(tmp: Path) -> None:
         d["pair_draft"]["better"] = d["pair_draft"]["reply"]
         return json.dumps(d)
 
-    a._call_anthropic = fake_llm_noop_pair
+    a._call_llm = fake_llm_noop_pair
     added3 = await a._evolve_tick()
     check("tick: unusable draft proposes nothing",
           added3 == 0 and len(a.candidate_ledger.all()) == 1)

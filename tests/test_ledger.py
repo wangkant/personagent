@@ -80,7 +80,7 @@ def entry(reply: str = "just restart it lol", *, target_uid: str = "42",
 
 
 def adjudicator(**adj):
-    """Stub _call_anthropic returning one fixed adjudication."""
+    """Stub _call_llm returning one fixed adjudication."""
     payload = {"reaction": "positive", "accept": True, "reason": "r",
                "better": "", "ask": "", "scenario": ""}
     payload.update(adj)
@@ -94,7 +94,7 @@ async def react(agent: Agent, adj: dict, *, reply: str = "just restart it lol",
                 text: str = "reaction", uid: str = "42", name: str = "alex",
                 is_owner: bool = False, conv_id: str = "g1",
                 pending: dict | None = None) -> None:
-    agent._call_anthropic = adjudicator(**adj)
+    agent._call_llm = adjudicator(**adj)
     await agent._process_reaction(
         pending if pending is not None else entry(reply),
         text, name, uid, is_owner, conv_id=conv_id)

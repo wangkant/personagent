@@ -15,7 +15,7 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 
-if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, anthropic" 2>/dev/null; then
+if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; then
   echo "installing dependencies..."
   "$PY" -m pip install -r requirements.txt -q
 fi

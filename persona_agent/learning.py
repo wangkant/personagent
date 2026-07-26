@@ -328,7 +328,7 @@ class Learning:
                 eval_url = f"{self.glm_base_url}/chat/completions"
                 eval_auth = self.glm_api_key
             else:
-                # /v1 prefix matches the main call path (_call_anthropic):
+                # /v1 prefix matches the main call path (_call_llm):
                 # DeepSeek accepts both aliases, but other OpenAI-compatible
                 # endpoints only serve /v1 — without it evals silently 404.
                 eval_url = f"{self.base_url}/v1/chat/completions"
@@ -566,7 +566,7 @@ class Learning:
             prompt = reactions.build_adjudicator_prompt(
                 entry, reaction_text, reactor_name, is_owner,
                 self.bot_name, self.agent_lang, reactor_history=history_line)
-            raw = await self._call_anthropic(
+            raw = await self._call_llm(
                 "", [{"role": "user", "content": prompt}],
                 model=self.react_model, max_tokens=400, enable_search=False)
             adj = reactions.parse_adjudication(raw)
@@ -794,7 +794,7 @@ class Learning:
         proposed = 0
         for ev in pending:
             prompt = evolution.build_review_prompt(ev, self.agent_lang)
-            raw = await self._call_anthropic(
+            raw = await self._call_llm(
                 "", [{"role": "user", "content": prompt}],
                 model=self.evolve_model, max_tokens=600, enable_search=False,
             )

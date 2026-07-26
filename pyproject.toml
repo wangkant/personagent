@@ -30,10 +30,17 @@ dependencies = [
     "uvicorn[standard]>=0.34,<1",
     "python-dotenv>=1.0,<2",
     "httpx>=0.27,<1",
-    "anthropic>=0.103,<1",
     "Pillow>=10,<13",
     "ddgs>=9,<10",
 ]
+
+[project.optional-dependencies]
+# The agent speaks only the OpenAI-compatible /v1 endpoint over httpx and needs no
+# vendor SDK. This extra exists for the two optional dev tools that deliberately
+# reach a DIFFERENT vendor than the one under test — tools/prompt_lab.py and
+# `tools/evolution_benchmark.py --judge anthropic` — so the learning signal and
+# the measurement never share a model.
+judge = ["anthropic>=0.103,<1"]
 
 [project.urls]
 Homepage = "https://github.com/wangkant/personagent"

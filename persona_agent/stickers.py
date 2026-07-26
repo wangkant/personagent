@@ -43,7 +43,7 @@ class StickerLibrary:
         stickers_dir: str | Path,
         stickers_file: str | Path,
         unknown_log: str | Path,
-        anthropic_caller: Optional[Callable[..., Awaitable[str]]] = None,
+        llm_caller: Optional[Callable[..., Awaitable[str]]] = None,
         tagger_model: str = "deepseek-chat",
         persona_brief: str = "",
     ):
@@ -52,7 +52,7 @@ class StickerLibrary:
         (self.dir / "auto").mkdir(parents=True, exist_ok=True)
         self.file = Path(stickers_file)
         self.unknown_log = Path(unknown_log)
-        self._anthropic_caller = anthropic_caller
+        self._llm_caller = llm_caller
         self.tagger_model = tagger_model
         # Optional one-line persona description. When set, the tag prompt
         # asks the model to also judge persona-fit (false → entry is hidden
@@ -263,7 +263,7 @@ class StickerLibrary:
     async def maybe_tag(self, md5: str) -> None:
         """If sticker has enough contexts and isn't tagged, kick off LLM tagging.
         Fire-and-forget; safe to call from anywhere."""
-        if not self._anthropic_caller:
+        if not self._llm_caller:
             return
         filename = self._md5_index.get(md5)
         if not filename:
@@ -330,7 +330,7 @@ class StickerLibrary:
                    'e.g. \'doge — smug/mocking\' \'salaryman slacking\'>",'
                    '"tags":["<2-4 tags for fuzzy retrieval, e.g. smug, lol, eyeroll, slacking>"]}')
             )
-            raw = await self._anthropic_caller(
+            raw = await self._llm_caller(
                 system="You are a sticker semantic analyzer. Output JSON only.",
                 messages=[{"role": "user", "content": prompt}],
                 model=self.tagger_model,
@@ -369,7 +369,7 @@ class StickerLibrary:
         by editing the prompt and bumping PERSONA_PROMPT_VERSION —
         existing entries get re-judged on next startup, no JSON surgery.
         Returns the count rechecked."""
-        if not self.persona_brief or not self._anthropic_caller:
+        if not self.persona_brief or not self._llm_caller:
             return 0
         todo = [
             (fn, v) for fn, v in self.entries.items()
@@ -415,7 +415,7 @@ class StickerLibrary:
                 '[Output a single JSON line] {"fit":true|false}'
             )
             try:
-                raw = await self._anthropic_caller(
+                raw = await self._llm_caller(
                     system="You are a sticker / persona-fit classifier. Output JSON only.",
                     messages=[{"role": "user", "content": prompt}],
                     model=self.tagger_model,
@@ -655,7 +655,7 @@ class StickerLibrary:
         """Scan library for untagged entries with enough contexts and kick off
         tagging for each. Called on agent startup to process seed data from
         bootstrap_from_history. Returns count scheduled."""
-        if not self._anthropic_caller:
+        if not self._llm_caller:
             return 0
         pending = [
             v["md5"] for v in self.entries.values()

@@ -132,7 +132,7 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     Model credentials come from the environment (the same vars main.py reads),
     so a live run generates and self-evals against the configured endpoints.
     They default to a fake key + api.deepseek.com, which is correct for the
-    tests — those stub `_call_anthropic`, so the key is never used."""
+    tests — those stub `_call_llm`, so the key is never used."""
     import os
     from persona_agent.agent import Agent
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -427,7 +427,10 @@ async def judge_export(inbox: list[dict], out_dir: Path) -> None:
 
 
 async def judge_anthropic(inbox: list[dict], model: str) -> dict:
-    import anthropic
+    try:
+        import anthropic
+    except ImportError:  # optional: only this judge backend needs the SDK
+        sys.exit('--judge anthropic needs the Anthropic SDK: pip install -e ".[judge]"')
     client = anthropic.AsyncAnthropic(
         api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         base_url=os.getenv("ANTHROPIC_BASE_URL", "") or None)

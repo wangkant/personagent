@@ -78,7 +78,8 @@ async def main(holdout_path: Path, runs: int) -> None:
         model=os.getenv("DEEPSEEK_MODEL", ""),
         bot_qq=os.getenv("BOT_QQ", ""),
         bot_name=os.getenv("BOT_NAME", ""),
-        anthropic_private_model=os.getenv("ANTHROPIC_PRIVATE_MODEL", ""),
+        private_model=(os.getenv("PRIVATE_MODEL", "")
+                       or os.getenv("ANTHROPIC_PRIVATE_MODEL", "")),  # pre-0.1.2 name
         vision_model=os.getenv("VISION_MODEL", ""),
         glm_api_key=os.getenv("GLM_API_KEY", ""),
         glm_base_url=os.getenv("GLM_BASE_URL", ""),

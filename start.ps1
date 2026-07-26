@@ -20,7 +20,7 @@ if (Test-Path $venvPy) {
 }
 
 # Dependency check
-& $pySource -c "import fastapi, uvicorn, dotenv, httpx, anthropic" 2>$null
+& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>$null
 if (-not $?) {
     Write-Host "installing dependencies..." -ForegroundColor Yellow
     & $pySource -m pip install -r requirements.txt -q
