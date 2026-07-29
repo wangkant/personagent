@@ -226,15 +226,18 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY) -> lis
     return [cid for cid in out if cid]
 
 
-def counter_evidence(cand: dict, events, *,
+def counter_evidence(cand: dict, events, *, now: float = 0.0,
                      policy: Policy = DEFAULT_POLICY) -> list[str]:
     """Event ids that argue against `cand` — a rejection of a reply somebody
     else laughed at, a laugh at a reply somebody else corrected."""
     ctype = str(cand.get("type") or "")
     reply = str(cand.get("reply") or "")
     scope = cand.get("scope") or {}
+    max_age = policy.max_evidence_age_days * 86400.0
     out = []
     for ev in events or ():
+        if now and max_age and now - epoch(ev.get("ts")) > max_age:
+            continue
         if str(ev.get("reply") or "") != reply:
             continue
         if not scope_compatible(candidates.scope_from_event(ev), scope,
@@ -275,7 +278,7 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         supporting.append(ev)
 
     strong = [e for e in supporting if e.get("strength") == evidence.STRONG]
-    against = counter_evidence(cand, related_events, policy=policy)
+    against = counter_evidence(cand, related_events, now=now, policy=policy)
     if against:
         return Decision(False, "compatible evidence disagrees — left for review",
                         len(supporting), len(strong), ",".join(against[:3]))

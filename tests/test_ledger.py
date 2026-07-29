@@ -18,12 +18,13 @@ import json
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from persona_agent import candidates, evidence, promotion  # noqa: E402
+from persona_agent import candidates, evidence, promotion, reactions  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
 from persona_agent.paths import runtime_dir  # noqa: E402
 
@@ -66,6 +67,7 @@ def make_agent(tmp: Path) -> Agent:
     a.examples_file = tmp / "examples.jsonl"
     a.feedback_seed_file = tmp / "seed_feedback.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
+    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
     a.react_elicit = False          # no elicitation sends in these tests
     return a
 
@@ -197,6 +199,62 @@ async def test_two_events_with_a_strong_one_promote(tmp: Path) -> None:
     a._reload_views_if_stale()
     check("4: retrieval surfaces the promoted pair",
           "check the logs first" in a._examples_for_prompt("restart server", "called"))
+
+
+def test_expired_counter_evidence_does_not_block_new_corroboration() -> None:
+    """A retired disagreement must not veto a fresh, corroborated correction."""
+    def stamp(seconds: float) -> str:
+        return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+
+    common = {
+        "lang": "en", "platform": "qq", "conv_id": "g1",
+        "persona": "B", "persona_hash": "h", "persona_version": "1",
+        "speaker_id": "42", "speaker_name": "Alex", "recipient_id": "42",
+        "reply": "just restart it lol", "context": ["Alex: server is down"],
+        "directed": True, "direction": "at",
+    }
+    old_positive = evidence.make_event(
+        kind=evidence.KIND_REACTION,
+        ts=stamp(NOW - 31 * 86400),
+        **common,
+        reaction_type="positive",
+        adjudication={"accept": True, "mode": "called"},
+    )
+    fresh = [
+        evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=stamp(NOW - offset), **common,
+            reaction_type="correction",
+            reaction_text=f"no, use the logs ({offset})",
+            adjudication={"accept": True, "better": "check the logs first",
+                          "mode": "called"},
+        )
+        for offset in (120, 60)
+    ]
+    scope = candidates.scope_from_event(fresh[0])
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope,
+        payload={"reply": common["reply"], "better": "check the logs first",
+                 "context": common["context"], "mode": "called"},
+        evidence=[event["event_id"] for event in fresh],
+        created_at=stamp(NOW),
+    )
+    decision = promotion.decide(
+        cand, linked_events=fresh, related_events=[old_positive, *fresh], now=NOW,
+        policy=promotion.Policy(max_evidence_age_days=30),
+    )
+    check("4b: expired counter-evidence does not block promotion",
+          decision.promote, decision.reason)
+    fresh_positive = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW - 30), **common,
+        reaction_type="positive", reaction_text="actually that landed",
+        adjudication={"accept": True, "mode": "called"},
+    )
+    decision = promotion.decide(
+        cand, linked_events=fresh, related_events=[fresh_positive, *fresh], now=NOW,
+        policy=promotion.Policy(max_evidence_age_days=30),
+    )
+    check("4b: fresh counter-evidence still blocks promotion",
+          not decision.promote and "disagrees" in decision.reason, decision.reason)
 
 
 # ---------------------------------------------------------------------------
@@ -538,6 +596,7 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
         "examples view": a.promoted_examples_file,
         "feedback view": a.promoted_feedback_file,
         "examples": a.examples_file, "feedback": a.feedback_file,
+        "teacher stats": a.teacher_stats.path,
         "legacy candidate pool": a.example_candidates.path,
         "audit": a.candidates_file, "eval": a.eval_file,
     }
@@ -559,6 +618,7 @@ def main() -> int:
         asyncio.run(test_repeated_weak_promotes_nothing(tmp / "t2"))
         asyncio.run(test_single_correction_proposes_only(tmp / "t3"))
         asyncio.run(test_two_events_with_a_strong_one_promote(tmp / "t4"))
+        test_expired_counter_evidence_does_not_block_new_corroboration()
         asyncio.run(test_incompatible_scopes_are_not_combined(tmp / "t5"))
         asyncio.run(test_conflicting_evidence_blocks_promotion(tmp / "t6"))
         asyncio.run(test_retry_provides_supporting_evidence(tmp / "t7"))

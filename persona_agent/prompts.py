@@ -64,7 +64,8 @@ TOOL_GUIDE = (
     "**[CORE_UPDATE]...[/CORE_UPDATE]** — self-maintained persistent note. "
     "If this exchange gave you a new, stable impression of a group member "
     "or of the group's vibe, append `[CORE_UPDATE]full new note[/CORE_UPDATE]` "
-    "at the end of your reply to overwrite core_memory. Note < 400 chars; "
+    "at the end of the reply field to overwrite core_memory. The runtime strips "
+    "it before delivery, so it never appears in the group. Note < 400 chars; "
     "record only \"baseline\" facts (who likes which kind of joke, who's "
     "nocturnal, which topics set someone off), never play-by-play.\n"
     "</tools>"
@@ -77,7 +78,7 @@ STYLE_GUIDE = (
     "[FORMAT — not a document]\n"
     "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
     "- Punctuation: avoid full stops at sentence end, em-dashes, semicolons, formal quotes; if you need a beat, line-break or use a casual comma\n"
-    "- Square brackets [] are reserved for [AT:qq] and [STICKER:tag] markers ONLY — never for anything else\n"
+    "- Square brackets [] are reserved for [AT:qq] and [STICKER:tag] markers ONLY — never for anything else. The internal [CORE_UPDATE]...[/CORE_UPDATE] suffix is the sole exception; use it only at the end of the reply field for a stable memory update\n"
     "\n"
     "[LENGTH HAS RHYTHM]\n"
     "- Usually one or two short lines (~15-30 characters / ~8-15 English words). Occasionally (roughly one in four) when something genuinely lands, two short bursts are fine. Never three same-length lines in a row\n"
@@ -167,7 +168,7 @@ REASONING_PROTOCOL = (
     "reply (string, what the group will actually see):\n"
     '  - Not replying → write exactly \"PASS\" (uppercase, nothing else)\n'
     "  - Replying → usually one or two short lines (~15-30 chars / ~8-15 English words); occasionally two short bursts when something really lands (see STYLE_GUIDE length rhythm)\n"
-    "  - **No nested JSON / XML tags / extra brackets** inside the string value. The only markers allowed inside reply are [STICKER:tag] and [AT:qq].\n"
+    "  - **No nested JSON / XML tags / extra brackets** inside the string value. The only markers allowed inside reply are [STICKER:tag], [AT:qq], and the internal [CORE_UPDATE]...[/CORE_UPDATE] suffix. Use that suffix only for a stable memory update; it is stripped before the group sees it.\n"
     "\n"
     'mem (string — one line if there\'s something worth remembering, empty string \"\" if not). Persona/event/attitude facts. Writing \"none\"/\"null\"/\"n/a\" is treated as empty.\n'
     "\n"

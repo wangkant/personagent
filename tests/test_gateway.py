@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from persona_agent import promotion  # noqa: E402
 from persona_agent.agent import Agent, SendResult  # noqa: E402
 from persona_agent.gateway import GatewaySink, message_to_reply_item, synthesize_onebot_payload  # noqa: E402
+from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE  # noqa: E402
 
 BOT_QQ = "10001"
 
@@ -71,6 +72,22 @@ def test_synthesize_group_self_mention() -> None:
     # A real self-mention segment exists, so is_at_me must NOT add a second at.
     at_count = sum(1 for s in p["message"] if s["type"] == "at")
     check("group: no duplicate at prepend", at_count == 1, repr(p["message"]))
+
+
+def test_core_update_prompt_contract_is_consistent() -> None:
+    """The hidden memory marker is legal only as the reply-field suffix.
+
+    The runtime strips it before delivery, so the prompt must not simultaneously
+    require the marker and forbid it. That contradiction makes the model either
+    skip long-term memory updates or leak the marker into visible text.
+    """
+    check("prompt: core update names the reply field",
+          "[CORE_UPDATE]full new note[/CORE_UPDATE]" in TOOL_GUIDE
+          and "at the end of the reply field to overwrite core_memory" in TOOL_GUIDE)
+    check("prompt: style permits hidden core update suffix",
+          "internal [CORE_UPDATE]...[/CORE_UPDATE] suffix" in STYLE_GUIDE)
+    check("prompt: protocol permits hidden core update suffix",
+          "the internal [CORE_UPDATE]...[/CORE_UPDATE] suffix" in REASONING_PROTOCOL)
 
 
 def test_synthesize_mention_other_user() -> None:
@@ -761,8 +778,7 @@ def test_pick_group_model_mode_exempt() -> None:
 
 
 def test_extract_core_update_no_persist() -> None:
-    """_extract_core_update strips the tag and returns the note WITHOUT persisting
-    (commit is deferred until the reply survives the output filter — anti-poison)."""
+    """Only a terminal core tag is accepted, and extraction never persists it."""
     a = Agent(api_key="k", bot_qq="1", bot_name="B")
     with tempfile.TemporaryDirectory() as d:
         # Redirect BEFORE committing: the ctor loaded the REPO's real
@@ -771,10 +787,15 @@ def test_extract_core_update_no_persist() -> None:
         # notes. Never write repo-real state from tests.
         a.core_memory_file = Path(d) / "core_memory.json"
         a.core_memory.clear()
-        stripped, note = a._extract_core_update("ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE]")
-        check("core: tag stripped from reply",
+        malformed = "ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE] still talking"
+        stripped, note = a._extract_core_update(malformed)
+        check("core: non-terminal tag is not extracted",
+              stripped == malformed and note == "", repr((stripped, note)))
+        stripped, note = a._extract_core_update(
+            "ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE]")
+        check("core: terminal tag stripped from reply",
               "CORE_UPDATE" not in stripped and stripped == "ok", repr(stripped))
-        check("core: note extracted", note == "this group is all cat people", repr(note))
+        check("core: terminal note extracted", note == "this group is all cat people", repr(note))
         check("core: NOT persisted on extract",
               "g" not in a.core_memory and len(a.core_memory) == 0, repr(dict(a.core_memory)))
         a._commit_core_memory("g", note)
@@ -1519,6 +1540,7 @@ async def main_async() -> None:
 
 def main() -> int:
     test_synthesize_group_self_mention()
+    test_core_update_prompt_contract_is_consistent()
     test_synthesize_mention_other_user()
     test_synthesize_is_at_me_prepend()
     test_synthesize_private()

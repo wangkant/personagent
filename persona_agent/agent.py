@@ -2868,13 +2868,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         into core memory (poison protection). The model rewrites the whole
         note each time (no merging), which forces it to keep the note short.
         Closed tag form so nested [STICKER:xxx] doesn't truncate it."""
-        m = re.search(r'\[CORE_UPDATE\](.*?)\[/CORE_UPDATE\]', reply, re.DOTALL)
+        m = re.search(r'\s*\[CORE_UPDATE\](.*?)\[/CORE_UPDATE\]\s*$', reply,
+                      re.DOTALL)
         if not m:
             return reply, ""
         new_note = m.group(1).strip()
         if len(new_note) > self.CORE_MEMORY_MAX_CHARS:
             new_note = new_note[:self.CORE_MEMORY_MAX_CHARS] + "..."
-        return reply.replace(m.group(0), "").strip(), new_note
+        return reply[:m.start()].strip(), new_note
 
     def _commit_core_memory(self, group_id: str, new_note: str) -> None:
         """Persist a note extracted by _extract_core_update. Empty notes skip."""
