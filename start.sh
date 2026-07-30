@@ -3,6 +3,7 @@
 set -e
 cd "$(dirname "$0")"
 PORT="${PORT:-8080}"
+HOST="${HOST:-127.0.0.1}"
 
 # Prefer the venv that quickstart.py creates; fall back to a global interpreter.
 if [ -x ".venv/bin/python" ]; then
@@ -20,6 +21,6 @@ if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; t
   "$PY" -m pip install -r requirements.txt -q
 fi
 
-echo "local:   http://127.0.0.1:${PORT}"
-echo "webhook: http://127.0.0.1:${PORT}/webhook/qq"
-exec "$PY" -m uvicorn main:app --host 0.0.0.0 --port "${PORT}"
+echo "listen:  http://${HOST}:${PORT}"
+echo "webhook: http://${HOST}:${PORT}/webhook/qq"
+exec "$PY" -m uvicorn main:app --host "${HOST}" --port "${PORT}"

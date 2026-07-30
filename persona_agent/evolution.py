@@ -1,8 +1,9 @@
 """Self-evolution core — the negative half of the learning loop.
 
-The positive half already runs in-process: every reply is self-scored
-(eval.jsonl) and top-scoring replies are auto-appended to
-data/examples.<lang>.jsonl, so the few-shot pool grows from real successes.
+The positive half already runs in-process: every delivered reply can be
+self-scored (eval.jsonl), with top scores recorded as weak evidence and a
+positive-example candidate. Self-scoring alone never grants retrieval
+authority.
 
 This module owns the shared logic for the negative half:
 
@@ -13,7 +14,7 @@ This module owns the shared logic for the negative half:
       -> the running agent hot-reloads feedback into few-shot retrieval
 
 Consumers:
-- tools/auto_reviewer.py   offline CLI; human-gated (--apply) or unattended (--yes)
+- tools/auto_reviewer.py   offline CLI; human-gated (--apply); --yes is refused
 - agent.Agent.loop_evolve  opt-in background loop (EVOLVE_AUTO=true)
 
 Pure logic only: no env reads, no LLM client — callers pass an async
@@ -23,11 +24,11 @@ transport (retry / fallback / throttling included).
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 from collections.abc import Iterable
 from pathlib import Path
+
+from .storage import atomic_write_text
 
 REVIEWER_PROMPTS = {
     "en": """You are a prompt engineer for an LLM persona agent. Below is one low-scoring reply from a group-chat persona chatbot. Diagnose the "AI tell" and draft a fix.
@@ -85,6 +86,18 @@ def parse_review(raw: str) -> dict | None:
         return None
     if not isinstance(diag, dict) or not isinstance(diag.get("pair_draft"), dict):
         return None
+    for key in ("failure_mode", "bad_diagnosis", "tag_to_patch",
+                "constraint_to_add"):
+        if not isinstance(diag.get(key), str):
+            return None
+    pd = diag["pair_draft"]
+    for key in ("scenario", "mode", "reply", "better"):
+        if not isinstance(pd.get(key), str):
+            return None
+    context = pd.get("context")
+    if not isinstance(context, list) or not all(
+            isinstance(line, str) for line in context):
+        return None
     return diag
 
 
@@ -133,6 +146,7 @@ def candidate_record(ev: dict, diag: dict, applied: str = "") -> dict:
         "src_eval_ts": ev.get("ts"),
         "src_score": ev.get("score"),
         "src_mode": ev.get("mode"),
+        "src_reply": ev.get("reply"),
         **diag,
     }
     if applied:
@@ -153,6 +167,9 @@ def pair_from_candidate(cand: dict, ts: str) -> dict | None:
         return None
     reply = str(pd.get("reply") or "").strip()
     better = str(pd.get("better") or "").strip()
+    source_reply = cand.get("src_reply")
+    if not isinstance(source_reply, str) or reply != source_reply.strip():
+        return None
     if not reply or not better or reply == better:
         return None
     mode = str(pd.get("mode") or "").strip()
@@ -269,18 +286,10 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
         return None
     dropped = set(auto_at[:len(auto_at) - max_auto])
     kept = [r for i, r in enumerate(records) if i not in dropped]
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            for r in kept:
-                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    atomic_write_text(
+        path,
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
+    )
     return len(auto_at), len(auto_at) - len(dropped)
 
 
@@ -294,15 +303,7 @@ def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:
         ts = r.get("src_eval_ts")
         if ts in verdicts and not r.get("applied"):
             r["applied"] = verdicts[ts]
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            for r in records:
-                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    atomic_write_text(
+        path,
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+    )

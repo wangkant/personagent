@@ -8,13 +8,14 @@ improving real performance on borderline images. A holdout set you don't
 touch while tuning is the only way to tell those two apart.
 
 How to use it:
-  1) Hand-label 30-50 stickers from `stickers/auto/` into `holdout.jsonl`.
+  1) Hand-label 30-50 stickers from `stickers/auto/` into
+     `runtime/holdout.jsonl`.
      One JSON object per line:
        {"filename": "abc.png", "expected_approved": true}
      Pick a mix of clear-yes / clear-no / borderline cases. See
      `tools/holdout.example.jsonl` for the format.
   2) Run:
-       python tools/sticker_holdout_eval.py [--runs 5] [--file holdout.jsonl]
+       python tools/sticker_holdout_eval.py [--runs 5]
      This judges each image multiple times and reports:
        - per-image vote distribution (how many of N runs voted approve)
        - confusion matrix vs the labels (accuracy / precision / recall)
@@ -43,9 +44,10 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 from persona_agent.agent import Agent
+from persona_agent.paths import resolve_runtime_state_file
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
 
@@ -175,8 +177,12 @@ async def main(holdout_path: Path, runs: int) -> None:
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--file", type=Path, default=ROOT / "holdout.jsonl",
-                   help="path to holdout jsonl (default: ./holdout.jsonl)")
+    p.add_argument(
+        "--file",
+        type=Path,
+        default=resolve_runtime_state_file("holdout.jsonl"),
+        help="path to holdout jsonl (default: runtime/holdout.jsonl)",
+    )
     p.add_argument("--runs", type=int, default=5,
                    help="how many times to judge each image (default 5)")
     args = p.parse_args()

@@ -11,21 +11,13 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from .storage import append_jsonl_unlocked, append_lock, atomic_write_text
+
 logger = logging.getLogger("agent.stickers")
 
 # Strong refs to fire-and-forget tag tasks. Without this, a task GC'd before
 # its finally (which discards from _tagging_inflight) leaks the inflight entry
 # forever → that sticker can never be retagged.
-_BG_TASKS: set = set()
-
-
-def _spawn(coro) -> "asyncio.Task":
-    t = asyncio.create_task(coro)
-    _BG_TASKS.add(t)
-    t.add_done_callback(_BG_TASKS.discard)
-    return t
-
-
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
@@ -71,12 +63,33 @@ class StickerLibrary:
         self._last_save = 0.0
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
+        self._bg_tasks: set[asyncio.Task] = set()
+
+    def _spawn(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+        return task
+
+    async def aclose(self) -> None:
+        tasks = [task for task in self._bg_tasks
+                 if task is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _load(self) -> dict:
         if not self.file.exists():
             return {}
         try:
-            return json.loads(self.file.read_text(encoding="utf-8"))
+            loaded = json.loads(self.file.read_text(encoding="utf-8"))
+            if not isinstance(loaded, dict):
+                raise ValueError("sticker registry root must be an object")
+            return {
+                key: value for key, value in loaded.items()
+                if isinstance(key, str) and isinstance(value, dict)
+            }
         except Exception as e:
             logger.warning("stickers.json load failed: %s", e)
             return {}
@@ -96,12 +109,10 @@ class StickerLibrary:
         if not force and (now - self._last_save) < SAVE_MIN_INTERVAL_SEC:
             return
         try:
-            tmp = self.file.with_suffix(".json.tmp")
-            tmp.write_text(
+            atomic_write_text(
+                self.file,
                 json.dumps(self.entries, ensure_ascii=False, separators=(',', ':')),
-                encoding="utf-8",
             )
-            tmp.replace(self.file)
             self._dirty = False
             self._last_save = now
         except Exception as e:
@@ -110,24 +121,24 @@ class StickerLibrary:
     def _log_unknown(self, md5: str, src_user: str, src_group: str, url: str) -> None:
         try:
             self.unknown_log.parent.mkdir(parents=True, exist_ok=True)
-            # Rotate to .old so this write-only diagnostic log doesn't grow
-            # without bound (evicted stickers get re-stolen and re-logged).
-            try:
-                if self.unknown_log.exists() and self.unknown_log.stat().st_size > 2_000_000:
-                    old = self.unknown_log.with_suffix(self.unknown_log.suffix + ".old")
-                    if old.exists():
-                        old.unlink()
-                    self.unknown_log.rename(old)
-            except OSError:
-                pass
-            with open(self.unknown_log, "a", encoding="utf-8", newline="\n") as f:
-                f.write(json.dumps({
+            with append_lock(self.unknown_log):
+                try:
+                    if (self.unknown_log.exists()
+                            and self.unknown_log.stat().st_size > 2_000_000):
+                        old = self.unknown_log.with_suffix(
+                            self.unknown_log.suffix + ".old")
+                        if old.exists():
+                            old.unlink()
+                        self.unknown_log.replace(old)
+                except OSError:
+                    pass
+                append_jsonl_unlocked(self.unknown_log, {
                     "ts": time.time(),
                     "md5": md5,
                     "src_user": src_user,
                     "src_group": src_group,
                     "url": url,
-                }, ensure_ascii=False) + "\n")
+                })
         except Exception:
             pass
 
@@ -276,7 +287,7 @@ class StickerLibrary:
         if filename in self._tagging_inflight:
             return
         self._tagging_inflight.add(filename)
-        _spawn(self._tag_one(filename))
+        self._spawn(self._tag_one(filename))
 
     async def _tag_one(self, filename: str) -> None:
         try:

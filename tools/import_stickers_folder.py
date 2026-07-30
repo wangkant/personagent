@@ -27,9 +27,11 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 import httpx
+from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.storage import atomic_write_text
 
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4").rstrip("/")
@@ -41,7 +43,7 @@ AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 _CANT_SEE = {"看不到", "cant see", "can't see"}
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
-STICKERS_JSON = ROOT / "stickers.json"
+STICKERS_JSON = resolve_runtime_state_file("stickers.json")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
@@ -52,9 +54,7 @@ def _atomic_write_json(path, obj) -> None:
     """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
     stickers.json, or the bot's next startup _load() silently falls back to an
     empty library (all metadata lost)."""
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 
 VISION_PROMPTS = {

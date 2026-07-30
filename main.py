@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -14,13 +15,74 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from persona_agent.agent import Agent
 from persona_agent.health import run_checks, all_critical_ok
+from persona_agent.paths import ROOT, runtime_dir
+from persona_agent.storage import RuntimeInstanceLock, atomic_write_text
+
+
+def _parse_int_config(
+    name: str,
+    raw,
+    default: int,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    """Parse one integer setting without crashing module import."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logging.getLogger("bot").warning(
+            "invalid %s=%r; using %d", name, raw, default)
+        return default
+    if ((minimum is not None and value < minimum)
+            or (maximum is not None and value > maximum)):
+        logging.getLogger("bot").warning(
+            "out-of-range %s=%r; using %d", name, raw, default)
+        return default
+    return value
+
+
+def _is_loopback_host(host: str) -> bool:
+    value = str(host or "").strip().strip("[]")
+    if value.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(value).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_exposure_config(
+    host: str,
+    webhook_secret: str,
+    gateway_token: str,
+) -> None:
+    """Refuse a network bind whose two event endpoints are not authenticated."""
+    if _is_loopback_host(host):
+        return
+    missing = []
+    if not webhook_secret:
+        missing.append("WEBHOOK_SECRET")
+    if not gateway_token:
+        missing.append("GATEWAY_TOKEN")
+    if missing:
+        raise ValueError(
+            f"HOST={host!r} is not loopback; set {', '.join(missing)} "
+            "before exposing webhook endpoints"
+        )
+
+
+def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
+    """Fail closed when an unauthenticated endpoint is reached off-host."""
+    return bool(credential) or _is_loopback_host(peer_host or "")
+
 
 # ========== Config ==========
 # Bind loopback by default: NapCat posts events from localhost
@@ -29,15 +91,25 @@ from persona_agent.health import run_checks, all_critical_ok
 # WEBHOOK_SECRET so forged OneBot payloads (impersonating OWNER_QQ, poisoning
 # memory, burning tokens) can't reach /webhook/qq.
 HOST = os.getenv("HOST", "127.0.0.1")
-PORT = int(os.getenv("PORT", 8080))
+PORT = _parse_int_config(
+    "PORT", os.getenv("PORT", "8080"), 8080, minimum=1, maximum=65535)
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
 # /webhook/qq body must carry a matching `x-signature: sha1=<hex>` header.
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
-try:
-    MAX_WEBHOOK_BODY_BYTES = max(
-        1, int(os.getenv("MAX_WEBHOOK_BODY_BYTES", "8000000")))
-except ValueError:
-    MAX_WEBHOOK_BODY_BYTES = 8_000_000
+MAX_WEBHOOK_BODY_BYTES = _parse_int_config(
+    "MAX_WEBHOOK_BODY_BYTES",
+    os.getenv("MAX_WEBHOOK_BODY_BYTES", "8000000"),
+    8_000_000,
+    minimum=1,
+    maximum=64_000_000,
+)
+MAX_INFLIGHT_WEBHOOKS = _parse_int_config(
+    "MAX_INFLIGHT_WEBHOOKS",
+    os.getenv("MAX_INFLIGHT_WEBHOOKS", "64"),
+    64,
+    minimum=1,
+    maximum=4096,
+)
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -50,11 +122,19 @@ BOT_NAME = os.getenv("BOT_NAME", "")
 # (persona/examples/feedback/output_filter/lorebook), and the control-flow lexicons.
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 AGENT_ENABLE = os.getenv("AGENT_ENABLE", "true").lower() == "true"
-AGENT_TRIGGER_COUNT = int(os.getenv("AGENT_TRIGGER_COUNT", 30))
-AGENT_CONTEXT_LEN = int(os.getenv("AGENT_CONTEXT_LEN", 120))
-AGENT_FOLLOWUP_WINDOW = int(os.getenv("AGENT_FOLLOWUP_WINDOW", 120))
+AGENT_TRIGGER_COUNT = _parse_int_config(
+    "AGENT_TRIGGER_COUNT", os.getenv("AGENT_TRIGGER_COUNT", "30"), 30,
+    minimum=1, maximum=10_000)
+AGENT_CONTEXT_LEN = _parse_int_config(
+    "AGENT_CONTEXT_LEN", os.getenv("AGENT_CONTEXT_LEN", "120"), 120,
+    minimum=10, maximum=10_000)
+AGENT_FOLLOWUP_WINDOW = _parse_int_config(
+    "AGENT_FOLLOWUP_WINDOW", os.getenv("AGENT_FOLLOWUP_WINDOW", "120"), 120,
+    minimum=0, maximum=86_400)
 AGENT_MEMORY_FILE = os.getenv("AGENT_MEMORY_FILE", "memory.json")
-AGENT_MEMORY_MAX = int(os.getenv("AGENT_MEMORY_MAX", 50))
+AGENT_MEMORY_MAX = _parse_int_config(
+    "AGENT_MEMORY_MAX", os.getenv("AGENT_MEMORY_MAX", "50"), 50,
+    minimum=1, maximum=10_000)
 OWNER_QQ = os.getenv("OWNER_QQ", "")
 OWNER_NAME = os.getenv("OWNER_NAME", "")
 OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
@@ -67,9 +147,15 @@ PRIVATE_MODEL = (os.getenv("PRIVATE_MODEL", "")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 # Defaults below match .env.example so behavior is identical whether or not a
 # .env is present (no silent drift between the template and the code).
-RATE_WINDOW = int(os.getenv("RATE_WINDOW", 120))
-RATE_THRESHOLD = int(os.getenv("RATE_THRESHOLD", 30))
-FALLBACK_DURATION = int(os.getenv("FALLBACK_DURATION", 180))
+RATE_WINDOW = _parse_int_config(
+    "RATE_WINDOW", os.getenv("RATE_WINDOW", "120"), 120,
+    minimum=1, maximum=86_400)
+RATE_THRESHOLD = _parse_int_config(
+    "RATE_THRESHOLD", os.getenv("RATE_THRESHOLD", "30"), 30,
+    minimum=1, maximum=100_000)
+FALLBACK_DURATION = _parse_int_config(
+    "FALLBACK_DURATION", os.getenv("FALLBACK_DURATION", "180"), 180,
+    minimum=1, maximum=86_400)
 EVAL_ENABLE = os.getenv("EVAL_ENABLE", "false").lower() == "true"
 EVAL_MODEL = os.getenv("EVAL_MODEL", "")
 EVAL_FILE = os.getenv("EVAL_FILE", "eval.jsonl")
@@ -80,37 +166,61 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 # Gateway (platform-neutral forwarding): shared secret for /webhook/gateway
 # (blank = no auth) and platform-prefixed ids treated as owner in gateway DMs.
 GATEWAY_TOKEN = os.getenv("GATEWAY_TOKEN", "")
+GATEWAY_SOURCE_MAX_AGE_SECONDS = _parse_int_config(
+    "GATEWAY_SOURCE_MAX_AGE_SECONDS",
+    os.getenv("GATEWAY_SOURCE_MAX_AGE_SECONDS", "86400"),
+    86_400,
+    minimum=1,
+    maximum=604_800,
+)
 GATEWAY_OWNER_IDS = tuple(
     s.strip() for s in os.getenv("GATEWAY_OWNER_IDS", "").split(",") if s.strip()
 )
 
 # ========== Logging ==========
-_log_root = logging.getLogger()
-# Guarded so a re-import of this module (uvicorn does this with the
-# "main:app" string form) doesn't attach duplicate handlers.
-if not _log_root.handlers:
-    _log_formatter = logging.Formatter(
+logger = logging.getLogger("bot")
+
+
+def _configure_logging() -> None:
+    """Configure process logging at startup, never as an import side effect."""
+    root = logging.getLogger()
+    formatter = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(message)s",
         datefmt="%H:%M:%S",
     )
-    _log_root.setLevel(logging.INFO)
-    _stdout_h = logging.StreamHandler()
-    _stdout_h.setFormatter(_log_formatter)
-    _log_root.addHandler(_stdout_h)
+    if not root.handlers:
+        stream = logging.StreamHandler()
+        stream.setFormatter(formatter)
+        root.addHandler(stream)
+    root.setLevel(logging.INFO)
+
+    # Conversation-adjacent logs are console-only by default. Operators who
+    # explicitly opt into a file must choose its protected runtime path.
+    log_file = os.getenv("LOG_FILE", "").strip()
+    if not log_file:
+        return
     try:
         from logging.handlers import RotatingFileHandler
-        # Absolute path anchored to this file so the log lands in the
-        # project directory regardless of the working directory the bot
-        # was launched from.
-        _log_path = Path(__file__).resolve().parent / "bot.log"
-        _file_h = RotatingFileHandler(
-            str(_log_path), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
+        target = Path(log_file).expanduser().resolve()
+        if any(
+            isinstance(handler, RotatingFileHandler)
+            and Path(handler.baseFilename).resolve() == target
+            for handler in root.handlers
+        ):
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            str(target), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
         )
-        _file_h.setFormatter(_log_formatter)
-        _log_root.addHandler(_file_h)
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
     except Exception:
-        pass
-logger = logging.getLogger("bot")
+        logger.exception("file logging setup failed")
+
 
 agent: Optional[Agent] = None
 
@@ -118,6 +228,188 @@ agent: Optional[Agent] = None
 # a task, so one suspended at an await with no other reference can be garbage
 # collected mid-flight, silently dropping the work (e.g. an inbound message).
 _bg_tasks: set[asyncio.Task] = set()
+
+
+class AdmissionLimiter:
+    """Small non-blocking admission counter for expensive webhook work."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = max(1, int(limit))
+        self.inflight = 0
+        self._lock = asyncio.Lock()
+
+    async def try_acquire(self) -> bool:
+        async with self._lock:
+            if self.inflight >= self.limit:
+                return False
+            self.inflight += 1
+            return True
+
+    async def release(self) -> None:
+        async with self._lock:
+            if self.inflight:
+                self.inflight -= 1
+
+
+class ReplayGuard:
+    """Bounded timestamped nonce cache for authenticated gateway envelopes."""
+
+    def __init__(
+        self,
+        ttl_seconds: int = 300,
+        max_entries: int = 4096,
+        state_file: str | Path | None = None,
+    ) -> None:
+        self.ttl_seconds = max(1, int(ttl_seconds))
+        self.max_entries = max(1, int(max_entries))
+        self.state_file = Path(state_file) if state_file is not None else None
+        self._seen: dict[str, int] = self._load()
+
+    def _load(self) -> dict[str, int]:
+        if self.state_file is None:
+            return {}
+        try:
+            raw = json.loads(self.state_file.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        loaded: dict[str, int] = {}
+        for nonce, timestamp in raw.items():
+            if not isinstance(nonce, str) or not nonce or len(nonce) > 128:
+                continue
+            try:
+                loaded[nonce] = int(timestamp)
+            except (TypeError, ValueError, OverflowError):
+                continue
+        return loaded
+
+    def _persist(self) -> None:
+        if self.state_file is None:
+            return
+        atomic_write_text(
+            self.state_file,
+            json.dumps(
+                self._seen, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ) + "\n",
+        )
+
+    def accept(self, nonce: str, timestamp: int, now: int) -> bool:
+        cutoff = now - self.ttl_seconds
+        pruned = {
+            key: stamp for key, stamp in self._seen.items()
+            if stamp >= cutoff
+        }
+        changed = pruned != self._seen
+        self._seen = pruned
+        if abs(now - timestamp) > self.ttl_seconds or nonce in self._seen:
+            if changed:
+                self._persist()
+            return False
+        if len(self._seen) >= self.max_entries:
+            # Evicting a still-fresh nonce re-opens its replay window.
+            if changed:
+                self._persist()
+            return False
+        self._seen[nonce] = timestamp
+        self._persist()
+        return True
+
+
+def _verify_gateway_envelope(
+    body: bytes,
+    headers,
+    token: str,
+    *,
+    now: int | None = None,
+    replay_guard: ReplayGuard | None = None,
+) -> bool:
+    """Verify bearer token plus HMAC-signed timestamp/nonce/body envelope."""
+    if not token:
+        return True
+    supplied_token = headers.get("x-gateway-token", "")
+    timestamp_raw = headers.get("x-gateway-timestamp", "")
+    nonce = headers.get("x-gateway-nonce", "")
+    supplied_signature = headers.get("x-gateway-signature", "")
+    if (not hmac.compare_digest(supplied_token, token)
+            or not timestamp_raw or not nonce or len(nonce) > 128):
+        return False
+    try:
+        timestamp = int(timestamp_raw)
+    except (TypeError, ValueError):
+        return False
+    mac_input = (
+        str(timestamp).encode("ascii") + b"."
+        + nonce.encode("utf-8") + b"." + body
+    )
+    expected = "sha256=" + hmac.new(
+        token.encode("utf-8"), mac_input, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(supplied_signature, expected):
+        return False
+    guard = replay_guard or _gateway_replay
+    return guard.accept(nonce, timestamp, int(time.time()) if now is None else now)
+
+
+def _validate_event_payload(payload: dict, *, gateway: bool) -> bool:
+    """Validate the stable identity fields required for deduplication."""
+    if not isinstance(payload, dict):
+        return False
+    if gateway:
+        required = (
+            "platform", "message_type", "user_id", "message_id",
+            "source_timestamp",
+        )
+        if any(payload.get(key) in (None, "") for key in required):
+            return False
+        if payload.get("message_type") == "group" and payload.get(
+                "conversation_id") in (None, ""):
+            return False
+        return isinstance(payload.get("segments", []), list)
+    if payload.get("post_type") != "message":
+        return True
+    required = ("message_type", "user_id", "message_id")
+    if any(payload.get(key) in (None, "") for key in required):
+        return False
+    if payload.get("message_type") == "group" and payload.get(
+            "group_id") in (None, ""):
+        return False
+    return isinstance(payload.get("message", []), list)
+
+
+def _gateway_event_is_fresh(
+    payload: dict,
+    *,
+    now: int | None = None,
+    max_age_seconds: int = GATEWAY_SOURCE_MAX_AGE_SECONDS,
+) -> bool:
+    """Validate source-event age independently of forwarding-envelope age."""
+    try:
+        event_time = int(payload.get("source_timestamp"))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    current = int(time.time()) if now is None else int(now)
+    return abs(current - event_time) <= max(1, int(max_age_seconds))
+
+
+def _onebot_event_is_fresh(
+    payload: dict,
+    *,
+    now: int | None = None,
+    max_age_seconds: int = 300,
+) -> bool:
+    """Reject stale signed OneBot events before their IDs age out of dedup."""
+    try:
+        event_time = int(payload.get("time"))
+    except (TypeError, ValueError):
+        return False
+    current = int(time.time()) if now is None else int(now)
+    return abs(current - event_time) <= max(1, int(max_age_seconds))
+
+
+_webhook_admission = AdmissionLimiter(MAX_INFLIGHT_WEBHOOKS)
+_gateway_replay = ReplayGuard(
+    state_file=runtime_dir() / "gateway_nonces.json")
 
 
 class RequestBodyTooLarge(Exception):
@@ -151,37 +443,52 @@ def _spawn(coro) -> asyncio.Task:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent
+    _configure_logging()
+    _validate_exposure_config(HOST, WEBHOOK_SECRET, GATEWAY_TOKEN)
+    runtime_lock = None
     if AGENT_ENABLE:
-        agent = Agent(
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
-            model=DEEPSEEK_MODEL,
-            bot_qq=BOT_QQ,
-            bot_name=BOT_NAME,
-            private_model=PRIVATE_MODEL,
-            napcat_api=NAPCAT_API,
-            trigger_count=AGENT_TRIGGER_COUNT,
-            context_len=AGENT_CONTEXT_LEN,
-            followup_window=AGENT_FOLLOWUP_WINDOW,
-            memory_file=AGENT_MEMORY_FILE,
-            memory_max_per_group=AGENT_MEMORY_MAX,
-            owner_qq=OWNER_QQ,
-            owner_name=OWNER_NAME,
-            owner_relationship=OWNER_RELATIONSHIP,
-            fallback_model=FALLBACK_MODEL,
-            rate_window=RATE_WINDOW,
-            rate_threshold=RATE_THRESHOLD,
-            fallback_duration=FALLBACK_DURATION,
-            eval_enable=EVAL_ENABLE,
-            eval_model=EVAL_MODEL,
-            eval_file=EVAL_FILE,
-            vision_model=VISION_MODEL,
-            glm_api_key=GLM_API_KEY,
-            glm_base_url=GLM_BASE_URL,
-            tavily_key=TAVILY_API_KEY,
-            lang=AGENT_LANG,
-            gateway_owner_ids=GATEWAY_OWNER_IDS,
-        )
+        # Agent construction reads legacy root-level state as well as runtime
+        # projections, so claim the deployment before touching either.
+        runtime_lock = RuntimeInstanceLock(ROOT)
+        runtime_lock.acquire()
+        try:
+            agent = Agent(
+                api_key=DEEPSEEK_API_KEY,
+                base_url=DEEPSEEK_BASE_URL,
+                model=DEEPSEEK_MODEL,
+                bot_qq=BOT_QQ,
+                bot_name=BOT_NAME,
+                private_model=PRIVATE_MODEL,
+                napcat_api=NAPCAT_API,
+                trigger_count=AGENT_TRIGGER_COUNT,
+                context_len=AGENT_CONTEXT_LEN,
+                followup_window=AGENT_FOLLOWUP_WINDOW,
+                memory_file=AGENT_MEMORY_FILE,
+                memory_max_per_group=AGENT_MEMORY_MAX,
+                owner_qq=OWNER_QQ,
+                owner_name=OWNER_NAME,
+                owner_relationship=OWNER_RELATIONSHIP,
+                fallback_model=FALLBACK_MODEL,
+                rate_window=RATE_WINDOW,
+                rate_threshold=RATE_THRESHOLD,
+                fallback_duration=FALLBACK_DURATION,
+                eval_enable=EVAL_ENABLE,
+                eval_model=EVAL_MODEL,
+                eval_file=EVAL_FILE,
+                vision_model=VISION_MODEL,
+                glm_api_key=GLM_API_KEY,
+                glm_base_url=GLM_BASE_URL,
+                tavily_key=TAVILY_API_KEY,
+                lang=AGENT_LANG,
+                gateway_owner_ids=GATEWAY_OWNER_IDS,
+            )
+            # The append-only ledger is authoritative. Repair stale derived
+            # retrieval views before the server can accept a request.
+            agent._rebuild_promoted_views(strict=True)
+        except BaseException:
+            runtime_lock.release()
+            runtime_lock = None
+            raise
         _spawn(agent.probe_models())
         _spawn(agent.check_missed_mentions())
         _spawn(agent.loop_check_missed())
@@ -206,26 +513,27 @@ async def lifespan(app: FastAPI):
         _spawn(_recheck_then_purge())
     logger.info("bot started on %s:%d (agent=%s, lang=%s)", HOST, PORT,
                 agent.enabled if agent else False, AGENT_LANG)
-    # Exposure warning: binding a non-loopback host without transport auth means
-    # anyone who can reach the port can forge events (impersonate OWNER_QQ,
-    # poison memory, fabricate per-key state, burn tokens).
-    if HOST not in ("127.0.0.1", "localhost", "::1"):
-        if not WEBHOOK_SECRET:
-            logger.warning("SECURITY: HOST=%s is not loopback and WEBHOOK_SECRET is unset — "
-                           "/webhook/qq accepts forged OneBot events. Set WEBHOOK_SECRET.", HOST)
-        if not GATEWAY_TOKEN:
-            logger.warning("SECURITY: HOST=%s is not loopback and GATEWAY_TOKEN is unset — "
-                           "/webhook/gateway is open (attacker-chosen keys). Set GATEWAY_TOKEN.", HOST)
-    yield
-    # ---- shutdown: cancel background loops + force out throttled writes so
-    # buffered state (dedup ring / sticker index) isn't lost ----
-    for t in list(_bg_tasks):
-        t.cancel()
-    if agent is not None:
-        try:
-            agent.flush_state()
-        except Exception:
-            logger.exception("shutdown flush failed")
+    try:
+        yield
+    finally:
+        # ---- shutdown: cancel background loops + force out throttled writes
+        # so buffered state isn't lost ----
+        tasks = list(_bg_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if agent is not None:
+            try:
+                close = getattr(agent, "aclose", None)
+                if close is not None:
+                    await close()
+                else:
+                    agent.flush_state()
+            except Exception:
+                logger.exception("shutdown cleanup failed")
+        if runtime_lock is not None:
+            runtime_lock.release()
 
 app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
 
@@ -238,6 +546,25 @@ _health_lock = asyncio.Lock()
 
 @app.get("/health")
 async def health():
+    """Cheap public liveness check; never spends upstream API credits."""
+    return {
+        "status": "ok",
+        "agent_enabled": bool(agent and agent.enabled),
+    }
+
+
+@app.get("/health/details")
+async def health_details(request: Request):
+    """Authenticated/loopback-only diagnostics that may call paid services."""
+    client_host = request.client.host if request.client else ""
+    if GATEWAY_TOKEN:
+        authorized = hmac.compare_digest(
+            request.headers.get("X-Gateway-Token", ""), GATEWAY_TOKEN)
+    else:
+        authorized = _is_loopback_host(client_host)
+    if not authorized:
+        return JSONResponse(status_code=403, content={"error": "forbidden"})
+
     now = time.time()
     if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
         async with _health_lock:
@@ -262,6 +589,22 @@ async def health():
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
+    if not await _webhook_admission.try_acquire():
+        return JSONResponse(
+            status_code=429, content={"error": "webhook capacity exceeded"})
+    request.state.admission_handed_off = False
+    try:
+        peer = request.client.host if request.client is not None else ""
+        if not _request_peer_is_allowed(peer, WEBHOOK_SECRET):
+            return JSONResponse(
+                status_code=403, content={"error": "authentication required"})
+        return await _qq_webhook_admitted(request)
+    finally:
+        if not request.state.admission_handed_off:
+            await _webhook_admission.release()
+
+
+async def _qq_webhook_admitted(request: Request):
     try:
         body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
     except RequestBodyTooLarge:
@@ -289,6 +632,14 @@ async def qq_webhook(request: Request):
     if isinstance(payload, dict):
         payload.pop("_gateway", None)
         payload.pop("_platform", None)
+    if not _validate_event_payload(payload, gateway=False):
+        return JSONResponse(
+            status_code=400, content={"error": "invalid event schema"})
+    if WEBHOOK_SECRET and not _onebot_event_is_fresh(payload):
+        return JSONResponse(
+            status_code=403, content={"error": "stale or missing event timestamp"})
+    if isinstance(payload, dict) and payload.get("message_id") not in (None, ""):
+        payload["message_id"] = str(payload["message_id"])
     if agent:
         # Non-blocking: don't make NapCat wait for the LLM round-trip.
         # Wrap in a guard so a raised exception is logged instead of vanishing
@@ -298,12 +649,29 @@ async def qq_webhook(request: Request):
                 await agent.handle(payload)
             except Exception:
                 logger.exception("handle failed")
+            finally:
+                await _webhook_admission.release()
+        request.state.admission_handed_off = True
         _spawn(_safe_handle())
     return {"ok": True}
 
 
 @app.post("/webhook/gateway")
 async def gateway_webhook(request: Request):
+    if not await _webhook_admission.try_acquire():
+        return JSONResponse(
+            status_code=429, content={"error": "webhook capacity exceeded"})
+    try:
+        peer = request.client.host if request.client is not None else ""
+        if not _request_peer_is_allowed(peer, GATEWAY_TOKEN):
+            return JSONResponse(
+                status_code=403, content={"error": "authentication required"})
+        return await _gateway_webhook_admitted(request)
+    finally:
+        await _webhook_admission.release()
+
+
+async def _gateway_webhook_admitted(request: Request):
     """Platform-neutral inbound endpoint for forwarder plugins (schema in
     gateway.py). Unlike /webhook/qq this is a synchronous round-trip: the
     forwarder needs the replies in the response body to relay them back, so
@@ -314,12 +682,11 @@ async def gateway_webhook(request: Request):
     except RequestBodyTooLarge:
         return JSONResponse(
             status_code=413, content={"error": "request body too large"})
-    # Constant-time compare, same standard as /webhook/qq's signature check:
-    # a plain != short-circuits on the first differing byte — a timing side
-    # channel on the only credential guarding this endpoint when exposed.
-    if GATEWAY_TOKEN and not hmac.compare_digest(
-            request.headers.get("X-Gateway-Token", ""), GATEWAY_TOKEN):
-        return JSONResponse(status_code=403, content={"error": "invalid gateway token"})
+    if not _verify_gateway_envelope(body, request.headers, GATEWAY_TOKEN):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "invalid, stale, or replayed gateway envelope"},
+        )
     try:
         event = json.loads(body or b"{}")
     except Exception:
@@ -328,6 +695,13 @@ async def gateway_webhook(request: Request):
         # A body that parses to JSON null/list/string would otherwise hit
         # event.get(...) in synthesize_onebot_payload and 500.
         event = {}
+    if not _validate_event_payload(event, gateway=True):
+        return JSONResponse(
+            status_code=400, content={"error": "invalid gateway event schema"})
+    if not _gateway_event_is_fresh(event):
+        return JSONResponse(
+            status_code=403, content={"error": "stale gateway source event"})
+    event["message_id"] = str(event["message_id"])
     if agent is None:
         return {"handled": False, "replies": []}
     return await agent.handle_gateway(event)

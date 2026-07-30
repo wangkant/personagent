@@ -7,12 +7,23 @@ Run from the repo root with no test framework required:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
+import logging
+import logging.handlers
+import tempfile
+import time
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import main as main_module  # noqa: E402
+import httpx  # noqa: E402
 from main import RequestBodyTooLarge, _read_body_limited  # noqa: E402
+from persona_agent import learning as learning_module  # noqa: E402
 
 _failures: list[str] = []
 
@@ -69,11 +80,322 @@ async def test_invalid_content_length_still_streams_safely() -> None:
           repr((body, request.stream_reads)))
 
 
+def test_exposure_guard_fails_closed() -> None:
+    guard = getattr(main_module, "_validate_exposure_config", None)
+    check("exposure guard exists", callable(guard))
+    if not callable(guard):
+        return
+    try:
+        guard("0.0.0.0", "", "")
+    except ValueError:
+        rejected = True
+    else:
+        rejected = False
+    check("public bind without both secrets rejected", rejected)
+    try:
+        guard("127.0.0.1", "", "")
+        loopback_ok = True
+    except ValueError:
+        loopback_ok = False
+    check("loopback bind permits local unauthenticated deployment", loopback_ok)
+    peer_guard = getattr(main_module, "_request_peer_is_allowed", None)
+    check("request peer guard exists", callable(peer_guard))
+    if callable(peer_guard):
+        check("request peer: loopback may use empty secret",
+              peer_guard("127.0.0.1", "") is True)
+        check("request peer: remote may not use empty secret",
+              peer_guard("203.0.113.10", "") is False)
+        check("request peer: authenticated remote is allowed",
+              peer_guard("203.0.113.10", "secret") is True)
+
+
+def test_numeric_config_parser_is_bounded() -> None:
+    parser = getattr(main_module, "_parse_int_config", None)
+    check("numeric config parser exists", callable(parser))
+    if not callable(parser):
+        return
+    check("numeric config: invalid value uses default",
+          parser("PORT", "not-a-number", 8080, minimum=1, maximum=65535) == 8080)
+    check("numeric config: out-of-range value uses default",
+          parser("PORT", "70000", 8080, minimum=1, maximum=65535) == 8080)
+    check("numeric config: valid value accepted",
+          parser("PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
+
+
+def test_import_has_no_file_logging_side_effect() -> None:
+    handlers = logging.getLogger().handlers
+    check("main import does not open a repository log file",
+          not any(isinstance(h, logging.handlers.RotatingFileHandler)
+                  for h in handlers),
+          repr(handlers))
+
+
+async def test_admission_limiter_is_bounded() -> None:
+    limiter_cls = getattr(main_module, "AdmissionLimiter", None)
+    check("admission limiter exists", limiter_cls is not None)
+    if limiter_cls is None:
+        return
+    limiter = limiter_cls(2)
+    first = await limiter.try_acquire()
+    second = await limiter.try_acquire()
+    third = await limiter.try_acquire()
+    check("admission limiter rejects overflow",
+          first and second and not third, repr((first, second, third)))
+    await limiter.release()
+    check("admission limiter admits after release",
+          await limiter.try_acquire())
+
+
+async def test_public_health_is_a_cheap_liveness_check() -> None:
+    original = main_module.run_checks
+
+    def fail_if_called():
+        raise AssertionError("public health must not run paid probes")
+
+    main_module.run_checks = fail_if_called
+    try:
+        response = await main_module.health()
+        check("public health avoids paid diagnostics",
+              isinstance(response, dict)
+              and response.get("status") == "ok",
+              repr(response))
+    finally:
+        main_module.run_checks = original
+
+
+async def test_asgi_webhook_auth_and_schema() -> None:
+    original_secret = main_module.WEBHOOK_SECRET
+    original_token = main_module.GATEWAY_TOKEN
+    original_agent = main_module.agent
+    original_replay = main_module._gateway_replay
+    main_module.WEBHOOK_SECRET = "qq-secret"
+    main_module.GATEWAY_TOKEN = "gateway-secret"
+    main_module.agent = None
+    main_module._gateway_replay = main_module.ReplayGuard()
+    transport = httpx.ASGITransport(app=main_module.app)
+    try:
+        async with httpx.AsyncClient(
+                transport=transport, base_url="http://test") as client:
+            qq_event = {
+                "post_type": "message", "message_type": "group",
+                "group_id": "g", "user_id": "u", "message_id": "m1",
+                "message": [], "time": int(time.time()),
+            }
+            qq_body = json.dumps(
+                qq_event, separators=(",", ":")).encode()
+            bad = await client.post(
+                "/webhook/qq", content=qq_body,
+                headers={"x-signature": "sha1=bad"})
+            qq_sig = "sha1=" + hmac.new(
+                b"qq-secret", qq_body, hashlib.sha1).hexdigest()
+            good = await client.post(
+                "/webhook/qq", content=qq_body,
+                headers={"x-signature": qq_sig})
+
+            gateway_event = {
+                "platform": "telegram", "message_type": "group",
+                "conversation_id": "g", "user_id": "u",
+                "message_id": "m2", "segments": [],
+                "source_timestamp": int(time.time()),
+            }
+            gateway_body = json.dumps(
+                gateway_event, separators=(",", ":")).encode()
+            stamp = str(int(time.time()))
+            nonce = "asgi-nonce"
+            gateway_sig = "sha256=" + hmac.new(
+                b"gateway-secret",
+                stamp.encode() + b"." + nonce.encode() + b"." + gateway_body,
+                hashlib.sha256,
+            ).hexdigest()
+            gw = await client.post(
+                "/webhook/gateway", content=gateway_body,
+                headers={
+                    "x-gateway-token": "gateway-secret",
+                    "x-gateway-timestamp": stamp,
+                    "x-gateway-nonce": nonce,
+                    "x-gateway-signature": gateway_sig,
+                })
+        check("ASGI auth: invalid QQ signature rejected", bad.status_code == 403)
+        check("ASGI auth: valid QQ envelope accepted", good.status_code == 200)
+        check("ASGI auth: valid gateway envelope accepted",
+              gw.status_code == 200 and gw.json() == {
+                  "handled": False, "replies": []}, repr(gw.text))
+    finally:
+        main_module.WEBHOOK_SECRET = original_secret
+        main_module.GATEWAY_TOKEN = original_token
+        main_module.agent = original_agent
+        main_module._gateway_replay = original_replay
+
+
+def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
+    verifier = getattr(main_module, "_verify_gateway_envelope", None)
+    guard_cls = getattr(main_module, "ReplayGuard", None)
+    check("gateway signed-envelope verifier exists",
+          callable(verifier) and guard_cls is not None)
+    if not callable(verifier) or guard_cls is None:
+        return
+    token = "shared-secret"
+    body = b'{"message_id":"m1"}'
+    now = int(time.time())
+    nonce = "nonce-1"
+    stamp = str(now)
+    digest = hmac.new(
+        token.encode(),
+        stamp.encode() + b"." + nonce.encode() + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+    headers = {
+        "x-gateway-token": token,
+        "x-gateway-timestamp": stamp,
+        "x-gateway-nonce": nonce,
+        "x-gateway-signature": "sha256=" + digest,
+    }
+    replay = guard_cls(ttl_seconds=300, max_entries=16)
+    first = verifier(body, headers, token, now=now, replay_guard=replay)
+    second = verifier(body, headers, token, now=now, replay_guard=replay)
+    stale_headers = dict(headers)
+    stale_headers["x-gateway-nonce"] = "nonce-2"
+    stale_headers["x-gateway-timestamp"] = str(now - 301)
+    stale_digest = hmac.new(
+        token.encode(),
+        stale_headers["x-gateway-timestamp"].encode()
+        + b"." + stale_headers["x-gateway-nonce"].encode() + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+    stale_headers["x-gateway-signature"] = "sha256=" + stale_digest
+    stale = verifier(
+        body, stale_headers, token, now=now, replay_guard=replay)
+    check("gateway signed envelope: first request accepted", first is True, repr(first))
+    check("gateway signed envelope: nonce replay rejected", second is False, repr(second))
+    check("gateway signed envelope: stale request rejected", stale is False, repr(stale))
+
+    with tempfile.TemporaryDirectory() as td:
+        state_file = Path(td) / "gateway_nonces.json"
+        persisted = guard_cls(
+            ttl_seconds=300, max_entries=2, state_file=state_file)
+        first_persisted = verifier(
+            body, headers, token, now=now, replay_guard=persisted)
+        reloaded = guard_cls(
+            ttl_seconds=300, max_entries=2, state_file=state_file)
+        after_restart = verifier(
+            body, headers, token, now=now, replay_guard=reloaded)
+        check("gateway replay cache persists across restart",
+              first_persisted is True and after_restart is False,
+              repr((first_persisted, after_restart)))
+
+        full = guard_cls(ttl_seconds=300, max_entries=1)
+        first_full = verifier(body, headers, token, now=now, replay_guard=full)
+        second_headers = dict(headers)
+        second_headers["x-gateway-nonce"] = "nonce-full-2"
+        second_digest = hmac.new(
+            token.encode(),
+            stamp.encode() + b"." + b"nonce-full-2" + b"." + body,
+            hashlib.sha256,
+        ).hexdigest()
+        second_headers["x-gateway-signature"] = "sha256=" + second_digest
+        second_full = verifier(
+            body, second_headers, token, now=now, replay_guard=full)
+        check("gateway replay cache sheds new work instead of evicting fresh nonce",
+              first_full is True and second_full is False,
+              repr((first_full, second_full)))
+
+
+def test_event_schema_requires_stable_message_ids() -> None:
+    validator = getattr(main_module, "_validate_event_payload", None)
+    check("event schema validator exists", callable(validator))
+    if not callable(validator):
+        return
+    qq_missing = {
+        "post_type": "message", "message_type": "group",
+        "group_id": "1", "user_id": "2", "message": [],
+    }
+    qq_valid = dict(qq_missing, message_id="m1")
+    gateway_missing = {
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": "g", "user_id": "u", "segments": [],
+    }
+    gateway_valid = dict(
+        gateway_missing, message_id="m2", source_timestamp=int(time.time()))
+    check("event schema: QQ message without id rejected",
+          validator(qq_missing, gateway=False) is False)
+    check("event schema: QQ message with id accepted",
+          validator(qq_valid, gateway=False) is True)
+    check("event schema: gateway message without id rejected",
+          validator(gateway_missing, gateway=True) is False)
+    check("event schema: gateway message with id accepted",
+          validator(gateway_valid, gateway=True) is True)
+    check("event schema: gateway source timestamp required",
+          validator(dict(gateway_valid, source_timestamp=None), gateway=True)
+          is False)
+    gateway_freshness = getattr(
+        main_module, "_gateway_event_is_fresh", None)
+    check("gateway source freshness validator exists",
+          callable(gateway_freshness))
+    if callable(gateway_freshness):
+        now = int(time.time())
+        check("gateway source freshness: current event accepted",
+              gateway_freshness(
+                  {"source_timestamp": now}, now=now,
+                  max_age_seconds=300) is True)
+        check("gateway source freshness: stale event rejected",
+              gateway_freshness(
+                  {"source_timestamp": now - 301}, now=now,
+                  max_age_seconds=300) is False)
+    freshness = getattr(main_module, "_onebot_event_is_fresh", None)
+    check("OneBot freshness validator exists", callable(freshness))
+    if callable(freshness):
+        now = int(time.time())
+        check("OneBot freshness: current event accepted",
+              freshness({"time": now}, now=now) is True)
+        check("OneBot freshness: missing timestamp rejected",
+              freshness({}, now=now) is False)
+        check("OneBot freshness: stale event rejected",
+              freshness({"time": now - 301}, now=now) is False)
+
+
+def test_startup_view_rebuild_can_fail_closed() -> None:
+    dummy = SimpleNamespace(
+        candidate_ledger=object(),
+        promoted_examples_file=Path("unused-examples"),
+        promoted_feedback_file=Path("unused-feedback"),
+        examples_max_auto=10,
+        feedback_max_auto=10,
+    )
+    original = learning_module.candidates.rebuild_views
+
+    def fail(*_args, **_kwargs):
+        raise OSError("disk unavailable")
+
+    learning_module.candidates.rebuild_views = fail
+    try:
+        soft = learning_module.Learning._rebuild_promoted_views(dummy)
+        raised = False
+        try:
+            learning_module.Learning._rebuild_promoted_views(
+                dummy, strict=True)
+        except OSError:
+            raised = True
+    finally:
+        learning_module.candidates.rebuild_views = original
+    check("promoted-view rebuild retains non-strict maintenance mode",
+          soft == (-1, -1), repr(soft))
+    check("startup promoted-view rebuild fails closed", raised)
+
+
 async def main_async() -> None:
     await test_accepts_body_at_limit()
     await test_rejects_stream_over_limit_without_header()
     await test_rejects_large_content_length_before_stream()
     await test_invalid_content_length_still_streams_safely()
+    test_exposure_guard_fails_closed()
+    test_numeric_config_parser_is_bounded()
+    test_import_has_no_file_logging_side_effect()
+    await test_admission_limiter_is_bounded()
+    await test_public_health_is_a_cheap_liveness_check()
+    await test_asgi_webhook_auth_and_schema()
+    test_gateway_envelope_rejects_replay_and_stale_requests()
+    test_event_schema_requires_stable_message_ids()
+    test_startup_view_rebuild_can_fail_closed()
 
 
 def main() -> int:

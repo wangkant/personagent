@@ -92,7 +92,7 @@ agent 围绕自己的输出闭合了一整条学习回路。整个设计由四�
 - **你是这条回路的另一半。** `python tools/candidates_admin.py list` 列出正在等待的候选，以及*策略为什么按着它*；`show <id>` 打印一个候选背后的每一条证据、是谁说的、算不算数；`promote` / `reject` / `rollback` / `supersede` / `rebuild` 完成其余操作。每个动作都只追加一条生命周期事件——日志里的任何一行永远不会被改写或删除。
 - **从成功中学（兜底）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分被记为弱证据，并提出一个正向范例候选。它不会自我晋升：这个评分器在代码注释里就写明手松，而手松的评分者给自己批作业是整个系统里最弱的信号。
 - **从失败中学（兜底，无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。两种跑法：
-  - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断，批准 / 拒绝 / 编辑后才写入（`--yes` 跳过人审）。这里权限在你手上，所以批准的偏好对直接写入。
+  - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断，批准 / 拒绝 / 编辑后才写入。这里权限在你手上，所以批准的偏好对直接写入；旧版 `--yes` 无人值守直写模式会被拒绝。
   - **无人值守:** 设 `EVOLVE_AUTO=true`，进程内后台循环定时做诊断，只处理明确的失败（`score <= EVOLVE_THRESHOLD`，默认 2）。它只提出候选、不直接应用——一个没有任何人在场见证的自动信号，没资格改变行为。每次诊断都记录在 `candidates.jsonl`，CLI 和循环永远不会重复处理同一条，你也随时能审计 bot 给自己提了什么。
 - **表情包也在进化。** 每张发出的表情有自己的评分；持续低分会被降级出库（见[表情包质量管线](#表情包质量管线)）。
 - **人设给自己记笔记。** letta 风格的 `core_memory.json` 按群维护一条模型可以在对话中更新的自留笔记——群里的长期事实不随上下文窗口滚动而丢失。
@@ -149,7 +149,7 @@ python quickstart.py
 2. 在 NapCat 的 OneBot 配置里同时开启 HTTP 服务器**和** HTTP webhook：
    ```json
    {
-     "http": { "enable": true, "host": "0.0.0.0", "port": 3000 },
+     "http": { "enable": true, "host": "127.0.0.1", "port": 3000 },
      "webhook": {
        "enable": true,
        "url": "http://127.0.0.1:8080/webhook/qq",
@@ -180,8 +180,8 @@ QQ                              -->  NapCat             --HTTP-->  agent /webhoo
 ```
 
 1. 装好 AstrBot，配上想要的平台适配器。
-2. 把 `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` 拷进 AstrBot 的 `data/plugins/`，改插件配置（agent 地址、可选共享密钥、群/私聊白名单）。完整说明见[插件 README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)。
-3. `.env` 可选加固：`GATEWAY_TOKEN`（webhook 共享密钥）和 `GATEWAY_OWNER_IDS`（把例如 `telegram:12345` 当主人对待），见 `.env.example`。
+2. 把 `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` 拷进 AstrBot 的 `data/plugins/`，再明确填写允许转发的群 ID 和/或私聊用户。插件默认拒绝：白名单为空时不转发任何会话，私聊转发也默认关闭。完整说明见[插件 README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)。
+3. 同机部署保留 loopback 地址；跨主机必须使用 HTTPS，并在插件 `gateway_token` 与 agent 的 `GATEWAY_TOKEN` 中配置同一个非空密钥，或让私有隧道在 AstrBot 可见的 loopback 地址终止。请求使用带时间戳与 nonce 的正文签名防重放，绝不能让密钥走明文 HTTP。`GATEWAY_OWNER_IDS` 可选把例如 `telegram:12345` 当主人对待，见 `.env.example`。
 
 网关会话全部带 `<平台>:<id>` 命名空间，记忆和状态不会跟 QQ 串。NapCat 直连 agent 时，插件的排除平台里要留着 `aiocqhttp`（默认就是），否则 QQ 消息会被处理两遍。QQ 专属机制（偷表情包、OCR、主动发言/漏 @ 补抓）只走 QQ 链路；文字 / 表情包 / @ 回复全平台都通。
 
@@ -266,7 +266,7 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | 变量 | 含义 |
 |---|---|
 | `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
-| `AGENT_RUNTIME_DIR` | 证据日志、候选账本、晋升视图和学到的 examples/feedback 所在的忽略目录（默认 `runtime/`） |
+| `AGENT_RUNTIME_DIR` | 所有可变文本状态的目录：记忆、自评、证据、账本、防重放缓存、表情元数据、晋升视图和学习池（默认 `runtime/`，已 gitignore）；旧版根目录文件首次使用时会复制到这里；自定义仓库内路径必须手动加入 `.gitignore` |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
 | `PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点。留空 = 私聊也用 `DEEPSEEK_MODEL`。（0.1.2 之前叫 `ANTHROPIC_PRIVATE_MODEL`，旧名仍然可用） |
 | `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
@@ -275,6 +275,10 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | 视觉模型 (图/表情理解). 留空 = 只走 NapCat OCR 兜底 |
 | `NAPCAT_IMAGE_DIR` / `MAX_IMAGE_BYTES` | 本地图片缓存白名单目录与最大解码图片大小；目录留空时拒绝所有 `file://` |
 | `MAX_WEBHOOK_BODY_BYTES` | 两个 webhook 接受的最大原始请求体（默认 8 MB） |
+| `MAX_INFLIGHT_WEBHOOKS` | 同时处理的高开销 webhook 上限（默认 64）；超出时返回 HTTP 429 |
+| `GATEWAY_TOKEN` | AstrBot bearer 认证及带时间戳/nonce/正文签名的共享密钥；跨主机转发必须配合 HTTPS 使用 |
+| `GATEWAY_SOURCE_MAX_AGE_SECONDS` | 原始网关事件允许的最大年龄，与转发签名时间独立校验（默认 86400 秒 / 24 小时） |
+| `LOG_FILE` | 可选轮转文件日志；留空则只输出控制台，仓库内自定义路径必须手动 gitignore |
 | `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`) |
 | `PROACTIVE_ENABLE`（+ `PROACTIVE_*`）| 可选的主动发言。详见[主动发言](#主动发言可选) |
 | `REACT_LEARN`（+ `REACT_*`）| 从真实用户反应中学习（默认开——自进化主信号）。详见[自进化](#自进化) |
@@ -431,7 +435,7 @@ integrations/         AstrBot 转发插件(多平台)
 | `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊 |
 | `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
-| `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`,再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 runtime feedback（`--yes` 无人值守） |
+| `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`，再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 runtime feedback；旧版 `--yes` 直写模式会被拒绝 |
 | `tools/candidates_admin.py` | 晋升闸门的人工那一半：列出正在等待的候选及策略为何按着它、展示某个候选背后的全部证据、晋升 / 拒绝 / 回滚 / 取代、重建检索视图。只追加——任何动作都不改写历史 |
 | `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 runtime examples |
 | `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
@@ -442,6 +446,7 @@ integrations/         AstrBot 转发插件(多平台)
 
 ```bash
 python tests/test_gateway.py
+python tests/test_astrbot_plugin.py
 python tests/test_evolution.py
 python tests/test_benchmark.py
 python tests/test_reactions.py
@@ -459,7 +464,7 @@ python tests/test_ledger.py
 
 - `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
 - `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 runtime examples。
-- `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁;加 `--apply` 逐条批准写入 `feedback.jsonl`（见[自进化](#自进化)）。
+- `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁；加 `--apply` 逐条批准写入 `runtime/feedback.<lang>.jsonl`（或自定义的 `AGENT_RUNTIME_DIR`，见[自进化](#自进化)）。
 - `python tools/candidates_admin.py list`——学习循环正在提什么、策略为何按着它；随后可用 `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild`（见[自进化](#自进化)）。
 - `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。由独立裁判盲评 —— `--judge export` 导出不带标签的清单交给人或另一个模型打分,`--judge anthropic` 走另一家厂商（需要 `pip install -e ".[judge]"`；bot 本体不带任何厂商 SDK）—— 学习信号和测量信号不共用模型。
 
@@ -469,20 +474,20 @@ python tests/test_ledger.py
 
 ```
 .env                      # API key
-eval.jsonl                # 自评打分原始记录
-memory.json               # 抽取出来的长期记忆
-core_memory.json          # 自维护的人设笔记
-stickers.json             # 表情索引 + 样本上下文
+runtime/eval.jsonl        # 自评打分原始记录
+runtime/memory.json       # 抽取出来的长期记忆
+runtime/core_memory.json  # 自维护的人设笔记
+runtime/stickers.json     # 表情索引 + 样本上下文
 stickers/auto/            # 下载的表情图片
-seen_msg_ids.json         # 跨重启 message-id 去重状态
-owner_profile.json        # owner 发言频率画像
+runtime/seen_msg_ids.json # 跨重启 message-id 去重状态
+runtime/owner_profile.json # owner 发言频率画像
 unknown_stickers.jsonl    # 下载 URL
 candidates.jsonl          # auto-reviewer 输出 + 反应裁决审计
 runtime/                  # 证据日志、候选账本、晋升视图、学到的池子
 *.log                     # 运行日志
 ```
 
-仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据只写进 gitignore 的 `runtime/`（或 `AGENT_RUNTIME_DIR`），避免误提交——证据日志也在其中，它会原样引用真实反应，但只记结构化裁决结论和一句话理由，绝不记模型的思维链。
+仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据默认只写进已 gitignore 的 `runtime/`；如果把 `AGENT_RUNTIME_DIR` 改成仓库内其他目录，运行前必须自己把它加入 `.gitignore`。证据日志会连同结构化裁决与一句话理由保存近期上下文和真实反应原文，但绝不保存裁决模型的原始输出或思维链。
 
 ## License
 

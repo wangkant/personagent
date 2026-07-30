@@ -75,6 +75,54 @@ def test_pending_replies() -> None:
           p2.match("g4", sender_uid="7", quote_mid="x0", now=110) is None)
 
 
+def test_pending_replies_survive_restart_bounded() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        state = Path(d) / "pending.json"
+        try:
+            p = reactions.PendingReplies(
+                max_per_conv=2, ttl_sec=600, max_conversations=2,
+                state_file=state,
+            )
+        except TypeError as exc:
+            check("pending restart: persistent bounded state API exists",
+                  False, str(exc))
+            return
+        p.record("old", **_entry_kwargs(mids=["old-mid"]))
+        p.record("kept", **_entry_kwargs(mids=["kept-mid"]))
+        p.note_rejection(
+            "kept",
+            {"reply": "bad", "ctx_lines": ["ctx"], "mode": "called"},
+            ts=100.0,
+        )
+        p.record("new", **_entry_kwargs(mids=["new-mid"]))
+
+        restored = reactions.PendingReplies(
+            max_per_conv=2, ttl_sec=600, max_conversations=2,
+            state_file=state,
+        )
+        check("pending restart: total conversations stay bounded",
+              "old" not in restored._by_conv
+              and set(restored._by_conv) == {"kept", "new"},
+              repr(list(restored._by_conv)))
+        check("pending restart: pending reply survives",
+              restored.match(
+                  "new", sender_uid="7", quote_mid="new-mid", now=110
+              ) is not None)
+        check("pending restart: consumed conversation releases bound slot",
+              "new" not in restored._conversation_order,
+              repr(restored._conversation_order))
+        restored.record(
+            "kept", **_entry_kwargs(reply="fixed", mids=["fix-mid"], ts=150)
+        )
+        fixed = restored.match(
+            "kept", sender_uid="7", quote_mid="fix-mid", now=160
+        )
+        check("pending restart: retry link survives",
+              fixed is not None
+              and fixed.get("fixes", {}).get("reply") == "bad",
+              repr(fixed))
+
+
 # ---------------------------------------------------------------------------
 # Unit: parse_adjudication / write shapes
 # ---------------------------------------------------------------------------
@@ -90,6 +138,14 @@ def test_parse_and_shapes() -> None:
     check("parse: garbage -> None", reactions.parse_adjudication("nah") is None)
     check("parse: bad reaction type -> None",
           reactions.parse_adjudication('{"reaction":"meh","accept":true}') is None)
+    check("parse: string false is rejected, not truthy",
+          reactions.parse_adjudication(
+              '{"reaction":"correction","accept":"false","reason":"no",'
+              '"better":"poison","ask":"","scenario":"x"}') is None)
+    check("parse: non-string structured fields are rejected",
+          reactions.parse_adjudication(
+              '{"reaction":"correction","accept":true,"reason":"ok",'
+              '"better":["poison"],"ask":"","scenario":"x"}') is None)
 
     entry = {"reply": "the answer is 42", "ctx_lines": ["alex: what port"],
              "mode": "called", "intent": "chat", "target_uid": "42"}
@@ -225,6 +281,8 @@ async def integration_process_reaction(tmp: Path) -> None:
     check("correction -> evidence event recorded",
           len(a.evidence_log.all()) == 1
           and a.evidence_log.all()[0]["strength"] == "strong")
+    check("correction -> evidence anchored to source bot message",
+          a.evidence_log.all()[0].get("source_event_id") == "m1")
     cand = a.candidate_ledger.all()
     check("correction -> one proposed preference-pair candidate",
           len(cand) == 1 and cand[0]["type"] == "preference_pair"
@@ -390,6 +448,7 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
 
 def main() -> int:
     test_pending_replies()
+    test_pending_replies_survive_restart_bounded()
     test_parse_and_shapes()
     test_retry_and_elicited()
     with tempfile.TemporaryDirectory() as td:

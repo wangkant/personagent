@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 
 from persona_agent import evolution  # noqa: E402
 
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 DATA = ROOT / "data" / "benchmark"
 

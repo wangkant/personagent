@@ -507,18 +507,23 @@ def test_promoted_views_are_a_third_retrieval_source() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
+        scope = {
+            "lang": a.agent_lang, "platform": "qq", "conv_id": "g1",
+            "persona": a.bot_name, "persona_hash": a.persona_hash,
+            "persona_version": a.persona_version,
+        }
         write_jsonl(a.examples_file, [ex("learned reply")])
         write_jsonl(a.feedback_file,
                     [dict(ex("learned bad"), rating="better",
                           better="learned good")])
         write_jsonl(a.promoted_examples_file,
                     [dict(ex("promoted reply"), src="promoted_candidate",
-                          candidate_id="c1")])
+                          candidate_id="c1", scope=scope)])
         write_jsonl(a.promoted_feedback_file,
                     [dict(ex("promoted bad"), rating="better",
                           better="promoted good", src="promoted_candidate",
-                          candidate_id="c2")])
-        block = a._examples_for_prompt("hi", "called")
+                          candidate_id="c2", scope=scope)])
+        block = a._examples_for_prompt("hi", "called", conv_id="g1")
         for label in ("learned reply", "learned good", "promoted reply",
                       "promoted good"):
             check(f"view: {label} reaches the prompt", label in block)
@@ -528,7 +533,7 @@ def test_promoted_views_are_a_third_retrieval_source() -> None:
         # A rewritten view is picked up; a rewritten view of nothing empties it.
         time.sleep(0.01)
         write_jsonl(a.promoted_feedback_file, [])
-        block = a._examples_for_prompt("hi", "called")
+        block = a._examples_for_prompt("hi", "called", conv_id="g1")
         check("view: an emptied view drops out of retrieval",
               "promoted good" not in block)
         check("view: the learned pool survives the view rewrite",
@@ -540,6 +545,37 @@ def test_promoted_views_are_a_third_retrieval_source() -> None:
                     [dict(ex("half a pair"), rating="better", better="")])
         a._reload_views_if_stale()
         check("view: unusable pair rows are skipped", a._view_pairs_cache == [])
+
+
+def test_promoted_views_enforce_full_scope() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        base_scope = {
+            "lang": a.agent_lang,
+            "platform": "qq",
+            "persona": a.bot_name,
+            "persona_hash": a.persona_hash,
+            "persona_version": a.persona_version,
+        }
+        write_jsonl(a.promoted_examples_file, [
+            dict(ex("ROOM_A_ONLY"), src="promoted_candidate",
+                 candidate_id="c-a",
+                 scope=dict(base_scope, conv_id="room-a")),
+            dict(ex("ROOM_B_ONLY"), src="promoted_candidate",
+                 candidate_id="c-b",
+                 scope=dict(base_scope, conv_id="room-b")),
+        ])
+        room_a = a._examples_for_prompt(
+            "room", "called", conv_id="room-a")
+        no_scope = a._examples_for_prompt("room", "called")
+        check("view scope: matching room is retrieved",
+              "ROOM_A_ONLY" in room_a, room_a)
+        check("view scope: other room is excluded",
+              "ROOM_B_ONLY" not in room_a, room_a)
+        check("view scope: scoped authority is excluded without context",
+              "ROOM_A_ONLY" not in no_scope and "ROOM_B_ONLY" not in no_scope,
+              no_scope)
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +662,7 @@ def main() -> int:
     test_feedback_auto_pool_capped()
     test_feedback_write_survives_a_full_pool()
     test_promoted_views_are_a_third_retrieval_source()
+    test_promoted_views_enforce_full_scope()
     test_relevance_outranks_recency()
     test_future_timestamp_cannot_outrank_a_match()
     test_no_signal_falls_back_to_the_newest_entries()

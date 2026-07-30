@@ -23,7 +23,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 from persona_agent.agent import Agent  # noqa: E402
 

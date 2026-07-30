@@ -29,18 +29,23 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 import httpx
+from persona_agent.ingestion import safe_fetch_url
+from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.storage import atomic_write_text
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000").rstrip("/")
 OWNER_QQ = os.getenv("OWNER_QQ", "")
 BOT_QQ = os.getenv("BOT_QQ", "")
 QQ_GROUPS = [g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()]
 
+# Sticker binaries remain under stickers/auto so existing libraries and file
+# allowlists keep working. Their PII-bearing text metadata lives in runtime/.
 STICKERS_DIR = ROOT / "stickers" / "auto"
-STICKERS_JSON = ROOT / "stickers.json"
-OWNER_PROFILE = ROOT / "owner_profile.json"
+STICKERS_JSON = resolve_runtime_state_file("stickers.json")
+OWNER_PROFILE = resolve_runtime_state_file("owner_profile.json")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
@@ -51,9 +56,7 @@ def _atomic_write_json(path, obj) -> None:
     """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
     stickers.json, or the bot's next startup _load() silently falls back to an
     empty library (all metadata lost)."""
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 # ============ NapCat history ============
 async def fetch_page(client: httpx.AsyncClient, group_id: str,
@@ -182,11 +185,23 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
     if not url:
         return None
     try:
-        r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"},
-                             follow_redirects=True, timeout=15)
-        if r.status_code != 200:
+        # Production callers pass None so safe_fetch_url owns a fresh,
+        # address-pinned client. The optional client is retained only as a
+        # lightweight injection seam for this standalone tool's tests.
+        client_factory = (lambda **_kwargs: client) if client is not None else None
+        result = await safe_fetch_url(
+            url,
+            timeout=15,
+            max_wire_bytes=800_000,
+            max_decoded_bytes=800_000,
+            headers={"User-Agent": "Mozilla/5.0"},
+            allowed_content_types=("image/",),
+            require_content_type=True,
+            client_factory=client_factory,
+        )
+        if result is None:
             return None
-        return r.content
+        return result.content
     except Exception as e:
         logger.debug("download failed (%s): %s", url[:80], e)
         return None
@@ -255,7 +270,7 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
                     seen_skip += 1
                     continue
 
-                img_bytes = await download_sticker(client, seg["url"])
+                img_bytes = await download_sticker(None, seg["url"])
                 if not img_bytes:
                     continue
                 if len(img_bytes) < 200 or len(img_bytes) > 800_000:

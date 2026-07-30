@@ -1,5 +1,9 @@
 # persona-llm-agent — one-click start (Windows)
+$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath $PSScriptRoot
+
 $port = if ($env:PORT) { $env:PORT } else { 8080 }
+$bindHost = if ($env:HOST) { $env:HOST } else { '127.0.0.1' }
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   persona-llm-agent" -ForegroundColor Cyan
@@ -29,15 +33,9 @@ if (-not $?) {
 # Avoid mojibake for non-ASCII console output on Windows
 $env:PYTHONIOENCODING = 'utf-8'
 
-$hostIp = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
-    Select-Object -First 1).IPAddress
-if (-not $hostIp) { $hostIp = '<your-ip>' }
-
 Write-Host ""
-Write-Host "local:    http://127.0.0.1:$port" -ForegroundColor Cyan
-Write-Host "LAN:      http://${hostIp}:$port" -ForegroundColor Cyan
-Write-Host "webhook:  http://${hostIp}:$port/webhook/qq" -ForegroundColor Cyan
+Write-Host "listen:   http://${bindHost}:$port" -ForegroundColor Cyan
+Write-Host "webhook:  http://${bindHost}:$port/webhook/qq" -ForegroundColor Cyan
 Write-Host ""
 
-& $pySource -m uvicorn main:app --host 0.0.0.0 --port $port
+& $pySource -m uvicorn main:app --host $bindHost --port $port

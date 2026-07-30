@@ -44,7 +44,11 @@ tools/dspy_log.md
 
 # Logs
 *.log
+*.log.*
 logs/
+
+# Atomic/maintenance backups of runtime JSONL ledgers
+*.jsonl.old
 
 # Benchmark run artifacts
 benchmark_runs/

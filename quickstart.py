@@ -34,7 +34,7 @@ PROVIDERS = [
 ]
 
 NAPCAT_SNIPPET = """{
-  "http": { "enable": true, "host": "0.0.0.0", "port": 3000 },
+  "http": { "enable": true, "host": "127.0.0.1", "port": 3000 },
   "webhook": {
     "enable": true,
     "url": "http://127.0.0.1:8080/webhook/qq",

@@ -372,10 +372,9 @@ class TextProcessing:
         2. Try json.loads on the whole string.
         3. Fall back to JSONDecoder.raw_decode from the first `{` so two
            concatenated JSON objects parse as the first valid one.
-        4. If still no dict, last-ditch chat-shape heuristic: short chat text
-           (English or CJK) without XML/JSON/pipe characters and not a
-           reasoning-style prefix is treated as a naked reply. The downstream
-           whitelist validator (_validate_reply_safe) is the final gate.
+        4. If no dictionary is recovered, fail closed. A fluent reasoning
+           fragment is indistinguishable from an ordinary naked chat line, so
+           accepting non-JSON text would violate the protocol boundary.
         """
         if not raw or not raw.strip():
             return "", "", "", ""
@@ -393,39 +392,21 @@ class TextProcessing:
                 except json.JSONDecodeError:
                     data = None
         if not isinstance(data, dict):
-            # Naked-text rescue: occasionally a model just emits the reply text
-            # directly without the JSON wrapper. If it looks like a normal
-            # short chat line (English OR CJK), ship it and let the validator gate.
-            cleaned = raw.strip()[:300]
-            has_letters = any(c.isalpha() for c in cleaned)
-            looks_like_reply = (
-                3 <= len(cleaned) <= 200
-                and has_letters
-                and not re.search(r'[<>{}|｜▁]', cleaned)
-                # Reasoning-channel prefixes that occasionally leak through —
-                # match both English and Chinese forms so neither locale can
-                # smuggle reasoning into the reply field.
-                and not re.match(
-                    r'^[\s\-•]*('
-                    r'input|speaker|intent|decision|style|analysis|judgment|'
-                    r'thinking|scenario|reply strategy|context|background|mode'
-                    r'|输入|发言人|意图|决策|风格|分析|判断|思考|场景|回复策略|上下文|背景|模式'
-                    r')[:：]',
-                    cleaned, re.IGNORECASE,
-                )
-            )
-            if looks_like_reply:
-                logger.warning("[Agent] parser: non-JSON but raw looks like a valid reply, passing through: %r",
-                               cleaned[:80])
-                return cleaned, "", "", ""
             logger.warning("[Agent] parser: model output is not JSON, dropping raw=%r",
                            raw[:200])
             return "", raw.strip()[:240], "", ""
-        reply = str(data.get("reply") or "").strip()
-        reasoning = str(data.get("reasoning") or "").strip()
-        intent = str(data.get("intent") or "").strip().lower()
+        allowed_keys = {"reply", "reasoning", "intent", "mem"}
+        if set(data) - allowed_keys or any(
+            value is not None and not isinstance(value, str)
+            for value in data.values()
+        ):
+            logger.warning("[Agent] parser: invalid JSON protocol field types/keys")
+            return "", raw.strip()[:240], "", ""
+        reply = (data.get("reply") or "").strip()
+        reasoning = (data.get("reasoning") or "").strip()
+        intent = (data.get("intent") or "").strip().lower()
         mem_raw = data.get("mem")
-        mem = str(mem_raw).strip() if mem_raw is not None else ""
+        mem = mem_raw.strip() if mem_raw is not None else ""
         # Placeholder words count as empty (model occasionally fills "无" / "none" / etc.)
         if mem.lower() in {"无", "none", "n/a", "null", "无内容", "无可记"}:
             mem = ""

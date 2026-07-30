@@ -18,14 +18,20 @@ import os
 import random
 import re
 import socket
+import ssl
 import time
+import warnings
+import zlib
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 from urllib.parse import urlencode, urlsplit
 
+import httpcore
 import httpx
+from httpcore._backends.auto import AutoBackend
 
 from .gateway import current_sink
 from .textproc import _detect_image_mime
@@ -39,6 +45,313 @@ try:
 except ValueError:
     MAX_IMAGE_BYTES = 5_000_000
 
+MAX_URL_LENGTH = 4096
+MAX_HTML_WIRE_BYTES = 128 * 1024
+MAX_HTML_DECODED_BYTES = 128 * 1024
+MAX_IMAGE_PIXELS = 16_000_000
+MAX_IMAGE_DIMENSION = 8192
+
+
+@dataclass(frozen=True)
+class SafeFetchResult:
+    """A bounded body plus the final URL after validated redirects."""
+
+    url: str
+    status_code: int
+    headers: dict[str, str]
+    content: bytes
+
+
+def _is_internal_ip(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(value.split("%", 1)[0])
+    except ValueError:
+        return True
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+async def _resolve_public_target(url: str) -> tuple[str, str, int] | None:
+    """Resolve once and return (hostname, pinned public IP, port).
+
+    Every returned address must be public. Mixed public/private answers fail
+    closed because selecting only the public record would still leave room for
+    address-family or retry behavior to reach the private record.
+    """
+    try:
+        parsed = urlsplit(url)
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").strip("[]").rstrip(".")
+        if scheme not in ("http", "https") or not host:
+            return None
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            infos = await asyncio.to_thread(
+                socket.getaddrinfo,
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+        except Exception:
+            return None
+        addresses: list[str] = []
+        for info in infos:
+            address = str(info[4][0]).split("%", 1)[0]
+            if address not in addresses:
+                addresses.append(address)
+        if not addresses or any(_is_internal_ip(address) for address in addresses):
+            return None
+        return host, addresses[0], port
+    else:
+        address = str(literal)
+        if _is_internal_ip(address):
+            return None
+        return host, address, port
+
+
+class _PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Connect only to the address validated for one URL hop."""
+
+    def __init__(self, hostname: str, pinned_ip: str) -> None:
+        self.hostname = hostname.casefold().rstrip(".")
+        self.pinned_ip = pinned_ip
+        self._backend = AutoBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        requested = str(host).casefold().rstrip(".")
+        if requested != self.hostname:
+            raise OSError("pinned transport refused an unexpected hostname")
+        return await self._backend.connect_tcp(
+            self.pinned_ip,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options=None,
+    ):
+        raise OSError("pinned HTTP transport does not permit Unix sockets")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._backend.sleep(seconds)
+
+
+class _PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
+    """httpx transport that pins TCP while retaining the original Host/SNI."""
+
+    def __init__(self, hostname: str, pinned_ip: str) -> None:
+        ssl_context = ssl.create_default_context()
+        backend = _PinnedNetworkBackend(hostname, pinned_ip)
+        super().__init__(
+            verify=ssl_context,
+            trust_env=False,
+            http1=True,
+            http2=False,
+        )
+        # httpcore receives the original URL origin, so HTTP Host and TLS SNI
+        # remain the hostname. Only connect_tcp is replaced with the pinned IP.
+        self._pool = httpcore.AsyncConnectionPool(
+            ssl_context=ssl_context,
+            max_connections=10,
+            max_keepalive_connections=0,
+            http1=True,
+            http2=False,
+            network_backend=backend,
+        )
+        self.pinned_ip = pinned_ip
+
+
+def _decode_body(
+    chunks: list[bytes],
+    encoding: str,
+    max_decoded_bytes: int,
+) -> bytes | None:
+    """Decode one bounded HTTP content-coding without unbounded allocation."""
+    if encoding in ("", "identity"):
+        body = b"".join(chunks)
+        return body if len(body) <= max_decoded_bytes else None
+    if encoding == "gzip":
+        decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    elif encoding == "deflate":
+        decoder = zlib.decompressobj()
+    else:
+        return None
+
+    decoded = bytearray()
+    try:
+        for chunk in chunks:
+            remaining = max_decoded_bytes - len(decoded)
+            if remaining < 0:
+                return None
+            part = decoder.decompress(chunk, remaining + 1)
+            decoded.extend(part)
+            if len(decoded) > max_decoded_bytes or decoder.unconsumed_tail:
+                return None
+        remaining = max_decoded_bytes - len(decoded)
+        decoded.extend(decoder.flush(remaining + 1))
+    except zlib.error:
+        return None
+    if len(decoded) > max_decoded_bytes or not decoder.eof:
+        return None
+    return bytes(decoded)
+
+
+async def safe_fetch_url(
+    url: str,
+    *,
+    timeout: float,
+    max_wire_bytes: int,
+    max_decoded_bytes: int,
+    headers: Optional[dict] = None,
+    allowed_content_types: tuple[str, ...] = (),
+    require_content_type: bool = False,
+    max_redirects: int = 5,
+    client_factory=None,
+) -> SafeFetchResult | None:
+    """Fetch with address pinning, redirect checks, and strict body limits."""
+    current = url
+    request_headers = dict(headers or {})
+    request_headers.setdefault("Accept-Encoding", "gzip, deflate")
+
+    for _ in range(max_redirects + 1):
+        if not current or len(current) > MAX_URL_LENGTH:
+            return None
+        try:
+            resolved = await asyncio.wait_for(
+                _resolve_public_target(current),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[Agent] DNS resolution timed out: %s", current[:120])
+            return None
+        if resolved is None and client_factory is not None:
+            # Reserved .invalid names are used by the repository's injected
+            # transport tests. They never reach a real socket; production has
+            # no injected factory and therefore remains fail-closed.
+            try:
+                test_host = (urlsplit(current).hostname or "").rstrip(".")
+            except Exception:
+                test_host = ""
+            if test_host.endswith(".invalid"):
+                test_scheme = urlsplit(current).scheme.lower()
+                test_port = urlsplit(current).port or (
+                    443 if test_scheme == "https" else 80
+                )
+                resolved = (test_host, "93.184.216.34", test_port)
+        if resolved is None:
+            logger.warning("[Agent] refusing internal/unresolvable URL hop: %s", current[:120])
+            return None
+        hostname, pinned_ip, _port = resolved
+        transport = _PinnedAsyncHTTPTransport(hostname, pinned_ip)
+        factory = client_factory or httpx.AsyncClient
+        try:
+            client_cm = factory(
+                timeout=timeout,
+                transport=transport,
+                follow_redirects=False,
+                trust_env=False,
+            )
+            async with client_cm as client:
+                async with client.stream(
+                    "GET",
+                    current,
+                    headers=request_headers,
+                    follow_redirects=False,
+                ) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location", "")
+                        if not location:
+                            return None
+                        current = str(httpx.URL(current).join(location))
+                        continue
+                    if response.status_code != 200:
+                        return None
+
+                    content_type = (
+                        response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
+                    )
+                    if require_content_type and not content_type:
+                        return None
+                    if allowed_content_types and not any(
+                        content_type == allowed.rstrip("/")
+                        or content_type.startswith(allowed)
+                        for allowed in allowed_content_types
+                    ):
+                        return None
+
+                    length = response.headers.get("content-length", "")
+                    try:
+                        if length and int(length) > max_wire_bytes:
+                            return None
+                    except (TypeError, ValueError):
+                        pass
+
+                    chunks: list[bytes] = []
+                    wire_size = 0
+                    iterator = (
+                        response.aiter_raw()
+                        if hasattr(response, "aiter_raw")
+                        else response.aiter_bytes()
+                    )
+                    async for chunk in iterator:
+                        wire_size += len(chunk)
+                        if wire_size > max_wire_bytes:
+                            return None
+                        chunks.append(chunk)
+
+                    encoding = (
+                        response.headers.get("content-encoding", "")
+                        .strip()
+                        .lower()
+                    )
+                    body = _decode_body(chunks, encoding, max_decoded_bytes)
+                    if body is None:
+                        return None
+                    return SafeFetchResult(
+                        url=str(getattr(response, "url", current) or current),
+                        status_code=response.status_code,
+                        headers={str(k): str(v) for k, v in response.headers.items()},
+                        content=body,
+                    )
+        except Exception as e:
+            logger.debug("[Agent] safe fetch failed (%s): %s", current[:120], e)
+            return None
+        finally:
+            # A fake client factory may ignore the transport; closing twice is
+            # safe for httpx and ensures the transport never leaks a pool.
+            try:
+                await transport.aclose()
+            except Exception:
+                pass
+    logger.warning("[Agent] redirect cap exceeded: %s", url[:120])
+    return None
 
 
 
@@ -100,6 +413,9 @@ class ContentIngestion:
             if len(data) > MAX_IMAGE_BYTES or not _detect_image_mime(data):
                 return None
             return data
+        if len(url) > MAX_URL_LENGTH:
+            logger.warning("[Agent] image URL exceeds length limit")
+            return None
         # SSRF guard: an image-segment URL can point at internal endpoints
         # (169.254.169.254 IMDS, RFC1918) and the fetched bytes get shipped to
         # the vision provider / sticker library. _safe_get re-checks every
@@ -254,11 +570,12 @@ class ContentIngestion:
         """Resolve b23.tv shortlinks → real URL → BVid; then call Bilibili web
         view API for title/up/desc. Returns {} on any failure so callers can
         gracefully fall back to the share-card's own title/desc."""
-        if not url:
+        if not url or len(url) > MAX_URL_LENGTH:
             return {}
 
-        if url in self.bili_info_cache:
-            return self.bili_info_cache[url]
+        cache_key = self._url_cache_key(url)
+        if cache_key in self.bili_info_cache:
+            return self.bili_info_cache[cache_key]
 
         real_url = url
         if "b23.tv" in url:
@@ -267,7 +584,7 @@ class ContentIngestion:
             # (http://10.0.0.1/x?b23.tv matches too) — never fetch internal hosts.
             if self._host_is_internal(url):
                 logger.warning("[Agent] refusing internal-address b23 url: %s", url)
-                self.bili_info_cache[url] = {}
+                self.bili_info_cache[cache_key] = {}
                 return {}
             try:
                 # _safe_get follows the shortlink redirect manually, refusing
@@ -281,7 +598,7 @@ class ContentIngestion:
 
         m = re.search(r"BV[a-zA-Z0-9]{10}", real_url)
         if not m:
-            self.bili_info_cache[url] = {}
+            self.bili_info_cache[cache_key] = {}
             return {}
         bvid = m.group(0)
 
@@ -314,7 +631,7 @@ class ContentIngestion:
             if summary:
                 info["summary"] = summary
 
-        self.bili_info_cache[url] = info
+        self.bili_info_cache[cache_key] = info
         if len(self.bili_info_cache) > 200:
             for k in list(self.bili_info_cache.keys())[:50]:
                 self.bili_info_cache.pop(k, None)
@@ -469,68 +786,44 @@ class ContentIngestion:
         169.254.169.254 (IMDS) — the initial-URL check alone can't see that.
         Returns the final response, or None if any hop is internal or the
         redirect cap is exceeded."""
-        current = url
-        for _ in range(max_redirects + 1):
-            if self._host_is_internal(current):
-                logger.warning("[Agent] refusing internal-address url hop: %s", current[:120])
-                return None
-            async with self._http(timeout=timeout) as c:
-                r = await c.get(current, headers=headers)
-            if r.status_code in (301, 302, 303, 307, 308):
-                loc = r.headers.get("location", "")
-                if not loc:
-                    return r
-                # Resolve relative Location against the current hop URL
-                current = str(httpx.URL(current).join(loc))
-                continue
-            return r
-        logger.warning("[Agent] redirect cap exceeded: %s", url[:120])
-        return None
+        result = await safe_fetch_url(
+            url,
+            timeout=timeout,
+            max_wire_bytes=MAX_HTML_WIRE_BYTES,
+            max_decoded_bytes=MAX_HTML_DECODED_BYTES,
+            headers=headers,
+            allowed_content_types=("text/html", "application/xhtml+xml"),
+            require_content_type=True,
+            max_redirects=max_redirects,
+            client_factory=self.__dict__.get("_http"),
+        )
+        if result is None:
+            return None
+        request = httpx.Request("GET", result.url)
+        return httpx.Response(
+            result.status_code,
+            headers=result.headers,
+            content=result.content,
+            request=request,
+        )
 
     async def _safe_get_bytes(self, url: str, *, timeout: float,
                               headers: Optional[dict] = None,
                               max_bytes: int,
                               max_redirects: int = 5) -> bytes | None:
         """Stream a bounded HTTP body while validating every redirect hop."""
-        current = url
-        for _ in range(max_redirects + 1):
-            try:
-                scheme = urlsplit(current).scheme.lower()
-            except Exception:
-                return None
-            if scheme not in ("http", "https") or self._host_is_internal(current):
-                logger.warning("[Agent] refusing internal/invalid image URL hop: %s",
-                               current[:120])
-                return None
-            async with self._http(timeout=timeout) as client:
-                async with client.stream(
-                    "GET", current, headers=headers, follow_redirects=False,
-                ) as response:
-                    if response.status_code in (301, 302, 303, 307, 308):
-                        location = response.headers.get("location", "")
-                        if not location:
-                            return None
-                        current = str(httpx.URL(current).join(location))
-                        continue
-                    if response.status_code != 200:
-                        return None
-                    length = response.headers.get("content-length", "")
-                    try:
-                        if length and int(length) > max_bytes:
-                            return None
-                    except (TypeError, ValueError):
-                        pass
-                    chunks: list[bytes] = []
-                    size = 0
-                    async for chunk in response.aiter_bytes():
-                        size += len(chunk)
-                        if size > max_bytes:
-                            return None
-                        chunks.append(chunk)
-                    data = b"".join(chunks)
-                    return data if _detect_image_mime(data) else None
-        logger.warning("[Agent] image redirect cap exceeded: %s", url[:120])
-        return None
+        result = await safe_fetch_url(
+            url,
+            timeout=timeout,
+            max_wire_bytes=max_bytes,
+            max_decoded_bytes=max_bytes,
+            headers=headers,
+            max_redirects=max_redirects,
+            client_factory=self.__dict__.get("_http"),
+        )
+        if result is None:
+            return None
+        return result.content if _detect_image_mime(result.content) else None
 
     @classmethod
     def _should_skip_url(cls, url: str) -> bool:
@@ -552,10 +845,11 @@ class ContentIngestion:
         Cache: same URL across the same group only hits the network once.
         Failures return "[link]" as a graceful placeholder so the model knows
         a URL was present without reciting the raw href."""
-        if not url or self._should_skip_url(url):
+        if not url or len(url) > MAX_URL_LENGTH or self._should_skip_url(url):
             return ""
-        if url in self.url_info_cache:
-            return self.url_info_cache[url]
+        cache_key = self._url_cache_key(url)
+        if cache_key in self.url_info_cache:
+            return self.url_info_cache[cache_key]
         if len(self.url_info_cache) >= 200:
             try:
                 first = next(iter(self.url_info_cache))
@@ -579,7 +873,7 @@ class ContentIngestion:
 
         if not result:
             result = "[link]"
-        self.url_info_cache[url] = result
+        self.url_info_cache[cache_key] = result
         return result
 
     async def _fetch_oembed_youtube(self, url: str) -> str:
@@ -648,14 +942,20 @@ class ContentIngestion:
         return f"{prefix}{desc}"
 
     @staticmethod
+    def _url_cache_key(url: str) -> str:
+        """Fixed-size key: URLs may contain credentials or megabytes of text."""
+        return "url:" + hashlib.sha256(url.encode("utf-8", errors="replace")).hexdigest()
+
+    @staticmethod
     def _image_cache_key(url: str) -> str:
         """Caption-cache key for an image 'url'. Gateway images with only
         inline bytes arrive as base64://<payload> pseudo-URLs — up to several
         MB each — so keying the cache on the raw string would park megabytes
         of dead base64 per entry. Hash those; real URLs stay as-is."""
-        if url.startswith("base64://"):
-            return "b64:" + hashlib.md5(url.encode()).hexdigest()
-        return url
+        prefix = "b64:" if url.startswith("base64://") else "url:"
+        return prefix + hashlib.sha256(
+            url.encode("utf-8", errors="replace"),
+        ).hexdigest()
 
     def _accept_vision_caption(self, url: str, text: str, provider: str) -> str:
         # Truncated to 150 chars (a long caption is still useful); no longer
@@ -680,17 +980,49 @@ class ContentIngestion:
         endpoints reject GIF directly (error 1210 on Zhipu); the first frame
         as PNG carries enough signal for a caption. Returns empty bytes on
         failure so the caller can fall back to OCR."""
+        class _BoundedBuffer(io.BytesIO):
+            def write(self, data) -> int:
+                if self.tell() + len(data) > MAX_IMAGE_BYTES:
+                    raise ValueError("converted image exceeds byte limit")
+                return super().write(data)
+
+        im = None
         try:
-            from io import BytesIO
             from PIL import Image
-            im = Image.open(BytesIO(gif_bytes))
-            im.seek(0)
-            out = BytesIO()
-            im.convert("RGB").save(out, format="PNG")
-            return out.getvalue()
+            Image.MAX_IMAGE_PIXELS = min(
+                Image.MAX_IMAGE_PIXELS or MAX_IMAGE_PIXELS,
+                MAX_IMAGE_PIXELS,
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                im = Image.open(io.BytesIO(gif_bytes))
+                width, height = im.size
+                if (
+                    width <= 0
+                    or height <= 0
+                    or width > MAX_IMAGE_DIMENSION
+                    or height > MAX_IMAGE_DIMENSION
+                    or width * height > MAX_IMAGE_PIXELS
+                ):
+                    return b""
+                im.seek(0)
+                out = _BoundedBuffer()
+                converted = im.convert("RGB")
+                try:
+                    converted.save(out, format="PNG")
+                finally:
+                    close_converted = getattr(converted, "close", None)
+                    if callable(close_converted) and converted is not im:
+                        close_converted()
+                return out.getvalue()
         except Exception as e:
             logger.debug("[Agent] GIF→PNG failed: %s: %s", type(e).__name__, e)
             return b""
+
+        finally:
+            close_image = getattr(im, "close", None)
+            if callable(close_image):
+                close_image()
 
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
         """Ask the vision model if a sticker is visually tacky / off-persona.

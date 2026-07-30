@@ -21,10 +21,11 @@ Pure logic only (no I/O, no clock reads — callers pass timestamps):
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 from collections import defaultdict, deque
+from pathlib import Path
+
+from .storage import atomic_write_text
 
 REACTION_TYPES = {"correction", "rejection", "positive", "neutral"}
 
@@ -109,7 +110,9 @@ class PendingReplies:
     """
 
     def __init__(self, max_per_conv: int = 4, ttl_sec: float = 900.0,
-                 fix_window_sec: float = 600.0, elicit_window_sec: float = 240.0):
+                 fix_window_sec: float = 600.0, elicit_window_sec: float = 240.0,
+                 max_conversations: int = 256,
+                 state_file: str | Path | None = None):
         self.max_per_conv = max_per_conv
         self.ttl_sec = ttl_sec
         # Retry-completion (Alexa-style): after an accepted rejection, the
@@ -121,9 +124,94 @@ class PendingReplies:
         # the rejector what they meant, that person's next message counts as
         # a directed reaction even without an @ (short window, that uid only).
         self.elicit_window_sec = elicit_window_sec
-        self._by_conv: dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=self.max_per_conv))
+        self.max_conversations = max(1, int(max_conversations))
+        self.state_file = Path(state_file) if state_file else None
+        self._by_conv: dict[str, deque] = {}
         self._awaiting_fix: dict[str, dict] = {}
+        self._conversation_order: dict[str, None] = {}
+        self._load()
+
+    def _touch(self, conv_id: str) -> None:
+        self._conversation_order.pop(conv_id, None)
+        self._conversation_order[conv_id] = None
+        while len(self._conversation_order) > self.max_conversations:
+            oldest = next(iter(self._conversation_order))
+            self.drop_conversation(oldest, persist=False)
+
+    def _load(self) -> None:
+        if self.state_file is None:
+            return
+        try:
+            raw = json.loads(self.state_file.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or raw.get("version") != 1:
+                return
+            pending = raw.get("pending") or {}
+            awaiting = raw.get("awaiting_fix") or {}
+            order = raw.get("order") or []
+            if (not isinstance(pending, dict)
+                    or not isinstance(awaiting, dict)
+                    or not isinstance(order, list)):
+                return
+            for conv_id in order:
+                key = str(conv_id)
+                rows = pending.get(key) or []
+                if isinstance(rows, list):
+                    valid = [dict(row) for row in rows if isinstance(row, dict)]
+                    if valid:
+                        self._by_conv[key] = deque(
+                            valid[-self.max_per_conv:],
+                            maxlen=self.max_per_conv)
+                fix = awaiting.get(key)
+                if isinstance(fix, dict):
+                    self._awaiting_fix[key] = dict(fix)
+                if key in self._by_conv or key in self._awaiting_fix:
+                    self._touch(key)
+        except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError,
+                ValueError):
+            return
+
+    def _save(self) -> None:
+        if self.state_file is None:
+            return
+        payload = {
+            "version": 1,
+            "order": list(self._conversation_order),
+            "pending": {
+                key: list(self._by_conv.get(key, ()))
+                for key in self._conversation_order
+                if self._by_conv.get(key)
+            },
+            "awaiting_fix": {
+                key: self._awaiting_fix[key]
+                for key in self._conversation_order
+                if key in self._awaiting_fix
+            },
+        }
+        try:
+            atomic_write_text(
+                self.state_file,
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            )
+        except OSError:
+            return
+
+    def drop_conversation(self, conv_id: str, *, persist: bool = True) -> None:
+        self._by_conv.pop(conv_id, None)
+        self._awaiting_fix.pop(conv_id, None)
+        self._conversation_order.pop(conv_id, None)
+        if persist:
+            self._save()
+
+    def flush(self) -> None:
+        self._save()
+
+    def _drop_empty_pending(self, conv_id: str) -> None:
+        q = self._by_conv.get(conv_id)
+        if q:
+            return
+        self._by_conv.pop(conv_id, None)
+        if conv_id not in self._awaiting_fix:
+            self._conversation_order.pop(conv_id, None)
 
     def record(self, conv_id: str, *, reply: str, ctx_lines: list[str],
                mode: str, intent: str = "", target_uid: str = "",
@@ -155,7 +243,10 @@ class PendingReplies:
                               "ctx_lines": bad.get("ctx_lines", []),
                               "mode": bad.get("mode", "called"),
                               "evidence_id": str(bad.get("evidence_id") or "")}
-        self._by_conv[conv_id].append(entry)
+        self._touch(conv_id)
+        self._by_conv.setdefault(
+            conv_id, deque(maxlen=self.max_per_conv)).append(entry)
+        self._save()
 
     def note_rejection(self, conv_id: str, entry: dict, ts: float,
                        evidence_id: str = "") -> None:
@@ -166,6 +257,8 @@ class PendingReplies:
         follows can be linked back to the complaint it answers."""
         self._awaiting_fix[conv_id] = {**entry, "rejected_ts": ts,
                                        "evidence_id": str(evidence_id or "")}
+        self._touch(conv_id)
+        self._save()
 
     def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
         """True if an elicited entry for `uid` is still pending (i.e. the user
@@ -178,8 +271,16 @@ class PendingReplies:
         q = self._by_conv.get(conv_id)
         if not q:
             return
+        changed = False
         while q and now - q[0]["ts"] > self.ttl_sec:
             q.popleft()
+            changed = True
+        if not q:
+            self._by_conv.pop(conv_id, None)
+            if conv_id not in self._awaiting_fix:
+                self._conversation_order.pop(conv_id, None)
+        if changed:
+            self._save()
 
     def match(self, conv_id: str, *, sender_uid: str, quote_mid: str = "",
               at_bot: bool = False, is_private: bool = False,
@@ -205,6 +306,8 @@ class PendingReplies:
                     entry = q[i]
                     del q[i]
                     entry["matched_by"] = "quote"
+                    self._drop_empty_pending(conv_id)
+                    self._save()
                     return entry
             # A quote of a non-pending (older / foreign) message is not a
             # reaction to anything we track — do NOT fall through to @-logic:
@@ -213,6 +316,8 @@ class PendingReplies:
         if at_bot or (is_private and str(sender_uid) == q[-1]["target_uid"]):
             entry = q.pop()
             entry["matched_by"] = "at" if at_bot else "dm"
+            self._drop_empty_pending(conv_id)
+            self._save()
             return entry
         # Elicited exception: the bot just asked THIS user what they meant, so
         # their next message counts even without an @ (short window).
@@ -222,6 +327,8 @@ class PendingReplies:
                     and now - e["ts"] <= self.elicit_window_sec):
                 del q[i]
                 e["matched_by"] = "elicited"
+                self._drop_empty_pending(conv_id)
+                self._save()
                 return e
         return None
 
@@ -256,11 +363,15 @@ def parse_adjudication(raw: str) -> dict | None:
         return None
     if not isinstance(d, dict) or d.get("reaction") not in REACTION_TYPES:
         return None
-    d["accept"] = bool(d.get("accept"))
-    d["better"] = str(d.get("better") or "").strip()
-    d["ask"] = str(d.get("ask") or "").strip()
-    d["scenario"] = str(d.get("scenario") or "").strip()
-    d["reason"] = str(d.get("reason") or "").strip()
+    # Fail closed on schema drift. In particular, bool("false") is True in
+    # Python, so coercing a model-emitted string would invert its verdict.
+    if type(d.get("accept")) is not bool:
+        return None
+    for key in ("better", "ask", "scenario", "reason"):
+        value = d.get(key, "")
+        if not isinstance(value, str):
+            return None
+        d[key] = value.strip()
     return d
 
 
@@ -377,9 +488,9 @@ class TeacherStats:
 
     def _save(self) -> None:
         try:
-            fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), suffix=".tmp")
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(self._d, fh, ensure_ascii=False, indent=1)
-            os.replace(tmp, self.path)
+            atomic_write_text(
+                self.path,
+                json.dumps(self._d, ensure_ascii=False, indent=1),
+            )
         except OSError:
             pass

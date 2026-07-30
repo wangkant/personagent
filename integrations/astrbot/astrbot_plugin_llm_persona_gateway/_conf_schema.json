@@ -6,7 +6,7 @@
   },
   "gateway_token": {
     "type": "string",
-    "description": "Shared secret sent as the X-Gateway-Token header. Leave empty if the agent has no GATEWAY_TOKEN configured.",
+    "description": "Shared secret used for the gateway bearer header and replay-resistant HMAC envelope. It must match the agent's GATEWAY_TOKEN. A non-empty value is required for every off-host endpoint.",
     "default": ""
   },
   "timeout_s": {
@@ -21,17 +21,17 @@
   },
   "group_whitelist": {
     "type": "list",
-    "description": "Group IDs to forward. An empty list forwards all groups.",
+    "description": "Group IDs to forward. Default-deny: an empty list forwards no groups.",
     "default": []
   },
   "private_enabled": {
     "type": "bool",
-    "description": "Forward private (direct) messages to the agent.",
-    "default": true
+    "description": "Enable forwarding for explicitly allowlisted private (direct) senders.",
+    "default": false
   },
   "private_whitelist": {
     "type": "list",
-    "description": "Sender IDs allowed in private chat. An empty list allows all senders (when private_enabled is on).",
+    "description": "Sender IDs allowed in private chat. Default-deny: an empty list allows no senders.",
     "default": []
   },
   "block_default": {

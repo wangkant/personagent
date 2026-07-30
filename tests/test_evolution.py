@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from persona_agent import evolution  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
+from tools import auto_reviewer  # noqa: E402
 
 _failures: list[str] = []
 
@@ -63,6 +64,14 @@ def test_parse_review() -> None:
           evolution.parse_review('{"failure_mode": "x"}') is None)
     check("parse: pair_draft not dict -> None",
           evolution.parse_review('{"pair_draft": "x"}') is None)
+    malformed = json.loads(json.dumps(GOOD_DIAG))
+    malformed["pair_draft"]["context"] = "not a list"
+    check("parse: pair context must be a string list",
+          evolution.parse_review(json.dumps(malformed)) is None)
+    malformed = json.loads(json.dumps(GOOD_DIAG))
+    malformed["bad_diagnosis"] = ["not", "text"]
+    check("parse: diagnosis fields are type checked",
+          evolution.parse_review(json.dumps(malformed)) is None)
     check("parse: empty -> None", evolution.parse_review("") is None)
 
 
@@ -101,7 +110,8 @@ def test_loaders(tmp: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_pair_from_candidate() -> None:
-    ev = {"ts": "t1", "score": 1, "mode": "followup"}
+    ev = {"ts": "t1", "score": 1, "mode": "followup",
+          "reply": GOOD_DIAG["pair_draft"]["reply"]}
     cand = evolution.candidate_record(ev, GOOD_DIAG)
     pair = evolution.pair_from_candidate(cand, "2026-07-22T12:00:00")
     check("pair: converts", pair is not None)
@@ -129,11 +139,15 @@ def test_pair_from_candidate() -> None:
     check("pair: invalid mode falls back to src_mode",
           p is not None and p["mode"] == "followup")
 
-    strctx = json.loads(json.dumps(cand))
-    strctx["pair_draft"]["context"] = "single line, not a list"
-    p = evolution.pair_from_candidate(strctx, "ts")
-    check("pair: string context coerced to list",
-          p is not None and p["context"] == ["single line, not a list"])
+    fabricated = json.loads(json.dumps(cand))
+    fabricated["pair_draft"]["reply"] = "a different reply never evaluated"
+    check("pair: draft must be bound to the evaluated reply",
+          evolution.pair_from_candidate(fabricated, "ts") is None)
+
+    missing_source = json.loads(json.dumps(cand))
+    missing_source.pop("src_reply", None)
+    check("pair: missing source binding fails closed",
+          evolution.pair_from_candidate(missing_source, "ts") is None)
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +157,9 @@ def test_pair_from_candidate() -> None:
 def test_append_and_dedup(tmp: Path) -> None:
     fb = tmp / "feedback.jsonl"
     pair = evolution.pair_from_candidate(
-        evolution.candidate_record({"ts": "t1"}, GOOD_DIAG), "ts")
+        evolution.candidate_record({
+            "ts": "t1", "reply": GOOD_DIAG["pair_draft"]["reply"]},
+            GOOD_DIAG), "ts")
     n = evolution.append_jsonl(fb, [pair])
     check("append: writes one", n == 1 and fb.exists())
     keys = evolution.load_feedback_keys(fb)
@@ -184,6 +200,36 @@ def test_mark_candidates(tmp: Path) -> None:
     check("mark: untouched entry stays pending", "applied" not in rows["t2"])
     check("mark: existing verdict not overwritten",
           rows["t3"].get("applied") == "auto")
+
+
+def test_auto_yes_cannot_direct_apply(tmp: Path) -> None:
+    """Unattended reviewer output must stay inert until the promotion gate."""
+    candidates_file = tmp / "candidates.jsonl"
+    feedback_file = tmp / "feedback.jsonl"
+    seed_file = tmp / "seed-feedback.jsonl"
+    record = evolution.candidate_record(
+        {"ts": "t1", "score": 1, "mode": "called",
+         "reply": GOOD_DIAG["pair_draft"]["reply"]},
+        GOOD_DIAG,
+    )
+    _write_jsonl(candidates_file, [record])
+
+    old_candidates = auto_reviewer.CANDIDATES_FILE
+    old_feedback_files = auto_reviewer._feedback_files
+    auto_reviewer.CANDIDATES_FILE = candidates_file
+    auto_reviewer._feedback_files = lambda: (seed_file, feedback_file)
+    try:
+        auto_reviewer.apply_candidates(auto_yes=True)
+    finally:
+        auto_reviewer.CANDIDATES_FILE = old_candidates
+        auto_reviewer._feedback_files = old_feedback_files
+
+    pending = evolution.load_pending_candidates(candidates_file)
+    check("auto-reviewer: --yes writes no trusted feedback",
+          not feedback_file.exists() or not feedback_file.read_text(
+              encoding="utf-8").strip())
+    check("auto-reviewer: --yes leaves the proposal pending",
+          len(pending) == 1 and not pending[0].get("applied"), str(pending))
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +273,8 @@ async def integration_evolve_tick(tmp: Path) -> None:
     a = _make_agent(tmp)
     _write_jsonl(a.eval_file, [
         {"ts": "t1", "score": 1, "mode": "called",
-         "user_msg": "is the build broken", "reply": "Great question!", "reason": "AI tone"},
+         "user_msg": "is the build broken",
+         "reply": GOOD_DIAG["pair_draft"]["reply"], "reason": "AI tone"},
         {"ts": "t2", "score": 5, "mode": "called",
          "user_msg": "hi", "reply": "yo", "reason": "fine"},
     ])
@@ -287,7 +334,8 @@ async def integration_evolve_tick(tmp: Path) -> None:
 
     async def fake_llm_noop_pair(system, messages, model, **kw):
         d = json.loads(json.dumps(GOOD_DIAG))
-        d["pair_draft"]["better"] = d["pair_draft"]["reply"]
+        d["pair_draft"]["reply"] = "y"
+        d["pair_draft"]["better"] = "y"
         return json.dumps(d)
 
     a._call_llm = fake_llm_noop_pair
@@ -307,6 +355,8 @@ def main() -> int:
         test_append_and_dedup(Path(td))
     with tempfile.TemporaryDirectory() as td:
         test_mark_candidates(Path(td))
+    with tempfile.TemporaryDirectory() as td:
+        test_auto_yes_cannot_direct_apply(Path(td))
     with tempfile.TemporaryDirectory() as td:
         asyncio.run(integration_evolve_tick(Path(td)))
     print()

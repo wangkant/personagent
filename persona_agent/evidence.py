@@ -27,11 +27,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
-from .pools import _needs_leading_newline
+from .storage import (
+    append_jsonl_unlocked,
+    append_lock,
+    append_only_health,
+    read_validated_jsonl,
+)
 
-SCHEMA = 1
+SCHEMA = 2
 
 # What produced the event.
 KIND_REACTION = "reaction"              # a directed user reaction to a reply
@@ -56,9 +62,13 @@ _MAX_REASON = 200
 # excluded: the same reaction re-adjudicated a second later is the same event.
 _ID_FIELDS = (
     "kind", "lang", "platform", "conv_id", "persona", "persona_hash",
-    "speaker_id", "recipient_id", "reply", "reaction_text", "reaction_type",
-    "parent_event_id",
+    "persona_version", "speaker_id", "recipient_id", "reply", "context",
+    "reaction_text", "reaction_type", "directed", "direction", "scope_mode",
+    "source_event_id", "parent_event_id",
 )
+
+_SUPPORTED_SCHEMAS = (1, SCHEMA)
+_DEFAULT_WARNING_BYTES = 50_000_000
 
 
 def _text(value, limit: int = _MAX_TEXT) -> str:
@@ -78,6 +88,41 @@ def event_id(payload: dict) -> str:
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def _validate_event(record: dict) -> str | None:
+    schema = record.get("schema")
+    if not isinstance(schema, int) or schema not in _SUPPORTED_SCHEMAS:
+        return "unsupported schema"
+    if not isinstance(record.get("event_id"), str) or not record["event_id"]:
+        return "event_id must be a non-empty string"
+    if record.get("kind") not in KINDS:
+        return "unknown evidence kind"
+    if not isinstance(record.get("context"), list):
+        return "context must be a list"
+    if not isinstance(record.get("adjudication"), dict):
+        return "adjudication must be an object"
+    if schema == SCHEMA and record["event_id"] != event_id(record):
+        return "event_id does not match semantic payload"
+    return None
+
+
+def _file_stamp(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return 0, 0
+
+
+def _warning_bytes(override: int | None = None) -> int:
+    if override is not None:
+        return max(0, int(override))
+    try:
+        return max(0, int(os.getenv(
+            "AGENT_EVIDENCE_WARN_BYTES", str(_DEFAULT_WARNING_BYTES))))
+    except ValueError:
+        return _DEFAULT_WARNING_BYTES
 
 
 def classify_strength(event: dict) -> str:
@@ -146,6 +191,7 @@ def make_event(
     adjudication: dict | None = None,
     adjudicator_model: str = "",
     adjudicator_prompt_version: str = "",
+    source_event_id: str = "",
     parent_event_id: str = "",
 ) -> dict:
     """Build a normalized, id-stamped evidence event.
@@ -174,6 +220,8 @@ def make_event(
         "reaction_text": _text(reaction_text),
         "directed": bool(directed),
         "direction": _text(direction, 16),
+        "scope_mode": _text(adj.get("mode"), 32),
+        "source_event_id": _text(source_event_id, 128),
         "reaction_type": (reaction_type if reaction_type in REACTION_TYPES else ""),
         "adjudication": {
             "accept": bool(adj.get("accept")),
@@ -238,27 +286,18 @@ class EvidenceLog:
         self.path = Path(path)
         self._events: list[dict] | None = None
         self._ids: set[str] = set()
+        self._stamp: tuple[int, int] = (-1, -1)
+        self._quarantined = []
 
     # -- reads -------------------------------------------------------------
     def _load(self) -> list[dict]:
-        if self._events is None:
-            events: list[dict] = []
-            try:
-                lines = self.path.read_text(encoding="utf-8").splitlines()
-            except (FileNotFoundError, OSError):
-                lines = []
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(rec, dict) and rec.get("event_id"):
-                    events.append(rec)
-            self._events = events
-            self._ids = {e["event_id"] for e in events}
+        stamp = _file_stamp(self.path)
+        if self._events is None or stamp != self._stamp:
+            result = read_validated_jsonl(self.path, _validate_event)
+            self._events = result.rows
+            self._ids = {e["event_id"] for e in result.rows}
+            self._quarantined = result.quarantined
+            self._stamp = stamp
         return self._events
 
     def all(self) -> list[dict]:
@@ -289,22 +328,39 @@ class EvidenceLog:
         eid = event.get("event_id")
         if not eid:
             return False
-        self._load()
-        if eid in self._ids:
-            return False
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False) + "\n"
-        with self.path.open("a", encoding="utf-8", newline="\n") as fh:
-            # A hand-inspected log can lose its final newline; appending onto an
-            # unterminated line would destroy both records.
-            if _needs_leading_newline(self.path):
-                fh.write("\n")
-            fh.write(line)
-        self._events.append(event)
-        self._ids.add(eid)
+        reason = _validate_event(event)
+        if reason:
+            raise ValueError(f"invalid evidence event: {reason}")
+        with append_lock(self.path):
+            # Refresh while holding the interprocess lock.  A second process
+            # may have appended this content-addressed event since our cache
+            # was built.
+            result = read_validated_jsonl(self.path, _validate_event)
+            ids = {row["event_id"] for row in result.rows}
+            if eid in ids:
+                self._events = result.rows
+                self._ids = ids
+                self._quarantined = result.quarantined
+                self._stamp = _file_stamp(self.path)
+                return False
+            append_jsonl_unlocked(self.path, event)
+            self._events = result.rows + [event]
+            self._ids = ids | {eid}
+            self._quarantined = result.quarantined
+            self._stamp = _file_stamp(self.path)
         return True
+
+    def health_metadata(self, *, warning_bytes: int | None = None) -> dict:
+        self._load()
+        return append_only_health(
+            self.path,
+            warning_bytes=_warning_bytes(warning_bytes),
+            quarantined_rows=len(self._quarantined),
+        )
 
     def reload(self) -> None:
         """Drop the in-memory cache; the next read re-reads the file."""
         self._events = None
         self._ids = set()
+        self._stamp = (-1, -1)
+        self._quarantined = []

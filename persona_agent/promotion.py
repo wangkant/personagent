@@ -35,12 +35,12 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from . import candidates, evidence
+from .storage import atomic_write_text
 
 # ---------------------------------------------------------------------------
 # Automatic promotion policy
@@ -165,7 +165,8 @@ def scope_compatible(a: dict, b: dict, *,
     moment for being worded differently, which in practice means nothing is ever
     corroborated. The label is kept in the scope record for audit.
     """
-    for key in ("lang", "persona", "persona_hash", "persona_version"):
+    for key in ("lang", "platform", "persona", "persona_hash",
+                "persona_version"):
         if str(a.get(key) or "") != str(b.get(key) or ""):
             return False
     if require_same_conversation and str(a.get("conv_id") or "") != str(b.get("conv_id") or ""):
@@ -352,11 +353,10 @@ class CandidatePool:
     # -- persistence -------------------------------------------------------
     def _save(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), suffix=".tmp")
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(self._d, fh, ensure_ascii=False, indent=1)
-            os.replace(tmp, self.path)
+            atomic_write_text(
+                self.path,
+                json.dumps(self._d, ensure_ascii=False, indent=1),
+            )
         except OSError:
             pass
 
@@ -447,10 +447,8 @@ def retract_example(path: Path, reply: str) -> int:
     if not dropped:
         return 0
     try:
-        fd, tmp = tempfile.mkstemp(dir=str(Path(path).parent), suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("\n".join(kept) + ("\n" if kept else ""))
-        os.replace(tmp, path)
+        atomic_write_text(
+            path, "\n".join(kept) + ("\n" if kept else ""))
     except OSError:
         return 0
     return dropped

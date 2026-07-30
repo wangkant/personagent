@@ -30,10 +30,16 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
 
-SCHEMA = 1
+from .storage import (
+    append_jsonl,
+    append_only_health,
+    atomic_write_text,
+    read_validated_jsonl,
+)
+
+SCHEMA = 2
 
 TYPE_PAIR = "preference_pair"
 TYPE_EXAMPLE = "positive_example"
@@ -51,6 +57,10 @@ STATES = (STATE_PROPOSED, STATE_PROMOTED, STATE_REJECTED,
 ROW_CANDIDATE = "candidate"
 ROW_LIFECYCLE = "lifecycle"
 ROW_EVIDENCE = "evidence_link"
+ROW_SUPERSESSION = "supersession"
+
+_SUPPORTED_SCHEMAS = (1, SCHEMA)
+_DEFAULT_WARNING_BYTES = 50_000_000
 
 # Which states a transition may be written from. The ledger replays whatever it
 # contains — this is a write-time guard, so a mistaken admin command is refused
@@ -66,8 +76,8 @@ _ALLOWED_FROM = {
 # and modes are deliberately excluded — the adjudicator writes a free-text
 # scene label per call, and letting it split identity would strand each event
 # on its own candidate where none ever reaches the corroboration threshold.
-_ID_FIELDS = ("type", "lang", "persona_hash", "persona_version", "conv_id",
-              "reply", "better")
+_ID_FIELDS = ("type", "lang", "platform", "persona", "persona_hash",
+              "persona_version", "conv_id", "reply", "better")
 
 
 def scope_from_event(event: dict) -> dict:
@@ -89,6 +99,8 @@ def candidate_id(ctype: str, scope: dict, reply: str, better: str = "") -> str:
     payload = {
         "type": ctype,
         "lang": scope.get("lang", ""),
+        "platform": scope.get("platform", ""),
+        "persona": scope.get("persona", ""),
         "persona_hash": scope.get("persona_hash", ""),
         "persona_version": scope.get("persona_version", ""),
         "conv_id": scope.get("conv_id", ""),
@@ -132,9 +144,72 @@ def view_row(cand: dict) -> dict:
     """The retrieval row a promoted candidate contributes."""
     row = dict(cand.get("payload") or {})
     row["candidate_id"] = cand.get("candidate_id", "")
+    row["scope"] = dict(cand.get("scope") or {})
     if not row.get("src"):
         row["src"] = "promoted_candidate"
     return row
+
+
+def _validate_row(row: dict) -> str | None:
+    schema = row.get("schema")
+    if not isinstance(schema, int) or schema not in _SUPPORTED_SCHEMAS:
+        return "unsupported schema"
+    cid = row.get("candidate_id")
+    if not isinstance(cid, str) or not cid:
+        return "candidate_id must be a non-empty string"
+    kind = row.get("kind")
+    if kind == ROW_CANDIDATE:
+        if row.get("type") not in TYPES:
+            return "unknown candidate type"
+        if not isinstance(row.get("scope"), dict):
+            return "scope must be an object"
+        if not isinstance(row.get("payload"), dict):
+            return "payload must be an object"
+        if not isinstance(row.get("evidence"), list):
+            return "evidence must be a list"
+        if not isinstance(row.get("reply"), str):
+            return "reply must be a string"
+        if not isinstance(row.get("better"), str):
+            return "better must be a string"
+        return None
+    if kind == ROW_LIFECYCLE:
+        if row.get("state") not in _ALLOWED_FROM:
+            return "unknown lifecycle state"
+        if not isinstance(row.get("evidence"), list):
+            return "evidence must be a list"
+        return None
+    if kind == ROW_EVIDENCE:
+        if not isinstance(row.get("evidence"), list):
+            return "evidence must be a list"
+        return None
+    if kind == ROW_SUPERSESSION:
+        if schema != SCHEMA:
+            return "supersession requires current schema"
+        replacement = row.get("replacement_id")
+        if not isinstance(replacement, str) or not replacement:
+            return "replacement_id must be a non-empty string"
+        return None
+    return "unknown ledger row kind"
+
+
+def _file_stamp(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return 0, 0
+
+
+def _warning_bytes(override: int | None = None) -> int:
+    if override is not None:
+        return max(0, int(override))
+    try:
+        return max(0, int(os.getenv(
+            "AGENT_CANDIDATE_LEDGER_WARN_BYTES",
+            str(_DEFAULT_WARNING_BYTES),
+        )))
+    except ValueError:
+        return _DEFAULT_WARNING_BYTES
 
 
 class CandidateLedger:
@@ -143,25 +218,15 @@ class CandidateLedger:
     def __init__(self, path):
         self.path = Path(path)
         self._by_id: dict[str, dict] | None = None
+        self._stamp: tuple[int, int] = (-1, -1)
+        self._quarantined = []
 
     # -- projection --------------------------------------------------------
     def _rows(self) -> list[dict]:
-        try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
-        except (FileNotFoundError, OSError):
-            return []
-        rows: list[dict] = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(rec, dict) and rec.get("candidate_id"):
-                rows.append(rec)
-        return rows
+        result = read_validated_jsonl(self.path, _validate_row)
+        self._quarantined = result.quarantined
+        self._stamp = _file_stamp(self.path)
+        return result.rows
 
     def _project(self) -> dict[str, dict]:
         """Replay the log into current candidate state.
@@ -170,7 +235,7 @@ class CandidateLedger:
         projection, which is what makes "restart and replay produce identical
         state" a property of the design rather than a hope.
         """
-        if self._by_id is not None:
+        if self._by_id is not None and self._stamp == _file_stamp(self.path):
             return self._by_id
         out: dict[str, dict] = {}
         for row in self._rows():
@@ -187,6 +252,26 @@ class CandidateLedger:
                 cand["state"] = STATE_PROPOSED
                 cand["history"] = []
                 out[cid] = cand
+                continue
+            if kind == ROW_SUPERSESSION:
+                replacement_id = str(row.get("replacement_id") or "")
+                old, new = out.get(cid), out.get(replacement_id)
+                # A compound row is all-or-nothing on replay. If either
+                # candidate definition is absent/corrupt, apply neither half.
+                if old is None or new is None or cid == replacement_id:
+                    continue
+                old["state"] = STATE_SUPERSEDED
+                old["superseded_by"] = replacement_id
+                old.setdefault("history", []).append({
+                    "state": STATE_SUPERSEDED, "ts": row.get("ts", ""),
+                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+                })
+                new["state"] = STATE_PROMOTED
+                new["supersedes"] = cid
+                new.setdefault("history", []).append({
+                    "state": STATE_PROMOTED, "ts": row.get("ts", ""),
+                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+                })
                 continue
             cand = out.get(cid)
             if cand is None:
@@ -227,6 +312,8 @@ class CandidateLedger:
 
     def reload(self) -> None:
         self._by_id = None
+        self._stamp = (-1, -1)
+        self._quarantined = []
 
     # -- queries -----------------------------------------------------------
     def all(self) -> list[dict]:
@@ -252,14 +339,19 @@ class CandidateLedger:
 
     # -- writes ------------------------------------------------------------
     def _append(self, row: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8", newline="\n") as fh:
-            try:
-                if self.path.stat().st_size and not _ends_with_newline(self.path):
-                    fh.write("\n")
-            except OSError:
-                pass
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        reason = _validate_row(row)
+        if reason:
+            raise ValueError(f"invalid candidate ledger row: {reason}")
+        append_jsonl(self.path, row)
+
+    def health_metadata(self, *, warning_bytes: int | None = None) -> dict:
+        # Force validation even when no caller has projected the ledger yet.
+        self._project()
+        return append_only_health(
+            self.path,
+            warning_bytes=_warning_bytes(warning_bytes),
+            quarantined_rows=len(self._quarantined),
+        )
 
     def propose(self, cand: dict) -> tuple[dict, bool]:
         """Record a candidate. Returns ``(projected, created)``.
@@ -360,11 +452,28 @@ class CandidateLedger:
             return False
         if new.get("state") not in _ALLOWED_FROM[STATE_PROMOTED]:
             return False
-        self.transition(old_cid, STATE_SUPERSEDED, ts=ts, actor=actor,
-                        reason=reason, superseded_by=new_cid)
-        self.transition(new_cid, STATE_PROMOTED, ts=ts, actor=actor,
-                        reason=reason or f"supersedes {old_cid}",
-                        supersedes=old_cid)
+        row = {
+            "schema": SCHEMA,
+            "kind": ROW_SUPERSESSION,
+            "candidate_id": old_cid,
+            "replacement_id": new_cid,
+            "ts": ts,
+            "actor": actor,
+            "reason": str(reason or f"supersedes {old_cid}")[:300],
+        }
+        self._append(row)
+        old["state"] = STATE_SUPERSEDED
+        old["superseded_by"] = new_cid
+        old.setdefault("history", []).append({
+            "state": STATE_SUPERSEDED, "ts": ts, "actor": actor,
+            "reason": row["reason"],
+        })
+        new["state"] = STATE_PROMOTED
+        new["supersedes"] = old_cid
+        new.setdefault("history", []).append({
+            "state": STATE_PROMOTED, "ts": ts, "actor": actor,
+            "reason": row["reason"],
+        })
         return True
 
 
@@ -398,19 +507,9 @@ def _write_view(path: Path, rows: list[dict]) -> int:
     derived: the ledger is the source of truth and this is a cache of its
     current projection.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            for row in rows:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    text = "".join(
+        json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+    atomic_write_text(path, text)
     return len(rows)
 
 

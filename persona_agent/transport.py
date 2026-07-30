@@ -80,6 +80,8 @@ class Transport:
         for old in sorted(self._gateway_conv_lru, key=self._gateway_conv_lru.get):
             if old == key:
                 continue
+            if self._gateway_inflight.get(old, 0):
+                continue
             lock = self.locks.get(old)
             send_lock = self.send_locks.get(old)
             if (lock and lock.locked()) or (send_lock and send_lock.locked()):
@@ -100,14 +102,24 @@ class Transport:
                   self.last_reply_at, self.active_users, self._msg_seq,
                   self._vision_in_flight, self._sticky_call,
                   self.last_activity_at, self.last_proactive_at,
-                  self._send_window):
+                  self._send_window, self._sent_mids):
             d.pop(key, None)
+        pending = self._pending_outbound.pop(key, None)
+        if pending is not None:
+            pending.set()
+        self._private_send_owners.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
+        reaction_key = key
         if key.startswith("private:"):
             uid = key.split(":", 1)[1]
+            reaction_key = f"dm:{uid}"
             self.private_history.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(f"dm:{uid}", None)
+            self._last_elicit_at.pop(reaction_key, None)
+        else:
+            self._last_elicit_at.pop(key, None)
+        self.pending_reactions.drop_conversation(reaction_key)
         # Group-conversation memory key = the group_id itself; gateway DM
         # memory key = "private:<uid>" = key.
         if self.memories.pop(key, None) is not None:
@@ -156,8 +168,7 @@ class Transport:
         if sink is not None:
             # Gateway capture: hand the reply back over HTTP instead of
             # posting to NapCat (gateway ids aren't ints anyway).
-            sink.add(message)
-            return True
+            return sink.add(message)
         if not await self._throttle_send(f"group:{group_id}"):
             return False
         attempts = 3  # 1 initial + 2 retries
@@ -183,13 +194,19 @@ class Transport:
                 logger.warning("[Agent] NapCat returned %d: %s",
                                r.status_code, r.text[:200])
                 return False
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
-                    httpx.WriteTimeout, httpx.PoolTimeout) as e:
+            except (httpx.ConnectError, httpx.ConnectTimeout,
+                    httpx.PoolTimeout) as e:
                 if attempt == attempts - 1:
                     logger.warning("[Agent] send group msg failed after %d attempts: %s",
                                    attempts, e)
                     return False
                 await asyncio.sleep(0.5 * (attempt + 1))
+            except (httpx.ReadTimeout, httpx.WriteTimeout) as e:
+                # The peer may have accepted the request before its response
+                # was lost. Retrying an ambiguous timeout duplicates a chat
+                # message, so fail this logical chunk instead of replaying it.
+                logger.warning("[Agent] send group msg outcome unknown; not retrying: %s", e)
+                return False
             except Exception as e:
                 logger.warning("[Agent] send group msg failed: %s", e)
                 return False
@@ -296,8 +313,7 @@ class Transport:
         if sink is not None:
             # Gateway capture: hand the reply back over HTTP instead of
             # posting to NapCat (gateway ids aren't ints anyway).
-            sink.add(message)
-            return True
+            return sink.add(message)
         if not await self._throttle_send(f"private:{user_id}"):
             return False
         attempts = 3  # 1 initial + 2 retries
@@ -323,19 +339,37 @@ class Transport:
                 # error — retrying rarely helps, so log and stop.
                 logger.warning("[Agent] NapCat private %d: %s", r.status_code, r.text[:200])
                 return False
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
-                    httpx.WriteTimeout, httpx.PoolTimeout) as e:
+            except (httpx.ConnectError, httpx.ConnectTimeout,
+                    httpx.PoolTimeout) as e:
                 if attempt == attempts - 1:
                     logger.warning("[Agent] send private msg failed after %d attempts: %s",
                                    attempts, e)
                     return False
                 await asyncio.sleep(0.5 * (attempt + 1))
+            except (httpx.ReadTimeout, httpx.WriteTimeout) as e:
+                logger.warning(
+                    "[Agent] send private msg outcome unknown; not retrying: %s", e)
+                return False
             except Exception as e:
                 logger.warning("[Agent] send private msg failed: %s", e)
                 return False
         return False
 
     async def _send_private_qq(self, user_id: str, text: str) -> SendResult:
+        """Serialize standalone private sends.
+
+        Full private conversation paths already hold this lock across delivery
+        and state commit and call ``_send_private_qq_unlocked`` directly.
+        Background callers (for example delayed elicitation) use this wrapper.
+        """
+        key = f"private:{user_id}"
+        if self._private_send_owners.get(key) is asyncio.current_task():
+            return await self._send_private_qq_unlocked(user_id, text)
+        async with self.send_locks[key]:
+            return await self._send_private_qq_unlocked(user_id, text)
+
+    async def _send_private_qq_unlocked(
+            self, user_id: str, text: str) -> SendResult:
         target_key = f"private:{user_id}"
         self._sent_mids[target_key] = []
         text = self._sanitize_reply(text, self.agent_lang)

@@ -141,6 +141,118 @@ def test_run_arm_isolation_and_growth() -> None:
               "auto_reviewer" not in real_fb.read_text(encoding="utf-8"))
 
 
+def _install_external_llm_fakes(agent: Agent) -> None:
+    """Replace only the two network boundaries used by the real pipeline."""
+    bad_reply = "Great question! Let me help."
+
+    async def fake_call(system, messages, model, **kw):
+        prompt = str(messages[-1].get("content", ""))
+        if "[raw data]" in prompt and '"failure_mode"' in prompt:
+            return json.dumps({
+                "failure_mode": "service-desk tone",
+                "bad_diagnosis": "opens like a support agent",
+                "tag_to_patch": "style",
+                "constraint_to_add":
+                    "BAD 'Great question!' -> OK 'probably, your commit'",
+                "pair_draft": {
+                    "scenario": "casual status question",
+                    "context": ["alex: is the build broken"],
+                    "mode": "called",
+                    "reply": bad_reply,
+                    "better": "probably, it was your commit",
+                },
+            })
+        return json.dumps({
+            "reasoning": "direct question",
+            "intent": "chat",
+            "reply": bad_reply,
+            "mem": "",
+        })
+
+    class EvalResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [{
+                    "message": {
+                        "content": json.dumps({
+                            "score": 1,
+                            "reason": "service-desk tone",
+                        }),
+                    },
+                }],
+            }
+
+    class EvalClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return EvalResponse()
+
+    agent._call_llm = fake_call
+    agent._http = lambda **kwargs: EvalClient()
+
+
+def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
+    """The benchmark drives real eval, evolution, promotion, and retrieval."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        agent = bench.build_isolated_agent(
+            tmp / "state", "Robin", "en", eval_enable=True)
+        _install_external_llm_fakes(agent)
+        train = [{
+            "id": "tr-real",
+            "family": "service-desk",
+            "scenario": "casual status question",
+            "mode": "called",
+            "context": ["alex: <bot-name> is the build still broken"],
+        }]
+        holdout = [{
+            "id": "ho-real",
+            "family": "service-desk",
+            "scenario": "casual status question",
+            "mode": "called",
+            "context": ["taylor: <bot-name> did deploy recover"],
+        }]
+
+        replies = asyncio.run(
+            bench.run_round(
+                agent, train, holdout, "Robin",
+                evolve_on=True, judge_model="stub-judge",
+            )
+        )
+
+        eval_rows = evolution.load_evals(agent.eval_file, threshold=5)
+        promoted = [
+            cand for cand in agent.candidate_ledger.all()
+            if cand.get("state") == "promoted"
+        ]
+        learned_pairs = evolution.load_feedback_keys(
+            agent.promoted_feedback_file)
+        check("real pipeline: holdout still produces a reply",
+              replies[0]["reply"] == "Great question! Let me help.",
+              repr(replies))
+        check("real pipeline: evaluator persisted the low score",
+              len(eval_rows) == 1 and eval_rows[0]["score"] == 1,
+              repr(eval_rows))
+        check("real pipeline: evolve tick recorded self-review evidence",
+              [event["kind"] for event in agent.evidence_log.all()]
+              == ["self_review"],
+              repr(agent.evidence_log.all()))
+        check("real pipeline: benchmark gate promoted the candidate",
+              len(promoted) == 1, repr(promoted))
+        check("real pipeline: promoted correction is retrievable",
+              ("Great question! Let me help.", "probably, it was your commit")
+              in learned_pairs,
+              repr(learned_pairs))
+
+
 def test_inbox_is_blind_and_ingest() -> None:
     arms = [{"arm": "evolve-on", "rounds": [
         {"round": 0, "feedback_pairs": 0,
@@ -209,6 +321,7 @@ def main() -> int:
     test_seed_buffer()
     test_drive_scenario_stubbed()
     test_run_arm_isolation_and_growth()
+    test_real_evolution_pipeline_with_external_calls_stubbed()
     test_inbox_is_blind_and_ingest()
     test_outputs()
     test_export_writes_blind_inbox()

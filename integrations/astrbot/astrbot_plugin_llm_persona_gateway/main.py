@@ -17,13 +17,14 @@ agent repo):
       "sender_name": str,
       "self_id": str,                   # raw platform bot id
       "message_id": str|int|null,
+      "source_timestamp": int,           # original adapter event time
       "is_at_me": bool,
       "segments": [
         {"type": "text", "text": str},
         {"type": "mention", "user_id": str, "name": str},
         {"type": "image", "url": str} | {"type": "image", "b64": str},
         {"type": "emoji", "name": str},
-        {"type": "reply"}
+        {"type": "reply", "message_id": str}
       ],
       "raw_text": str
     }
@@ -44,7 +45,13 @@ plugin maps whichever is present back to the native component.
 """
 
 import asyncio
+import hashlib
+import hmac
+import json
 import random
+import secrets
+import time
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -98,13 +105,13 @@ class LLMPersonaGateway(Star):
 
         if is_group:
             whitelist = [str(g) for g in (self.config.get("group_whitelist") or [])]
-            if whitelist and group_id not in whitelist:
+            if group_id not in whitelist:
                 return
         else:
-            if not self.config.get("private_enabled", True):
+            if not self.config.get("private_enabled", False):
                 return
             whitelist = [str(u) for u in (self.config.get("private_whitelist") or [])]
-            if whitelist and sender_id not in whitelist:
+            if sender_id not in whitelist:
                 return
 
         segments, is_at_me = self._map_segments(event, self_id)
@@ -129,6 +136,18 @@ class LLMPersonaGateway(Star):
             is_at_me = True
 
         conversation_id = group_id if is_group else sender_id
+        source_timestamp = (
+            getattr(event.message_obj, "timestamp", None)
+            or getattr(event.message_obj, "time", None)
+        )
+        try:
+            source_timestamp = int(source_timestamp)
+        except (TypeError, ValueError, OverflowError):
+            logger.warning(
+                "llm_persona_gateway: dropping event without a valid "
+                "authoritative source timestamp"
+            )
+            return
         neutral_event = {
             "platform": platform,
             "message_type": "group" if is_group else "private",
@@ -137,12 +156,13 @@ class LLMPersonaGateway(Star):
             "sender_name": event.get_sender_name() or sender_id,
             "self_id": self_id,
             "message_id": getattr(event.message_obj, "message_id", None),
+            "source_timestamp": source_timestamp,
             "is_at_me": is_at_me,
             "segments": segments,
             "raw_text": raw_text,
         }
 
-        replies = await self._post_to_agent(neutral_event)
+        delivered, replies = await self._post_to_agent(neutral_event)
 
         first = True
         for item in replies:
@@ -156,7 +176,7 @@ class LLMPersonaGateway(Star):
             first = False
             yield event.chain_result(chain)
 
-        if self.config.get("block_default", True):
+        if delivered and self.config.get("block_default", True):
             # The agent owns these conversations: keep AstrBot's built-in
             # LLM pipeline from producing a second reply.
             event.stop_event()
@@ -208,7 +228,11 @@ class LLMPersonaGateway(Star):
                 # OR in forward_to_agent covers that case.)
                 if self_id and str(getattr(comp, "sender_id", "") or "") == self_id:
                     is_at_me = True
-                segments.append({"type": "reply"})
+                reply_id = str(getattr(comp, "id", "") or "")
+                reply_seg = {"type": "reply"}
+                if reply_id:
+                    reply_seg["message_id"] = reply_id
+                segments.append(reply_seg)
             # Any other component type carries nothing the agent understands.
         return segments, is_at_me
 
@@ -233,26 +257,73 @@ class LLMPersonaGateway(Star):
 
     # ---------- transport ----------
 
-    async def _post_to_agent(self, neutral_event: dict) -> list:
+    @staticmethod
+    def _endpoint_is_allowed(url: str, token: str) -> tuple[bool, str]:
+        """Reject credential-free or cleartext forwarding beyond loopback."""
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return False, "agent_url must be an absolute HTTP(S) URL"
+        host = (parsed.hostname or "").lower()
+        if not host or parsed.scheme not in ("http", "https"):
+            return False, "agent_url must be an absolute HTTP(S) URL"
+        if host in ("localhost", "127.0.0.1", "::1"):
+            return True, ""
+        if parsed.scheme != "https":
+            return False, (
+                "off-host agent_url must use HTTPS (or a private tunnel "
+                "terminating at a loopback URL)"
+            )
+        if not token:
+            return False, "off-host agent_url requires a non-empty gateway_token"
+        return True, ""
+
+    async def _post_to_agent(self, neutral_event: dict) -> tuple[bool, list]:
         url = str(self.config.get("agent_url") or DEFAULT_AGENT_URL)
         timeout = float(self.config.get("timeout_s") or DEFAULT_TIMEOUT_S)
-        headers = {}
         token = str(self.config.get("gateway_token") or "")
+        allowed, reason = self._endpoint_is_allowed(url, token)
+        if not allowed:
+            logger.warning(f"llm_persona_gateway: refusing unsafe agent_url: {reason}")
+            return False, []
+
+        body = json.dumps(
+            neutral_event,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
         if token:
             headers["X-Gateway-Token"] = token
+            timestamp = str(int(time.time()))
+            nonce = secrets.token_hex(16)
+            signed = timestamp.encode() + b"." + nonce.encode() + b"." + body
+            signature = hmac.new(
+                token.encode("utf-8"), signed, hashlib.sha256
+            ).hexdigest()
+            headers.update(
+                {
+                    "X-Gateway-Timestamp": timestamp,
+                    "X-Gateway-Nonce": nonce,
+                    "X-Gateway-Signature": f"sha256={signature}",
+                }
+            )
         try:
             resp = await self._client.post(
-                url, json=neutral_event, headers=headers, timeout=timeout
+                url, content=body, headers=headers, timeout=timeout
             )
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
             logger.warning(f"llm_persona_gateway: agent request failed: {e}")
-            return []
+            return False, []
         replies = data.get("replies") if isinstance(data, dict) else None
         if not isinstance(replies, list):
-            return []
-        return [r for r in replies if isinstance(r, dict)]
+            return False, []
+        return bool(data.get("handled")), [
+            r for r in replies if isinstance(r, dict)
+        ]
 
     # ---------- outbound: neutral reply item -> AstrBot chain ----------
 

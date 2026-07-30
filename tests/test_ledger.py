@@ -194,11 +194,23 @@ async def test_two_events_with_a_strong_one_promote(tmp: Path) -> None:
     check("4: pair materialized into the view",
           len(rows) == 1 and rows[0]["better"] == "check the logs first",
           str(rows))
+    check("4: materialized row preserves its complete authority scope",
+          rows[0].get("scope") == {
+              "lang": "en",
+              "platform": "qq",
+              "conv_id": "g1",
+              "persona": "B",
+              "persona_hash": a.persona_hash,
+              "persona_version": a.persona_version,
+              "scenario": "wrong advice",
+              "mode": "called",
+          }, str(rows[0].get("scope")))
     cand = [c for c in a.candidate_ledger.all() if c["state"] == "promoted"][0]
     check("4: both events cited", len(cand["evidence"]) == 2, str(cand["evidence"]))
     a._reload_views_if_stale()
     check("4: retrieval surfaces the promoted pair",
-          "check the logs first" in a._examples_for_prompt("restart server", "called"))
+          "check the logs first" in a._examples_for_prompt(
+              "restart server", "called", conv_id="g1"))
 
 
 def test_expired_counter_evidence_does_not_block_new_corroboration() -> None:
@@ -278,7 +290,8 @@ async def test_incompatible_scopes_are_not_combined(tmp: Path) -> None:
             "persona_version": "", "conv_id": "g1", "mode": "called"}
     check("5: same scope is compatible",
           promotion.scope_compatible(base, dict(base)))
-    for key, value in (("lang", "zh"), ("persona", "C"),
+    for key, value in (("lang", "zh"), ("platform", "telegram"),
+                       ("persona", "C"),
                        ("persona_hash", "other"), ("persona_version", "2"),
                        ("conv_id", "g2"), ("mode", "owner")):
         check(f"5: {key} mismatch blocks combination",
@@ -286,6 +299,18 @@ async def test_incompatible_scopes_are_not_combined(tmp: Path) -> None:
     check("5: conversation scope can be widened by configuration",
           promotion.scope_compatible(base, dict(base, conv_id="g2"),
                                      require_same_conversation=False))
+
+    qq_id = candidates.candidate_id(
+        candidates.TYPE_PAIR, dict(base, platform="qq"), "bad", "good")
+    tg_id = candidates.candidate_id(
+        candidates.TYPE_PAIR, dict(base, platform="telegram"), "bad", "good")
+    other_persona_id = candidates.candidate_id(
+        candidates.TYPE_PAIR, dict(base, platform="qq", persona="C"),
+        "bad", "good")
+    check("5: candidate identity includes platform",
+          qq_id != tg_id, f"{qq_id} == {tg_id}")
+    check("5: candidate identity includes persona",
+          qq_id != other_persona_id, f"{qq_id} == {other_persona_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -421,8 +446,8 @@ async def test_restart_and_replay_are_identical(tmp: Path) -> None:
     fresh._reload_views_if_stale()
     a._reload_views_if_stale()
     check("9: retrieval output matches across the restart",
-          fresh._examples_for_prompt("restart server", "called")
-          == a._examples_for_prompt("restart server", "called"))
+          fresh._examples_for_prompt("restart server", "called", conv_id="g1")
+          == a._examples_for_prompt("restart server", "called", conv_id="g1"))
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +460,8 @@ async def test_rollback_removes_from_retrieval(tmp: Path) -> None:
     await react(a, CORRECTION, text="i meant check the logs")
     a._reload_views_if_stale()
     check("10: promoted pair is retrievable",
-          "check the logs first" in a._examples_for_prompt("restart", "called"))
+          "check the logs first" in a._examples_for_prompt(
+              "restart", "called", conv_id="g1"))
     cid = [c["candidate_id"] for c in a.candidate_ledger.all()
            if c["state"] == "promoted"][0]
 
@@ -446,7 +472,8 @@ async def test_rollback_removes_from_retrieval(tmp: Path) -> None:
     check("10: rollback accepted", ok is True)
     check("10: view no longer carries it", view_pairs(a) == [])
     check("10: retrieval no longer surfaces it",
-          "check the logs first" not in a._examples_for_prompt("restart", "called"))
+          "check the logs first" not in a._examples_for_prompt(
+              "restart", "called", conv_id="g1"))
     check("10: history survives the rollback",
           [h["state"] for h in a.candidate_ledger.history(cid)]
           == ["promoted", "rolled_back"])
@@ -469,8 +496,14 @@ async def test_supersession_replaces_the_active_preference(tmp: Path) -> None:
     check("11: the replacement is not promoted automatically",
           a.candidate_ledger.get(new)["state"] == "proposed")
 
+    rows_before = len(a.candidate_ledger_file.read_text(
+        encoding="utf-8").splitlines())
     ok = a.candidate_ledger.supersede(old, new, ts="2026-07-25T12:00:00",
                                       actor="admin", reason="better wording")
+    rows_after = [
+        json.loads(line) for line in a.candidate_ledger_file.read_text(
+            encoding="utf-8").splitlines() if line.strip()
+    ]
     a._rebuild_promoted_views()
     a._reload_views_if_stale()
     check("11: supersede accepted", ok is True)
@@ -485,8 +518,103 @@ async def test_supersession_replaces_the_active_preference(tmp: Path) -> None:
     check("11: both records preserved",
           a.candidate_ledger.get(old) is not None
           and a.candidate_ledger.get(new).get("supersedes") == old)
+    check("11: supersession is one atomic ledger event",
+          len(rows_after) == rows_before + 1
+          and rows_after[-1].get("kind") == "supersession",
+          str(rows_after[-2:]))
+    replayed = candidates.CandidateLedger(a.candidate_ledger_file)
+    check("11: compound supersession replays both halves",
+          replayed.get(old)["state"] == "superseded"
+          and replayed.get(new)["state"] == "promoted")
     check("11: superseding a superseded candidate is refused",
           a.candidate_ledger.supersede(old, new, ts="t", actor="admin") is False)
+
+
+def test_evidence_identity_includes_source_and_full_scope() -> None:
+    base = {
+        "kind": evidence.KIND_REACTION,
+        "ts": "2026-07-25T10:00:00",
+        "lang": "en",
+        "platform": "qq",
+        "conv_id": "g1",
+        "persona": "B",
+        "persona_hash": "h",
+        "persona_version": "v1",
+        "speaker_id": "42",
+        "recipient_id": "42",
+        "reply": "bad",
+        "reaction_text": "no",
+        "reaction_type": "correction",
+        "adjudication": {"accept": True, "better": "good", "mode": "called"},
+        "source_event_id": "message-1",
+    }
+    first = evidence.make_event(**base)
+    second_source = evidence.make_event(**dict(base, source_event_id="message-2"))
+    second_version = evidence.make_event(**dict(base, persona_version="v2"))
+    second_platform = evidence.make_event(**dict(base, platform="telegram"))
+    check("8b: distinct source events have distinct identities",
+          first["event_id"] != second_source["event_id"])
+    check("8b: persona version is part of evidence identity",
+          first["event_id"] != second_version["event_id"])
+    check("8b: platform is part of evidence identity",
+          first["event_id"] != second_platform["event_id"])
+
+
+def test_invalid_log_rows_are_quarantined_from_replay(tmp: Path) -> None:
+    tmp.mkdir(parents=True, exist_ok=True)
+    valid_event = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts="2026-07-25T10:00:00",
+        lang="en", platform="qq", conv_id="g1", persona="B",
+        persona_hash="h", speaker_id="42", recipient_id="42",
+        reply="bad", reaction_text="no", reaction_type="correction",
+        adjudication={"accept": True, "better": "good", "mode": "called"},
+    )
+    evidence_path = tmp / "evidence.jsonl"
+    evidence_path.write_text(
+        json.dumps(valid_event) + "\n"
+        + '{"schema":999,"event_id":"future","kind":"reaction"}\n'
+        + '{"schema":2,"event_id":17,"kind":"reaction"}\n'
+        + "torn",
+        encoding="utf-8",
+    )
+    loaded_evidence = evidence.EvidenceLog(evidence_path)
+    check("8c: evidence replay skips unsupported and malformed rows",
+          [row["event_id"] for row in loaded_evidence.all()]
+          == [valid_event["event_id"]])
+    evidence_health = loaded_evidence.health_metadata(warning_bytes=1)
+    check("8c: evidence health reports quarantined rows and size warning",
+          evidence_health["quarantined_rows"] == 3
+          and evidence_health["size_warning"] is True,
+          str(evidence_health))
+    check("8c: evidence quarantine preserves the source audit bytes",
+          evidence_path.read_text(encoding="utf-8").endswith("torn"))
+
+    scope = {
+        "lang": "en", "platform": "qq", "conv_id": "g1",
+        "persona": "B", "persona_hash": "h", "persona_version": "",
+        "scenario": "s", "mode": "called",
+    }
+    valid_candidate = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope,
+        payload={"reply": "bad", "better": "good", "rating": "better"},
+        created_at="2026-07-25T10:00:00",
+    )
+    ledger_path = tmp / "ledger.jsonl"
+    ledger_path.write_text(
+        json.dumps(valid_candidate) + "\n"
+        + '{"schema":999,"kind":"candidate","candidate_id":"future"}\n'
+        + '{"schema":2,"kind":"lifecycle","candidate_id":9,"state":"promoted"}\n',
+        encoding="utf-8",
+    )
+    loaded_ledger = candidates.CandidateLedger(ledger_path)
+    check("8c: ledger replay skips unsupported and malformed rows",
+          [row["candidate_id"] for row in loaded_ledger.all()]
+          == [valid_candidate["candidate_id"]])
+    ledger_health = loaded_ledger.health_metadata(warning_bytes=1)
+    check("8c: ledger health reports quarantined rows and size warning",
+          ledger_health["quarantined_rows"] == 2
+          and ledger_health["size_warning"] is True,
+          str(ledger_health))
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +751,8 @@ def main() -> int:
         asyncio.run(test_conflicting_evidence_blocks_promotion(tmp / "t6"))
         asyncio.run(test_retry_provides_supporting_evidence(tmp / "t7"))
         asyncio.run(test_duplicate_events_are_idempotent(tmp / "t8"))
+        test_evidence_identity_includes_source_and_full_scope()
+        test_invalid_log_rows_are_quarantined_from_replay(tmp / "t8c")
         asyncio.run(test_restart_and_replay_are_identical(tmp / "t9"))
         asyncio.run(test_rollback_removes_from_retrieval(tmp / "t10"))
         asyncio.run(test_supersession_replaces_the_active_preference(tmp / "t11"))

@@ -57,11 +57,13 @@ class Learning:
         QQ group ids are bare numbers and QQ DMs are ``dm:<uid>``. Evidence from
         two platforms is never combined, so this has to be right rather than
         merely plausible."""
-        parts = str(conv_id or "").split(":")
-        head = parts[0]
-        if head == "dm" and len(parts) > 1:
-            head = parts[1]
-        return "qq" if not head or head.isdigit() else head
+        value = str(conv_id or "")
+        # Native QQ ids are not required to be numeric in tests/adapters; the
+        # absence of a namespace separator is the reliable signal. QQ private
+        # keys use the explicit ``dm:<uid>`` prefix.
+        if ":" not in value or value.startswith("dm:"):
+            return "qq"
+        return value.split(":", 1)[0] or "qq"
 
     def _scope_fields(self, conv_id: str) -> dict:
         """The scope every evidence event carries: which character, which
@@ -203,7 +205,9 @@ class Learning:
             policy=self.promotion_policy,
         )
 
-    def _rebuild_promoted_views(self) -> tuple[int, int]:
+    def _rebuild_promoted_views(
+        self, *, strict: bool = False,
+    ) -> tuple[int, int]:
         """Re-materialize the retrieval views from the ledger.
 
         Derived state, so a whole-file atomic rewrite is safe — and it is the
@@ -219,6 +223,8 @@ class Learning:
             return counts
         except OSError as e:
             logger.warning("[Agent] promoted view rebuild failed: %s", e)
+            if strict:
+                raise
             return (-1, -1)
 
     def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
@@ -459,6 +465,7 @@ class Learning:
                                   "intent": intent, "reason": reason},
                     adjudicator_model=self.eval_model,
                     adjudicator_prompt_version="self-eval/1",
+                    source_event_id=f"eval:{group_id}:{record['ts']}",
                 )
                 self._record_and_corroborate(ev, record["ts"])
                 self._propose_candidate(ev, candidates.TYPE_EXAMPLE, ex,
@@ -591,6 +598,10 @@ class Learning:
                 direction=str(entry.get("matched_by") or ("dm" if is_private else "at")),
                 adjudicator_model=self.react_model,
                 adjudicator_prompt_version=reactions.ADJUDICATOR_VERSION,
+                source_event_id=str(
+                    entry.get("source_event_id")
+                    or entry.get("reaction_mid")
+                    or ((entry.get("mids") or [""])[0])),
             )
 
             # The reaction happened. Record it before deciding what it means:
@@ -752,7 +763,7 @@ class Learning:
             logger.warning("[Agent] elicitation failed: %s: %s",
                            type(e).__name__, e)
 
-    # ---------------- Self-evolution (eval -> feedback, unattended) ----------------
+    # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:
         """Background loop that turns the agent's own low-score evals into
         BAD/OK preference *candidates*. Opt-in (EVOLVE_AUTO).
@@ -822,6 +833,8 @@ class Learning:
                     },
                     adjudicator_model=self.evolve_model,
                     adjudicator_prompt_version=evolution.REVIEWER_VERSION,
+                    source_event_id=(
+                        f"eval:{ev.get('group_id') or ''}:{ev.get('ts') or ''}"),
                 )
                 self._record_and_corroborate(event, now)
                 outcome = self._propose_candidate(

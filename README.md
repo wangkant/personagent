@@ -92,7 +92,7 @@ Only promoted candidates enter dynamic few-shot retrieval, and they hot-reload i
 - **You are the other half of the loop.** `python tools/candidates_admin.py list` shows what is waiting and *why the policy is holding it*; `show <id>` prints a candidate with every piece of evidence behind it, who said it, and whether it counts; `promote` / `reject` / `rollback` / `supersede` / `rebuild` do the rest. Every action appends a lifecycle event — nothing in the log is ever edited or removed.
 - **Learn from successes (fallback).** An async self-evaluator scores every sent reply 1–5 into `eval.jsonl`. A full 5 is recorded as weak evidence and proposes a positive-example candidate. It will not promote itself: the evaluator is documented in-code as generous, and a generous grader marking its own homework is the weakest signal in the system.
 - **Learn from failures without a human in the loop (fallback).** Low-scoring replies are fed back to a model that names the failure mode ("service-desk tone", "answered the wrong person"), drafts one negative constraint, and writes a BAD → OK rewrite. Two ways to run it:
-  - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written (`--yes` skips the prompt). You are the authority here, so approved pairs are written directly.
+  - **Human-gated:** `python tools/auto_reviewer.py --apply` shows each diagnosis and lets you approve / reject / edit before anything is written. You are the authority here, so approved pairs are written directly. The legacy `--yes` direct-apply mode is refused.
   - **Unattended:** set `EVOLVE_AUTO=true` and a background loop does the diagnosis in-process on a timer, restricted to clear failures (`score <= EVOLVE_THRESHOLD`, default 2). It files candidates rather than applying them — one automatic signal that nobody witnessed does not get to change behaviour. Every diagnosis is recorded in `candidates.jsonl`, so the CLI and the loop never double-process an entry and you can always audit what the bot proposed for itself.
 - **Stickers evolve too.** Each sent sticker gets its own score; a sustained low average demotes it out of the library (see [Sticker quality pipeline](#sticker-quality-pipeline)).
 - **The persona takes notes on itself.** A letta-style `core_memory.json` holds a per-group self-maintained note the model can update mid-conversation — standing facts about the group survive context-window turnover.
@@ -149,7 +149,7 @@ You type a line, the bot replies — through the **same** reasoning path the liv
 2. In NapCat's OneBot config, enable the HTTP server **and** an HTTP webhook:
    ```json
    {
-     "http": { "enable": true, "host": "0.0.0.0", "port": 3000 },
+     "http": { "enable": true, "host": "127.0.0.1", "port": 3000 },
      "webhook": {
        "enable": true,
        "url": "http://127.0.0.1:8080/webhook/qq",
@@ -180,8 +180,8 @@ QQ                              -->  NapCat                      --HTTP-->  agen
 ```
 
 1. Install AstrBot and configure the platform adapters you want.
-2. Copy `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` into AstrBot's `data/plugins/` and set its config (agent URL, optional shared token, group/DM whitelists). Full reference: [plugin README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md).
-3. Optional hardening in `.env`: `GATEWAY_TOKEN` (shared secret checked on the webhook) and `GATEWAY_OWNER_IDS` (treat e.g. `telegram:12345` as the owner). See `.env.example`.
+2. Copy `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` into AstrBot's `data/plugins/`, then explicitly allow the group IDs and/or DM senders to forward. The plugin is default-deny: empty allowlists forward nothing, and private forwarding starts off. Full reference: [plugin README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md).
+3. Same host: keep the loopback agent URL. Different host: use HTTPS with the same non-empty secret in the plugin's `gateway_token` and the agent's `GATEWAY_TOKEN`, or terminate a private tunnel at a loopback URL visible to AstrBot. Signed timestamp/nonce/body envelopes prevent replay; never send the token over cleartext HTTP. `GATEWAY_OWNER_IDS` optionally treats e.g. `telegram:12345` as the owner. See `.env.example`.
 
 Gateway conversations are namespaced `<platform>:<id>`, so memory and state never collide with QQ. Keep `aiocqhttp` in the plugin's excluded platforms (the default) when NapCat already feeds the agent directly, or QQ messages get handled twice. QQ-only machinery (sticker stealing, OCR, proactive / missed-mention catch-up) stays on the QQ path; text / sticker / mention replies work everywhere.
 
@@ -266,7 +266,7 @@ All settings come from `.env`. Key fields:
 | Variable | What |
 |---|---|
 | `AGENT_LANG` | `en` (default) or `zh`. Selects the per-language data files, validator mode, and lexicons. See [Language](#language-english--中文) |
-| `AGENT_RUNTIME_DIR` | Ignored directory for learned examples and feedback (default `runtime/`) |
+| `AGENT_RUNTIME_DIR` | Directory for all mutable text state: memory, evals, evidence, ledgers, replay cache, sticker metadata, promoted views and learned pools (default `runtime/`, which is gitignored). Legacy root-level files are copied here on first use. Custom in-repository paths must be added to `.gitignore` manually |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Primary chat-completion model. Any OpenAI-compatible endpoint works. **The only key needed for `python try_chat.py`** |
 | `PRIVATE_MODEL` | **Optional.** Alternate model name for 1:1 private chats, served by the same primary endpoint. Blank = `DEEPSEEK_MODEL`. (Was `ANTHROPIC_PRIVATE_MODEL` before 0.1.2 — the old name still works) |
 | `BOT_QQ` / `BOT_NAME` | The bot account's QQ number and display name |
@@ -275,6 +275,10 @@ All settings come from `.env`. Key fields:
 | `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | Vision model for image / sticker understanding. Leave blank to skip (OCR-only fallback) |
 | `NAPCAT_IMAGE_DIR` / `MAX_IMAGE_BYTES` | Allowlisted local image-cache directory and maximum decoded image size. `file://` is rejected when the directory is unset |
 | `MAX_WEBHOOK_BODY_BYTES` | Maximum raw request body accepted by either webhook (default 8 MB) |
+| `MAX_INFLIGHT_WEBHOOKS` | Concurrent expensive webhook limit (default 64); excess requests receive HTTP 429 |
+| `GATEWAY_TOKEN` | Shared secret for AstrBot bearer authentication and replay-resistant timestamp/nonce/body signatures. Required with HTTPS for off-host forwarding |
+| `GATEWAY_SOURCE_MAX_AGE_SECONDS` | Maximum age of an original gateway event, independent of its forwarding time (default 86400 / 24 h) |
+| `LOG_FILE` | Optional rotating file log. Blank keeps logs console-only; custom in-repository paths must be gitignored |
 | `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `REACT_LEARN` (+ `REACT_*`) | Learn from real user reactions (on by default — the primary self-evolution signal). See [Self-evolution](#self-evolution) |
@@ -398,7 +402,7 @@ NapCat → QQ                   AstrBot → Telegram / Discord / …
 | `main.py` | FastAPI webhook receiver. NapCat POSTs group events to `/webhook/qq`; the agent processes and POSTs replies back to NapCat's HTTP API. Startup chains text-based + vision-based persona-fit rechecks → purge so the on-disk library only contains in-character stickers. |
 | `persona_agent/gateway.py` + `integrations/astrbot/` | Platform-neutral gateway: a neutral inbound event schema synthesized into the same handler pipeline, replies captured via a context-local sink, plus a bundled [AstrBot](https://github.com/AstrBotDevs/AstrBot) forwarder plugin that connects Telegram / Discord / Slack / … groups and DMs |
 | `tools/bootstrap_from_history.py` | One-shot bootstrap: pulls group history, computes owner's message-frequency profile, seeds the sticker library |
-| `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into runtime feedback (`--yes` for unattended) |
+| `tools/auto_reviewer.py` | The human-gated end of the learning loop: diagnoses low-score entries in `eval.jsonl` into `candidates.jsonl`, then `--apply` walks you through approving / editing each BAD → OK pair into runtime feedback. Legacy `--yes` direct apply is refused |
 | `tools/candidates_admin.py` | The human half of the promotion gate: list what is waiting and why, show a candidate with the evidence behind it, promote / reject / roll back / supersede, rebuild the retrieval views. Append-only — no action edits history |
 | `tools/prompt_lab.py` | Offline interactive tuning: run the agent against `tools/fixtures.<lang>.jsonl`, rate replies, approved ones flow into runtime examples |
 | `tools/import_stickers_folder.py` | Bulk-import stickers from a local folder, auto-tag via vision model |
@@ -442,6 +446,7 @@ The regression suite runs without a test framework — plain standard-library Py
 
 ```bash
 python tests/test_gateway.py
+python tests/test_astrbot_plugin.py
 python tests/test_evolution.py
 python tests/test_benchmark.py
 python tests/test_reactions.py
@@ -459,7 +464,7 @@ For prompt and persona tuning:
 
 - `python try_chat.py` — interactive single-turn chat through the full reasoning path (see [Quick start](#quick-start)).
 - `python tools/prompt_lab.py` — offline batch tuning against `tools/fixtures.<lang>.jsonl`; approved replies flow into runtime examples.
-- `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `feedback.jsonl` interactively (see [Self-evolution](#self-evolution)).
+- `python tools/auto_reviewer.py` — scans `eval.jsonl` for low-scoring replies and drafts prompt patches; add `--apply` to approve them into `runtime/feedback.<lang>.jsonl` (or your `AGENT_RUNTIME_DIR`) interactively (see [Self-evolution](#self-evolution)).
 - `python tools/candidates_admin.py list` — what the learning loop is proposing and why it is being held; then `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild` (see [Self-evolution](#self-evolution)).
 - `python tools/evolution_benchmark.py run` then score `judge_inbox.jsonl` and `... ingest` — measures the [self-evolution](#self-evolution) loop: runs an evolve-on vs evolve-off control over held-out scenarios and plots mean AI-tell score by round (`curve.svg`). A separate judge scores the replies blind — `--judge export` writes an unlabelled inbox for a human or another model, `--judge anthropic` routes it to a different vendor (needs `pip install -e ".[judge]"`; the bot itself has no vendor SDK) — so the learning signal and the measurement never share a model.
 
@@ -469,20 +474,20 @@ Files that may contain real chat content are gitignored:
 
 ```
 .env                      # API keys
-eval.jsonl                # raw self-eval scoring trace
-memory.json               # extracted long-term memories
-core_memory.json          # self-maintained persona notes
-stickers.json             # sticker index incl. sample chat contexts
+runtime/eval.jsonl        # raw self-eval scoring trace
+runtime/memory.json       # extracted long-term memories
+runtime/core_memory.json  # self-maintained persona notes
+runtime/stickers.json     # sticker index incl. sample chat contexts
 stickers/auto/            # downloaded sticker binaries
-seen_msg_ids.json         # cross-restart message dedup state
-owner_profile.json        # owner's message-frequency profile
+runtime/seen_msg_ids.json # cross-restart message dedup state
+runtime/owner_profile.json # owner's message-frequency profile
 unknown_stickers.jsonl    # download URLs
 candidates.jsonl          # auto-reviewer output + reaction adjudication audit
 runtime/                  # evidence log, candidate ledger, promoted views, learned pools
 *.log                     # runtime logs
 ```
 
-The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` are **read-only, fully synthetic seeds** showing the format only. Learning from real conversations is written under gitignored `runtime/` (or `AGENT_RUNTIME_DIR`), so it cannot be committed accidentally. That includes the evidence log, which quotes real reactions verbatim — it records the structured verdict and a one-sentence reason, never a model's chain of thought.
+The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` are **read-only, fully synthetic seeds** showing the format only. Learning from real conversations is written under the default gitignored `runtime/`. If you set `AGENT_RUNTIME_DIR` to another in-repository directory, add it to `.gitignore` yourself before running the agent. The evidence log can quote recent context and real reactions verbatim alongside the structured verdict and one-sentence reason; it never stores the adjudicator's raw output or chain of thought.
 
 ## License
 

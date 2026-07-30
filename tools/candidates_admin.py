@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
 
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 from persona_agent import candidates, evidence, promotion
 from persona_agent.paths import resolve_runtime_lang_file

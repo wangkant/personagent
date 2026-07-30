@@ -31,11 +31,13 @@ clients against QQ:
 
 If you fine-tune the persona on real chat data:
 
-- The committed `data/examples.*.jsonl` / `data/feedback.*.jsonl` are synthetic
-  seeds, but the agent **appends high-scoring real replies to them at runtime**;
-  `memory.json` / `eval.jsonl` also capture real chat content (those are
-  gitignored). **Review `data/examples.*.jsonl` / `data/feedback.*.jsonl` before
-  pushing** to a public repo, or keep your tuned copies out of git
+- The committed `data/examples.*.jsonl` / `data/feedback.*.jsonl` are read-only
+  synthetic seeds. Real reactions, learned examples, preference pairs and
+  candidate/evidence logs are written under `runtime/` by default;
+  `memory.json` / `eval.jsonl` can also capture real chat content. These default
+  paths are gitignored. If you set `AGENT_RUNTIME_DIR`, `AGENT_MEMORY_FILE`,
+  `EVAL_FILE` or `LOG_FILE` to another in-repository path, add that path to
+  `.gitignore` yourself before running the agent
 - LLM API requests send chat context to the model provider. Read the
   provider's data-retention policy before using; some providers train on
   your data unless you opt out

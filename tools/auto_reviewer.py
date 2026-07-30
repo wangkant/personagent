@@ -10,7 +10,7 @@ hot-reloads into few-shot retrieval — no restart needed.
 Usage:
     python tools/auto_reviewer.py                     # review only (as before)
     python tools/auto_reviewer.py --apply             # review, then y/n/e gate
-    python tools/auto_reviewer.py --yes               # unattended: apply all
+    python tools/auto_reviewer.py --yes               # refused: unsafe legacy mode
     python tools/auto_reviewer.py --dry-run           # print diagnoses only
 
 Uses the same OpenAI-compatible endpoint as the agent (DEEPSEEK_API_KEY /
@@ -32,15 +32,24 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env", override=True)
+load_dotenv(ROOT / ".env", override=False)
 
 import httpx
 
 from persona_agent import evolution
-from persona_agent.paths import resolve_runtime_lang_file, resolve_seed_lang_file
+from persona_agent.paths import (
+    resolve_runtime_lang_file,
+    resolve_runtime_state_file,
+    resolve_seed_lang_file,
+)
 
-EVAL_FILE = ROOT / "eval.jsonl"
-CANDIDATES_FILE = ROOT / "candidates.jsonl"
+
+def _runtime_file(value: str) -> Path:
+    return resolve_runtime_state_file(value)
+
+
+EVAL_FILE = _runtime_file(os.getenv("EVAL_FILE", "eval.jsonl"))
+CANDIDATES_FILE = resolve_runtime_state_file("candidates.jsonl")
 
 API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 BASE_URL = (os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")).rstrip("/")
@@ -138,7 +147,15 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
 
 
 def apply_candidates(auto_yes: bool) -> None:
-    """Stage 2: pending candidates -> feedback pairs, human-gated unless --yes."""
+    """Stage 2: pending candidates -> feedback pairs, always human-gated."""
+    if auto_yes:
+        # Model output is not operator authority. Unattended self-review must
+        # travel through evidence -> candidate -> promotion in the in-process
+        # evolution loop; it may never write a trusted retrieval pool directly.
+        logger.error(
+            "--yes direct apply is disabled; use EVOLVE_AUTO for gated "
+            "unattended review, or --apply for explicit per-pair approval")
+        return
     feedback_seed, feedback = _feedback_files()
     pending = evolution.load_pending_candidates(CANDIDATES_FILE)
     if not pending:
@@ -219,7 +236,7 @@ async def main() -> int:
     p.add_argument("--apply", action="store_true",
                    help="after reviewing, interactively approve pairs into feedback")
     p.add_argument("--yes", action="store_true",
-                   help="unattended: apply all usable pairs without prompting (implies --apply)")
+                   help="deprecated unsafe mode; refused without writing feedback")
     args = p.parse_args()
 
     await review_pending(args.threshold, args.limit, args.dry_run)

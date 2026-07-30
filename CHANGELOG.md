@@ -84,9 +84,9 @@ authority away without erasing the history.
   still retractable: an accepted rejection or correction removes the matching
   row, because deletion is the only revocation the pre-ledger design had.
   `promotion.CandidatePool` and `promotion.retract_example` remain public.
-- `tools/auto_reviewer.py --yes` still writes pairs directly. It is an operator
-  running a command with an explicit flag — human authority, the same as
-  promoting from the admin CLI.
+- `tools/auto_reviewer.py --yes` is refused. Unattended direct writes cannot
+  stand in for a human decision; use interactive `--apply` or promote a
+  candidate explicitly with the admin CLI.
 - `tools/evolution_benchmark.py` stubs the human gate (`actor="benchmark"` in
   the ledger) so the arm still measures something. No new benchmark numbers are
   claimed for this change.

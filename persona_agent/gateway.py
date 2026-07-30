@@ -102,12 +102,13 @@ class GatewaySink:
         self.items: list[dict] = []
         self.closed = False
 
-    def add(self, message) -> None:
+    def add(self, message) -> bool:
         if self.closed:
             logger.warning("[Gateway] sink already closed; dropping late reply: %r",
                            str(message)[:120])
-            return
+            return False
         self.items.append(message_to_reply_item(message))
+        return True
 
 
 def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
@@ -117,6 +118,11 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
     _is_at_me fires exactly like a real QQ @-mention."""
     platform = str(event.get("platform", "") or "gateway").strip()
     message_type = event.get("message_type", "group")
+    conversation_id = (
+        event.get("conversation_id")
+        if message_type == "group"
+        else event.get("user_id")
+    )
     self_id = str(event.get("self_id", ""))
     sender_name = str(event.get("sender_name", "") or "?")
     user_id = f"{platform}:{event.get('user_id', '')}"
@@ -146,7 +152,11 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
         elif t == "emoji":
             message.append({"type": "face", "data": {}})
         elif t == "reply":
-            message.append({"type": "reply", "data": {}})
+            reply_id = seg.get("message_id", seg.get("id"))
+            data = {}
+            if reply_id is not None and reply_id != "":
+                data["id"] = f"{platform}:{conversation_id}:{reply_id}"
+            message.append({"type": "reply", "data": data})
     # Some platforms signal "this message addresses the bot" without a real
     # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at
     # so _is_at_me fires.
@@ -172,7 +182,5 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
         # routinely appears in two different chats and a bare
         # "<platform>:<mid>" key would silently swallow the second message.
         # Private events use the sender as the conversation.
-        conv = event.get("conversation_id") if message_type == "group" \
-            else event.get("user_id")
-        payload["message_id"] = f"{platform}:{conv}:{mid}"
+        payload["message_id"] = f"{platform}:{conversation_id}:{mid}"
     return payload

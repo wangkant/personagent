@@ -1,9 +1,9 @@
 """Single anchor for on-disk locations.
 
-ROOT is the repository / deployment root, NOT the package directory: every
-state file the agent reads or writes (memory.json, eval.jsonl,
-candidates.jsonl, stickers/, data/...) lived at the root before the package
-restructure, and existing deployments keep working only if it stays that way.
+ROOT is the repository / deployment root, NOT the package directory. Read-only
+seed data and sticker binaries live there. Mutable text state belongs under
+``runtime_dir()``; Agent migrates legacy root-level JSON/JSONL files on first
+use so older deployments keep working.
 
 **personagent is an application you deploy from a checkout, not a library you
 install and forget.** ``pip install -e .`` exists so the pipeline can be
@@ -60,8 +60,43 @@ def resolve_seed_lang_file(stem: str, ext: str, lang: str) -> Path:
 def runtime_dir() -> Path:
     """Return the ignored directory used for learned runtime state."""
     configured = os.getenv("AGENT_RUNTIME_DIR", "").strip()
-    path = Path(configured) if configured else ROOT / "runtime"
-    return path if path.is_absolute() else ROOT / path
+    root = ROOT.resolve()
+    path = Path(configured).expanduser() if configured else Path("runtime")
+    resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"AGENT_RUNTIME_DIR must stay under AGENT_HOME ({root}): "
+            f"{resolved}") from exc
+    return resolved
+
+
+def resolve_runtime_state_file(value: str | Path) -> Path:
+    """Resolve mutable relative state and copy a legacy root file once.
+
+    Keeping migration here makes service startup and maintenance tools agree:
+    whichever runs first preserves the pre-runtime/ file.
+    """
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    base = runtime_dir().resolve()
+    target = (base / path).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(
+            f"relative runtime state path must stay under {base}: {value}"
+        ) from exc
+    legacy = ROOT / path
+    if not target.exists() and legacy.is_file():
+        from .storage import atomic_write_text
+
+        # Fail closed: continuing with an empty target could let the caller
+        # overwrite the new location and permanently shadow valid legacy data.
+        atomic_write_text(target, legacy.read_text(encoding="utf-8"))
+    return target
 
 
 def resolve_runtime_lang_file(stem: str, ext: str, lang: str) -> Path:

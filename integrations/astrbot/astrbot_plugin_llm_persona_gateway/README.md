@@ -31,21 +31,29 @@ long as the agent "thinks and types" — that is expected, and the default
 2. Restart AstrBot (or reload plugins from the WebUI). AstrBot installs
    `requirements.txt` (only `httpx`) automatically.
 
-3. Open the plugin's configuration in the AstrBot WebUI and point
+3. Open the plugin's configuration in the AstrBot WebUI, explicitly allow the
+   group IDs and/or private senders this agent should receive, then point
    `agent_url` at your running agent.
+
+The plugin starts **default-deny**: it forwards no groups and no private
+messages until you configure the allowlists. For same-host installs, keep the
+default loopback URL. For an agent on another host, use HTTPS and set the same
+non-empty secret in the plugin's `gateway_token` and the agent's
+`GATEWAY_TOKEN`. A private tunnel is also suitable when it terminates at a
+loopback URL visible to AstrBot; never send the token over cleartext HTTP.
 
 ## Configuration
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | Agent gateway endpoint. |
-| `gateway_token` | string | `""` | Sent as `X-Gateway-Token`; must match the agent's `GATEWAY_TOKEN` env. Leave empty if the agent has none. |
+| `gateway_token` | string | `""` | Shared secret for bearer authentication and the signed timestamp/nonce/body envelope. Must match `GATEWAY_TOKEN`; required off-host. |
 | `timeout_s` | int | `180` | HTTP timeout per round-trip. The agent simulates typing delays, keep it generous. |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Platform adapter names never forwarded. |
-| `group_whitelist` | list | `[]` | Group IDs to forward; empty = all groups. |
-| `private_enabled` | bool | `true` | Forward private messages. |
-| `private_whitelist` | list | `[]` | Allowed private senders; empty = all. |
-| `block_default` | bool | `true` | Call `event.stop_event()` after forwarding to suppress AstrBot's own reply pipeline. |
+| `group_whitelist` | list | `[]` | Group IDs to forward; empty = none. |
+| `private_enabled` | bool | `false` | Enable forwarding for explicitly allowlisted private senders. |
+| `private_whitelist` | list | `[]` | Allowed private senders; empty = none. |
+| `block_default` | bool | `true` | Call `event.stop_event()` only after the agent successfully accepts ownership (`handled: true`). Transport failures, invalid responses, and `handled: false` fall back to AstrBot's normal pipeline. |
 
 ## Important: QQ / NapCat double-handling
 
@@ -53,6 +61,24 @@ If NapCat already feeds the agent directly through `POST /webhook/qq`, keep
 `aiocqhttp` in `excluded_platforms` (it is there by default). Otherwise the
 same QQ message would reach the agent twice — once from NapCat and once from
 this plugin.
+
+## Request authentication
+
+When `gateway_token` is set, every request carries the legacy
+`X-Gateway-Token` bearer header plus a replay-resistant envelope:
+`X-Gateway-Timestamp`, a fresh `X-Gateway-Nonce`, and
+`X-Gateway-Signature`. The signature is
+`sha256=<HMAC-SHA256(token, timestamp + "." + nonce + "." + canonical JSON bytes)>`.
+Canonical JSON here means UTF-8, lexicographically sorted keys, compact
+separators, and unescaped Unicode. The agent rejects bad, stale, or reused
+envelopes. Because the signature covers the exact request bytes, proxies must
+not rewrite the JSON body.
+
+The JSON also carries the adapter's original event timestamp. The agent checks
+that source time separately from the forwarding-envelope time, so replaying an
+old queued event with a freshly signed request is rejected. Events whose
+adapter does not provide a valid source timestamp are left to AstrBot's normal
+pipeline instead of being forwarded.
 
 ## How identities look on the agent side
 
