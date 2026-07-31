@@ -7,8 +7,9 @@ plots mean score vs round.
 
 The judge must not be the model being measured, or the loop grades its own
 homework: `--judge export` writes a blind inbox for a human or a separate
-model to score, `--judge anthropic --judge-model ...` routes it to a different
-vendor. Neither ever feeds the learning loop.
+model to score; `--judge openai` (any OpenAI-compatible endpoint) and
+`--judge anthropic` route it to a named judge model. Point them at a model
+other than the one under test. None of them ever feeds the learning loop.
 
 **What the evolve-on arm measures.** The agent's self-review proposes candidates
 and will not promote them unattended — a single automatic signal must never
@@ -25,6 +26,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -288,10 +290,18 @@ def build_inbox(arms: list[dict], votes: int = 1):
     """Build a blind inbox from arm results.
 
     Returns (inbox, key_map) where:
-    - inbox: list of {"item_id", "reply"} (blind: no arm/round/family/scenario_id)
+    - inbox: list of {"item_id", "reply"}; item_id is an opaque digest that
+      carries no arm/round/family/scenario_id.
     - key_map: {item_id: {"arm", "round", "scenario_id", "family"}}
-    - Order shuffled deterministically by sha1(item_id) so judge can't infer arm/round from position.
-    - votes copies per reply with suffixed ids #v1, #v2, etc.
+    - Order shuffled deterministically by the opaque id, so neither the id nor
+      the position tells the judge which arm produced a reply.
+    - votes copies per reply with distinct opaque ids.
+
+    The blinding has to live in the identifier itself.  An earlier version
+    emitted "evolve-on|0|ho001#v1" as the item_id and relied on shuffling the
+    order for blindness, which meant every reply was handed to the judge with
+    its arm spelled out beside it -- the scores it produced could not be
+    evidence of anything.
     """
     inbox: list[dict] = []
     key_map: dict[str, dict] = {}
@@ -301,14 +311,13 @@ def build_inbox(arms: list[dict], votes: int = 1):
             for h in rd["holdout"]:
                 base = f"{aname}|{rd['round']}|{h['scenario_id']}"
                 for v in range(1, votes + 1):
-                    item_id = f"{base}#v{v}"
+                    item_id = hashlib.sha256(
+                        f"{base}#v{v}".encode("utf-8")).hexdigest()[:16]
                     inbox.append({"item_id": item_id, "reply": h["reply"]})
                     key_map[item_id] = {"arm": aname, "round": rd["round"],
                                         "scenario_id": h["scenario_id"],
                                         "family": h["family"]}
-    # Deterministic shuffle: order by a hash of the id so the judge can't infer
-    # arm/round from position, but the same run reproduces the same order.
-    inbox.sort(key=lambda it: hashlib.sha1(it["item_id"].encode()).hexdigest())
+    inbox.sort(key=lambda it: it["item_id"])
     return inbox, key_map
 
 
@@ -344,10 +353,37 @@ def aggregate(key_map: dict, scores: dict) -> dict:
         by_round_vals[(meta["arm"], meta["round"])].append(sc)
         by_family_vals[(meta["arm"], meta["round"], meta["family"])].append(sc)
     mean = lambda xs: round(sum(xs) / len(xs), 3)
+    all_scores = [scores[iid]["score"] for iid in key_map]
     return {
         "by_round": {k: mean(v) for k, v in by_round_vals.items()},
         "by_family": {k: mean(v) for k, v in by_family_vals.items()},
+        "warnings": _measurement_warnings(all_scores),
     }
+
+
+def _measurement_warnings(all_scores: list[int]) -> list[str]:
+    """Flag runs whose numbers cannot support a conclusion.
+
+    A run where the judge answered 5 to all 56 items still produces four tidy
+    means and a plotted curve, and nothing in the output says the instrument
+    never moved. Zero variance means the comparison had no power to detect a
+    difference of any size, so the curve is decoration, not evidence.
+    """
+    warnings: list[str] = []
+    if not all_scores:
+        return ["no scores at all"]
+    distinct = sorted(set(all_scores))
+    if len(distinct) == 1:
+        warnings.append(
+            f"the judge gave {distinct[0]} to all {len(all_scores)} items: zero "
+            "variance, so this run cannot show a difference between arms of any "
+            "size. Treat the curve as void. Usually the scenarios do not "
+            "actually elicit the failure mode, or the rubric is too coarse.")
+    elif len(distinct) == 2 and min(all_scores) >= 4:
+        warnings.append(
+            f"scores span only {distinct}: near-ceiling, so the comparison has "
+            "little power. Widen the rubric or use harder scenarios.")
+    return warnings
 
 
 def write_csv(agg: dict, path: Path) -> None:
@@ -454,6 +490,88 @@ async def judge_anthropic(inbox: list[dict], model: str) -> dict:
     return scores
 
 
+_JUDGE_RUBRIC = (
+    "Rate 1-5 how much this group-chat reply reads like a real person.\n"
+    "5 = indistinguishable from a human in a casual group chat.\n"
+    "1 = obvious AI tell: service-desk tone, bullet lists, name-at-start, "
+    "over-explaining, answered the wrong person, jumped in mid-burst.\n"
+    "You are given the reply only, with no information about how it was "
+    "produced. Judge the text on its own.\n"
+    'Reply ONLY with JSON {"score": int, "reason": "short"}.\n\nReply: ')
+
+
+def _parse_judge_json(raw: str) -> dict:
+    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    d = json.loads(raw)
+    score = int(d["score"])
+    if not 1 <= score <= 5:
+        raise ValueError(f"score {score} out of range")
+    return {"score": score, "reason": str(d.get("reason", ""))[:200]}
+
+
+async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
+    """Judge every reply with an OpenAI-compatible chat endpoint.
+
+    A failed call is left out of the returned mapping rather than backfilled
+    with a neutral 3: a fabricated middle score drags both arms toward each
+    other, which quietly manufactures the "no difference" result the benchmark
+    exists to test for. ``aggregate`` refuses to run on a partial score set, so
+    dropping the item surfaces the problem instead of averaging it away.
+    """
+    import httpx
+
+    base = (os.getenv("BENCH_JUDGE_BASE_URL")
+            or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")).rstrip("/")
+    key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
+    if not key:
+        sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or DEEPSEEK_API_KEY")
+    url = base + ("" if base.endswith("/chat/completions") else "/v1/chat/completions"
+                  if not base.endswith("/v1") else "/chat/completions")
+
+    scores: dict = {}
+    failures: list[str] = []
+    sem = asyncio.Semaphore(4)
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async def one(it: dict) -> None:
+            async with sem:
+                for attempt in range(3):
+                    try:
+                        r = await client.post(
+                            url,
+                            headers={"Authorization": f"Bearer {key}"},
+                            # Generous budget: a reasoning judge spends most of
+                            # it on hidden thinking tokens and emits nothing at
+                            # all if the cap lands mid-thought.
+                            json={"model": model, "max_tokens": 1200,
+                                  "temperature": 0,
+                                  "messages": [{"role": "user",
+                                                "content": _JUDGE_RUBRIC + it["reply"]}]})
+                        r.raise_for_status()
+                        body = r.json()["choices"][0]
+                        text = (body["message"].get("content") or "").strip()
+                        if not text and body.get("finish_reason") == "length":
+                            raise ValueError(
+                                "empty judge output, finish_reason=length "
+                                "(reasoning model? pick a non-reasoning judge)")
+                        scores[it["item_id"]] = _parse_judge_json(text)
+                        return
+                    except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+                        if attempt == 2:
+                            failures.append(f"{it['item_id']}: {exc}")
+                        else:
+                            await asyncio.sleep(1.5 * (attempt + 1))
+
+        await asyncio.gather(*(one(it) for it in inbox))
+
+    if failures:
+        print(f"\n  {len(failures)} of {len(inbox)} judge calls failed after retries:")
+        for line in failures[:5]:
+            print(f"    {line}")
+        print("  These items are omitted; aggregate will refuse a partial set.")
+    return scores
+
+
 def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
     # 'synthetic' copies the committed starter datasets so both arms begin
     # identically; 'empty' starts from nothing.
@@ -500,8 +618,10 @@ async def cmd_run(args) -> int:
     inbox, key_map = build_inbox(arms, votes=args.holdout_votes)
     (out / "key_map.json").write_text(json.dumps(key_map, ensure_ascii=False, indent=2),
                                       encoding="utf-8", newline="\n")
-    if args.judge == "anthropic":
-        scores = await judge_anthropic(inbox, args.judge_model)
+    if args.judge in ("anthropic", "openai"):
+        scores = (await judge_anthropic(inbox, args.judge_model)
+                  if args.judge == "anthropic"
+                  else await judge_openai_compatible(inbox, args.judge_model))
         (out / "judge_scores.jsonl").write_text(
             "".join(json.dumps({"item_id": k, **v}, ensure_ascii=False) + "\n"
                     for k, v in scores.items()), encoding="utf-8", newline="\n")
@@ -524,7 +644,40 @@ def _ingest(out: Path) -> int:
     print(f"\nWrote {out/'results.csv'} and {out/'curve.svg'}")
     for (arm, rnd), sc in sorted(agg["by_round"].items()):
         print(f"  {arm} round {rnd}: {sc}")
+
+    warnings = list(agg.get("warnings", []))
+    warnings.extend(_arm_warnings(out / "arms.json"))
+    if warnings:
+        print("\n  THIS RUN IS NOT EVIDENCE:")
+        for w in warnings:
+            print(f"    - {w}")
+        return 2
     return 0
+
+
+def _arm_warnings(arms_path: Path) -> list[str]:
+    """Flag an evolve-on arm that never actually had anything to learn from.
+
+    If no round produced a feedback pair, the on-arm ran the same prompt
+    material as the control and the two arms are a comparison in name only --
+    a flat curve then says nothing about whether learning helps.
+    """
+    try:
+        arms = json.loads(arms_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    out: list[str] = []
+    for arm in arms:
+        if arm.get("arm") != "evolve-on":
+            continue
+        pairs = [r.get("feedback_pairs", 0) for r in arm.get("rounds", [])]
+        if pairs and not any(pairs):
+            out.append(
+                f"the evolve-on arm accumulated no feedback pairs ({pairs}): it "
+                "had nothing to learn from, so it is not distinguishable from "
+                "the control by construction. The scenarios did not trigger a "
+                "low enough self-eval to produce a pair.")
+    return out
 
 
 def main() -> int:
@@ -540,7 +693,8 @@ def main() -> int:
                    help="full (default) = real STYLE_GUIDE; weak = neutral style guide "
                         "so the base produces AI-tell for the loop to re-learn (ablation)")
     r.add_argument("--holdout-votes", type=int, default=1)
-    r.add_argument("--judge", default="export", choices=["export", "anthropic"])
+    r.add_argument("--judge", default="export",
+                   choices=["export", "anthropic", "openai"])
     r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", "claude-opus-4-8"))
     r.add_argument("--outdir", default=str(ROOT / "benchmark_runs" / "latest"))
     i = sub.add_parser("ingest")

@@ -256,16 +256,42 @@ def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
 def test_inbox_is_blind_and_ingest() -> None:
     arms = [{"arm": "evolve-on", "rounds": [
         {"round": 0, "feedback_pairs": 0,
-         "holdout": [{"scenario_id": "ho1", "family": "f", "reply": "hello"}]},
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "hello"}]},
         {"round": 1, "feedback_pairs": 2,
-         "holdout": [{"scenario_id": "ho1", "family": "f", "reply": "sup"}]},
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "sup"}]},
     ]}]
-    inbox, key_map = bench.build_inbox(arms, votes=1)
+    inbox, key_map = bench.build_inbox(arms, votes=2)
     leaked = [k for it in inbox for k in it
               if k in ("arm", "round", "family", "scenario_id")]
     check("inbox blind (no leak fields)", leaked == [])
     check("inbox has item_id + reply only", all(set(it) == {"item_id", "reply"} for it in inbox))
     check("key_map covers all items", set(key_map) == {it["item_id"] for it in inbox})
+
+    # The identifier is the thing the judge reads next to every reply, so the
+    # blinding has to hold there.  Checking only that no dict *key* is named
+    # "arm" passes happily on item_id="evolve-on|0|ho1#v1", which is exactly
+    # what this function used to emit: the judge saw the arm on every line.
+    # The hex-shape check below is the airtight one: a lowercase hex digest
+    # cannot spell "evolve-on" or "vent". The substring check backs it up if
+    # the id format is ever changed, and ignores values under 3 characters
+    # because a single digit or an "f" collides with hex by chance, not by leak.
+    exposed = [(it["item_id"], field, value)
+               for it in inbox
+               for field, value in key_map[it["item_id"]].items()
+               if len(str(value)) >= 3 and str(value) in it["item_id"]]
+    check("item_id leaks no metadata value", exposed == [], str(exposed[:3]))
+    check("item_id is an opaque fixed-width digest",
+          all(len(it["item_id"]) == 16 and all(c in "0123456789abcdef" for c in it["item_id"])
+              for it in inbox),
+          str([it["item_id"] for it in inbox[:3]]))
+    # Repeat votes must not collapse: two votes on one reply need separate ids,
+    # or the second vote silently overwrites the first in the score file.
+    check("every vote gets a distinct id",
+          len({it["item_id"] for it in inbox}) == len(inbox),
+          f"{len({it['item_id'] for it in inbox})} ids for {len(inbox)} items")
+    check("build_inbox is deterministic",
+          [it["item_id"] for it in bench.build_inbox(arms, votes=2)[0]]
+          == [it["item_id"] for it in inbox])
 
     scores = {it["item_id"]: {"score": 3 + i, "reason": "r"} for i, it in enumerate(inbox)}
     agg = bench.aggregate(key_map, scores)
@@ -280,6 +306,54 @@ def test_inbox_is_blind_and_ingest() -> None:
     except ValueError:
         raised = True
     check("aggregate errors on missing score", raised)
+
+
+def test_void_runs_are_reported_not_plotted() -> None:
+    """A run the judge could not discriminate must not be presented as a result.
+
+    aggregate() happily returns four tidy means when the judge answered 5 to
+    every item, write_svg() plots them, and the operator sees a flat curve that
+    looks like a measured null result. It is not one: zero variance means the
+    comparison had no power to detect any difference at all."""
+    km = {}
+    flat = {}
+    for arm in ("evolve-on", "evolve-off"):
+        for rnd in (0, 1):
+            for i in range(4):
+                iid = f"{arm}{rnd}{i}"
+                km[iid] = {"arm": arm, "round": rnd, "scenario_id": f"ho{i}",
+                           "family": "vent"}
+                flat[iid] = {"score": 5, "reason": "r"}
+    agg = bench.aggregate(km, flat)
+    check("void run: means still computed", len(agg["by_round"]) == 4)
+    check("void run: flagged as unusable",
+          any("zero variance" in w for w in agg["warnings"]), str(agg["warnings"]))
+
+    near = {k: {"score": 4 + (i % 2), "reason": "r"} for i, k in enumerate(km)}
+    check("near-ceiling run: flagged as low power",
+          any("near-ceiling" in w for w in bench.aggregate(km, near)["warnings"]))
+
+    spread = {k: {"score": 1 + (i % 5), "reason": "r"} for i, k in enumerate(km)}
+    check("discriminating run: no warning",
+          bench.aggregate(km, spread)["warnings"] == [],
+          str(bench.aggregate(km, spread)["warnings"]))
+
+    # An evolve-on arm that never banked a feedback pair is the control.
+    with tempfile.TemporaryDirectory() as td:
+        ap = Path(td) / "arms.json"
+        ap.write_text(json.dumps([
+            {"arm": "evolve-on", "rounds": [{"round": 0, "feedback_pairs": 0},
+                                            {"round": 1, "feedback_pairs": 0}]},
+            {"arm": "evolve-off", "rounds": [{"round": 0, "feedback_pairs": 0}]},
+        ]), encoding="utf-8")
+        w = bench._arm_warnings(ap)
+        check("no-feedback on-arm is flagged",
+              len(w) == 1 and "nothing to learn from" in w[0], str(w))
+        ap.write_text(json.dumps([
+            {"arm": "evolve-on", "rounds": [{"round": 0, "feedback_pairs": 0},
+                                            {"round": 1, "feedback_pairs": 3}]},
+        ]), encoding="utf-8")
+        check("on-arm that did learn is not flagged", bench._arm_warnings(ap) == [])
 
 
 def test_outputs() -> None:
@@ -323,6 +397,7 @@ def main() -> int:
     test_run_arm_isolation_and_growth()
     test_real_evolution_pipeline_with_external_calls_stubbed()
     test_inbox_is_blind_and_ingest()
+    test_void_runs_are_reported_not_plotted()
     test_outputs()
     test_export_writes_blind_inbox()
     print()
