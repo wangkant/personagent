@@ -6,6 +6,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The benchmark's blind judging is now actually blind — and actually judges.**
+  Four measurement defects, found by running the thing: the "blind" inbox spelled
+  the arm out in every `item_id`; a run the judge scored 5-across-the-board (zero
+  variance) was plotted as a tidy curve instead of being refused; the model's
+  `PASS` sentinel was graded as if someone had typed the word (polluting both
+  the learning material and the judged sample); and a reply-only judge rated a
+  drafted apology letter 5/5 "like a friend offering a script" because without
+  the chat context, over-formality is invisible. Item ids are opaque digests
+  now; `ingest` names void runs (zero variance, silent-rate imbalance,
+  no-feedback on-arm, `--style full` ceilings) and exits 2; PASS collapses to
+  silence and silence is counted per arm instead of judged; the judge sees the
+  scenario context (identical for both arms) and rates against the persona
+  register, not mere human-plausibility.
+- **An empty reply with `finish_reason=length` is retried once at 4x the
+  budget.** A reasoning model can spend the whole token budget on hidden
+  chain-of-thought and emit nothing visible; every turn came back empty with
+  only a terse warning. The retry recovers the turn and the log now names the
+  likely cause (model choice) and the fix.
+- **The self-evaluator now treats a blatant AI tell as a failure, not a
+  quibble.** Measured on a 30-scenario probe, it scored a "Here you go:
+  [drafted apology]" reply 4/5 ("slightly formal"). Since only scores <= 2
+  become learning material, the loop was structurally blind to its most common
+  failure mode. A scoring anchor caps blatant tells (markdown, drafted
+  deliverables, tutorial structure, service politeness) at 2.
+
+### Added
+
+- **Six assistant-bait scenario families** (`rec-request`, `tech-help`,
+  `explain-bait`, `decision-bait`, `task-bait`, `plan-bait`, 18 train + 12
+  holdout). The original families are all easy social chatter; none exercised
+  the style rules the loop is supposed to re-derive. Each new family baits the
+  weak-styled model into a register the persona forbids.
+- **`tools/scenario_probe.py`** — calibrates candidate scenarios against the
+  real model before they earn a place in the benchmark: reports each
+  scenario's self-eval and blind-judge score so curation is evidence, not
+  intuition.
+- **`--judge openai`** — routes blind judging to any OpenAI-compatible
+  endpoint (`BENCH_JUDGE_BASE_URL` / `BENCH_JUDGE_API_KEY`, falling back to
+  the `DEEPSEEK_*` vars). A failed judge call is dropped, never backfilled
+  with a neutral 3 — a fabricated middle score manufactures the "no
+  difference" verdict the benchmark exists to test for. The `anthropic`
+  backend now behaves the same way.
+
 Recording something and being changed by it are now separate acts. A reaction is
 **evidence**. An adjudication creates a **candidate**. **Promotion** grants a
 candidate authority over future replies. **Rollback or supersession** takes that

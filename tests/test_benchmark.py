@@ -256,15 +256,18 @@ def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
 def test_inbox_is_blind_and_ingest() -> None:
     arms = [{"arm": "evolve-on", "rounds": [
         {"round": 0, "feedback_pairs": 0,
-         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "hello"}]},
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "hello",
+                      "context": ["alex: rough day"]}]},
         {"round": 1, "feedback_pairs": 2,
-         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "sup"}]},
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "sup",
+                      "context": ["alex: rough day"]}]},
     ]}]
     inbox, key_map = bench.build_inbox(arms, votes=2)
     leaked = [k for it in inbox for k in it
               if k in ("arm", "round", "family", "scenario_id")]
     check("inbox blind (no leak fields)", leaked == [])
-    check("inbox has item_id + reply only", all(set(it) == {"item_id", "reply"} for it in inbox))
+    check("inbox carries item_id + reply + context only",
+          all(set(it) == {"item_id", "reply", "context"} for it in inbox))
     check("key_map covers all items", set(key_map) == {it["item_id"] for it in inbox})
 
     # The identifier is the thing the judge reads next to every reply, so the
@@ -289,6 +292,14 @@ def test_inbox_is_blind_and_ingest() -> None:
     check("every vote gets a distinct id",
           len({it["item_id"] for it in inbox}) == len(inbox),
           f"{len({it['item_id'] for it in inbox})} ids for {len(inbox)} items")
+    check("context rides along for the judge",
+          all(it["context"] == ["alex: rough day"] for it in inbox))
+    legacy = [{"arm": "evolve-on", "rounds": [
+        {"round": 0, "feedback_pairs": 0,
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "hey"}]}]}]
+    linbox, _ = bench.build_inbox(legacy, votes=1)
+    check("legacy arms.json without context still exports",
+          linbox and linbox[0]["context"] == [])
     check("build_inbox is deterministic",
           [it["item_id"] for it in bench.build_inbox(arms, votes=2)[0]]
           == [it["item_id"] for it in inbox])
@@ -306,6 +317,56 @@ def test_inbox_is_blind_and_ingest() -> None:
     except ValueError:
         raised = True
     check("aggregate errors on missing score", raised)
+
+
+def test_pass_sentinel_is_protocol_not_text() -> None:
+    """The PASS sentinel must never reach the evaluator or the judge.
+
+    The production gateway swallows PASS-prefixed replies before anything
+    downstream sees them. The harness calls _think directly, and used to feed
+    the raw string onward: the self-eval graded the literal word PASS as a
+    reply (observed live: 'too terse and robotic', 2/5), the evolve tick got
+    protocol noise as learning material, and the judge inbox asked a blind
+    judge to rate "PASS" as if a person had typed it."""
+    check("PASS collapses to silence", bench.strip_pass_sentinel("PASS") == "")
+    check("PASS with tail collapses (production word-boundary rule)",
+          bench.strip_pass_sentinel("PASS lol") == "")
+    check("case-insensitive like production",
+          bench.strip_pass_sentinel("pass.") == "")
+    check("genuine reply is untouched",
+          bench.strip_pass_sentinel("passable lol") == "passable lol")
+    check("empty stays empty", bench.strip_pass_sentinel(None) == "")
+
+    arms = [{"arm": "evolve-on", "rounds": [
+        {"round": 0, "feedback_pairs": 0,
+         "holdout": [{"scenario_id": "ho1", "family": "vent", "reply": "hey"},
+                     {"scenario_id": "ho2", "family": "vent", "reply": ""}]},
+    ]}]
+    inbox, key_map = bench.build_inbox(arms, votes=1)
+    check("silent replies never reach the judge inbox",
+          len(inbox) == 1 and inbox[0]["reply"] == "hey", str(inbox))
+    check("key_map matches the filtered inbox", set(key_map) == {inbox[0]["item_id"]})
+
+    with tempfile.TemporaryDirectory() as td:
+        ap = Path(td) / "arms.json"
+        ap.write_text(json.dumps([
+            {"arm": "evolve-on", "rounds": [
+                {"round": 0, "holdout": [{"reply": ""}, {"reply": ""},
+                                         {"reply": ""}, {"reply": "hey"}]}]},
+            {"arm": "evolve-off", "rounds": [
+                {"round": 0, "holdout": [{"reply": "a"}, {"reply": "b"},
+                                         {"reply": "c"}, {"reply": "d"}]}]},
+        ]), encoding="utf-8")
+        counts = bench._pass_counts(ap)
+        check("pass counts read from arms.json",
+              counts[("evolve-on", 0)] == (3, 4)
+              and counts[("evolve-off", 0)] == (0, 4), str(counts))
+        w = bench._pass_warnings(counts)
+        check("75-point silence gap is flagged",
+              len(w) == 1 and "not like-for-like".replace(" ", " ") in w[0], str(w))
+        balanced = {("evolve-on", 0): (1, 14), ("evolve-off", 0): (2, 14)}
+        check("small silence gap is not flagged",
+              bench._pass_warnings(balanced) == [])
 
 
 def test_void_runs_are_reported_not_plotted() -> None:
@@ -337,6 +398,19 @@ def test_void_runs_are_reported_not_plotted() -> None:
     check("discriminating run: no warning",
           bench.aggregate(km, spread)["warnings"] == [],
           str(bench.aggregate(km, spread)["warnings"]))
+
+    # A ceiling run with style=full means the ablation was off, not broken.
+    with tempfile.TemporaryDirectory() as td:
+        mp = Path(td) / "meta.json"
+        mp.write_text(json.dumps({"style": "full"}), encoding="utf-8")
+        check("full-style ceiling names the real cause",
+              any("--style weak" in w
+                  for w in bench._style_warnings(mp, ["zero variance"])))
+        check("full-style is not flagged when the run discriminated",
+              bench._style_warnings(mp, []) == [])
+        mp.write_text(json.dumps({"style": "weak"}), encoding="utf-8")
+        check("weak-style ceiling is not blamed on the flag",
+              bench._style_warnings(mp, ["zero variance"]) == [])
 
     # An evolve-on arm that never banked a feedback pair is the control.
     with tempfile.TemporaryDirectory() as td:
@@ -386,7 +460,9 @@ def test_export_writes_blind_inbox() -> None:
         asyncio.run(bench.judge_export(inbox, out))
         written = (out / "judge_inbox.jsonl").read_text(encoding="utf-8")
         rec = json.loads(written.splitlines()[0])
-        check("exported item blind", set(rec) == {"item_id", "reply"})
+        check("exported item blind",
+              set(rec) == {"item_id", "context", "reply"}
+              and not any(k in rec for k in ("arm", "round", "family", "scenario_id")))
         check("exported reply present", rec["reply"] == "hi there")
 
 
@@ -397,6 +473,7 @@ def main() -> int:
     test_run_arm_isolation_and_growth()
     test_real_evolution_pipeline_with_external_calls_stubbed()
     test_inbox_is_blind_and_ingest()
+    test_pass_sentinel_is_protocol_not_text()
     test_void_runs_are_reported_not_plotted()
     test_outputs()
     test_export_writes_blind_inbox()

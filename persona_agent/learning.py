@@ -322,6 +322,12 @@ class Learning:
                 f"Judge by: 1) does the reply fit the context 2) does it match the "
                 f"persona 3) does it sound natural rather than AI-flavored 4) is "
                 f"the length reasonable.\n"
+                f"Scoring anchor: a blatant AI tell is not 'slightly off', it "
+                f"caps the score at 2. Blatant tells: markdown/bullets/numbered "
+                f"steps, a drafted document or 'here you go' deliverable, "
+                f"step-by-step tutorial structure, lecture length, "
+                f"customer-service politeness. A real group member answers a "
+                f"casual ask with a casual line.\n"
                 f"Output JSON only: {json_schema}"
             )
 

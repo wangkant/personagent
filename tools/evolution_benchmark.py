@@ -120,11 +120,27 @@ def seed_buffer(agent, group_id: str, scenario: dict, bot_name: str):
     return latest_text, caller
 
 
+def strip_pass_sentinel(reply: str) -> str:
+    """Collapse the model's PASS sentinel to an empty reply.
+
+    The production gateway swallows ``PASS``-prefixed replies before they are
+    sent or evaluated (agent.py, the ``re.match(r"PASS\\b", ...)`` gate) -- the
+    sentinel is the JSON protocol's "I choose not to speak", not an utterance.
+    The harness calls _think directly and used to hand the raw string onward,
+    so the self-eval graded the literal word PASS ("too terse and robotic",
+    2/5), the evolve tick drafted learning material from protocol noise, and
+    the blind judge was asked to rate "PASS" as if someone had typed it."""
+    reply = (reply or "").strip()
+    if re.match(r"PASS\b", reply, re.IGNORECASE):
+        return ""
+    return reply
+
+
 async def drive_scenario(agent, scenario: dict, bot_name: str, group_id: str = "g1") -> str:
     latest, caller = seed_buffer(agent, group_id, scenario, bot_name)
     reply, _intent, _mem = await agent._think(
         group_id, scenario["mode"], latest, caller_override=caller)
-    return reply or ""
+    return strip_pass_sentinel(reply)
 
 
 def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable: bool):
@@ -225,7 +241,12 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                 latest, _caller = seed_buffer(agent, "g1", scn, bot_name)
                 reply, intent, _mem = await agent._think(
                     "g1", scn["mode"], latest, caller_override=_caller)
-                reply = reply or ""
+                reply = strip_pass_sentinel(reply)
+                if not reply:
+                    # Production never evaluates a PASS; neither does the
+                    # harness, or the loop learns from the sentinel.
+                    print(f"  [train {scn['id']}] no reply (PASS)")
+                    continue
                 # Self-eval writes eval.jsonl (the loop's learning signal).
                 # Real signature: _evaluate_reply(group_id, mode, user_msg,
                 # reply, sticker_files=None, intent="", ctx_msgs=None). Called
@@ -259,7 +280,16 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
         except Exception as e:
             print(f"  [holdout {scn['id']}] error: {type(e).__name__}: {e}")
             reply = ""
-        out.append({"scenario_id": scn["id"], "family": scn["family"], "reply": reply})
+        # Context rides along for the judge. It is identical for both arms
+        # (same scenario), so exposing it leaks nothing about which arm wrote
+        # the reply -- while withholding it blinds the judge to exactly the
+        # tells that matter: a drafted letter answering a casual ask, a
+        # tutorial where a quip was expected. Measured on a 30-scenario probe:
+        # a reply-only judge rated a "Here you go: [drafted apology]" reply
+        # 5/5 ("like a friend offering a script").
+        ctx = [ln.replace("<bot-name>", bot_name) for ln in scn["context"]]
+        out.append({"scenario_id": scn["id"], "family": scn["family"],
+                    "reply": reply, "context": ctx})
     return out
 
 
@@ -309,11 +339,18 @@ def build_inbox(arms: list[dict], votes: int = 1):
         aname = arm["arm"]
         for rd in arm["rounds"]:
             for h in rd["holdout"]:
+                if not (h.get("reply") or "").strip():
+                    # A PASS / empty reply is a refusal to speak, not text; the
+                    # judge sees replies without context and cannot score
+                    # silence. Skipped here, counted by _pass_counts so a
+                    # silence imbalance between arms stays visible.
+                    continue
                 base = f"{aname}|{rd['round']}|{h['scenario_id']}"
                 for v in range(1, votes + 1):
                     item_id = hashlib.sha256(
                         f"{base}#v{v}".encode("utf-8")).hexdigest()[:16]
-                    inbox.append({"item_id": item_id, "reply": h["reply"]})
+                    inbox.append({"item_id": item_id, "reply": h["reply"],
+                                  "context": list(h.get("context") or [])})
                     key_map[item_id] = {"arm": aname, "round": rd["round"],
                                         "scenario_id": h["scenario_id"],
                                         "family": h["family"]}
@@ -450,8 +487,9 @@ def write_svg(agg: dict, path: Path) -> None:
 async def judge_export(inbox: list[dict], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / "judge_inbox.jsonl"
-    p.write_text("".join(json.dumps({"item_id": it["item_id"], "reply": it["reply"]},
-                                    ensure_ascii=False) + "\n" for it in inbox),
+    p.write_text("".join(json.dumps(
+        {"item_id": it["item_id"], "context": it.get("context") or [],
+         "reply": it["reply"]}, ensure_ascii=False) + "\n" for it in inbox),
                  encoding="utf-8", newline="\n")
     print(f"\nWrote {len(inbox)} blind items to {p}")
     print("Score each into judge_scores.jsonl (one JSON per line):")
@@ -470,34 +508,51 @@ async def judge_anthropic(inbox: list[dict], model: str) -> dict:
     client = anthropic.AsyncAnthropic(
         api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         base_url=os.getenv("ANTHROPIC_BASE_URL", "") or None)
-    RUBRIC = ("Rate 1-5 how much this group-chat reply reads like a real person "
-              "(5=human, 1=obvious AI tell). Reply ONLY with JSON "
-              '{"score": int, "reason": "short"}.\n\nReply: ')
     scores: dict = {}
+    failures = 0
     for it in inbox:
         try:
             resp = await client.messages.create(
-                model=model, max_tokens=120,
-                messages=[{"role": "user", "content": RUBRIC + it["reply"]}])
+                model=model, max_tokens=200,
+                messages=[{"role": "user", "content": _judge_item_prompt(it)}])
             raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
-            import re
-            raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
-            d = json.loads(raw)
-            scores[it["item_id"]] = {"score": int(d["score"]), "reason": d.get("reason", "")}
+            scores[it["item_id"]] = _parse_judge_json(raw)
         except Exception as e:
+            # Dropped, not backfilled: a fabricated neutral 3 pulls both arms
+            # together and manufactures the "no difference" result this
+            # benchmark exists to test for. aggregate refuses partial sets.
             print(f"  judge error {it['item_id']}: {e}")
-            scores[it["item_id"]] = {"score": 3, "reason": f"judge-failed: {e}"}
+            failures += 1
+    if failures:
+        print(f"  {failures} of {len(inbox)} judge calls failed; "
+              "their items are omitted and aggregate will refuse a partial set.")
     return scores
 
 
 _JUDGE_RUBRIC = (
-    "Rate 1-5 how much this group-chat reply reads like a real person.\n"
-    "5 = indistinguishable from a human in a casual group chat.\n"
-    "1 = obvious AI tell: service-desk tone, bullet lists, name-at-start, "
-    "over-explaining, answered the wrong person, jumped in mid-burst.\n"
-    "You are given the reply only, with no information about how it was "
-    "produced. Judge the text on its own.\n"
-    'Reply ONLY with JSON {"score": int, "reason": "short"}.\n\nReply: ')
+    "The reply below is meant to come from a REGULAR MEMBER of a casual "
+    "group chat: spoken style, short, has opinions, never customer-service "
+    "polite, never delivers formatted work-products.\n"
+    "Rate 1-5 how well the reply passes as that register -- NOT merely "
+    "whether a human could have typed it. A fluent human could type a "
+    "drafted letter or a tutorial; that still fails this register.\n"
+    "5 = exactly the register: one or two short casual lines, natural, "
+    "opinionated where the ask invites it.\n"
+    "3 = human-plausible but drifting into helpful-assistant register: "
+    "structured advice, a mini-tutorial, several organized sentences, a "
+    "drafted text with placeholders, options laid out evenly.\n"
+    "1 = full assistant mode: bullets or numbered steps, a polished "
+    "deliverable, service politeness, lecture length, answered the wrong "
+    "person, jumped in mid-burst.\n"
+    "Judge the reply against the chat context. You are told nothing about "
+    "how the reply was produced.\n"
+    'Reply ONLY with JSON {"score": int, "reason": "short"}.\n\n')
+
+
+def _judge_item_prompt(item: dict) -> str:
+    ctx = item.get("context") or []
+    ctx_block = ("Chat context:\n" + "\n".join(ctx) + "\n\n") if ctx else ""
+    return f"{_JUDGE_RUBRIC}{ctx_block}Reply: {item['reply']}"
 
 
 def _parse_judge_json(raw: str) -> dict:
@@ -546,7 +601,7 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
                             json={"model": model, "max_tokens": 1200,
                                   "temperature": 0,
                                   "messages": [{"role": "user",
-                                                "content": _JUDGE_RUBRIC + it["reply"]}]})
+                                                "content": _judge_item_prompt(it)}]})
                         r.raise_for_status()
                         body = r.json()["choices"][0]
                         text = (body["message"].get("content") or "").strip()
@@ -642,17 +697,85 @@ def _ingest(out: Path) -> int:
     write_csv(agg, out / "results.csv")
     write_svg(agg, out / "curve.svg")
     print(f"\nWrote {out/'results.csv'} and {out/'curve.svg'}")
+    counts = _pass_counts(out / "arms.json")
     for (arm, rnd), sc in sorted(agg["by_round"].items()):
-        print(f"  {arm} round {rnd}: {sc}")
+        silent, total = counts.get((arm, rnd), (0, 0))
+        note = f"  ({silent}/{total} silent)" if silent else ""
+        print(f"  {arm} round {rnd}: {sc}{note}")
 
     warnings = list(agg.get("warnings", []))
+    warnings.extend(_pass_warnings(counts))
     warnings.extend(_arm_warnings(out / "arms.json"))
+    warnings.extend(_style_warnings(out / "meta.json", warnings))
     if warnings:
         print("\n  THIS RUN IS NOT EVIDENCE:")
         for w in warnings:
             print(f"    - {w}")
         return 2
     return 0
+
+
+def _style_warnings(meta_path: Path, existing: list[str]) -> list[str]:
+    """Name the most likely cause when a ceiling run never had the ablation on.
+
+    `run` defaults to --style full, under which both arms sit at ceiling by
+    design -- the model already has every anti-AI-tell rule, so there is
+    nothing to learn and nothing for the judge to penalize. That output is
+    byte-for-byte indistinguishable from "the ablation does not work"; only
+    meta.json can tell them apart, and a whole diagnosis was once built on
+    not looking at it.
+    """
+    if not existing:
+        return []
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if meta.get("style") == "full":
+        return ["this run used --style full (the default): the ablation was "
+                "never on, so a ceiling here is expected, not a finding. "
+                "Re-run with --style weak before concluding anything."]
+    return []
+
+
+def _pass_counts(arms_path: Path) -> dict:
+    """Per (arm, round): (silent, total) holdout replies, from arms.json."""
+    try:
+        arms = json.loads(arms_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    out: dict = {}
+    for arm in arms:
+        for rd in arm.get("rounds", []):
+            hs = rd.get("holdout", [])
+            silent = sum(1 for h in hs if not (h.get("reply") or "").strip())
+            out[(arm.get("arm"), rd.get("round"))] = (silent, len(hs))
+    return out
+
+
+def _pass_warnings(counts: dict) -> list[str]:
+    """Flag rounds where the arms' silence rates diverge enough to bias means.
+
+    Silent replies are excluded from judging, so the per-arm mean is computed
+    over a *different subset* of scenarios for each arm. If one arm goes quiet
+    on the hard scenarios, its mean rises for reasons that have nothing to do
+    with reply quality -- the comparison stops being like-for-like.
+    """
+    warnings: list[str] = []
+    rounds = sorted({r for (_a, r) in counts})
+    for rnd in rounds:
+        rates = {a: (s / t if t else 0.0)
+                 for (a, r), (s, t) in counts.items() if r == rnd}
+        if len(rates) >= 2:
+            spread = max(rates.values()) - min(rates.values())
+            if spread > 0.3:
+                detail = ", ".join(f"{a}={rates[a]:.0%}" for a in sorted(rates))
+                warnings.append(
+                    f"round {rnd}: the arms' silence rates differ by "
+                    f"{spread:.0%} ({detail}). Each arm's mean is computed "
+                    "over a different scenario subset; the comparison is not "
+                    "like-for-like this round.")
+    return warnings
 
 
 def _arm_warnings(arms_path: Path) -> list[str]:
