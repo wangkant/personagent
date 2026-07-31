@@ -38,6 +38,7 @@ import httpx
 
 from . import candidates, evidence, evolution, promotion, reactions
 from .pools import _needs_leading_newline
+from .storage import append_jsonl_unlocked, append_lock
 
 logger = logging.getLogger("agent")
 
@@ -515,25 +516,43 @@ class Learning:
 
     @staticmethod
     def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
-        """Append a line; rotate path to path.old when it would exceed max_bytes."""
+        """Append one JSONL row, rotating to path.old past max_bytes.
+
+        Rotation and write happen under the same lock every other writer of
+        this file takes, and the row goes through storage.append_jsonl_unlocked
+        so it is fsynced and a missing trailing newline is repaired. This was a
+        bare open("a") with an unlocked rename: eval.jsonl lost its tail on
+        power loss, and a rotation racing an append could drop the row into the
+        file that had just been moved aside."""
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            sz = path.stat().st_size if path.exists() else 0
-        except OSError:
-            sz = 0
-        if sz > max_bytes:
-            old = path.with_suffix(path.suffix + ".old")
-            try:
-                if old.exists():
-                    old.unlink()
-                path.rename(old)
-            except OSError as e:
-                logger.warning("[Agent] log rotation failed for %s: %s", path, e)
+            row = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            row = None
         try:
-            with path.open("a", encoding="utf-8") as f:
-                if _needs_leading_newline(path):
-                    f.write("\n")
-                f.write(line)
+            with append_lock(path):
+                try:
+                    sz = path.stat().st_size if path.exists() else 0
+                except OSError:
+                    sz = 0
+                if sz > max_bytes:
+                    old = path.with_suffix(path.suffix + ".old")
+                    try:
+                        if old.exists():
+                            old.unlink()
+                        path.rename(old)
+                    except OSError as e:
+                        logger.warning("[Agent] log rotation failed for %s: %s",
+                                       path, e)
+                if isinstance(row, dict):
+                    append_jsonl_unlocked(path, row)
+                else:
+                    # Not a JSON object; callers always pass one, but keep the
+                    # old behaviour rather than silently dropping the line.
+                    with path.open("a", encoding="utf-8") as f:
+                        if _needs_leading_newline(path):
+                            f.write("\n")
+                        f.write(line)
         except OSError as e:
             logger.warning("[Agent] log write failed for %s: %s", path, e)
 

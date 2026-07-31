@@ -166,8 +166,14 @@ def append_jsonl_unlocked(path: str | Path, row: dict) -> int:
     payload = (json.dumps(
         row, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
     existed = path.exists()
+    # O_BINARY matters on Windows: without it the fd is in text mode, so every
+    # newline in the payload is written as CRLF, the returned length is short
+    # by one byte per row, and the file ends up with mixed line endings against
+    # every other writer here (all of which pin newline to LF).
     fd = os.open(
-        path, os.O_RDWR | os.O_CREAT | os.O_APPEND, PRIVATE_FILE_MODE)
+        path,
+        os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0),
+        PRIVATE_FILE_MODE)
     try:
         _set_private_permissions(path)
         size = os.fstat(fd).st_size

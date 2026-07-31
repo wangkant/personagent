@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import ast
 import sys
 from pathlib import Path
 
@@ -37,6 +38,44 @@ def test_every_test_file_is_collected() -> None:
         f"{Path(__file__).name}, and each suite must be runnable as a script "
         "with an `if __name__ == \"__main__\": sys.exit(main())` guard: "
         + ", ".join(missing)
+    )
+
+
+def test_every_test_function_is_registered() -> None:
+    """A test function must actually be called, not merely defined.
+
+    These suites wire themselves by hand — `main()` calls each test in turn —
+    so a function that is never added there is dead code that reports nothing
+    while the suite still prints "all tests passed". This bit twice in one
+    afternoon: an edit inserted the definition but its registration line missed
+    the anchor it was matching against, and neither the suite nor CI noticed.
+
+    Same failure mode as an uncollected file, one level down: a test existing
+    is not a test running, and green output does not distinguish the two."""
+    unregistered: list[str] = []
+    for suite in SUITES:
+        tree = ast.parse(suite.read_text(encoding="utf-8"), filename=str(suite))
+        defined = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and (node.name.startswith("test_") or node.name.startswith("regression_"))
+        }
+        # Any load of the name counts as registration, not just a direct
+        # call: suites register either as `main()` calling each test, or as a
+        # list of function references walked in a loop
+        # (`tests = [test_a, ...]; for t in tests: t()`).
+        referenced = {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+        }
+        for name in sorted(defined - referenced):
+            unregistered.append(f"{suite.name}::{name}")
+    assert not unregistered, (
+        "these test functions are defined but never called from their suite's "
+        "main(), so they run nowhere and pass vacuously: "
+        + ", ".join(unregistered)
     )
 
 

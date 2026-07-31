@@ -53,3 +53,6 @@ logs/
 # Benchmark run artifacts
 benchmark_runs/
 teacher_stats.json
+
+# Single-instance guard written at the deployment root (main.py)
+.personagent.instance.lock

@@ -272,6 +272,31 @@ def test_cli_tools_migrate_legacy_state_when_run_first(tmp: Path) -> None:
     )
 
 
+def test_appended_rows_are_byte_exact(tmp: Path) -> None:
+    """Appends must land byte-for-byte, with LF endings on every platform.
+
+    os.open without O_BINARY leaves the descriptor in text mode on Windows, so
+    every newline was written as CRLF: the file gained endings no other writer
+    here produces, and append_jsonl_unlocked's returned length was one byte
+    short per row. Asserted with read_bytes rather than splitlines, because
+    splitlines treats CRLF as a line break and hides the very corruption under
+    test."""
+    tmp.mkdir(parents=True, exist_ok=True)
+    path = tmp / "rows.jsonl"
+    lf = chr(10).encode()
+    cr = chr(13).encode()
+    written = storage.append_jsonl(path, {"x": 1})
+    raw = path.read_bytes()
+    check("append: row is byte-exact LF", raw == b'{"x":1}' + lf, repr(raw))
+    check("append: returned length matches what hit disk",
+          written == len(raw), f"{written} vs {len(raw)}")
+    storage.append_jsonl(path, {"y": 2})
+    raw2 = path.read_bytes()
+    check("append: no CR anywhere in the file", cr not in raw2, repr(raw2))
+    check("append: second row appended cleanly",
+          raw2 == b'{"x":1}' + lf + b'{"y":2}' + lf, repr(raw2))
+
+
 def main() -> int:
     if storage is None or paths is None:
         check("storage module is importable", False,
@@ -282,6 +307,7 @@ def main() -> int:
             test_runtime_instance_lock(tmp / "instance")
             test_cross_process_append(tmp / "append")
             test_atomic_write(tmp / "atomic")
+            test_appended_rows_are_byte_exact(tmp / "bytes")
             test_validated_jsonl_quarantines_in_place(tmp / "validation")
             test_runtime_dir_stays_under_agent_home(tmp / "home")
             test_cli_tools_follow_runtime_dir()
