@@ -345,8 +345,10 @@ class StickerLibrary:
                 system="You are a sticker semantic analyzer. Output JSON only.",
                 messages=[{"role": "user", "content": prompt}],
                 model=self.tagger_model,
-                max_tokens=200,
+                max_tokens=600,
                 enable_search=False,
+                disable_thinking=True,
+                json_object=True,
             )
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
             try:
@@ -430,8 +432,10 @@ class StickerLibrary:
                     system="You are a sticker / persona-fit classifier. Output JSON only.",
                     messages=[{"role": "user", "content": prompt}],
                     model=self.tagger_model,
-                    max_tokens=40,
+                    max_tokens=300,
                     enable_search=False,
+                    disable_thinking=True,
+                    json_object=True,
                 )
                 raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
                 parsed = json.loads(raw)

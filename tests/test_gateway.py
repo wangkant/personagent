@@ -2044,6 +2044,39 @@ async def regression_truncated_reply_retries_once(tmp: Path) -> None:
     check("truncation: the retry's answer is returned",
           out == '{"reply":"recovered"}', repr(out))
 
+    # json_object mode: a truncated non-empty JSON with finish=length must
+    # also retry -- it used to bypass the empty-only check and get dropped by
+    # the fail-closed parser with no length warning at all. And the payload
+    # must actually carry response_format, or none of this mode exists.
+    budgets.clear()
+    payloads = []
+
+    class _Trunc(_Resp):
+        def json(self):
+            return {"choices": [{"message": {"content": '{"reasoning": "half'},
+                                 "finish_reason": "length" if len(budgets) == 1
+                                 else "stop"}]}
+
+    class _HTTP3(_HTTP):
+        async def post(self, url, headers=None, json=None):
+            budgets.append(json["max_tokens"])
+            payloads.append(json)
+            if len(budgets) == 1:
+                return _Trunc("")
+            return _Resp('{"reply":"whole"}')
+
+    agent._http = lambda **kw: _HTTP3()
+    out = await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                                model="m", max_tokens=1200,
+                                enable_search=False, json_object=True)
+    check("truncation: half-emitted JSON retries too",
+          budgets == [1200, 4800], repr(budgets))
+    check("truncation: whole JSON comes back from the retry",
+          out == '{"reply":"whole"}', repr(out))
+    check("json_object: payload carries response_format",
+          all(pl.get("response_format") == {"type": "json_object"}
+              for pl in payloads), repr(payloads[:1]))
+
     # A non-length empty reply must NOT trigger the retry.
     budgets.clear()
 

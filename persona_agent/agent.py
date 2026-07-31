@@ -1445,8 +1445,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             system=system,
             messages=messages,
             model=self.private_model,
-            max_tokens=2048,
+            max_tokens=4096,
             enable_search=not proactive,
+            json_object=True,
         )
         reply, reasoning, intent, mem = self._parse_model_output(raw)
         if reasoning:
@@ -1797,11 +1798,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         system,  # str | list[dict] — list form enables cache_control segmentation
         messages: list[dict],
         model: str,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
         enable_search: bool = True,
         disable_thinking: bool = False,
         temperature: float | None = None,
         search_hint: str = "",
+        json_object: bool = False,
     ) -> str:
         """Unified LLM call → the provider's OpenAI-compatible endpoint
         (/v1/chat/completions), over plain httpx — no vendor SDK. Carries
@@ -1813,8 +1815,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         single system message. Providers like DeepSeek auto prefix-cache identical
         prefixes, so no explicit cache_control is needed.
 
-        disable_thinking is kept for signature compatibility but ignored on the
-        OpenAI endpoint (the message `content` is the answer)."""
+        json_object=True 添加 response_format={"type":"json_object"}, 只给
+        期待 JSON 协议输出的调用点用。实测 (26 turns x 2 runs, deepseek-v4-flash):
+        thinking 模型会把协议里的 reasoning 字段当成自己隐藏的 reasoning_content
+        已经交差, content 里只吐裸聊天行 -- 9/26 轮被 fail-closed 解析器整条丢弃;
+        加 response_format 后 52 轮 0 次。裸文本不能用 parser 兜底放行: 那会删掉
+        _parse_model_output 文档写明的协议边界。
+
+        disable_thinking 在 DeepSeek /v1 端点同样有效 (thinking 字段), 用于
+        不需要推理的机械调用点。"""
         if not (self.base_url and self.api_key):
             logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
             return ""
@@ -1830,6 +1839,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             payload = {"model": mdl, "max_tokens": mtok, "messages": _oai_messages}
             if temperature is not None:
                 payload["temperature"] = temperature
+            if json_object:
+                payload["response_format"] = {"type": "json_object"}
+            if disable_thinking:
+                payload["thinking"] = {"type": "disabled"}
             async with self._http(timeout=self.llm_timeout) as client:
                 resp = await client.post(_url, headers=_headers, json=payload)
             resp.raise_for_status()
@@ -1920,7 +1933,25 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             logger.warning("[Agent] failed to parse LLM response: %s; data=%.300s", e, str(data))
             return ""
 
-        if not text and finish == "length":
+        def _budget_starved(t: str, fin: str) -> bool:
+            # Truncation shows up two ways on a reasoning model: no visible
+            # text at all (budget died mid-thought), or — in json_object mode —
+            # a half-emitted object like '{\n  "' that the fail-closed parser
+            # would silently drop. Both are the same defect: the answer did
+            # not fit. Measured: the empty-only condition let every truncated
+            # non-empty JSON skip the retry and vanish with no length warning.
+            if fin != "length":
+                return False
+            if not t:
+                return True
+            if json_object:
+                try:
+                    json.loads(t)
+                except (json.JSONDecodeError, TypeError):
+                    return True
+            return False
+
+        if _budget_starved(text, finish):
             # A reasoning model spends the budget on its chain of thought and
             # can hit the cap before emitting a single visible token. The
             # symptom is an empty reply on every turn, and the only clue used
@@ -2071,7 +2102,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 ],
                 "tools": [tool],
                 "tool_choice": "auto",
-                "max_tokens": 150,
+                # Thinking off, and not only for the budget: with thinking on,
+                # this endpoint rarely emits tool_calls at ANY budget (measured
+                # 7/30 at max_tokens=256), so the search silently never fires.
+                # 800, not 150: measured decision+arguments run up to ~360
+                # tokens even with thinking off.
+                "thinking": {"type": "disabled"},
+                "max_tokens": 800,
                 "temperature": 0.1,
             }
             async with self._http(timeout=20) as client:
@@ -2350,9 +2387,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 system=gate_system_content,
                 messages=[{"role": "user", "content": user_prompt}],
                 model=self.judge_model,
-                max_tokens=600,
+                max_tokens=1500,
                 enable_search=False,
                 disable_thinking=True,
+                json_object=True,
                 # The PASS/reply gate can't run at the default temperature=1.0
                 # (hot sampling → whether-to-reply drifts randomly). 0.3 makes
                 # the decision stable and cuts pointless chime-ins / cold PASSes.
@@ -2374,9 +2412,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             system=system_content,
             messages=[{"role": "user", "content": user_prompt}],
             model=model_to_use,
-            max_tokens=1200,
+            # 3000, not 1200: on a reasoning model the hidden thinking tokens
+            # bill against this cap; 1200 sat under the measured tail (~940
+            # visible completion alone) and truncated about 1 turn in 10.
+            max_tokens=3000,
             enable_search=enable_search,
             disable_thinking=False,
+            json_object=True,
             # Search decisions judge the real trigger text, not the whole
             # rendered prompt (see _decide_and_search).
             search_hint=latest_text,

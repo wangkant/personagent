@@ -39,6 +39,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now *means* "assistant drift", `EVOLVE_THRESHOLD` defaults to 3 -- with the
   old default of 2 the loop would still collect nothing.
 
+- **Thinking-mode models no longer silently skip the JSON reply protocol.**
+  Measured on the real reply path: with thinking on, the model treats its
+  hidden reasoning channel as having satisfied the protocol's `reasoning`
+  field and emits only the bare chat line -- 9 of 17 @-directed turns were
+  dropped whole by the fail-closed parser. JSON-protocol call sites now send
+  `response_format={"type":"json_object"}` (0 drops in 52 measured turns and
+  a 10-turn live check), and the budget-starvation retry also fires on a
+  truncated-but-non-empty JSON, which used to vanish without even a length
+  warning. Bare text is still never accepted by the parser: the protocol
+  boundary stays fail-closed.
+- **Token budgets raised for reasoning models, and `disable_thinking` is now
+  real.** Hidden thinking tokens bill against `max_tokens`, so the old
+  budgets starved: the reply path truncated about 1 turn in 10, and the
+  web-search decision at 150 tokens could not even fit its tool call -- with
+  thinking on that endpoint rarely emits tool calls at any budget, so the
+  search gate now disables thinking outright. Reply 1200->3000, gate
+  600->1500, search decision 150->800, evolve draft 600->2000, self-eval
+  800->1500, reaction adjudication 400->1000, sticker tagging 200->600 and
+  40->300 (thinking off), default cap 2048->4096. The `disable_thinking`
+  parameter, previously documented as ignored, now maps to the endpoint's
+  thinking switch.
+
 ### Added
 
 - **Six assistant-bait scenario families** (`rec-request`, `tech-help`,

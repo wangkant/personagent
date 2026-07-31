@@ -373,7 +373,7 @@ class Learning:
                 # before the JSON even with thinking disabled; too few tokens cut
                 # the trailing JSON in half and the parse fails. 800 leaves room
                 # for prose + JSON; the parser also salvages a truncated object.
-                "max_tokens": 800,
+                "max_tokens": 1500,
                 "response_format": {"type": "json_object"},
             }
             # K2-family reasoning models burn the budget on reasoning_content;
@@ -616,7 +616,8 @@ class Learning:
                 self.bot_name, self.agent_lang, reactor_history=history_line)
             raw = await self._call_llm(
                 "", [{"role": "user", "content": prompt}],
-                model=self.react_model, max_tokens=400, enable_search=False)
+                model=self.react_model, max_tokens=1000, enable_search=False,
+                json_object=True)
             adj = reactions.parse_adjudication(raw)
             if not adj:
                 return
@@ -857,7 +858,8 @@ class Learning:
             prompt = evolution.build_review_prompt(ev, self.agent_lang)
             raw = await self._call_llm(
                 "", [{"role": "user", "content": prompt}],
-                model=self.evolve_model, max_tokens=600, enable_search=False,
+                model=self.evolve_model, max_tokens=2000, enable_search=False,
+                json_object=True,
             )
             diag = evolution.parse_review(raw)
             if not diag:
