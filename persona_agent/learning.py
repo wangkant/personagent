@@ -203,6 +203,7 @@ class Learning:
             peers=ledger.all(),
             now=time.time(),
             policy=self.promotion_policy,
+            owner_id=str(getattr(self, "owner_qq", "") or ""),
         )
 
     def _rebuild_promoted_views(
@@ -640,7 +641,15 @@ class Learning:
             # rejection. The user reacting positively — or just moving on —
             # accepts the fix, which is strong evidence for (rejected -> retry)
             # with zero user effort. Strong, but still one event.
-            if entry.get("fixes") and adj["reaction"] in ("positive", "neutral"):
+            # A `positive` verdict only counts when the adjudicator accepted it;
+            # `neutral` is recorded but classifies as weaker, since the "better"
+            # side of the pair is the agent's own retry text (see
+            # evidence.classify_strength). Without both guards, a user changing
+            # the subject minted STRONG evidence for the agent's own wording and
+            # overrode an adjudicator verdict of accept=false.
+            if entry.get("fixes") and (
+                    (adj["reaction"] == "positive" and adj["accept"])
+                    or adj["reaction"] == "neutral"):
                 fix = entry["fixes"]
                 fpair = reactions.fix_pair(fix, entry["reply"], now)
                 if fpair is not None and _fresh_pair(fpair):
@@ -650,7 +659,8 @@ class Learning:
                         reply=fpair["reply"],
                         reaction_type=adj["reaction"],
                         adjudication={
-                            "accept": True, "better": fpair["better"],
+                            "accept": adj["reaction"] == "positive",
+                            "better": fpair["better"],
                             "scenario": fpair.get("scenario", ""),
                             "mode": fix.get("mode", mode),
                             "reason": "user accepted the bot's retry",

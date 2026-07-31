@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from persona_agent import reactions  # noqa: E402
+from persona_agent import evidence, reactions  # noqa: E402
 from persona_agent.agent import Agent, SendResult  # noqa: E402
 
 _failures: list[str] = []
@@ -401,8 +401,14 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
                                "alex", "42", False, conv_id="g1")
     retry_evs = [e for e in a2.evidence_log.all()
                  if e["kind"] == "retry_acceptance"]
-    check("retry-completion recorded as strong evidence from a neutral move-on",
-          len(retry_evs) == 1 and retry_evs[0]["strength"] == "strong"
+    # Moving on is recorded, but it is not acceptance. The "better" side of a
+    # retry-acceptance event is the agent's OWN retry text, so treating a topic
+    # change as strong would let it manufacture a mandate for its own wording —
+    # and here the adjudicator explicitly returned accept=false.
+    check("retry-completion from a neutral move-on is recorded, not strong",
+          len(retry_evs) == 1
+          and retry_evs[0]["strength"] == evidence.NEGATIVE_ONLY
+          and retry_evs[0]["adjudication"]["accept"] is False
           and retry_evs[0]["adjudication"]["better"] == "check the logs first",
           str(retry_evs))
     pair_cands = [c for c in a2.candidate_ledger.all()

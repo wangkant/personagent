@@ -80,13 +80,13 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
     return None
 
 
-def _decide(ledger, log, cand, policy) -> promotion.Decision:
+def _decide(ledger, log, cand, policy, owner_id: str = "") -> promotion.Decision:
     reply = str(cand.get("reply") or "").strip()
     related = [e for e in log.all() if str(e.get("reply") or "").strip() == reply]
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=related, peers=ledger.all(), now=time.time(),
-        policy=policy)
+        policy=policy, owner_id=owner_id)
 
 
 def _short(text, width: int = 60) -> str:

@@ -54,6 +54,26 @@ from .storage import append_lock, atomic_write_text
 # misreading.
 MIN_EVENTS = 2
 MIN_STRONG = 1
+# ...from at least this many distinct people, owner exempt.
+#
+# MIN_EVENTS counts events, and one determined member can produce two by
+# themselves: correct a reply, then accept the agent's retry. Delayed
+# elicitation even has the agent *solicit* that second event from the same
+# person. So "two distinct compatible events" is not "two people agreed".
+#
+# The default is 1 — today's behaviour — because the attack path and the
+# honest path are structurally identical. "that's not what I asked" followed by
+# "I meant check the logs" is one person, two events, and it is exactly how a
+# real clarification looks; requiring a second voice would refuse it too, and
+# solo clarification is the flagship zero-effort loop. What is closed by
+# default instead is the part that was unambiguously wrong: a topic change no
+# longer counts as acceptance, and an adjudicator verdict of accept=false is no
+# longer overridden (see evidence.classify_strength).
+#
+# Set PROMOTE_MIN_SPEAKERS=2 for a room where strangers should not be able to
+# teach the agent unaided. Nothing is lost when it blocks: the candidate is
+# still proposed and waits in `candidates_admin.py list` for a human.
+MIN_SPEAKERS = 1
 # Evidence older than this stops counting as support. A correction from four
 # months and one persona revision ago is history, not a mandate.
 MAX_EVIDENCE_AGE_DAYS = 30.0
@@ -71,6 +91,7 @@ class Policy:
 
     min_events: int = MIN_EVENTS
     min_strong: int = MIN_STRONG
+    min_speakers: int = MIN_SPEAKERS
     max_evidence_age_days: float = MAX_EVIDENCE_AGE_DAYS
     require_same_conversation: bool = REQUIRE_SAME_CONVERSATION
     auto_promote: bool = AUTO_PROMOTE
@@ -100,6 +121,10 @@ class Policy:
             # exactly the failure this module exists to prevent.
             min_events=max(2, _int("PROMOTE_MIN_EVENTS", MIN_EVENTS)),
             min_strong=max(1, _int("PROMOTE_MIN_STRONG", MIN_STRONG)),
+            # Floor of 1, not 2: an operator running a private single-user
+            # deployment has nobody to corroborate with, and should be able to
+            # say so explicitly rather than have promotion silently never fire.
+            min_speakers=max(1, _int("PROMOTE_MIN_SPEAKERS", MIN_SPEAKERS)),
             max_evidence_age_days=max(
                 0.0, _float("PROMOTE_EVIDENCE_MAX_AGE_DAYS", MAX_EVIDENCE_AGE_DAYS)),
             require_same_conversation=_bool(
@@ -250,12 +275,14 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
 
 
 def decide(cand: dict, *, linked_events, related_events=(), peers=(),
-           now: float = 0.0, policy: Policy = DEFAULT_POLICY) -> Decision:
+           now: float = 0.0, policy: Policy = DEFAULT_POLICY,
+           owner_id: str = "") -> Decision:
     """Should `cand` be promoted automatically, right now.
 
     `linked_events` are the events recorded as supporting it, `related_events`
     every event about the same reply (searched for contradictions), `peers` the
-    other candidates (searched for conflicting proposals).
+    other candidates (searched for conflicting proposals). `owner_id` is the
+    configured owner, who is exempt from the distinct-speaker requirement.
     """
     if not policy.auto_promote:
         return Decision(False, "automatic promotion disabled (PROMOTE_AUTO)")
@@ -297,6 +324,22 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         return Decision(
             False,
             f"{len(supporting)}/{policy.min_events} compatible events",
+            len(supporting), len(strong))
+    # Distinct people, not distinct events. One member correcting a reply and
+    # then accepting the retry produces two compatible events by themselves —
+    # and delayed elicitation has the agent *ask* for that second one. The
+    # owner is exempt: whoever deployed the agent may teach it alone.
+    speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
+    owner_spoke = bool(owner_id) and str(owner_id) in speakers
+    # `not speakers` means no event carried attribution at all — an adapter
+    # that does not supply speaker ids, or older events from before the field
+    # existed. Missing data must not veto: fall back to the event count rather
+    # than silently refusing to ever promote on such a deployment.
+    if speakers and not owner_spoke and len(speakers) < policy.min_speakers:
+        return Decision(
+            False,
+            f"{len(speakers)}/{policy.min_speakers} distinct speakers "
+            f"({len(supporting)} events, but corroboration means people)",
             len(supporting), len(strong))
     return Decision(
         True,

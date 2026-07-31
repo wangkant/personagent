@@ -369,22 +369,31 @@ async def test_retry_provides_supporting_evidence(tmp: Path) -> None:
           retry is not None and retry["fixes"]["reply"] == "just restart it lol"
           and bool(retry["fixes"]["evidence_id"]))
 
-    # The user just moves on: that accepts the fix.
+    # The user merely moves on. That is recorded, but it is NOT acceptance:
+    # the "better" side of a retry-acceptance event is the agent's own retry
+    # text, so counting a topic change as strong would let it manufacture a
+    # mandate for its own wording — over an adjudicator verdict of accept=false.
     await react(a, {"reaction": "neutral", "accept": False, "reason": "moved on",
                     "better": "", "scenario": ""},
                 text="anyway, lunch?", pending=retry)
     kinds = {e["kind"]: e["strength"] for e in a.evidence_log.all()}
-    check("7: retry acceptance recorded as strong evidence",
-          kinds.get("retry_acceptance") == "strong", str(kinds))
-    rows = view_pairs(a)
-    check("7: rejection + accepted retry promote the pair",
-          len(rows) == 1 and rows[0]["reply"] == "just restart it lol"
-          and rows[0]["better"] == "check the logs first", str(rows))
-    promoted = [c for c in a.candidate_ledger.all() if c["state"] == "promoted"][0]
+    check("7: moving on is recorded but is not strong",
+          kinds.get("retry_acceptance") == evidence.NEGATIVE_ONLY, str(kinds))
+    check("7: a topic change alone promotes nothing", view_pairs(a) == [],
+          str(view_pairs(a)))
+
+    # NOTE: the "explicit positive also promotes" path is not asserted here.
+    # It runs into the pre-existing counter-evidence rule (the original
+    # rejection is related evidence about the same reply and reads as
+    # disagreement), which is orthogonal to what this test pins down and is
+    # covered by test 6.
     check("7: the retry chain is linked back to the complaint",
           any(e.get("parent_event_id") for e in a.evidence_log.all()))
-    check("7: promotion cites two events", len(promoted["evidence"]) == 2,
-          str(promoted["evidence"]))
+    pair = [c for c in a.candidate_ledger.all()
+            if (c.get("payload") or {}).get("better") == "check the logs first"]
+    check("7: the proposal still cites both events",
+          bool(pair) and len(pair[0].get("evidence") or []) == 2,
+          str([c.get("evidence") for c in pair]))
 
 
 # ---------------------------------------------------------------------------
@@ -736,6 +745,79 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
               real not in resolved.parents, str(resolved))
 
 
+
+def test_corroboration_means_people_not_events() -> None:
+    """One member producing two events is not corroboration.
+
+    Correcting a reply and then accepting the agent's retry clears "two
+    distinct compatible events" single-handedly — and delayed elicitation has
+    the agent *solicit* that second event from the same person. Promotion
+    therefore counts distinct speakers, with the owner exempt."""
+    ts = "2026-07-25T12:00:00"
+    now = time.time()
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+
+    def ev(speaker, kind=evidence.KIND_REACTION, rtype="correction"):
+        return evidence.make_event(
+            kind=kind, ts=ts, **scope, speaker_id=speaker, recipient_id=speaker,
+            reply="bad line", reaction_type=rtype,
+            adjudication={"accept": True, "better": "fixed", "mode": "called"})
+
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=ts, evidence=[],
+        payload={"reply": "bad line", "better": "fixed", "mode": "called",
+                 "rating": "better"})
+
+    def decide(events, owner_id="", policy=promotion.DEFAULT_POLICY):
+        return promotion.decide(cand, linked_events=events, related_events=[],
+                                peers=[], now=now, owner_id=owner_id,
+                                policy=policy)
+
+    strict = promotion.Policy(min_speakers=2)
+    solo = [ev("mallory"),
+            ev("mallory", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+    two = [ev("alice"), ev("bob", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+    owner = [ev("owner1"),
+             ev("owner1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+
+    # Default (1) keeps solo clarification working: the honest path and the
+    # attack path are structurally identical, so this is a deployment choice.
+    check("speakers: default lets one person clarify",
+          decide(solo).promote is True, decide(solo).reason)
+    # Opting in to 2 is what refuses a lone stranger.
+    check("speakers: MIN_SPEAKERS=2 blocks one stranger self-corroborating",
+          decide(solo, policy=strict).promote is False,
+          decide(solo, policy=strict).reason)
+    check("speakers: MIN_SPEAKERS=2 still promotes on two people",
+          decide(two, policy=strict).promote is True,
+          decide(two, policy=strict).reason)
+    check("speakers: the owner is exempt even at MIN_SPEAKERS=2",
+          decide(owner, owner_id="owner1", policy=strict).promote is True,
+          decide(owner, owner_id="owner1", policy=strict).reason)
+    check("speakers: floor keeps 0 from disabling the rule",
+          promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "0"}).min_speakers == 1)
+    check("speakers: env opt-in is read",
+          promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "2"}).min_speakers == 2)
+
+
+def test_moving_on_is_not_acceptance() -> None:
+    """A `neutral` retry reaction means the person changed the subject. The
+    "better" side of a retry-acceptance event is the agent's OWN retry text, so
+    treating silence as strong would let it manufacture a mandate for its own
+    wording out of nothing happening."""
+    ts = "2026-07-25T12:00:00"
+    common = dict(kind=evidence.KIND_RETRY_ACCEPTANCE, ts=ts, speaker_id="a",
+                  recipient_id="a", reply="retry text",
+                  adjudication={"accept": True, "better": "retry text"})
+    strong = evidence.make_event(**common, reaction_type="positive")
+    moved_on = evidence.make_event(**common, reaction_type="neutral")
+    check("retry: an explicit positive is strong",
+          strong["strength"] == evidence.STRONG, strong["strength"])
+    check("retry: moving on is not strong",
+          moved_on["strength"] != evidence.STRONG, moved_on["strength"])
+
+
 def main() -> int:
     real = runtime_dir()
     before = sorted(p.name for p in real.glob("*")) if real.exists() else []
@@ -760,6 +842,8 @@ def main() -> int:
         test_legacy_feedback_still_loads(tmp / "t13")
         asyncio.run(test_legacy_rows_still_retractable(tmp / "t13b"))
         test_paths_never_touch_real_runtime_state(tmp / "t14")
+        test_corroboration_means_people_not_events()
+        test_moving_on_is_not_acceptance()
 
     after = sorted(p.name for p in real.glob("*")) if real.exists() else []
     check("14: the real runtime directory was not written",

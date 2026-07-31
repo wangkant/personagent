@@ -147,7 +147,15 @@ def classify_strength(event: dict) -> str:
     if kind == KIND_RETRY_ACCEPTANCE:
         # Acceptance only counts from the person the retry was for. A bystander
         # laughing at the second attempt is not the complainant being satisfied.
-        return STRONG if _same_person(event) else NEGATIVE_ONLY
+        if not _same_person(event):
+            return NEGATIVE_ONLY
+        # Silence is not acceptance. `neutral` means the person simply moved
+        # on — and the "better" text of a retry-acceptance event is the agent's
+        # OWN retry, so counting a topic change as STRONG would let the agent
+        # manufacture a mandate for its own wording out of nothing happening.
+        if event.get("reaction_type") == "neutral":
+            return NEGATIVE_ONLY
+        return STRONG
     if kind == KIND_SELF_REVIEW:
         # The agent noticing its own failure and drafting a fix. Concrete, but
         # nobody witnessed it — a single unwitnessed signal cannot authorize.
