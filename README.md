@@ -486,7 +486,7 @@ The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `t
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify and share for any noncommercial purpose (personal projects, research, education, nonprofit and government use). Commercial use is not permitted. Releases up to v0.1.1 were published under MIT and remain MIT.
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify and share for any noncommercial purpose (personal projects, research, education, nonprofit and government use). Commercial use is not permitted. The early v0.1.x tags were briefly published under MIT and have been withdrawn; copies obtained while they were up keep the license they were obtained under.
 
 ## Acknowledgements
 
