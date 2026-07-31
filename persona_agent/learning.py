@@ -309,25 +309,40 @@ class Learning:
                 '{"score": int 1-5, "reason": "one short sentence"}'
             )
 
+            # Register framing, not "quality" framing. Measured on the same
+            # model (deepseek-v4-pro) and the same drafted-letter reply:
+            # "Rate the quality of this reply" returned 5/5 ("casual, helpful
+            # suggestion ... without AI tells") while the register rubric below
+            # returned 3 -- a quality frame rewards helpfulness, which is
+            # exactly the assistant register this evaluator exists to catch.
+            # An earlier bolt-on anchor ("a blatant tell caps the score at 2")
+            # did not survive either: the model classified every tell it liked
+            # as "not blatant". The scale itself has to define the register.
             eval_prompt = (
-                f"Rate the quality of this group-chat reply. 1-5 scale: "
-                f"5 = perfectly natural, 4 = solid, 3 = a bit off, "
-                f"2 = clearly wrong, 1 = disaster.\n\n"
+                f"The reply below is from {self.bot_name or 'bot'} -- meant to "
+                f"pass as a REGULAR MEMBER of a casual group chat: spoken "
+                f"style, short, has opinions, picks up jokes, never "
+                f"customer-service polite, never delivers formatted "
+                f"work-products.\n"
+                f"Rate 1-5 how well the reply passes as that register -- NOT "
+                f"merely whether a human could have typed it. A fluent human "
+                f"could type a drafted letter or a tutorial; that still fails "
+                f"this register.\n"
+                f"5 = exactly the register: one or two short casual lines, "
+                f"natural, fits the context.\n"
+                f"4 = the register, with a small flaw (slightly stiff line, "
+                f"slightly long).\n"
+                f"3 = human-plausible but drifting into helpful-assistant "
+                f"register: structured advice, a mini-tutorial, a drafted text "
+                f"with placeholders, options laid out evenly.\n"
+                f"2 = clear assistant register: a polished deliverable, "
+                f"step-by-step structure, markdown/bullets, service "
+                f"politeness, lecture length.\n"
+                f"1 = disaster: answered the wrong person, broke character, "
+                f"incoherent, ignored the context.\n\n"
                 f"Group chat context:\n---\n{ctx_text}\n---\n"
                 f"{self.bot_name or 'bot'}'s reply: \"{reply}\"\n"
                 f"{sticker_clause}\n"
-                f"Persona: {self.bot_name or 'bot'} is a regular member of the "
-                f"group, casual spoken style, has opinions, never customer-service "
-                f"polite, picks up jokes where appropriate.\n"
-                f"Judge by: 1) does the reply fit the context 2) does it match the "
-                f"persona 3) does it sound natural rather than AI-flavored 4) is "
-                f"the length reasonable.\n"
-                f"Scoring anchor: a blatant AI tell is not 'slightly off', it "
-                f"caps the score at 2. Blatant tells: markdown/bullets/numbered "
-                f"steps, a drafted document or 'here you go' deliverable, "
-                f"step-by-step tutorial structure, lecture length, "
-                f"customer-service politeness. A real group member answers a "
-                f"casual ask with a casual line.\n"
                 f"Output JSON only: {json_schema}"
             )
 

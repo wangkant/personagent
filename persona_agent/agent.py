@@ -371,7 +371,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # twice.
         self.evolve_auto = os.getenv("EVOLVE_AUTO", "false").lower() == "true"
         self.evolve_interval = int(float(os.getenv("EVOLVE_INTERVAL_HOURS", 6)) * 3600)
-        self.evolve_threshold = int(os.getenv("EVOLVE_THRESHOLD", 2))
+        # 3, not 2: on the evaluator's register scale (learning.py), 3 means
+        # "human-plausible but drifting into helpful-assistant register" --
+        # precisely the failure mode the loop exists to correct. Validated on
+        # 8 known-label replies: every known tell (drafted letter, mini
+        # tutorials) scored exactly 3, every casual line scored 5, so a
+        # threshold of 2 would leave the loop with nothing to learn from.
+        self.evolve_threshold = int(os.getenv("EVOLVE_THRESHOLD", 3))
         self.evolve_batch = int(os.getenv("EVOLVE_BATCH", 5))  # diagnoses per tick
         self.evolve_model = os.getenv("EVOLVE_MODEL", "") or self.eval_model
         self.candidates_file = resolve_runtime_state_file("candidates.jsonl")

@@ -26,12 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chain-of-thought and emit nothing visible; every turn came back empty with
   only a terse warning. The retry recovers the turn and the log now names the
   likely cause (model choice) and the fix.
-- **The self-evaluator now treats a blatant AI tell as a failure, not a
-  quibble.** Measured on a 30-scenario probe, it scored a "Here you go:
-  [drafted apology]" reply 4/5 ("slightly formal"). Since only scores <= 2
-  become learning material, the loop was structurally blind to its most common
-  failure mode. A scoring anchor caps blatant tells (markdown, drafted
-  deliverables, tutorial structure, service politeness) at 2.
+- **The self-evaluator scores register, not "quality" — and the learning
+  trigger moved to match.** Measured three times: a "Here you go: [drafted
+  apology]" reply got 4/5 ("slightly formal") from the quality-framed prompt,
+  a bolted-on "blatant tells cap at 2" anchor was talked around ("AI-like,
+  though not blatant" -> 4), and the same model that rated the same letter
+  5/5 as a quality-evaluator rated it 3 as a register-judge -- the frame, not
+  the model, was the problem. The eval prompt now defines the persona register
+  and scores against it (5 = the register, 3 = drifting into
+  helpful-assistant, 1 = broke character). Validated on 8 known-label
+  replies: every known tell scored exactly 3, every casual line 5. Because 3
+  now *means* "assistant drift", `EVOLVE_THRESHOLD` defaults to 3 -- with the
+  old default of 2 the loop would still collect nothing.
 
 ### Added
 

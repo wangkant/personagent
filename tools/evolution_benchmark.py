@@ -667,6 +667,7 @@ async def cmd_run(args) -> int:
         "seed_state": args.seed_state, "holdout_votes": args.holdout_votes,
         "gen_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         "eval_model": os.getenv("EVAL_MODEL", ""),
+        "evolve_threshold": int(os.getenv("EVOLVE_THRESHOLD", 3)),
     }, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     arms = []
     for evolve_on in (True, False):
