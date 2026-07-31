@@ -62,6 +62,10 @@ class SendResult:
     partial: bool = False
     message_ids: list[str] = field(default_factory=list)
     sticker_files: list[str] = field(default_factory=list)
+    # The text the group actually saw. On a partial send this is the prefix
+    # that posted before the failure — the caller has to commit it, because
+    # from every reader's point of view the bot said it.
+    delivered: str = ""
 
 
 class Transport:
@@ -227,6 +231,7 @@ class Transport:
             return SendResult()
         sendable = False
         sent_any = False
+        delivered: list[str] = []
         failed = False
         # On the QQ path an at target must be a bare QQ number — a hallucinated
         # non-numeric [AT:] marker would produce a broken NapCat at segment, so
@@ -294,11 +299,13 @@ class Transport:
                                    "dropping remaining chunks (group=%s)", group_id)
                     break
                 sent_any = True
+                delivered.append(chunk)
             if failed:
                 break
         return SendResult(
             success=sendable and not failed,
             partial=sent_any and failed,
+            delivered=chr(10).join(delivered),
             message_ids=list(self._sent_mids.get(target_key, [])),
             sticker_files=sent_stickers,
         )
@@ -383,6 +390,7 @@ class Transport:
         segments = self._parse_sticker_markers(text)
         sendable = False
         sent_any = False
+        delivered: list[str] = []
         failed = False
         sent_stickers: list[str] = []
         for kind, value in segments:
@@ -419,11 +427,13 @@ class Transport:
                     failed = True
                     break
                 sent_any = True
+                delivered.append(chunk)
             if failed:
                 break
         return SendResult(
             success=sendable and not failed,
             partial=sent_any and failed,
+            delivered=chr(10).join(delivered),
             message_ids=list(self._sent_mids.get(target_key, [])),
             sticker_files=sent_stickers,
         )

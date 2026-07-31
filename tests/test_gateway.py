@@ -2001,6 +2001,65 @@ async def regression_private_message_ids(tmp: Path) -> None:
           getattr(result, "message_ids", None) == ["123"], repr(result))
 
 
+async def regression_partial_delivery_is_committed(tmp: Path) -> None:
+    """A partially delivered reply must still be recorded.
+
+    Multi-chunk replies are ordinary — _split_text splits on sentence
+    punctuation, so most Chinese replies are several chunks. When a later chunk
+    failed, _handle_inner returned before the commit block, leaving
+    last_reply_at, the buffer and pending_reactions untouched for text the
+    group had already read: the followup window never opened and the next
+    _think could re-emit the same line verbatim. What belongs to the reply as a
+    whole — core memory, auto-memory, self-eval — is still withheld."""
+    from types import SimpleNamespace
+
+    agent = make_agent(tmp)
+    agent.allowed_groups = set()
+    agent.eval_enable = True
+    evaluated: list = []
+
+    async def spy_evaluate(*a, **k):
+        evaluated.append(a)
+
+    agent._evaluate_reply = spy_evaluate
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        return ("[CORE_UPDATE]unsent core[/CORE_UPDATE]first part. second part.",
+                "chat", "unsent auto memory")
+
+    async def half_send(group_id, text, at_user_id=""):
+        # The first chunk posted; the second did not.
+        return SimpleNamespace(success=False, partial=True,
+                               message_ids=["m1"], sticker_files=[],
+                               delivered="first part.")
+
+    agent._think = fake_think
+    agent._send_qq = half_send
+    handled = await agent.handle({
+        "post_type": "message", "message_type": "group", "group_id": "559",
+        "user_id": "42", "message_id": 92010, "sender": {"nickname": "Alice"},
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": "you there?"}}],
+        "raw_message": "you there?",
+    })
+    bot_lines = [m["text"] for m in agent.buffers["559"] if m.get("name") == "TestBot"]
+    check("partial: the delivered text is in the buffer",
+          bot_lines == ["first part."], repr(bot_lines))
+    check("partial: the undelivered remainder is not",
+          all("second part" not in t for t in bot_lines), repr(bot_lines))
+    check("partial: followup window opened",
+          agent.last_reply_at.get("559", 0.0) > 0,
+          repr(agent.last_reply_at.get("559")))
+    check("partial: handle reports incomplete delivery",
+          handled is False, repr(handled))
+    check("partial: core memory withheld",
+          "559" not in agent.core_memory, repr(dict(agent.core_memory)))
+    check("partial: auto memory withheld",
+          agent.memories.get("559") in (None, []), repr(agent.memories.get("559")))
+    check("partial: self-eval not run on a truncated reply",
+          evaluated == [], repr(evaluated))
+
+
 async def regression_llm_fail_fallback_outside_lock(tmp: Path) -> None:
     """The called-mode LLM-failure fallback must send with the group lock
     RELEASED and the send lock HELD (it used to send inside the group lock and
@@ -2116,6 +2175,7 @@ async def main_async() -> None:
         await regression_rejected_reply_not_committed(tmp / "w")
         await regression_delivery_failure_not_committed(tmp / "x")
         await regression_private_message_ids(tmp / "y")
+        await regression_partial_delivery_is_committed(tmp / "pd")
         await regression_llm_fail_fallback_outside_lock(tmp / "z")
         await regression_web_desc_not_control_plane(tmp / "zz")
 

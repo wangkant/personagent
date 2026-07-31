@@ -1075,49 +1075,65 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         try:
             async with self.send_locks[group_id]:
                 send_result = await self._send_qq(group_id, reply, at_uid)
-            if not send_result.success:
-                logger.warning("[Agent] reply delivery failed (mode=%s, group=%s, partial=%s)",
-                               mode, group_id, send_result.partial)
-                return send_result.partial
+            if not send_result.success and not send_result.partial:
+                logger.warning("[Agent] reply delivery failed (mode=%s, group=%s)",
+                               mode, group_id)
+                return False
 
+            # A partial send still put text in front of everyone. Returning
+            # early here left last_reply_at, the buffer and pending_reactions
+            # untouched for words the group had already read — so the followup
+            # window never opened and the next _think could re-emit the same
+            # line verbatim. Commit what was actually delivered; withhold only
+            # what belongs to the reply as a whole (core memory, auto-memory
+            # and the self-eval below all describe the complete answer).
+            committed = reply if send_result.success else send_result.delivered
             async with self.locks[group_id]:
                 self.last_reply_at[group_id] = time.time()
-                self._append_buffer(group_id, self.bot_name, reply)
-                self._commit_core_memory(group_id, _pending_core)
-                if auto_mem:
-                    self._save_auto_memory(group_id, auto_mem)
+                if committed:
+                    self._append_buffer(group_id, self.bot_name, committed)
+                if send_result.success:
+                    self._commit_core_memory(group_id, _pending_core)
+                    if auto_mem:
+                        self._save_auto_memory(group_id, auto_mem)
+            if not send_result.success:
+                logger.warning(
+                    "[Agent] reply PARTIALLY delivered (mode=%s, group=%s): "
+                    "committed %d of %d chars",
+                    mode, group_id, len(committed), len(reply))
         finally:
             if self._pending_outbound.get(group_id) is outbound_done:
                 self._pending_outbound.pop(group_id, None)
                 outbound_done.set()
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
 
-        # Reaction learning: this reply now waits (bounded, TTL) for a directed
-        # user reaction — see _process_reaction.
-        if self.react_learn:
+        # Reaction learning tracks what was actually said: a reaction to a
+        # truncated reply is a reaction to the truncation, and adjudicating it
+        # against the full text would attribute a complaint to words nobody read.
+        if self.react_learn and committed:
             self.pending_reactions.record(
-                group_id, reply=reply, ctx_lines=eval_ctx, mode=mode,
+                group_id, reply=committed, ctx_lines=eval_ctx, mode=mode,
                 intent=_intent, target_uid=at_uid or user_id,
                 target_name=nickname, mids=send_result.message_ids,
                 ts=time.time(),
             )
 
-        if self.on_reply:
+        if self.on_reply and committed:
             try:
-                await self.on_reply(group_id, reply)
+                await self.on_reply(group_id, committed)
             except Exception as e:
                 logger.warning("[Agent] on_reply callback failed: %s", e)
 
-        # Pass the actual sticker files sent to eval so it can score
-        # them and feed back into the quality loop (low-average →
-        # auto persona_fit=false → purged on next startup).
-        if self.eval_enable:
+        # Self-eval only for a complete reply. Scoring a half-delivered answer
+        # measures the network, not the persona, and a low score would feed the
+        # learning loop a verdict about text the model never got to finish.
+        if self.eval_enable and send_result.success:
             self._spawn(self._evaluate_reply(
                 group_id, mode, text, reply, send_result.sticker_files,
                 _intent, eval_ctx,
             ))
 
-        return True
+        return send_result.success
 
     async def _handle_private_legacy(self, user_id: str, payload: dict,
                                      is_owner: bool = True) -> bool:

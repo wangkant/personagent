@@ -155,6 +155,32 @@ async def test_html_decoded_cap() -> None:
     check("html: decoded gzip body over cap rejected", got == "", repr(got))
 
 
+async def test_gzip_site_og_tags_are_actually_parsed() -> None:
+    """A gzip-served page must yield its OG tags.
+
+    safe_fetch_url returns a DECODED body, and _safe_get used to rebuild an
+    httpx.Response from it while keeping the original `content-encoding: gzip`
+    header — so httpx re-ran its decompressor over plaintext and raised
+    DecodingError from the constructor. That was swallowed upstream and every
+    shared link from a gzip-serving site (i.e. most of them) degraded to
+    "[link]". The only gzip test asserted "" for an oversized body, and "" is
+    also what this bug produced, so it masked the failure rather than catching
+    it. This asserts the positive case."""
+    agent = Harness()
+    decoded = (b'<html><head>'
+               b'<meta property="og:title" content="Real Title">'
+               b'<meta property="og:description" content="Real description">'
+               b'</head></html>')
+    fake = FakeClient(FakeResponse(
+        gzip.compress(decoded),
+        content_encoding="gzip",
+        eager_text=decoded.decode(),
+    ))
+    agent._http = lambda **kwargs: fake
+    got = await agent._fetch_og_meta("https://example.com/gzipped")
+    check("html: gzip page yields its og:title", "Real Title" in got, repr(got))
+
+
 async def test_html_content_type() -> None:
     agent = Harness()
     body = b'<meta property="og:title" content="not-html">'
@@ -317,6 +343,7 @@ async def test_bootstrap_uses_guarded_bounded_fetch() -> None:
 async def main() -> int:
     await test_html_wire_cap()
     await test_html_decoded_cap()
+    await test_gzip_site_og_tags_are_actually_parsed()
     await test_html_content_type()
     await test_url_limits_and_cache_keys()
     await test_dns_resolution_is_pinned_once()

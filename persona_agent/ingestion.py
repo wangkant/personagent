@@ -814,9 +814,20 @@ class ContentIngestion:
         if result is None:
             return None
         request = httpx.Request("GET", result.url)
+        # safe_fetch_url already decoded the body (_decode_body, bounded), so
+        # the transfer-framing headers now describe something that is no longer
+        # true. Passing content-encoding: gzip alongside plaintext makes httpx
+        # re-run its decompressor over it and raise DecodingError from the
+        # constructor — swallowed upstream, which silently degraded every
+        # shared link from a gzip-serving site (i.e. most of them) to "[link]".
+        headers = {
+            k: v for k, v in (result.headers or {}).items()
+            if k.lower() not in ("content-encoding", "content-length",
+                                 "transfer-encoding")
+        }
         return httpx.Response(
             result.status_code,
-            headers=result.headers,
+            headers=headers,
             content=result.content,
             request=request,
         )
