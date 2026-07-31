@@ -88,6 +88,32 @@ def test_drive_scenario_stubbed() -> None:
         check("drive returns reply", reply == "yo whats up")
 
 
+def test_isolated_agent_state_stays_in_one_tree() -> None:
+    """Every state path of a benchmark agent must resolve inside state_dir.
+
+    The Agent ctor re-anchors relative state paths under the repo's runtime/
+    dir, so a relative --outdir split one arm's state across two trees: the
+    ctor-resolved eval file landed in runtime/<outdir>/ while the post-ctor
+    assignments landed in <outdir>/. Found because state-on had no eval.jsonl
+    while the evolve tick was demonstrably reading one."""
+    import os
+    with tempfile.TemporaryDirectory() as td:
+        old_cwd = os.getcwd()
+        os.chdir(td)
+        try:
+            a = bench.build_isolated_agent(Path("rel-out") / "state-on",
+                                           "Robin", "en", eval_enable=True)
+            base = (Path(td) / "rel-out" / "state-on").resolve()
+            for name in ("eval_file", "candidates_file", "feedback_file",
+                         "examples_file", "memory_file", "core_memory_file"):
+                p = Path(getattr(a, name))
+                check(f"isolation: {name} inside state_dir",
+                      p.is_absolute() and str(p.resolve()).startswith(str(base)),
+                      str(p))
+        finally:
+            os.chdir(old_cwd)
+
+
 def test_run_arm_isolation_and_growth() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -470,6 +496,7 @@ def main() -> int:
     test_scenario_sets()
     test_seed_buffer()
     test_drive_scenario_stubbed()
+    test_isolated_agent_state_stays_in_one_tree()
     test_run_arm_isolation_and_growth()
     test_real_evolution_pipeline_with_external_calls_stubbed()
     test_inbox_is_blind_and_ingest()

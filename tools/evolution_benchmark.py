@@ -153,6 +153,13 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     tests — those stub `_call_llm`, so the key is never used."""
     import os
     from persona_agent.agent import Agent
+    # Absolute, always: the Agent ctor re-anchors RELATIVE state paths under
+    # the repo's runtime/ dir (paths.resolve_runtime_state_file), so a relative
+    # --outdir silently split one arm's state across two trees -- ctor-resolved
+    # files under runtime/<outdir>/, post-ctor assignments under <outdir>/.
+    # Reads and writes stayed consistent per file, which is why nothing
+    # crashed: the isolation promise was broken quietly.
+    state_dir = state_dir.resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
         api_key=os.getenv("DEEPSEEK_API_KEY", "") or "benchmark-key",
