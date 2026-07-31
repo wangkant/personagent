@@ -2001,6 +2001,68 @@ async def regression_private_message_ids(tmp: Path) -> None:
           getattr(result, "message_ids", None) == ["123"], repr(result))
 
 
+async def regression_truncated_reply_retries_once(tmp: Path) -> None:
+    """An empty reply with finish_reason=length must be diagnosed, not shrugged at.
+
+    A reasoning model spends the budget on its chain of thought and can hit the
+    cap before emitting a single visible token, so every turn comes back empty.
+    The only clue used to be "finish_reason=length" in a warning, which does not
+    tell an operator that their model choice is the cause. Found by running the
+    benchmark against deepseek-v4-pro: every reply empty, every self-eval 1/5,
+    and nothing in the logs pointing at why."""
+    agent = make_agent(tmp)
+    budgets: list[int] = []
+
+    class _Resp:
+        def __init__(self, content: str) -> None:
+            self._c = content
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": self._c},
+                                 "finish_reason": "length" if not self._c else "stop"}]}
+
+    class _HTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            budgets.append(json["max_tokens"])
+            return _Resp("" if len(budgets) == 1 else '{"reply":"recovered"}')
+
+    agent._http = lambda **kw: _HTTP()
+    out = await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                                model="reasoner", max_tokens=1200,
+                                enable_search=False)
+    check("truncation: retried once at a larger budget",
+          budgets == [1200, 4800], repr(budgets))
+    check("truncation: the retry's answer is returned",
+          out == '{"reply":"recovered"}', repr(out))
+
+    # A non-length empty reply must NOT trigger the retry.
+    budgets.clear()
+
+    class _EmptyStop(_Resp):
+        def json(self):
+            return {"choices": [{"message": {"content": ""},
+                                 "finish_reason": "stop"}]}
+
+    class _HTTP2(_HTTP):
+        async def post(self, url, headers=None, json=None):
+            budgets.append(json["max_tokens"])
+            return _EmptyStop("")
+
+    agent._http = lambda **kw: _HTTP2()
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                          model="m", max_tokens=1200, enable_search=False)
+    check("truncation: an empty stop is not retried", budgets == [1200], repr(budgets))
+
+
 async def regression_partial_delivery_is_committed(tmp: Path) -> None:
     """A partially delivered reply must still be recorded.
 
@@ -2175,6 +2237,7 @@ async def main_async() -> None:
         await regression_rejected_reply_not_committed(tmp / "w")
         await regression_delivery_failure_not_committed(tmp / "x")
         await regression_private_message_ids(tmp / "y")
+        await regression_truncated_reply_retries_once(tmp / "tr")
         await regression_partial_delivery_is_committed(tmp / "pd")
         await regression_llm_fail_fallback_outside_lock(tmp / "z")
         await regression_web_desc_not_control_plane(tmp / "zz")

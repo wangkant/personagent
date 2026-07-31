@@ -1914,7 +1914,35 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             logger.warning("[Agent] failed to parse LLM response: %s; data=%.300s", e, str(data))
             return ""
 
-        if not text:
+        if not text and finish == "length":
+            # A reasoning model spends the budget on its chain of thought and
+            # can hit the cap before emitting a single visible token. The
+            # symptom is an empty reply on every turn, and the only clue used
+            # to be "finish_reason=length" in a warning — which does not tell
+            # an operator that their model choice is the cause. Retry once with
+            # a materially larger budget, then say plainly what happened.
+            retry_tokens = max_tokens * 4
+            logger.warning(
+                "[Agent] empty reply, finish_reason=length (model=%s, "
+                "max_tokens=%d) — retrying once at %d. If this repeats, the "
+                "model is likely a reasoning model whose thinking tokens "
+                "exhaust the budget before the answer; pick a non-reasoning "
+                "model or raise the cap.",
+                used_model, max_tokens, retry_tokens)
+            try:
+                data = await _do_call(retry_tokens, used_model)
+                _choice = (data.get("choices") or [{}])[0]
+                text = ((_choice.get("message") or {}).get("content") or "").strip()
+                finish = _choice.get("finish_reason", "?")
+            except Exception as e:
+                logger.warning("[Agent] retry at a larger budget failed: %s: %s",
+                               type(e).__name__, e)
+            if not text:
+                logger.warning(
+                    "[Agent] still empty at max_tokens=%d (model=%s). This model "
+                    "cannot answer within the budget — switch models or raise "
+                    "LLM_MAX_TOKENS.", retry_tokens, used_model)
+        elif not text:
             logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
                            finish, used_model)
         # Providers like DeepSeek auto prefix-cache; usage exposes hit/miss tokens.
