@@ -86,6 +86,8 @@ authority away without erasing the history.
 
 ### Changed
 
+- **License: MIT -> PolyForm Noncommercial 1.0.0.** The project stays source-available and free for personal, research, educational and nonprofit use; commercial use now requires a separate license from the copyright holder. Releases up to v0.1.1 were published under MIT and remain MIT.
+
 - **No automatic signal writes a retrieval pool any more.** An accepted
   correction, an accepted retry and a positive reaction previously landed in
   `runtime/feedback.<lang>.jsonl` or `runtime/examples.<lang>.jsonl` — the
