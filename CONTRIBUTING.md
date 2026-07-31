@@ -16,24 +16,33 @@ protocol + validator), so it is the fastest way to reproduce a persona bug.
 
 ## Running the tests
 
-No test framework — plain stdlib, no pytest:
+Run what CI runs — one command, every suite:
 
 ```bash
-python tests/test_gateway.py
-python tests/test_evolution.py
-python tests/test_benchmark.py
-python tests/test_reactions.py
-python tests/test_http.py
-python tests/test_retrieval.py
-python tests/test_promotion.py
-python tests/test_ledger.py
+python -m pip install "pytest>=8,<10"
+python -m pytest -q
 python -m compileall -q .
 ```
 
-CI runs exactly these on Python 3.10 and 3.12. Run them before opening a PR.
+CI runs exactly this on Python 3.10 / 3.11 / 3.12 on Linux, and again on
+Windows. Run it before opening a PR.
+
+The suites themselves are framework-free stdlib scripts; pytest is only the
+runner. Each stays directly executable for a fast single-file loop:
+
+```bash
+python tests/test_gateway.py
+```
 
 Tests use a lightweight `check(name, cond)` harness. Add new checks next to the
 behaviour they cover, and register the test function in that file's `main()`.
+
+**A new test file must be runnable as a script.** `pytest.ini` collects only
+`tests/test_pytest_entry.py`, which discovers the script suites — so a plain
+pytest-style file would never run while `pytest -q` still reported success.
+`test_every_test_file_is_collected` now fails by name when that happens: give
+every new `tests/test_*.py` a `main()` and an `if __name__ == "__main__":`
+guard.
 
 **Tests must never write the repo's real state files.** `memory.json`,
 `core_memory.json`, `seen_msg_ids.json`, `runtime/` and the sticker library all

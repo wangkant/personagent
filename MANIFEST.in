@@ -1,0 +1,9 @@
+# The sdist used to ship tests/ without pytest.ini, pytest_regression.py,
+# main.py, data/ or requirements.txt — a suite that cannot be collected, let
+# alone pass, and the CI sdist step only did `import persona_agent` so it never
+# noticed. pyproject is explicit that this is an application you deploy from a
+# checkout rather than a library, so stop advertising a suite the artifact
+# cannot run: clone the repo to run the tests.
+prune tests
+exclude pytest.ini
+exclude .pre-commit-config.yaml

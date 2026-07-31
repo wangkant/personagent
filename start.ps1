@@ -23,9 +23,22 @@ if (Test-Path $venvPy) {
     $pySource = $py.Source
 }
 
-# Dependency check
-& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>$null
-if (-not $?) {
+# Dependency check.
+#
+# Two Windows PowerShell 5.1 traps live in these few lines, and the previous
+# version hit both. `2>$null` on a NATIVE command makes PS wrap each stderr
+# line in an ErrorRecord; under $ErrorActionPreference='Stop' that becomes a
+# terminating NativeCommandError, so the install below was unreachable and a
+# missing dependency simply killed the launcher. And `$?` is not a native exit
+# status: any stderr output sets it to $false even on success, so a healthy
+# install would reinstall on every start. Suspend Stop across the probe and
+# read $LASTEXITCODE instead.
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" > $null 2>&1
+$depsOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEAP
+if (-not $depsOk) {
     Write-Host "installing dependencies..." -ForegroundColor Yellow
     & $pySource -m pip install -r requirements.txt -q
 }

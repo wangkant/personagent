@@ -442,19 +442,14 @@ integrations/         AstrBot 转发插件(多平台)
 
 ## 开发
 
-回归测试无需测试框架——纯标准库 Python，不依赖 pytest：
+跑 CI 实际跑的那条命令，一条覆盖全部套件：
 
 ```bash
-python tests/test_gateway.py
-python tests/test_astrbot_plugin.py
-python tests/test_evolution.py
-python tests/test_benchmark.py
-python tests/test_reactions.py
-python tests/test_http.py
-python tests/test_retrieval.py
-python tests/test_promotion.py
-python tests/test_ledger.py
+python -m pip install "pytest>=8,<10"
+python -m pytest -q
 ```
+
+套件本身仍是不依赖框架的纯标准库脚本，pytest 只是运行器——调某一个文件时它依然可以单独执行（`python tests/test_gateway.py`）。
 
 它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习、少样本检索与其增量数据集加载，以及「证据 → 候选 → 晋升」这条路径（单一信号能做什么、不能做什么、作用域隔离、矛盾拦停、重放、回滚、取代、日志只追加、旧数据兼容）。提交 PR 前请先跑一遍。
 

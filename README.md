@@ -442,19 +442,14 @@ integrations/         AstrBot forwarder plugin for multi-platform
 
 ## Development
 
-The regression suite runs without a test framework — plain standard-library Python, no pytest dependency:
+Run what CI runs — one command covers every suite:
 
 ```bash
-python tests/test_gateway.py
-python tests/test_astrbot_plugin.py
-python tests/test_evolution.py
-python tests/test_benchmark.py
-python tests/test_reactions.py
-python tests/test_http.py
-python tests/test_retrieval.py
-python tests/test_promotion.py
-python tests/test_ledger.py
+python -m pip install "pytest>=8,<10"
+python -m pytest -q
 ```
+
+The suites themselves are framework-free standard-library scripts; pytest is only the runner, so any single one stays directly executable while you work on it (`python tests/test_gateway.py`).
 
 It uses a lightweight `check()` harness and covers the gateway pipeline, the reply/PASS gate, the output validator, memory eviction, the SSRF guard, outbound throttling, the setup wizard's `.env` writer, the self-evolution loop (diagnosis parsing, pair conversion, dedup, the audit trail), reaction learning, few-shot retrieval with its append-aware dataset loading, and the evidence → candidate → promotion path (what one signal may and may not do, scope isolation, contradictions, replay, rollback, supersession, append-only logs, legacy compatibility). Run it before opening a pull request.
 
