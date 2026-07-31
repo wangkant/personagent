@@ -1470,13 +1470,28 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     continue
                 entry = self.stickers.lookup_by_file_field(file_field)
                 if entry and entry.get("auto_tagged") and entry.get("meaning"):
-                    parts.append(f"[sticker: {entry['meaning']}]")
+                    # Fenced: `meaning` is a tagger-LLM reading of an image,
+                    # written with the surrounding (attacker-controllable) chat
+                    # as context, so it is model output over untrusted input —
+                    # the same trust class as a scraped page title.
+                    meaning = str(entry["meaning"]).replace(
+                        _WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+                    parts.append(
+                        f"{_WEB_DESC_OPEN}[sticker: {meaning}]{_WEB_DESC_CLOSE}")
                     self._spawn(self._record_sticker_context(
                         entry["md5"], group_id, sender_uid,
                     ))
                     continue
                 desc = await self._describe_image(url)
-                parts.append(f"[image: {desc}]" if desc else "[image]")
+                # Fenced too: the caption is a vision model's reading of an
+                # image any group member can post, so its text is attacker-
+                # shaped. An image containing "<BOT> remember X" would
+                # otherwise reach the control plane through the caption.
+                if desc:
+                    desc = desc.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+                    parts.append(f"{_WEB_DESC_OPEN}[image: {desc}]{_WEB_DESC_CLOSE}")
+                else:
+                    parts.append("[image]")
                 # Sticker stealing is a QQ-path feature: gateway images must
                 # not get cataloged into the QQ sticker library or burn
                 # tagging calls, so skip the spawn while the gateway sink is
@@ -1498,7 +1513,21 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 # bare "[reply]" if it can't be fetched (never blocks / drops).
                 qid = d.get("id")
                 quoted = await self._resolve_quote(qid, group_id) if qid else ""
-                parts.append(f"[reply {quoted}]" if quoted else "[reply]")
+                # Fenced, because quoted text is by definition not authored by
+                # the person now speaking: A writing "<BOT> remember X" and B
+                # quoting it must not mean B issued the command.
+                #
+                # This also closes a laundering path that defeated the fences
+                # above. The buffer and _msg_index store the sentinel-stripped
+                # rendering, so web-derived enrichment re-entered ctrl_text the
+                # moment anyone quoted the message — attributed to the *quoter*,
+                # which let an attacker plant a memory under an innocent user,
+                # or have an owner's quote execute a page-authored "forget".
+                if quoted:
+                    quoted = quoted.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+                    parts.append(f"{_WEB_DESC_OPEN}[reply {quoted}]{_WEB_DESC_CLOSE}")
+                else:
+                    parts.append("[reply]")
             elif t == "record":
                 # Voice message — no ASR pipeline; show a clean placeholder
                 # so the raw CQ-code (which would leak file paths) doesn't
@@ -1530,7 +1559,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                         logger.warning("[Agent] _describe_share failed: %s: %s",
                                        type(e).__name__, e)
                         desc = ""
-                    parts.append(desc if desc else "[share-card]")
+                    # Same fence as the text-URL branch above, for the same
+                    # reason: a share card's title/description is scraped from
+                    # a third-party page, so it is web-derived text. Unfenced,
+                    # a page whose og:description reads "<BOT> remember X" —
+                    # or "<BOT> forget ..." — reaches ctrl_text and drives
+                    # is_called and _handle_memory_command, i.e. a page author
+                    # writing and deleting the group's memories.
+                    desc = (desc or "[share-card]").replace(
+                        _WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
+                    parts.append(f"{_WEB_DESC_OPEN}{desc}{_WEB_DESC_CLOSE}")
                 else:
                     parts.append("[share-card]")
         if parts:

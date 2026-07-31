@@ -28,7 +28,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from .storage import atomic_write_text
+from .storage import append_jsonl_unlocked, append_lock, atomic_write_text
 
 REVIEWER_PROMPTS = {
     "en": """You are a prompt engineer for an LLM persona agent. Below is one low-scoring reply from a group-chat persona chatbot. Diagnose the "AI tell" and draft a fix.
@@ -202,16 +202,11 @@ def load_feedback_keys(paths: Path | Iterable[Path]) -> set[tuple[str, str]]:
     }
 
 
-def _last_byte(path: Path) -> bytes:
-    """Last byte of `path`, or b"" when empty/unreadable."""
-    try:
-        with path.open("rb") as fh:
-            if fh.seek(0, 2) == 0:
-                return b""
-            fh.seek(-1, 2)
-            return fh.read(1)
-    except OSError:
-        return b""
+def _encoded_len(rec: dict) -> int:
+    """Bytes one record will occupy on disk, matching append_jsonl_unlocked's
+    compact encoding plus its newline. Used for the size budget only."""
+    return len(json.dumps(
+        rec, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) + 1
 
 
 def append_jsonl(path: Path, records: list[dict],
@@ -220,25 +215,23 @@ def append_jsonl(path: Path, records: list[dict],
     so an unattended loop can't grow a curated dataset without bound."""
     if not records:
         return 0
-    try:
-        size = path.stat().st_size if path.exists() else 0
-    except OSError:
-        size = 0
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    with path.open("a", encoding="utf-8", newline="\n") as fh:
-        # A dataset that doesn't end in a newline (hand-edited, most likely)
-        # would otherwise have its last record glued to the first appended one,
-        # destroying both.
-        if size and _last_byte(path) != b"\n":
-            fh.write("\n")
-            size += 1
+    # One lock for the whole batch. The agent (learning.py) and
+    # tools/auto_reviewer.py both append to candidates.jsonl, and the previous
+    # bare open("a") lost records outright: on Windows O_APPEND is
+    # seek-to-end-then-write rather than an atomic append, so two writers
+    # silently overwrite each other. append_jsonl_unlocked also fsyncs and
+    # repairs a missing trailing newline, which this used to do by hand.
+    with append_lock(path):
+        try:
+            size = path.stat().st_size if path.exists() else 0
+        except OSError:
+            size = 0
         for rec in records:
-            line = json.dumps(rec, ensure_ascii=False) + "\n"
-            if size + len(line.encode("utf-8")) > max_bytes:
+            if size + _encoded_len(rec) > max_bytes:
                 break
-            fh.write(line)
-            size += len(line.encode("utf-8"))
+            size += append_jsonl_unlocked(path, rec)
             written += 1
     return written
 
@@ -280,16 +273,20 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
                 return None
     except OSError:
         return None
-    records = _read_jsonl(path)
-    auto_at = [i for i, r in enumerate(records) if is_auto(r)]
-    if len(auto_at) <= max_auto + max(0, slack):
-        return None
-    dropped = set(auto_at[:len(auto_at) - max_auto])
-    kept = [r for i, r in enumerate(records) if i not in dropped]
-    atomic_write_text(
-        path,
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
-    )
+    # Read and replace under the same lock appenders take: this is a
+    # read-modify-write of the whole file, so any row appended between the
+    # read and the atomic replace would be discarded with no trace.
+    with append_lock(path):
+        records = _read_jsonl(path)
+        auto_at = [i for i, r in enumerate(records) if is_auto(r)]
+        if len(auto_at) <= max_auto + max(0, slack):
+            return None
+        dropped = set(auto_at[:len(auto_at) - max_auto])
+        kept = [r for i, r in enumerate(records) if i not in dropped]
+        atomic_write_text(
+            path,
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
+        )
     return len(auto_at), len(auto_at) - len(dropped)
 
 
@@ -298,12 +295,16 @@ def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:
     keyed by src_eval_ts. Atomic rewrite (tmp + replace)."""
     if not verdicts or not path.exists():
         return
-    records = _read_jsonl(path)
-    for r in records:
-        ts = r.get("src_eval_ts")
-        if ts in verdicts and not r.get("applied"):
-            r["applied"] = verdicts[ts]
-    atomic_write_text(
-        path,
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
-    )
+    # Read-modify-write of the whole candidates file while the agent may be
+    # appending to it: without the lock, every row written between the read
+    # and the replace is silently dropped.
+    with append_lock(path):
+        records = _read_jsonl(path)
+        for r in records:
+            ts = r.get("src_eval_ts")
+            if ts in verdicts and not r.get("applied"):
+                r["applied"] = verdicts[ts]
+        atomic_write_text(
+            path,
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+        )

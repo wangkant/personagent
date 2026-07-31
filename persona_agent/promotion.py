@@ -40,7 +40,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import candidates, evidence
-from .storage import atomic_write_text
+from .storage import append_lock, atomic_write_text
 
 # ---------------------------------------------------------------------------
 # Automatic promotion policy
@@ -423,32 +423,36 @@ def retract_example(path: Path, reply: str) -> int:
     The counterpart to promotion: a reply the user later rejected must stop
     being retrieved as a model answer. Rewrites atomically and leaves every
     other row byte-identical.
+
+    Read and replace happen under the same lock appenders take: this is a
+    read-modify-write of the whole pool, and the agent banks new examples into
+    it continuously, so any row appended between the read and the replace
+    would be erased with no trace. A failed replace is allowed to raise rather
+    than being reported as "nothing to retract" — the caller logs it, and
+    silently leaving a rejected reply retrievable is the worse outcome.
     """
     reply = (reply or "").strip()
     if not reply or not Path(path).exists():
         return 0
-    try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return 0
-    kept, dropped = [], 0
-    for ln in lines:
-        if not ln.strip():
-            continue
+    with append_lock(path):
         try:
-            rec = json.loads(ln)
-        except json.JSONDecodeError:
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return 0
+        kept, dropped = [], 0
+        for ln in lines:
+            if not ln.strip():
+                continue
+            try:
+                rec = json.loads(ln)
+            except json.JSONDecodeError:
+                kept.append(ln)
+                continue
+            if isinstance(rec, dict) and str(rec.get("reply") or "").strip() == reply:
+                dropped += 1
+                continue
             kept.append(ln)
-            continue
-        if isinstance(rec, dict) and str(rec.get("reply") or "").strip() == reply:
-            dropped += 1
-            continue
-        kept.append(ln)
-    if not dropped:
-        return 0
-    try:
-        atomic_write_text(
-            path, "\n".join(kept) + ("\n" if kept else ""))
-    except OSError:
-        return 0
+        if not dropped:
+            return 0
+        atomic_write_text(path, "\n".join(kept) + ("\n" if kept else ""))
     return dropped

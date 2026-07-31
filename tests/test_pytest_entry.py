@@ -21,6 +21,25 @@ def test_script_suite(suite: Path) -> None:
     run_script_suite(ROOT, suite)
 
 
+def test_every_test_file_is_collected() -> None:
+    """No test file may be silently invisible to CI.
+
+    `pytest.ini` restricts collection to this one module, so a suite reaches CI
+    only by appearing in SUITES. Discovery skips any file without a
+    `__main__` guard — which used to mean a new suite (or one written with
+    single quotes) simply never ran while `pytest -q` still printed success.
+    A file that cannot be collected must break the build here instead."""
+    on_disk = {p.name for p in (ROOT / "tests").glob("test_*.py")}
+    collected = {p.name for p in SUITES} | {Path(__file__).name}
+    missing = sorted(on_disk - collected)
+    assert not missing, (
+        "these test files are never executed by CI — pytest.ini collects only "
+        f"{Path(__file__).name}, and each suite must be runnable as a script "
+        "with an `if __name__ == \"__main__\": sys.exit(main())` guard: "
+        + ", ".join(missing)
+    )
+
+
 def test_gateway_suite_does_not_create_clean_checkout_state(
     tmp_path: Path,
 ) -> None:

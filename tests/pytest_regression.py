@@ -1,6 +1,7 @@
 """Helpers for running the legacy script suites safely under pytest."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import subprocess
@@ -31,13 +32,34 @@ _NESTED_PII_PATHS = (
 )
 
 
+def has_main_guard(path: Path) -> bool:
+    """True if the module has an ``if __name__ == "__main__":`` block.
+
+    Parsed, not substring-matched. The old check looked for the literal
+    double-quoted spelling, so a suite written with single quotes was dropped
+    from collection silently — it never ran and CI still reported success. Any
+    quoting, spacing, or reversed comparison now counts."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If) or not isinstance(node.test, ast.Compare):
+            continue
+        operands = [node.test.left, *node.test.comparators]
+        names = {n.id for n in operands if isinstance(n, ast.Name)}
+        consts = {n.value for n in operands if isinstance(n, ast.Constant)}
+        if "__name__" in names and "__main__" in consts:
+            return True
+    return False
+
+
 def discover_script_suites(tests_dir: Path, *, exclude: str) -> tuple[Path, ...]:
     """Return executable framework-free test modules in stable order."""
     return tuple(
         path
         for path in sorted(tests_dir.glob("test_*.py"))
-        if path.name != exclude
-        and 'if __name__ == "__main__"' in path.read_text(encoding="utf-8")
+        if path.name != exclude and has_main_guard(path)
     )
 
 

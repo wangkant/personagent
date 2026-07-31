@@ -51,6 +51,14 @@ MAX_HTML_DECODED_BYTES = 128 * 1024
 MAX_IMAGE_PIXELS = 16_000_000
 MAX_IMAGE_DIMENSION = 8192
 
+# Hostnames that are internal by definition (RFC 6761 / RFC 2606), so the
+# network-free pre-filter can reject them without a lookup. Anything outside
+# this set is decided by _resolve_public_target at connect time.
+_RESERVED_LOCAL_NAMES = frozenset({
+    "localhost", "localhost.localdomain",
+    "ip6-localhost", "ip6-loopback",
+})
+
 
 @dataclass(frozen=True)
 class SafeFetchResult:
@@ -749,13 +757,27 @@ class ContentIngestion:
 
     @classmethod
     def _host_is_internal(cls, url: str) -> bool:
-        """SSRF guard: True if the URL's host is, or resolves to, an internal
-        address — loopback, RFC1918, link-local (incl. the 169.254.169.254
-        cloud-metadata endpoint), reserved, or IPv6 equivalents. Resolving the
-        hostname also blocks public names that point at internal IPs.
-        Redirect hops are re-checked by _safe_get (manual redirect follow)."""
+        """Cheap, network-free SSRF pre-filter: True if the URL's host is
+        *self-evidently* internal — an IP literal in a non-public range
+        (loopback, RFC1918, link-local incl. the 169.254.169.254 metadata
+        endpoint, reserved, IPv6 equivalents) or a reserved local name.
+
+        **This is a fast reject, not the security boundary.** The boundary is
+        _resolve_public_target: resolve once, refuse if any answer is
+        internal, then pin the connection to that exact address. Every fetch
+        goes through it, and every redirect hop is re-validated by it.
+
+        It deliberately does NOT resolve hostnames. Doing so cost two things
+        and bought nothing. `socket.getaddrinfo` is synchronous, so one posted
+        URL whose nameserver blackholes froze the whole event loop — every
+        group, the gateway round-trip, all background loops — for the resolver
+        timeout. And a name resolved *here* says nothing about the address
+        connected to later; that gap is precisely the DNS-rebinding window
+        that _resolve_public_target's pinning closes. A public name pointing
+        at an internal address is still refused — at connect time, by the
+        layer that can actually make the refusal stick."""
         try:
-            host = (urlsplit(url).hostname or "").strip("[]")
+            host = (urlsplit(url).hostname or "").strip("[]").rstrip(".")
         except Exception:
             return True
         if not host:
@@ -763,29 +785,21 @@ class ContentIngestion:
         try:
             return cls._ip_is_internal(ipaddress.ip_address(host))
         except ValueError:
-            pass  # not an IP literal — resolve the hostname below
-        try:
-            infos = socket.getaddrinfo(host, None)
-        except Exception:
-            return False  # can't resolve → let the normal fetch fail
-        for info in infos:
-            addr = info[4][0].split('%')[0]  # strip IPv6 zone id
-            try:
-                if cls._ip_is_internal(ipaddress.ip_address(addr)):
-                    return True
-            except ValueError:
-                continue
-        return False
+            pass  # not an IP literal
+        # Names that are internal by definition, so no lookup is needed.
+        # Anything else is left to _resolve_public_target.
+        low = host.lower()
+        return low in _RESERVED_LOCAL_NAMES or low.endswith(".localhost")
 
     async def _safe_get(self, url: str, *, timeout: float,
                         headers: Optional[dict] = None,
                         max_redirects: int = 5) -> Optional[httpx.Response]:
-        """GET with redirects followed manually so EVERY hop is re-checked
-        against _host_is_internal. httpx's automatic following would happily
-        chase a public URL that 302s to 127.0.0.1 (the protocol API) or
-        169.254.169.254 (IMDS) — the initial-URL check alone can't see that.
-        Returns the final response, or None if any hop is internal or the
-        redirect cap is exceeded."""
+        """GET with redirects followed manually so EVERY hop is re-resolved,
+        re-validated and pinned by _resolve_public_target. httpx's automatic
+        following would happily chase a public URL that 302s to 127.0.0.1 (the
+        protocol API) or 169.254.169.254 (IMDS) — no check of the initial URL
+        can see that. Returns the final response, or None if any hop resolves
+        to an internal address or the redirect cap is exceeded."""
         result = await safe_fetch_url(
             url,
             timeout=timeout,
@@ -1304,8 +1318,25 @@ class ContentIngestion:
 
     async def _ocr_image(self, url: str) -> str:
         """Call the OneBot /ocr_image endpoint (NapCat etc.) to extract text
-        from an image. Returns "" on failure or when no text is detected."""
+        from an image. Returns "" on failure or when no text is detected.
+
+        The URL is handed to NapCat, which fetches it with no SSRF controls of
+        its own — so this is a delegated fetch and must be gated here. It is
+        reached precisely when the direct fetch failed, and for an internal URL
+        that failure is *guaranteed* (safe_fetch_url refuses it, the vision
+        caption comes back empty, and this is the fallback). Ungated, the SSRF
+        refusal was therefore converted into an SSRF *success* by proxy, with
+        the fetched text reflected back into the group buffer and the prompt.
+        file:// is refused for the same reason the direct image path keeps a
+        NAPCAT_IMAGE_DIR jail: those URLs really do arrive here."""
         if not url:
+            return ""
+        if not url.lower().startswith(("http://", "https://")):
+            logger.warning("[Agent] refusing non-HTTP OCR delegation: %s", url[:80])
+            return ""
+        if await _resolve_public_target(url) is None:
+            logger.warning("[Agent] refusing OCR delegation for internal/"
+                           "unresolvable url: %s", url[:80])
             return ""
         cache_key = self._image_cache_key(url)
         if cache_key in self.image_caption_cache:

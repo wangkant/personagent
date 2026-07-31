@@ -112,7 +112,6 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
         return []
 
     written: list[dict] = []
-    fh = None if dry_run else open(CANDIDATES_FILE, "a", encoding="utf-8", newline="\n")
     try:
         for ev in pending:
             prompt = evolution.build_review_prompt(ev, AGENT_LANG)
@@ -132,15 +131,22 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
             if dry_run:
                 print(line)
             else:
-                fh.write(line + "\n")
+                # One locked, fsynced append per record instead of a bare
+                # long-lived handle. The running agent appends to this same
+                # file throughout — that is the documented workflow — and the
+                # unlocked handle lost ~25-30% of this run's own diagnoses.
+                # Worse, a torn line lands mid-multibyte on Chinese payloads,
+                # after which every reader of candidates.jsonl raises
+                # UnicodeDecodeError and the negative half of the learning
+                # loop stops permanently, including the code that could repair it.
+                evolution.append_jsonl(CANDIDATES_FILE, [record])
             written.append(record)
             logger.info("  [%s] %s → %s",
                         str(ev.get("ts", "?"))[:19],
                         diag.get("failure_mode", "?"),
                         str(diag.get("constraint_to_add", ""))[:80])
     finally:
-        if fh:
-            fh.close()
+        pass
     logger.info("review done: %d/%d written to %s", len(written), len(pending),
                 "stdout (dry-run)" if dry_run else CANDIDATES_FILE.name)
     return written
