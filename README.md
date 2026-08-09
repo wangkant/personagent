@@ -1,7 +1,7 @@
 # personagent
 
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 **English** | [中文](README.zh-CN.md)
@@ -486,7 +486,7 @@ The committed `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `t
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify and share for any noncommercial purpose (personal projects, research, education, nonprofit and government use). Commercial use is not permitted. The early v0.1.x tags were briefly published under MIT and have been withdrawn; copies obtained while they were up keep the license they were obtained under.
+[MIT License](LICENSE).
 
 ## Acknowledgements
 

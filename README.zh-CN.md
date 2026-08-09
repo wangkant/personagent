@@ -1,7 +1,7 @@
 # personagent
 
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 [English](README.md) | **中文**
@@ -486,7 +486,7 @@ runtime/                  # 证据日志、候选账本、晋升视图、学到�
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) —— 个人项目、研究、学习、教育、非营利组织与政府用途可自由使用、修改和分发；**不允许商业使用**。早期的 v0.1.x tag 曾短暂以 MIT 发布、现已撤回;在其上架期间取得的副本保留取得时的许可。
+[MIT License](LICENSE)。
 
 ## 致谢
 

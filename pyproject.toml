@@ -8,7 +8,7 @@ version = "0.1.1"
 description = "A self-evolving persona LLM agent for group chat: learns to sound like a person from real user reactions, not from a bigger prompt."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
