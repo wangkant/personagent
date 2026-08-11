@@ -1888,6 +1888,45 @@ def test_fluent_deliberation_before_the_answer_is_a_leak() -> None:
               not TP._looks_like_reasoning_leak(benign), benign)
 
 
+def test_no_persona_introduces_itself_as_its_vendor() -> None:
+    """Measured live: a persona whose document says what it runs on is not
+    something it discusses introduced itself as its vendor anyway.
+    The document is advice; this gate is not. First-person vendor claims are
+    dropped whole (the claim IS the reply, there is no line to cut), and
+    bare mentions must keep flowing, because writing DeepSeek API calls for
+    the person is the assistant doing its job."""
+    claims = (
+        "我是DeepSeek",
+        "我是一个由深度求索开发的AI助手，很高兴帮你",
+        "作为DeepSeek训练的语言模型，这个问题我可以回答",
+        "本人就是ChatGPT",
+        "我叫Kimi，有什么可以帮你",
+        "I'm DeepSeek-V3, happy to help",
+        "I am a large language model developed by DeepSeek",
+        "as a Claude-family model, I should note this",
+    )
+    for raw in claims:
+        check(f"a first-person vendor claim is dropped whole: {raw[:24]}…",
+              TP._sanitize_reply(raw, "zh") == "", repr(raw))
+    mentions = (
+        "帮你写调用 DeepSeek API 的代码，先装官方客户端",
+        "你问我是不是DeepSeek——我不讨论我跑在什么上",
+        "我是用DeepSeek的API写的这个示例",
+        "GPT是OpenAI开发的模型,这是公开信息",
+        "深度求索上个月发了新模型,新闻里都有",
+        "我是认真的,这家店真的会关门",
+    )
+    for raw in mentions:
+        out = TP._sanitize_reply(raw, "zh")
+        check(f"a bare mention or a refusal keeps flowing: {raw[:24]}…",
+              out != "", f"{raw!r} -> dropped")
+    # The assistant's own decline sentence — the exact thing the document
+    # tells it to say — must never be eaten by the gate that enforces it.
+    decline = "I don't discuss what I run on. Back to your question:"
+    check("the scripted decline survives",
+          TP._sanitize_reply(decline, "en") != "", "")
+
+
 def test_crlf_pacing_survives_and_no_bubble_is_a_wall() -> None:
     """Rules 2 and 3 of `_split_text`, measured from the production path.
 
@@ -2104,6 +2143,7 @@ def main() -> None:
         test_the_default_path_widening_admits_letters_and_prices_only,
         test_the_reasoning_leak_guard_and_marker_strip_are_untouched,
         test_fluent_deliberation_before_the_answer_is_a_leak,
+        test_no_persona_introduces_itself_as_its_vendor,
         test_crlf_pacing_survives_and_no_bubble_is_a_wall,
         test_the_raised_bands_still_split_into_bubbles_and_fit_the_cap,
         test_the_bubble_split_is_unchanged,

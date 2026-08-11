@@ -761,6 +761,54 @@ _LEAK_LABEL_RE = re.compile(
     r"(?i)^[\s\-•*]*(input|speaker|intent|decision|style|"
     r"输入|发言人|意图|决策|风格|分析|判断)\s*[:：]")
 
+# --- Vendor self-identification ---------------------------------------------
+# The engine's models know who trained them and will say so when asked —
+# "我是DeepSeek" is close to a trained reflex — and the persona documents'
+# "what you run on is private" rule is advice the model is free to ignore.
+# Measured 2026-08-11: the assistant, whose document says exactly that,
+# introduced itself as DeepSeek anyway. This is the layer that is not advice.
+#
+# THE SHAPE IS FIRST PERSON + A VENDOR IN ONE BREATH, never a bare mention:
+# the assistant writing DeepSeek API calls for the person is the tool doing
+# its job, and an encyclopedic "GPT是OpenAI开发的" is an answer, not a
+# confession. Every pattern is anchored on 我/本人/I am/as a, the claim verb
+# is guarded against questions ("我是不是DeepSeek" never matches) and
+# against instrumentals ("我是用DeepSeek的API写的" never matches), and the
+# windows stop at clause punctuation so a match cannot straddle two
+# sentences. High precision over recall, deliberately: a sideways leak is
+# the prompt's problem; a false positive here silences a legitimate answer.
+_VENDOR_NAMES = (
+    r"(?:deep\s?seek[\w.-]*|深度求索|open\s?ai|chat\s?gpt|gpt[-\d][\w.]*|"
+    r"anthropic|claude[\w.-]*|gemini|通义千问|通义|qwen[\w.-]*|"
+    r"kimi|月之暗面|moonshot|智谱|chatglm|glm-[\w.]*|文心一言|ernie|"
+    r"llama[\w.-]*|mistral|grok|豆包|doubao|minimax|混元|hunyuan)"
+)
+_VENDOR_SELF_ID_RES = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    # 我是DeepSeek / 我叫Kimi / 本人就是ChatGPT. 是 refuses a question mark
+    # shape (是不是/是否) and an instrumental (是用/是在/是帮/是给/是拿).
+    rf"(?:我|本人)(?:就是|叫|是(?!不是|否|用|在|帮|给|拿))"
+    rf"[^。！？，,\n]{{0,10}}{_VENDOR_NAMES}",
+    # 作为DeepSeek(训练的模型) — the self-framing preamble.
+    rf"作为[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}",
+    # 我(是一个)由深度求索(开发/训练)的… — the full-dress introduction.
+    rf"(?:我|本人)[^。！？\n]{{0,8}}由[^。！？\n]{{0,10}}{_VENDOR_NAMES}"
+    rf"[^。！？\n]{{0,6}}(?:开发|训练|打造|创造)",
+    # I'm DeepSeek / I am Claude-3. The 12-char window admits "based on"
+    # and refuses "happy to help with" — measured on both.
+    rf"\bI(?:'m| am)\b[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}",
+    # I am a (large language) model/assistant … by/from DeepSeek. The
+    # window is measured: "large language model developed " is 31 chars.
+    rf"\bI(?:'m| am) an? [^.!?\n]{{0,40}}\b(?:by|from|of) {_VENDOR_NAMES}",
+    # as a DeepSeek(-trained) model — the English self-framing preamble.
+    rf"\bas an? [^.!?\n]{{0,12}}{_VENDOR_NAMES}",
+))
+
+
+def _names_its_own_vendor(text: str) -> bool:
+    """True when the reply claims a vendor or model identity in the first
+    person. See `_VENDOR_SELF_ID_RES` for the shape and its guards."""
+    return any(pattern.search(text) for pattern in _VENDOR_SELF_ID_RES)
+
 # --- The hard reject, closed under Unicode folding -------------------------
 # `< > { } |` is the set, but the SET IS NOT THE CHARACTERS — it is the
 # meanings, and Unicode spells each of those meanings more than once. The
@@ -1344,6 +1392,17 @@ class TextProcessing:
                 text = scrubbed
         if text and TextProcessing._looks_like_reasoning_leak(text):
             logger.warning("[Agent] reasoning-leak blocked, dropping reply: %r", text[:80])
+            return ""
+        # No persona is the model it runs on, and the persona documents'
+        # "what you run on is private" is advice the model can and does
+        # ignore ("我是DeepSeek", measured live). First-person vendor claims
+        # are dropped whole — there is no line to cut, the claim IS the
+        # reply — while bare mentions flow: writing DeepSeek API calls for
+        # the person is the assistant doing its job.
+        if text and _names_its_own_vendor(text):
+            logger.warning(
+                "[Agent] vendor self-identification blocked, dropping "
+                "reply: %r", text[:80])
             return ""
         # Final gate: whitelist character validation. Any reply that doesn't
         # look like normal chat for the active language (XML / JSON / system
