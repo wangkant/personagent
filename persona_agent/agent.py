@@ -51,6 +51,7 @@ from .prompts import (
     REASONING_PROTOCOL,
     STYLE_GUIDE,
     TOOL_GUIDE,
+    parse_persona_style,
 )
 from .stickers import StickerLibrary
 from .storage import atomic_write_text
@@ -61,6 +62,7 @@ from .textproc import (
     _WEB_DESC_OPEN,
     SLEEP_PASS_PROB,
     SUB_TRIGGER_PASS_PROB,
+    ReplyStyle,
     TextProcessing,
     _focus_tokens,
     _strip_web_desc,
@@ -87,6 +89,24 @@ logger = logging.getLogger("agent")
 
 
 
+
+
+def _load_persona_card() -> Optional[dict]:
+    """Optional persona card JSON (PERSONA_CARD_FILE, default persona.card.json
+    next to persona.txt). Carries author-level knobs that are configuration
+    rather than prose — today the `reply_style` character policy (see
+    `textproc.ReplyStyle.from_card`). Any read or parse failure means "no
+    card": the narrow default character policy applies, which is the
+    fail-closed direction."""
+    card_path = Path(os.getenv("PERSONA_CARD_FILE", "persona.card.json"))
+    if not card_path.is_file():
+        return None
+    try:
+        data = json.loads(card_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("read persona card failed; using the default reply style")
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _load_persona(lang: str = "en") -> str:
@@ -268,7 +288,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self.trigger_count = trigger_count
         self.context_len = context_len
         self.followup_window = followup_window
-        self.persona = persona if persona is not None else _load_persona(self.agent_lang)
+        raw_persona = persona if persona is not None else _load_persona(self.agent_lang)
+        # A persona document may end with a [style] declaration block. Parsing
+        # strips it from the prose (so the model never reads raw knob config as
+        # persona text) and keeps the knobs for prompt variants that use them.
+        self.persona_style, self.persona = parse_persona_style(raw_persona)
+        # The per-persona character policy. Without a card (or with a broken
+        # one) this is the narrow fail-closed default.
+        self.reply_style = ReplyStyle.from_card(_load_persona_card())
         self.owner_relationship = owner_relationship
         self.on_reply = on_reply
         self.buffers: dict[str, deque] = defaultdict(lambda: deque(maxlen=context_len))
@@ -674,6 +701,19 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         finally:
             lock.release()
 
+    def _validator_lang(self) -> str:
+        """The language `_validate_reply_safe` reads its rules in.
+
+        The only language-dependent rule in that validator is the zh one: a
+        reply with no CJK and no marker is REJECTED, because a Chinese bot
+        emitting pure ASCII is a suspected template or token leak. That rule
+        is safe here because this deployment has a single language for both
+        the persona and its readers — `agent_lang` — so ASCII from a zh agent
+        really is anomalous. A deployment that ever grows a per-reader
+        language must stop passing `agent_lang` unconditionally and apply the
+        zh rule only where persona and reader language agree."""
+        return self.agent_lang
+
     async def handle_gateway(self, event: dict) -> dict:
         """Handle one platform-neutral event forwarded by a gateway plugin.
 
@@ -1036,7 +1076,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # committed — a phantom "sent" reply the group never saw. Now a
             # rejection takes the PASS path below instead.
             if reply:
-                reply = self._sanitize_reply(reply, self.agent_lang)
+                reply = self._sanitize_reply(reply, self._validator_lang(), self.reply_style)
             reply = reply.strip().strip('"').strip("「」")
             at_uid = ""
             # Non-digit targets included: gateway user ids look like
@@ -1195,7 +1235,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # Sanitize/validate before committing the assistant turn — a
             # fail-closed rejection inside _send_private_qq would otherwise
             # leave an unsent reply in private_history (phantom turn).
-            reply = self._sanitize_reply(reply, self.agent_lang)
+            reply = self._sanitize_reply(reply, self._validator_lang(), self.reply_style)
             reply = reply.strip().strip('"').strip("「」")
             reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
 
@@ -1291,7 +1331,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                         user_id, blocked, reply[:120])
                     return False
                 had_visible_candidate = bool(filtered.strip())
-                reply = self._sanitize_reply(filtered, self.agent_lang)
+                reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
                 reply = reply.strip().strip('"').strip("「」")
                 reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
                 if had_visible_candidate and not reply:
@@ -2592,7 +2632,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # Sanitize BEFORE committing buffer/last_reply_at (same as
             # _handle_inner): a fail-closed rejection later inside _send_qq
             # would otherwise leave a phantom "sent" line in the buffer.
-            reply = self._sanitize_reply(reply, self.agent_lang)
+            reply = self._sanitize_reply(reply, self._validator_lang(), self.reply_style)
             reply = reply.strip().strip('"').strip("「」")
             at_uid = ""
             at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
@@ -2666,7 +2706,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     "[Agent] output_filter blocked (proactive private user=%s): %s",
                     uid, blocked)
                 continue
-            reply = self._sanitize_reply(filtered, self.agent_lang)
+            reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
             reply = reply.strip().strip('"').strip("「」")
             reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):

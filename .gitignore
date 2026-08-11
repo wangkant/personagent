@@ -5,6 +5,7 @@
 
 # Persona (user-specific)
 persona.txt
+persona.card.json
 
 # Python
 __pycache__/

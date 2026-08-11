@@ -54,6 +54,13 @@ _SEND_WINDOW_SEC = 60.0
 # recently-active gateway conversation is evicted (see _touch_gateway_conv).
 _MAX_GATEWAY_CONVS = 256
 
+# Warn well before the cap bites: an operator seeing "it forgot our
+# conversation" reports has no error to grep for today (eviction is a normal,
+# silent cache-capacity decision, not a bug) -- this is the one signal that a
+# deployment is approaching the point where _evict_conversation starts
+# dropping `private_history` for its least-recently-active conversations.
+_GATEWAY_CONV_WARN_THRESHOLD = 200
+
 @dataclass
 class SendResult:
     """Outcome of one logical reply, which may contain several chunks."""
@@ -79,7 +86,28 @@ class Transport:
         A conversation whose lock is currently held is skipped in favor of the
         next-oldest one."""
         self._gateway_conv_lru[key] = time.monotonic()
-        if len(self._gateway_conv_lru) <= _MAX_GATEWAY_CONVS:
+        count = len(self._gateway_conv_lru)
+        # A one-bit "already warned" flag, NOT a `count == threshold`
+        # transition check: `dict[key] = value` on an EXISTING key (the
+        # common case -- most touches are a conversation that was already
+        # in the LRU, and this method runs on every touch, several times
+        # per gateway message) does not change len(). Once a deployment's
+        # live conversation count settles AT or ABOVE the threshold,
+        # `count == _GATEWAY_CONV_WARN_THRESHOLD` would be true again on
+        # every subsequent re-touch of an existing key -- not just once --
+        # spamming a warning per message in exactly the steady state it
+        # exists to flag. `getattr(..., False)` avoids needing an __init__
+        # addition in agent.py for a flag only this one warning needs.
+        if (count >= _GATEWAY_CONV_WARN_THRESHOLD
+                and not getattr(self, "_gateway_conv_warned", False)):
+            self._gateway_conv_warned = True
+            logger.warning(
+                "[Agent] gateway conversation count crossed %d (cap %d) for "
+                "bot=%s; least-recently-active conversations will start "
+                "losing their in-memory private_history once the cap is hit",
+                _GATEWAY_CONV_WARN_THRESHOLD, _MAX_GATEWAY_CONVS,
+                self.bot_qq)
+        if count <= _MAX_GATEWAY_CONVS:
             return
         for old in sorted(self._gateway_conv_lru, key=self._gateway_conv_lru.get):
             if old == key:
@@ -95,12 +123,16 @@ class Transport:
 
     def _evict_conversation(self, key: str) -> None:
         """Drop all of a conversation's in-memory state (buffer / locks /
-        counters / throttle window / ...). Entries under the same key in the
-        persistent stores (memories / core_memory) go too: gateway conversation
-        keys are minted remotely, and keeping them would let a malicious
-        forwarder cycle conversation ids to grow memory.json / core_memory.json
-        forever (each key is capped, the key count wasn't). QQ groups/DMs never
-        enter the LRU, so real user data is unaffected."""
+        counters / throttle window / ...).
+
+        The persisted memories / core_memory / pending-reply rows under the
+        same key are dropped too (`PendingReplies.drop_conversation` for the
+        pending table): `_save_memories` / `_save_core_memory` rewrite the
+        whole JSON dict, so they cannot preserve a key the in-memory dict no
+        longer holds without a read-merge layer that is not worth building for
+        a path that does not evict at volume. Only gateway conversations ever
+        enter the LRU — QQ groups/DMs never do — so real user data on the QQ
+        path is unaffected either way."""
         self._gateway_conv_lru.pop(key, None)
         for d in (self.locks, self.send_locks, self.buffers, self.counters,
                   self.last_reply_at, self.active_users, self._msg_seq,
@@ -126,9 +158,11 @@ class Transport:
         self.pending_reactions.drop_conversation(reaction_key)
         # Group-conversation memory key = the group_id itself; gateway DM
         # memory key = "private:<uid>" = key.
-        if self.memories.pop(key, None) is not None:
+        had_memories = self.memories.pop(key, None) is not None
+        had_core = self.core_memory.pop(key, None) is not None
+        if had_memories:
             self._save_memories()
-        if self.core_memory.pop(key, None) is not None:
+        if had_core:
             self._save_core_memory()
         logger.info("[Agent] gateway conversation evicted (over the %d cap): %s",
                     _MAX_GATEWAY_CONVS, key)
@@ -225,7 +259,7 @@ class Transport:
         # chunk's message_id (same-group sends are serialized by send_locks).
         target_key = group_id
         self._sent_mids[target_key] = []
-        text = self._sanitize_reply(text, self.agent_lang)
+        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
         sent_stickers: list[str] = []
         if not text:
             return SendResult()
@@ -379,7 +413,7 @@ class Transport:
             self, user_id: str, text: str) -> SendResult:
         target_key = f"private:{user_id}"
         self._sent_mids[target_key] = []
-        text = self._sanitize_reply(text, self.agent_lang)
+        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
         # Private chat is 1:1 — there's no "target someone" semantics. The
         # model still occasionally emits [AT:xxx] (STYLE_GUIDE teaches the
         # marker); the group path extracts it, private has no extractor — left
@@ -388,6 +422,20 @@ class Transport:
         if not text:
             return SendResult()
         segments = self._parse_sticker_markers(text)
+        # Typing rhythm belongs to whoever the user is actually watching.
+        #
+        # On QQ, sleeping here IS the pause the user sees: this coroutine and
+        # the chat window are the same timeline. Behind a `GatewaySink` they
+        # are not. The sink collects every chunk and hands the finished list
+        # back to `handle_gateway`'s caller, which does its own pacing —
+        # so these sleeps happen BEFORE the caller has been given anything
+        # to show. Measured 2026-08-06 behind a sink: 7.0s of the 12.3s turn
+        # was spent here, invisible, and the caller then emitted typing,
+        # chunk and done 0.00s apart because the waiting was already over.
+        #
+        # The sink extraction rerouted the DATA through it and left the
+        # TIMING behind. This is that half.
+        collected = current_sink.get() is not None
         sendable = False
         sent_any = False
         delivered: list[str] = []
@@ -399,7 +447,8 @@ class Transport:
                 if not file_path or not file_path.exists():
                     logger.info("[Agent] sticker tag %r → no match, skipping (private)", value)
                     continue
-                await asyncio.sleep(random.uniform(0.6, 1.4))
+                if not collected:
+                    await asyncio.sleep(random.uniform(0.6, 1.4))
                 try:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 except Exception as e:
@@ -418,11 +467,14 @@ class Transport:
                 except ValueError:
                     pass
                 continue
-            # text chunk — split for typing simulation
+            # text chunk — split for typing simulation. The SPLIT still
+            # happens behind a sink (multi-bubble texture costs no time and
+            # the web layer wants the same units); only the WAIT is skipped.
             chunks = self._split_text(value)
             for chunk in chunks:
                 sendable = True
-                await asyncio.sleep(self._typing_delay(chunk))
+                if not collected:
+                    await asyncio.sleep(self._typing_delay(chunk))
                 if not await self._napcat_send_private(user_id, chunk):
                     failed = True
                     break

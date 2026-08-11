@@ -59,6 +59,17 @@ current_sink: contextvars.ContextVar[Optional["GatewaySink"]] = contextvars.Cont
     "current_sink", default=None,
 )
 
+# A contextvar rather than a threaded parameter, for the same reason
+# `current_sink` is one: per-turn state on an Agent instance shared by every
+# conversation, where asyncio hands each Task its own copy so two turns in
+# flight cannot see each other's value. None means "not supplied" and the
+# TZ_OFFSET_HOURS env default still applies, so a deployment that never sets
+# it is behaviorally unchanged. A gateway embedder with a per-user notion of
+# "local time" may set it for the duration of a turn.
+current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
+    "current_tz_offset_h", default=None,
+)
+
 
 def message_to_reply_item(message) -> dict:
     """Convert one NapCat-shaped message (str or v11 segment list, exactly

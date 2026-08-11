@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "personagent"
-version = "0.1.1"
+version = "0.2.0"
 description = "A self-evolving persona LLM agent for group chat: learns to sound like a person from real user reactions, not from a bigger prompt."
 readme = "README.md"
 requires-python = ">=3.10"

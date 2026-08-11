@@ -4,7 +4,84 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — 2026-08-11
+
+The headline: **an unsupported character now degrades to a missing glyph,
+never to silence.** The reply validator is still a fail-closed whitelist —
+that is a token-leak defence and it stays — but "reject" used to mean "drop
+the whole reply", and a whitelist narrow enough to catch a chat template is
+also narrow enough to catch `ok ❤️ sure`. Measured against the old
+validator, ordinary replies with emoji, curly quotes, an ellipsis or a
+katakana word produced `""`: the user saw nothing on the turn they cared
+about.
+
+### Added
+
+- **A three-tier reply character policy: STRIP / MAP / ALLOW.** Emoji,
+  variation selectors, ZWJ sequences and decorative symbol blocks are
+  stripped (the reply survives minus the glyph); curly quotes, dashes and
+  no-break spaces are mapped to their ASCII spelling; and named letter
+  ranges join the whitelist itself, each with a written reason. A code point
+  named in no tier still drops the reply — adding a script stays a
+  deliberate act. The policy ships with its own suite
+  (`tests/test_textproc.py`): a leak corpus that must stay silenced under
+  the widest style a persona can express, plus a test-of-the-test that
+  fails if the corpus could no longer detect an over-broad widening.
+- **Six more scripts on the default path.** Kana, Hangul, Cyrillic, Greek,
+  Arabic and Latin-with-diacritics are how languages are spelled, not
+  registers a persona opts into: `café later`, `нет проблем` and `なるほど`
+  are content now. Thai, Hebrew, Devanagari and friends still fail closed
+  until someone names them.
+- **Per-persona character opt-ins (`ReplyStyle`), with a card to carry
+  them.** A new optional `PERSONA_CARD_FILE` (default `persona.card.json`)
+  may declare `{"reply_style": {"emoji": true, "charsets": ["music"],
+  "max_chars": 320}}`. Optional charsets are ellipsis, music and arrows —
+  registers, not languages. Every malformed value fails toward the narrow
+  default, and the arrows opt-in buys narration (`s1 → s2`), not a frame:
+  an arrow hugging a bare token (`←persona→`) is rejected by shape, so the
+  opt-in cannot be used to smuggle a template past the whitelist.
+- **A persona `[style]` declaration block.** A persona document may end
+  with a `[style]` block declaring six register knobs (`length`, `vent`,
+  `recs`, `good_news`, `particles`, `fatigue`). The block is parsed against
+  a single knob table and stripped from the prose, so raw configuration
+  never reaches the model as persona text; prose-shaped lines, unclosed or
+  repeated blocks and orphan closers all resolve toward keeping the
+  persona's sentences.
+- **`current_tz_offset_h`** — a per-turn timezone contextvar for gateway
+  embedders whose users are not all in the deployment's `TZ_OFFSET_HOURS`.
+
+### Changed
+
+- **The per-turn reply ceiling rose from 500 to 800 characters, and
+  truncation got a visible seam.** The ceiling is also the per-turn
+  exfiltration bound, so it moved deliberately: the widest length band's
+  English reading did not fit under 500, which turned the band into a
+  truncation machine. A cut reply now ends in a visible ` ...` rather than
+  pretending it was whole.
+- **The trusted trailer, and honesty about being an AI.** The system prompt
+  now ends with `<trusted_directives>` — application-authored text a persona
+  document cannot displace — and the persona sits in an unforgeable
+  `<persona>` region above it. The directives carry the safety exceptions
+  and an affirmative honesty clause; the engine no longer instructs any
+  persona to deny being an AI, in either chat path.
+- **Gateway transport hardening.** The gateway-conversation LRU warns once
+  instead of per message, skips evicting a conversation whose lock is
+  currently held, and releases waiters on eviction; private DM history is
+  capped instead of growing without bound.
+
+### Fixed
+
+- **Pacing survives CRLF, and no bubble is a wall.** `\r\n` breaks are
+  honored by the splitter instead of leaking `\r` into bubbles; a run of
+  punctuation can no longer produce a zero-length bubble, and discarding an
+  all-whitespace chunk no longer discards the hard break it carried.
+- **Emoji modifiers no longer drop the whole reply.** U+FE0F, U+200D,
+  keycaps, flags and skin-tone modifiers survived the old emoji strip,
+  reached the whitelist, and silenced the turn.
+
+The engine work below was ported back from the maintainer's private fork of
+this engine; the entries above are that sync. What follows was already on
+main awaiting release.
 
 ### Fixed
 
@@ -315,5 +392,6 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[0.2.0]: https://github.com/wangkant/personagent/releases/tag/v0.2.0
 [0.1.1]: https://github.com/wangkant/personagent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/wangkant/personagent/releases/tag/v0.1.0

@@ -279,7 +279,8 @@ agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LAN
 | `GATEWAY_TOKEN` | AstrBot bearer 认证及带时间戳/nonce/正文签名的共享密钥；跨主机转发必须配合 HTTPS 使用 |
 | `GATEWAY_SOURCE_MAX_AGE_SECONDS` | 原始网关事件允许的最大年龄，与转发签名时间独立校验（默认 86400 秒 / 24 小时） |
 | `LOG_FILE` | 可选轮转文件日志；留空则只输出控制台，仓库内自定义路径必须手动 gitignore |
-| `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`) |
+| `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`)。文档末尾可带一个 `[style]` 声明块（`length` / `vent` / `recs` / `good_news` / `particles` / `fatigue` 六个语域旋钮），会被解析并从正文剥离，原始配置不会进入模型 |
+| `PERSONA_CARD_FILE` | 可选人设卡 JSON (默认 `persona.card.json`)。其中的 `reply_style` 对象可为该人设开启 emoji 和附加字符集（`ellipsis` / `music` / `arrows`），也可调低回复上限；格式错误一律回退到收窄的默认策略 |
 | `PROACTIVE_ENABLE`（+ `PROACTIVE_*`）| 可选的主动发言。详见[主动发言](#主动发言可选) |
 | `REACT_LEARN`（+ `REACT_*`）| 从真实用户反应中学习（默认开——自进化主信号）。详见[自进化](#自进化) |
 | `PROMOTE_AUTO`（+ `PROMOTE_*`）| 候选何时可以获得影响未来回复的权限：需要几条兼容证据、其中几条必须是强证据、证据多久过期、以及一个会话的证据能否替另一个会话说话。默认保守；`PROMOTE_AUTO=false` 则一切都留给人审。详见[自进化](#自进化) |

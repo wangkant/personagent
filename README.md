@@ -279,7 +279,8 @@ All settings come from `.env`. Key fields:
 | `GATEWAY_TOKEN` | Shared secret for AstrBot bearer authentication and replay-resistant timestamp/nonce/body signatures. Required with HTTPS for off-host forwarding |
 | `GATEWAY_SOURCE_MAX_AGE_SECONDS` | Maximum age of an original gateway event, independent of its forwarding time (default 86400 / 24 h) |
 | `LOG_FILE` | Optional rotating file log. Blank keeps logs console-only; custom in-repository paths must be gitignored |
-| `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`) |
+| `PERSONA_FILE` | Path to your persona prompt (default `persona.txt`). The document may end with a `[style]` block declaring register knobs (`length` / `vent` / `recs` / `good_news` / `particles` / `fatigue`); it is parsed and stripped so raw config never reaches the model |
+| `PERSONA_CARD_FILE` | Optional persona card JSON (default `persona.card.json`). Its `reply_style` object opts the persona into emoji and extra charsets (`ellipsis` / `music` / `arrows`) and can lower the reply cap; anything malformed falls back to the narrow default |
 | `PROACTIVE_ENABLE` (+ `PROACTIVE_*`) | Opt-in self-initiated messaging. See [Proactive messaging](#proactive-messaging-optional) |
 | `REACT_LEARN` (+ `REACT_*`) | Learn from real user reactions (on by default — the primary self-evolution signal). See [Self-evolution](#self-evolution) |
 | `PROMOTE_AUTO` (+ `PROMOTE_*`) | When a candidate may gain authority over future replies: how many compatible events, how many strong, how old, and whether one conversation's evidence may speak for another. Conservative defaults; `PROMOTE_AUTO=false` leaves everything for human review. See [Self-evolution](#self-evolution) |
