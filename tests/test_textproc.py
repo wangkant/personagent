@@ -1857,6 +1857,37 @@ def test_the_reasoning_leak_guard_and_marker_strip_are_untouched() -> None:
           TP._sanitize_reply("**bold** and `code`", "en") == "bold and code", "")
 
 
+def test_fluent_deliberation_before_the_answer_is_a_leak() -> None:
+    """Measured shape: a model dumped a whole paragraph of deliberation into
+    the reply field BEFORE the in-character answer, and the meta-phrase list
+    matched none of it — no labels, no English narration, none of the five
+    original Chinese phrases. The tells the widened list keys on: a persona
+    narrating its interlocutor in the THIRD PERSON (in character the reader
+    is only ever 你/you), and a persona citing its own configuration as a
+    plan rather than as quoted speech."""
+    leaked = ("用户在问店里今天有什么 我不知道他是谁，第一次来 "
+              "按人物设定我只聊店里的事，不聊别的\n"
+              "所以回答的重点不是报菜单，而是把他当熟客接住\n"
+              "保持客气，符合设定 语气不能太生硬")
+    check("the deliberation paragraph is detected as reasoning",
+          TP._looks_like_reasoning_leak(leaked), "")
+    check("...and sanitize drops the whole thing rather than reading the "
+          "stage directions to the audience",
+          TP._sanitize_reply(leaked, "zh") == "", "")
+    answer = ("今天就两样，热的和冰的\n你要是赶时间就先坐")
+    check("the in-character answer that followed it is not a leak",
+          not TP._looks_like_reasoning_leak(answer), "")
+    check("...and survives sanitize untouched",
+          TP._sanitize_reply(answer, "zh") == answer, "")
+    # Benign neighbours of the new phrases: a character TALKING ABOUT
+    # settings or asking about people is speech, not narration.
+    for benign in ("你想喝什么直接说",
+                   "这家店的设定就是不开灯，你将就一下",
+                   "the user manual is on the shelf"):
+        check(f"benign line stays a reply: {benign[:14]}…",
+              not TP._looks_like_reasoning_leak(benign), benign)
+
+
 def test_crlf_pacing_survives_and_no_bubble_is_a_wall() -> None:
     """Rules 2 and 3 of `_split_text`, measured from the production path.
 
@@ -2072,6 +2103,7 @@ def main() -> None:
         test_a_script_named_in_no_tier_still_drops_the_whole_reply,
         test_the_default_path_widening_admits_letters_and_prices_only,
         test_the_reasoning_leak_guard_and_marker_strip_are_untouched,
+        test_fluent_deliberation_before_the_answer_is_a_leak,
         test_crlf_pacing_survives_and_no_bubble_is_a_wall,
         test_the_raised_bands_still_split_into_bubbles_and_fit_the_cap,
         test_the_bubble_split_is_unchanged,

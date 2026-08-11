@@ -1588,8 +1588,28 @@ class TextProcessing:
         if labelled >= 2:
             return True
         # Self-narration about HOW to reply (describing the response process).
+        #
+        # The second half of the list is measured, not imagined: a live leak
+        # walked a whole paragraph of deliberation out to a reader before the
+        # in-character answer, and the original list matched none of it. The
+        # shapes it carried are the ones added:
+        #   * the persona narrating its interlocutor in the THIRD PERSON
+        #     ("用户在问" / "the user is asking") — in character the reader
+        #     is only ever 你/you, so this voice is the protocol's;
+        #   * the persona citing its own configuration as a plan ("符合设定" /
+        #     "stay in character" said about itself, not quoted);
+        #   * the persona planning its answer's structure ("回答的重点").
+        # Known cost, accepted: a persona drafting support copy FOR the
+        # reader could legitimately write "the user is asking", and that turn
+        # is dropped. A dropped turn is a visible failure with a retry; a
+        # leak is the engine reading its stage directions to the audience.
         meta = ("i should reply", "let me reply", "let me respond", "i'll respond",
-                "先接这个", "我回不了那个", "回一句", "应该是看到", "按protocol")
+                "先接这个", "我回不了那个", "回一句", "应该是看到", "按protocol",
+                "the user is asking", "the user asked", "the user wants",
+                "stay in character", "stays in character",
+                "用户在问", "用户问的", "用户想", "用户说的是",
+                "符合设定", "符合人设", "保持人设", "按人设", "按设定",
+                "回答的重点")
         low = text.lower()
         hits = sum(1 for m in meta if m.lower() in low)
         # Long reply (chat is rarely >80 chars) + ≥1 meta phrase, or any ≥2 → leak.
