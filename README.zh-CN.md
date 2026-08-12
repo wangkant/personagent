@@ -1,152 +1,88 @@
 # personagent
 
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
+[![最新版本](https://img.shields.io/github/v/release/wangkant/personagent?display_name=tag&sort=semver)](https://github.com/wangkant/personagent/releases)
+[![已测试 Python 3.10、3.11、3.12](https://img.shields.io/badge/tested-Python%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-[English](README.md) | **中文**
+[English](README.md) · **简体中文**
 
-> **一个用于群聊和私聊的自进化人设 agent——像群里的熟人，而不是客服。**
+> 面向群聊与私聊、可部署、可自进化的人设 Agent。
 
-`personagent` 把 OpenAI 兼容模型变成一个懂得选择性接话、支持中英双语、还能从群聊现场学习的人设。
+`personagent` 可以把任意 OpenAI 兼容聊天模型变成一个有选择性的人设角色：它理解聊天现场，知道什么时候不该接话，把图片和表情包当作表达的一部分，还能从真实反应中学习，同时避免一次噪声反馈直接改写自身行为。
 
-- **像真人一样聊天。** 人设与风格约束、内容理解、表情包、主动发言，以及选择沉默的能力。
-- **反馈即时热加载，但先过一道闸。** 反应只被记为证据；裁决证据只产出候选；只有被**晋升**的候选才进入检索，而晋升随时可以撤销。单独一次纠正、一次笑、一次自评满分，什么都不会改变。
-- **一条受保护的管线。** 结构化 JSON 经过解析与校验后，回复才会通过 OneBot / QQ 或 AstrBot 网关发往 Telegram、Discord、Slack、飞书和 KOOK。
+它既可以在终端本地运行，也可以通过 OneBot v11 直接接入 QQ，或借助仓库内置的 AstrBot 网关接入 Telegram、Discord、Slack、飞书和 KOOK。
 
-### 60 秒试用
+[![personagent 终端演示](assets/demo.svg)](#快速开始)
 
-只需 Python 3.10+ 和一个 OpenAI 兼容 API key；不需要 QQ 或 NapCat：
+## 为什么选择 personagent
 
-```bash
-python quickstart.py
-```
+大多数群聊机器人始终处于“值班”状态：正式、积极、明显像一个助理。`personagent` 从底层采用了另一套运行方式。
 
-这一条命令会创建 `.venv`、安装依赖、写入 `.env`，并询问是否立即进入终端试聊。之后再次运行时，请使用[完整快速开始](#免-qq-试用)中的平台专用 `.venv` 解释器命令；配置进程无法激活它的父级 shell。
-
-[![personagent 终端演示](assets/demo.svg)](#免-qq-试用)
-
-*协议示意动画：缩进块是模型的结构化返回；只有与主线对齐的 `sent` 行会进入聊天。实际终端试聊保持简洁。*
-
-<details>
-<summary><strong>部署免责声明</strong></summary>
-
-本项目仅供教育 / 研究，与任何 IM 平台厂商无关联，也未获任何平台授权或赞助。部署前请阅读 [DISCLAIMER.md](DISCLAIMER.md)。NapCat 等第三方 OneBot 客户端不受其上游 IM 平台认可；如果部署到 QQ，请使用小号和家庭 / 居民 IP。仓库作者不对下游协议客户端的选择承担责任。
-
-</details>
-
-## 目录
-
-- [设计动机](#设计动机)
-- [自进化](#自进化)
-- [快速开始](#快速开始)
-- [多平台接入（AstrBot）](#多平台接入astrbot)
-- [语言（English / 中文）](#语言english--中文)
-- [主动发言（可选）](#主动发言可选)
-- [输出协议：JSON 不是 XML](#输出协议json-不是-xml)
-- [回复示例](#回复示例)
-- [配置](#配置)
-- [迭代循环](#迭代循环)
-- [表情包质量管线](#表情包质量管线)
-- [架构](#架构)
-- [项目结构](#项目结构)
-- [组成模块](#组成模块)
-- [开发](#开发)
-- [隐私](#隐私)
-- [License](#license)
-- [致谢](#致谢)
-
-## 设计动机
-
-大多数"群聊 LLM"项目最终都停留在客服模式：礼貌、热心、有问必答，却没有自己的立场。本模板从五个方面解决人设问题：
-
-- **输出安全优先。** reasoning / intent / reply 是 JSON 字段而非内嵌 XML 标签，因此模型输出即便残缺，也无法将内部思考泄露到可见回复中。发送前还会经过一层字符白名单，凡是不符合**当前语言**正常聊天特征的内容（XML 残片、JSON 大括号、模型 token、泄露的模板）整条丢弃；未来出现的未知泄露形态也会被自动拦截。
-- **将风格作为代码维护。** `STYLE_GUIDE` 将人设的*口吻*、禁用句式、身份攻击防御、旁观者位规则以及"看图而不复述图"等规则编码进 prompt——这些约束正是让 agent 具备人格、而非通用助手的关键。
-- **表情包是语气的一部分。** 表情库自动收集群内新表情，用视觉模型打标，进行文字与视觉两层 persona-fit 评估，并允许模型通过 `[STICKER:<tag>]` 内联发送。基于真实对话的反馈闭环会将持续表现不佳的表情降级。
-- **理解实际内容。** 文本中的链接、B 站 / YouTube 视频以及各类小程序分享卡都会被抓取、解析，并以结构化上下文提供给模型，使其接收到底层内容，而非一个不透明的 URL。
-- **自进化：证据与权限分开。** 人设不是部署完就冻结的。它主要从真实用户反应中学习——但一个反应只是*证据*，证据必须得到佐证，才有资格改变 bot 说话的方式。被晋升的材料会热加载进下一次同类对话，也能同样快地被收回。见下一节。
-
-## 自进化
-
-![自进化闭环](docs/self_evolution_loop.zh-CN.svg)
-
-agent 围绕自己的输出闭合了一整条学习回路。整个设计由四个词撑起来，代码、测试和文档里一律按这个含义使用：
-
-| | |
+| 能力 | 实际含义 |
 |---|---|
-| **证据（evidence）** | 对话里确实发生过某件事的只追加记录。一个反应就是一条证据——仅此而已。 |
-| **候选（candidate）** | 裁决证据后产出的、带版本的行为变更提案。 |
-| **晋升（promotion）** | 授予某个候选影响未来行为的权限。 |
-| **回滚 / 取代（rollback / supersession）** | 事后收回这个权限，同时不擦除历史。 |
+| **人设优先的对话** | 语域、关系、现场位置、意图、记忆，以及返回 `PASS` 保持沉默，都是核心回复链路的一部分。 |
+| **有门控的自进化** | 用户反应先成为只追加的证据。只有经过交叉验证并晋升的候选项才能影响后续回复，所有晋升都可审计、可撤销。 |
+| **失败即关闭的输出边界** | 模型返回结构化 JSON；解析、语义过滤、字符策略和投递检查全部通过后，内容才会进入聊天。 |
+| **多模态上下文** | 图片、表情包、URL、Bilibili/YouTube 元数据与分享卡片会被转换成可用上下文，而不是作为不透明附件。 |
+| **模型供应商无关** | 聊天、裁决、评估和视觉调用都通过 OpenAI 兼容 HTTP 接口完成，运行时不依赖厂商 SDK。 |
+| **完整的运维控制** | 包含 Webhook 鉴权、重放防护、请求限流、持久化去重、健康检查、运行数据隔离和跨平台 CI。 |
 
-只有被晋升的候选才进入动态 few-shot 检索，且无需重启就会热加载进下一次同类对话。
-
-- **从真实用户反应中学（主信号）。** 每条发出的回复会短暂等待一次*指向它的*反应——有人引用了 bot 那条消息、@了它，或在私聊里直接接话。进程内的裁决官对反应分类：「不是，我是说X」是**纠正**（正确答案就在用户话里）；换个说法把同一件事又问一遍是**否定**（没接住）；笑了/接梗是**正向**。随后这个反应被写进 `runtime/evidence.<lang>.jsonl`——无论采信还是驳回都写，因为「有人试图教它、但被驳回了」本身就值得日后查得到——并且*可能*在 `runtime/candidate_ledger.<lang>.jsonl` 里提出一个候选。这两步都不会改动任何一条回复。判断「一个反应意味着什么」远比判断「这句话像不像真人」容易，这正是这条通道在朴素 LLM 自评分过于手松的地方依然有效的原因。三个机制把回路挖得更深：**重试自动配对**（用户否定回复 A，bot 重来的 B 让对方满意——(A → B) 零成本形成强证据）、**延迟追问**（否定但没学到具体东西时，bot 会在等完自己的正常回复后、每小时最多一次地自然问一句对方到底想要啥；答案按正式纠正裁决，并链回引发追问的那条抱怨）、**教学信誉**（按用户记录教学被采纳/被驳回的历史喂给裁决官；一贯乱教的直接硬拉黑，连裁决调用都省了）。前人脉络（诚实注明）：这是把 deployment-time learning 研究线——[Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415) 的反馈追问、[Alexa self-learning](https://arxiv.org/pdf/1911.02557) 的重述-重试信号、[BlenderBot 3x](https://arxiv.org/abs/2306.04707) 的抗投毒教师过滤——移植成 training-free、in-context 的形态。
-- **晋升是授予权限的那一步，门槛是刻意设高的。** 一个候选需要**两条互不相同、彼此兼容的证据，其中至少一条是强证据**。注意这数的是*事件*而不是人——同一个人先纠正、再接受重试，一个人就能凑满，而这恰恰也是一次诚实澄清的样子。想要求「两个不同的人」，设 `PROMOTE_MIN_SPEAKERS=2`（owner 仍豁免）：
-  - **强（strong）** —— 回复所指向的那个人明确纠正了它，并给出了具体的替代说法；或者同一个人接受了 bot 的重试。
-  - **较弱** —— 没给出具体内容的否定、旁观者的纠正，或 bot 自己的复盘。是「确实有点不对」的真实证据，但不构成改写授权。
-  - **弱（weak）** —— 笑、认同、接着聊，以及 bot 自己的评分。**无论多少条都不足以晋升**。
-
-  证据只在同一人设、同一人设版本、同一语言、同一会话、同一 mode 内合并。**owner 身份不能替代「回复所指向的人」**——owner 纠正一条本来是回给别人的回复，只算支持性证据，不算权限。如果彼此兼容的证据指向两个相反的方向，自动晋升直接被拦下，两个候选都留给人判断。由于没有任何正向信号属于强证据，**单靠被笑到已经完全不能再扩充示例池**：它只会在候选上累积，等你来定。所有阈值都是 `.env` 里有名字的配置项（`PROMOTE_*`），默认值保守；`PROMOTE_AUTO=false` 可彻底关掉自动晋升。
-- **回滚与取代。** 回滚一个候选会立刻把它的影响从检索里移除，且不删除任何记录。取代会停用旧候选、启用替代者，两份记录都保留。当一条回复被采信的否定或纠正命中时，它此前被晋升的东西会自动走这条路。
-- **你是这条回路的另一半。** `python tools/candidates_admin.py list` 列出正在等待的候选，以及*策略为什么按着它*；`show <id>` 打印一个候选背后的每一条证据、是谁说的、算不算数；`promote` / `reject` / `rollback` / `supersede` / `rebuild` 完成其余操作。每个动作都只追加一条生命周期事件——日志里的任何一行永远不会被改写或删除。
-- **从成功中学（兜底）。** 异步自评器给每条已发送回复打 1–5 分写入 `eval.jsonl`。满 5 分被记为弱证据，并提出一个正向范例候选。它不会自我晋升：这个评分器在代码注释里就写明手松，而手松的评分者给自己批作业是整个系统里最弱的信号。
-- **从失败中学（兜底，无人值守）。** 低分回复会交给一个模型命名失败模式（「客服腔」「回错人了」）、起草一条负向约束，并写出 BAD → OK 改写。两种跑法：
-  - **人审:** `python tools/auto_reviewer.py --apply` 逐条展示诊断，批准 / 拒绝 / 编辑后才写入。这里权限在你手上，所以批准的偏好对直接写入；旧版 `--yes` 无人值守直写模式会被拒绝。
-  - **无人值守:** 设 `EVOLVE_AUTO=true`，进程内后台循环定时做诊断，只处理明确的失败（`score <= EVOLVE_THRESHOLD`，默认 2）。它只提出候选、不直接应用——一个没有任何人在场见证的自动信号，没资格改变行为。每次诊断都记录在 `candidates.jsonl`，CLI 和循环永远不会重复处理同一条，你也随时能审计 bot 给自己提了什么。
-- **表情包也在进化。** 每张发出的表情有自己的评分；持续低分会被降级出库（见[表情包质量管线](#表情包质量管线)）。
-- **人设给自己记笔记。** letta 风格的 `core_memory.json` 按群维护一条模型可以在对话中更新的自留笔记——群里的长期事实不随上下文窗口滚动而丢失。
-
-**这些材料实际存在哪里。** 只追加的事件日志是唯一事实源。被晋升的候选会物化成 `runtime/promoted.{examples,feedback}.<lang>.jsonl`，检索会连同 `data/` 种子和已学到的池子一起读它。这个视图只是缓存：每次晋升或回滚都会原子重写，也随时能从日志重建（`candidates_admin.py rebuild`）。把它单独放开，正是回滚成本极低的原因，也保证了任何一次重建都不会碰到你自己写下或批准过的行。
-
-护栏（无人值守的反馈回路同样可能固化垃圾）：每个反应都要过裁决官（玩笑和恶意投喂被过滤，陌生人必须一眼就对）；任何单一自动信号都无法完成晋升；证据会过期（`PROMOTE_EVIDENCE_MAX_AGE_DAYS`），且从不跨人设、跨语言、跨会话合并；出现矛盾时直接拦停而不是自作主张；无人值守只碰明确失败；偏好对对所有池子去重；视图有大小上限；证据日志和候选账本都是只追加的——因此每一次行为变化都有可追溯的理由，和一个可撤销的决定。
+**项目状态：** Beta。版本发布遵循语义化版本规范，行为与存储变更会记录在[更新日志](CHANGELOG.md)中。当前版本适合受控的个人部署，但平台政策与账号风险仍由部署者承担。连接第三方 IM 客户端前请阅读[部署免责声明](DISCLAIMER.md)。
 
 ## 快速开始
 
-依赖：Python 3.10+ 与一个 OpenAI 兼容的 chat completions API key。OneBot v11 客户端（例如 NapCat）仅在运行**真实群聊**时才需要；下面的试用无需它。
+环境要求：Git、Python 3.10+，以及一个 OpenAI 兼容 API Key。本地试用不需要 QQ 或 NapCat。CI 当前覆盖 Python 3.10、3.11 和 3.12。
 
 ```bash
-# 一条命令：venv + 依赖 + 交互式配置向导
+git clone https://github.com/wangkant/personagent.git
+cd personagent
 python quickstart.py
 ```
 
-装完环境后向导会问你：API 服务商（DeepSeek / Kimi / OpenAI / Ollama / 任意 OpenAI 兼容端点）、key、bot 名字、语言 —— 答案自动写进 `.env`，可以顺手发一次 1-token 调用验证 key，选择上真实群的话还会继续收集 live 配置并**把要粘贴的 NapCat 配置直接打出来**，最后可以直接进终端试聊。**全程不用手动编辑 `.env`** —— 这个文件仍然是所有进阶开关的完整注释参考。
+这个可重复执行的配置向导会创建 `.venv`、安装依赖、写入 `.env`、按需验证模型接口、创建人设文件，并询问是否直接进入终端试用。它支持 DeepSeek、Kimi、OpenAI、Ollama 和自定义 OpenAI 兼容接口。
 
-幂等 —— 重跑只报告哪些已就位，想重新配置才会再进向导。`--no-input`（或管道输入）跳过向导只做经典引导（建 `.venv`、`pip install -r requirements.txt`、复制 `.env.example → .env` 和 persona 模板），适合 CI。
-
-### 免 QQ 试用
-
-体验人设最快的方式——无需 QQ 账号、无需 NapCat，只要一个 API key。向导会在最后一步引导你进入。之后如需再次运行，无需激活 shell，直接调用 `quickstart.py` 安装的解释器：
+以后再次进入试用：
 
 ```bash
 # macOS / Linux
-.venv/bin/python try_chat.py             # 英文（默认）
-.venv/bin/python try_chat.py --lang zh   # 中文变体
-.venv/bin/python try_chat.py --owner     # 以配置的 owner 身份说话
+.venv/bin/python try_chat.py
+.venv/bin/python try_chat.py --lang zh
 
-# Windows（PowerShell 或命令提示符）
-.venv\Scripts\python.exe try_chat.py             # 英文（默认）
-.venv\Scripts\python.exe try_chat.py --lang zh   # 中文变体
-.venv\Scripts\python.exe try_chat.py --owner     # 以配置的 owner 身份说话
+# Windows
+.venv\Scripts\python.exe try_chat.py
+.venv\Scripts\python.exe try_chat.py --lang zh
 ```
 
-你输入一行，bot 回复一句——走的是与线上 bot **完全相同**的推理路径（人设 + 风格指南 + JSON 输出协议 + 字符白名单校验器）。试聊会打印最终回复、选中的 `intent` 与抽取到的 `mem`；上方动画则把“模型返回 → 实际发送”的边界展开，便于观察协议。若需针对 fixture 做批量 / 离线调优（为回复打分、扩充 few-shot 库），使用 `python tools/prompt_lab.py`。
+终端试用与线上部署共用相同的人设、Prompt 组装、检索、模型输出解析和回复验证链路。使用 `--owner` 测试配置好的主人关系，使用 `--name <名字>` 指定当前说话者。
 
-### 在群里实际运行
+在 CI 或自动化部署脚本中进行无交互初始化：
 
-1. **配 `.env`** —— 向导里答过 live 部署那几问的话这步已经完成；否则填 *REQUIRED FOR A LIVE QQ / OneBot DEPLOYMENT* 那一块（`BOT_QQ`、`QQ_GROUPS`、`NAPCAT_API`），并写好你的 `persona.txt`。
-2. **启动 agent：**
+```bash
+python quickstart.py --no-input
+```
+
+## 部署方式
+
+| 方式 | 适用场景 | 入口 | 说明 |
+|---|---|---|---|
+| **终端** | 人设设计与本地评估 | `try_chat.py` | 不需要 IM 账号或适配器。 |
+| **OneBot v11** | 完整 QQ 部署 | `main.py` → `/webhook/qq` | 主部署路径；支持 QQ 专属的图片、表情包、主动消息和漏接补偿能力。 |
+| **AstrBot 网关** | Telegram、Discord、Slack、飞书、KOOK 及其他 AstrBot 适配平台 | `/webhook/gateway` | 通过内置转发插件复用同一套 Agent 链路。 |
+
+### 通过 OneBot 接入 QQ
+
+1. 运行 `python quickstart.py` 并回答可选的线上部署问题；也可以直接在 `.env` 中填写 `BOT_QQ`、`BOT_NAME`、`NAPCAT_API` 和 `QQ_GROUPS`。
+2. 启动 Agent：
+
    ```bash
-   source .venv/bin/activate            # Windows: .venv\Scripts\activate
-   python main.py                       # 或: ./start.sh   (Windows: .\start.ps1)
+   python main.py
+   # 或：./start.sh
+   # Windows：.\start.ps1
    ```
-   应当看到 `bot started on 127.0.0.1:8080 (agent=True, lang=zh)`。
-3. **配好 NapCat**（或任意 OneBot v11 客户端）并指向 agent —— 见下文。
 
-#### NapCat 三步走
+3. 为 [NapCat](https://github.com/NapNeko/NapCatQQ) 等 OneBot v11 客户端启用 HTTP API 和 Webhook：
 
-1. 下载 [NapCat](https://github.com/NapNeko/NapCatQQ) 并登录一个**小号** QQ（扫码 / 确认登录）。先看 [DISCLAIMER.md](DISCLAIMER.md) —— 用一次性小号 + 家庭/居民 IP。
-2. 在 NapCat 的 OneBot 配置里同时开启 HTTP 服务器**和** HTTP webhook：
    ```json
    {
      "http": { "enable": true, "host": "127.0.0.1", "port": 3000 },
@@ -157,346 +93,203 @@ python quickstart.py
      }
    }
    ```
-3. 先起 NapCat，再起 agent。在群里发条消息，看日志。
 
-#### 端口与数据流向
+两个 HTTP 方向用途不同：
 
-这两条连接方向相反，容易混淆：
-
-```
-NapCat  --(webhook: 事件)-->  agent :8080    (.env 里的 HOST / PORT)
-agent   --(发送回复)------->  NapCat :3000   (.env 里的 NAPCAT_API)
+```text
+OneBot 客户端 ──事件──▶ personagent :8080   (HOST / PORT)
+personagent   ──动作──▶ OneBot 客户端 :3000 (NAPCAT_API)
 ```
 
-> **Windows 启动器：** `launch.vbs` 用两个最小化窗口同时启动 NapCat 和 agent。使用前先设置文件开头的三个值（`BOT_QQ`、`NAPCAT_DIR`、`AGENT_DIR`）；存在 `.venv` 时会自动优先使用。
+两个服务部署在同一台机器时，请保持默认的回环地址绑定。若需要让其他主机访问 Webhook，请设置 `HOST=0.0.0.0`、配置 `WEBHOOK_SECRET`，并保护网络边界。本地 Windows 部署还可在配置账号和路径后使用 `launch.vbs`。
 
-## 多平台接入（AstrBot）
+### 通过 AstrBot 接入其他平台
 
-上面的 QQ/NapCat 是主链路，但 agent 还暴露了一个平台无关的 webhook —— `POST /webhook/gateway`，借助 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的平台适配器，同一个人设可以进 Telegram / Discord / Slack / 飞书 / KOOK 的群聊和私聊。人设管线完全不动：网关把中立入站事件合成进原有 handler、回复经上下文局部 sink 捕获，AstrBot 侧的翻译由内置转发插件完成。
+`POST /webhook/gateway` 接收平台无关事件，并在响应中返回要由适配器转发的回复。仓库内置的 AstrBot 插件位于 [`integrations/astrbot/`](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)。
 
-```
-Telegram / Discord / Slack / …  -->  AstrBot + 转发插件  --HTTP-->  agent /webhook/gateway
-QQ                              -->  NapCat             --HTTP-->  agent /webhook/qq      (不变)
-```
-
-1. 装好 AstrBot，配上想要的平台适配器。
-2. 把 `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` 拷进 AstrBot 的 `data/plugins/`，再明确填写允许转发的群 ID 和/或私聊用户。插件默认拒绝：白名单为空时不转发任何会话，私聊转发也默认关闭。完整说明见[插件 README](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)。
-3. 同机部署保留 loopback 地址；跨主机必须使用 HTTPS，并在插件 `gateway_token` 与 agent 的 `GATEWAY_TOKEN` 中配置同一个非空密钥，或让私有隧道在 AstrBot 可见的 loopback 地址终止。请求使用带时间戳与 nonce 的正文签名防重放，绝不能让密钥走明文 HTTP。`GATEWAY_OWNER_IDS` 可选把例如 `telegram:12345` 当主人对待，见 `.env.example`。
-
-网关会话全部带 `<平台>:<id>` 命名空间，记忆和状态不会跟 QQ 串。NapCat 直连 agent 时，插件的排除平台里要留着 `aiocqhttp`（默认就是），否则 QQ 消息会被处理两遍。QQ 专属机制（偷表情包、OCR、主动发言/漏 @ 补抓）只走 QQ 链路；文字 / 表情包 / @ 回复全平台都通。
-
-## 语言（English / 中文）
-
-agent **英文优先**，一个开关切到中文。在 `.env` 里设 `AGENT_LANG`：
-
-- `AGENT_LANG=en`（默认）—— 主英文构建。
-- `AGENT_LANG=zh` —— 中文变体。
-
-这个开关一步到位地选择：
-
-- **按后缀选数据文件（在 `data/` 下）**：`data/persona.example.<lang>.txt`、`data/examples.<lang>.jsonl`、`data/feedback.<lang>.jsonl`、`data/output_filter.<lang>.json`、`data/lorebook.<lang>.json`。每个先解析到 `<lang>` 文件，找不到再回退到不带后缀的同名文件（方便你放自己的）。
-- **回复校验器**（`_validate_reply_safe`）：英文模式接受任何带字母的回复（仍然丢掉 XML / JSON / token 漏出）；`zh` 模式要求含 CJK。中英混说两种模式都放行。
-- **控制流词表**：few-shot/记忆的分词器和话题类型分类器按语言切换各自的词表。
-- **开发工具**：`tools/auto_reviewer.py`、`tools/import_stickers_folder.py`、`tools/prompt_lab.py` 同样跟随 `AGENT_LANG`。
-
-想加一门新语言，放进一套 `*.<lang>.*` 数据文件，用 `AGENT_LANG=<lang>` 跑即可（校验器把任何非 `zh` 的语言当成基于字母处理）。
-
-## 主动发言（可选）
-
-默认 bot 是纯被动的 —— 只在有消息进来时才说话。设 `PROACTIVE_ENABLE=true` 后，后台循环会偶尔在没有任何触发的情况下**主动**发一句，让它更像一个偶尔会打破沉默的真人，而不是 24 小时待命的应答机。
-
-该机制刻意保守：一个对着空场刷屏的 bot 比保持安静更糟：
-
-- **仅在真正冷场之后**，且在 sleep window 之外触发，附带每个会话的冷却时间与很低的单次触发概率。
-- **绝不凭空开口。** 仅在已观察到有人发言的群里活动，也只主动私聊曾私聊过它的人（owner 与 `PRIVATE_ALLOWED_QQS`）；不会无端联系任何人。
-- **模型被要求：除非确有话可说，否则一律返回 PASS**——例如接续此前的话题、一个偶发的想法，或一句简短问候——并**不得发送**「在吗」之类的空话。大多数 tick 不产出任何内容。
-- **群聊与私聊**行为一致，各自拥有独立的静默、冷却与概率参数。
-
-在 `.env` 里调 `PROACTIVE_*`。默认值：群冷场 ≥45 分钟、两次间隔 ≥3 小时、每次检查约 25%；私聊冷场 ≥4 小时、间隔 ≥24 小时、约 20%。
-
-## 输出协议：JSON 不是 XML
-
-模型每条回复输出单个 JSON 对象：
-
-```json
-{
-  "reasoning": "...",      // ≤100 字内部分析, 永不展示
-  "intent": "chat",        // joke | vent | share | question | troll | chat 六选一
-  "reply": "...",          // 群里实际看到的内容 (写 "PASS" 表示不接)
-  "mem": ""                // 可选记忆行, 空字符串=不记
-}
+```text
+Telegram / Discord / Slack / 飞书 / KOOK
+                    │
+                    ▼
+          AstrBot + 转发插件
+                    │ 签名 HTTP
+                    ▼
+      personagent /webhook/gateway
 ```
 
-![JSON 与 XML 输出协议对比](docs/json_vs_xml_protocol_comparison.zh-CN.svg)
-
-为什么不用 `<reasoning>...</reasoning><intent>...</intent><reply>...</reply>` XML：
-
-- **字段隔离。** 模型截断、标签拼错、吐出厂商内部 token 时，JSON 解析直接失败 — 整条不发。原 XML 形式的兜底分支会把 reasoning 漏到 reply。
-- **多层容错好加。** parser 剥可选的 ```json``` 围栏 → `json.JSONDecoder.raw_decode`（处理双对象拼接）→ 兜底把短的、长得像聊天的输出当裸 reply（英文或 CJK 都行，仍然走 validator 把关）。
-- **缓存友好。** system prompt 持有 schema；每次调用的差异落在 user message 和一小段「动态」分块里。持久部分用 Anthropic `cache_control: ephemeral` 标记，命中时重复调用的输入成本降到约 ~10%。
-
-即便过了 parser，`_validate_reply_safe` 在 send 前还要过一道字符白名单，且**按语言区分**：英文模式下，任何带至少一个字母的回复放行，而 XML / JSON 大括号 / 管道 / 子词标记一律丢；`zh` 模式下回复必须含 CJK。中英混说两种模式都放行。未来出现的未知漏出形态无需逐条加正则即可自动挡掉。
-
-## 回复示例
-
-"像真人"在实际对话里的样子 (示例已脱敏 / 改写)。(主构建为英文；设 `AGENT_LANG=zh` 切到中文变体，模式一致。)
-
-> 群友 *(挑刺)*: `今天又做天才发明家了?`
-> Bot: `对啊 一直在敲键盘碰运气 等哪个 feature 自己掉出来`
-> — 顺着对方的话演下去, 不防御也不道歉.
-
-> 群友: `(只发了一张表情包, 无文字)`
-> Bot: `又开始用表情包代替说话 经典 [STICKER:翻白眼]`
-> — 反应"对方发表情"这个**动作**, 不复述图里画的啥.
-
-> 群友: `匹配机制烂死了 连跪 4 把 队友疯狂送`
-> Bot: `匹配系统觉得你今天该长长教训 [STICKER:无奈]`
-> — 加入吐槽, 配合表情, 不问"怎么了"也不给方案.
-
-> Owner: `等等 刚才说的那个 那个梗叫啥来着`
-> Bot: `哥 两分钟前的事 这记忆堪比金鱼 [STICKER:嘲讽]`
-> — 对熟人 (owner) 可以小调侃, 留台阶.
-
-风格规律：agent 先推理谁对谁说了什么（具备旁观者位意识），选定 intent，再以对应子风格撰写 reply——不列点、不用分析腔、不用客服腔。
-
-## 配置
-
-所有配置在 `.env`。重点字段：
-
-| 变量 | 含义 |
-|---|---|
-| `AGENT_LANG` | `en`（默认）或 `zh`。选择按语言区分的数据文件、校验器模式和词表。详见[语言](#语言english--中文) |
-| `AGENT_RUNTIME_DIR` | 所有可变文本状态的目录：记忆、自评、证据、账本、防重放缓存、表情元数据、晋升视图和学习池（默认 `runtime/`，已 gitignore）；旧版根目录文件首次使用时会复制到这里；自定义仓库内路径必须手动加入 `.gitignore` |
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 主 chat-completion 模型, 任意 OpenAI 兼容端点都行。**`python try_chat.py` 唯一需要的 key** |
-| `PRIVATE_MODEL` | **可选。** 私聊(1:1)用的备选模型名，走同一个主端点。留空 = 私聊也用 `DEEPSEEK_MODEL`。（0.1.2 之前叫 `ANTHROPIC_PRIVATE_MODEL`，旧名仍然可用） |
-| `BOT_QQ` / `BOT_NAME` | bot 账号的 QQ 号和昵称 |
-| `OWNER_QQ` / `OWNER_NAME` / `OWNER_RELATIONSHIP` | bot 比较熟的人 (可选, 默认空) |
-| `QQ_GROUPS` | 监听的群号, 逗号分隔. 留空 = 所有群都听 |
-| `VISION_MODEL` + `GLM_API_KEY` / `GLM_BASE_URL` | 视觉模型 (图/表情理解). 留空 = 只走 NapCat OCR 兜底 |
-| `NAPCAT_IMAGE_DIR` / `MAX_IMAGE_BYTES` | 本地图片缓存白名单目录与最大解码图片大小；目录留空时拒绝所有 `file://` |
-| `MAX_WEBHOOK_BODY_BYTES` | 两个 webhook 接受的最大原始请求体（默认 8 MB） |
-| `MAX_INFLIGHT_WEBHOOKS` | 同时处理的高开销 webhook 上限（默认 64）；超出时返回 HTTP 429 |
-| `GATEWAY_TOKEN` | AstrBot bearer 认证及带时间戳/nonce/正文签名的共享密钥；跨主机转发必须配合 HTTPS 使用 |
-| `GATEWAY_SOURCE_MAX_AGE_SECONDS` | 原始网关事件允许的最大年龄，与转发签名时间独立校验（默认 86400 秒 / 24 小时） |
-| `LOG_FILE` | 可选轮转文件日志；留空则只输出控制台，仓库内自定义路径必须手动 gitignore |
-| `PERSONA_FILE` | 人设 prompt 路径 (默认 `persona.txt`)。文档末尾可带一个 `[style]` 声明块（`length` / `vent` / `recs` / `good_news` / `particles` / `fatigue` 六个语域旋钮），会被解析并从正文剥离，原始配置不会进入模型 |
-| `PERSONA_CARD_FILE` | 可选人设卡 JSON (默认 `persona.card.json`)。其中的 `reply_style` 对象可为该人设开启 emoji 和附加字符集（`ellipsis` / `music` / `arrows`），也可调低回复上限；格式错误一律回退到收窄的默认策略 |
-| `PROACTIVE_ENABLE`（+ `PROACTIVE_*`）| 可选的主动发言。详见[主动发言](#主动发言可选) |
-| `REACT_LEARN`（+ `REACT_*`）| 从真实用户反应中学习（默认开——自进化主信号）。详见[自进化](#自进化) |
-| `PROMOTE_AUTO`（+ `PROMOTE_*`）| 候选何时可以获得影响未来回复的权限：需要几条兼容证据、其中几条必须是强证据、证据多久过期、以及一个会话的证据能否替另一个会话说话。默认保守；`PROMOTE_AUTO=false` 则一切都留给人审。详见[自进化](#自进化) |
-| `PERSONA_VERSION` | 可选标签，与人设文本的哈希一起记进每条证据。两者都参与证据作用域，所以重写人设后，旧证据无法再为新角色的改动授权 |
-| `EVOLVE_AUTO`（+ `EVOLVE_*`）| 可选的无人值守自我复盘循环；它只提出候选，不直接应用（兜底通道）。详见[自进化](#自进化) |
-| `FALLBACK_MODEL` + `RATE_THRESHOLD` + `RATE_WINDOW` | 请求过密时自动降级到便宜模型 |
-| `JUDGE_MODEL` | 最便宜的模型，只用于自发模式（judge/followup/proactive）「要不要回」的判断门；真正发出去的回复永远由主模型写。留空 = 用 `FALLBACK_MODEL` |
-| `EVAL_MODEL` | 异步自评打分用的模型 (用便宜的就行) |
-
-完整列表见 `.env.example`。
-
-## 迭代循环
-
-![热加载迭代闭环](docs/hot_reload_iteration_loop.zh-CN.svg)
-
-可自动化的部分[自进化闭环](#自进化)已经自己在跑;下面这条手动循环留给需要人类判断的失败——一类新的失败*类型*,该在 prompt 里加硬约束,而不只是多一条检索样本。prompt 的分块结构是为了让这种 bug 好定位：
-
-```
-观察到失败 (eval.jsonl LOW-SCORE / 线上观察)
-  ↓
-定位归属块 (STYLE_GUIDE / REASONING_PROTOCOL / INTENT_RULES / output_filter)
-  ↓
-在相近规则旁边加硬约束 + 反例,
-  或往 data/output_filter.<lang>.json 里加一条语义正则
-  ↓
-在 runtime/feedback.<lang>.jsonl 里加一条 BAD/OK pair
-  ↓
-下次类似输入触发, 动态 few-shot 检索把这对拿出来注入
-```
-
-你亲手写下或批准的东西不需要晋升——权限本来就在你手上，写完立即生效。整套证据与晋升机制针对的是 *agent* 对自己提出的东西。
-
-检索会合并三个来源：`data/{examples,feedback}.<lang>.jsonl` 里的只读合成种子、`runtime/{examples,feedback}.<lang>.jsonl` 里的运行时学习数据，以及 `runtime/promoted.{examples,feedback}.<lang>.jsonl` 里被晋升的候选。它使用按语言区分的 token（英文是去停用词后的单词，中文是 2 字 ngram）+ 场景 tag + 时间衰减，所以即使每个 failure mode 只有 5-10 条样本也已经能起效。
-
-**池子大小是有意设上限的。** 每轮只有 4 条示例 + 6 对对比样本能进 prompt，所以机器写入的那一半只保留最新的 `EXAMPLES_MAX_AUTO` / `FEEDBACK_MAX_AUTO` 条（默认各 500，设 `0` 关闭上限）。它给晋升视图定大小，离线工具也按同样的上限裁剪自己写入的内容。这既是性能设置也是质量设置：几个月前晋升的材料出自更早的 prompt，一旦堆到几千条就会把近期的条目压下去。**你自己写的或人工批准过的条目不计入上限、也永远不会被删** —— `data/` 下的种子是只读的，你通过 `prompt_lab.py` 批准的条目不带机器标记，旧版本（引入账本之前）学到的行也原样保留。视图里被裁掉一行并不改变生命周期：该候选在账本里仍然是已晋升状态。
-
-`data/output_filter.<lang>.json` 是**热加载**的，改完不用重启。`data/lorebook.<lang>.json`（SillyTavern World Info 风格的关键词触发上下文注入）也一样。
-
-## 表情包质量管线
-
-![表情包库七步过滤](docs/sticker_seven_step_filter.zh-CN.svg)
-
-表情包在可被选用之前需经过多道门：
-
-1. **收集。** 群内出现的非 bot 图片按 md5 去重后存盘。
-2. **打标。** 上下文积累足够后，tagger LLM 依据**周围聊天**推断该表情的情绪 / 梗（它看不到图片本身）。
-3. **文字 persona-fit 门。** 同一 tagger 判定推断出的含义是否契合人设。`PERSONA_PROMPT_VERSION` 递增后，旧条目会在下次启动时重新评判。
-4. **视觉审美门。** 视觉模型直接**查看图片**判定视觉风格（现代清爽设计 vs. 陈旧的家族群风格）——这是文字无法分辨的。`VISUAL_AESTHETIC_VERSION` 递增时同样触发重新评判。
-5. **评估反馈闭环。** 每张发出的表情由自评器打 1–5 分；累积平均低于阈值即自动降级为 `persona_fit=false`。
-6. **选择。** `pick_by_tag` 通过同义词扩展进行匹配，为较新条目给予少量新鲜度加分，跳过孤儿条目（backing 文件缺失的条目），并在丢弃纯表情回复前回退到近期用过的匹配项。
-7. **清理。** 标记为 `persona_fit=false` 的条目会在下次启动时删除（记录与文件）。
+转发插件默认拒绝所有来源：只有明确加入白名单后，群聊或私聊才会被转发。跨主机部署时，请使用 HTTPS 或私有隧道，并让插件的 `gateway_token` 与 Agent 的 `GATEWAY_TOKEN` 使用同一个非空密钥。时间戳、nonce 和正文会共同参与签名并进行重放检查。如果 NapCat 已经把 QQ 事件发到 `/webhook/qq`，请继续排除 AstrBot 的 QQ 适配器，否则同一条消息会被处理两次。
 
 ## 架构
 
 ![personagent 架构](docs/persona_llm_agent_architecture.zh-CN.svg)
 
+无论来自哪种传输层，每个事件都会经过同一条回复边界：
+
+1. **接入**——鉴权、限流、去重、归一化，并补充会话、图片、链接和分享卡片上下文。
+2. **决策**——解析关系和模式（主人、直接呼叫、跟进、判断或主动消息），再决定是否需要回复。
+3. **检索**——组合人设、世界书、有作用域的记忆、合成种子，以及与本轮相关的已晋升运行时样例。
+4. **生成**——按结构化输出协议调用已配置模型。
+5. **验证与投递**——解析 JSON，执行输出过滤和字符策略，安全拆分回复，解析表情包，并且只发送已提交的输出。
+6. **异步学习**——把评估和定向用户反应记录成证据；候选晋升不会阻塞实时回复。
+
+可导入的核心代码位于 `persona_agent/`；`main.py`、`try_chat.py` 和各类工具只是轻量入口。可变状态默认与版本化种子分离，统一写入 `runtime/`。
+
 <details>
-<summary>实现细节（handler 调用链）</summary>
-
-```
-NapCat (QQ ↔ OneBot)          AstrBot + 转发插件
-    │                              │
-    │  POST /webhook/qq            │  POST /webhook/gateway
-    ▼                              ▼
-┌──────────────────── main.py (FastAPI) ────────────────────┐
-│                                                            │
-│  ┌─────────────── persona_agent/agent.py ───────────────┐  │
-│  │  handle(payload)                                     │  │
-│  │    ├─ 持久 dedup (seen_msg_ids.json)                  │  │
-│  │    ├─ 防抖 + sticky-call 继承                          │  │
-│  │    ├─ 视觉 (图 / 表情 caption)                         │  │
-│  │    ├─ URL / 分享卡 元信息抓取                          │  │
-│  │    ├─ buffer (按群滚动历史)                             │  │
-│  │    ├─ 模式判定 (owner / called / followup / judge)     │  │
-│  │    └─ _think()                                       │  │
-│  │         ├─ 拼缓存分块 system prompt                    │  │
-│  │         ├─ 调 LLM (JSON 输出协议)                      │  │
-│  │         ├─ _parse_model_output (fail-closed)         │  │
-│  │         ├─ output_filter (语义正则规则)                │  │
-│  │         ├─ _validate_reply_safe (字符白名单)           │  │
-│  │         ├─ _send_qq (表情匹配 + 发送)                   │  │
-│  │         └─ 异步自评 → eval.jsonl + sticker 评分        │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌────────────── 学习路径（在热路径之外） ──────────────┐  │
-│  │  一个反应 / 一次被接受的重试 / 一次自评满分          │  │
-│  │    ├─ evidence.py     只追加事件，不带任何权限       │  │
-│  │    ├─ candidates.py   带版本的提案，惰性无效         │  │
-│  │    └─ promotion.py    2 条证据、至少 1 条强？        │  │
-│  │         否 → 留在 proposed（candidates_admin.py）    │  │
-│  │         是 → 生命周期事件 + 重建视图：               │  │
-│  │             promoted.{examples,feedback}.<lang>.jsonl│  │
-│  │             下一轮由 _examples_for_prompt 读到       │  │
-│  │  回滚 / 取代 → 重建 → 影响被移除                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌────────────── persona_agent/stickers.py ─────────────┐  │
-│  │  偷 → 打标 → persona-fit 文字门 → 视觉审美门            │  │
-│  │  → eval 反馈闭环 → 偏向新鲜度的选择                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
-    │                              │
-    │  POST /send_group_msg        │  网关响应里带回复
-    ▼                              ▼
-NapCat → QQ                   AstrBot → Telegram / Discord / …
-```
-</details>
-
-## 项目结构
-
-app 式布局：一个可导入的核心包，根目录只留薄薄的入口脚本，状态文件也留在根目录（升级永远不用迁移数据）。
-
-```
-persona_agent/        应用核心包 —— Agent 按关注点由多个 mixin 组合而成
-  agent.py            编排:消息接入、模式判定、debounce、_think、prompt 组装
-  prompts.py          人设契约:风格指南、输出协议、intent 规则(纯常量)
-  textproc.py         纯文本处理:分词、清洗、白名单校验器、分句
-  pools.py            检索数据集的增量 JSONL 加载
-  ingestion.py        链接、分享卡、图片、OCR、视觉 —— 含 SSRF 防护
-  transport.py        限流、分块、打字模拟、发送、会话 LRU
-  learning.py         自评、反应裁决、EVOLVE_AUTO 循环
-  evidence.py         只追加的「发生了什么」记录，本身不带任何权限
-  candidates.py       带版本的提案 + 只追加的生命周期账本
-  promotion.py        证据何时可以授予候选权限
-  reactions.py        真实用户反应学习逻辑(主信号)
-  evolution.py        eval -> 候选 学习循环逻辑
-  gateway.py          平台无关事件 schema + 回复 sink
-  stickers.py         表情包库及其质量门
-  health.py           启动 / 运行时环境体检
-  paths.py            ROOT 锚点——所有状态文件都在仓库根
-main.py               FastAPI 入口(webhook、lifespan、后台循环)
-try_chat.py           走完整推理路径的终端试聊
-quickstart.py         一条命令的配置向导
-tools/                离线调优 + 运维 CLI(auto_reviewer、candidates_admin、prompt_lab 等)
-data/                 按语言区分的数据集:persona、examples、feedback、lorebook、output_filter
-runtime/              gitignore：证据日志、候选账本、晋升视图、学到的池子
-docs/                 架构 + 闭环示意图(中英)
-tests/                纯标准库回归测试(不依赖 pytest)
-integrations/         AstrBot 转发插件(多平台)
-```
-
-## 组成模块
+<summary><strong>核心包结构</strong></summary>
 
 | 模块 | 职责 |
 |---|---|
-| `persona_agent/agent.py` + 各 mixin | JSON 协议输出；字符白名单校验；发送成功后才提交状态；有界图片输入；按用户的 RAG 记忆；合并 seed + runtime examples/feedback 的动态 few-shot 检索；正则前置过滤；异步自评；可选的 `EVOLVE_AUTO` 循环；跨重启 `seen_msg_ids` 去重。已拆分为 `prompts` / `textproc` / `pools` / `ingestion` / `transport` / `learning`，见[项目结构](#项目结构) |
-| `persona_agent/reactions.py` | 从真实用户反应学习（主信号）：待反应表 + 引用/@/私聊归属、单次调用的裁决官（分类+真伪+改写）、feedback/examples 写入形态 |
-| `persona_agent/evidence.py` | 只追加的证据日志：发生了什么，连同作用域、说话人与被回复人、结构化裁决结论、裁决模型与 prompt 版本。事件 id 由内容哈希得出，因此重复事件是幂等的。**从不存储思维链** |
-| `persona_agent/candidates.py` | 带版本的候选，以及拥有其生命周期的只追加账本（`proposed` / `promoted` / `rejected` / `superseded` / `rolled_back`），外加物化出的检索视图。当前状态由重放日志得出 |
-| `persona_agent/promotion.py` | 晋升策略：证据强度、作用域兼容性、冲突检测、阈值——以及为引入账本之前就已在学习的部署保留的旧版闸门 |
-| `persona_agent/evolution.py` | eval → 候选 学习循环逻辑（读低分、拼诊断 prompt、草稿转偏好对、去重、审计痕迹）——进程内 `EVOLVE_AUTO` 循环和 `tools/auto_reviewer.py` 共用，不绑定任何传输层 |
-| `persona_agent/stickers.py` | md5 去重的表情库；自动收新表情；上下文够了再视觉打标；文字 + 视觉两层 persona-fit 过滤；eval 闭环按真实使用反馈淘汰低分表情；选用时给新表情新鲜度加分；跳过文件丢失的孤儿条目 |
-| `main.py` | FastAPI webhook 接收端。NapCat 把群事件 POST 到 `/webhook/qq`，agent 处理后再 POST 回 NapCat 的 HTTP API。启动钩子链式跑文字 + 视觉两轮 persona-fit recheck → purge，磁盘上只剩合人设的表情 |
-| `persona_agent/gateway.py` + `integrations/astrbot/` | 平台无关网关：中立入站事件合成进同一条处理管线，回复经上下文局部 sink 捕获；附带 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 转发插件，接入 Telegram / Discord / Slack 等平台的群聊和私聊 |
-| `tools/bootstrap_from_history.py` | 一次性 bootstrap：拉群历史，计算主人发言频率画像，初始化表情包库 |
-| `tools/auto_reviewer.py` | 学习循环的人审端：把 `eval.jsonl` 低分条目诊断进 `candidates.jsonl`，再用 `--apply` 逐条批准 / 编辑 BAD → OK 偏好对写入 runtime feedback；旧版 `--yes` 直写模式会被拒绝 |
-| `tools/candidates_admin.py` | 晋升闸门的人工那一半：列出正在等待的候选及策略为何按着它、展示某个候选背后的全部证据、晋升 / 拒绝 / 回滚 / 取代、重建检索视图。只追加——任何动作都不改写历史 |
-| `tools/prompt_lab.py` | 离线交互调优：让 agent 跑 `tools/fixtures.<lang>.jsonl`，人工打分，通过的回复流到 runtime examples |
-| `tools/import_stickers_folder.py` | 从本地文件夹批量导入表情包，自动调视觉模型打标 |
+| `agent.py` | 编排、模式、去抖、Prompt 组装和模型调用。 |
+| `prompts.py`、`textproc.py`、`pools.py` | 人设协议、安全输出处理和可感知追加内容的检索数据集。 |
+| `ingestion.py`、`transport.py`、`gateway.py` | 内容增强、有界投递和平台无关转发。 |
+| `learning.py`、`reactions.py`、`evolution.py` | 评估、反应裁决和候选项生成。 |
+| `evidence.py`、`candidates.py`、`promotion.py` | 只追加证据、候选生命周期、晋升策略、回滚与物化视图。 |
+| `stickers.py` | 表情包接入、去重、打标、人设匹配门控、评分和选择。 |
+| `storage.py`、`paths.py`、`health.py` | 带锁/原子持久化、运行路径隔离和服务诊断。 |
+
+</details>
+
+## 有门控的学习
+
+学习系统把“观察到什么”和“什么有权改变行为”严格分开：
+
+| 概念 | 含义 |
+|---|---|
+| **证据（Evidence）** | 用户反应、被接受的重试或评估形成的只追加记录。它不能改变行为。 |
+| **候选项（Candidate）** | 从证据中产生、有版本的候选样例或偏好对。默认不生效。 |
+| **晋升（Promotion）** | 显式授予候选项影响检索与后续回复的权限。 |
+| **回滚 / 取代** | 不删除历史的前提下撤销或替换这份权限。 |
+
+默认情况下，自动晋升至少需要两个相互兼容的事件，其中至少一个必须是强证据。证据会按人设、人设版本、语言、会话和模式隔离；过期或互相矛盾的证据不能被静默合并。积极反应和自评分都属于弱信号，永远无法独自晋升候选项。
+
+已晋升内容会原子化地物化到 `runtime/promoted.{examples,feedback}.<lang>.jsonl`，并在下一次相关对话中热加载。只追加账本始终是唯一事实来源，因此视图可以重建，每一次决策都可以审计或撤销。
+
+```bash
+python tools/candidates_admin.py list
+python tools/candidates_admin.py show <candidate-id>
+python tools/candidates_admin.py promote <candidate-id> --reason "reviewed"
+python tools/candidates_admin.py rollback <candidate-id> --reason "regression"
+python tools/candidates_admin.py rebuild
+```
+
+设置 `PROMOTE_AUTO=false` 可完全改为人工授权。`EVOLVE_AUTO=true` 会自动诊断低分回复，但只创建候选项，不会绕过晋升门控。需要交互式审核时，运行 `python tools/auto_reviewer.py --apply`。
+
+![自进化闭环](docs/self_evolution_loop.zh-CN.svg)
+
+## 输出与安全边界
+
+模型必须返回一个对象：
+
+```json
+{
+  "reasoning": "内部决策摘要",
+  "intent": "chat",
+  "reply": "要发送的文字，或 PASS",
+  "mem": "可选记忆"
+}
+```
+
+只有 `reply` 字段可能进入传输层。结构化输出格式错误时默认拒绝；唯一例外是短小、明显像聊天文本且仍能通过验证器的裸回复。XML/JSON 残留、供应商 Token、模板标记、不支持的控制字符、不安全 URL、过大图片、未经鉴权的远程 Webhook 和重放的网关信封，都会在投递前被拒绝。
+
+字符策略刻意保持保守：常见语言文字直接允许，排版字符会被规范化，emoji 和可选风格字符集需要在人设级别主动开启。当前策略和回归覆盖见 [v0.2.0](CHANGELOG.md#020--2026-08-11)。
+
+## 配置
+
+`.env.example` 是完整且带注释的权威配置参考。配置向导只写入首次运行所需的最少内容，其余高级能力保持可选。
+
+| 范围 | 主要设置 | 默认策略 |
+|---|---|---|
+| 模型 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL` | 一个 OpenAI 兼容接口即可启动。 |
+| 人设 | `BOT_NAME`、`AGENT_LANG`、`PERSONA_FILE`、`PERSONA_CARD_FILE`、`PERSONA_VERSION` | 英文示例人设；自定义人设不进入 Git。 |
+| 运行状态 | `AGENT_RUNTIME_DIR` | `runtime/`，已被 Git 忽略。 |
+| QQ / OneBot | `BOT_QQ`、`QQ_GROUPS`、`NAPCAT_API`、`WEBHOOK_SECRET` | Webhook 只监听回环地址；`QQ_GROUPS` 为空时监听全部群。 |
+| 网关 | `GATEWAY_TOKEN`、`GATEWAY_OWNER_IDS`、`GATEWAY_SOURCE_MAX_AGE_SECONDS` | 未鉴权时仅允许回环访问。 |
+| 视觉与搜索 | `VISION_MODEL`、`GLM_API_KEY`、`TAVILY_API_KEY` | 视觉关闭；搜索回退到免 Key 的 DuckDuckGo。 |
+| 学习 | `REACT_*`、`PROMOTE_*`、`EVOLVE_*`、`EVAL_*` | 反应采集开启；保守晋升；无人值守进化和自评关闭。 |
+| 主动消息 | `PROACTIVE_*` | 关闭；开启后也不会主动联系从未出现过的会话。 |
+| 容量与日志 | `MAX_IMAGE_BYTES`、`MAX_WEBHOOK_BODY_BYTES`、`MAX_INFLIGHT_WEBHOOKS`、`LOG_FILE` | 输入和并发有上限；日志默认只输出到控制台。 |
+
+切换语言只需要一个设置：
+
+```dotenv
+AGENT_LANG=en  # 主构建
+# AGENT_LANG=zh  # 中文人设、数据文件、验证器与词表
+```
+
+不同语言的种子文件位于 `data/*.<lang>.*`。新增语言需要提供对应的人设、样例、反馈、过滤器和世界书文件；除 `zh` 外的语言使用基于字母的验证模式。
+
+## 运维
+
+### 健康检查
+
+```bash
+python tools/healthcheck.py
+curl http://127.0.0.1:8080/health
+```
+
+- `GET /health` 是廉价存活探针，不会消耗上游 API 额度。
+- `GET /health/details` 会检查依赖并缓存 60 秒；它仅允许回环访问，或在配置 `GATEWAY_TOKEN` 后使用 `X-Gateway-Token` 访问。
+- 任一关键依赖降级时，详细探针会返回 HTTP 503。
+
+### 运行数据与备份
+
+请将 `AGENT_RUNTIME_DIR` 与私有人设文件一起备份。它包含记忆、证据、候选账本、已晋升视图、学习样例、去重状态和表情包元数据。必要的写入使用文件锁和原子替换，候选/事件日志保持只追加。
+
+不要提交运行状态。这里可能包含 API Key、账号标识、对话片段、用户反应、图片元数据和学习内容。仓库中的 `data/` 和 `tools/fixtures.*.jsonl` 只包含合成种子。
+
+### 更新
+
+先查看 [CHANGELOG.md](CHANGELOG.md)，停止进程，备份运行状态，再拉取选定版本、重新安装依赖并启动。启动流程会兼容处理受支持的旧状态；具体版本变更会写入发布说明。
 
 ## 开发
 
-跑 CI 实际跑的那条命令，一条覆盖全部套件：
+安装依赖并运行与 CI 相同的离线测试：
 
 ```bash
-python -m pip install "pytest>=8,<10"
+python -m pip install -r requirements.txt "pytest>=8,<10"
 python -m pytest -q
+python -m compileall -q .
 ```
 
-套件本身仍是不依赖框架的纯标准库脚本，pytest 只是运行器——调某一个文件时它依然可以单独执行（`python tests/test_gateway.py`）。
+CI 会在 Linux 的 Python 3.10、3.11 和 3.12 上运行测试，在 Windows 上执行真实存储与启动器路径，并构建、导入 wheel 和源码分发包。测试使用模型与传输层替身，不需要 API Key 或网络。
 
-它使用一个轻量的 `check()` 断言框架，覆盖网关管线、回复 / PASS 判定门、输出校验器、记忆淘汰、SSRF 防护、出站限流、配置向导的 `.env` 写入逻辑、自进化闭环（诊断解析、偏好对转换、去重、审计痕迹）、反应学习、少样本检索与其增量数据集加载，以及「证据 → 候选 → 晋升」这条路径（单一信号能做什么、不能做什么、作用域隔离、矛盾拦停、重放、回滚、取代、日志只追加、旧数据兼容）。提交 PR 前请先跑一遍。
+常用维护工具：
 
-想在自己的代码里 import 这套管线：`pip install -e .`（见 [pyproject.toml](pyproject.toml)）。版本变更记录在 [CHANGELOG.md](CHANGELOG.md)；贡献指南、模块分工表，以及「测试绝不许写仓库真实 state」这条铁律在 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-用于 prompt 与人设调优：
-
-- `python try_chat.py`——通过完整推理路径进行交互式单轮对话（见[快速开始](#快速开始)）。
-- `python tools/prompt_lab.py`——针对 `tools/fixtures.<lang>.jsonl` 的离线批量调优；通过的回复会流入 runtime examples。
-- `python tools/auto_reviewer.py`——扫描 `eval.jsonl` 中的低分回复并起草 prompt 补丁；加 `--apply` 逐条批准写入 `runtime/feedback.<lang>.jsonl`（或自定义的 `AGENT_RUNTIME_DIR`，见[自进化](#自进化)）。
-- `python tools/candidates_admin.py list`——学习循环正在提什么、策略为何按着它；随后可用 `show` / `promote` / `reject` / `rollback` / `supersede` / `rebuild`（见[自进化](#自进化)）。
-- `python tools/evolution_benchmark.py run` 后给 `judge_inbox.jsonl` 打分再 `... ingest` —— 量化[自进化](#自进化)循环:跑 evolve-on 对 evolve-off 对照组,在留出场景上画每轮 AI 味均分曲线(`curve.svg`)。由独立裁判盲评 —— `--judge export` 导出不带标签的清单交给人或另一个模型打分,`--judge anthropic` 走另一家厂商（需要 `pip install -e ".[judge]"`；bot 本体不带任何厂商 SDK）—— 学习信号和测量信号不共用模型。
-
-## 隐私
-
-可能包含真实聊天内容的文件已经 gitignore：
-
-```
-.env                      # API key
-runtime/eval.jsonl        # 自评打分原始记录
-runtime/memory.json       # 抽取出来的长期记忆
-runtime/core_memory.json  # 自维护的人设笔记
-runtime/stickers.json     # 表情索引 + 样本上下文
-stickers/auto/            # 下载的表情图片
-runtime/seen_msg_ids.json # 跨重启 message-id 去重状态
-runtime/owner_profile.json # owner 发言频率画像
-unknown_stickers.jsonl    # 下载 URL
-candidates.jsonl          # auto-reviewer 输出 + 反应裁决审计
-runtime/                  # 证据日志、候选账本、晋升视图、学到的池子
-*.log                     # 运行日志
+```bash
+python tools/prompt_lab.py
+python tools/auto_reviewer.py --apply
+python tools/candidates_admin.py list
+python tools/import_stickers_folder.py <folder>
+python tools/evolution_benchmark.py --help
 ```
 
-仓库里附带的 `data/examples.{en,zh}.jsonl` / `data/feedback.{en,zh}.jsonl` / `tools/fixtures.{en,zh}.jsonl` 是**只读、纯合成的种子**。真实对话产生的学习数据默认只写进已 gitignore 的 `runtime/`；如果把 `AGENT_RUNTIME_DIR` 改成仓库内其他目录，运行前必须自己把它加入 `.gitignore`。证据日志会连同结构化裁决与一句话理由保存近期上下文和真实反应原文，但绝不保存裁决模型的原始输出或思维链。
+仓库约定、测试发现规则、模块结构和隐私要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。可复现的 Bug 和边界清晰的功能建议请提交到 [GitHub Issues](https://github.com/wangkant/personagent/issues)。
 
-## License
+## 仓库结构
 
-[MIT License](LICENSE)。
+```text
+persona_agent/   可导入的应用核心
+main.py          FastAPI 服务与后台循环
+quickstart.py    可重复执行的配置向导
+try_chat.py      经过生产回复链路的终端试用
+integrations/    平台适配器（包含 AstrBot 转发插件）
+data/            版本化的合成人设与检索种子
+runtime/         私有可变状态（Git 忽略，运行时创建）
+tools/           审核、调优、基准、导入和健康检查 CLI
+tests/           离线跨平台回归测试
+docs/            架构与管线图
+```
+
+## 负责任地使用
+
+本项目与任何即时通信平台或模型供应商均无关联，也未获得其认可或赞助。第三方协议客户端可能违反上游条款或触发账号风控。请使用次要账号、默认保持私有部署、妥善保护密钥和对话数据，并在处理他人消息前取得适当同意。
+
+完整部署说明见 [DISCLAIMER.md](DISCLAIMER.md)。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 Qiankang Wang。
 
 ## 致谢
 
-- reasoning / intent / reply 分离的想法早于本仓库——先思考再开口、思考过程读者看不到，是角色扮演类 prompt 由来已久的做法。这里只是把它从内嵌标签改写成 JSON 字段，消掉了一类泄露 bug。
-- [NapCat](https://github.com/NapNeko/NapCatQQ) 与 [OneBot v11](https://github.com/botuniverse/onebot-11) 标准——QQ 协议层，以及主传输层所使用的事件 / 动作 schema（`persona_agent/transport.py`、`ingestion.py`）。
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot)——它的平台适配器让同一个人设能出现在 Telegram / Discord / Slack / Lark / KOOK，接入方式是 `integrations/astrbot/` 里附带的转发插件。
-- [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info + regex extension 启发了 `lorebook.json`（关键词触发的上下文条目，热加载）和 `output_filter.json`（编译成正则、逐条作用于每条外发回复）。
-- OpenAI 兼容的 `/v1/chat/completions` 约定——所有 LLM 调用（主聊、裁判、视觉、表情打标）都走它，用的是裸 [httpx](https://github.com/encode/httpx)；正因如此，DeepSeek / 智谱 GLM / Moonshot / OpenAI / 本地 Ollama 或 llama.cpp 之间只需改 `.env` 就能互换。
-- [FastAPI](https://github.com/fastapi/fastapi) + [Uvicorn](https://github.com/encode/uvicorn) 提供 webhook 服务，[Pillow](https://github.com/python-pillow/Pillow) 负责把 GIF 抽首帧转 PNG（多数视觉端点直接拒收 GIF）。
-- [ddgs](https://github.com/deedy5/ddgs)（免 key 的 DuckDuckGo，默认）与 [Tavily](https://tavily.com)（可选，需 key）支撑 agent 遇到不认识的东西时的自动查证。
-- bilibili 的公开 `web-interface` API 和 YouTube 的 oEmbed 接口——标题、UP 主以及 B 站自带的 AI 总结，是把一个光秃秃的分享链接变成人设真能接话的内容的关键。
-- [DSPy](https://github.com/stanfordnlp/dspy) 的「prompt 是可优化的程序，而不是一段反复手改的字符串」这一思路，是 `tools/dspy_tune.py` 脚手架的来源。
+`personagent` 构建于 [OneBot v11](https://github.com/botuniverse/onebot-11) 事件模型、[NapCat](https://github.com/NapNeko/NapCatQQ)、[AstrBot](https://github.com/AstrBotDevs/AstrBot)、[FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 之上；学习机制参考了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 与 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)。世界书和过滤器模型受到 SillyTavern World Info 与正则扩展的启发。
