@@ -1,38 +1,32 @@
+<div align="center">
+
 # personagent
 
+<p><strong>一个知道怎么说话，也知道什么时候不该说话的人设 Agent。</strong></p>
+
+可部署于群聊和私聊，理解聊天现场，默认有选择地回应；<br>
+能够从真实反应中学习，但不会让一次噪声反馈直接改写自己的性格。
+
+[English](README.md) · [**简体中文**](README.zh-CN.md)
+
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
-[![最新版本](https://img.shields.io/github/v/release/wangkant/personagent?display_name=tag&sort=semver)](https://github.com/wangkant/personagent/releases)
-[![已测试 Python 3.10、3.11、3.12](https://img.shields.io/badge/tested-Python%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![最新版本](https://img.shields.io/github/v/release/wangkant/personagent?display_name=tag&sort=semver&color=6f42c1)](https://github.com/wangkant/personagent/releases)
+[![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
 
-[English](README.md) · **简体中文**
+[**快速开始**](#快速开始) · [为什么不同](#为什么选择-personagent) · [部署](#部署方式) · [架构](#架构) · [配置](#配置)
 
-> 面向群聊与私聊、可部署、可自进化的人设 Agent。
+</div>
 
-`personagent` 可以把任意 OpenAI 兼容聊天模型变成一个有选择性的人设角色：它理解聊天现场，知道什么时候不该接话，把图片和表情包当作表达的一部分，还能从真实反应中学习，同时避免一次噪声反馈直接改写自身行为。
+<a href="#快速开始">
+  <img src="assets/demo.svg" alt="personagent 经过结构化决策后选择回复或保持沉默" width="100%">
+</a>
 
-它既可以在终端本地运行，也可以通过 OneBot v11 直接接入 QQ，或借助仓库内置的 AstrBot 网关接入 Telegram、Discord、Slack、飞书和 KOOK。
-
-[![personagent 终端演示](assets/demo.svg)](#快速开始)
-
-## 为什么选择 personagent
-
-大多数群聊机器人始终处于“值班”状态：正式、积极、明显像一个助理。`personagent` 从底层采用了另一套运行方式。
-
-| 能力 | 实际含义 |
-|---|---|
-| **人设优先的对话** | 语域、关系、现场位置、意图、记忆，以及返回 `PASS` 保持沉默，都是核心回复链路的一部分。 |
-| **有门控的自进化** | 用户反应先成为只追加的证据。只有经过交叉验证并晋升的候选项才能影响后续回复，所有晋升都可审计、可撤销。 |
-| **失败即关闭的输出边界** | 模型返回结构化 JSON；解析、语义过滤、字符策略和投递检查全部通过后，内容才会进入聊天。 |
-| **多模态上下文** | 图片、表情包、URL、Bilibili/YouTube 元数据与分享卡片会被转换成可用上下文，而不是作为不透明附件。 |
-| **模型供应商无关** | 聊天、裁决、评估和视觉调用都通过 OpenAI 兼容 HTTP 接口完成，运行时不依赖厂商 SDK。 |
-| **完整的运维控制** | 包含 Webhook 鉴权、重放防护、请求限流、持久化去重、健康检查、运行数据隔离和跨平台 CI。 |
-
-**项目状态：** Beta。版本发布遵循语义化版本规范，行为与存储变更会记录在[更新日志](CHANGELOG.md)中。当前版本适合受控的个人部署，但平台政策与账号风险仍由部署者承担。连接第三方 IM 客户端前请阅读[部署免责声明](DISCLAIMER.md)。
+`personagent` 可以把任意 OpenAI 兼容聊天模型变成一个真正处在对话现场中的人设角色。它既能在终端本地运行，也能通过 OneBot v11 直接接入 QQ，或借助仓库内置的 AstrBot 网关接入 Telegram、Discord、Slack、飞书和 KOOK。
 
 ## 快速开始
 
-环境要求：Git、Python 3.10+，以及一个 OpenAI 兼容 API Key。本地试用不需要 QQ 或 NapCat。CI 当前覆盖 Python 3.10、3.11 和 3.12。
+你只需要 Git、Python 3.10+，以及一个 OpenAI 兼容 API Key。本地试用不需要 QQ、NapCat 或其他消息平台适配器。
 
 ```bash
 git clone https://github.com/wangkant/personagent.git
@@ -40,9 +34,10 @@ cd personagent
 python quickstart.py
 ```
 
-这个可重复执行的配置向导会创建 `.venv`、安装依赖、写入 `.env`、按需验证模型接口、创建人设文件，并询问是否直接进入终端试用。它支持 DeepSeek、Kimi、OpenAI、Ollama 和自定义 OpenAI 兼容接口。
+配置向导会创建 `.venv`、安装依赖、写入 `.env`、按需验证模型接口、创建人设文件，并询问是否直接进入终端试用。它可以安全地重复运行，支持 DeepSeek、Kimi、OpenAI、Ollama 和自定义 OpenAI 兼容接口。
 
-以后再次进入试用：
+<details>
+<summary><strong>再次进入终端试用，或进行无交互初始化</strong></summary>
 
 ```bash
 # macOS / Linux
@@ -52,15 +47,31 @@ python quickstart.py
 # Windows
 .venv\Scripts\python.exe try_chat.py
 .venv\Scripts\python.exe try_chat.py --lang zh
-```
 
-终端试用与线上部署共用相同的人设、Prompt 组装、检索、模型输出解析和回复验证链路。使用 `--owner` 测试配置好的主人关系，使用 `--name <名字>` 指定当前说话者。
-
-在 CI 或自动化部署脚本中进行无交互初始化：
-
-```bash
+# CI / 自动化部署
 python quickstart.py --no-input
 ```
+
+终端试用与线上部署共用相同的人设、Prompt 组装、检索、输出解析和回复验证链路。使用 `--owner` 测试配置好的主人关系，或用 `--name <名字>` 指定当前说话者。
+
+</details>
+
+## 为什么选择 personagent
+
+大多数群聊机器人始终处于“值班”状态：正式、积极、明显像一个助理。`personagent` 的出发点则是成为聊天中的一个参与者。
+
+| **处在现场的人设** | **默认有选择地回应** |
+|---|---|
+| 语域、关系、现场位置、意图和有作用域的记忆都位于核心回复链路中。 | `PASS` 是一等结果；当沉默比再发一条消息更合适时，Agent 可以选择不接话。 |
+| **门控之后再学习** | **把媒体当作上下文** |
+| 用户反应先成为只追加证据；只有经过交叉验证并晋升的候选项才能影响后续回复，而且每次晋升都可以撤销。 | 图片、表情包、URL、视频和分享卡片都会变成可用上下文，也可以成为人设表达的一部分。 |
+
+### 默认具备生产防线
+
+- **失败即关闭的输出边界：** 模型的结构化输出会先经过解析、过滤、字符策略和投递验证，再进入聊天。
+- **供应商无关且便于运维：** 聊天、裁决、评估和视觉调用都使用 OpenAI 兼容 HTTP 接口；同时内置 Webhook 鉴权、重放防护、限流、持久化去重、健康检查、运行数据隔离和跨平台 CI。
+
+> **Beta：** 版本发布遵循语义化版本规范，行为与存储变更会记录在[更新日志](CHANGELOG.md)中。当前版本支持受控的个人部署，但平台政策与账号风险仍由部署者承担。连接第三方 IM 客户端前请阅读[部署免责声明](DISCLAIMER.md)。
 
 ## 部署方式
 
