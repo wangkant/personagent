@@ -491,16 +491,29 @@ def test_teacher_forgiveness_window(tmp: Path) -> None:
         check("teacher: and the next dismissal starts from zero",
               (rec["accepted"], rec["dismissed"]) == (0, 1), repr(rec))
 
+        # The cadence a half-life could not catch AT ALL: there, each
+        # dismissal landed on counts the decay had already eaten, so the total
+        # never reached the threshold and the teacher was never blocked once
+        # in 400 days. A window counts what actually happened, so five paced
+        # dismissals reach it like any other five.
+        #
+        # What is asserted is that the block ENGAGES and HOLDS, not that it is
+        # permanent — a teacher who stops for a month is forgiven, deliberately
+        # and by the same rule that unmutes the legacy record above. Sampling
+        # stays clear of `ts + FORGIVENESS_DAYS` itself: `real()` is re-read on
+        # every call, so at the exact boundary the age is the window plus this
+        # test's own runtime, and which side of the comparison that lands on is
+        # a fact about the machine.
         pace = tmp / "pace.json"
         pace.write_text("{}", encoding="utf-8")
         paced = reactions.TeacherStats(pace)
-        for offset in range(0, 400, 5):
+        for offset in (0, 5, 10, 15, 20):
             time.time = lambda o=offset: real() + o * day
-            if not paced.hard_block("u2"):
-                paced.update("u2", "slow", accepted=False)
-        time.time = lambda: real() + 400 * day
-        check("teacher: a five-day cadence does not slip the block",
-              paced.hard_block("u2"), repr(paced._d.get("u2")))
+            paced.update("u2", "slow", accepted=False)
+        for offset in (21, 30, 45):
+            time.time = lambda o=offset: real() + o * day
+            check(f"teacher: a five-day cadence is blocked on day {offset}",
+                  paced.hard_block("u2"), repr(paced._d.get("u2")))
 
         # json.loads accepts a bare NaN, and a NaN timestamp must not raise
         # out of a gate that runs before every adjudication.
