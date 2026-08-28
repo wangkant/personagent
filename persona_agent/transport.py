@@ -7,22 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
-import heapq
-import io
-import ipaddress
-import json
 import logging
-import os
 import random
 import re
-import socket
 import time
-from collections import defaultdict, deque
-from datetime import datetime
-from pathlib import Path
-from typing import Awaitable, Callable, Optional
-from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -212,7 +200,7 @@ class Transport:
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
             try:
-                async with self._http(timeout=10) as client:
+                async with self._local_http(timeout=10) as client:
                     r = await client.post(
                         f"{self.napcat_api}/send_group_msg",
                         json={"group_id": int(group_id), "message": message},
@@ -360,7 +348,7 @@ class Transport:
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
             try:
-                async with self._http(timeout=10) as client:
+                async with self._local_http(timeout=10) as client:
                     r = await client.post(
                         f"{self.napcat_api}/send_private_msg",
                         json={"user_id": int(user_id), "message": message},
@@ -502,7 +490,7 @@ class Transport:
             if ":" in group_id:
                 continue
             try:
-                async with self._http(timeout=15) as client:
+                async with self._local_http(timeout=15) as client:
                     r = await client.post(
                         f"{self.napcat_api}/get_group_msg_history",
                         json={"group_id": int(group_id), "count": 10},
@@ -515,8 +503,11 @@ class Transport:
                         # / poll. Without this, the same offline @ mention
                         # would log "replaying" every 30 minutes even though
                         # handle() short-circuits via the seen-id ring.
+                        # str(): NapCat's history carries an int here while
+                        # the ring is keyed on the webhook path's string —
+                        # see the dedup gate in agent.handle().
                         mid = msg.get("message_id")
-                        if mid is not None and mid in self._seen_msg_ids:
+                        if mid is not None and str(mid) in self._seen_msg_ids:
                             continue
                         sender_id = str((msg.get("sender") or {}).get("user_id", ""))
                         if sender_id == self.bot_qq:

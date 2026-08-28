@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import gzip
 import io
-import os
 import re
 import socket
 import sys

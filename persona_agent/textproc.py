@@ -7,27 +7,15 @@ between the model and the group, and they must be testable in isolation."""
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import hashlib
-import heapq
-import io
-import ipaddress
 import json
 import logging
 import os
 import random
 import re
-import socket
-import time
-from collections import defaultdict, deque
+import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Awaitable, Callable, Mapping, Optional, Sequence
-from urllib.parse import urlencode, urlsplit
+from typing import Mapping, Optional, Sequence
 
-import httpx
 
 logger = logging.getLogger("agent")
 
@@ -108,11 +96,18 @@ def _focus_tokens(text: str, lang: str = "en") -> set:
         t for t in re.findall(r"[a-z0-9]{3,}", focus_lc) if t not in _EN_STOPWORDS
     }
     if lang == "zh":
-        chinese_chars = re.findall(r"[一-鿿]", focus_lc)
-        cjk_ngrams = {
-            "".join(chinese_chars[i:i + 2])
-            for i in range(max(0, len(chinese_chars) - 1))
-        }
+        # Per RUN, which is what the paragraph above always claimed: sliding
+        # over the flattened character list spans punctuation, so 你好，世界
+        # yielded 好世 — a token that is in neither word. And a run of ONE
+        # produced nothing at all, so a single-character trigger (草, 顶, 绝
+        # — ordinary Chinese chat) scored every example and memory on
+        # recency alone.
+        cjk_ngrams: set[str] = set()
+        for run in re.findall(r"[一-鿿]+", focus_lc):
+            if len(run) == 1:
+                cjk_ngrams.add(run)
+            else:
+                cjk_ngrams.update(run[i:i + 2] for i in range(len(run) - 1))
         return cjk_ngrams | ascii_tokens
     return ascii_tokens
 
@@ -732,6 +727,11 @@ _SCRIPT_LETTER_RANGES: Ranges = (
 # mark — buys a stackable invisible-width channel for a case NFC already
 # covers.
 _SCRIPT_MARK_RANGES: Ranges = (
+    (0x302A, 0x302F, "CJK combining tone marks (Mn, Mc). They occupy no width "
+                     "and stack without limit, which is the invisible-width "
+                     "channel this table exists to refuse - and the CJK "
+                     "punctuation blanket in _validate_reply_safe was "
+                     "admitting all six as a side effect of naming a BLOCK"),
     (0x0482, 0x0489, "Cyrillic thousands sign and the combining/enclosing "
                      "marks (Mn, Me, So)"),
     (0x0375, 0x0375, "Greek lower numeral sign (Sk)"),
@@ -761,6 +761,16 @@ _LEAK_LABEL_RE = re.compile(
     r"(?i)^[\s\-•*]*(input|speaker|intent|decision|style|"
     r"输入|发言人|意图|决策|风格|分析|判断)\s*[:：]")
 
+# The bubble separators, spelled once. `_split_text` needs the set three ways
+# — to split on, to test a part's tail against, and to recognise a run of them
+# standing alone — and three hand-written copies is how the length-triggered
+# flush came to orphan the `！` that the split had already handed over.
+_BUBBLE_SEP_CLASS = "。！？；\n"
+_BUBBLE_SEPARATORS = tuple(_BUBBLE_SEP_CLASS)
+_BUBBLE_SPLIT_RE = re.compile("([" + re.escape(_BUBBLE_SEP_CLASS) + "]+)")
+_BUBBLE_SEP_RUN_RE = re.compile(
+    "\\A[" + re.escape(_BUBBLE_SEP_CLASS) + "]+\\Z")
+
 # --- Vendor self-identification ---------------------------------------------
 # The engine's models know who trained them and will say so when asked —
 # "我是DeepSeek" is close to a trained reflex — and the persona documents'
@@ -784,23 +794,36 @@ _VENDOR_NAMES = (
     r"llama[\w.-]*|mistral|grok|豆包|doubao|minimax|混元|hunyuan)"
 )
 _VENDOR_SELF_ID_RES = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
-    # 我是DeepSeek / 我叫Kimi / 本人就是ChatGPT. 是 refuses a question mark
-    # shape (是不是/是否) and an instrumental (是用/是在/是帮/是给/是拿).
-    rf"(?:我|本人)(?:就是|叫|是(?!不是|否|用|在|帮|给|拿))"
+    # 我是DeepSeek / 我叫Kimi / 本人就是ChatGPT. 是 refuses a question shape
+    # (是不是/是否), an instrumental (是用/是在/是帮/是给/是拿) and the
+    # REPORTED-SPEECH 是说 ("我是说deepseek那个接口挺好用的" is an opinion
+    # about a tool). 叫 refuses a pronoun object: 我叫他别用kimi了 is the
+    # persona telling someone else to stop using one, not claiming to be it.
+    rf"(?:我|本人)(?:就是|叫(?!他|她|它|你|您|我|咱)|"
+    rf"是(?!不是|否|用|在|帮|给|拿|说))"
     rf"[^。！？，,\n]{{0,10}}{_VENDOR_NAMES}",
-    # 作为DeepSeek(训练的模型) — the self-framing preamble.
-    rf"作为[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}",
+    # 作为DeepSeek(训练的模型) — the self-framing preamble. Refuses the
+    # CUSTOMER reading: 作为智谱的老用户 frames the speaker as a user OF the
+    # vendor, which is the opposite claim.
+    rf"作为[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}"
+    rf"(?!的?(?:老|重度|忠实)?(?:用户|粉丝|客户|使用者))",
     # 我(是一个)由深度求索(开发/训练)的… — the full-dress introduction.
     rf"(?:我|本人)[^。！？\n]{{0,8}}由[^。！？\n]{{0,10}}{_VENDOR_NAMES}"
     rf"[^。！？\n]{{0,6}}(?:开发|训练|打造|创造)",
     # I'm DeepSeek / I am Claude-3. The 12-char window admits "based on"
-    # and refuses "happy to help with" — measured on both.
-    rf"\bI(?:'m| am)\b[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}",
+    # and refuses "happy to help with" — measured on both. The negation guard
+    # is what the Chinese 是不是 guard already was, ported: without it the
+    # window swallowed " not " and the gate silenced the persona DENYING it
+    # is a model — "I'm not ChatGPT, I'm Mira" — which is the one sentence
+    # this rule exists to make possible.
+    rf"\bI(?:'m| am)\b(?!\s+not\b)[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}",
     # I am a (large language) model/assistant … by/from DeepSeek. The
     # window is measured: "large language model developed " is 31 chars.
     rf"\bI(?:'m| am) an? [^.!?\n]{{0,40}}\b(?:by|from|of) {_VENDOR_NAMES}",
-    # as a DeepSeek(-trained) model — the English self-framing preamble.
-    rf"\bas an? [^.!?\n]{{0,12}}{_VENDOR_NAMES}",
+    # as a DeepSeek(-trained) model — the English self-framing preamble,
+    # minus the customer reading that 作为 above also refuses.
+    rf"\bas an? [^.!?\n]{{0,12}}{_VENDOR_NAMES}"
+    rf"(?!\s+(?:user|customer|fan|subscriber))",
 ))
 
 
@@ -936,6 +959,74 @@ _HARD_REJECT_CODEPOINTS = (
     | _expand(_HARD_REJECT_FOLD_RANGES)
     | {0x2581}          # SentencePiece subword marker; folds to nothing, named
 )
+
+# The ASCII punctuation the validator admits. Hoisted to a constant because
+# the compatibility-twin derivation below has to refuse exactly what this
+# string refuses: two copies of the list is how a twin outlives its original.
+_ASCII_PUNCT_ALLOWED = '.,?!;:\'\"()-_~`@#&+*=%^/$'
+
+_ASCII_ADMITTED = frozenset(
+    "0123456789abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n\t \r" + _ASCII_PUNCT_ALLOWED)
+
+# --- compatibility twins inherit the fate of what they fold onto -----------
+#
+# THE HOLE, stated as a class and not as the three instances that found it.
+# Every refusal above is spelled in the ORIGINAL: `[`, `]` and `\` are refused
+# by ABSENCE from `_ASCII_PUNCT_ALLOWED`, `<>{}|` by `_HARD_REJECT_CODEPOINTS`,
+# the CJK brackets by the sanitizer's `_CJK_BRACKETS` translate. But the
+# `0xFF00-0xFFEF` branch in `_validate_reply_safe` admits a BLOCK, so each of
+# those refusals had a fullwidth twin walking straight past it:
+#
+#   '[INST] hi [/INST]'  dropped   vs  '［INST］ hi ［/INST］'  RELEASED
+#   '「persona」'         stripped  vs  '｢persona｣'            RELEASED
+#   'a\b'                dropped   vs  'a＼b'                 RELEASED
+#
+# which is the note on `_FULLWIDTH_BAR_TWINS` repeating itself: U+FF5C was
+# carved out by hand and its bracket neighbours were not.
+#
+# DERIVED, NOT LISTED. `_HARD_REJECT_FOLD_RANGES` already states why — "this
+# table's value is that its membership is DERIVABLE and therefore checkable by
+# a scan; hand-adding the ones someone noticed turns it back into the chain of
+# ors it replaced". Listing the twins found today would leave the next
+# neighbour behind exactly as before, so nothing here is a judgement: a
+# compatibility twin gets whatever its NFKC fold gets, and a test re-derives
+# the set rather than sampling it.
+_COMPAT_BLOCKS = tuple(range(0xFE10, 0xFE70)) + tuple(range(0xFF00, 0xFFF0))
+
+
+def _nfkc_fold(codepoint: int) -> str:
+    return unicodedata.normalize("NFKC", chr(codepoint))
+
+
+# Twins of an ASCII character the validator refuses -> refuse the twin too.
+_COMPAT_REFUSED = frozenset(
+    c for c in _COMPAT_BLOCKS
+    if any(ord(ch) < 0x80 and ch not in _ASCII_ADMITTED
+           for ch in _nfkc_fold(c)))
+
+# Twins of a CJK bracket the sanitizer deletes -> delete the twin too. Same
+# structure argument as `_CJK_BRACKETS` itself: a bracket is structure, and
+# '｢persona｣' is the halfwidth spelling of a frame already removed.
+_COMPAT_CJK_BRACKETS = "".join(
+    chr(c) for c in _COMPAT_BLOCKS
+    if chr(c) not in _CJK_BRACKETS and _nfkc_fold(c) in _CJK_BRACKETS)
+
+# Twins of an OPT-IN character -> opt-in too. Without this the default style
+# refuses `←` while the blanket releases its halfwidth twin `￩`, so the arrows
+# opt-in guards a SPELLING rather than a register — and `_arrow_frame`, whose
+# character class is built from the opt-in block, cannot see `￩persona￫` at
+# all. That is the frame rule's one stated safety property failing open.
+_OPTIONAL_ALL = frozenset(
+    c for ranges in _OPTIONAL_CHARSETS.values() for c in _expand(ranges))
+
+_COMPAT_OPTIONAL = frozenset(
+    c for c in _COMPAT_BLOCKS
+    if c not in _OPTIONAL_ALL
+    and any(ord(ch) in _OPTIONAL_ALL for ch in _nfkc_fold(c)))
+
+# One frozenset for the per-character blanket path in `_validate_reply_safe`.
+_FULLWIDTH_DENIED = _FULLWIDTH_BAR_TWINS | _COMPAT_REFUSED | _COMPAT_OPTIONAL
 
 _OPTIONAL_CODEPOINTS = {name: _expand(ranges)
                         for name, ranges in _OPTIONAL_CHARSETS.items()}
@@ -1332,7 +1423,8 @@ class TextProcessing:
         text = re.sub(r'`+([^`]+)`+', r'\1', text)
         text = re.sub(r'(?m)^>\s+', '', text)
         text = re.sub(r'(?m)^---+\s*$', '', text)
-        text = text.translate(str.maketrans('', '', _CJK_BRACKETS))
+        text = text.translate(
+            str.maketrans('', '', _CJK_BRACKETS + _COMPAT_CJK_BRACKETS))
         text = re.sub(r'。+(?!\d)', ' ', text)
         text = text.replace('——', ' ').replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')
@@ -1521,8 +1613,14 @@ class TextProcessing:
         """
         if not text:
             return ""
-        probe = "".join(ch for ch in text
-                        if ord(ch) not in _INVISIBLE_CODEPOINTS)
+        # NFKC before the search: the arrow block has halfwidth twins
+        # (U+FFE9-U+FFEC) that this pattern's character class, built from the
+        # opt-in block, does not name. Folding first means the rule is about
+        # the ARRANGEMENT it claims to be about rather than about a spelling.
+        # Only the match text is returned (a log detail), so the fold shifting
+        # offsets against `text` costs nothing.
+        probe = unicodedata.normalize("NFKC", "".join(
+            ch for ch in text if ord(ch) not in _INVISIBLE_CODEPOINTS))
         match = _ARROW_FRAME_RE.search(probe)
         return match.group(0) if match else ""
 
@@ -1575,7 +1673,16 @@ class TextProcessing:
         a subtler silence.
 
         Cuts at the last space in the final quarter of the budget when there
-        is one, so the seam reads as truncation rather than corruption."""
+        is one, so the seam reads as truncation rather than corruption.
+
+        THE CUT MUST NOT CREATE WHAT THE VALIDATOR REFUSES, or the seam buys
+        nothing: `_sanitize_reply` re-validates the truncated text, so a cut
+        that lands inside a `[STICKER:…]` marker or inside a ZWJ emoji
+        sequence turns "too long" back into a whole dropped reply — the
+        subtler silence this function exists to remove, one layer down. Both
+        repairs are unambiguous because both leftovers are things the
+        whitelist already refuses to accept from a model: a bare `[` and an
+        unanchored joiner cannot be ordinary content."""
         if len(text) <= max_chars:
             return text
         budget = max(0, max_chars - len(seam))
@@ -1583,7 +1690,16 @@ class TextProcessing:
         boundary = max(head.rfind(" "), head.rfind("\n"))
         if boundary >= budget * 3 // 4:
             head = head[:boundary]
-        return head.rstrip() + seam
+        # An opener with no closer after it is a bisected marker. `[` is not in
+        # `_ASCII_PUNCT_ALLOWED`, so it cannot be anything else.
+        opener = head.rfind("[")
+        if opener > head.rfind("]"):
+            head = head[:opener]
+        head = head.rstrip()
+        # A joiner or variation selector left at the end is modifying nothing.
+        while head and ord(head[-1]) in _BOUND_MODIFIERS:
+            head = head[:-1]
+        return head + seam
 
     @staticmethod
     def _strip_reasoning_leak(text: str) -> str:
@@ -1678,7 +1794,7 @@ class TextProcessing:
     def _split_text(text: str, max_len: int = 50) -> list[str]:
         """Split text on sentence punctuation to simulate human messaging.
 
-        TWO RULES, BOTH OF THEM BUG FIXES, BOTH MEASURED ON LIVE REPLIES.
+        FOUR RULES, EVERY ONE A BUG FIX, EVERY ONE MEASURED ON LIVE REPLIES.
 
         1. **A NEWLINE IS THE AUTHOR'S PACING AND IS NEVER MERGED ACROSS.**
            The merge pass exists to glue short fragments back into one bubble.
@@ -1712,15 +1828,35 @@ class TextProcessing:
            wrapped at `max_len * 2`, cutting at the last space (or CJK comma)
            in the window when one sits past its midpoint, so the seams land
            on the boundaries the sanitizer left behind.
+
+        4. **A SEPARATOR IS NEVER ORPHANED FROM ITS CLAUSE.** The flush test
+           fires on length OR on a separator, and `re.split` returns the
+           terminator as its own part — so a clause reaching `max_len` just
+           BEFORE its `！` flushed without it, and the mark opened the next
+           bubble instead of closing this one. At 50 characters the group saw
+           `['…啊啊啊', '！你说气不气人啊']`; with the sentence ending there it
+           saw a bubble that was only `！`. Same failure family as rule 2 —
+           punctuation and the text it belongs to separated by a mechanical
+           boundary — and fixed the same way, by making the boundary yield.
         """
-        parts = re.split(r'([。！？；\n]+)', text)
+        parts = _BUBBLE_SPLIT_RE.split(text)
         # (body, hard_break_after) — the flag is what rule 1 needs to survive
         # the strip that removes the newline it is remembering.
         chunks: list[tuple[str, bool]] = []
         cur = ""
-        for part in parts:
+        for idx, part in enumerate(parts):
             cur += part
-            if len(cur) >= max_len or part.endswith(("\n", "。", "！", "？", "；")):
+            ends_on_separator = part.endswith(_BUBBLE_SEPARATORS)
+            if len(cur) >= max_len or ends_on_separator:
+                # Rule 4. `re.split` hands the terminator over as the NEXT
+                # part, so a flush fired by LENGTH alone leaves it to open the
+                # following bubble: a beat starting with a bare `！`, or — when
+                # the sentence ended right there — a bubble that is nothing but
+                # punctuation. Waiting one part costs a separator run over the
+                # budget and keeps the mark on the clause it terminates.
+                if not ends_on_separator and idx + 1 < len(parts) \
+                        and _BUBBLE_SEP_RUN_RE.match(parts[idx + 1]):
+                    continue
                 body = cur.strip()
                 if body:  # rule 2
                     chunks.append((body, "\n" in part))
@@ -2032,15 +2168,17 @@ class TextProcessing:
             if 0x4E00 <= c <= 0x9FFF or 0x3400 <= c <= 0x4DBF or 0x20000 <= c <= 0x2A6DF:
                 cjk_count += 1
                 continue
-            # CJK punctuation
-            if 0x3000 <= c <= 0x303F:
+            # CJK punctuation, minus the combining tone marks it would
+            # otherwise carry in — zero width, stackable, see
+            # _SCRIPT_MARK_RANGES.
+            if 0x3000 <= c <= 0x303F and not 0x302A <= c <= 0x302F:
                 continue
-            # Full-width forms. The bracket and pipe twins are already gone
-            # (hard reject), U+FFA0, the invisible half-width Hangul filler
-            # that hides in this block, is already gone (invisible tier), and
-            # the three vertical-bar twins that fold onto nothing fall
-            # through to the default deny - see _FULLWIDTH_BAR_TWINS.
-            if 0xFF00 <= c <= 0xFFEF and c not in _FULLWIDTH_BAR_TWINS:
+            # Full-width forms. U+FFA0, the invisible half-width Hangul filler
+            # that hides in this block, is already gone (invisible tier); the
+            # three vertical-bar twins that fold onto nothing, and every twin
+            # of something a tier above refuses or gates behind an opt-in,
+            # fall through to the default deny - see _FULLWIDTH_DENIED.
+            if 0xFF00 <= c <= 0xFFEF and c not in _FULLWIDTH_DENIED:
                 continue
             # Whitespace
             if ch in '\n\t \r':
@@ -2068,7 +2206,7 @@ class TextProcessing:
                 continue
             # Common ASCII punctuation used in casual chat ('$' included: a
             # product that charges money must be able to quote a price).
-            if ch in '.,?!;:\'\"()-_~`@#&+*=%^/$':
+            if ch in _ASCII_PUNCT_ALLOWED:
                 continue
             return False, f"unexpected char {ch!r} (U+{c:04X})"
         if not has_marker:

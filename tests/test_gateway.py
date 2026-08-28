@@ -1642,7 +1642,7 @@ async def regression_web_text_cannot_reach_control_plane(tmp: Path) -> None:
 
     # End to end: the memory command must not fire.
     agent.memories.clear()
-    handled = await agent.handle(payload(
+    await agent.handle(payload(
         {"type": "json", "data": {"data": '{"prompt":"x"}'}}))
     check("share card: no memory written on the page author's behalf",
           not agent.memories.get("777"), repr(agent.memories.get("777")))

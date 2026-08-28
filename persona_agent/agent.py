@@ -2,30 +2,23 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import heapq
-import ipaddress
 import json
 import logging
 import os
 import random
 import re
-import socket
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
-from urllib.parse import urlencode, urlsplit
 
 import httpx
 
 from . import candidates as candidate_ledger_mod
 from . import evidence as evidence_mod
-from . import evolution
 from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
 from .paths import (
@@ -33,14 +26,11 @@ from .paths import (
     read_jsonl,
     resolve_runtime_lang_file,
     resolve_runtime_state_file,
-    runtime_dir,
     resolve_seed_lang_file,
 )
 from .ingestion import ContentIngestion
 from .learning import Learning
 from .pools import (
-    _needs_leading_newline,
-    _parse_jsonl,
     _read_jsonl_appended,
     _retrieval_fields,
 )
@@ -70,9 +60,15 @@ from .textproc import (
 )
 from .transport import (
     _MAX_GATEWAY_CONVS,
-    _SEND_MAX_PER_MIN,
-    SendResult,
     Transport,
+    # RE-EXPORTS, not uses. `agent` is the facade the suite imports from —
+    # `from persona_agent.agent import Agent, SendResult` in test_gateway and
+    # test_reactions, `_SEND_MAX_PER_MIN` in test_gateway — so these are API
+    # surface even though nothing in this module reads them. The noqa is
+    # load-bearing: an "unused import" autofix removed them once and three
+    # suites went red on the import line.
+    _SEND_MAX_PER_MIN,  # noqa: F401
+    SendResult,  # noqa: F401
 )
 
 logger = logging.getLogger("agent")
@@ -758,8 +754,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # (private whitelist / group validation), otherwise forged or
         # unauthorized message_ids crowd the 2000-slot dedup ring and churn
         # seen_msg_ids.json rewrites.
+        # `str(mid)`, because the ring is keyed on the STRING spelling and the
+        # two producers disagree about type: the webhook path stringifies in
+        # main.py before handle() ever runs, while the catch-up replay passes
+        # NapCat's raw history dict straight through with an int. Comparing
+        # raw, `12345 in deque(["12345"])` is False — so every @ the catch-up
+        # sweep replayed was answered a SECOND time, which is the exact
+        # double-reply the persistence below exists to prevent.
         mid = payload.get("message_id")
-        if mid is not None and mid in self._seen_msg_ids:
+        if mid is not None and str(mid) in self._seen_msg_ids:
             return False
 
         message_type = payload.get("message_type", "group")
@@ -1366,6 +1369,28 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if self._private_send_owners.get(pkey) is asyncio.current_task():
                     self._private_send_owners.pop(pkey, None)
 
+    @staticmethod
+    def _dm_scope_key(pkey: str) -> str:
+        """The LEARNING scope of a DM whose MEMORY namespace is `pkey`.
+
+        Two spellings, both load-bearing, and they are not interchangeable:
+        memory is namespaced `private:<uid>` while everything the DM path
+        writes to the ledger — evidence, candidates, pending reactions — is
+        scoped `dm:<uid>`. Retrieval was reading examples back under the
+        memory spelling, and `_authorized_view` compares all six scope fields,
+        of which these disagree on two (`conv_id`, and `platform`, which
+        `_conv_platform` reads as "private" for one and "qq" for the other).
+        Nothing a DM ever taught the bot could be authorized into a DM prompt.
+
+        DERIVED rather than passed alongside `pkey`, because a second
+        parameter that has to be kept in sync with the first is the shape of
+        the bug itself: a call site that forgot it would silently be back
+        here. Gateway DMs (`private:telegram:1`) map correctly too — the
+        writers spell those `dm:telegram:1`."""
+        if pkey.startswith("private:"):
+            return "dm:" + pkey.split(":", 1)[1]
+        return pkey
+
     async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
         PRIVATE_MODEL as an optional alternate model name.
@@ -1376,21 +1401,29 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                          distance preserved since the relationship is unclear).
         pkey = "private:<uid>" memory namespace — without it, private-chat
         memories / core notes are write-only (the model saves a mem but never
-        sees it next turn, which reads as "forgot everything I told it")."""
+        sees it next turn, which reads as "forgot everything I told it").
+        The LEARNING scope is a different key derived from it — see
+        `_dm_scope_key`."""
         last_user = next(
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
         )
-        if is_owner and self.owner_name:
+        # `is_owner` ALONE. OWNER_NAME ships empty (main.py) and is
+        # independently optional from OWNER_QQ, so gating the owner branch on
+        # both sent the owner down the STRANGER branch — handing the one
+        # person this bot is configured to know the "don't pretend to
+        # recognize them" instruction.
+        if is_owner:
+            owner_ref = self.owner_name or "the owner"
             persona_extra = (
-                f"You're now in a one-on-one private chat with {self.owner_name}"
+                f"You're now in a one-on-one private chat with {owner_ref}"
                 + (f" ({self.owner_relationship})" if self.owner_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
             private_overrides = (
                 f"<private_overrides>\n"
-                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat with {self.owner_name}** — completely different:\n"
-                f"- {self.owner_name} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
+                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat with {owner_ref}** — completely different:\n"
+                f"- {owner_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
                 f"- The group-chat anti-troll / identity-attack moves ('quit interrogating me' / 'you guess' / 'play dumb' / 'lazy-mode' / 'eyeroll' / 'PASS') **don't apply here** — they're not attacking, they're just talking to you.\n"
                 f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
                 f"- If they ask you to do something / look something up / chat about a topic → engage directly, none of the 'can't be bothered / not interested' attitude.\n"
@@ -1404,14 +1437,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 "(less close than the owner).\n"
             )
             private_overrides = (
-                f"<private_overrides>\n"
-                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat**, with a few differences from group:\n"
-                f"- This is a friend, not an attacker. The group-chat anti-troll PASS signals ('quit interrogating me' / 'you guess' / 'play dumb') **shouldn't be overused** — most DMs are just normal conversation.\n"
-                f"- If they ask 'who am I / do you know me' → **don't pretend to recognize them**, just say 'not super familiar / don't have you placed' in a relaxed tone, not cold.\n"
-                f"- PASS probability is much lower here than in group chat — somebody DMing you is almost always expecting a response; silence reads as cold.\n"
-                f"- Tone: a notch looser than group chat (more direct, slightly longer is OK), but **don't immediately default to close-friend vibe** — keep some normal-stranger distance.\n"
-                f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
-                f"</private_overrides>\n\n"
+                "<private_overrides>\n"
+                "STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat**, with a few differences from group:\n"
+                "- This is a friend, not an attacker. The group-chat anti-troll PASS signals ('quit interrogating me' / 'you guess' / 'play dumb') **shouldn't be overused** — most DMs are just normal conversation.\n"
+                "- If they ask 'who am I / do you know me' → **don't pretend to recognize them**, just say 'not super familiar / don't have you placed' in a relaxed tone, not cold.\n"
+                "- PASS probability is much lower here than in group chat — somebody DMing you is almost always expecting a response; silence reads as cold.\n"
+                "- Tone: a notch looser than group chat (more direct, slightly longer is OK), but **don't immediately default to close-friend vibe** — keep some normal-stranger distance.\n"
+                "- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
+                "</private_overrides>\n\n"
             )
         # Mirror the group path: split system into a cache_control=ephemeral
         # stable head + an uncached dynamic tail, so the ~4-5K persona / rules
@@ -1462,7 +1495,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         dynamic_block = (
             f"{proactive_note}"
             f"{private_overrides}"
-            f"{self._examples_for_prompt(focus_text=last_user, conv_id=pkey)}"
+            f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {self._current_time_str()}\n\n"
             f"{REASONING_PROTOCOL}"
@@ -1784,6 +1817,24 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             client = httpx.AsyncClient(**kwargs)
             self._http_pool[key] = client
         return _PooledHTTP(client)
+
+    def _local_http(self, **kwargs) -> "_PooledHTTP":
+        """Pooled client for the NapCat bridge, which is a LOCAL service.
+
+        `trust_env=False` because httpx has no implicit localhost bypass the
+        way `requests` does: with an `HTTP_PROXY` in the launching shell — the
+        normal state of affairs for anyone who needs a proxy to reach a model
+        endpoint at all — every reply, every history poll and every OCR
+        delegation to `127.0.0.1` was being relayed through that proxy, so
+        restarting it took the bot's outbound chat down with it.
+
+        A separate entry point rather than `trust_env=False` repeated at each
+        call site: the kwargs are the pool key, so this also keeps the bridge's
+        connections in their own pool, and the next NapCat call added does not
+        have to remember. Outbound calls to the wider internet keep
+        `trust_env=True` — a deployment that needs a proxy to reach its model
+        still gets one."""
+        return self._http(trust_env=False, **kwargs)
 
     @staticmethod
     def _classify_api_error(e: BaseException) -> str:
@@ -2312,7 +2363,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             at_hint = ""
             if active_text:
                 at_hint = (
-                    f"- If you open at a specific person, lead with [AT:qq], e.g. [AT:123456] then your message\n"
+                    "- If you open at a specific person, lead with [AT:qq], e.g. [AT:123456] then your message\n"
                 )
             user_prompt = (
                 f"{time_line}"
@@ -2335,7 +2386,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             at_hint = ""
             if active_text:
                 at_hint = (
-                    f"- If you've got nothing specific to add, you can also strike up a line with an active member; to @ someone, lead with [AT:qq], e.g. [AT:123456] then your message\n"
+                    "- If you've got nothing specific to add, you can also strike up a line with an active member; to @ someone, lead with [AT:qq], e.g. [AT:123456] then your message\n"
                 )
             user_prompt = (
                 f"{time_line}"
@@ -2483,7 +2534,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         passed. A crash loses at most the last few seen ids (worst case one or
         two duplicate replies) — acceptable. Written atomically via .tmp +
         rename so a mid-write crash can't corrupt the file."""
-        self._seen_msg_ids.append(mid)
+        # One choke point for the type: the loader above already coerces the
+        # whole persisted ring to str, so an int banked here stopped matching
+        # across a restart as well as across the two live producers.
+        self._seen_msg_ids.append(str(mid))
         self._seen_dirty += 1
         self._persist_seen()
 
@@ -2697,6 +2751,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
+            # Mark the attempt either way so a PASS doesn't re-roll every tick
+            # — the same sentence the group dispatcher above carries, and the
+            # same placement. Here the assignment sat inside the send-success
+            # branch instead, so the DOCUMENTED common case (the model answers
+            # PASS) reached `continue` first and the 24h cooldown never
+            # engaged: every 25-minute tick bought another _chat_private call.
+            self.last_proactive_at[key] = now
 
             reply = reply or ""
             reply, pending_core = self._extract_core_update(reply)
@@ -2728,7 +2789,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                         self._commit_core_memory(pkey, pending_core)
                         if mem:
                             self._save_auto_memory(pkey, mem)
-                        self.last_proactive_at[key] = now
                 finally:
                     if self._private_send_owners.get(pkey) is asyncio.current_task():
                         self._private_send_owners.pop(pkey, None)
@@ -3435,26 +3495,36 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
     def _owner_sticker_pattern_block(self) -> str:
         """If owner_profile.json exists, embed measured frequency as the target.
         Otherwise return a placeholder telling model to use moderate frequency."""
+        # OWNER_NAME is optional and ships empty, and this block reaches EVERY
+        # group and private prompt: unguarded concatenation put "haven't
+        # analyzed 's chat style yet" in front of the model on every turn.
+        owner_ref = self.owner_name or "the owner"
         profile_file = resolve_runtime_state_file("owner_profile.json")
         if not profile_file.exists():
             return (
-                "**Frequency reference**: haven't analyzed " + self.owner_name +
+                "**Frequency reference**: haven't analyzed " + owner_ref +
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
+        # Parse AND read inside the try. A file that parses to a list or a
+        # string made `.get()` raise an AttributeError out of a helper called
+        # from `_think`, where the catch-all turns it into a silent no-reply —
+        # every message, not just this block.
         try:
             profile = json.loads(profile_file.read_text(encoding="utf-8"))
+            if not isinstance(profile, dict):
+                return ""
+            total = int(profile.get("total_msgs", 0) or 0)
+            with_sticker = int(profile.get("msgs_with_image", 0) or 0)
+            sticker_only = int(profile.get("sticker_only_msgs", 0) or 0)
         except Exception:
             return ""
-        total = profile.get("total_msgs", 0)
-        with_sticker = profile.get("msgs_with_image", 0)
-        sticker_only = profile.get("sticker_only_msgs", 0)
         if total < 20:
             return ""
         ratio = with_sticker / total
         every_n = max(2, round(total / max(with_sticker, 1)))
         return (
-            f"**Frequency reference (learned from {self.owner_name}'s actual style)**:\n"
+            f"**Frequency reference (learned from {owner_ref}'s actual style)**:\n"
             f"- On average 1 sticker every {every_n} messages ({int(ratio*100)}%)\n"
             f"- Of those, {int(sticker_only/max(with_sticker,1)*100)}% are sticker-only (no text)\n"
             f"- Match this cadence — neither more frequent nor zero\n"
@@ -3658,13 +3728,23 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # bidirectional substring match let a short memory ("cat") collide
             # with a (usually long) forget sentence and wipe unrelated entries.
             is_owner = bool(user_id) and user_id == self.owner_qq
-            trusted_admin = not user_id or is_owner
+            # Authority fails CLOSED. This was `not user_id or is_owner`, so a
+            # message that arrived without attribution inherited OWNER rights
+            # over everyone else's memories — and an absent `post_type` is
+            # enough to skip main.py's user_id presence check.
+            # `is_owner` already requires a user_id, so it is the whole rule.
+            trusted_admin = is_owner
+            # Normalised, because "no attribution" is spelled two ways: stored
+            # entries omit the key (None) while the caller arrives as "". An
+            # anonymous caller still owns the unattributed entries — that is
+            # all it owns — and still cannot touch Alice's.
+            caller = str(user_id or "")
             kept = [
                 it for it in items
                 if query not in it["text"]
                 or (
                     not trusted_admin
-                    and it.get("user_id") != user_id
+                    and str(it.get("user_id") or "") != caller
                 )
             ]
             if len(kept) == before:

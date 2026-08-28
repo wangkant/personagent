@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections import defaultdict, deque
+import time
+from collections import deque
 from pathlib import Path
 
 from .storage import atomic_write_text
@@ -442,6 +443,12 @@ def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
     }
 
 
+# Reputation half-life, in days. Long enough that a genuinely adversarial
+# teacher stays blocked across a normal run, short enough that a bad week is
+# not a life sentence.
+TEACHER_HALF_LIFE_DAYS = 30.0
+
+
 class TeacherStats:
     """Per-user teaching reputation (BlenderBot-3x lesson: a third of the
     wild is adversarial). Counts how often a user's corrections/rejections
@@ -462,16 +469,45 @@ class TeacherStats:
 
     def update(self, uid: str, name: str, accepted: bool) -> None:
         rec = self._d.setdefault(str(uid), {"accepted": 0, "dismissed": 0})
+        # Fold the elapsed decay in BEFORE incrementing, so a stored record
+        # always reads "counts as of ts" and a quiet period cannot let old
+        # dismissals re-inflate the moment a new one lands.
+        rec["accepted"], rec["dismissed"] = self._decayed(rec)
         rec["accepted" if accepted else "dismissed"] += 1
         rec["name"] = name
+        rec["ts"] = time.time()
         self._save()
 
+    @staticmethod
+    def _decayed(rec: dict) -> tuple[int, int]:
+        """Counts discounted for how long ago they were last touched.
+
+        Records written before this field existed carry no `ts` and are read
+        undecayed until their next update — the conservative direction."""
+        acc = int(rec.get("accepted", 0) or 0)
+        dis = int(rec.get("dismissed", 0) or 0)
+        try:
+            age = time.time() - float(rec.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            return acc, dis
+        if not rec.get("ts") or age <= 0:
+            return acc, dis
+        factor = 0.5 ** (age / (TEACHER_HALF_LIFE_DAYS * 86400.0))
+        return round(acc * factor), round(dis * factor)
+
     def _counts(self, uid: str) -> tuple[int, int]:
-        rec = self._d.get(str(uid)) or {}
-        return int(rec.get("accepted", 0)), int(rec.get("dismissed", 0))
+        return self._decayed(self._d.get(str(uid)) or {})
 
     def hard_block(self, uid: str) -> bool:
-        """Persistently bad teachers stop costing adjudicator calls at all."""
+        """Persistently bad teachers stop costing adjudicator calls at all.
+
+        DECAYING, because without it this is an ABSORBING state and that is a
+        bug rather than a policy: `learning.py` consults this gate and returns
+        BEFORE `update()` runs, so `accepted` — whose only writer is that
+        `update()` — can never rise again for a blocked user. Five dismissals
+        during a prompt-tuning session muted someone for the life of the file.
+        A teacher who is still bad keeps refreshing `ts` and stays blocked; a
+        quiet one is eventually let back in to try."""
         acc, dis = self._counts(uid)
         total = acc + dis
         return total >= 5 and acc / total <= 0.1

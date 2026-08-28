@@ -6,26 +6,11 @@ can prove the consumed prefix is unchanged."""
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import hashlib
-import heapq
-import io
-import ipaddress
 import json
 import logging
-import os
-import random
-import re
-import socket
-import time
-from collections import defaultdict, deque
 from datetime import datetime
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
-from urllib.parse import urlencode, urlsplit
 
-import httpx
 
 logger = logging.getLogger("agent")
 

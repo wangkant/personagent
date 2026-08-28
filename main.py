@@ -308,12 +308,33 @@ class ReplayGuard:
                 self._persist()
             return False
         if len(self._seen) >= self.max_entries:
-            # Evicting a still-fresh nonce re-opens its replay window.
+            # Evicting a still-fresh nonce re-opens its replay window, so the
+            # cap is a hard refusal — which means a busy forwarder can hit a
+            # cliff where EVERY gateway event 403s as "replayed", and that is
+            # indistinguishable from a bad token unless it is said out loud.
+            logger.error(
+                "[main] gateway replay guard full (%d nonces live within %ds) "
+                "— rejecting all gateway events until the window drains; "
+                "raise the cap if this is legitimate traffic",
+                len(self._seen), self.ttl_seconds)
             if changed:
                 self._persist()
             return False
+        if len(self._seen) >= self.max_entries * 4 // 5:
+            logger.warning(
+                "[main] gateway replay guard at %d/%d nonces",
+                len(self._seen), self.max_entries)
         self._seen[nonce] = timestamp
-        self._persist()
+        try:
+            self._persist()
+        except Exception:
+            # Un-burn it. The caller is about to get a 500 and retry with the
+            # SAME nonce (correct client behaviour), and a nonce left burned
+            # by a failed write turns one transient disk error — on Windows,
+            # an AV or indexer holding the destination across os.replace —
+            # into a message that can never be delivered at all.
+            self._seen.pop(nonce, None)
+            raise
         return True
 
 
@@ -432,11 +453,29 @@ async def _read_body_limited(request: Request, limit: int) -> bytes:
     return bytes(body)
 
 
+def _on_bg_task_done(task: asyncio.Task) -> None:
+    """Discard the strong ref AND retrieve the exception.
+
+    `_bg_tasks.discard` alone never touched `.exception()`, so a crash in one
+    of the lifespan one-shots (`probe_models`, `bootstrap_tag_all`,
+    `_recheck_then_purge` — the last has no internal guard of its own)
+    surfaced only as a context-free "Task exception was never retrieved" at
+    GC time, if at all. `_safe_handle` already logs its own; this is the same
+    courtesy for everything else that goes through `_spawn`."""
+    _bg_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("[main] background task %s crashed: %s: %s",
+                     task.get_name(), type(exc).__name__, exc, exc_info=exc)
+
+
 def _spawn(coro) -> asyncio.Task:
     """create_task + retain a strong ref until the task finishes."""
     t = asyncio.create_task(coro)
     _bg_tasks.add(t)
-    t.add_done_callback(_bg_tasks.discard)
+    t.add_done_callback(_on_bg_task_done)
     return t
 
 

@@ -160,7 +160,7 @@ async def main(holdout_path: Path, runs: int) -> None:
         print("no judgments to score (all missing or all failed)")
         return
     print(f"confusion matrix (n={total}):")
-    print(f"                  predicted_approved  predicted_rejected")
+    print("                  predicted_approved  predicted_rejected")
     print(f"  actual_approved {tp:>18d}  {fn_:>18d}")
     print(f"  actual_rejected {fp:>18d}  {tn:>18d}")
     accuracy = (tp + tn) / total

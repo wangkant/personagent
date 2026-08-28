@@ -9,24 +9,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import heapq
 import io
 import ipaddress
 import json
 import logging
 import os
-import random
 import re
 import socket
 import ssl
 import time
 import warnings
 import zlib
-from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Optional
 from urllib.parse import urlencode, urlsplit
 
 import httpcore
@@ -1353,7 +1349,7 @@ class ContentIngestion:
         if cache_key in self.image_caption_cache:
             return self.image_caption_cache[cache_key]
         try:
-            async with self._http(timeout=15) as client:
+            async with self._local_http(timeout=15) as client:
                 r = await client.post(
                     f"{self.napcat_api}/ocr_image",
                     json={"image": url},

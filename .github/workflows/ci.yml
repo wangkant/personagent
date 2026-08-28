@@ -36,6 +36,15 @@ jobs:
         run: |
           bash -n start.sh
           test -x start.sh
+      # Dead and undefined names only — not a style gate. The module split
+      # that produced this package copied one import header into six files
+      # and left 114 unused imports behind; F821 is the one that would have
+      # caught a name the split dropped. Re-exports carry an explicit
+      # `# noqa: F401` saying they are API surface.
+      - name: Lint for dead and undefined names
+        run: |
+          python -m pip install "ruff>=0.6,<1"
+          ruff check . --select F401,F811,F821
       - name: Run isolated script suites through pytest
         run: |
           python -m pytest -q

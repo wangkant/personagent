@@ -2,6 +2,12 @@ fastapi>=0.115,<1
 uvicorn[standard]>=0.34,<1
 python-dotenv>=1.0,<2
 httpx>=0.27,<1
+# Direct, not transitive. ingestion.py imports `httpcore._backends.auto` — a
+# PRIVATE module — to pin DNS resolution per hop in safe_fetch_url's SSRF
+# guard. httpx only constrains `httpcore==1.*`, so without a direct pin any
+# 1.x that moves that path breaks `import persona_agent.ingestion`, i.e. the
+# whole agent, at startup.
+httpcore>=1.0,<2
 # Used by the vision pipeline to extract the first frame of a GIF as PNG
 # (most vision endpoints, including Zhipu GLM-4V, reject GIFs directly).
 Pillow>=10,<13

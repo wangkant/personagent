@@ -30,6 +30,9 @@ dependencies = [
     "uvicorn[standard]>=0.34,<1",
     "python-dotenv>=1.0,<2",
     "httpx>=0.27,<1",
+    # Direct: ingestion.py imports the private `httpcore._backends.auto` for
+    # the SSRF guard's per-hop DNS pinning. See requirements.txt.
+    "httpcore>=1.0,<2",
     "Pillow>=10,<13",
     "ddgs>=9,<10",
 ]
@@ -41,6 +44,10 @@ dependencies = [
 # `tools/evolution_benchmark.py --judge anthropic` — so the learning signal and
 # the measurement never share a model.
 judge = ["anthropic>=0.103,<1"]
+# What CI installs on top of the runtime deps. `ruff --select F401,F811,F821`
+# is the gate: the split that produced this package left 114 dead imports
+# behind across six modules, and nothing was watching.
+dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 
 [project.urls]
 Homepage = "https://github.com/wangkant/personagent"

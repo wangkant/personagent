@@ -6,7 +6,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 import time
@@ -28,6 +27,7 @@ from persona_agent.paths import (
     resolve_runtime_lang_file,
     resolve_seed_lang_file,
 )
+from persona_agent.storage import append_jsonl
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 
@@ -59,11 +59,6 @@ def load_jsonl(path: Path) -> list:
 
 def load_examples() -> list:
     return read_jsonl([EXAMPLES_SEED_FILE, EXAMPLES_FILE])
-
-def append_jsonl(path: Path, record: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 def build_system_prompt(examples: list) -> str:
     parts = [

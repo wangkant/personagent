@@ -32,6 +32,12 @@ _failures: list[str] = []
 NOW = 1_800_000_000.0
 
 
+def stamp(seconds: float) -> str:
+    """Epoch -> ISO. Every fixture timestamp derives from NOW through this, so
+    that no test's meaning depends on the day it happens to run."""
+    return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+
+
 def check(name: str, cond: bool, detail: str = "") -> None:
     status = "PASS" if cond else "FAIL"
     print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
@@ -215,9 +221,6 @@ async def test_two_events_with_a_strong_one_promote(tmp: Path) -> None:
 
 def test_expired_counter_evidence_does_not_block_new_corroboration() -> None:
     """A retired disagreement must not veto a fresh, corroborated correction."""
-    def stamp(seconds: float) -> str:
-        return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
-
     common = {
         "lang": "en", "platform": "qq", "conv_id": "g1",
         "persona": "B", "persona_hash": "h", "persona_version": "1",
@@ -753,8 +756,11 @@ def test_corroboration_means_people_not_events() -> None:
     distinct compatible events" single-handedly — and delayed elicitation has
     the agent *solicit* that second event from the same person. Promotion
     therefore counts distinct speakers, with the owner exempt."""
-    ts = "2026-07-25T12:00:00"
-    now = time.time()
+    # Frozen clock: a literal ts judged against a wall-clock now silently
+    # expires once it passes MAX_EVIDENCE_AGE_DAYS, turning this green suite red
+    # on a calendar date rather than on a code change.
+    now = NOW
+    ts = stamp(NOW - 3600)
     scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
                  persona_hash="h", persona_version="v1")
 
