@@ -17,6 +17,7 @@ A preflight that can fail is a preflight nobody runs.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from .paths import ROOT
@@ -38,6 +39,11 @@ TEMPLATE_EXEMPT = frozenset({
     # Set by the process manager / shell rather than by the file, and
     # documented in the deployment notes rather than as a knob.
     "PYTHONUTF8", "PYTHONPATH", "TZ",
+    # A pre-0.1.2 alias kept working for existing deployments and deliberately
+    # not advertised to new ones. `tests/test_http.py` exempts it from the
+    # template scan for the same reason; both lists have to agree or a
+    # deployment that legitimately sets it gets told it is a typo.
+    "ANTHROPIC_PRIVATE_MODEL",
 })
 
 
@@ -53,22 +59,42 @@ class Finding:
         return f"<{self.level} {self.key}: {self.detail}>"
 
     def line(self) -> str:
-        return f"[{self.level:>5}] {self.key}: {self.detail}"
+        # `!r` on the key, because a name that differs only by an invisible
+        # character — a BOM, a stray space — otherwise prints identically to
+        # the real one and the operator reads the report as nonsense.
+        shown = self.key if self.key.isprintable() else repr(self.key)
+        return f"[{self.level:>5}] {shown}: {self.detail}"
 
 
-def _parse(path: Path) -> dict:
-    """Key -> value for one dotenv file; `{}` when it is missing or unreadable.
+def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:
+    """Key -> value for one dotenv file; **None** when it is absent.
+
+    `None` and `{}` are different answers and conflating them was a bug: a
+    missing `.env.example` came back empty, the unknown-key check read that as
+    "the authority lists nothing", and every configured key was reported as a
+    typo. Any layout that ships `.env` without the template — including the
+    multi-persona `AGENT_HOME` arrangement the template itself recommends —
+    got one ERROR per setting, which is how a checker teaches people to ignore
+    it.
 
     Uses python-dotenv's own parser rather than a local one: the agent loads
-    these files through it, so anything this disagrees with the agent about
+    these files through it, so anything this disagreed with the agent about
     would be a second bug wearing the first one's clothes."""
     try:
         if not path.is_file():
-            return {}
+            return None
         from dotenv import dotenv_values
-        return {k: v for k, v in dotenv_values(path).items() if k}
+        values = {k: v for k, v in dotenv_values(path).items() if k}
+        # A BOM survives dotenv and lands on the first key. For the TEMPLATE
+        # that only produces a false "unknown key" report, so strip it. For
+        # `.env` it must NOT be stripped: the agent's own `load_dotenv` does
+        # not strip it either, so the setting genuinely never arrives, and a
+        # preflight that tidied it away would call a broken deployment fine.
+        if strip_bom:
+            values = {k.lstrip("﻿"): v for k, v in values.items()}
+        return values
     except Exception:  # a preflight must not be the thing that breaks
-        return {}
+        return None
 
 
 def check_config(root: Path | None = None, env: dict | None = None) -> list[Finding]:
@@ -78,27 +104,52 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     question is "what did the operator write down" — a value exported in the
     shell is not a typo anyone is hunting for."""
     base = Path(root) if root is not None else ROOT
-    template = _parse(base / ".env.example")
+    template = _parse(base / ".env.example", strip_bom=True)
     configured = _parse(base / ".env") if env is None else dict(env)
+    if configured is None:
+        configured = {}
 
     findings: list[Finding] = []
 
+    bom_keys = [key for key in configured if key.startswith("﻿")]
+    if bom_keys:
+        findings.append(Finding(
+            "ERROR", ".env",
+            "starts with a UTF-8 BOM, so the first setting's name carries it "
+            f"({bom_keys[0]!r}) and never reaches the process — the default is "
+            "used instead, and the file looks correct in every editor. "
+            "Re-save it as UTF-8 without a BOM"))
+
     for key in REQUIRED:
-        if not str(configured.get(key) or "").strip():
+        # `.env` OR the process environment. A container, a systemd unit and a
+        # CI runner all pass configuration in the environment and ship no
+        # `.env` at all — reading only the file told a correctly-running
+        # deployment that every turn would fail.
+        if not (str(configured.get(key) or "").strip()
+                or os.environ.get(key, "").strip()):
             findings.append(Finding(
                 "ERROR", key,
-                "not set — there is no model endpoint to call, so every turn "
-                "will fail"))
+                "not set in .env or the environment — there is no model "
+                "endpoint to call, so every turn will fail"))
 
-    unknown = sorted(
-        key for key in configured
-        if key not in template and key not in TEMPLATE_EXEMPT)
-    for key in unknown:
+    if template is None:
+        # Without the template there is no authority on what a key may be
+        # called, so the typo check is not merely wrong here, it is
+        # unanswerable. Say that once instead of accusing every key.
         findings.append(Finding(
-            "ERROR", key,
-            "is not a setting this project reads. A misspelled key is silent: "
-            "the value is ignored and the default is used instead. Check it "
-            "against .env.example"))
+            "WARN", ".env.example",
+            "is missing, so misspelled settings cannot be detected. Copy it "
+            "from the repository if you want that check"))
+    else:
+        unknown = sorted(
+            key for key in configured
+            if key not in template and key not in TEMPLATE_EXEMPT)
+        for key in unknown:
+            findings.append(Finding(
+                "ERROR", key,
+                "is not a setting this project reads. A misspelled key is "
+                "silent: the value is ignored and the default is used "
+                "instead. Check it against .env.example"))
 
     for key, why in WANTED.items():
         if key in configured and not str(configured.get(key) or "").strip():
@@ -111,10 +162,25 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             f"points at {home!r}, which is not a directory — every runtime "
             f"path is resolved under it"))
 
-    if str(configured.get("BOT_QQ") or "").strip() and "QQ_GROUPS" not in configured:
+    bot_qq = str(configured.get("BOT_QQ") or "").strip()
+    if bot_qq and "QQ_GROUPS" not in configured:
         findings.append(Finding(
             "INFO", "QQ_GROUPS",
             "is unset, so the bot listens in every group it is a member of"))
+    # BOT_QQ is silently load-bearing: `_is_at_me` returns False the moment it
+    # is empty, so a deployment that is otherwise complete starts cleanly,
+    # logs nothing, and never answers a mention. Exactly the failure class
+    # this module exists for — and only a warning, because `try_chat.py`
+    # supplies its own placeholder and needs none of this.
+    looks_like_qq = any(str(configured.get(key) or "").strip()
+                        for key in ("NAPCAT_API", "QQ_GROUPS", "OWNER_QQ",
+                                    "PRIVATE_ALLOWED_QQS"))
+    if looks_like_qq and not bot_qq:
+        findings.append(Finding(
+            "WARN", "BOT_QQ",
+            "is empty while the rest of the QQ configuration is set — the bot "
+            "cannot recognise being @-mentioned and will never reply in a "
+            "group, without logging anything"))
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))

@@ -271,7 +271,40 @@ def cmd_show_prompt():
     print(system)
     print(f"{dim('--- end (len=' + str(len(system)) + ') ---')}\n")
 
+USAGE = """\
+usage: python tools/prompt_lab.py
+
+Interactive prompt-tuning lab. Runs the fixtures in tools/fixtures[.<lang>].jsonl
+through a persona prompt, lets you rate each reply, and banks the ones you
+approve into the active-language example pool.
+
+Generates through the Anthropic SDK on purpose — a different vendor from the
+one the agent runs on, so the tuning signal and the thing being tuned are not
+the same model. Needs:
+
+  pip install -e ".[judge]"
+  ANTHROPIC_API_KEY   in .env
+  PROMPT_LAB_MODEL    optional, default claude-sonnet-5
+
+Takes no flags; everything is chosen from the menu.
+"""
+
+
 async def main():
+    # The same argv front door `quickstart.py` and `tools/healthcheck.py`
+    # already carry, and this file was missed when they got it: `--help` fell
+    # through to the interactive menu and then died on `input()` with an
+    # unhandled EOFError traceback on any non-tty.
+    argv = sys.argv[1:]
+    if argv:
+        print(USAGE)
+        return 0 if {"-h", "--help"} & set(argv) else 2
+    if not ANTHROPIC_API_KEY:
+        # Up front, not on the first generation: the menu used to render in
+        # full and only fail once you picked an option that calls the model.
+        print(USAGE)
+        sys.exit("prompt_lab needs ANTHROPIC_API_KEY in .env")
+
     fixtures = load_jsonl(FIXTURES_FILE)
     examples = load_examples()
 
@@ -318,6 +351,8 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
+        sys.exit(asyncio.run(main()) or 0)
+    except (KeyboardInterrupt, EOFError):
+        # EOFError as well as KeyboardInterrupt: a piped or redirected stdin
+        # reaches the menu's `input()` and used to produce a traceback.
         print("\nbye")

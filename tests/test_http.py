@@ -325,8 +325,17 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     naming rather than pretending away."""
     import ast
 
+    # `tools/` AND the root entry points, not just the package. Scanning only
+    # `main.py` and `persona_agent/` left nine real settings undocumented —
+    # `ANTHROPIC_API_KEY` and `PROMPT_LAB_MODEL` among them, which
+    # `tools/prompt_lab.py` explicitly tells the operator to put in `.env` —
+    # and the preflight then reported every one of them as a misspelling.
     root = Path(__file__).resolve().parents[1]
-    sources = [root / "main.py", *sorted((root / "persona_agent").glob("*.py"))]
+    sources = [
+        root / "main.py", root / "try_chat.py", root / "quickstart.py",
+        *sorted((root / "persona_agent").glob("*.py")),
+        *sorted((root / "tools").glob("*.py")),
+    ]
 
     def is_env_read(call: ast.Call) -> bool:
         fn = call.func

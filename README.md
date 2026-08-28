@@ -112,7 +112,7 @@ OneBot client ──events──▶ personagent :8080   (HOST / PORT)
 personagent   ──actions─▶ OneBot client :3000 (NAPCAT_API)
 ```
 
-Keep the default loopback binding when both services run on one machine. If you expose the webhook to another host, set `HOST=0.0.0.0`, configure `WEBHOOK_SECRET`, and protect the network boundary. `launch.vbs` is available for a local Windows deployment after its three path/account values are configured.
+Keep the default loopback binding when both services run on one machine. If you expose the webhook to another host, set `HOST=0.0.0.0` and configure **both** `WEBHOOK_SECRET` and `GATEWAY_TOKEN`, then protect the network boundary. Both are required even for a QQ-only deployment, and startup refuses a non-loopback `HOST` without them: `/webhook/gateway` is mounted whether or not you use it, so binding a public interface without a gateway token would leave it open. `launch.vbs` is available for a local Windows deployment after its three path/account values are configured.
 
 ### Other platforms through AstrBot
 
