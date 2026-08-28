@@ -10,6 +10,7 @@ import asyncio
 import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -452,6 +453,66 @@ async def integration_retry_and_elicit(tmp: Path) -> None:
           "dismissed" in a4.teacher_stats.history_line("99", "en"))
 
 
+def test_teacher_forgiveness_window(tmp: Path) -> None:
+    """`hard_block` was an ABSORBING state: the gate is consulted before
+    `update()` runs, so `accepted` — whose only writer is that `update()` —
+    could never rise again. Five dismissals during a prompt-tuning session
+    muted someone for the life of the file.
+
+    Forgiveness is keyed on SILENCE, not on a decaying count, and the
+    difference is the whole design. A half-life discounts the total that
+    `hard_block` thresholds on, so it walks the block off almost immediately
+    (measured: 4.56 days for five dismissals) and a teacher pacing one
+    dismissal every five days is never blocked at all, because each one lands
+    on counts the decay has already eaten. A window has neither failure."""
+    path = tmp / "teacher_stats.json"
+    # A record from before `ts` existed, written by an already-blocked teacher.
+    path.write_text(json.dumps({"u1": {"accepted": 0, "dismissed": 5,
+                                       "name": "mallory"}}), encoding="utf-8")
+    stats = reactions.TeacherStats(path)
+    check("teacher: a legacy record is still blocked on load",
+          stats.hard_block("u1"))
+    stamped = json.loads(path.read_text(encoding="utf-8"))["u1"]
+    check("teacher: ...and its clock is stamped, and PERSISTED",
+          isinstance(stamped.get("ts"), (int, float)), repr(stamped))
+    reactions.TeacherStats(path)
+    check("teacher: a restart does not reset that clock",
+          json.loads(path.read_text(encoding="utf-8"))["u1"].get("ts")
+          == stamped.get("ts"))
+
+    real = time.time
+    day = 86400.0
+    try:
+        time.time = lambda: real() + (reactions.TEACHER_FORGIVENESS_DAYS + 1) * day
+        check("teacher: silence past the window forgives",
+              not stats.hard_block("u1"))
+        stats.update("u1", "mallory", accepted=False)
+        rec = json.loads(path.read_text(encoding="utf-8"))["u1"]
+        check("teacher: and the next dismissal starts from zero",
+              (rec["accepted"], rec["dismissed"]) == (0, 1), repr(rec))
+
+        pace = tmp / "pace.json"
+        pace.write_text("{}", encoding="utf-8")
+        paced = reactions.TeacherStats(pace)
+        for offset in range(0, 400, 5):
+            time.time = lambda o=offset: real() + o * day
+            if not paced.hard_block("u2"):
+                paced.update("u2", "slow", accepted=False)
+        time.time = lambda: real() + 400 * day
+        check("teacher: a five-day cadence does not slip the block",
+              paced.hard_block("u2"), repr(paced._d.get("u2")))
+
+        # json.loads accepts a bare NaN, and a NaN timestamp must not raise
+        # out of a gate that runs before every adjudication.
+        nan_path = tmp / "nan.json"
+        nan_path.write_text('{"u3": {"accepted": 2, "dismissed": 9, "ts": NaN}}',
+                            encoding="utf-8")
+        check("teacher: a NaN timestamp degrades instead of raising",
+              reactions.TeacherStats(nan_path).hard_block("u3") in (True, False))
+    finally:
+        time.time = real
+
+
 def main() -> int:
     test_pending_replies()
     test_pending_replies_survive_restart_bounded()
@@ -459,6 +520,8 @@ def main() -> int:
     test_retry_and_elicited()
     with tempfile.TemporaryDirectory() as td:
         test_teacher_stats(Path(td))
+    with tempfile.TemporaryDirectory() as td:
+        test_teacher_forgiveness_window(Path(td))
     with tempfile.TemporaryDirectory() as td:
         asyncio.run(integration_process_reaction(Path(td)))
     with tempfile.TemporaryDirectory() as td:

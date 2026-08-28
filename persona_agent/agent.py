@@ -1612,7 +1612,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if current_sink.get() is not None:
             return ""
         try:
-            async with self._http(timeout=4) as client:
+            async with self._local_http(timeout=4) as client:
                 r = await client.post(
                     f"{self.napcat_api}/get_msg",
                     json={"message_id": int(mid)},

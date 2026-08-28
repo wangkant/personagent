@@ -2235,6 +2235,37 @@ async def regression_web_desc_not_control_plane(tmp: Path) -> None:
           repr(buf_texts))
 
 
+def test_every_napcat_call_goes_through_local_http() -> None:
+    """The bridge is a LOCAL service, and httpx — unlike requests — has no
+    implicit localhost bypass. With an `HTTP_PROXY` in the launching shell,
+    which is the normal state for anyone who needs a proxy to reach a model
+    endpoint at all, every reply, history poll and OCR delegation to
+    127.0.0.1 was relayed through that proxy; restarting it took the bot's
+    outbound chat down with it. `_local_http` is the entry point that turns
+    `trust_env` off.
+
+    ASSERTED AT SOURCE LEVEL, because the alternative is standing up a proxy
+    in CI — and because the property is "every call site", which is exactly
+    the kind of thing a hand-migration gets 4 out of 5 right. It did: the
+    `/get_msg` lookup was missed, and nothing caught it, because the rule
+    lived only in a docstring."""
+    src_root = Path(__file__).resolve().parents[1] / "persona_agent"
+    offenders: list[str] = []
+    for name in ("agent.py", "transport.py", "ingestion.py"):
+        src = (src_root / name).read_text(encoding="utf-8")
+        needle = "{self.napcat_api}/"
+        pos = src.find(needle)
+        while pos != -1:
+            head = src[:pos]
+            # `self._http(` is not a substring of `self._local_http(`, so the
+            # later of the two openers is the one this call actually used.
+            if head.rfind("self._http(") > head.rfind("self._local_http("):
+                offenders.append(f"{name}:{head.count(chr(10)) + 1}")
+            pos = src.find(needle, pos + 1)
+    check("every NapCat call site goes through _local_http",
+          not offenders, ", ".join(offenders))
+
+
 async def regression_declared_style_reaches_the_private_prompt(tmp: Path) -> None:
     """A `[style]` block a persona declares must actually change the DM.
 
@@ -2351,6 +2382,7 @@ def main() -> int:
     test_extract_core_update_no_persist()
     test_memory_candidates_reject_instructions()
     test_sticker_tagger_uses_judge_model()
+    test_every_napcat_call_goes_through_local_http()
     with tempfile.TemporaryDirectory() as d:
         test_runtime_learning_paths(Path(d))
     asyncio.run(main_async())

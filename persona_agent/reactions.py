@@ -443,10 +443,18 @@ def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
     }
 
 
-# Reputation half-life, in days. Long enough that a genuinely adversarial
-# teacher stays blocked across a normal run, short enough that a bad week is
-# not a life sentence.
-TEACHER_HALF_LIFE_DAYS = 30.0
+# How long a record has to go QUIET before it starts over, in days.
+#
+# A window, not a half-life, and the difference is the whole point. Decaying
+# the counts continuously sounds gentler and behaves worse: the gate fires on
+# `total >= 5`, so discounting the total walks it back under the threshold
+# almost immediately — a fresh block measured 4.56 days, and a teacher
+# dismissed once every five days was never blocked at all, because each
+# dismissal landed on counts the decay had already eaten. Forgiveness keyed on
+# SILENCE has neither failure: someone still teaching keeps refreshing `ts`
+# and stays blocked for as long as they keep it up, and someone who stops is
+# clear a month later.
+TEACHER_FORGIVENESS_DAYS = 30.0
 
 
 class TeacherStats:
@@ -466,37 +474,51 @@ class TeacherStats:
                     self._d = loaded
         except (OSError, json.JSONDecodeError):
             self._d = {}
+        # Stamp records written before `ts` existed, and PERSIST the stamp.
+        # `hard_block` is consulted before `update()` runs, so a blocked
+        # teacher never writes one on their own — without this they would sit
+        # outside the forgiveness window forever, which is the absorbing state
+        # this whole mechanism exists to end. Persisted rather than stamped in
+        # memory because a bot that restarts weekly would otherwise reset the
+        # clock every start and never forgive anyone.
+        stamped = False
+        now = time.time()
+        for rec in self._d.values():
+            if isinstance(rec, dict) and not isinstance(rec.get("ts"), (int, float)):
+                rec["ts"] = now
+                stamped = True
+        if stamped:
+            self._save()
 
     def update(self, uid: str, name: str, accepted: bool) -> None:
         rec = self._d.setdefault(str(uid), {"accepted": 0, "dismissed": 0})
-        # Fold the elapsed decay in BEFORE incrementing, so a stored record
-        # always reads "counts as of ts" and a quiet period cannot let old
-        # dismissals re-inflate the moment a new one lands.
-        rec["accepted"], rec["dismissed"] = self._decayed(rec)
+        # Read THROUGH the window before incrementing: a teacher who went
+        # quiet long enough starts from zero rather than from where they left
+        # off, and one who did not keeps their record intact.
+        rec["accepted"], rec["dismissed"] = self._counts(uid)
         rec["accepted" if accepted else "dismissed"] += 1
         rec["name"] = name
         rec["ts"] = time.time()
         self._save()
 
     @staticmethod
-    def _decayed(rec: dict) -> tuple[int, int]:
-        """Counts discounted for how long ago they were last touched.
-
-        Records written before this field existed carry no `ts` and are read
-        undecayed until their next update — the conservative direction."""
-        acc = int(rec.get("accepted", 0) or 0)
-        dis = int(rec.get("dismissed", 0) or 0)
+    def _is_forgiven(rec: dict) -> bool:
+        """Has this record been quiet long enough to start over."""
         try:
             age = time.time() - float(rec.get("ts") or 0.0)
         except (TypeError, ValueError):
-            return acc, dis
-        if not rec.get("ts") or age <= 0:
-            return acc, dis
-        factor = 0.5 ** (age / (TEACHER_HALF_LIFE_DAYS * 86400.0))
-        return round(acc * factor), round(dis * factor)
+            return False
+        # A NaN `ts` — json.loads accepts a bare NaN — compares False against
+        # everything, which is the safe answer rather than an exception out of
+        # the gate.
+        return age > TEACHER_FORGIVENESS_DAYS * 86400.0
 
     def _counts(self, uid: str) -> tuple[int, int]:
-        return self._decayed(self._d.get(str(uid)) or {})
+        rec = self._d.get(str(uid)) or {}
+        if self._is_forgiven(rec):
+            return 0, 0
+        return (int(rec.get("accepted", 0) or 0),
+                int(rec.get("dismissed", 0) or 0))
 
     def hard_block(self, uid: str) -> bool:
         """Persistently bad teachers stop costing adjudicator calls at all.
