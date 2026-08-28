@@ -3238,14 +3238,19 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # Seed + legacy/hand-approved rows, plus the promoted-candidate views.
         # Concatenated only when a view is non-empty: on a fresh deployment
         # that is two list copies per turn saved on the hot path.
-        current_scope = {
+        # Normalised, because the rows being compared against were written
+        # through the same table: the ledger stores a TRUNCATED scope and this
+        # side used to build a raw one, so any field over its limit — a
+        # `persona_version` of 45 characters, say — made every promoted row
+        # unretrievable on every turn, with nothing logged anywhere.
+        current_scope = evidence_mod.normalize_scope({
             "lang": self.agent_lang,
             "platform": self._conv_platform(conv_id) if conv_id else "",
-            "conv_id": str(conv_id or ""),
-            "persona": self.bot_name or "",
+            "conv_id": conv_id,
+            "persona": self.bot_name,
             "persona_hash": self.persona_hash,
             "persona_version": self.persona_version,
-        }
+        })
 
         def _authorized_view(rows: list) -> list:
             authorized = []

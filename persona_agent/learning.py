@@ -50,8 +50,18 @@ class Learning:
         # Native QQ ids are not required to be numeric in tests/adapters; the
         # absence of a namespace separator is the reliable signal. QQ private
         # keys use the explicit ``dm:<uid>`` prefix.
-        if ":" not in value or value.startswith("dm:"):
+        if ":" not in value:
             return "qq"
+        if value.startswith("dm:"):
+            # `dm:` is the DM marker, not the platform. A QQ DM is `dm:<uid>`
+            # and is "qq"; a gateway DM is `dm:<platform>:<id>` and is that
+            # platform. Reading the whole prefix as QQ stamped every Telegram
+            # and Discord DM `platform="qq"`, and with
+            # PROMOTE_REQUIRE_SAME_CONVERSATION=false `scope_compatible` then
+            # returned True between a Telegram DM and a QQ DM — the exact
+            # combination the sentence above says never happens.
+            rest = value[3:]
+            return rest.split(":", 1)[0] if ":" in rest else "qq"
         return value.split(":", 1)[0] or "qq"
 
     def _scope_fields(self, conv_id: str) -> dict:
@@ -183,8 +193,17 @@ class Learning:
             return promotion.Decision(False, "unknown candidate")
         log = self.evidence_log
         reply = str(cand.get("reply") or "").strip()
+        # Events about the REWRITE are related too. `counter_evidence` now
+        # treats a rejection of the `better` text as arguing against the pair,
+        # and this list is where it looks — filtering to the original reply
+        # alone made that branch unreachable and left the disagreement
+        # invisible to promotion.
+        wanted = {reply}
+        rewrite = str(cand.get("better") or "").strip()
+        if rewrite:
+            wanted.add(rewrite)
         related = [e for e in log.all()
-                   if str(e.get("reply") or "").strip() == reply]
+                   if str(e.get("reply") or "").strip() in wanted]
         return promotion.decide(
             cand,
             linked_events=log.many(cand.get("evidence") or []),

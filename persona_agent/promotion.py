@@ -233,7 +233,8 @@ def supports_candidate(event: dict, cand: dict, *,
     return True
 
 
-def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY) -> list[str]:
+def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
+                   related_events=()) -> list[str]:
     """Candidate ids that propose something incompatible with `cand`.
 
     Two proposals conflict when they rewrite the same reply, in compatible
@@ -256,8 +257,46 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY) -> lis
                                 require_same_conversation=policy.require_same_conversation):
             continue
         if str(other.get("better") or "") != str(cand.get("better") or ""):
+            # `related_events` is only consulted when we have it: with no
+            # events to read, the conflict stands, because the alternative is
+            # a veto silently disappearing whenever a caller omits them.
+            if related_events and _rewrite_is_unwitnessed(other, related_events):
+                continue
             out.append(other.get("candidate_id", ""))
     return [cid for cid in out if cid]
+
+
+# The two event kinds nobody witnessed: the agent scoring itself, and the
+# agent diagnosing itself. Neither is a person disagreeing with anything.
+_UNWITNESSED_KINDS = (evidence.KIND_SELF_REVIEW, evidence.KIND_SELF_EVAL)
+
+
+def _rewrite_is_unwitnessed(cand: dict, events) -> bool:
+    """True when no PERSON has argued for this candidate's rewrite.
+
+    The evolution loop proposes `X -> Y` off a single self-review, and such a
+    candidate can never clear `min_strong` — a TYPE_PAIR is auto-promotable
+    only when its `better` was authored by a strong event, i.e. by a user's
+    correction or by the bot's own accepted retry, and an LLM-authored `Y`
+    matches one only by coincidence.
+
+    So before this check, an unpromotable proposal still held a VETO: the
+    user's real correction of the same reply became "a conflicting candidate
+    exists" and both sat in `proposed` forever, blocking each other, with the
+    view empty and a human required to break the tie. Measured — control run
+    `states: ['promoted']`, with an evolution proposal present
+    `states: ['proposed', 'proposed']`.
+
+    A proposal nobody witnessed does not get to outrank one somebody made."""
+    better = str(cand.get("better") or "").strip()
+    if not better:
+        return False
+    for ev in events or ():
+        if ev.get("kind") in _UNWITNESSED_KINDS:
+            continue
+        if str((ev.get("adjudication") or {}).get("better") or "").strip() == better:
+            return False
+    return True
 
 
 def counter_evidence(cand: dict, events, *, now: float = 0.0,
@@ -266,18 +305,29 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
     else laughed at, a laugh at a reply somebody else corrected."""
     ctype = str(cand.get("type") or "")
     reply = str(cand.get("reply") or "")
+    better = str(cand.get("better") or "").strip()
     scope = cand.get("scope") or {}
     max_age = policy.max_evidence_age_days * 86400.0
     out = []
     for ev in events or ():
         if now and max_age and now - epoch(ev.get("ts")) > max_age:
             continue
-        if str(ev.get("reply") or "") != reply:
+        ev_reply = str(ev.get("reply") or "")
+        about_reply = ev_reply == reply
+        # A rejection of the REWRITE argues against the pair as directly as a
+        # laugh at the reply it would replace. Only rollback covered this, and
+        # only for candidates already promoted, so a pair could be rejected
+        # while `proposed` and then promoted anyway on a later event about the
+        # original — teaching the text the user had just refused.
+        about_rewrite = (ctype == candidates.TYPE_PAIR and better
+                         and ev_reply.strip() == better)
+        if not (about_reply or about_rewrite):
             continue
         if not scope_compatible(candidates.scope_from_event(ev), scope,
                                 require_same_conversation=policy.require_same_conversation):
             continue
-        if evidence.opposes(ev, ctype):
+        if (evidence.opposes(ev, ctype) if about_reply
+                else evidence.opposes_rewrite(ev)):
             out.append(ev.get("event_id", ""))
     return [eid for eid in out if eid]
 
@@ -319,7 +369,8 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     if against:
         return Decision(False, "compatible evidence disagrees — left for review",
                         len(supporting), len(strong), ",".join(against[:3]))
-    conflicting = find_conflicts(cand, peers, policy=policy)
+    conflicting = find_conflicts(cand, peers, policy=policy,
+                                 related_events=related_events)
     if conflicting:
         return Decision(False, "a conflicting candidate exists — left for review",
                         len(supporting), len(strong), ",".join(conflicting[:3]))

@@ -834,6 +834,137 @@ def test_moving_on_is_not_acceptance() -> None:
           moved_on["strength"] != evidence.STRONG, moved_on["strength"])
 
 
+def test_an_unwitnessed_proposal_does_not_veto_a_real_correction() -> None:
+    """The evolution loop could block the user it exists to serve.
+
+    `_evolve_tick` proposes `X -> Y` off a single self-review. Such a
+    candidate can never clear `min_strong` — a pair is auto-promotable only
+    when its `better` was authored by a strong event, i.e. a user's correction
+    or the bot's accepted retry, and an LLM-authored rewrite matches one only
+    by coincidence. So it sat in `proposed` forever, which would be harmless
+    except that `find_conflicts` gave it a VETO: the user's real correction of
+    the same reply became "a conflicting candidate exists" and both proposals
+    blocked each other permanently, with the view empty.
+
+    The guardrails matter as much as the fix, so all four are asserted: the
+    unwitnessed proposal loses its veto, it does NOT thereby gain authority of
+    its own, and two REAL users disagreeing still block each other exactly as
+    before."""
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    reply = "just restart it lol"
+    user_fix, llm_fix = "check the logs first", "eh just look at the logs"
+
+    def correction(speaker: str, better: str, age: float) -> dict:
+        return evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=stamp(NOW - age), **scope,
+            speaker_id=speaker, recipient_id=speaker, reply=reply,
+            reaction_type="correction",
+            adjudication={"accept": True, "better": better, "mode": "called"})
+
+    self_review = evidence.make_event(
+        kind=evidence.KIND_SELF_REVIEW, ts=stamp(NOW - 100), **scope,
+        reply=reply, directed=False, direction="self",
+        adjudication={"accept": True, "better": llm_fix, "mode": "called"})
+
+    def pair(better: str) -> dict:
+        return candidates.make_candidate(
+            ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+            evidence=[], payload={"reply": reply, "better": better,
+                                  "mode": "called"})
+
+    user_cand, evo_cand = pair(user_fix), pair(llm_fix)
+    linked = [correction("alice", user_fix, 60), correction("bob", user_fix, 20)]
+
+    control = promotion.decide(user_cand, linked_events=linked,
+                               related_events=linked, peers=[user_cand],
+                               now=NOW)
+    check("veto: the correction promotes with no peer in the way",
+          control.promote is True, control.reason)
+
+    with_evo = promotion.decide(user_cand, linked_events=linked,
+                                related_events=linked + [self_review],
+                                peers=[user_cand, evo_cand], now=NOW)
+    check("veto: an unwitnessed proposal no longer blocks it",
+          with_evo.promote is True, with_evo.reason)
+
+    evo = promotion.decide(evo_cand, linked_events=[self_review],
+                           related_events=linked + [self_review],
+                           peers=[user_cand, evo_cand], now=NOW)
+    check("veto: ...and does not gain authority of its own",
+          evo.promote is False, evo.reason)
+
+    rival = pair("restart the service instead")
+    rival_ev = [correction("carol", "restart the service instead", 30)]
+    two_users = promotion.decide(user_cand, linked_events=linked,
+                                 related_events=linked + rival_ev,
+                                 peers=[user_cand, rival], now=NOW)
+    check("veto: two real users proposing different rewrites still conflict",
+          two_users.promote is False and "conflicting" in two_users.reason,
+          two_users.reason)
+
+
+def test_a_rejected_rewrite_is_not_promoted_later() -> None:
+    """Rejecting the fix has to count against the pair that proposes it.
+
+    `_rollback_promoted_for` already withdrew a PROMOTED pair whose `better`
+    the user rejected — its docstring says so, and means it. But a pair still
+    sitting in `proposed` was untouched, and `counter_evidence` only ever
+    looked at events about the reply being REPLACED, never about the
+    replacement. So: user corrects X to Y and the pair is proposed on one
+    strong event; the bot later says Y and the user rejects it outright;
+    nothing happens; a second ordinary event about X arrives and the pair
+    promotes, teaching Y — the exact text the user refused — into every
+    subsequent prompt.
+
+    Two changes, and both are needed: `counter_evidence` learned the
+    question, and `_decide_promotion` had to widen `related_events` to
+    include events about the rewrite, or the new branch would never have seen
+    one. The control below is what makes this test mean anything — without
+    it, "did not promote" is satisfied by any regression at all."""
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    reply, rewrite = "just restart it lol", "check the logs first"
+
+    def correction(speaker: str, age: float) -> dict:
+        return evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=stamp(NOW - age), **scope,
+            speaker_id=speaker, recipient_id=speaker, reply=reply,
+            reaction_type="correction",
+            adjudication={"accept": True, "better": rewrite, "mode": "called"})
+
+    rejects_the_fix = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW - 10), **scope,
+        speaker_id="alice", recipient_id="alice", reply=rewrite,
+        reaction_type="rejection",
+        adjudication={"accept": True, "mode": "called"})
+
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+        evidence=[], payload={"reply": reply, "better": rewrite,
+                              "mode": "called"})
+    linked = [correction("alice", 60), correction("bob", 20)]
+
+    control = promotion.decide(cand, linked_events=linked,
+                               related_events=linked, peers=[], now=NOW)
+    check("rewrite: the pair promotes when nobody rejected the fix",
+          control.promote is True, control.reason)
+
+    # `related` exactly as `_decide_promotion` now builds it.
+    wanted = {reply, rewrite}
+    related = [e for e in linked + [rejects_the_fix]
+               if str(e.get("reply") or "").strip() in wanted]
+    check("rewrite: an event about the REWRITE is related to the pair",
+          rejects_the_fix in related)
+    check("rewrite: rejecting the fix is counter-evidence",
+          promotion.counter_evidence(cand, related, now=NOW) != [])
+
+    after = promotion.decide(cand, linked_events=linked,
+                             related_events=related, peers=[], now=NOW)
+    check("rewrite: and the pair is then left for review, not promoted",
+          after.promote is False and "disagrees" in after.reason, after.reason)
+
+
 def test_stale_evidence_is_refused() -> None:
     """The rule at the centre of the four-day outage, and it had no test.
 
@@ -1024,6 +1155,8 @@ def main() -> int:
         test_corroboration_means_people_not_events()
         test_moving_on_is_not_acceptance()
         test_stale_evidence_is_refused()
+        test_a_rejected_rewrite_is_not_promoted_later()
+        test_an_unwitnessed_proposal_does_not_veto_a_real_correction()
         test_a_positive_example_waits_for_a_person_and_says_so()
 
     after = sorted(p.name for p in real.glob("*")) if real.exists() else []

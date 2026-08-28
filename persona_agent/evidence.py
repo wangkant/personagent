@@ -171,6 +171,41 @@ def classify_strength(event: dict) -> str:
     return WEAK
 
 
+# The six fields promotion compares, and the length each is STORED at. One
+# table, because the producer and the comparator have to agree and they live
+# in different modules: `make_event` writes through it, and
+# `agent._examples_for_prompt` reads a live scope through `normalize_scope`
+# before comparing. They did not agree, and the failure was silent — see
+# `normalize_scope`.
+SCOPE_LIMITS = {
+    "lang": 16,
+    "platform": 32,
+    "conv_id": 128,
+    "persona": 64,
+    "persona_hash": 64,
+    "persona_version": 32,
+}
+
+
+def normalize_scope(scope: dict) -> dict:
+    """A live scope, as the ledger would have stored it.
+
+    `_authorized_view` requires all six fields to match exactly, and the
+    ledger holds TRUNCATED values while retrieval built its side from the raw
+    configuration. So `PERSONA_VERSION=release-2026-08-28-persona-rewrite-b7f3`
+    (45 characters) was written as 32 and compared against 45: candidates
+    promoted normally, the view file was written normally, `candidates_admin
+    list --state promoted` showed them, and every single row was dropped on
+    every turn. Nothing logged anything. The learning loop looked healthy and
+    was inert.
+
+    Any field over its limit is a silent total failure of retrieval, which is
+    why this is a shared function and not a comment asking the next caller to
+    remember."""
+    return {key: _text(scope.get(key), limit)
+            for key, limit in SCOPE_LIMITS.items()}
+
+
 def _same_person(event: dict) -> bool:
     """Is the speaker the person the reply was aimed at."""
     recipient = _text(event.get("recipient_id"), 64)
@@ -214,12 +249,13 @@ def make_event(
         "event_id": "",
         "ts": _text(ts, 32),
         "kind": kind if kind in KINDS else KIND_REACTION,
-        "lang": _text(lang, 16),
-        "platform": _text(platform, 32),
-        "conv_id": _text(conv_id, 128),
-        "persona": _text(persona, 64),
-        "persona_hash": _text(persona_hash, 64),
-        "persona_version": _text(persona_version, 32),
+        # Through SCOPE_LIMITS, so the length retrieval compares at cannot
+        # drift from the length this writes at.
+        **normalize_scope({
+            "lang": lang, "platform": platform, "conv_id": conv_id,
+            "persona": persona, "persona_hash": persona_hash,
+            "persona_version": persona_version,
+        }),
         "speaker_id": _text(speaker_id, 64),
         "speaker_name": _text(speaker_name, 64),
         "recipient_id": _text(recipient_id, 64),
@@ -306,6 +342,24 @@ def can_be_strong(candidate_type: str) -> bool:
     threshold you could reach by waiting, and no amount of waiting reaches it.
     """
     return candidate_type in STRONG_CAPABLE_TYPES
+
+
+def opposes_rewrite(event: dict) -> bool:
+    """True when this event argues against a pair's PROPOSED replacement.
+
+    `opposes` below asks about the reply a candidate would replace. This asks
+    about the text it would replace it WITH, which is a different question and
+    had no answer: a user rejecting or correcting the bot's `better` text is
+    saying the fix itself is wrong.
+
+    Without it, a pair still sitting in `proposed` when its rewrite was
+    rejected could be promoted afterwards by an unrelated second event about
+    the original — and go on to teach the exact text the user refused.
+    `_rollback_promoted_for` covered only candidates that were already
+    PROMOTED, so the window between proposal and promotion was open."""
+    if not (event.get("adjudication") or {}).get("accept"):
+        return False
+    return event.get("reaction_type") in ("rejection", "correction")
 
 
 def opposes(event: dict, candidate_type: str) -> bool:
