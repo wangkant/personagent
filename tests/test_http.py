@@ -378,6 +378,88 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
           "; ".join(missing))
 
 
+def test_preflight_reports_the_right_deployments() -> None:
+    """134 lines wired into `lifespan` had no behavioural test at all.
+
+    The thing it has to get right is not the true positives — those are easy —
+    but the FALSE ones. A checker that fires at a working deployment teaches
+    the operator to skip its output, and then the real report goes unread too.
+    Four of these were live: settings the shipped tools read, a container
+    passing config in the environment, a persona home with no template, and a
+    BOM on the template."""
+    from persona_agent import preflight
+
+    def levels(**kwargs):
+        return {(f.level, f.key) for f in preflight.check_config(**kwargs)}
+
+    # --- must stay quiet ---------------------------------------------------
+    check("preflight: a minimal working config is silent",
+          not levels(env={"DEEPSEEK_API_KEY": "sk-x"}))
+    check("preflight: settings the offline tools read are not typos",
+          not levels(env={"DEEPSEEK_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
+                          "PROMPT_LAB_MODEL": "m", "REVIEWER_MODEL": "r",
+                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY": "1",
+                          "ANTHROPIC_PRIVATE_MODEL": "p"}))
+    check("preflight: proxy variables are not typos",
+          not levels(env={"DEEPSEEK_API_KEY": "sk-x", "HTTP_PROXY": "p",
+                          "HTTPS_PROXY": "p", "NO_PROXY": "localhost"}))
+
+    import os as _os
+    _os.environ["DEEPSEEK_API_KEY"] = "sk-from-the-environment"
+    try:
+        # A container, a systemd unit and a CI runner all configure this way
+        # and ship no `.env`. Reading only the file told them every turn
+        # would fail while they answered correctly.
+        check("preflight: configuration in the environment counts as set",
+              not levels(env={}))
+    finally:
+        del _os.environ["DEEPSEEK_API_KEY"]
+
+    # --- must still fire ---------------------------------------------------
+    check("preflight: a missing required setting is an error",
+          ("ERROR", "DEEPSEEK_API_KEY") in levels(env={}))
+    check("preflight: a misspelling is named as one",
+          ("ERROR", "DEEPSEK_API_KEY") in levels(env={"DEEPSEK_API_KEY": "x"}))
+    check("preflight: an empty BOT_QQ on a QQ config is a warning",
+          ("WARN", "BOT_QQ") in levels(env={
+              "DEEPSEEK_API_KEY": "x", "NAPCAT_API": "http://127.0.0.1:3000"}))
+
+    # --- and it must never raise, which is its own docstring's promise -----
+    for hostile in ({"AGENT_HOME": "~nosuchuser/x"}, {"AGENT_HOME": "\x00"},
+                    {"": "x"}, {"DEEPSEEK_API_KEY": None}):
+        try:
+            preflight.check_config(env=hostile)
+            raised = ""
+        except Exception as exc:  # noqa: BLE001 - the point is that none escape
+            raised = f"{type(exc).__name__}: {exc}"
+        check(f"preflight: does not raise on {hostile!r}", not raised, raised)
+
+    with tempfile.TemporaryDirectory() as d:
+        home = Path(d)
+        (home / ".env").write_text("DEEPSEEK_API_KEY=x\nBOT_NAME=Mira\n",
+                                   encoding="utf-8")
+        # The multi-persona layout `.env.example` itself recommends: a home
+        # with its own `.env` and no template. This used to report EVERY
+        # configured key as unknown, including `AGENT_HOME`, by the code that
+        # reads `AGENT_HOME`.
+        found = levels(root=home)
+        check("preflight: a missing template warns once, it does not accuse",
+              found == {("WARN", ".env.example")}, repr(found))
+
+        # A BOM on `.env` is a TRUE positive — dotenv leaves it on the first
+        # key, so the setting never reaches the process — and must survive.
+        (home / ".env.example").write_text("DEEPSEEK_API_KEY=\n",
+                                           encoding="utf-8")
+        (home / ".env").write_bytes(b"\xef\xbb\xbfDEEPSEEK_API_KEY=x\n")
+        check("preflight: a BOM on .env is reported as a BOM",
+              ("ERROR", ".env") in levels(root=home))
+        # ...while a BOM on the TEMPLATE must not accuse a real key.
+        (home / ".env.example").write_bytes(b"\xef\xbb\xbfDEEPSEEK_API_KEY=\n")
+        (home / ".env").write_text("DEEPSEEK_API_KEY=x\n", encoding="utf-8")
+        check("preflight: a BOM on the template accuses nobody",
+              not levels(root=home), repr(levels(root=home)))
+
+
 def test_gateway_envelope_refuses_a_bad_signature() -> None:
     """The signature is what binds the BODY to the token. Nothing tested it.
 
@@ -558,6 +640,7 @@ async def main_async() -> None:
     await test_asgi_webhook_auth_and_schema()
     test_gateway_envelope_rejects_replay_and_stale_requests()
     test_gateway_envelope_refuses_a_bad_signature()
+    test_preflight_reports_the_right_deployments()
     test_every_setting_the_code_reads_is_in_the_template()
     test_event_schema_requires_stable_message_ids()
     test_startup_view_rebuild_can_fail_closed()

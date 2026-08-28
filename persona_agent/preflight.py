@@ -39,6 +39,12 @@ TEMPLATE_EXEMPT = frozenset({
     # Set by the process manager / shell rather than by the file, and
     # documented in the deployment notes rather than as a knob.
     "PYTHONUTF8", "PYTHONPATH", "TZ",
+    # Proxy configuration. `load_dotenv` puts these in `os.environ` and httpx
+    # honours them — the suite has a whole test built around an `HTTP_PROXY`
+    # in the launching shell — so reporting them as typos was telling an
+    # operator their working proxy setting was being ignored.
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
     # A pre-0.1.2 alias kept working for existing deployments and deliberately
     # not advertised to new ones. `tests/test_http.py` exempts it from the
     # template scan for the same reason; both lists have to agree or a
@@ -156,11 +162,26 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             findings.append(Finding("WARN", key, f"is empty — {why}"))
 
     home = str(configured.get("AGENT_HOME") or "").strip()
-    if home and not Path(home).expanduser().is_dir():
-        findings.append(Finding(
-            "ERROR", "AGENT_HOME",
-            f"points at {home!r}, which is not a directory — every runtime "
-            f"path is resolved under it"))
+    if home:
+        try:
+            resolved = Path(home).expanduser()
+            bad = not resolved.is_dir()
+        except (OSError, RuntimeError) as exc:
+            # `expanduser()` on `~/...` RAISES when no home directory can be
+            # determined, and this function's contract is that it never does:
+            # `main.lifespan` calls it unguarded, so a `~` in AGENT_HOME on a
+            # host without HOME set took the whole process down at startup.
+            resolved, bad = home, True
+            findings.append(Finding(
+                "ERROR", "AGENT_HOME",
+                f"cannot be resolved ({type(exc).__name__}: {exc}) — every "
+                f"runtime path is resolved under it"))
+        else:
+            if bad:
+                findings.append(Finding(
+                    "ERROR", "AGENT_HOME",
+                    f"points at {resolved}, which is not a directory — every "
+                    f"runtime path is resolved under it"))
 
     bot_qq = str(configured.get("BOT_QQ") or "").strip()
     if bot_qq and "QQ_GROUPS" not in configured:

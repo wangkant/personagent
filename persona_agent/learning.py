@@ -212,22 +212,12 @@ class Learning:
         if cand is None:
             return promotion.Decision(False, "unknown candidate")
         log = self.evidence_log
-        reply = str(cand.get("reply") or "").strip()
-        # Events about the REWRITE are related too. `counter_evidence` now
-        # treats a rejection of the `better` text as arguing against the pair,
-        # and this list is where it looks — filtering to the original reply
-        # alone made that branch unreachable and left the disagreement
-        # invisible to promotion.
-        wanted = {reply}
-        rewrite = str(cand.get("better") or "").strip()
-        if rewrite:
-            wanted.add(rewrite)
-        related = [e for e in log.all()
-                   if str(e.get("reply") or "").strip() in wanted]
         return promotion.decide(
             cand,
             linked_events=log.many(cand.get("evidence") or []),
-            related_events=related,
+            # Built by `promotion`, not here: the operator CLI needs the same
+            # list and a second copy of the filter is what let the two drift.
+            related_events=promotion.related_events(cand, log.all()),
             peers=ledger.all(),
             now=time.time(),
             policy=self.promotion_policy,

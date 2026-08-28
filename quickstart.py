@@ -132,8 +132,20 @@ def write_env(env_path: Path, values: dict) -> None:
     # left an empty .env. `persona_agent.storage.atomic_write_text` does
     # exactly this, but quickstart runs BEFORE the dependencies it installs,
     # which is the whole point of quickstart, so it cannot import it.
+    # `.env.tmp` is in .gitignore and in the test suite's PII watch list. It
+    # holds the same API keys `.env` does, and an interruption between these
+    # two lines — the exact interruption this atomicity exists for — leaves it
+    # on disk for `git add -A` to stage.
     tmp = env_path.with_name(env_path.name + ".tmp")
     tmp.write_text(updated, encoding="utf-8")
+    try:
+        # Carry the original's permissions across, or os.replace hands the
+        # secrets file a fresh umask-default mode and quietly widens a
+        # deliberate `chmod 600`. No-op on Windows.
+        if env_path.exists():
+            os.chmod(tmp, env_path.stat().st_mode & 0o7777)
+    except OSError:
+        pass
     os.replace(tmp, env_path)
 
 

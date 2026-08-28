@@ -86,7 +86,12 @@ def platform_of(key: str) -> str:
         if value.startswith(marker):
             rest = value[len(marker):]
             # `<marker><uid>` is native; `<marker><platform>:<id>` is not.
-            return rest.split(":", 1)[0] if ":" in rest else NATIVE_PLATFORM
+            # The `or NATIVE_PLATFORM` matters for the same reason it does on
+            # the room branch below: an empty prefix (`private::9`) must fall
+            # back rather than return "", which no scope would ever match.
+            if ":" not in rest:
+                return NATIVE_PLATFORM
+            return rest.split(":", 1)[0] or NATIVE_PLATFORM
     return value.split(":", 1)[0] or NATIVE_PLATFORM
 
 

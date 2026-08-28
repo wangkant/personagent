@@ -381,6 +381,16 @@ def opposes_rewrite(event: dict) -> bool:
     PROMOTED, so the window between proposal and promotion was open."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
+    # A PERSON has to have refused it. `promotion._rewrite_is_unwitnessed`
+    # excludes these two kinds forty lines away and for the same reason — a
+    # proposal nobody witnessed does not outrank one somebody made — and the
+    # thesis has to hold on both sides of the file. Without this, a
+    # self-review carrying `reaction_type="rejection"` would veto a
+    # two-strong user correction. Not reachable today; neither `_evolve_tick`
+    # nor `_evaluate_reply` sets a reaction type on a self event, which is
+    # precisely the kind of "not reachable today" that stops being true.
+    if event.get("kind") in (KIND_SELF_REVIEW, KIND_SELF_EVAL):
+        return False
     return event.get("reaction_type") in ("rejection", "correction")
 
 
@@ -388,7 +398,20 @@ def opposes(event: dict, candidate_type: str) -> bool:
     """True when this event argues *against* a candidate of that type."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
+    kind = event.get("kind")
     if candidate_type == "preference_pair":
+        # NOT a retry acceptance, and this one was live. `reaction_type` on
+        # that event is "positive" because the user accepted the RETRY —
+        # the opposite of liking the reply the pair replaces, which is what a
+        # positive reaction means on every other kind. Reading the field
+        # without the kind turned the STRONG event a retry-completion pair is
+        # BUILT FROM into counter-evidence against that same pair:
+        # `supports` and `opposes` both answered True for one event, and
+        # `decide` returned "compatible evidence disagrees". The
+        # zero-user-effort retry loop — a documented feature — could never
+        # promote anything, in any deployment.
+        if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
+            return False
         return event.get("reaction_type") == "positive"
     if candidate_type == "positive_example":
         return event.get("reaction_type") in ("correction", "rejection")

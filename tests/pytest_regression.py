@@ -24,7 +24,8 @@ _ROOT_PII_NAMES = (
     "teacher_stats.json",
     "unknown_stickers.jsonl",
 )
-_ROOT_PII_GLOBS = (".env", ".env.local", ".env.*.local", "*.log", "*.log.*")
+_ROOT_PII_GLOBS = (".env", ".env.tmp", ".env.local", ".env.*.local",
+                   "*.log", "*.log.*")
 _NESTED_PII_PATHS = (
     "logs",
     "tools/dspy_log.md",
@@ -130,8 +131,30 @@ def _state_changes(
     return changes
 
 
-def _restore_created(root: Path, changes: list[str]) -> list[str]:
-    """Delete what the suite created, so the baseline is the baseline again.
+#: Files up to this size are copied into memory before a suite runs, so a
+#: MODIFIED one can be put back. Above it the guard can still detect a change
+#: but not undo it, and says so rather than pretending.
+_BACKUP_MAX_BYTES = 8_000_000
+
+
+def _backup(root: Path, snapshot: dict[str, str]) -> dict[str, bytes]:
+    """Contents of every watched FILE small enough to restore from memory."""
+    saved: dict[str, bytes] = {}
+    for relative, kind in snapshot.items():
+        if not kind.startswith("file:"):
+            continue
+        path = root / relative
+        try:
+            if path.stat().st_size <= _BACKUP_MAX_BYTES:
+                saved[relative] = path.read_bytes()
+        except OSError:
+            continue
+    return saved
+
+
+def _restore_created(root: Path, changes: list[str],
+                     backup: dict[str, bytes]) -> list[str]:
+    """Undo what the suite did, so the baseline is the baseline again.
 
     THE GUARD USED TO FIRE EXACTLY ONCE. It diffs a before/after snapshot, so
     a suite that wrote `memory.json` was caught on the first run — and then
@@ -144,9 +167,10 @@ def _restore_created(root: Path, changes: list[str]) -> list[str]:
     `teacher_stats.json`, which is precisely the state the guard was weakest
     against.
 
-    Only CREATED paths can be undone from a snapshot of hashes; a modified or
-    deleted pre-existing file needs its contents, which are not kept. Those
-    are reported as needing manual repair rather than silently tolerated."""
+    A created path is deleted; a modified or deleted one is written back from
+    the pre-run backup. A file too large to have been backed up can still be
+    DETECTED but not undone, and is reported as needing manual repair rather
+    than silently tolerated."""
     unrepaired: list[str] = []
     created = [c[len("created "):] for c in changes if c.startswith("created ")]
     # Deepest first, so a created directory is empty by the time it is removed.
@@ -159,13 +183,31 @@ def _restore_created(root: Path, changes: list[str]) -> list[str]:
                 path.rmdir()
         except OSError as exc:
             unrepaired.append(f"{relative} ({exc.__class__.__name__})")
-    unrepaired.extend(c for c in changes if not c.startswith("created "))
+    # MODIFIED AND DELETED TOO, from the backup. Restoring only what was
+    # created left the guard firing exactly once in the state it is weakest
+    # against and names as such: a live deployment checkout, where
+    # `memory.json` and friends already exist, so an errant write MODIFIES
+    # rather than creates. Run 1 red, run 2 green, the write still happening —
+    # and the operator's file overwritten on the way past.
+    for change in changes:
+        if change.startswith("created "):
+            continue
+        relative = change.split(" ", 1)[1]
+        content = backup.get(relative)
+        if content is None:
+            unrepaired.append(f"{relative} (no backup: too large or unreadable)")
+            continue
+        try:
+            (root / relative).write_bytes(content)
+        except OSError as exc:
+            unrepaired.append(f"{relative} ({exc.__class__.__name__})")
     return unrepaired
 
 
 def run_script_suite(root: Path, suite: Path) -> None:
     """Run one script suite and reject any deployment-state mutation."""
     before = snapshot_sensitive_state(root)
+    backup = _backup(root, before)
     completed = subprocess.run(
         [sys.executable, str(suite)],
         cwd=root,
@@ -179,7 +221,7 @@ def run_script_suite(root: Path, suite: Path) -> None:
     after = snapshot_sensitive_state(root)
     changes = _state_changes(before, after)
     if changes:
-        unrepaired = _restore_created(root, changes)
+        unrepaired = _restore_created(root, changes, backup)
         repaired = _state_changes(before, snapshot_sensitive_state(root))
         raise AssertionError(
             f"{suite.name} changed real repository runtime/PII state:\n"

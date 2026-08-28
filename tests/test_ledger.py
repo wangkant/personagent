@@ -987,6 +987,100 @@ def test_a_rejected_rewrite_is_not_promoted_later() -> None:
           outwaited.reason)
 
 
+def test_a_retry_acceptance_does_not_argue_against_its_own_pair() -> None:
+    """`supports` and `opposes` both answered True for one event.
+
+    A retry acceptance carries `reaction_type="positive"` because the user
+    accepted the RETRY — the opposite of liking the reply the pair replaces,
+    which is what a positive reaction means on every other kind. `opposes`
+    read the field without the kind, so the STRONG event a retry-completion
+    pair is BUILT FROM became counter-evidence against that same pair and
+    `decide` answered "compatible evidence disagrees". The zero-user-effort
+    retry loop — a documented feature — could never promote anything, in any
+    deployment.
+
+    The last check is the guardrail: a real laugh at the original reply must
+    still oppose, or this fix would have removed the rule instead of the bug."""
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    reply, rewrite = "just restart it lol", "check the logs first"
+
+    retry = evidence.make_event(
+        kind=evidence.KIND_RETRY_ACCEPTANCE, ts=stamp(NOW - 60), **scope,
+        speaker_id="a", recipient_id="a", reply=reply,
+        reaction_type="positive",
+        adjudication={"accept": True, "better": rewrite, "mode": "called"})
+    correction = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW - 30), **scope,
+        speaker_id="b", recipient_id="b", reply=reply,
+        reaction_type="correction",
+        adjudication={"accept": True, "better": rewrite, "mode": "called"})
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+        evidence=[], payload={"reply": reply, "better": rewrite,
+                              "mode": "called"})
+    linked = [retry, correction]
+
+    check("retry: the acceptance is strong",
+          evidence.classify_strength(retry) == evidence.STRONG)
+    check("retry: it supports the pair", evidence.supports(retry, candidates.TYPE_PAIR))
+    check("retry: and does NOT also oppose it",
+          not evidence.opposes(retry, candidates.TYPE_PAIR))
+    check("retry: so it is not counter-evidence against itself",
+          promotion.counter_evidence(cand, linked, now=NOW) == [],
+          repr(promotion.counter_evidence(cand, linked, now=NOW)))
+    decision = promotion.decide(
+        cand, linked_events=linked,
+        related_events=promotion.related_events(cand, linked), peers=[], now=NOW)
+    check("retry: the zero-effort loop can promote",
+          decision.promote is True, decision.reason)
+
+    laugh = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW - 20), **scope,
+        speaker_id="c", recipient_id="c", reply=reply, reaction_type="positive",
+        adjudication={"accept": True, "mode": "called"})
+    check("retry: a real laugh at the reply still opposes the pair",
+          evidence.opposes(laugh, candidates.TYPE_PAIR))
+
+
+def test_related_events_covers_the_rewrite() -> None:
+    """One builder, because there are two callers.
+
+    The running agent and `tools/candidates_admin.py` each built this list.
+    When only the first was widened to include events about the REWRITE, the
+    CLI went on printing `policy: would promote` for a pair whose rewrite the
+    user had rejected — with an unconditional `promote` command next to it.
+    Same shape as the conversation-key mapping that lived in three places."""
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    reply, rewrite = "just restart it lol", "check the logs first"
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+        evidence=[], payload={"reply": reply, "better": rewrite,
+                              "mode": "called"})
+
+    def event(text: str) -> dict:
+        return evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=stamp(NOW - 10), **scope,
+            speaker_id="a", recipient_id="a", reply=text,
+            reaction_type="rejection", adjudication={"accept": True})
+
+    about_reply, about_rewrite, unrelated = (
+        event(reply), event(rewrite), event("something else entirely"))
+    got = promotion.related_events(
+        cand, [about_reply, about_rewrite, unrelated])
+    check("related: events about the reply are included", about_reply in got)
+    check("related: events about the REWRITE are included", about_rewrite in got)
+    check("related: unrelated events are not", unrelated not in got)
+    check("related: an example candidate has no rewrite to widen to",
+          len(promotion.related_events(
+              candidates.make_candidate(
+                  ctype=candidates.TYPE_EXAMPLE, scope=scope,
+                  created_at=stamp(NOW), evidence=[],
+                  payload={"reply": reply, "mode": "called"}),
+              [about_reply, about_rewrite])) == 1)
+
+
 def test_an_over_long_scope_field_stays_distinct() -> None:
     """Bounding the scope must not merge two conversations into one.
 
@@ -1217,6 +1311,8 @@ def main() -> int:
         test_stale_evidence_is_refused()
         test_a_rejected_rewrite_is_not_promoted_later()
         test_an_unwitnessed_proposal_does_not_veto_a_real_correction()
+        test_a_retry_acceptance_does_not_argue_against_its_own_pair()
+        test_related_events_covers_the_rewrite()
         test_an_over_long_scope_field_stays_distinct()
         test_a_positive_example_waits_for_a_person_and_says_so()
 

@@ -1,5 +1,9 @@
 # Secrets / local config
 .env
+# quickstart's atomic-replace temporary. It holds the same API keys .env does,
+# and the interruption that atomicity exists for is exactly what leaves it
+# behind — where `git add -A` would stage it.
+.env.tmp
 .env.local
 .env.*.local
 

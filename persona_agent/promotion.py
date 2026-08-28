@@ -299,6 +299,31 @@ def _rewrite_is_unwitnessed(cand: dict, events) -> bool:
     return True
 
 
+def related_events(cand: dict, events) -> list[dict]:
+    """The `related_events` argument `decide` expects, for one candidate.
+
+    Events about the reply a candidate would replace AND about the text it
+    would replace it with. `counter_evidence` treats a rejection of the
+    REWRITE as arguing against the pair, so filtering to the original alone
+    makes that branch unreachable.
+
+    ONE FUNCTION BECAUSE THERE ARE TWO CALLERS. The running agent
+    (`learning._decide_promotion`) and the operator's CLI
+    (`tools/candidates_admin.py`) each built this list, and when only the
+    first was widened the CLI went on printing `policy: would promote` for a
+    pair whose rewrite the user had explicitly rejected — with an
+    unconditional `promote` command sitting next to it. Same shape as the
+    conversation-key mapping that lived in three places: the defect was not
+    the filter, it was that there was more than one of it.
+    """
+    wanted = {str(cand.get("reply") or "").strip()}
+    better = str(cand.get("better") or "").strip()
+    if better:
+        wanted.add(better)
+    return [event for event in events or ()
+            if str(event.get("reply") or "").strip() in wanted]
+
+
 def counter_evidence(cand: dict, events, *, now: float = 0.0,
                      policy: Policy = DEFAULT_POLICY) -> list[str]:
     """Event ids that argue against `cand` — a rejection of a reply somebody
