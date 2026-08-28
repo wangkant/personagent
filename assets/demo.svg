@@ -1,190 +1,157 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="598" viewBox="0 0 820 598" role="img" aria-labelledby="title desc">
-  <title id="title">personagent animated protocol trace</title>
-  <desc id="desc">An illustrated two-turn terminal trace. Each user message stays on the main alignment. The model's complete JSON return is indented as an internal diagnostic block. The first reply reaches the main sent line; the second returns PASS, so the sent line remains empty.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="420" viewBox="0 0 920 420" role="img" aria-labelledby="title desc">
+  <title id="title">personagent animated selective reply trace</title>
+  <desc id="desc">An animated terminal trace alternates between two complete outcomes from the same persona-agent pipeline. One turn produces a natural reply and is sent. The other produces PASS and stays silent. The layout remains filled throughout the animation.</desc>
   <style>
-    svg {
-      --bg: #f8fafc;
-      --surface: #ffffff;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #d9e2ec;
-      --blue: #1769aa;
-      --violet: #7047b8;
-      --violet-soft: #f3effb;
-      --mint: #087f5b;
-      --mint-soft: #eaf8f2;
-      --amber: #9a5b00;
-      --amber-soft: #fff5dc;
-    }
     text {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       dominant-baseline: middle;
       white-space: pre;
     }
-    .bg { fill: var(--bg); }
-    .surface { fill: var(--surface); }
-    .frame, .rule { stroke: var(--line); }
-    .ink { fill: var(--ink); }
-    .muted { fill: var(--muted); }
-    .user { fill: var(--blue); }
-    .model { fill: var(--violet); }
-    .model-panel {
-      fill: var(--violet-soft);
-      stroke: var(--line);
+    .bg { fill: #f6f7fb; }
+    .surface { fill: #ffffff; }
+    .frame, .rule { stroke: #dfe3ec; }
+    .ink { fill: #1d2433; }
+    .muted { fill: #687083; }
+    .violet { fill: #6842c2; }
+    .blue { fill: #1769aa; }
+    .green { fill: #087f5b; }
+    .amber { fill: #946000; }
+    .pipeline, .model-panel { fill: #f2edff; stroke: #dfe3ec; }
+    .reply-result { fill: #e9f8f1; }
+    .pass-result { fill: #fff5dc; }
+    .shadow { fill: #d7d9e3; opacity: .42; }
+    .scenario { animation: 14s steps(1, end) infinite; }
+    .scenario-reply { opacity: 1; animation-name: show-reply; }
+    .scenario-pass { opacity: 0; animation-name: show-pass; }
+    @keyframes show-reply {
+      0%, 49% { opacity: 1; }
+      50%, 99% { opacity: 0; }
+      100% { opacity: 1; }
     }
-    .sent-panel { fill: var(--mint-soft); }
-    .sent { fill: var(--mint); }
-    .pass-panel { fill: var(--amber-soft); }
-    .pass { fill: var(--amber); }
-    .row {
-      opacity: 0;
-      animation-duration: 18s;
-      animation-timing-function: steps(1, end);
-      animation-iteration-count: infinite;
+    @keyframes show-pass {
+      0%, 49% { opacity: 0; }
+      50%, 99% { opacity: 1; }
+      100% { opacity: 0; }
     }
-    .r0 { animation-name: r0; }
-    .r1 { animation-name: r1; }
-    .r2 { animation-name: r2; }
-    .r3 { animation-name: r3; }
-    .r4 { animation-name: r4; }
-    .r5 { animation-name: r5; }
-    .r6 { animation-name: r6; }
-    .r7 { animation-name: r7; }
-    .r8 { animation-name: r8; }
-    .r9 { animation-name: r9; }
-    .r10 { animation-name: r10; }
-    .r11 { animation-name: r11; }
-    .r12 { animation-name: r12; }
-    .r13 { animation-name: r13; }
-    .r14 { animation-name: r14; }
-    .r15 { animation-name: r15; }
-    .r16 { animation-name: r16; }
-    .r17 { animation-name: r17; }
-    @keyframes r0 { 0%,2%{opacity:0} 3%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r1 { 0%,6%{opacity:0} 7%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r2 { 0%,11%{opacity:0} 12%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r3 { 0%,17%{opacity:0} 18%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r4 { 0%,21%{opacity:0} 22%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r5 { 0%,25%{opacity:0} 26%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r6 { 0%,29%{opacity:0} 30%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r7 { 0%,33%{opacity:0} 34%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r8 { 0%,37%{opacity:0} 38%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r9 { 0%,43%{opacity:0} 44%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r10 { 0%,51%{opacity:0} 52%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r11 { 0%,57%{opacity:0} 58%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r12 { 0%,61%{opacity:0} 62%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r13 { 0%,65%{opacity:0} 66%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r14 { 0%,69%{opacity:0} 70%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r15 { 0%,73%{opacity:0} 74%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r16 { 0%,77%{opacity:0} 78%,94%{opacity:1} 98%,100%{opacity:0} }
-    @keyframes r17 { 0%,83%{opacity:0} 84%,94%{opacity:1} 98%,100%{opacity:0} }
+    .step { opacity: .88; animation: step-pulse 4.8s ease-in-out infinite; }
+    .step-2 { animation-delay: 1.2s; }
+    .step-3 { animation-delay: 2.4s; }
+    .step-4 { animation-delay: 3.6s; }
+    @keyframes step-pulse {
+      0%, 18% { opacity: 1; }
+      28%, 100% { opacity: .88; }
+    }
     .cursor { animation: blink 1.05s steps(1, end) infinite; }
-    @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
     @media (prefers-color-scheme: dark) {
-      svg {
-        --bg: #0d1117;
-        --surface: #111821;
-        --ink: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --blue: #58a6ff;
-        --violet: #bc8cff;
-        --violet-soft: #1c1726;
-        --mint: #56d49b;
-        --mint-soft: #10241d;
-        --amber: #e3b341;
-        --amber-soft: #2a210f;
-      }
+      .bg { fill: #0d1117; }
+      .surface { fill: #141a23; }
+      .frame, .rule, .pipeline, .model-panel { stroke: #30363d; }
+      .ink { fill: #e6edf3; }
+      .muted { fill: #8b949e; }
+      .violet { fill: #bc8cff; }
+      .blue { fill: #58a6ff; }
+      .green { fill: #56d49b; }
+      .amber { fill: #e3b341; }
+      .pipeline, .model-panel { fill: #211a31; }
+      .reply-result { fill: #11271e; }
+      .pass-result { fill: #2a210f; }
+      .shadow { fill: #000000; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .row { animation: none !important; opacity: 1; }
-      .cursor { animation: none !important; opacity: 1; }
+      .scenario, .step, .cursor { animation: none !important; }
+      .scenario-reply, .cursor { opacity: 1; }
+      .scenario-pass { opacity: 0; }
+      .step { opacity: .92; }
     }
   </style>
 
-  <rect class="bg" width="820" height="598" rx="10"/>
-  <rect class="surface" x="0.5" y="0.5" width="819" height="42" rx="9"/>
-  <rect class="frame" x="0.5" y="0.5" width="819" height="597" rx="9" fill="none"/>
-  <circle cx="22" cy="21" r="5.5" fill="#e66555"/>
-  <circle cx="40" cy="21" r="5.5" fill="#d99b22"/>
-  <circle cx="58" cy="21" r="5.5" fill="#28a36a"/>
-  <text class="muted" x="410" y="21" font-size="12.5" text-anchor="middle">try_chat.py · illustrated protocol trace</text>
-  <line class="rule" x1="0" y1="42" x2="820" y2="42"/>
+  <rect class="bg" width="920" height="420" rx="14"/>
+  <rect class="shadow" x="8" y="8" width="904" height="404" rx="13"/>
+  <rect class="surface" x="0.5" y="0.5" width="919" height="411" rx="13"/>
+  <rect class="frame" x="0.5" y="0.5" width="919" height="411" rx="13" fill="none"/>
 
-  <g class="row r0">
-    <text class="sent" x="20" y="66" font-size="12.5">$</text>
-    <text class="ink" x="46" y="66" font-size="13.5">python try_chat.py</text>
-  </g>
-  <text class="row r1 muted" x="20" y="92" font-size="12.5">internal JSON is expanded here · the real trial prints only reply, intent, and mem</text>
+  <rect class="surface" x="0.5" y="0.5" width="919" height="44" rx="13"/>
+  <line class="rule" x1="0" y1="44" x2="920" y2="44"/>
+  <circle cx="22" cy="22" r="5.5" fill="#e66555"/>
+  <circle cx="40" cy="22" r="5.5" fill="#d99b22"/>
+  <circle cx="58" cy="22" r="5.5" fill="#28a36a"/>
+  <text class="muted" x="460" y="22" font-size="12.5" text-anchor="middle">try_chat.py · selective reply trace</text>
 
-  <g class="row r2">
-    <text class="user" x="20" y="128" font-size="12.5">you</text>
-    <text class="ink" x="92" y="128" font-size="13.5">spent 3 hours on this and ctrl+z'd it into the void</text>
-  </g>
+  <text class="green" x="22" y="66" font-size="12.5">$</text>
+  <text class="ink" x="47" y="66" font-size="13.5">python try_chat.py</text>
+  <text class="muted" x="898" y="66" font-size="11.5" text-anchor="end">live agent boundary</text>
 
-  <g class="row r3" data-role="model-trace">
-    <rect class="model-panel" x="52" y="148" width="748" height="142" rx="7"/>
-    <line class="rule" x1="52" y1="148" x2="52" y2="290"/>
-    <text class="model" x="70" y="166" font-size="12.5">model</text>
-    <text class="muted" x="154" y="166" font-size="13.5">{</text>
+  <rect class="pipeline" x="20" y="84" width="880" height="42" rx="10"/>
+  <g class="step step-1">
+    <text class="violet" x="42" y="105" font-size="12.5">persona + room</text>
   </g>
-  <g class="row r4">
-    <text class="model" x="154" y="190" font-size="13">&quot;reasoning&quot;:</text>
-    <text class="ink" x="278" y="190" font-size="13">&quot;a beat of empathy, not a fix-it list&quot;,</text>
+  <text class="muted" x="235" y="105" font-size="14">→</text>
+  <g class="step step-2">
+    <text class="violet" x="272" y="105" font-size="12.5">structured decision</text>
   </g>
-  <g class="row r5">
-    <text class="model" x="154" y="214" font-size="13">&quot;intent&quot;:</text>
-    <text class="ink" x="278" y="214" font-size="13">&quot;vent&quot;,</text>
+  <text class="muted" x="485" y="105" font-size="14">→</text>
+  <g class="step step-3">
+    <text class="violet" x="522" y="105" font-size="12.5">validate</text>
   </g>
-  <g class="row r6">
-    <text class="model" x="154" y="238" font-size="13">&quot;reply&quot;:</text>
-    <text class="ink" x="278" y="238" font-size="13">&quot;rip. take five before you go back in&quot;,</text>
-  </g>
-  <g class="row r7">
-    <text class="model" x="154" y="262" font-size="13">&quot;mem&quot;:</text>
-    <text class="ink" x="278" y="262" font-size="13">&quot;&quot;</text>
-  </g>
-  <text class="row r8 muted" x="154" y="282" font-size="13.5">}</text>
-
-  <g class="row r9" data-role="sent">
-    <rect class="sent-panel" x="12" y="304" width="796" height="42" rx="7"/>
-    <text class="sent" x="20" y="326" font-size="12.5">sent</text>
-    <text class="ink" x="92" y="326" font-size="13.5">rip. take five before you go back in</text>
+  <text class="muted" x="647" y="105" font-size="14">→</text>
+  <g class="step step-4">
+    <text class="violet" x="684" y="105" font-size="12.5">send or stay silent</text>
   </g>
 
-  <g class="row r10">
-    <text class="user" x="20" y="370" font-size="12.5">you</text>
-    <text class="ink" x="92" y="370" font-size="13.5">D . e</text>
+  <rect class="shadow" x="24" y="146" width="876" height="240" rx="11"/>
+  <rect class="surface frame" x="20.5" y="142.5" width="879" height="239" rx="11"/>
+
+  <g class="scenario scenario-reply">
+    <circle cx="42" cy="164" r="5" fill="#28a36a"/>
+    <text class="green" x="57" y="164" font-size="12.5">REPLY</text>
+    <text class="muted" x="878" y="164" font-size="11.5" text-anchor="end">01 / a message belongs here</text>
+
+    <text class="blue" x="42" y="188" font-size="12">you</text>
+    <text class="ink" x="102" y="188" font-size="12.5">spent 3 hours on this and ctrl+z'd it into the void</text>
+
+    <rect class="model-panel" x="42" y="205" width="836" height="110" rx="8"/>
+    <text class="violet" x="58" y="224" font-size="12">model</text>
+    <text class="violet" x="146" y="224" font-size="12">reasoning</text>
+    <text class="ink" x="248" y="224" font-size="12.5">"a beat of empathy, not a fix-it list"</text>
+    <text class="violet" x="146" y="248" font-size="12">intent</text>
+    <text class="ink" x="248" y="248" font-size="12.5">"vent"</text>
+    <text class="violet" x="146" y="272" font-size="12">reply</text>
+    <text class="ink" x="248" y="272" font-size="12.5">"rip. take five before you go back in"</text>
+    <text class="violet" x="146" y="296" font-size="12">mem</text>
+    <text class="ink" x="248" y="296" font-size="12.5">""</text>
+
+    <rect class="reply-result" x="42" y="327" width="836" height="38" rx="8"/>
+    <text class="green" x="58" y="346" font-size="11.5">SENT</text>
+    <text class="ink" x="122" y="346" font-size="12.5">rip. take five before you go back in</text>
+    <text class="green cursor" x="854" y="346" font-size="12.5">█</text>
   </g>
 
-  <g class="row r11" data-role="model-trace">
-    <rect class="model-panel" x="52" y="390" width="748" height="142" rx="7"/>
-    <line class="rule" x1="52" y1="390" x2="52" y2="532"/>
-    <text class="model" x="70" y="408" font-size="12.5">model</text>
-    <text class="muted" x="154" y="408" font-size="13.5">{</text>
-  </g>
-  <g class="row r12">
-    <text class="model" x="154" y="432" font-size="13">&quot;reasoning&quot;:</text>
-    <text class="ink" x="278" y="432" font-size="13">&quot;noise — nothing here asks for a reply&quot;,</text>
-  </g>
-  <g class="row r13">
-    <text class="model" x="154" y="456" font-size="13">&quot;intent&quot;:</text>
-    <text class="ink" x="278" y="456" font-size="13">&quot;chat&quot;,</text>
-  </g>
-  <g class="row r14">
-    <text class="model" x="154" y="480" font-size="13">&quot;reply&quot;:</text>
-    <text class="pass" x="278" y="480" font-size="13">&quot;PASS&quot;,</text>
-  </g>
-  <g class="row r15">
-    <text class="model" x="154" y="504" font-size="13">&quot;mem&quot;:</text>
-    <text class="ink" x="278" y="504" font-size="13">&quot;&quot;</text>
-  </g>
-  <text class="row r16 muted" x="154" y="524" font-size="13.5">}</text>
+  <g class="scenario scenario-pass">
+    <circle cx="42" cy="164" r="5" fill="#d99b22"/>
+    <text class="amber" x="57" y="164" font-size="12.5">PASS</text>
+    <text class="muted" x="878" y="164" font-size="11.5" text-anchor="end">02 / silence fits the room</text>
 
-  <g class="row r17" data-role="sent">
-    <rect class="pass-panel" x="12" y="546" width="796" height="40" rx="7"/>
-    <text class="pass" x="20" y="567" font-size="12.5">sent</text>
-    <text class="pass" x="92" y="567" font-size="13.5">∅ · PASS keeps this turn inside the agent pipeline</text>
-    <text class="cursor sent" x="786" y="567" font-size="13">█</text>
+    <text class="blue" x="42" y="188" font-size="12">you</text>
+    <text class="ink" x="102" y="188" font-size="12.5">D . e</text>
+    <text class="muted" x="180" y="188" font-size="11.5">nothing here asks for a reply</text>
+
+    <rect class="model-panel" x="42" y="205" width="836" height="110" rx="8"/>
+    <text class="violet" x="58" y="224" font-size="12">model</text>
+    <text class="violet" x="146" y="224" font-size="12">reasoning</text>
+    <text class="ink" x="248" y="224" font-size="12.5">"noise — nothing here asks for a reply"</text>
+    <text class="violet" x="146" y="248" font-size="12">intent</text>
+    <text class="ink" x="248" y="248" font-size="12.5">"chat"</text>
+    <text class="violet" x="146" y="272" font-size="12">reply</text>
+    <text class="amber" x="248" y="272" font-size="12.5">"PASS"</text>
+    <text class="violet" x="146" y="296" font-size="12">mem</text>
+    <text class="ink" x="248" y="296" font-size="12.5">""</text>
+
+    <rect class="pass-result" x="42" y="327" width="836" height="38" rx="8"/>
+    <text class="amber" x="58" y="346" font-size="11.5">SILENT</text>
+    <text class="ink" x="122" y="346" font-size="12.5">∅  no outbound message · the decision stays inside the pipeline</text>
+    <text class="amber cursor" x="854" y="346" font-size="12.5">█</text>
   </g>
+
+  <text class="muted" x="460" y="401" font-size="11.5" text-anchor="middle">The expanded trace makes the decision visible; the real trial prints only reply, intent, and memory.</text>
 </svg>

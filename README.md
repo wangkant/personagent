@@ -1,38 +1,32 @@
+<div align="center">
+
 # personagent
 
+<p><strong>A persona agent that knows how to talk — and when not to.</strong></p>
+
+Deployable in group chats and DMs. Grounded in the room, selective by design,<br>
+and able to learn from reactions without letting one noisy signal rewrite its character.
+
+[**English**](README.md) · [简体中文](README.zh-CN.md)
+
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/wangkant/personagent?display_name=tag&sort=semver)](https://github.com/wangkant/personagent/releases)
-[![Tested on Python 3.10, 3.11, 3.12](https://img.shields.io/badge/tested-Python%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/wangkant/personagent?display_name=tag&sort=semver&color=6f42c1)](https://github.com/wangkant/personagent/releases)
+[![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
 
-**English** · [简体中文](README.zh-CN.md)
+[**Quick start**](#quick-start) · [Why it is different](#why-personagent) · [Deploy](#deployment-paths) · [Architecture](#architecture) · [Configure](#configuration)
 
-> A deployable, self-evolving persona agent for group chats and direct messages.
+</div>
 
-`personagent` turns any OpenAI-compatible chat model into a selective conversational persona: it understands the room, can choose not to reply, uses images and stickers as part of its voice, and learns from real reactions without letting a single noisy signal rewrite its behaviour.
+<a href="#quick-start">
+  <img src="assets/demo.svg" alt="personagent selectively replies or stays silent after a structured decision" width="100%">
+</a>
 
-It runs locally in a terminal, directly on QQ through OneBot v11, or across Telegram, Discord, Slack, Lark, and KOOK through the bundled AstrBot gateway.
-
-[![personagent terminal demo](assets/demo.svg)](#quick-start)
-
-## Why personagent
-
-Most group-chat bots are permanently on duty: formal, eager, and visibly assistant-shaped. `personagent` is built around a different operating model.
-
-| Capability | What it means in practice |
-|---|---|
-| **Persona-first conversation** | Register, relationships, conversational position, intent, memory, and the option to return `PASS` are part of the core reply path. |
-| **Guarded self-evolution** | Reactions become append-only evidence. Only corroborated, promoted candidates can influence future replies; promotion is auditable and reversible. |
-| **Fail-closed output boundary** | The model returns structured JSON. Parsing, semantic filters, character policy, and delivery checks run before anything reaches a chat. |
-| **Multimodal context** | Images, stickers, URLs, Bilibili/YouTube metadata, and share cards are turned into usable context instead of opaque attachments. |
-| **Vendor-neutral models** | Chat, judge, evaluation, and vision calls use OpenAI-compatible endpoints over HTTP; no provider SDK is required at runtime. |
-| **Operational controls** | Authenticated webhooks, replay protection, request limits, persistent deduplication, health checks, isolated runtime state, and cross-platform CI are included. |
-
-**Project status:** beta. Versioned releases follow Semantic Versioning; behavioural and storage changes are documented in the [changelog](CHANGELOG.md). The current release is suitable for controlled personal deployments, but operators remain responsible for platform-policy and account risk. Read the [deployment disclaimer](DISCLAIMER.md) before connecting a third-party IM client.
+`personagent` turns any OpenAI-compatible chat model into a situated conversational persona. It can run locally in a terminal, directly on QQ through OneBot v11, or across Telegram, Discord, Slack, Lark, and KOOK through the bundled AstrBot gateway.
 
 ## Quick start
 
-Requirements: Git, Python 3.10+, and one OpenAI-compatible API key. QQ and NapCat are not required for the local trial. CI currently covers Python 3.10, 3.11, and 3.12.
+You need Git, Python 3.10+, and one OpenAI-compatible API key. The local trial does not require QQ, NapCat, or another messaging adapter.
 
 ```bash
 git clone https://github.com/wangkant/personagent.git
@@ -40,9 +34,10 @@ cd personagent
 python quickstart.py
 ```
 
-The idempotent setup wizard creates `.venv`, installs dependencies, writes `.env`, optionally verifies the model endpoint, creates a persona file, and offers to start the terminal trial. It supports DeepSeek, Kimi, OpenAI, Ollama, and custom OpenAI-compatible endpoints.
+The setup wizard creates `.venv`, installs dependencies, writes `.env`, optionally verifies the model endpoint, creates a persona file, and offers to open the terminal trial. It is safe to run again and supports DeepSeek, Kimi, OpenAI, Ollama, and custom OpenAI-compatible endpoints.
 
-To return to the trial later:
+<details>
+<summary><strong>Open the terminal trial again or bootstrap without prompts</strong></summary>
 
 ```bash
 # macOS / Linux
@@ -52,15 +47,31 @@ To return to the trial later:
 # Windows
 .venv\Scripts\python.exe try_chat.py
 .venv\Scripts\python.exe try_chat.py --lang zh
-```
 
-The terminal uses the same persona, prompt assembly, retrieval, model-output parser, and reply validator as a live deployment. Use `--owner` to test the configured owner relationship and `--name <name>` to set the speaker name.
-
-For unattended bootstrap in CI or provisioning scripts:
-
-```bash
+# CI / provisioning
 python quickstart.py --no-input
 ```
+
+The trial uses the same persona, prompt assembly, retrieval, output parser, and reply validator as a live deployment. Add `--owner` to test the configured owner relationship or `--name <name>` to choose the speaker.
+
+</details>
+
+## Why personagent
+
+Most group-chat bots are permanently on duty: formal, eager, and visibly assistant-shaped. `personagent` is built around the social position of a participant instead.
+
+| **Situated persona** | **Selective by design** |
+|---|---|
+| Register, relationships, conversational position, intent, and scoped memory live in the core reply path. | `PASS` is a first-class outcome. The agent can decide that silence fits the room better than another message. |
+| **Learning behind a gate** | **Media as context** |
+| Reactions become append-only evidence; only corroborated, promoted candidates can affect future replies, and every promotion is reversible. | Images, stickers, URLs, videos, and share cards become usable context and can form part of the persona's voice. |
+
+### Production-minded by default
+
+- **Fail-closed output boundary:** structured model output is parsed, filtered, checked against the character policy, and validated before delivery.
+- **Vendor-neutral and operable:** chat, judge, evaluation, and vision calls use OpenAI-compatible HTTP endpoints; authenticated webhooks, replay protection, limits, persistent deduplication, health checks, isolated runtime state, and cross-platform CI are included.
+
+> **Beta:** versioned releases follow Semantic Versioning, and behavioural or storage changes are recorded in the [changelog](CHANGELOG.md). Controlled personal deployments are supported, but platform-policy and account risk remain the operator's responsibility. Read the [deployment disclaimer](DISCLAIMER.md) before connecting a third-party IM client.
 
 ## Deployment paths
 
