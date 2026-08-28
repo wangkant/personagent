@@ -459,7 +459,14 @@ class Learning:
                 sticker_score = None
 
             record = {
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                # Microseconds, because this stamp is not just a timestamp:
+                # `evolution.load_reviewed_ts` uses `src_eval_ts` as the ONLY
+                # review-dedup key, so two low-score replies landing in the
+                # same second were one key — the evolve loop reviewed the
+                # first, wrote that key, and the second was invisible
+                # forever. `auto_reviewer`'s verdict landed on both rows for
+                # the same reason.
+                "ts": datetime.now().isoformat(timespec="microseconds"),
                 "group_id": group_id,
                 "mode": mode,
                 "user_msg": user_msg[:200],

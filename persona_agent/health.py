@@ -137,7 +137,46 @@ def check_onebot():
 
 
 # (name, probe, is_critical)
+_DEFAULT_LEDGER_WARN_BYTES = 50_000_000
+
+
+def check_ledger_sizes():
+    """The append-only ledgers, against the two documented warn thresholds.
+
+    `AGENT_EVIDENCE_WARN_BYTES` and `AGENT_CANDIDATE_LEDGER_WARN_BYTES` are
+    documented in `.env.example` and, until this probe existed, changed
+    nothing anyone could observe: `EvidenceLog.health_metadata` and
+    `CandidateLedger.health_metadata` compute exactly this and had no caller
+    outside the test suite. Neither ledger has rotation, so the size only ever
+    goes one way and the operator's only warning was the disk filling up.
+
+    Never critical: a large ledger is a thing to attend to, not a reason to
+    call the deployment down."""
+    from .paths import resolve_runtime_lang_file
+
+    lang = os.getenv("AGENT_LANG", "en").strip().lower() or "en"
+    watched = (
+        ("evidence", "AGENT_EVIDENCE_WARN_BYTES"),
+        ("candidate_ledger", "AGENT_CANDIDATE_LEDGER_WARN_BYTES"),
+    )
+    parts, over = [], False
+    for stem, knob in watched:
+        try:
+            limit = int(os.getenv(knob, "") or _DEFAULT_LEDGER_WARN_BYTES)
+            path = resolve_runtime_lang_file(stem, "jsonl", lang)
+            size = path.stat().st_size if path.exists() else 0
+        except (OSError, ValueError) as e:
+            parts.append(f"{stem}: unreadable ({type(e).__name__})")
+            continue
+        mark = ""
+        if limit and size >= limit:
+            over, mark = True, " OVER"
+        parts.append(f"{stem} {size / 1_000_000:.1f}MB/{limit / 1_000_000:.0f}MB{mark}")
+    return (not over), "; ".join(parts) or "no ledgers yet"
+
+
 CHECKS = [
+    ("Ledger sizes",            check_ledger_sizes,     False),
     ("Private chat (openai)",   check_private_chat,     True),
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
