@@ -300,6 +300,75 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
               repr((first_full, second_full)))
 
 
+#: Read by the code on purpose and kept OUT of the template. Every entry
+#: weakens the typo check, so each one states why it is worth that.
+_UNDOCUMENTED_SETTINGS = {
+    # A pre-0.1.2 alias kept working for existing deployments and
+    # deliberately not advertised to new ones.
+    "ANTHROPIC_PRIVATE_MODEL",
+}
+
+
+def test_every_setting_the_code_reads_is_in_the_template() -> None:
+    """`.env.example` is the authority on what a key may be CALLED.
+
+    `preflight.check_config` reports anything in `.env` that the template does
+    not list, because a misspelled key is otherwise completely silent — the
+    value is ignored, the default is used, and the bot runs and misbehaves
+    with no clue anywhere. That check is only honest while the template
+    actually covers what the code reads: a setting the code reads and the
+    template omits would be reported to its operator as a typo.
+
+    Scanned rather than listed, so the two cannot drift apart again. `os.getenv`
+    and `os.environ.get` only — `Policy.from_env` reads through a dict
+    parameter and is out of reach of a syntactic scan, which is a gap worth
+    naming rather than pretending away."""
+    import ast
+
+    root = Path(__file__).resolve().parents[1]
+    sources = [root / "main.py", *sorted((root / "persona_agent").glob("*.py"))]
+
+    def is_env_read(call: ast.Call) -> bool:
+        fn = call.func
+        if not isinstance(fn, ast.Attribute):
+            return False
+        if fn.attr == "getenv":
+            return isinstance(fn.value, ast.Name) and fn.value.id == "os"
+        if fn.attr == "get":
+            inner = fn.value
+            return (isinstance(inner, ast.Attribute) and inner.attr == "environ"
+                    and isinstance(inner.value, ast.Name)
+                    and inner.value.id == "os")
+        return False
+
+    read: dict[str, str] = {}
+    for path in sources:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and is_env_read(node)):
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            key = node.args[0].value
+            if isinstance(key, str) and key.isupper():
+                read.setdefault(key, f"{path.name}:{node.lineno}")
+
+    check("template scan found the settings at all", len(read) > 20, str(len(read)))
+
+    template = (root / ".env.example").read_text(encoding="utf-8")
+    documented = {
+        line.split("=", 1)[0].strip()
+        for line in template.splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+    missing = sorted(
+        f"{key} ({where})" for key, where in read.items()
+        if key not in documented and key not in _UNDOCUMENTED_SETTINGS)
+    check("every setting the code reads is documented in .env.example",
+          not missing,
+          "; ".join(missing))
+
+
 def test_gateway_envelope_refuses_a_bad_signature() -> None:
     """The signature is what binds the BODY to the token. Nothing tested it.
 
@@ -480,6 +549,7 @@ async def main_async() -> None:
     await test_asgi_webhook_auth_and_schema()
     test_gateway_envelope_rejects_replay_and_stale_requests()
     test_gateway_envelope_refuses_a_bad_signature()
+    test_every_setting_the_code_reads_is_in_the_template()
     test_event_schema_requires_stable_message_ids()
     test_startup_view_rebuild_can_fail_closed()
 

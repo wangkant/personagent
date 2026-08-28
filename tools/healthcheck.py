@@ -20,6 +20,7 @@ except Exception:
     pass
 
 from persona_agent.health import run_checks, all_critical_ok
+from persona_agent.preflight import check_config
 
 
 USAGE = """\
@@ -40,8 +41,18 @@ def main():
         print(USAGE)
         return 0 if {"-h", "--help"} & set(argv) else 2
     print("=" * 64)
-    print("  personagent — API health check")
+    print("  personagent — config + API health check")
     print("=" * 64)
+    # Config first: a probe that fails because a key is misspelled reads like
+    # the service being down, and the two have very different fixes.
+    findings = check_config()
+    if findings:
+        for finding in findings:
+            print(f"  {finding.line()}")
+        print("-" * 64)
+    else:
+        print("[  OK ] configuration                    no unknown or missing keys")
+        print("-" * 64)
     results = run_checks()
     for r in results:
         mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")

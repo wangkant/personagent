@@ -20,6 +20,7 @@ load_dotenv(override=False)
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from persona_agent import preflight
 from persona_agent.agent import Agent
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT, runtime_dir
@@ -500,6 +501,12 @@ def _spawn(coro) -> asyncio.Task:
 async def lifespan(app: FastAPI):
     global agent
     _configure_logging()
+    # Before anything is wired up, say what the configuration gets wrong —
+    # above all a MISSPELLED key, which is otherwise completely silent: the
+    # value is ignored, the default is used, and the bot runs and misbehaves.
+    # Reported, never fatal: a deployment that is 90% configured should start
+    # and tell you about the other 10%.
+    preflight.log_findings(preflight.check_config())
     _validate_exposure_config(HOST, WEBHOOK_SECRET, GATEWAY_TOKEN)
     runtime_lock = None
     if AGENT_ENABLE:
