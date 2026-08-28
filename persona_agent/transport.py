@@ -16,6 +16,7 @@ import httpx
 
 from dataclasses import dataclass, field
 
+from . import channels
 from .gateway import current_sink
 
 logger = logging.getLogger("agent")
@@ -133,16 +134,17 @@ class Transport:
             pending.set()
         self._private_send_owners.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
-        reaction_key = key
-        if key.startswith("private:"):
+        # Through `channels`, not spelled here: this was the third independent
+        # copy of the private: -> dm: step and the other two had drifted.
+        reaction_key = channels.learning_key(key)
+        if channels.is_dm(key):
             uid = key.split(":", 1)[1]
-            reaction_key = f"dm:{uid}"
             self.private_history.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
-            self.last_proactive_at.pop(f"dm:{uid}", None)
-            self._last_elicit_at.pop(reaction_key, None)
-        else:
-            self._last_elicit_at.pop(key, None)
+            self.last_proactive_at.pop(reaction_key, None)
+        # `reaction_key` IS `key` for a room, so the branch these two used to
+        # sit in was spelling the same mapping twice more.
+        self._last_elicit_at.pop(reaction_key, None)
         self.pending_reactions.drop_conversation(reaction_key)
         # Group-conversation memory key = the group_id itself; gateway DM
         # memory key = "private:<uid>" = key.

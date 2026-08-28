@@ -20,9 +20,11 @@ import httpx
 # Make the repo root importable when invoked as `python tests/test_gateway.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from persona_agent import channels  # noqa: E402
 from persona_agent import paths as agent_paths  # noqa: E402
 from persona_agent import promotion  # noqa: E402
 from persona_agent.agent import Agent, SendResult  # noqa: E402
+from persona_agent.learning import Learning  # noqa: E402
 from persona_agent.textproc import (  # noqa: E402
     _strip_web_desc,
     _unwrap_web_desc,
@@ -2235,6 +2237,51 @@ async def regression_web_desc_not_control_plane(tmp: Path) -> None:
           repr(buf_texts))
 
 
+def test_the_channel_key_table_is_one_table() -> None:
+    """A conversation has three names, and they must come from one place.
+
+    Routing (locks, buffers, transport), memory (`memories` / `core_memory`)
+    and learning (the `conv_id` in every evidence event and candidate scope)
+    are different keys for the same conversation. Three call sites derived the
+    mapping between them independently and two were wrong: retrieval read
+    promoted rows under the MEMORY key while every writer used the LEARNING
+    one, and `_conv_platform` read the whole `dm:` prefix as QQ so every
+    Telegram DM was stamped `platform="qq"`.
+
+    The last two checks are the ones that keep this honest: a delegate that
+    grows its own opinion is how there came to be three copies."""
+    rows = (
+        # routing,             learning,          platform
+        ("123456",             "123456",          "qq"),
+        ("private:777",        "dm:777",          "qq"),
+        ("telegram:c1",        "telegram:c1",     "telegram"),
+        ("private:telegram:1", "dm:telegram:1",   "telegram"),
+        ("discord:9",          "discord:9",       "discord"),
+        ("private:discord:9",  "dm:discord:9",    "discord"),
+        ("",                   "",                "qq"),
+    )
+    for routing, learning, platform in rows:
+        check(f"channels: {routing!r} learns under {learning!r}",
+              channels.learning_key(routing) == learning,
+              repr(channels.learning_key(routing)))
+        check(f"channels: {routing!r} is on {platform!r}",
+              channels.platform_of(routing) == platform,
+              repr(channels.platform_of(routing)))
+        # BOTH spellings are handed to `platform_of` by different callers —
+        # transport holds routing keys, promotion holds learning ones — so it
+        # has to give the same answer for either.
+        check(f"channels: both spellings agree for {routing!r}",
+              channels.platform_of(learning) == platform,
+              repr(channels.platform_of(learning)))
+
+    check("channels: Agent._dm_scope_key has no opinion of its own",
+          all(Agent._dm_scope_key(r) == channels.learning_key(r)
+              for r, _, _ in rows))
+    check("channels: Learning._conv_platform has no opinion of its own",
+          all(Learning._conv_platform(r) == channels.platform_of(r)
+              for r, _, _ in rows))
+
+
 def test_every_napcat_call_goes_through_local_http() -> None:
     """The bridge is a LOCAL service, and httpx — unlike requests — has no
     implicit localhost bypass. With an `HTTP_PROXY` in the launching shell,
@@ -2382,6 +2429,7 @@ def main() -> int:
     test_extract_core_update_no_persist()
     test_memory_candidates_reject_instructions()
     test_sticker_tagger_uses_judge_model()
+    test_the_channel_key_table_is_one_table()
     test_every_napcat_call_goes_through_local_http()
     with tempfile.TemporaryDirectory() as d:
         test_runtime_learning_paths(Path(d))

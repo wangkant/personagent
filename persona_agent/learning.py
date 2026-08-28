@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-from . import candidates, evidence, evolution, promotion, reactions
+from . import candidates, channels, evidence, evolution, promotion, reactions
 from .pools import _needs_leading_newline
 from .storage import append_jsonl_unlocked, append_lock
 
@@ -46,23 +46,11 @@ class Learning:
         QQ group ids are bare numbers and QQ DMs are ``dm:<uid>``. Evidence from
         two platforms is never combined, so this has to be right rather than
         merely plausible."""
-        value = str(conv_id or "")
-        # Native QQ ids are not required to be numeric in tests/adapters; the
-        # absence of a namespace separator is the reliable signal. QQ private
-        # keys use the explicit ``dm:<uid>`` prefix.
-        if ":" not in value:
-            return "qq"
-        if value.startswith("dm:"):
-            # `dm:` is the DM marker, not the platform. A QQ DM is `dm:<uid>`
-            # and is "qq"; a gateway DM is `dm:<platform>:<id>` and is that
-            # platform. Reading the whole prefix as QQ stamped every Telegram
-            # and Discord DM `platform="qq"`, and with
-            # PROMOTE_REQUIRE_SAME_CONVERSATION=false `scope_compatible` then
-            # returned True between a Telegram DM and a QQ DM — the exact
-            # combination the sentence above says never happens.
-            rest = value[3:]
-            return rest.split(":", 1)[0] if ":" in rest else "qq"
-        return value.split(":", 1)[0] or "qq"
+        # `channels` owns the key vocabulary. `dm:` and `private:` are DM
+        # MARKERS, not platforms, and reading the whole prefix as QQ stamped
+        # every Telegram and Discord DM `platform="qq"` — see the module
+        # docstring for what that let `scope_compatible` combine.
+        return channels.platform_of(conv_id)
 
     def _scope_fields(self, conv_id: str) -> dict:
         """The scope every evidence event carries: which character, which

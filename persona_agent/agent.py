@@ -18,6 +18,7 @@ from typing import Awaitable, Callable, Optional
 import httpx
 
 from . import candidates as candidate_ledger_mod
+from . import channels
 from . import evidence as evidence_mod
 from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
@@ -1284,10 +1285,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         parameter that has to be kept in sync with the first is the shape of
         the bug itself: a call site that forgot it would silently be back
         here. Gateway DMs (`private:telegram:1`) map correctly too — the
-        writers spell those `dm:telegram:1`."""
-        if pkey.startswith("private:"):
-            return "dm:" + pkey.split(":", 1)[1]
-        return pkey
+        writers spell those `dm:telegram:1`.
+
+        The mapping itself lives in `channels`, which is the one place it is
+        allowed to live: three call sites derived it independently and two got
+        it wrong."""
+        return channels.learning_key(pkey)
 
     async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
