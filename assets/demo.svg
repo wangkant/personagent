@@ -1,307 +1,218 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="500" viewBox="0 0 1000 500" role="img" aria-labelledby="title desc">
-  <title id="title">personagent live decision terminal</title>
-  <desc id="desc">A cinematic dark terminal animation shows a persona agent reading a conversation, assembling context, streaming structured model output, and making one of two decisions: send a natural reply or return PASS and keep the channel silent.</desc>
+  <title id="title">personagent reply decision</title>
+  <desc id="desc">A calm macOS-style terminal window shows personagent reading context and structured model output, then choosing either to send a natural reply or remain silent with PASS.</desc>
 
   <defs>
-    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#05070b"/>
-      <stop offset="0.58" stop-color="#080d15"/>
-      <stop offset="1" stop-color="#0d0a18"/>
+    <linearGradient id="canvas" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fafafa"/>
+      <stop offset="1" stop-color="#f2f2f4"/>
     </linearGradient>
-    <linearGradient id="terminal" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0b111a"/>
-      <stop offset="1" stop-color="#070b11"/>
-    </linearGradient>
-    <radialGradient id="violet-halo">
-      <stop offset="0" stop-color="#8b5cf6" stop-opacity=".22"/>
-      <stop offset=".55" stop-color="#8b5cf6" stop-opacity=".06"/>
-      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="green-halo">
-      <stop offset="0" stop-color="#39e58c" stop-opacity=".34"/>
-      <stop offset=".58" stop-color="#39e58c" stop-opacity=".08"/>
-      <stop offset="1" stop-color="#39e58c" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="amber-halo">
-      <stop offset="0" stop-color="#f5b942" stop-opacity=".34"/>
-      <stop offset=".58" stop-color="#f5b942" stop-opacity=".08"/>
-      <stop offset="1" stop-color="#f5b942" stop-opacity="0"/>
-    </radialGradient>
-    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M20 0H0V20" fill="none" stroke="#64748b" stroke-opacity=".09" stroke-width=".7"/>
-    </pattern>
-    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="7" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="window-shadow" x="-20%" y="-25%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#1d1d1f" flood-opacity=".12"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1d1d1f" flood-opacity=".05"/>
     </filter>
-    <filter id="tight-glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <clipPath id="left-panel-clip"><rect x="18" y="66" width="650" height="416" rx="14"/></clipPath>
   </defs>
 
   <style>
     text {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
       dominant-baseline: middle;
-      white-space: pre;
+      text-rendering: geometricPrecision;
     }
-    .ink { fill: #d9e4f0; }
-    .bright { fill: #f8fbff; }
-    .muted { fill: #78879a; }
-    .faint { fill: #708096; }
-    .cyan { fill: #65d9ff; }
-    .violet { fill: #b49aff; }
-    .green { fill: #48f0a1; }
-    .amber { fill: #ffc65c; }
-    .rule { stroke: #202b39; }
-    .scene-reply { opacity: 1; animation: reply-scene 18s steps(1, end) infinite; }
-    .scene-pass { opacity: 0; animation: pass-scene 18s steps(1, end) infinite; }
-    .reply-user, .reply-context, .reply-json-1, .reply-json-2, .reply-json-3,
-    .reply-json-4, .reply-decision, .reply-output,
-    .pass-user, .pass-context, .pass-json-1, .pass-json-2, .pass-json-3,
-    .pass-json-4, .pass-decision, .pass-output { animation: 18s ease-out infinite; }
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    .primary { fill: #1d1d1f; }
+    .secondary { fill: #6e6e73; }
+    .tertiary { fill: #707075; }
+    .green { fill: #1f7a36; }
+    .blue { fill: #0071e3; }
+    .label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; }
+    .scene-reply { opacity: 1; animation: reply-scene 16s ease-in-out infinite; }
+    .scene-pass { opacity: 0; animation: pass-scene 16s ease-in-out infinite; }
+    .reply-user, .reply-context, .reply-code-1, .reply-code-2,
+    .reply-code-3, .reply-code-4, .reply-decision, .reply-result,
+    .pass-user, .pass-context, .pass-code-1, .pass-code-2,
+    .pass-code-3, .pass-code-4, .pass-decision, .pass-result {
+      animation-duration: 16s;
+      animation-timing-function: cubic-bezier(.2,.7,.2,1);
+      animation-iteration-count: infinite;
+    }
     .reply-user { animation-name: reply-user; }
     .reply-context { animation-name: reply-context; }
-    .reply-json-1 { animation-name: reply-json-1; }
-    .reply-json-2 { animation-name: reply-json-2; }
-    .reply-json-3 { animation-name: reply-json-3; }
-    .reply-json-4 { animation-name: reply-json-4; }
+    .reply-code-1 { animation-name: reply-code-1; }
+    .reply-code-2 { animation-name: reply-code-2; }
+    .reply-code-3 { animation-name: reply-code-3; }
+    .reply-code-4 { animation-name: reply-code-4; }
     .reply-decision { animation-name: reply-decision; }
-    .reply-output { animation-name: reply-output; }
+    .reply-result { animation-name: reply-result; }
     .pass-user { animation-name: pass-user; }
     .pass-context { animation-name: pass-context; }
-    .pass-json-1 { animation-name: pass-json-1; }
-    .pass-json-2 { animation-name: pass-json-2; }
-    .pass-json-3 { animation-name: pass-json-3; }
-    .pass-json-4 { animation-name: pass-json-4; }
+    .pass-code-1 { animation-name: pass-code-1; }
+    .pass-code-2 { animation-name: pass-code-2; }
+    .pass-code-3 { animation-name: pass-code-3; }
+    .pass-code-4 { animation-name: pass-code-4; }
     .pass-decision { animation-name: pass-decision; }
-    .pass-output { animation-name: pass-output; }
-    @keyframes reply-scene { 0%,19%{opacity:1} 20%,67%{opacity:0} 68%,100%{opacity:1} }
-    @keyframes pass-scene { 0%,21%{opacity:0} 22%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes reply-user { 0%,19%{opacity:1} 20%,69%{opacity:0} 71%,100%{opacity:1} }
-    @keyframes reply-context { 0%,19%{opacity:1} 20%,73%{opacity:0} 75%,100%{opacity:1} }
-    @keyframes reply-json-1 { 0%,19%{opacity:1} 20%,77%{opacity:0} 79%,100%{opacity:1} }
-    @keyframes reply-json-2 { 0%,19%{opacity:1} 20%,79%{opacity:0} 81%,100%{opacity:1} }
-    @keyframes reply-json-3 { 0%,19%{opacity:1} 20%,81%{opacity:0} 83%,100%{opacity:1} }
-    @keyframes reply-json-4 { 0%,19%{opacity:1} 20%,83%{opacity:0} 85%,100%{opacity:1} }
-    @keyframes reply-decision { 0%,19%{opacity:1} 20%,86%{opacity:0} 88%,100%{opacity:1} }
-    @keyframes reply-output { 0%,19%{opacity:1} 20%,89%{opacity:0} 92%,100%{opacity:1} }
-    @keyframes pass-user { 0%,23%{opacity:0} 25%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-context { 0%,27%{opacity:0} 29%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-json-1 { 0%,31%{opacity:0} 33%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-json-2 { 0%,33%{opacity:0} 35%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-json-3 { 0%,35%{opacity:0} 37%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-json-4 { 0%,37%{opacity:0} 39%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-decision { 0%,40%{opacity:0} 42%,65%{opacity:1} 66%,100%{opacity:0} }
-    @keyframes pass-output { 0%,43%{opacity:0} 46%,65%{opacity:1} 66%,100%{opacity:0} }
-    .orbit-a { transform-origin: 833px 228px; animation: spin 8s linear infinite; }
-    .orbit-b { transform-origin: 833px 228px; animation: spin-reverse 12s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes spin-reverse { to { transform: rotate(-360deg); } }
-    .core-pulse { transform-origin: 833px 228px; animation: core-pulse 2.4s ease-in-out infinite; }
-    @keyframes core-pulse { 0%,100%{transform:scale(.94);opacity:.65} 50%{transform:scale(1.06);opacity:1} }
-    .scanline { animation: scan 4.2s ease-in-out infinite; }
-    @keyframes scan { 0%{transform:translateY(-290px);opacity:0} 12%{opacity:.55} 78%{opacity:.2} 100%{transform:translateY(300px);opacity:0} }
-    .wipe { opacity: 0; animation: wipe 18s ease-in-out infinite; }
-    @keyframes wipe {
-      0%,17%,24%,63%,70%,100%{opacity:0;transform:translateY(-120px)}
-      19%,65%{opacity:.9;transform:translateY(165px)}
-      22%,68%{opacity:0;transform:translateY(415px)}
-    }
-    .send-ray { transform-origin: 58px 421px; animation: send-ray 18s ease-out infinite; }
-    @keyframes send-ray { 0%,88%{transform:scaleX(0);opacity:0} 92%{transform:scaleX(1);opacity:1} 100%{transform:scaleX(1);opacity:.28} }
-    .pass-collapse { transform-origin: 833px 228px; animation: pass-collapse 18s ease-out infinite; }
-    @keyframes pass-collapse { 0%,39%{transform:scale(1.35);opacity:0} 43%,65%{transform:scale(1);opacity:1} 66%,100%{transform:scale(.7);opacity:0} }
-    .cursor { animation: cursor 1s steps(1, end) infinite; }
-    @keyframes cursor { 0%,48%{opacity:1} 49%,100%{opacity:0} }
-    .live-dot { animation: live 1.6s ease-in-out infinite; }
-    @keyframes live { 0%,100%{opacity:.35} 50%{opacity:1} }
-    .static-pass-summary { display: none; }
+    .pass-result { animation-name: pass-result; }
+
+    @keyframes reply-scene { 0%,47%{opacity:1} 51%,100%{opacity:0} }
+    @keyframes pass-scene { 0%,49%{opacity:0} 53%,96%{opacity:1} 100%{opacity:0} }
+    @keyframes reply-user { 0%{opacity:0;transform:translateY(5px)} 5%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-context { 0%,7%{opacity:0;transform:translateY(5px)} 12%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-code-1 { 0%,13%{opacity:0;transform:translateY(4px)} 17%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-code-2 { 0%,16%{opacity:0;transform:translateY(4px)} 20%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-code-3 { 0%,19%{opacity:0;transform:translateY(4px)} 23%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-code-4 { 0%,22%{opacity:0;transform:translateY(4px)} 26%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-decision { 0%,25%{opacity:0;transform:translateY(5px)} 30%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes reply-result { 0%,30%{opacity:0;transform:translateY(6px)} 36%,47%{opacity:1;transform:none} 51%,100%{opacity:0} }
+    @keyframes pass-user { 0%,52%{opacity:0;transform:translateY(5px)} 57%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-context { 0%,57%{opacity:0;transform:translateY(5px)} 62%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-code-1 { 0%,62%{opacity:0;transform:translateY(4px)} 66%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-code-2 { 0%,65%{opacity:0;transform:translateY(4px)} 69%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-code-3 { 0%,68%{opacity:0;transform:translateY(4px)} 72%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-code-4 { 0%,71%{opacity:0;transform:translateY(4px)} 75%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-decision { 0%,74%{opacity:0;transform:translateY(5px)} 79%,96%{opacity:1;transform:none} 100%{opacity:0} }
+    @keyframes pass-result { 0%,79%{opacity:0;transform:translateY(6px)} 85%,96%{opacity:1;transform:none} 100%{opacity:0} }
+
+    .typing-cursor { animation: cursor 1.1s steps(1,end) infinite; }
+    @keyframes cursor { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    .static-pass-note { display: none; }
     @media (prefers-reduced-motion: reduce) {
-      .scene-reply, .reply-user, .reply-context, .reply-json-1, .reply-json-2,
-      .reply-json-3, .reply-json-4, .reply-decision, .reply-output {
-        animation: none !important; opacity: 1;
+      .scene-reply, .reply-user, .reply-context, .reply-code-1, .reply-code-2,
+      .reply-code-3, .reply-code-4, .reply-decision, .reply-result {
+        animation: none !important; opacity: 1; transform: none;
       }
-      .scene-pass, .wipe, .scanline, .pass-collapse { animation: none !important; opacity: 0; }
-      .orbit-a, .orbit-b, .core-pulse, .send-ray, .cursor, .live-dot { animation: none !important; }
-      .send-ray { transform: scaleX(1); opacity: .28; }
-      .static-pass-summary { display: block; }
+      .scene-pass, .typing-cursor { animation: none !important; opacity: 0; }
+      .static-pass-note { display: block; }
     }
   </style>
 
-  <rect width="1000" height="500" rx="18" fill="url(#stage)"/>
-  <ellipse cx="805" cy="238" rx="300" ry="250" fill="url(#violet-halo)"/>
-  <rect x=".75" y=".75" width="998.5" height="498.5" rx="17.25" fill="none" stroke="#263244" stroke-width="1.5"/>
+  <rect width="1000" height="500" fill="url(#canvas)"/>
 
-  <rect x="1" y="1" width="998" height="45" rx="17" fill="#0a0e15"/>
-  <path d="M1 45.5H999" stroke="#202a38"/>
-  <circle cx="22" cy="23" r="5.5" fill="#ff6b5f"/>
-  <circle cx="41" cy="23" r="5.5" fill="#f5b942"/>
-  <circle cx="60" cy="23" r="5.5" fill="#32d583"/>
-  <text x="88" y="23" class="faint" font-size="11.5" letter-spacing="1.2">PERSONAGENT / LIVE DECISION TRACE</text>
-  <circle class="live-dot" cx="842" cy="23" r="3.5" fill="#39e58c" filter="url(#tight-glow)"/>
-  <text x="854" y="23" class="green" font-size="10.5" letter-spacing="1">LIVE</text>
-  <text x="970" y="23" class="faint" font-size="10.5" text-anchor="end">18.0s LOOP</text>
+  <g filter="url(#window-shadow)">
+    <rect x="42" y="34" width="916" height="430" rx="22" fill="#ffffff"/>
+  </g>
+  <rect x="42.5" y="34.5" width="915" height="429" rx="21.5" fill="none" stroke="#dedee2"/>
 
-  <rect x="18" y="66" width="650" height="416" rx="14" fill="url(#terminal)" stroke="#202c3b"/>
-  <rect x="18" y="66" width="650" height="416" rx="14" fill="url(#grid)"/>
-  <rect x="684" y="66" width="298" height="416" rx="14" fill="#080c13" stroke="#202c3b"/>
-  <rect x="684" y="66" width="298" height="416" rx="14" fill="url(#grid)" opacity=".6"/>
+  <path d="M42 91.5H958" stroke="#e5e5e7"/>
+  <circle cx="70" cy="63" r="6" fill="#ff5f57"/>
+  <circle cx="90" cy="63" r="6" fill="#febc2e"/>
+  <circle cx="110" cy="63" r="6" fill="#28c840"/>
+  <text x="500" y="63" class="secondary" font-size="12" font-weight="500" text-anchor="middle">personagent</text>
+  <rect x="853" y="51" width="77" height="24" rx="12" fill="#f5f5f7"/>
+  <circle cx="868" cy="63" r="3" fill="#34c759"/>
+  <text x="879" y="63" class="secondary" font-size="10.5">Live trace</text>
 
-  <text x="38" y="90" class="green" font-size="12.5">$</text>
-  <text x="56" y="90" class="bright" font-size="12.5">personagent trace --live</text>
-  <text x="648" y="90" class="faint" font-size="10.5" text-anchor="end">same production reply boundary</text>
-  <path class="rule" d="M38 112H648"/>
+  <text x="74" y="122" class="secondary label">INCOMING</text>
+  <text x="693" y="122" class="secondary label">DECISION</text>
+  <path d="M665 114V432" stroke="#e8e8ed"/>
 
   <g class="scene-reply">
     <g class="reply-user">
-      <text x="38" y="140" class="cyan" font-size="11.5" letter-spacing=".8">INBOUND</text>
-      <text x="112" y="140" class="faint" font-size="11.5">you  ›</text>
-      <text x="166" y="140" class="bright" font-size="12.5">spent 3 hours on this and ctrl+z'd it into the void</text>
+      <rect x="74" y="139" width="555" height="48" rx="14" fill="#f5f5f7"/>
+      <text x="94" y="163" class="primary" font-size="14">spent 3 hours on this and ctrl+z'd it into the void</text>
     </g>
+
     <g class="reply-context">
-      <text x="38" y="171" class="faint" font-size="10.5">CONTEXT</text>
-      <rect x="106" y="159" width="112" height="24" rx="12" fill="#102230" stroke="#1b526c"/>
-      <text x="162" y="171" class="cyan" font-size="10.5" text-anchor="middle">room / group</text>
-      <rect x="226" y="159" width="130" height="24" rx="12" fill="#1b1530" stroke="#4b347c"/>
-      <text x="291" y="171" class="violet" font-size="10.5" text-anchor="middle">relation / friend</text>
-      <rect x="364" y="159" width="112" height="24" rx="12" fill="#101c19" stroke="#225a48"/>
-      <text x="420" y="171" class="green" font-size="10.5" text-anchor="middle">memory / 1 hit</text>
-      <path d="M38 201H648" stroke="#182330" stroke-dasharray="3 7"/>
+      <rect x="74" y="201" width="102" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="125" y="214" class="secondary" font-size="10.5" text-anchor="middle">group chat</text>
+      <rect x="184" y="201" width="92" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="230" y="214" class="secondary" font-size="10.5" text-anchor="middle">friend</text>
+      <rect x="284" y="201" width="108" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="338" y="214" class="secondary" font-size="10.5" text-anchor="middle">1 memory</text>
     </g>
 
-    <rect x="38" y="219" width="610" height="153" rx="10" fill="#0b1019" stroke="#26354a"/>
-    <rect x="38" y="219" width="3" height="153" rx="1.5" fill="#8b5cf6" filter="url(#tight-glow)"/>
-    <text x="56" y="239" class="violet" font-size="10.5" letter-spacing="1">MODEL / STRUCTURED OUTPUT</text>
-    <text x="56" y="258" class="faint" font-size="11.5">{</text>
-    <g class="reply-json-1">
-      <text x="72" y="276" class="faint" font-size="11.5">&quot;reasoning&quot;:</text>
-      <text x="160" y="276" class="ink" font-size="11.5">"a beat of empathy, not a fix-it list",</text>
+    <rect x="74" y="243" width="555" height="143" rx="15" fill="#fafafa" stroke="#e5e5e7"/>
+    <text x="94" y="265" class="tertiary label">MODEL OUTPUT</text>
+    <text x="94" y="289" class="tertiary mono" font-size="11.5">{</text>
+    <g class="reply-code-1">
+      <text x="109" y="307" class="tertiary mono" font-size="11.5">&quot;reasoning&quot;:</text>
+      <text x="198" y="307" class="primary mono" font-size="11.5">&quot;empathy before advice&quot;,</text>
     </g>
-    <g class="reply-json-2">
-      <text x="72" y="295" class="faint" font-size="11.5">&quot;intent&quot;:</text>
-      <text x="160" y="295" class="cyan" font-size="11.5">"vent",</text>
+    <g class="reply-code-2">
+      <text x="109" y="327" class="tertiary mono" font-size="11.5">&quot;intent&quot;:</text>
+      <text x="198" y="327" class="blue mono" font-size="11.5">&quot;vent&quot;,</text>
     </g>
-    <g class="reply-json-3">
-      <text x="72" y="314" class="faint" font-size="11.5">&quot;reply&quot;:</text>
-      <text x="160" y="314" class="green" font-size="11.5">"rip. take five before you go back in",</text>
+    <g class="reply-code-3">
+      <text x="109" y="347" class="tertiary mono" font-size="11.5">&quot;reply&quot;:</text>
+      <text x="198" y="347" class="green mono" font-size="11.5">&quot;rip. take five before you go back in&quot;,</text>
     </g>
-    <g class="reply-json-4">
-      <text x="72" y="333" class="faint" font-size="11.5">&quot;mem&quot;:</text>
-      <text x="160" y="333" class="ink" font-size="11.5">""</text>
+    <g class="reply-code-4">
+      <text x="109" y="367" class="tertiary mono" font-size="11.5">&quot;mem&quot;:</text>
+      <text x="198" y="367" class="primary mono" font-size="11.5">&quot;&quot;</text>
     </g>
-    <text x="56" y="352" class="faint" font-size="11.5">}</text>
+    <text x="94" y="376" class="tertiary mono" font-size="11.5">}</text>
 
-    <g class="reply-output">
-      <rect x="38" y="394" width="610" height="58" rx="10" fill="#092018" stroke="#1c6c4c"/>
-      <path class="send-ray" d="M58 421H626" stroke="#48f0a1" stroke-width="1.5" filter="url(#tight-glow)"/>
-      <text x="58" y="411" class="green" font-size="10.5" letter-spacing="1">OUTBOUND / OPEN</text>
-      <text x="58" y="434" class="bright" font-size="12.5">rip. take five before you go back in</text>
-      <text x="626" y="434" class="green cursor" font-size="12" text-anchor="end">█</text>
+    <g class="reply-result">
+      <rect x="74" y="401" width="555" height="40" rx="12" fill="#eef8f0"/>
+      <circle cx="94" cy="421" r="4" fill="#34c759"/>
+      <text x="108" y="421" class="green" font-size="12.5" font-weight="500">rip. take five before you go back in</text>
+      <text x="607" y="421" class="green mono typing-cursor" font-size="12" text-anchor="end">▌</text>
+    </g>
+
+    <g class="reply-decision">
+      <circle cx="808" cy="215" r="44" fill="#eef8f0"/>
+      <path d="M789 215l12 12 27-29" fill="none" stroke="#34c759" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="808" y="282" class="primary" font-size="26" font-weight="650" text-anchor="middle">Reply</text>
+      <text x="808" y="312" class="secondary" font-size="12" text-anchor="middle">A response adds value.</text>
+      <rect x="748" y="339" width="120" height="32" rx="16" fill="#1f7a36"/>
+      <text x="808" y="355" fill="#ffffff" font-size="11.5" font-weight="600" text-anchor="middle">Channel open</text>
     </g>
   </g>
 
   <g class="scene-pass">
     <g class="pass-user">
-      <text x="38" y="140" class="cyan" font-size="11.5" letter-spacing=".8">INBOUND</text>
-      <text x="112" y="140" class="faint" font-size="11.5">you  ›</text>
-      <text x="166" y="140" class="bright" font-size="12.5">D . e</text>
+      <rect x="74" y="139" width="555" height="48" rx="14" fill="#f5f5f7"/>
+      <text x="94" y="163" class="primary" font-size="14">D . e</text>
     </g>
+
     <g class="pass-context">
-      <text x="38" y="171" class="faint" font-size="10.5">CONTEXT</text>
-      <rect x="106" y="159" width="112" height="24" rx="12" fill="#102230" stroke="#1b526c"/>
-      <text x="162" y="171" class="cyan" font-size="10.5" text-anchor="middle">room / group</text>
-      <rect x="226" y="159" width="130" height="24" rx="12" fill="#1b1530" stroke="#4b347c"/>
-      <text x="291" y="171" class="violet" font-size="10.5" text-anchor="middle">signal / noise</text>
-      <rect x="364" y="159" width="124" height="24" rx="12" fill="#21190c" stroke="#6f4a18"/>
-      <text x="426" y="171" class="amber" font-size="10.5" text-anchor="middle">reply need / none</text>
-      <path d="M38 201H648" stroke="#182330" stroke-dasharray="3 7"/>
+      <rect x="74" y="201" width="102" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="125" y="214" class="secondary" font-size="10.5" text-anchor="middle">group chat</text>
+      <rect x="184" y="201" width="106" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="237" y="214" class="secondary" font-size="10.5" text-anchor="middle">low signal</text>
+      <rect x="298" y="201" width="118" height="26" rx="13" fill="#f5f5f7"/>
+      <text x="357" y="214" class="secondary" font-size="10.5" text-anchor="middle">no reply needed</text>
     </g>
 
-    <rect x="38" y="219" width="610" height="153" rx="10" fill="#0b1019" stroke="#26354a"/>
-    <rect x="38" y="219" width="3" height="153" rx="1.5" fill="#8b5cf6" filter="url(#tight-glow)"/>
-    <text x="56" y="239" class="violet" font-size="10.5" letter-spacing="1">MODEL / STRUCTURED OUTPUT</text>
-    <text x="56" y="258" class="faint" font-size="11.5">{</text>
-    <g class="pass-json-1">
-      <text x="72" y="276" class="faint" font-size="11.5">&quot;reasoning&quot;:</text>
-      <text x="160" y="276" class="ink" font-size="11.5">"noise — nothing here asks for a reply",</text>
+    <rect x="74" y="243" width="555" height="143" rx="15" fill="#fafafa" stroke="#e5e5e7"/>
+    <text x="94" y="265" class="tertiary label">MODEL OUTPUT</text>
+    <text x="94" y="289" class="tertiary mono" font-size="11.5">{</text>
+    <g class="pass-code-1">
+      <text x="109" y="307" class="tertiary mono" font-size="11.5">&quot;reasoning&quot;:</text>
+      <text x="198" y="307" class="primary mono" font-size="11.5">&quot;nothing here asks for a reply&quot;,</text>
     </g>
-    <g class="pass-json-2">
-      <text x="72" y="295" class="faint" font-size="11.5">&quot;intent&quot;:</text>
-      <text x="160" y="295" class="cyan" font-size="11.5">"chat",</text>
+    <g class="pass-code-2">
+      <text x="109" y="327" class="tertiary mono" font-size="11.5">&quot;intent&quot;:</text>
+      <text x="198" y="327" class="blue mono" font-size="11.5">&quot;chat&quot;,</text>
     </g>
-    <g class="pass-json-3">
-      <text x="72" y="314" class="faint" font-size="11.5">&quot;reply&quot;:</text>
-      <text x="160" y="314" class="amber" font-size="11.5">"PASS",</text>
+    <g class="pass-code-3">
+      <text x="109" y="347" class="tertiary mono" font-size="11.5">&quot;reply&quot;:</text>
+      <text x="198" y="347" class="primary mono" font-size="11.5">&quot;PASS&quot;,</text>
     </g>
-    <g class="pass-json-4">
-      <text x="72" y="333" class="faint" font-size="11.5">&quot;mem&quot;:</text>
-      <text x="160" y="333" class="ink" font-size="11.5">""</text>
+    <g class="pass-code-4">
+      <text x="109" y="367" class="tertiary mono" font-size="11.5">&quot;mem&quot;:</text>
+      <text x="198" y="367" class="primary mono" font-size="11.5">&quot;&quot;</text>
     </g>
-    <text x="56" y="352" class="faint" font-size="11.5">}</text>
+    <text x="94" y="376" class="tertiary mono" font-size="11.5">}</text>
 
-    <g class="pass-output">
-      <rect x="38" y="394" width="610" height="58" rx="10" fill="#211707" stroke="#6d4817"/>
-      <text x="58" y="411" class="amber" font-size="10.5" letter-spacing="1">OUTBOUND / CLOSED</text>
-      <text x="58" y="434" class="bright" font-size="12.5">∅  PASS stays inside the agent boundary</text>
-      <text x="626" y="434" class="amber cursor" font-size="12" text-anchor="end">█</text>
+    <g class="pass-result">
+      <rect x="74" y="401" width="555" height="40" rx="12" fill="#f5f5f7"/>
+      <circle cx="94" cy="421" r="4" fill="#86868b"/>
+      <text x="108" y="421" class="secondary" font-size="12.5" font-weight="500">No message sent</text>
+    </g>
+
+    <g class="pass-decision">
+      <circle cx="808" cy="215" r="44" fill="#f5f5f7"/>
+      <path d="M791 215h34" fill="none" stroke="#86868b" stroke-width="4" stroke-linecap="round"/>
+      <text x="808" y="282" class="primary" font-size="26" font-weight="650" text-anchor="middle">Pass</text>
+      <text x="808" y="312" class="secondary" font-size="12" text-anchor="middle">Silence is the response.</text>
+      <rect x="748" y="339" width="120" height="32" rx="16" fill="#f5f5f7" stroke="#d2d2d7"/>
+      <text x="808" y="355" class="secondary" font-size="11.5" font-weight="600" text-anchor="middle">Channel closed</text>
     </g>
   </g>
 
-  <g clip-path="url(#left-panel-clip)">
-    <rect class="scanline" x="18" y="66" width="650" height="1.5" fill="#65d9ff" opacity="0" filter="url(#tight-glow)"/>
-    <rect class="wipe" x="18" y="66" width="650" height="3" fill="#b49aff" filter="url(#soft-glow)"/>
-  </g>
-
-  <text x="708" y="91" class="faint" font-size="10.5" letter-spacing="1.2">DECISION CORE</text>
-  <text x="958" y="91" class="faint" font-size="9.5" text-anchor="end">HOT PATH / 01</text>
-  <path d="M708 111H958" stroke="#202b39"/>
-
-  <path d="M737 145L785 186M929 145L881 186M737 309L785 270M929 309L881 270" stroke="#29374a" stroke-width="1"/>
-  <circle cx="833" cy="228" r="116" fill="url(#violet-halo)"/>
-  <circle class="orbit-a" cx="833" cy="228" r="83" fill="none" stroke="#7c5ce0" stroke-opacity=".55" stroke-dasharray="4 9"/>
-  <circle class="orbit-b" cx="833" cy="228" r="66" fill="none" stroke="#65d9ff" stroke-opacity=".35" stroke-dasharray="2 12"/>
-  <circle cx="833" cy="228" r="48" fill="#0c111a" stroke="#314057" stroke-width="1.2"/>
-  <circle class="core-pulse" cx="833" cy="228" r="41" fill="none" stroke="#8b5cf6" stroke-opacity=".35"/>
-
-  <rect x="708" y="126" width="68" height="28" rx="7" fill="#111827" stroke="#29374a"/>
-  <text x="742" y="140" class="violet" font-size="9.5" text-anchor="middle">PERSONA</text>
-  <rect x="890" y="126" width="68" height="28" rx="7" fill="#111827" stroke="#29374a"/>
-  <text x="924" y="140" class="cyan" font-size="9.5" text-anchor="middle">CONTEXT</text>
-  <rect x="708" y="302" width="68" height="28" rx="7" fill="#111827" stroke="#29374a"/>
-  <text x="742" y="316" class="green" font-size="9.5" text-anchor="middle">MEMORY</text>
-  <rect x="890" y="302" width="68" height="28" rx="7" fill="#111827" stroke="#29374a"/>
-  <text x="924" y="316" class="amber" font-size="9.5" text-anchor="middle">POLICY</text>
-
-  <g class="scene-reply reply-decision">
-    <circle cx="833" cy="228" r="102" fill="url(#green-halo)"/>
-    <text x="833" y="216" class="green" font-size="20" font-weight="700" letter-spacing="2" text-anchor="middle" filter="url(#tight-glow)">REPLY</text>
-    <text x="833" y="242" class="muted" font-size="9.5" letter-spacing="1.3" text-anchor="middle">CHANNEL OPEN</text>
-  </g>
-  <g class="scene-pass pass-decision">
-    <circle class="pass-collapse" cx="833" cy="228" r="102" fill="url(#amber-halo)"/>
-    <text x="833" y="216" class="amber" font-size="20" font-weight="700" letter-spacing="2" text-anchor="middle" filter="url(#tight-glow)">PASS</text>
-    <text x="833" y="242" class="muted" font-size="9.5" letter-spacing="1.3" text-anchor="middle">CHANNEL CLOSED</text>
-  </g>
-
-  <path d="M708 350H958" stroke="#202b39"/>
-  <text x="708" y="370" class="faint" font-size="9.5" letter-spacing="1">BOUNDARY CHECKS</text>
-  <circle cx="713" cy="394" r="3" fill="#39e58c"/>
-  <text x="725" y="394" class="muted" font-size="10.5">structured output</text>
-  <text x="958" y="394" class="green" font-size="10.5" text-anchor="end">VALID</text>
-  <circle cx="713" cy="418" r="3" fill="#39e58c"/>
-  <text x="725" y="418" class="muted" font-size="10.5">character policy</text>
-  <text x="958" y="418" class="green" font-size="10.5" text-anchor="end">CLEAN</text>
-  <circle cx="713" cy="442" r="3" fill="#39e58c"/>
-  <text x="725" y="442" class="muted" font-size="10.5">delivery gate</text>
-  <g class="scene-reply reply-decision"><text x="958" y="442" class="green" font-size="10.5" text-anchor="end">OPEN</text></g>
-  <g class="scene-pass pass-decision"><text x="958" y="442" class="amber" font-size="10.5" text-anchor="end">CLOSED</text></g>
-  <text x="708" y="466" class="faint" font-size="9.5">silence is a first-class result</text>
-  <text x="958" y="466" class="faint" font-size="9.5" text-anchor="end">FAIL-CLOSED</text>
-  <g class="static-pass-summary">
-    <rect x="708" y="453" width="250" height="24" rx="6" fill="#211707" stroke="#6d4817"/>
-    <text x="833" y="465" class="amber" font-size="9.5" letter-spacing=".7" text-anchor="middle">ALTERNATE / PASS · CHANNEL CLOSED</text>
+  <g class="static-pass-note">
+    <rect x="714" y="397" width="188" height="34" rx="17" fill="#f5f5f7"/>
+    <circle cx="735" cy="414" r="3.5" fill="#86868b"/>
+    <text x="748" y="414" class="secondary" font-size="10.5">Also: Pass · Channel closed</text>
   </g>
 </svg>
