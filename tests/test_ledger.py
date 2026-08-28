@@ -964,6 +964,66 @@ def test_a_rejected_rewrite_is_not_promoted_later() -> None:
     check("rewrite: and the pair is then left for review, not promoted",
           after.promote is False and "disagrees" in after.reason, after.reason)
 
+    # AND THE PROTECTION MUST NOT EXPIRE. The first cut of this fix applied
+    # the ordinary evidence-age window to the rejection, so the block could be
+    # OUTWAITED: rejection on day 0, two fresh corroborating corrections on
+    # days 40 and 41, and the refused text promoted. A rolled-back promoted
+    # pair never comes back; a proposed one only had to wait a month.
+    #
+    # Counter-evidence about the REPLY still expires — "4b" above pins that,
+    # and a stale laugh must not veto a fresh correction. "This person refused
+    # this exact text" is a different statement and does not go stale.
+    old_rejection = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW - 400 * 86400), **scope,
+        speaker_id="alice", recipient_id="alice", reply=rewrite,
+        reaction_type="rejection",
+        adjudication={"accept": True, "mode": "called"})
+    fresh_pair = [correction("bob", 0.02), correction("carol", 0.04)]
+    outwaited = promotion.decide(
+        cand, linked_events=fresh_pair,
+        related_events=fresh_pair + [old_rejection], peers=[], now=NOW)
+    check("rewrite: a year-old rejection still blocks the pair",
+          outwaited.promote is False and "disagrees" in outwaited.reason,
+          outwaited.reason)
+
+
+def test_an_over_long_scope_field_stays_distinct() -> None:
+    """Bounding the scope must not merge two conversations into one.
+
+    Retrieval compares a live scope against the ledger's, and the ledger's is
+    length-bounded. Normalising BOTH sides through a plain truncation fixed
+    the comparison and introduced a quieter version of the same bug: two ids
+    differing only past the limit became the same string, so material promoted
+    in one room was authorized into another that shared its 128-character
+    prefix — and `require_same_conversation` could not stop it, because by
+    then the two really were equal.
+
+    Short ids — every real one — must be untouched, so this cannot be
+    "fixed" by hashing everything."""
+    long_a = "g" * 128 + "-room-one"
+    long_b = "g" * 128 + "-room-two"
+    norm_a = evidence.normalize_scope({"conv_id": long_a})["conv_id"]
+    norm_b = evidence.normalize_scope({"conv_id": long_b})["conv_id"]
+    check("scope: two over-long conv_ids stay distinct", norm_a != norm_b,
+          f"{norm_a!r} vs {norm_b!r}")
+    check("scope: ...and stay within the stored limit",
+          len(norm_a) <= evidence.SCOPE_LIMITS["conv_id"], str(len(norm_a)))
+    check("scope: an ordinary id is untouched",
+          evidence.normalize_scope({"conv_id": "g1"})["conv_id"] == "g1")
+
+    # The writer and the comparator must agree for the over-long case too —
+    # that agreement is the whole point of the table.
+    event = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW), conv_id=long_a,
+        speaker_id="a", recipient_id="a", reply="x")
+    check("scope: what make_event stores is what normalize_scope produces",
+          event["conv_id"] == norm_a, f"{event['conv_id']!r} vs {norm_a!r}")
+    other = evidence.make_event(
+        kind=evidence.KIND_REACTION, ts=stamp(NOW), conv_id=long_b,
+        speaker_id="a", recipient_id="a", reply="x")
+    check("scope: and the two rooms are not one room in the ledger either",
+          event["conv_id"] != other["conv_id"])
+
 
 def test_stale_evidence_is_refused() -> None:
     """The rule at the centre of the four-day outage, and it had no test.
@@ -1157,6 +1217,7 @@ def main() -> int:
         test_stale_evidence_is_refused()
         test_a_rejected_rewrite_is_not_promoted_later()
         test_an_unwitnessed_proposal_does_not_veto_a_real_correction()
+        test_an_over_long_scope_field_stays_distinct()
         test_a_positive_example_waits_for_a_person_and_says_so()
 
     after = sorted(p.name for p in real.glob("*")) if real.exists() else []

@@ -3268,6 +3268,28 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if all(str(scope.get(key) or "") == str(value or "")
                        for key, value in current_scope.items()):
                     authorized.append(row)
+            # SAY SOMETHING WHEN EVERYTHING IS REFUSED. Dropping 100% of a
+            # non-empty view logged nothing at all, which is the property that
+            # let an over-long PERSONA_VERSION delete the entire learning loop
+            # in silence for however long nobody looked. The scope contains
+            # `persona_hash`, so editing the persona document by ONE BYTE
+            # orphans the whole learned corpus the same way, and that is a
+            # trigger nobody has to opt into.
+            #
+            # Edge-triggered: once per transition, not once per turn, and it
+            # rearms when authority comes back so a later regression is not
+            # swallowed by the first one.
+            if authorized:
+                self._scope_drop_warned = False
+            elif rows and not getattr(self, "_scope_drop_warned", False):
+                self._scope_drop_warned = True
+                logger.warning(
+                    "[Agent] all %d promoted row(s) refused by scope for "
+                    "conv_id=%r — nothing learned can reach a prompt until "
+                    "these agree. Live scope: %r. Usual causes: the persona "
+                    "document was edited (persona_hash), BOT_NAME changed "
+                    "(persona), or PERSONA_VERSION was bumped.",
+                    len(rows), conv_id, current_scope)
             return authorized
 
         scoped_pairs = _authorized_view(self._view_pairs_cache)

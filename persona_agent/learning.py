@@ -112,6 +112,38 @@ class Learning:
                            type(e).__name__, e)
         return promoted
 
+    #: The audit trail's byte ceiling. `candidates.jsonl` has no rotation,
+    #: unlike `eval.jsonl`, so reaching this is terminal rather than a wrap.
+    CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
+
+    def _audit_candidate(self, ev: dict, diag: dict, applied: str) -> None:
+        """Write one review audit row — and SAY SO when the file refuses it.
+
+        `src_eval_ts` in this file is the only review-dedup key, so a row that
+        does not land means the same eval is re-diagnosed on every tick,
+        forever, at one model call each. `evolution.append_jsonl` refuses
+        silently past its byte cap and returns 0, and nobody read that return
+        — so the loop kept spending and the audit trail, which is the only
+        record of WHY the agent talks the way it does, went quiet at the same
+        moment and for the same reason."""
+        try:
+            written = evolution.append_jsonl(
+                self.candidates_file,
+                [evolution.candidate_record(ev, diag, applied=applied)],
+                max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES,
+            )
+        except Exception as e:
+            logger.warning("[Agent] candidate audit append failed: %s: %s",
+                           type(e).__name__, e)
+            return
+        if not written:
+            logger.error(
+                "[Agent] candidates.jsonl has hit its %d-byte cap — the audit "
+                "row for %s was DROPPED, so that eval will be re-diagnosed on "
+                "every evolve tick and the audit trail is no longer being "
+                "written. Archive or truncate the file.",
+                self.CANDIDATE_AUDIT_MAX_BYTES, str(ev.get("ts", "?"))[:19])
+
     def _record_and_corroborate(self, event: dict, ts: str) -> bool:
         """Record an event, then let it speak for whatever is already waiting."""
         fresh = self._record_evidence(event)
@@ -485,9 +517,9 @@ class Learning:
                     adjudicator_prompt_version="self-eval/1",
                     source_event_id=f"eval:{group_id}:{record['ts']}",
                 )
-                self._record_and_corroborate(ev, record["ts"])
-                self._propose_candidate(ev, candidates.TYPE_EXAMPLE, ex,
-                                        record["ts"])
+                if self._record_and_corroborate(ev, record["ts"]):
+                    self._propose_candidate(ev, candidates.TYPE_EXAMPLE, ex,
+                                            record["ts"])
         except Exception as e:
             logger.warning("[Agent] reply evaluation failed: %s: %s",
                            type(e).__name__, e)
@@ -652,7 +684,15 @@ class Learning:
                               "intent": entry.get("intent", "")},
                 parent_event_id=str(entry.get("parent_evidence_id") or ""),
             )
-            self._record_and_corroborate(reaction_ev, now)
+            # KEEP THE ANSWER. Evidence identity is content-addressed and
+            # `adjudication` is deliberately NOT one of `_ID_FIELDS`, so the
+            # same reaction re-adjudicated — a retried background task, a
+            # replayed webhook, exactly what that dedup exists to absorb —
+            # is one evidence row and, if the second verdict differs, a
+            # SECOND candidate proposing a different rewrite. The two then
+            # block each other through `find_conflicts`, permanently, with
+            # the view empty and nothing to retire either of them.
+            reaction_is_new = self._record_and_corroborate(reaction_ev, now)
 
             # Dedup keys mean parsing the seed AND learned feedback pools, which
             # are allowed to reach 5 MB — tens of milliseconds on the event
@@ -706,17 +746,21 @@ class Learning:
                         parent_event_id=str(fix.get("evidence_id")
                                             or reaction_ev["event_id"]),
                     )
-                    self._record_and_corroborate(retry_ev, now)
-                    outcomes.append("retry:" + self._propose_candidate(
-                        retry_ev, candidates.TYPE_PAIR, fpair, now))
+                    if self._record_and_corroborate(retry_ev, now):
+                        outcomes.append("retry:" + self._propose_candidate(
+                            retry_ev, candidates.TYPE_PAIR, fpair, now))
 
             if adj["accept"]:
+                # `reaction_is_new` gates the two PROPOSALS and nothing else.
+                # The retraction and the recovery paths below stay
+                # unconditional: they are idempotent, and they describe what
+                # the user did rather than what a model said about it.
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
-                if pair is not None and _fresh_pair(pair):
+                if reaction_is_new and pair is not None and _fresh_pair(pair):
                     outcomes.append("pair:" + self._propose_candidate(
                         reaction_ev, candidates.TYPE_PAIR, pair, now))
                 ex = reactions.to_example(entry, adj, now)
-                if ex is not None:
+                if reaction_is_new and ex is not None:
                     # One laugh is not proof, and no quantity of laughter is:
                     # positive reactions are weak evidence, so an example
                     # candidate waits for a strong event or a human.
@@ -858,6 +902,17 @@ class Learning:
             )
             diag = evolution.parse_review(raw)
             if not diag:
+                # AUDIT THE FAILURE, then move on. `src_eval_ts` in
+                # candidates.jsonl is the ONLY review-dedup key, so skipping
+                # the row left this eval permanently pending: re-diagnosed on
+                # every tick, one model call each, forever — and
+                # `EVOLVE_BATCH` of them pin the window so nothing else is
+                # ever reviewed either.
+                logger.warning(
+                    "[Agent] evolve: reviewer output not JSON for %s, marking "
+                    "reviewed so it is not retried forever: %s",
+                    str(ev.get("ts", "?"))[:19], str(raw)[:120])
+                self._audit_candidate(ev, {}, "unparseable")
                 continue
             pair = evolution.pair_from_candidate(
                 evolution.candidate_record(ev, diag), now)
@@ -883,20 +938,16 @@ class Learning:
                     source_event_id=(
                         f"eval:{ev.get('group_id') or ''}:{ev.get('ts') or ''}"),
                 )
-                self._record_and_corroborate(event, now)
-                outcome = self._propose_candidate(
-                    event, candidates.TYPE_PAIR, pair, now)
+                outcome = ("held" if not self._record_and_corroborate(event, now)
+                           else self._propose_candidate(
+                               event, candidates.TYPE_PAIR, pair, now))
                 if outcome in ("proposed", "promoted"):
                     proposed += 1
                 existing.add((pair["reply"], pair["better"]))
             # Audit trail after the proposal, but keyed so a crash in between
             # re-reviews the entry rather than losing it: the ledger's own
             # dedup makes a repeated proposal a no-op.
-            evolution.append_jsonl(
-                self.candidates_file,
-                [evolution.candidate_record(ev, diag, applied=outcome)],
-                max_bytes=20_000_000,
-            )
+            self._audit_candidate(ev, diag, outcome)
         if proposed:
             logger.info("[Agent] evolve: +%d preference candidates from %d "
                         "low-score evals (awaiting corroboration)",

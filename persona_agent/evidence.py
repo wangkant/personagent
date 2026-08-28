@@ -202,8 +202,30 @@ def normalize_scope(scope: dict) -> dict:
     Any field over its limit is a silent total failure of retrieval, which is
     why this is a shared function and not a comment asking the next caller to
     remember."""
-    return {key: _text(scope.get(key), limit)
+    return {key: _scope_text(scope.get(key), limit)
             for key, limit in SCOPE_LIMITS.items()}
+
+
+def _scope_text(value, limit: int) -> str:
+    """Bounded like everything else here, but still DISTINCT.
+
+    Normalising both sides through a plain truncation fixed the comparison and
+    introduced a quieter version of the same bug: two values differing only
+    past the limit became EQUAL, so material promoted in a room whose id
+    shared a 128-character prefix with another was authorized into that other
+    room's prompt, and `PROMOTE_REQUIRE_SAME_CONVERSATION` could not stop it
+    because the two ids really were the same string by then. Two release
+    labels sharing a 32-character prefix were likewise one agent.
+
+    An over-length value keeps a readable prefix and carries a digest of the
+    WHOLE original, so the field stays bounded and the comparison stays
+    injective. Short values — every real id — are untouched, so this changes
+    nothing for anyone it was not already broken for."""
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+    return text[:max(0, limit - 9)] + "~" + digest
 
 
 def _same_person(event: dict) -> bool:

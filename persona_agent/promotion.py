@@ -310,8 +310,6 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
     max_age = policy.max_evidence_age_days * 86400.0
     out = []
     for ev in events or ():
-        if now and max_age and now - epoch(ev.get("ts")) > max_age:
-            continue
         ev_reply = str(ev.get("reply") or "")
         about_reply = ev_reply == reply
         # A rejection of the REWRITE argues against the pair as directly as a
@@ -322,6 +320,22 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
         about_rewrite = (ctype == candidates.TYPE_PAIR and better
                          and ev_reply.strip() == better)
         if not (about_reply or about_rewrite):
+            continue
+        # THE AGE WINDOW APPLIES TO ONE OF THESE AND NOT THE OTHER.
+        #
+        # Counter-evidence about the REPLY expires on purpose — a stale laugh
+        # must not veto a fresh correction, which is what "4b: expired
+        # counter-evidence does not block promotion" pins.
+        #
+        # A rejection of the REWRITE is a different statement: this person
+        # refused this exact text, and that does not stop being true because a
+        # month passed. Expiring it meant the protection could simply be
+        # outwaited — measured: rejection on day 0, two fresh corroborating
+        # corrections on days 40 and 41, and the refused text promoted into
+        # the prompt. A promoted pair rolled back for the same reason never
+        # comes back; a proposed one only had to wait.
+        if (about_reply and now and max_age
+                and now - epoch(ev.get("ts")) > max_age):
             continue
         if not scope_compatible(candidates.scope_from_event(ev), scope,
                                 require_same_conversation=policy.require_same_conversation):
