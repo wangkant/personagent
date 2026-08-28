@@ -38,10 +38,14 @@ from . import promotion
 from .prompts import (
     DEFAULT_PERSONA,
     INTENT_RULES,
+    PRIVATE_TOOL_GUIDE,
     REASONING_PROTOCOL,
     STYLE_GUIDE,
     TOOL_GUIDE,
     parse_persona_style,
+    private_intent_rules,
+    private_output_protocol,
+    private_style_guide,
 )
 from .stickers import StickerLibrary
 from .storage import atomic_write_text
@@ -1345,21 +1349,34 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # prefix is billed at ~10% on cache hits. _call_llm accepts a
         # list system and flattens it back to a string if the endpoint doesn't
         # support cache_control.
-        # - static_block (cache): persona + STYLE_GUIDE + INTENT_RULES +
-        #     TOOL_GUIDE + rules — process-wide constants.
+        # - static_block (cache): persona + the PRIVATE style guide, intent
+        #     rules and tool guide + rules. Constant per Agent, which is what
+        #     the cache prefix needs: `private_style_guide` interpolates the
+        #     persona's declared knobs but no persona-specific STRING, so the
+        #     prefix stays byte-identical across every turn of this persona.
         # - semi_static_block (cache): sticker guide — only changes when new
         #     stickers get tagged.
         # - dynamic_block (no cache): private_overrides + few-shot examples +
-        #     time line + REASONING_PROTOCOL. The output contract stays at the
-        #     very end of the prompt (same ordering as before) so it's the last
-        #     thing the model reads before generating.
+        #     time line + the private output protocol. The output contract
+        #     stays at the very end of the prompt so it's the last thing the
+        #     model reads before generating.
+        #
+        # THE PRIVATE VARIANTS, not the group constants. `prompts.py` grew a
+        # full 1:1 set — and the `[style]` block a persona document may end
+        # with is parsed into `self.persona_style` for them — but this path
+        # kept assembling itself from the GROUP constants, so every knob a
+        # persona declared was stripped from its prose and then ignored. It
+        # also meant a DM was reading the group PASS list: `private_output_
+        # protocol` exists partly because that list "produced a read receipt
+        # on perfectly ordinary turns ('ok', 'night', a one-word follow-up)".
+        # There is no PASS in a chat with one person in it.
         static_block = (
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
             f"</persona>\n\n"
-            f"{STYLE_GUIDE}\n\n"
-            f"{INTENT_RULES}\n\n"
-            f"{TOOL_GUIDE}"
+            f"{private_style_guide(self.persona_style)}\n\n"
+            f"{private_intent_rules(self.persona_style)}\n\n"
+            f"{PRIVATE_TOOL_GUIDE}"
             f"<rules>\n"
             f"- Don't reveal you're an AI, don't mention your model name / version.\n"
             f"- Even when the answer carries a lot of info, write it in chat voice paragraph-by-paragraph, never as a document.\n"
@@ -1392,7 +1409,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {self._current_time_str()}\n\n"
-            f"{REASONING_PROTOCOL}"
+            f"{private_output_protocol(self.persona_style)}"
         )
         system = [
             {"type": "text", "text": static_block,

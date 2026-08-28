@@ -824,6 +824,77 @@ def test_moving_on_is_not_acceptance() -> None:
           moved_on["strength"] != evidence.STRONG, moved_on["strength"])
 
 
+def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
+    """`positive_example` cannot auto-promote, and that is the policy.
+
+    `supports` accepts a self-eval or a positive reaction there, and
+    `classify_strength` calls both WEAK — "laughter, agreement, banter, the
+    agent's own score. Never sufficient to promote anything, at any
+    quantity." So the type is human-review-only BY CONSTRUCTION, not by
+    threshold, and promotion has to say which of the two it is: the reason
+    used to read "0/1 strong events (4 supporting)", which describes a bar
+    the next reaction might clear. No reaction ever clears it.
+
+    The table is DERIVED here rather than copied. Anyone widening `supports`
+    or `classify_strength` moves the intersection, and the point of the table
+    is to make that show up as a failing test instead of as a bot that
+    started imitating whatever four people laughed at."""
+    derived = set()
+    for ctype in candidates.TYPES:
+        for kind in evidence.KINDS:
+            for rtype in evidence.REACTION_TYPES:
+                for recipient in ("a", "b"):   # same person / a bystander
+                    ev = evidence.make_event(
+                        kind=kind, ts=stamp(NOW), speaker_id="a",
+                        recipient_id=recipient, reply="a line",
+                        reaction_type=rtype,
+                        adjudication={"accept": True, "better": "a fix"})
+                    if (evidence.supports(ev, ctype)
+                            and evidence.classify_strength(ev) == evidence.STRONG):
+                        derived.add(ctype)
+    check("STRONG_CAPABLE_TYPES is what the two functions actually do",
+          derived == set(evidence.STRONG_CAPABLE_TYPES),
+          f"derived={sorted(derived)} table={sorted(evidence.STRONG_CAPABLE_TYPES)}")
+
+    # The exclusion that keeps the derivation honest. A retry acceptance IS
+    # strong, and its `reply` is the text the user REJECTED — so admitting it
+    # as support for a positive example would let "the user accepted the fix"
+    # promote the rejected line as something to imitate. Only the
+    # reply-equality check in supports_candidate stood between those two.
+    retry = evidence.make_event(
+        kind=evidence.KIND_RETRY_ACCEPTANCE, ts=stamp(NOW), speaker_id="a",
+        recipient_id="a", reply="the rejected line", reaction_type="positive",
+        adjudication={"accept": True, "better": "the retry"})
+    check("a retry acceptance is still strong",
+          evidence.classify_strength(retry) == evidence.STRONG,
+          evidence.classify_strength(retry))
+    check("a retry acceptance still argues for the pair",
+          evidence.supports(retry, candidates.TYPE_PAIR))
+    check("but never that the rejected text is a good example",
+          not evidence.supports(retry, candidates.TYPE_EXAMPLE))
+
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    events = [
+        evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=stamp(NOW - 60), **scope,
+            speaker_id=str(i), recipient_id=str(i), reply="good line",
+            reaction_type="positive",
+            adjudication={"accept": True, "mode": "called"})
+        for i in range(4)
+    ]
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_EXAMPLE, scope=scope, created_at=stamp(NOW),
+        evidence=[], payload={"reply": "good line", "mode": "called"})
+    decision = promotion.decide(cand, linked_events=events, related_events=[],
+                                peers=[], now=NOW)
+    check("four positive reactions still promote nothing",
+          decision.promote is False, decision.reason)
+    check("and the reason names a person, not a count",
+          "person" in decision.reason and "/1 strong" not in decision.reason,
+          decision.reason)
+
+
 def main() -> int:
     real = runtime_dir()
     before = sorted(p.name for p in real.glob("*")) if real.exists() else []
@@ -850,6 +921,7 @@ def main() -> int:
         test_paths_never_touch_real_runtime_state(tmp / "t14")
         test_corroboration_means_people_not_events()
         test_moving_on_is_not_acceptance()
+        test_a_positive_example_waits_for_a_person_and_says_so()
 
     after = sorted(p.name for p in real.glob("*")) if real.exists() else []
     check("14: the real runtime directory was not written",

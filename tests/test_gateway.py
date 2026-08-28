@@ -399,16 +399,19 @@ def test_plugin_reply_id_strip() -> None:
 # Integration: real Agent + handle_gateway round-trip
 # ---------------------------------------------------------------------------
 
-def make_agent(tmp: Path) -> Agent:
+def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     """Lightest viable Agent: real ctor, no network config, all writable
-    state files redirected into a temp directory."""
+    state files redirected into a temp directory.
+
+    `persona` is a parameter so a test can hand the ctor a document with a
+    `[style]` declaration and check what the real parse does with it."""
     a = Agent(
         api_key="test-key",  # non-empty so the agent is enabled
         bot_qq=BOT_QQ,
         bot_name="TestBot",
         napcat_api="http://127.0.0.1:9",  # closed port; never reached when the sink is set
         memory_file=str(tmp / "memory.json"),
-        persona="test persona",
+        persona=persona,
         eval_enable=False,
         eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"),
@@ -2232,6 +2235,53 @@ async def regression_web_desc_not_control_plane(tmp: Path) -> None:
           repr(buf_texts))
 
 
+async def regression_declared_style_reaches_the_private_prompt(tmp: Path) -> None:
+    """A `[style]` block a persona declares must actually change the DM.
+
+    `prompts.py` grew a full 1:1 renderer set — `private_style_guide`,
+    `private_intent_rules`, `PRIVATE_TOOL_GUIDE`, `private_output_protocol`,
+    all six knobs applied — and `Agent.__init__` has always parsed the block
+    into `self.persona_style`. But `_chat_private` kept assembling itself
+    from the GROUP constants, so the block was stripped out of the prose (so
+    the model never saw the raw config, which is correct) and then had no
+    effect whatsoever. Nothing tested the chain end to end, which is how a
+    finished feature stayed unwired.
+
+    The last check is the one that matters operationally: `private_output_
+    protocol` exists partly because the group PASS list "produced a read
+    receipt on perfectly ordinary turns" in a chat with one person in it."""
+    doc = ("Mira is blunt and warm.\n\n"
+           "[style]\nlength: long\nvent: solve\n[/style]\n")
+    agent = make_agent(tmp, persona=doc)
+    check("style: the declaration is stripped from the persona prose",
+          "[style]" not in agent.persona and "Mira is blunt" in agent.persona,
+          repr(agent.persona))
+    check("style: the ctor parsed the knobs off the document",
+          agent.persona_style.length == "long"
+          and agent.persona_style.vent == "solve",
+          repr(agent.persona_style))
+
+    captured: dict = {}
+
+    async def fake_call(*, system, messages, **_kw):
+        captured["system"] = system
+        return '{"reasoning": "r", "intent": "chat", "reply": "ok", "mem": ""}'
+
+    agent._call_llm = fake_call
+    await agent._chat_private([{"role": "user", "content": "hey"}],
+                              is_owner=True, pkey="private:42")
+    blocks = captured.get("system") or []
+    text = "".join(b.get("text", "") for b in blocks)
+    check("style: the prompt states the DECLARED length band",
+          "four to six lines" in text, text[:160])
+    check("style: the prompt states the DECLARED vent move",
+          "practical thing" in text, "")
+    check("style: the default band is not also present",
+          "~40-80 characters" not in text, "")
+    check("style: a DM reads the 1:1 protocol, not the group one",
+          REASONING_PROTOCOL not in text and STYLE_GUIDE not in text, "")
+
+
 async def main_async() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -2274,6 +2324,7 @@ async def main_async() -> None:
         await regression_partial_delivery_is_committed(tmp / "pd")
         await regression_llm_fail_fallback_outside_lock(tmp / "z")
         await regression_web_desc_not_control_plane(tmp / "zz")
+        await regression_declared_style_reaches_the_private_prompt(tmp / "sty")
 
 
 def main() -> int:

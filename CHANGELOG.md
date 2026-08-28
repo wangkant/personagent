@@ -4,6 +4,114 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A debugging pass over the whole package. Every item below was reproduced
+before it was changed and is covered by a test that fails without the fix.
+
+### Security
+
+- **A refused character no longer has a twin that walks past it.** Every
+  refusal is spelled in the ORIGINAL — `[`, `]` and `\` by absence from the
+  ASCII punctuation string, `<>{}|` by the hard-reject set, the CJK brackets
+  by the sanitizer — while the `0xFF00-0xFFEF` branch of the validator admits
+  a BLOCK. `[INST] hi [/INST]` was dropped while `［INST］ hi ［/INST］` was
+  released, `「persona」` was stripped while `｢persona｣` was not, `a\b` was
+  dropped while `a＼b` was not, and `_arrow_frame` could not see `￩persona￫`
+  at all because its character class is built from the arrows opt-in. A
+  compatibility twin now inherits the fate of its NFKC fold, **derived** at
+  import rather than listed — the same argument `_HARD_REJECT_FOLD_RANGES`
+  already makes for itself, and the derivation turned up `U+FE47`/`U+FE48`,
+  `U+FE68` and the whole vertical-form bracket family that no list had.
+- **The CJK punctuation blanket no longer carries combining marks.** Naming
+  the whole `0x3000-0x303F` block admitted `U+302A-U+302F`: six stackable,
+  zero-width marks, which is the invisible-width channel `_SCRIPT_MARK_RANGES`
+  exists to refuse. Forty of them survived a default-style reply intact.
+- **A retry acceptance can no longer argue that a rejected reply is a good
+  example.** `evidence.supports` accepted one for `positive_example` on the
+  strength of its `positive` reaction type, but that event is about the PAIR
+  and its `reply` field is the text the user REJECTED — and it classifies
+  STRONG, so one would have cleared `min_strong` alone. Only a reply-equality
+  check in `supports_candidate` happened to disagree, which was a guard by
+  accident rather than by intent.
+- **Memory-deletion authority fails closed.** `trusted_admin` was
+  `not user_id or is_owner`, so a message that arrived without attribution
+  inherited OWNER rights over everyone else's entries.
+
+### Fixed
+
+- **A truncated reply keeps its voice.** `_sanitize_reply` re-validates what
+  it truncates, so a cut landing inside a `[STICKER:…]` marker or inside a ZWJ
+  sequence left a bare `[` or a joiner modifying nothing and the whole reply
+  was dropped — the subtler silence the seam exists to remove, one layer down.
+  The sticker case needed no persona configuration and fired at nine
+  consecutive body lengths.
+- **The vendor gate no longer silences a denial.** Negation guards existed on
+  the Chinese `是` branch and on none of the three English patterns, so
+  "I'm not ChatGPT, I'm Mira" was dropped whole — along with reported speech
+  (`我是说deepseek…`), a pronoun object (`我叫他别用kimi了`) and the customer
+  reading (`作为智谱的老用户…`).
+- **The same @ is answered once.** The dedup ring is keyed on the string
+  spelling at one choke point: the webhook path banked `"12345"` while the
+  catch-up replay compared `12345`, so every mention the sweep replayed got a
+  second answer.
+- **What a DM teaches reaches a DM prompt.** The learning scope (`dm:<uid>`)
+  is derived from the memory namespace (`private:<uid>`) instead of being read
+  back under it; the two spellings disagree on two of the six fields
+  `_authorized_view` compares.
+- **A persona's `[style]` block changes the chat it is written for.**
+  `prompts.py` carries a full 1:1 renderer set with all six knobs applied and
+  the ctor has always parsed the block, but `_chat_private` kept assembling
+  itself from the GROUP constants — so a declared knob was stripped from the
+  prose and then ignored, and a DM was reading the group PASS list that
+  `private_output_protocol` exists to replace.
+- **The proactive DM cooldown engages.** The attempt is marked whether or not
+  the model answers PASS, which is what the group dispatcher already says and
+  does; the assignment sat inside the send-success branch, so the documented
+  common case re-rolled every tick.
+- **Teacher reputation decays** (30-day half-life). `hard_block` consulted
+  counters whose only writer sits behind the gate, making it an absorbing
+  state: five dismissals during a tuning session muted someone permanently.
+- **The NapCat bridge is not proxied.** httpx has no implicit localhost
+  bypass, so an `HTTP_PROXY` in the launching shell relayed every reply,
+  history poll and OCR call to `127.0.0.1` through it. Calls to the wider
+  internet still honour the proxy.
+- **The gateway has its own admission budget** (`MAX_INFLIGHT_GATEWAY`). It
+  answers synchronously and holds a slot for the whole turn while
+  `/webhook/qq` releases within milliseconds; one shared counter let gateway
+  bursts 429 the QQ path.
+- **`PROMOTE_AUTO=1` means on.** `_bool` was `raw == "true"`, so every other
+  spelling silently disabled automatic promotion.
+- **Promotion says which kind of "no" it means.** A `positive_example` cannot
+  reach `min_strong` from any quantity of the events that support it — it is
+  waiting for a person, not for more evidence — but the reason read
+  "0/1 strong events", which describes a bar the next reaction might clear.
+- The owner branch gates on `is_owner` alone (`OWNER_NAME` ships empty and is
+  independently optional, so gating on both sent the owner down the stranger
+  branch); the sticker guide no longer renders `haven't analyzed 's chat
+  style`; a non-dict `owner_profile.json` no longer turns every message into
+  a silent no-reply; the gateway replay guard un-burns a nonce when its
+  persist fails and warns before its cap instead of 403-ing silently;
+  `_spawn` retrieves its tasks' exceptions; `_focus_tokens` builds n-grams per
+  CJK run (a one-character trigger scored nothing, and `你好，世界` produced
+  `好世`); `_split_text` keeps a separator with the clause it terminates.
+
+### Changed
+
+- `httpcore` is a direct dependency — `ingestion.py` imports a private module
+  of it for the SSRF guard's per-hop DNS pinning, and `httpx` pins only the
+  major version.
+- CI gates on `ruff --select F401,F811,F821`, and a `dev` extra installs it.
+- `.env.example` documents `AGENT_HOME`, `LLM_TIMEOUT`, `LLM_MAX_RETRIES`,
+  `MAX_INFLIGHT_GATEWAY` and the two ledger warn-byte settings.
+
+### Removed
+
+- `_handle_private_legacy` — 106 lines, defined once and called nowhere,
+  carrying a hand-rolled lock protocol the live path no longer uses.
+- 114 unused imports: one header copied into six modules by the split that
+  produced this package.
+
 ## [0.2.0] — 2026-08-11
 
 The headline: **an unsupported character now degrades to a missing glyph,

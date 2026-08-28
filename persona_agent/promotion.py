@@ -297,6 +297,7 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     if cand.get("state") != candidates.STATE_PROPOSED:
         return Decision(False, f"state is {cand.get('state')}, not proposed")
 
+    ctype = str(cand.get("type") or "")
     max_age = policy.max_evidence_age_days * 86400.0
     supporting: list[dict] = []
     seen_ids: set[str] = set()
@@ -323,6 +324,17 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         return Decision(False, "a conflicting candidate exists — left for review",
                         len(supporting), len(strong), ",".join(conflicting[:3]))
     if len(strong) < policy.min_strong:
+        # Say which kind of "not yet" this is. A positive_example cannot
+        # reach `min_strong` from any quantity of the events that support it
+        # (see evidence.can_be_strong), so reporting it as a count made the
+        # audit log read like a threshold the next reaction might cross.
+        if not evidence.can_be_strong(ctype):
+            return Decision(
+                False,
+                f"{ctype} is promotable only by a person: nothing that "
+                f"supports one classifies strong ({len(supporting)} "
+                f"supporting)",
+                len(supporting), len(strong))
         return Decision(
             False,
             f"{len(strong)}/{policy.min_strong} strong events "

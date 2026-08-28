@@ -265,10 +265,47 @@ def supports(event: dict, candidate_type: str) -> bool:
             return True
         return event.get("reaction_type") in ("correction", "rejection")
     if candidate_type == "positive_example":
+        # NOT a retry acceptance, and the exclusion is load-bearing. That
+        # event is about the PAIR — its `reply` field is the text the user
+        # REJECTED and its `better` is the retry — so admitting it here makes
+        # "the user accepted the fix" argue that the text they rejected is a
+        # good example to imitate. It is STRONG, so one of them would clear
+        # `min_strong` on its own. Nothing stopped that today except
+        # `promotion.supports_candidate`'s reply-equality check happening to
+        # disagree, which is a guard by accident and not by intent.
+        if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
+            return False
         if kind == KIND_SELF_EVAL:
             return True
         return event.get("reaction_type") == "positive"
     return False
+
+
+# Which candidate types any single event can lend STRONG authority to.
+# Derived from the pair of functions above, not asserted alongside them:
+# `supports` says what argues FOR a type and `classify_strength` says how much
+# one event may lend, so "can this type ever clear min_strong" is their
+# intersection. `tests/test_ledger.py` re-derives this by scanning every
+# kind x reaction_type combination and fails if the answer moves.
+STRONG_CAPABLE_TYPES = frozenset({"preference_pair"})
+
+
+def can_be_strong(candidate_type: str) -> bool:
+    """Can any event that SUPPORTS this candidate type ever classify STRONG.
+
+    False for `positive_example`, and that is the POLICY rather than an
+    oversight. What supports one is a self-eval or a positive reaction, and
+    `classify_strength` calls both WEAK: "laughter, agreement, banter, the
+    agent's own score. Never sufficient to promote anything, at any
+    quantity." Such a candidate is still proposed, still audited, and still
+    promotable — by a person, through `tools/candidates_admin.py promote`.
+    It is waiting for a human, not for more events.
+
+    Promotion asks this so its refusal can say WHICH of those two it is. The
+    reason read "0/1 strong events (4 supporting)", which describes a
+    threshold you could reach by waiting, and no amount of waiting reaches it.
+    """
+    return candidate_type in STRONG_CAPABLE_TYPES
 
 
 def opposes(event: dict, candidate_type: str) -> bool:
