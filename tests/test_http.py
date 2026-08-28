@@ -300,6 +300,91 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
               repr((first_full, second_full)))
 
 
+def test_gateway_envelope_refuses_a_bad_signature() -> None:
+    """The signature is what binds the BODY to the token. Nothing tested it.
+
+    Every other envelope test supplies a correctly computed signature and
+    varies something else — replay, staleness, persistence, cache pressure —
+    so `if not hmac.compare_digest(supplied_signature, expected)` could be
+    replaced with `if False:` and the whole suite stayed green. Measured, by
+    mutation. The QQ webhook has its negative case (`ASGI auth: invalid QQ
+    signature rejected`); this one did not, and without the binding a bearer
+    token seen once in a log or a proxy is enough to inject arbitrary chat
+    events with no tie to the payload at all.
+
+    EVERY CASE GETS A FRESH NONCE AND A FRESH GUARD, and the control below
+    proves why that matters: reuse either and the refusal comes from the
+    replay guard instead, which is a test that passes for the wrong reason —
+    the failure mode this suite has already been bitten by twice."""
+    verifier = main_module._verify_gateway_envelope
+    guard_cls = main_module.ReplayGuard
+    token = "shared-secret"
+    body = b'{"message_id":"m1","text":"hello"}'
+    now = int(time.time())
+
+    def sign(payload: bytes, nonce: str, stamp: str, key: str = token) -> str:
+        return "sha256=" + hmac.new(
+            key.encode("utf-8"),
+            stamp.encode("ascii") + b"." + nonce.encode("utf-8") + b"." + payload,
+            hashlib.sha256).hexdigest()
+
+    def envelope(nonce: str, *, sig: str | None = None, stamp: str | None = None):
+        stamp = stamp or str(now)
+        return {
+            "x-gateway-token": token,
+            "x-gateway-timestamp": stamp,
+            "x-gateway-nonce": nonce,
+            "x-gateway-signature": (sign(body, nonce, stamp) if sig is None
+                                    else sig),
+        }
+
+    def verdict(headers, payload=body) -> bool:
+        # A guard per call: a shared one would let a replay refusal stand in
+        # for a signature refusal and every case below would "pass".
+        return verifier(payload, headers, token, now=now,
+                        replay_guard=guard_cls(ttl_seconds=300, max_entries=16))
+
+    # The control. If this is not True the rest proves nothing.
+    check("gateway signature: a correct envelope is accepted",
+          verdict(envelope("ctl")) is True)
+
+    cases = {
+        "a forged signature": envelope("n1", sig="sha256=" + "0" * 64),
+        "an absent signature": {k: v for k, v in envelope("n2").items()
+                                if k != "x-gateway-signature"},
+        "an empty signature": envelope("n3", sig=""),
+        "the digest without its prefix":
+            envelope("n4", sig=sign(body, "n4", str(now))[len("sha256="):]),
+        "a signature made with the wrong key":
+            envelope("n5", sig=sign(body, "n5", str(now), key="not-the-token")),
+    }
+    for label, headers in cases.items():
+        check(f"gateway signature: {label} is refused",
+              verdict(headers) is False, repr(headers.get("x-gateway-signature")))
+
+    # The BINDING, one field at a time: a signature that is valid for some
+    # other request must not travel. These are the shapes an attacker who can
+    # see one signed request actually has.
+    check("gateway signature: does not travel to a different body",
+          verdict(envelope("n6"), payload=b'{"message_id":"m1","text":"drop table"}')
+          is False)
+    tampered_nonce = envelope("n7")
+    tampered_nonce["x-gateway-nonce"] = "n7-swapped"
+    check("gateway signature: does not survive a swapped nonce",
+          verdict(tampered_nonce) is False)
+    tampered_stamp = envelope("n8")
+    tampered_stamp["x-gateway-timestamp"] = str(now - 1)
+    check("gateway signature: does not survive a swapped timestamp",
+          verdict(tampered_stamp) is False)
+
+    # And the token check is still its own gate, not a side effect of the
+    # signature matching.
+    wrong_token = envelope("n9")
+    wrong_token["x-gateway-token"] = "wrong"
+    check("gateway signature: the bearer token is checked separately",
+          verdict(wrong_token) is False)
+
+
 def test_event_schema_requires_stable_message_ids() -> None:
     validator = getattr(main_module, "_validate_event_payload", None)
     check("event schema validator exists", callable(validator))
@@ -394,6 +479,7 @@ async def main_async() -> None:
     await test_public_health_is_a_cheap_liveness_check()
     await test_asgi_webhook_auth_and_schema()
     test_gateway_envelope_rejects_replay_and_stale_requests()
+    test_gateway_envelope_refuses_a_bad_signature()
     test_event_schema_requires_stable_message_ids()
     test_startup_view_rebuild_can_fail_closed()
 

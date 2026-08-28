@@ -792,9 +792,19 @@ def test_corroboration_means_people_not_events() -> None:
     check("speakers: default lets one person clarify",
           decide(solo).promote is True, decide(solo).reason)
     # Opting in to 2 is what refuses a lone stranger.
+    solo_strict = decide(solo, policy=strict)
     check("speakers: MIN_SPEAKERS=2 blocks one stranger self-corroborating",
-          decide(solo, policy=strict).promote is False,
-          decide(solo, policy=strict).reason)
+          solo_strict.promote is False, solo_strict.reason)
+    # BY THE SPEAKER RULE, and not because the pile was empty. The line above
+    # is a negative, so it also holds when nothing was counted at all — which
+    # is precisely how the fixture rot in this file stayed invisible while its
+    # three positive siblings went red, and why shrinking the evidence window
+    # to 0.001 days still leaves it green. Naming the reason is what makes it
+    # distinguish the rule from its own absence.
+    check("speakers: ...refused by the speaker rule, not by an empty pile",
+          "distinct speakers" in solo_strict.reason
+          and solo_strict.supporting == 2,
+          f"{solo_strict.reason!r} supporting={solo_strict.supporting}")
     check("speakers: MIN_SPEAKERS=2 still promotes on two people",
           decide(two, policy=strict).promote is True,
           decide(two, policy=strict).reason)
@@ -822,6 +832,98 @@ def test_moving_on_is_not_acceptance() -> None:
           strong["strength"] == evidence.STRONG, strong["strength"])
     check("retry: moving on is not strong",
           moved_on["strength"] != evidence.STRONG, moved_on["strength"])
+
+
+def test_stale_evidence_is_refused() -> None:
+    """The rule at the centre of the four-day outage, and it had no test.
+
+    Three separate mutations of `promotion.py` all survived the whole suite:
+    disabling `decide`'s age gate, raising `MAX_EVIDENCE_AGE_DAYS` to 1e9, and
+    making `epoch()` fall back to `time.time()` instead of `0.0` on an
+    unparsable timestamp. Only the COUNTER-evidence window was pinned (4b
+    above) and only the lower bound of the supporting window, indirectly, by
+    the speaker tests. So the suite protected "evidence must not expire too
+    fast" and said nothing at all about "stale evidence must be refused".
+
+    THE OFFSETS BELOW ARE LITERALS ON PURPOSE. Deriving them from
+    `MAX_EVIDENCE_AGE_DAYS` would move the fixture with the constant, and the
+    mutation that widens the window to 1e9 would sail through — a test that
+    reads its own subject for the answer.
+
+    What a regression here costs: a year-old correction from someone who has
+    since left the group promotes into the permanent pool and the persona
+    imitates it forever. The inverse is worse to diagnose — a timestamp format
+    change makes every event read as ancient, promotion silently stops, and
+    the only symptom is that the agent quietly stops learning."""
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+
+    def correction(speaker: str, age_days: float, ts: str | None = None) -> dict:
+        return evidence.make_event(
+            kind=evidence.KIND_REACTION,
+            ts=stamp(NOW - age_days * 86400) if ts is None else ts,
+            **scope, speaker_id=speaker, recipient_id=speaker,
+            reply="just restart it lol", reaction_type="correction",
+            adjudication={"accept": True, "better": "check the logs first",
+                          "mode": "called"})
+
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+        evidence=[], payload={"reply": "just restart it lol",
+                              "better": "check the logs first",
+                              "mode": "called"})
+
+    def decide(events):
+        # The DEFAULT policy, so the shipped constant is the thing under test.
+        return promotion.decide(cand, linked_events=events, related_events=[],
+                                peers=[], now=NOW, policy=promotion.Policy())
+
+    fresh = [correction("alice", 0.02), correction("bob", 0.04)]
+    check("age: two fresh strong corrections promote",
+          decide(fresh).promote is True, decide(fresh).reason)
+
+    # 60 days: comfortably past the shipped 30 and comfortably short of any
+    # widening worth calling a widening.
+    stale = [correction("alice", 60), correction("bob", 60)]
+    decision = decide(stale)
+    check("age: the same two, sixty days old, promote nothing",
+          decision.promote is False, decision.reason)
+    check("age: ...and they are not merely outvoted, they are not counted",
+          decision.supporting == 0 and decision.strong == 0,
+          f"supporting={decision.supporting} strong={decision.strong}")
+
+    # One fresh, one stale: the fresh one is real evidence and still must not
+    # promote alone, which is the whole point of min_events.
+    check("age: a fresh event does not carry a stale one",
+          decide([correction("alice", 0.02), correction("bob", 60)]).promote
+          is False)
+
+    # An unparsable timestamp reads as ancient, never as now. `epoch()`
+    # returning 0.0 is a fail-closed decision and this is the half of its
+    # contract nothing pinned.
+    # BOTH events carry a non-empty unparsable stamp. An empty one returns
+    # early from `epoch()`, before the parse it is meant to exercise, so a
+    # pair with one of each leaves only one countable event and `min_events`
+    # refuses for the wrong reason — the mutation walks straight past.
+    unparsable = [correction("alice", 0.02, ts="not-a-timestamp"),
+                  correction("bob", 0.04, ts="???")]
+    check("age: an unparsable timestamp is treated as ancient, not as now",
+          decide(unparsable).promote is False, decide(unparsable).reason)
+    missing = [correction("alice", 0.02, ts=""), correction("bob", 0.04, ts="")]
+    check("age: a missing timestamp is treated as ancient too",
+          decide(missing).promote is False, decide(missing).reason)
+    # And the parser's contract asserted DIRECTLY, because the behavioural
+    # checks above cannot see it. `NOW` sits ~509 days ahead of the real
+    # clock, so a fallback of `time.time()` reads as MORE ancient than the
+    # window from NOW's point of view and is filtered either way — the frozen
+    # clock masks the mutation exactly where the behaviour is observed. A unit
+    # contract wants a unit assertion.
+    check("age: epoch() reads an unparsable stamp as 0, never as now",
+          promotion.epoch("not-a-timestamp") == 0.0
+          and promotion.epoch("") == 0.0
+          and promotion.epoch(None) == 0.0,
+          repr([promotion.epoch("not-a-timestamp"), promotion.epoch(""),
+                promotion.epoch(None)]))
 
 
 def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
@@ -921,6 +1023,7 @@ def main() -> int:
         test_paths_never_touch_real_runtime_state(tmp / "t14")
         test_corroboration_means_people_not_events()
         test_moving_on_is_not_acceptance()
+        test_stale_evidence_is_refused()
         test_a_positive_example_waits_for_a_person_and_says_so()
 
     after = sorted(p.name for p in real.glob("*")) if real.exists() else []
