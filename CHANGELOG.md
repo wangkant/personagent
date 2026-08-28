@@ -9,8 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 A debugging pass over the whole package. Every item below was reproduced
 before it was changed and is covered by a test that fails without the fix.
 
+### Added
+
+- **`persona_agent/preflight.py` — a misspelled setting is no longer silent.**
+  The deployment surface is 80 settings and four of them matter for a first
+  reply; everything else has a default, which is fine except that it makes a
+  TYPO invisible. `.env` with `DEEPSEK_API_KEY=sk-...` produced a bot that
+  started cleanly, logged nothing unusual, never answered, and gave the
+  operator no way to find out short of reading the source. Reported at startup
+  and by `tools/healthcheck.py`: missing required settings, an `AGENT_HOME`
+  that is not a directory, an empty `BOT_NAME`, and any key `.env.example`
+  does not list. Reported, never fatal — a deployment that is 90% configured
+  should start and say what the other 10% is.
+- **`.env.example` is checked against the code.** The typo check treats the
+  template as the authority on what a key may be called, so a test scans every
+  `os.getenv` / `os.environ.get` in the package and asserts the template
+  documents it. It found `PERSONA_FILE` and `PERSONA_CARD_FILE` on its first
+  run — the card being the carrier for the per-persona reply-style opt-ins, so
+  a persona author reading the template had no way to learn the feature
+  existed. Both are documented now.
+
 ### Security
 
+- **The gateway envelope's HMAC signature is tested against a bad signature.**
+  Every existing envelope test supplied a CORRECTLY computed one and varied
+  something else, so the comparison could be replaced with `if False:` and the
+  whole suite stayed green — measured by mutation. That signature is the only
+  thing binding the request body to the token: without it a bearer token seen
+  once in a log or a proxy is enough to inject arbitrary chat events. Ten
+  cases now, each with a fresh nonce and a fresh replay guard so a replay
+  refusal cannot stand in for a signature refusal.
+- **A rejection of a candidate's rewrite no longer expires.** The first cut of
+  the fix below applied the ordinary evidence-age window to it, so the
+  protection could be outwaited: rejection on day 0, two fresh corroborating
+  corrections on days 40 and 41, and the refused text promoted. Counter-
+  evidence about the REPLY still expires — a stale laugh must not veto a fresh
+  correction — because "this person refused this exact text" is a different
+  statement and does not go stale.
 - **A refused character no longer has a twin that walks past it.** Every
   refusal is spelled in the ORIGINAL — `[`, `]` and `\` by absence from the
   ASCII punctuation string, `<>{}|` by the hard-reject set, the CJK brackets
@@ -96,8 +131,49 @@ before it was changed and is covered by a test that fails without the fix.
   CJK run (a one-character trigger scored nothing, and `你好，世界` produced
   `好世`); `_split_text` keeps a separator with the clause it terminates.
 
+- **A replayed reaction no longer mints a second candidate.** Evidence
+  identity is content-addressed and `adjudication` is deliberately not part of
+  it — that is what lets a retried task or a duplicated webhook be absorbed —
+  so the same reaction answered differently the second time was ONE evidence
+  row and TWO candidates proposing different rewrites, which then blocked each
+  other permanently with the promoted view empty.
+- **The evolve loop no longer burns a model call per tick, forever, on an
+  answer it could not parse.** `src_eval_ts` is the only review-dedup key, and
+  a reviewer response that failed to parse wrote no audit row, so the eval
+  stayed pending indefinitely. Same failure by a second route: appends past
+  `candidates.jsonl`'s 20 MB cap are refused silently and the return value was
+  not read, which stopped the loop's progress and the audit trail at once.
+- **Two low-score evals in the same second are two evals.** The eval row's
+  timestamp is the review-dedup key and had one-second resolution, so the
+  second one was invisible from then on. Microseconds now.
+- **Bounding a scope field no longer merges two conversations.** Normalising
+  both sides of the comparison through a plain truncation made two ids
+  differing only past the limit into one string, so material promoted in one
+  room could be authorized into another sharing its 128-character prefix. An
+  over-length value keeps a prefix and carries a digest of the whole original.
+- **Refusing an entire promoted view says so.** Dropping 100% of a non-empty
+  view logged nothing, which is what let the `PERSONA_VERSION` mismatch above
+  delete the learning loop in silence — and `persona_hash` is one of the six
+  compared fields, so editing the persona document by one byte orphans the
+  learned corpus the same way, with a trigger nobody opts into.
+
 ### Changed
 
+- **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
+  suppressed only the write, so reaching for it to find out what the tool
+  would do got you billed for finding out. The old behaviour is `--no-write`.
+- **`quickstart.py --help` no longer runs the bootstrap.** The only argv
+  handling was `"--no-input" in sys.argv`, so `--help` — or any unrecognised
+  flag — fell through to `pip install -r requirements.txt`.
+  `tools/healthcheck.py --help` had the same shape and fired live probes.
+- **`persona_agent/channels.py`** is now the only place the conversation-key
+  vocabulary lives. Routing, memory and learning keys are three different
+  names for one conversation, three call sites derived the mapping between
+  them independently, and two were wrong.
+- `AGENT_EVIDENCE_WARN_BYTES` and `AGENT_CANDIDATE_LEDGER_WARN_BYTES` now
+  change something observable: `run_checks` has a ledger-size probe. Both
+  knobs were documented, both were computed by a `health_metadata` with no
+  caller outside the test suite.
 - `httpcore` is a direct dependency — `ingestion.py` imports a private module
   of it for the SSRF guard's per-hop DNS pinning, and `httpx` pins only the
   major version.
