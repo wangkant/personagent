@@ -113,8 +113,16 @@ class Policy:
                 return default
 
         def _bool(name: str, default: bool) -> bool:
+            """`raw == "true"` read every other spelling as False, so
+            `PROMOTE_AUTO=1` disabled promotion entirely and said nothing.
+            An unrecognised value keeps the default rather than silently
+            picking the opposite of what was meant."""
             raw = str(env.get(name, "")).strip().lower()
-            return default if not raw else raw == "true"
+            if raw in {"true", "1", "yes", "on"}:
+                return True
+            if raw in {"false", "0", "no", "off"}:
+                return False
+            return default
 
         return cls(
             # Floors, not suggestions: PROMOTE_MIN_EVENTS=1 would reintroduce

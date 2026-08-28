@@ -110,6 +110,22 @@ MAX_INFLIGHT_WEBHOOKS = _parse_int_config(
     minimum=1,
     maximum=4096,
 )
+# A SEPARATE budget, because the two endpoints hold their slot for wildly
+# different spans. /webhook/qq hands its slot to a background task within
+# milliseconds; /webhook/gateway answers synchronously and holds one for the
+# entire turn (~12s, see transport.py). Sharing one counter meant a burst of
+# gateway turns 429'd the cheap, non-blocking QQ webhooks alongside them.
+# Defaults to the same number, so an existing deployment keeps its capacity —
+# what changes is that the two can no longer starve each other.
+MAX_INFLIGHT_GATEWAY = _parse_int_config(
+    "MAX_INFLIGHT_GATEWAY",
+    # `.strip() or ...` so a blank line in .env means "same as above" rather
+    # than an unparseable value that warns on every start.
+    os.getenv("MAX_INFLIGHT_GATEWAY", "").strip() or MAX_INFLIGHT_WEBHOOKS,
+    MAX_INFLIGHT_WEBHOOKS,
+    minimum=1,
+    maximum=4096,
+)
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -429,6 +445,7 @@ def _onebot_event_is_fresh(
 
 
 _webhook_admission = AdmissionLimiter(MAX_INFLIGHT_WEBHOOKS)
+_gateway_admission = AdmissionLimiter(MAX_INFLIGHT_GATEWAY)
 _gateway_replay = ReplayGuard(
     state_file=runtime_dir() / "gateway_nonces.json")
 
@@ -697,7 +714,7 @@ async def _qq_webhook_admitted(request: Request):
 
 @app.post("/webhook/gateway")
 async def gateway_webhook(request: Request):
-    if not await _webhook_admission.try_acquire():
+    if not await _gateway_admission.try_acquire():
         return JSONResponse(
             status_code=429, content={"error": "webhook capacity exceeded"})
     try:
@@ -707,7 +724,7 @@ async def gateway_webhook(request: Request):
                 status_code=403, content={"error": "authentication required"})
         return await _gateway_webhook_admitted(request)
     finally:
-        await _webhook_admission.release()
+        await _gateway_admission.release()
 
 
 async def _gateway_webhook_admitted(request: Request):
