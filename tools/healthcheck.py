@@ -22,7 +22,23 @@ except Exception:
 from persona_agent.health import run_checks, all_critical_ok
 
 
+USAGE = """\
+usage: python tools/healthcheck.py
+
+Probes every external service the agent depends on and prints an OK/FAIL
+table. Exits non-zero if a service marked critical is down. The probes are
+tiny, read-only and unauthenticated, and are safe to run while the agent is
+live — but they DO reach the network, so this is not a no-op.
+"""
+
+
 def main():
+    # `--help` used to be ignored, which meant asking what this does fired
+    # live probes at every configured provider endpoint and the OneBot bridge.
+    argv = sys.argv[1:]
+    if argv:
+        print(USAGE)
+        return 0 if {"-h", "--help"} & set(argv) else 2
     print("=" * 64)
     print("  personagent — API health check")
     print("=" * 64)

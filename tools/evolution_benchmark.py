@@ -300,10 +300,34 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
     return out
 
 
+_STATE_MARKER = ".benchmark-state"
+
+
+def _reset_state_dir(state_dir: Path) -> None:
+    """Empty a benchmark arm's state directory — only if we created it.
+
+    `--outdir` is free-form and this used to be a bare
+    `if state_dir.exists(): shutil.rmtree(state_dir)`, so
+    `run --outdir <anything>` recursively deleted two subdirectories of
+    `<anything>` with no confirmation and no flag. A marker file is the
+    cheapest thing that distinguishes "the last run's scratch state" from
+    "a directory that happened to be named state-on"."""
+    if state_dir.exists():
+        if not (state_dir / _STATE_MARKER).is_file():
+            raise SystemExit(
+                f"refusing to delete {state_dir}: no {_STATE_MARKER} marker, "
+                f"so a benchmark run did not create it. Move or remove it by "
+                f"hand if that is really what you want.")
+        shutil.rmtree(state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / _STATE_MARKER).write_text(
+        "created by tools/evolution_benchmark.py; safe to delete\n",
+        encoding="utf-8")
+
+
 async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir,
                   judge_model, seed_state="empty"):
-    if state_dir.exists():
-        shutil.rmtree(state_dir)
+    _reset_state_dir(state_dir)
     agent = build_isolated_agent(state_dir, bot_name, lang, eval_enable=evolve_on)
     # Seed both arms identically (or start empty) AFTER build so the files
     # survive the rmtree above; the agent's retrieval caches reload lazily by

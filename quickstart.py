@@ -126,7 +126,15 @@ def set_env_values(env_text: str, values: dict) -> str:
 
 def write_env(env_path: Path, values: dict) -> None:
     text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    env_path.write_text(set_env_values(text, values), encoding="utf-8")
+    updated = set_env_values(text, values)
+    # Temp file then replace, because this is the file holding live API keys
+    # and a raw write_text truncates before it writes: a Ctrl-C in the wizard
+    # left an empty .env. `persona_agent.storage.atomic_write_text` does
+    # exactly this, but quickstart runs BEFORE the dependencies it installs,
+    # which is the whole point of quickstart, so it cannot import it.
+    tmp = env_path.with_name(env_path.name + ".tmp")
+    tmp.write_text(updated, encoding="utf-8")
+    os.replace(tmp, env_path)
 
 
 def _env_current_key(env_path: Path) -> str:
@@ -280,8 +288,38 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         print(f"  try it any time:  {_venv_python(venv)} try_chat.py")
 
 
+USAGE = """\
+usage: python quickstart.py [--no-input]
+
+Sets the project up: creates .venv, installs requirements.txt, copies
+.env.example to .env and persona.example to persona.txt, then runs a short
+wizard to fill in the API key and bot name.
+
+  --no-input   skip the wizard (classic bootstrap; also implied by a
+               non-interactive stdin, e.g. CI or a pipe)
+
+Re-running is safe: existing files are kept, and the wizard asks before
+reconfiguring anything already set.
+"""
+
+
 def main() -> None:
-    no_input = "--no-input" in sys.argv
+    # ARGV IS PARSED BEFORE ANYTHING HAPPENS. The only argv handling used to
+    # be `"--no-input" in sys.argv`, so `python quickstart.py --help` fell
+    # straight through to ensure_venv() -> `pip install -r requirements.txt`.
+    # A command someone types to find out what a script does must not install
+    # packages, and an unrecognised flag must not silently mean "yes, run the
+    # whole bootstrap".
+    argv = sys.argv[1:]
+    if {"-h", "--help"} & set(argv):
+        print(USAGE)
+        return
+    unknown = [arg for arg in argv if arg != "--no-input"]
+    if unknown:
+        print(USAGE)
+        sys.exit(f"unrecognised argument(s): {' '.join(unknown)}")
+
+    no_input = "--no-input" in argv
     venv = ensure_venv()
     ensure_deps(venv)
     _copy_template(".env.example", ".env")

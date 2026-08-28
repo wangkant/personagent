@@ -11,7 +11,9 @@ Usage:
     python tools/auto_reviewer.py                     # review only (as before)
     python tools/auto_reviewer.py --apply             # review, then y/n/e gate
     python tools/auto_reviewer.py --yes               # refused: unsafe legacy mode
-    python tools/auto_reviewer.py --dry-run           # print diagnoses only
+    python tools/auto_reviewer.py --dry-run           # list what would be
+                                                      # reviewed; no model call
+    python tools/auto_reviewer.py --no-write          # review, print, no write
 
 Uses the same OpenAI-compatible endpoint as the agent (DEEPSEEK_API_KEY /
 DEEPSEEK_BASE_URL); REVIEWER_MODEL falls back to EVAL_MODEL, then the chat
@@ -96,11 +98,25 @@ async def call_llm(prompt: str) -> str:
     return (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
 
 
-async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict]:
-    """Stage 1: diagnose new low-score evals into candidates.jsonl."""
+async def review_pending(threshold: int, limit: int, *, no_write: bool,
+                         call_model: bool = True) -> list[dict]:
+    """Stage 1: diagnose new low-score evals into candidates.jsonl.
+
+    `call_model=False` is the real dry run: it reports what WOULD be reviewed
+    and spends nothing. `no_write` is the narrower one — review for real, print
+    the diagnoses, leave the file alone."""
     evals = evolution.load_evals(EVAL_FILE, threshold)
     seen = evolution.load_reviewed_ts(CANDIDATES_FILE)
     pending = [e for e in evals if e.get("ts") not in seen][:limit]
+    if not call_model:
+        for ev in pending:
+            print(f"would review {str(ev.get('ts', '?'))[:19]} "
+                  f"(score {ev.get('score', '?')}): "
+                  f"{str(ev.get('reply', ''))[:70]}")
+        logger.info("dry run: %d entr%s would be reviewed, no model called, "
+                    "nothing written", len(pending),
+                    "y" if len(pending) == 1 else "ies")
+        return []
     logger.info(
         "low-score evals (score<=%d): %d; already reviewed: %d; this run: %d; reviewer=%s",
         threshold, len(evals), len(seen), len(pending), REVIEWER_MODEL,
@@ -128,7 +144,7 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
                 continue
             record = evolution.candidate_record(ev, diag)
             line = json.dumps(record, ensure_ascii=False)
-            if dry_run:
+            if no_write:
                 print(line)
             else:
                 # One locked, fsynced append per record instead of a bare
@@ -148,7 +164,7 @@ async def review_pending(threshold: int, limit: int, dry_run: bool) -> list[dict
     finally:
         pass
     logger.info("review done: %d/%d written to %s", len(written), len(pending),
-                "stdout (dry-run)" if dry_run else CANDIDATES_FILE.name)
+                "stdout (--no-write)" if no_write else CANDIDATES_FILE.name)
     return written
 
 
@@ -237,15 +253,25 @@ async def main() -> int:
                    help="treat score <= threshold as a low-score entry (default 3)")
     p.add_argument("--limit", type=int, default=20,
                    help="max entries to review per run (default 20)")
+    # `--dry-run` used to suppress only the WRITE: it still made one reviewer
+    # call per pending eval, so reaching for it to see what the tool would do
+    # got you billed for it. It means what everyone assumes it means now, and
+    # the old behaviour has its own flag.
     p.add_argument("--dry-run", action="store_true",
-                   help="print only, do not write candidates.jsonl")
+                   help="show what would be reviewed; calls no model and "
+                        "writes nothing")
+    p.add_argument("--no-write", action="store_true",
+                   help="review with the model and print the diagnoses, but "
+                        "do not write candidates.jsonl")
     p.add_argument("--apply", action="store_true",
                    help="after reviewing, interactively approve pairs into feedback")
     p.add_argument("--yes", action="store_true",
                    help="deprecated unsafe mode; refused without writing feedback")
     args = p.parse_args()
 
-    await review_pending(args.threshold, args.limit, args.dry_run)
+    await review_pending(args.threshold, args.limit,
+                         no_write=args.no_write or args.dry_run,
+                         call_model=not args.dry_run)
     if (args.apply or args.yes) and not args.dry_run:
         apply_candidates(auto_yes=args.yes)
     return 0
