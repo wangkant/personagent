@@ -92,7 +92,7 @@ Most group-chat bots are permanently on duty: formal, eager, and visibly assista
    # Windows: .\start.ps1
    ```
 
-3. Configure a OneBot v11 client such as [NapCat](https://github.com/NapNeko/NapCatQQ) with an HTTP API and webhook:
+3. Configure a OneBot v11 client such as [NapCat](https://github.com/NapNeko/NapCatQQ) with an HTTP API and webhook. Two directions have to be set up — an HTTP **server** the agent calls to send, and an HTTP **client** that delivers events to `/webhook/qq`. The exact configuration shape is the bridge's and has changed between its major versions, so read [NapCat's own docs](https://napneko.github.io/) rather than copying the sketch below; [`docs/deploy.md`](docs/deploy.md) has the full checklist and how to verify each direction separately.
 
    ```json
    {
@@ -238,7 +238,7 @@ python tools/healthcheck.py
 curl http://127.0.0.1:8080/health
 ```
 
-- `GET /health` is a cheap liveness endpoint and never spends upstream credits.
+- `GET /health` is a cheap liveness endpoint and never spends upstream credits. **`tools/healthcheck.py` is not that endpoint** — its service probes POST to `/v1/chat/completions` on every configured model, so the CLI does spend credits. Its configuration and ledger-size sections do not.
 - `GET /health/details` probes dependencies, is cached for 60 seconds, and is available only from loopback or with `X-Gateway-Token` when `GATEWAY_TOKEN` is configured.
 - A degraded critical dependency returns HTTP 503 from the detailed endpoint.
 
@@ -267,7 +267,8 @@ CI runs the suite on Python 3.10, 3.11, and 3.12 on Linux, runs the real storage
 Useful maintenance tools:
 
 ```bash
-python tools/prompt_lab.py
+python tools/prompt_lab.py                 # needs pip install -e ".[judge]" + ANTHROPIC_API_KEY
+python tools/auto_reviewer.py --dry-run    # what would be reviewed; calls no model
 python tools/auto_reviewer.py --apply
 python tools/candidates_admin.py list
 python tools/import_stickers_folder.py <folder>
