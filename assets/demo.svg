@@ -1,17 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="500" viewBox="0 0 1000 500" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="916" height="430" viewBox="42 34 916 430" role="img" aria-labelledby="title desc">
   <title id="title">personagent reply decision</title>
   <desc id="desc">A calm macOS-style terminal window shows personagent reading context and structured model output, then choosing either to send a natural reply or remain silent with PASS.</desc>
-
-  <defs>
-    <linearGradient id="canvas" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fafafa"/>
-      <stop offset="1" stop-color="#f2f2f4"/>
-    </linearGradient>
-    <filter id="window-shadow" x="-20%" y="-25%" width="140%" height="160%">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#1d1d1f" flood-opacity=".12"/>
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1d1d1f" flood-opacity=".05"/>
-    </filter>
-  </defs>
 
   <style>
     text {
@@ -85,11 +74,8 @@
     }
   </style>
 
-  <rect width="1000" height="500" fill="url(#canvas)"/>
-
-  <g filter="url(#window-shadow)">
-    <rect x="42" y="34" width="916" height="430" rx="22" fill="#ffffff"/>
-  </g>
+  <rect width="1000" height="500" fill="#ffffff"/>
+  <rect x="42" y="34" width="916" height="430" rx="22" fill="#ffffff"/>
   <rect x="42.5" y="34.5" width="915" height="429" rx="21.5" fill="none" stroke="#dedee2"/>
 
   <path d="M42 91.5H958" stroke="#e5e5e7"/>
