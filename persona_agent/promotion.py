@@ -242,6 +242,12 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
     superseded candidate has already been adjudicated and must not keep
     blocking its replacement.
     """
+    # ONE pass over the events, before the peer loop, not one per peer — see
+    # `witnessed_rewrites`. `None` when the caller supplied nothing, which is
+    # distinct from "supplied an empty list": with no events to read the
+    # conflict stands, because the alternative is a veto silently vanishing
+    # whenever a caller omits them.
+    witnessed = witnessed_rewrites(related_events) if related_events else None
     out: list[str] = []
     for other in peers or ():
         if other.get("candidate_id") == cand.get("candidate_id"):
@@ -260,8 +266,12 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
             # `related_events` is only consulted when we have it: with no
             # events to read, the conflict stands, because the alternative is
             # a veto silently disappearing whenever a caller omits them.
-            if related_events and _rewrite_is_unwitnessed(other, related_events):
-                continue
+            if witnessed is not None:
+                rewrite = str(other.get("better") or "").strip()
+                # An empty rewrite was never unwitnessed under the old
+                # per-peer check either, so it keeps its veto.
+                if rewrite and rewrite not in witnessed:
+                    continue
             out.append(other.get("candidate_id", ""))
     return [cid for cid in out if cid]
 
@@ -269,6 +279,32 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
 # The two event kinds nobody witnessed: the agent scoring itself, and the
 # agent diagnosing itself. Neither is a person disagreeing with anything.
 _UNWITNESSED_KINDS = (evidence.KIND_SELF_REVIEW, evidence.KIND_SELF_EVAL)
+
+
+def witnessed_rewrites(events) -> frozenset:
+    """Every rewrite a PERSON has argued for, in one pass over the events.
+
+    HOISTED OUT OF THE PEER LOOP, and that is the whole point of it existing.
+    `find_conflicts` asked `_rewrite_is_unwitnessed(peer, related_events)` once
+    per peer and each call re-scanned every related event, so the check was
+    O(peers x events) — a genuine quadratic, measured at 10x size -> 102x time
+    on a fixture where the candidates share a reply text:
+
+        C=E      100     500    1000    2000
+        ms      0.70    16.1    71.6   325.8
+
+    That fixture is not exotic. `learning._process_reaction`'s own comment
+    describes the state that produces it — one reaction re-adjudicated into a
+    second candidate proposing a different rewrite of the same reply, the two
+    then blocking each other permanently. Extrapolated to 20 000 in that
+    shape, a single decision projected to ~30 seconds.
+
+    One pass, then an O(1) membership test per peer."""
+    return frozenset(
+        str((event.get("adjudication") or {}).get("better") or "").strip()
+        for event in events or ()
+        if event.get("kind") not in _UNWITNESSED_KINDS
+    ) - {""}
 
 
 def _rewrite_is_unwitnessed(cand: dict, events) -> bool:

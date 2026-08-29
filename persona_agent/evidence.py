@@ -476,21 +476,33 @@ class EvidenceLog:
         if reason:
             raise ValueError(f"invalid evidence event: {reason}")
         with append_lock(self.path):
-            # Refresh while holding the interprocess lock.  A second process
+            # Refresh while holding the interprocess lock — a second process
             # may have appended this content-addressed event since our cache
-            # was built.
-            result = read_validated_jsonl(self.path, _validate_event)
-            ids = {row["event_id"] for row in result.rows}
-            if eid in ids:
+            # was built — but ONLY when the file actually moved.
+            #
+            # This re-read and re-validated the WHOLE log on every append: at
+            # 20 000 rows, 452 ms, the single most expensive item on the
+            # reaction path, and 97 % of it was `event_id()` re-deriving the
+            # sha256 content address of rows already sitting on disk. The log
+            # is APPEND-ONLY, so an unchanged (size, mtime) stamp is proof
+            # that nobody added anything and the cache is exact — and size
+            # alone settles it, because an append always changes the size.
+            # The safety the old comment is about is preserved: when the stamp
+            # HAS moved, the full validating re-read still happens, under the
+            # same lock, before the dedup check.
+            if self._events is None or _file_stamp(self.path) != self._stamp:
+                result = read_validated_jsonl(self.path, _validate_event)
                 self._events = result.rows
-                self._ids = ids
+                self._ids = {row["event_id"] for row in result.rows}
                 self._quarantined = result.quarantined
+            if eid in self._ids:
                 self._stamp = _file_stamp(self.path)
                 return False
             append_jsonl_unlocked(self.path, event)
-            self._events = result.rows + [event]
-            self._ids = ids | {eid}
-            self._quarantined = result.quarantined
+            # Rebound rather than mutated in place: `all()` hands this list
+            # out, and a caller holding one must not see it grow underneath.
+            self._events = self._events + [event]
+            self._ids = self._ids | {eid}
             self._stamp = _file_stamp(self.path)
         return True
 

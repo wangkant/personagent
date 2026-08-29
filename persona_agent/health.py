@@ -137,42 +137,60 @@ def check_onebot():
 
 
 # (name, probe, is_critical)
-_DEFAULT_LEDGER_WARN_BYTES = 50_000_000
-
-
 def check_ledger_sizes():
-    """The append-only ledgers, against the two documented warn thresholds.
+    """The append-only ledgers, through the ledgers' own health reporting.
 
-    `AGENT_EVIDENCE_WARN_BYTES` and `AGENT_CANDIDATE_LEDGER_WARN_BYTES` are
-    documented in `.env.example` and, until this probe existed, changed
-    nothing anyone could observe: `EvidenceLog.health_metadata` and
-    `CandidateLedger.health_metadata` compute exactly this and had no caller
-    outside the test suite. Neither ledger has rotation, so the size only ever
-    goes one way and the operator's only warning was the disk filling up.
+    THROUGH `health_metadata`, not around it. The first version of this probe
+    re-implemented the size check — `path.stat()` plus a third copy of the
+    50 MB default and its own reading of the env knob — and so:
 
-    Never critical: a large ledger is a thing to attend to, not a reason to
-    call the deployment down."""
+      * the CORRUPTION signal stayed unreported. `append_only_health` returns
+        `quarantined_rows`, which is the count of lines the ledger could not
+        parse and silently skipped. That is the number worth waking up for:
+        the learning corpus shrinks and nothing else says so.
+      * a typo in the knob's VALUE raised out of `int()` and was reported as
+        an unreadable ledger — a config error dressed as data loss.
+      * `50_000_000` came to live in three files with nothing tying them.
+
+    Costs a full ledger replay, which is hundreds of milliseconds on a large
+    one. That is the right trade here: this is a diagnostic an operator runs
+    deliberately, alongside probes that make network round-trips, and the
+    answer is worthless without the parse.
+
+    Never critical — a large or partly-quarantined ledger is something to
+    attend to, not a reason to call the deployment down."""
+    from .candidates import CandidateLedger
+    from .evidence import EvidenceLog
     from .paths import resolve_runtime_lang_file
 
     lang = os.getenv("AGENT_LANG", "en").strip().lower() or "en"
     watched = (
-        ("evidence", "AGENT_EVIDENCE_WARN_BYTES"),
-        ("candidate_ledger", "AGENT_CANDIDATE_LEDGER_WARN_BYTES"),
+        ("evidence", "evidence", EvidenceLog),
+        ("candidate_ledger", "candidate_ledger", CandidateLedger),
     )
-    parts, over = [], False
-    for stem, knob in watched:
+    parts, healthy = [], True
+    for label, stem, cls in watched:
         try:
-            limit = int(os.getenv(knob, "") or _DEFAULT_LEDGER_WARN_BYTES)
             path = resolve_runtime_lang_file(stem, "jsonl", lang)
-            size = path.stat().st_size if path.exists() else 0
-        except (OSError, ValueError) as e:
-            parts.append(f"{stem}: unreadable ({type(e).__name__})")
+            if not path.exists():
+                parts.append(f"{label} absent")
+                continue
+            meta = cls(path).health_metadata()
+        except Exception as e:  # a probe must not be the thing that fails
+            parts.append(f"{label}: unreadable ({type(e).__name__})")
+            healthy = False
             continue
-        mark = ""
-        if limit and size >= limit:
-            over, mark = True, " OVER"
-        parts.append(f"{stem} {size / 1_000_000:.1f}MB/{limit / 1_000_000:.0f}MB{mark}")
-    return (not over), "; ".join(parts) or "no ledgers yet"
+        size_mb = meta["size_bytes"] / 1_000_000
+        limit_mb = meta["warning_bytes"] / 1_000_000
+        note = f"{label} {size_mb:.1f}MB/{limit_mb:.0f}MB"
+        if meta["size_warning"]:
+            healthy = False
+            note += " OVER"
+        if meta["quarantined_rows"]:
+            healthy = False
+            note += f" {meta['quarantined_rows']} UNPARSEABLE row(s)"
+        parts.append(note)
+    return healthy, "; ".join(parts) or "no ledgers yet"
 
 
 CHECKS = [

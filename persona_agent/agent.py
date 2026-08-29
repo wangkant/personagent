@@ -1321,11 +1321,23 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 + (f" ({self.owner_relationship})" if self.owner_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
+            # WHAT THIS BLOCK IS FOR, now that the guides above it are the
+            # private ones. It used to open by correcting them — "STYLE_GUIDE /
+            # INTENT_RULES above are written for group-chat scenarios" — and
+            # then list the group moves that do not apply. Both halves became
+            # wrong when `_chat_private` switched to `private_style_guide` /
+            # `private_intent_rules`: the model was being told about two blocks
+            # that are not in its prompt, and the group PASS vocabulary was
+            # re-injected by the correction itself, into a prompt whose
+            # `private_output_protocol` exists precisely to remove it.
+            #
+            # What is left is the only thing the private renderers cannot
+            # carry: WHO this person is. Those blocks are persona-agnostic on
+            # purpose — they open the cached prefix — so the relationship has
+            # to be stated here or nowhere.
             private_overrides = (
                 f"<private_overrides>\n"
-                f"STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat with {owner_ref}** — completely different:\n"
                 f"- {owner_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
-                f"- The group-chat anti-troll / identity-attack moves ('quit interrogating me' / 'you guess' / 'play dumb' / 'lazy-mode' / 'eyeroll' / 'PASS') **don't apply here** — they're not attacking, they're just talking to you.\n"
                 f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
                 f"- If they ask you to do something / look something up / chat about a topic → engage directly, none of the 'can't be bothered / not interested' attitude.\n"
                 f"- Tone: familiar, gentle, default-trust what they say; occasional light pushback is fine but **no venom, no cold-shoulder, no defensive posture**.\n"
@@ -1337,12 +1349,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 "You're now in a one-on-one private chat with a friend "
                 "(less close than the owner).\n"
             )
+            # Same reason as the owner branch above: this states the
+            # RELATIONSHIP, which the persona-agnostic private guides cannot,
+            # and no longer corrects blocks that are not in the prompt or
+            # names the PASS vocabulary they were written to leave out.
             private_overrides = (
                 "<private_overrides>\n"
-                "STYLE_GUIDE / INTENT_RULES above are written for group-chat scenarios. This is a **one-on-one private chat**, with a few differences from group:\n"
-                "- This is a friend, not an attacker. The group-chat anti-troll PASS signals ('quit interrogating me' / 'you guess' / 'play dumb') **shouldn't be overused** — most DMs are just normal conversation.\n"
+                "- This is a friend, not an attacker — most DMs are just ordinary conversation.\n"
                 "- If they ask 'who am I / do you know me' → **don't pretend to recognize them**, just say 'not super familiar / don't have you placed' in a relaxed tone, not cold.\n"
-                "- PASS probability is much lower here than in group chat — somebody DMing you is almost always expecting a response; silence reads as cold.\n"
+                "- Somebody who opened a DM is expecting an answer; silence reads as cold.\n"
                 "- Tone: a notch looser than group chat (more direct, slightly longer is OK), but **don't immediately default to close-friend vibe** — keep some normal-stranger distance.\n"
                 "- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
                 "</private_overrides>\n\n"
