@@ -40,11 +40,15 @@ jobs:
       # that produced this package copied one import header into six files
       # and left 114 unused imports behind; F821 is the one that would have
       # caught a name the split dropped. Re-exports carry an explicit
-      # `# noqa: F401` saying they are API surface.
+      # `# noqa: F401` saying they are API surface. F841 catches the half of
+      # "computed, then dropped" that is mechanically visible — a value bound
+      # to a name nobody reads. It would NOT have caught 2f93615, where
+      # _record_and_corroborate's bool was discarded by never being bound at
+      # all; Python cannot tell that from a call made for its side effect.
       - name: Lint for dead and undefined names
         run: |
           python -m pip install "ruff>=0.6,<1"
-          ruff check . --select F401,F811,F821
+          ruff check . --select F401,F811,F821,F841
       - name: Run isolated script suites through pytest
         run: |
           python -m pytest -q

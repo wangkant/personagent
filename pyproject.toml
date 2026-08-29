@@ -44,9 +44,9 @@ dependencies = [
 # `tools/evolution_benchmark.py --judge anthropic` — so the learning signal and
 # the measurement never share a model.
 judge = ["anthropic>=0.103,<1"]
-# What CI installs on top of the runtime deps. `ruff --select F401,F811,F821`
-# is the gate: the split that produced this package left 114 dead imports
-# behind across six modules, and nothing was watching.
+# What CI installs on top of the runtime deps. The gate is
+# `ruff --select F401,F811,F821,F841`: the split that produced this package
+# left 114 dead imports behind across six modules, and nothing was watching.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 
 [project.urls]

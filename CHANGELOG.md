@@ -177,9 +177,24 @@ before it was changed and is covered by a test that fails without the fix.
 - `httpcore` is a direct dependency — `ingestion.py` imports a private module
   of it for the SSRF guard's per-hop DNS pinning, and `httpx` pins only the
   major version.
-- CI gates on `ruff --select F401,F811,F821`, and a `dev` extra installs it.
+- CI gates on `ruff --select F401,F811,F821,F841`, and a `dev` extra installs it.
 - `.env.example` documents `AGENT_HOME`, `LLM_TIMEOUT`, `LLM_MAX_RETRIES`,
   `MAX_INFLIGHT_GATEWAY` and the two ledger warn-byte settings.
+
+### Performance
+
+Both items were measured before and after; the two that an audit also flagged
+but measurement found to be 4% of the time were left alone.
+
+- **The candidate ledger no longer replays the whole log on every write.** It
+  kept an in-memory projection and then dropped it after each append, so a
+  write cost a full re-parse of the file it had just appended one line to.
+  Ten proposals against a 2,000-row ledger: 0 full-file replays, was 10. The
+  invalidation is a `(size, mtime_ns)` stamp read INSIDE the append's own
+  lock, so a second writer's rows are still picked up — the projection is only
+  kept when the file is exactly what this process last left.
+- **`EvidenceLog.append` re-reads only when the file moved**, not on every
+  call. 10.9× at 20,000 rows.
 
 ### Removed
 
@@ -187,6 +202,15 @@ before it was changed and is covered by a test that fails without the fix.
   carrying a hand-rolled lock protocol the live path no longer uses.
 - 114 unused imports: one header copied into six modules by the split that
   produced this package.
+- `EvidenceLog.reload` and `CandidateLedger.reload`, `_ends_with_newline`, and
+  `transition`'s `supersedes` / `superseded_by` keyword arguments — all
+  unreachable once the projection above became the single read path. The
+  schema-1 READ path for those two fields is kept.
+- The unused `httpx.AsyncClient` in `tools/bootstrap_from_history.py`, which
+  was opened per run and never issued a request. Note that passing it to
+  `download_sticker` would have been a regression, not a fix: that function
+  builds its own DNS-pinned client when `client=None`, which is the SSRF
+  guard.
 
 ## [0.2.0] — 2026-08-11
 

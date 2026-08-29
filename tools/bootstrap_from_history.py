@@ -236,78 +236,77 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
     ctx_count = 0
     seen_skip = 0
 
-    async with httpx.AsyncClient() as client:
-        for i, c in enumerate(classified):
-            if not c["has_image"]:
+    for i, c in enumerate(classified):
+        if not c["has_image"]:
+            continue
+        if c["user_id"] == BOT_QQ:
+            continue
+        ctx_before = [
+            format_ctx_line(messages[j])
+            for j in range(max(0, i - 6), i)
+            if messages[j].get("user_id") != int(BOT_QQ or 0)
+        ][-5:]
+
+        for seg in c["image_segs"]:
+            if not seg["is_sticker"]:
                 continue
-            if c["user_id"] == BOT_QQ:
-                continue
-            ctx_before = [
-                format_ctx_line(messages[j])
-                for j in range(max(0, i - 6), i)
-                if messages[j].get("user_id") != int(BOT_QQ or 0)
-            ][-5:]
+            file_md5 = ""
+            m = re.match(r"^([a-fA-F0-9]{32})\.", seg.get("file") or "")
+            if m:
+                file_md5 = m.group(1).lower()
 
-            for seg in c["image_segs"]:
-                if not seg["is_sticker"]:
-                    continue
-                file_md5 = ""
-                m = re.match(r"^([a-fA-F0-9]{32})\.", seg.get("file") or "")
-                if m:
-                    file_md5 = m.group(1).lower()
-
-                if file_md5 and file_md5 in md5_index:
-                    filename = md5_index[file_md5]
-                    entry = entries[filename]
-                    entry.setdefault("seen_contexts", []).append({
-                        "ts": c["ts"],
-                        "sender": c["user_id"],
-                        "before": ctx_before,
-                    })
-                    entry["seen_contexts"] = entry["seen_contexts"][-5:]
-                    entry["use_count"] = entry.get("use_count", 0) + 1
-                    ctx_count += 1
-                    seen_skip += 1
-                    continue
-
-                img_bytes = await download_sticker(None, seg["url"])
-                if not img_bytes:
-                    continue
-                if len(img_bytes) < 200 or len(img_bytes) > 800_000:
-                    continue
-                md5 = hashlib.md5(img_bytes).hexdigest()
-                if md5 in md5_index:
-                    continue
-                ext = guess_ext(img_bytes)
-                filename = f"auto/{md5}.{ext}"
-                filepath = ROOT / "stickers" / filename
-                filepath.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    filepath.write_bytes(img_bytes)
-                except Exception as e:
-                    logger.warning("write failed: %s", e)
-                    continue
-                entry = {
-                    "md5": md5,
-                    "src_user": c["user_id"],
-                    "src_group": str((messages[i].get("group_id") or "")),
-                    "first_seen": c["ts"],
-                    "use_count": 1,
-                    "seen_contexts": [{
-                        "ts": c["ts"],
-                        "sender": c["user_id"],
-                        "before": ctx_before,
-                    }],
-                    "meaning": "",
-                    "tags": [],
-                    "auto_tagged": False,
-                }
-                entries[filename] = entry
-                md5_index[md5] = filename
-                new_count += 1
+            if file_md5 and file_md5 in md5_index:
+                filename = md5_index[file_md5]
+                entry = entries[filename]
+                entry.setdefault("seen_contexts", []).append({
+                    "ts": c["ts"],
+                    "sender": c["user_id"],
+                    "before": ctx_before,
+                })
+                entry["seen_contexts"] = entry["seen_contexts"][-5:]
+                entry["use_count"] = entry.get("use_count", 0) + 1
                 ctx_count += 1
-                if new_count % 10 == 0:
-                    logger.info("  seeded %d stickers...", new_count)
+                seen_skip += 1
+                continue
+
+            img_bytes = await download_sticker(None, seg["url"])
+            if not img_bytes:
+                continue
+            if len(img_bytes) < 200 or len(img_bytes) > 800_000:
+                continue
+            md5 = hashlib.md5(img_bytes).hexdigest()
+            if md5 in md5_index:
+                continue
+            ext = guess_ext(img_bytes)
+            filename = f"auto/{md5}.{ext}"
+            filepath = ROOT / "stickers" / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                filepath.write_bytes(img_bytes)
+            except Exception as e:
+                logger.warning("write failed: %s", e)
+                continue
+            entry = {
+                "md5": md5,
+                "src_user": c["user_id"],
+                "src_group": str((messages[i].get("group_id") or "")),
+                "first_seen": c["ts"],
+                "use_count": 1,
+                "seen_contexts": [{
+                    "ts": c["ts"],
+                    "sender": c["user_id"],
+                    "before": ctx_before,
+                }],
+                "meaning": "",
+                "tags": [],
+                "auto_tagged": False,
+            }
+            entries[filename] = entry
+            md5_index[md5] = filename
+            new_count += 1
+            ctx_count += 1
+            if new_count % 10 == 0:
+                logger.info("  seeded %d stickers...", new_count)
 
     _atomic_write_json(STICKERS_JSON, entries)
     return {
