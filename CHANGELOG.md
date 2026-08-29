@@ -174,6 +174,14 @@ before it was changed and is covered by a test that fails without the fix.
   change something observable: `run_checks` has a ledger-size probe. Both
   knobs were documented, both were computed by a `health_metadata` with no
   caller outside the test suite.
+- **The DM key prefixes are minted in `channels`, not spelled at twelve call
+  sites.** The derivations already went through that module; what was left was
+  twelve hand-written `f"private:{uid}"` / `f"dm:{uid}"` literals in `agent.py`
+  and `transport.py`. Each was audited before it was replaced and each was
+  correct, so this changes no behaviour — but the prefixes are frozen (`dm:` is
+  in the scope of every DM candidate in a live ledger), and the warning saying
+  so now sits where the format is decided. Those twelve literals were also the
+  only thing pinning the wire format, so a test pins it explicitly instead.
 - `httpcore` is a direct dependency — `ingestion.py` imports a private module
   of it for the SSRF guard's per-hop DNS pinning, and `httpx` pins only the
   major version.

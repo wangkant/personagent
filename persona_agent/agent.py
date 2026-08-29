@@ -724,7 +724,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         HTTP response (the forwarder relays them to the source platform)."""
         payload = synthesize_onebot_payload(event, self.bot_qq)
         if payload.get("message_type") == "private":
-            gateway_key = f"private:{payload.get('user_id', '')}"
+            gateway_key = channels.dm_routing_key(payload.get("user_id", ""))
         else:
             gateway_key = str(payload.get("group_id", ""))
         if gateway_key:
@@ -792,7 +792,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # Gateway DM keys are forwarder-chosen → register in the LRU so an
             # over-the-cap flood evicts the least-recently-active conversation.
             if current_sink.get() is not None:
-                self._touch_gateway_conv(f"private:{user_id}")
+                self._touch_gateway_conv(channels.dm_routing_key(user_id))
             return await self._handle_private(user_id, payload, is_owner=is_owner)
 
         group_id = str(payload.get("group_id", "")).strip()
@@ -1192,7 +1192,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
     async def _handle_private(self, user_id: str, payload: dict,
                               is_owner: bool = True) -> bool:
         """Run one private turn in send/commit order without blocking intake."""
-        pkey = f"private:{user_id}"
+        pkey = channels.dm_routing_key(user_id)
         async with self.send_locks[pkey]:
             self._private_send_owners[pkey] = asyncio.current_task()
             try:
@@ -1202,12 +1202,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
                 if self.react_learn:
                     entry = self.pending_reactions.match(
-                        f"dm:{user_id}", sender_uid=user_id, is_private=True,
-                        now=time.time())
+                        channels.dm_learning_key(user_id),
+                        sender_uid=user_id, is_private=True, now=time.time())
                     if entry:
                         self._spawn(self._process_reaction(
                             entry, text, "owner" if is_owner else "friend",
-                            user_id, is_owner, conv_id=f"dm:{user_id}",
+                            user_id, is_owner,
+                            conv_id=channels.dm_learning_key(user_id),
                             is_private=True))
 
                 async with self.locks[pkey]:
@@ -1257,7 +1258,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                         self._save_auto_memory(pkey, auto_mem)
                     if self.react_learn:
                         self.pending_reactions.record(
-                            f"dm:{user_id}", reply=reply,
+                            channels.dm_learning_key(user_id), reply=reply,
                             ctx_lines=[f"user: {text[:100]}"],
                             mode="owner" if is_owner else "called",
                             target_uid=user_id, mids=send_result.message_ids,
@@ -2665,13 +2666,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # Don't cold-DM someone who never messaged the bot.
             if not last_act or now - last_act < self.proactive_dm_min_silence:
                 continue
-            key = f"dm:{uid}"
+            # The learning spelling on purpose: `transport._evict_conversation`
+            # pops `last_proactive_at` under the learning key.
+            key = channels.dm_learning_key(uid)
             if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown:
                 continue
             if random.random() > self.proactive_dm_prob:
                 continue
             is_owner = bool(self.owner_qq) and uid == self.owner_qq
-            pkey = f"private:{uid}"
+            pkey = channels.dm_routing_key(uid)
             try:
                 async with self.locks[pkey]:
                     history = list(self.private_history.get(uid, []))[-10:]

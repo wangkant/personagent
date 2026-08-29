@@ -345,7 +345,7 @@ class Transport:
             # Gateway capture: hand the reply back over HTTP instead of
             # posting to NapCat (gateway ids aren't ints anyway).
             return sink.add(message)
-        if not await self._throttle_send(f"private:{user_id}"):
+        if not await self._throttle_send(channels.dm_routing_key(user_id)):
             return False
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
@@ -362,7 +362,8 @@ class Transport:
                         _mid = ((r.json() or {}).get("data") or {}).get("message_id")
                         if _mid is not None:
                             self._sent_mids.setdefault(
-                                f"private:{user_id}", []).append(str(_mid))
+                                channels.dm_routing_key(user_id),
+                                []).append(str(_mid))
                     except Exception:
                         pass
                     return True
@@ -393,7 +394,7 @@ class Transport:
         and state commit and call ``_send_private_qq_unlocked`` directly.
         Background callers (for example delayed elicitation) use this wrapper.
         """
-        key = f"private:{user_id}"
+        key = channels.dm_routing_key(user_id)
         if self._private_send_owners.get(key) is asyncio.current_task():
             return await self._send_private_qq_unlocked(user_id, text)
         async with self.send_locks[key]:
@@ -401,7 +402,7 @@ class Transport:
 
     async def _send_private_qq_unlocked(
             self, user_id: str, text: str) -> SendResult:
-        target_key = f"private:{user_id}"
+        target_key = channels.dm_routing_key(user_id)
         self._sent_mids[target_key] = []
         text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
         # Private chat is 1:1 — there's no "target someone" semantics. The

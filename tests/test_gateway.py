@@ -2281,6 +2281,24 @@ def test_the_channel_key_table_is_one_table() -> None:
           all(Learning._conv_platform(r) == channels.platform_of(r)
               for r, _, _ in rows))
 
+    # The wire format itself, pinned against literals rather than against the
+    # prefix constants — comparing a constant to itself would pass no matter
+    # what it said. Twelve call sites used to spell these by hand, and that
+    # redundancy is what made the format hard to change by accident; it is
+    # minted in one place now, so the pin has to live here instead. `dm:` is
+    # in the scope of every DM candidate in a live ledger and renaming it
+    # orphans all of them.
+    for routing, learning, _ in rows:
+        if not routing.startswith("private:"):
+            continue
+        uid = routing[len("private:"):]
+        check(f"channels: mints the routing key {routing!r} from {uid!r}",
+              channels.dm_routing_key(uid) == routing,
+              repr(channels.dm_routing_key(uid)))
+        check(f"channels: mints the learning key {learning!r} from {uid!r}",
+              channels.dm_learning_key(uid) == learning,
+              repr(channels.dm_learning_key(uid)))
+
 
 def test_every_napcat_call_goes_through_local_http() -> None:
     """The bridge is a LOCAL service, and httpx — unlike requests — has no
