@@ -987,6 +987,63 @@ def test_a_rejected_rewrite_is_not_promoted_later() -> None:
           outwaited.reason)
 
 
+def test_the_live_projection_equals_a_cold_replay(tmp: Path) -> None:
+    """`_append` lets the live projection stand instead of replaying for its
+    own write, which removed a full-file re-parse per write — 461 ms at 20 000
+    rows, the largest item left on the reaction path. That is only sound while
+    every write method leaves `self._by_id` EXACTLY as a replay of the same
+    file would, so this asserts it directly, over every row kind.
+
+    The first draft applied the row in `_append` as well as in the caller, so
+    it landed twice. The duplicate was a repeated `history` entry — invisible
+    to every functional test, because no policy decision reads history — and
+    it showed up only in a byte-for-byte diff against a cold replay. This is
+    that diff."""
+    path = tmp / "ledger.jsonl"
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+
+    def pair(i: int) -> dict:
+        return candidates.make_candidate(
+            ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+            evidence=[f"ev{i}"],
+            payload={"reply": f"reply {i}", "better": f"fix {i}",
+                     "mode": "called"})
+
+    live = candidates.CandidateLedger(path)
+    ids = []
+    for i in range(6):
+        cand = pair(i)
+        live.propose(cand)
+        ids.append(cand["candidate_id"])
+    # Every row kind the projection knows about.
+    live.link_evidence(ids[0], ["ev-extra"], ts=stamp(NOW))
+    live.promote(ids[1], ts=stamp(NOW), actor="admin", reason="ok")
+    live.reject(ids[2], ts=stamp(NOW), actor="admin", reason="no")
+    live.promote(ids[3], ts=stamp(NOW), actor="admin", reason="ok")
+    live.rollback(ids[3], ts=stamp(NOW), actor="admin", reason="undo")
+    live.supersede(ids[4], ids[5], ts=stamp(NOW), actor="admin", reason="new")
+    live.propose(pair(0))   # a re-proposal must add evidence, not reset state
+
+    incremental = json.dumps(live.all(), sort_keys=True)
+    replayed = json.dumps(candidates.CandidateLedger(path).all(), sort_keys=True)
+    check("projection: advancing in place equals replaying the file",
+          incremental == replayed,
+          f"{len(incremental)} vs {len(replayed)} chars")
+
+    # A SECOND WRITER must invalidate the stamp rather than be dropped. The
+    # stamp is compared inside the append's own lock precisely so that this
+    # cannot become "the other row vanished and the fresh stamp hid it" —
+    # `tools/candidates_admin.py` bypasses the instance lock, so this writer
+    # is real.
+    other = candidates.CandidateLedger(path)
+    other.propose(pair(97))
+    live.propose(pair(98))
+    check("projection: a second writer's row is not lost",
+          json.dumps(live.all(), sort_keys=True)
+          == json.dumps(candidates.CandidateLedger(path).all(), sort_keys=True))
+
+
 def test_a_retry_acceptance_does_not_argue_against_its_own_pair() -> None:
     """`supports` and `opposes` both answered True for one event.
 
@@ -1311,6 +1368,7 @@ def main() -> int:
         test_stale_evidence_is_refused()
         test_a_rejected_rewrite_is_not_promoted_later()
         test_an_unwitnessed_proposal_does_not_veto_a_real_correction()
+        test_the_live_projection_equals_a_cold_replay(tmp / "t15")
         test_a_retry_acceptance_does_not_argue_against_its_own_pair()
         test_related_events_covers_the_rewrite()
         test_an_over_long_scope_field_stays_distinct()

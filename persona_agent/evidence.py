@@ -514,9 +514,3 @@ class EvidenceLog:
             quarantined_rows=len(self._quarantined),
         )
 
-    def reload(self) -> None:
-        """Drop the in-memory cache; the next read re-reads the file."""
-        self._events = None
-        self._ids = set()
-        self._stamp = (-1, -1)
-        self._quarantined = []

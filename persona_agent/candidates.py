@@ -33,7 +33,8 @@ import os
 from pathlib import Path
 
 from .storage import (
-    append_jsonl,
+    append_jsonl_unlocked,
+    append_lock,
     append_only_health,
     atomic_write_text,
     read_validated_jsonl,
@@ -239,66 +240,80 @@ class CandidateLedger:
             return self._by_id
         out: dict[str, dict] = {}
         for row in self._rows():
-            cid = row["candidate_id"]
-            kind = row.get("kind")
-            if kind == ROW_CANDIDATE:
-                if cid in out:
-                    # A re-proposal of an existing candidate adds evidence, it
-                    # does not reset the lifecycle.
-                    self._merge_evidence(out[cid], row.get("evidence"))
-                    continue
-                cand = dict(row)
-                cand["evidence"] = [str(e) for e in (row.get("evidence") or [])]
-                cand["state"] = STATE_PROPOSED
-                cand["history"] = []
-                out[cid] = cand
-                continue
-            if kind == ROW_SUPERSESSION:
-                replacement_id = str(row.get("replacement_id") or "")
-                old, new = out.get(cid), out.get(replacement_id)
-                # A compound row is all-or-nothing on replay. If either
-                # candidate definition is absent/corrupt, apply neither half.
-                if old is None or new is None or cid == replacement_id:
-                    continue
-                old["state"] = STATE_SUPERSEDED
-                old["superseded_by"] = replacement_id
-                old.setdefault("history", []).append({
-                    "state": STATE_SUPERSEDED, "ts": row.get("ts", ""),
-                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-                })
-                new["state"] = STATE_PROMOTED
-                new["supersedes"] = cid
-                new.setdefault("history", []).append({
-                    "state": STATE_PROMOTED, "ts": row.get("ts", ""),
-                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-                })
-                continue
-            cand = out.get(cid)
-            if cand is None:
-                # Lifecycle row for an unknown candidate: keep the history
-                # rather than drop it, so a hand-repaired log stays inspectable.
-                cand = {"candidate_id": cid, "type": "", "scope": {},
-                        "payload": {}, "evidence": [], "state": STATE_PROPOSED,
-                        "history": [], "orphan": True}
-                out[cid] = cand
-            if kind == ROW_EVIDENCE:
-                self._merge_evidence(cand, row.get("evidence"))
-                continue
-            if kind == ROW_LIFECYCLE:
-                state = row.get("state")
-                if state in STATES:
-                    cand["state"] = state
-                self._merge_evidence(cand, row.get("evidence"))
-                if row.get("superseded_by"):
-                    cand["superseded_by"] = row["superseded_by"]
-                if row.get("supersedes"):
-                    cand["supersedes"] = row["supersedes"]
-                cand["history"].append({
-                    "state": row.get("state", ""), "ts": row.get("ts", ""),
-                    "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-                })
+            self._apply_row(out, row)
         self._by_id = out
         return out
+
+    def _apply_row(self, out: dict[str, dict], row: dict) -> None:
+        """Fold one log row into a projection.
+
+        Split out of `_project` so the replay reads as what it is — one pass
+        applying rows in order — and so the meaning of each row kind is stated
+        once, in one place, next to the mutations the write methods make to
+        the live projection. Those two have to agree: `_append` lets the live
+        projection stand rather than replaying for its own write, which is
+        only sound while every write method leaves `self._by_id` exactly as a
+        cold replay of the same file would. `test_ledger.py` asserts that by
+        diffing the two.
+        """
+        cid = row["candidate_id"]
+        kind = row.get("kind")
+        if kind == ROW_CANDIDATE:
+            if cid in out:
+                # A re-proposal of an existing candidate adds evidence, it
+                # does not reset the lifecycle.
+                self._merge_evidence(out[cid], row.get("evidence"))
+                return
+            cand = dict(row)
+            cand["evidence"] = [str(e) for e in (row.get("evidence") or [])]
+            cand["state"] = STATE_PROPOSED
+            cand["history"] = []
+            out[cid] = cand
+            return
+        if kind == ROW_SUPERSESSION:
+            replacement_id = str(row.get("replacement_id") or "")
+            old, new = out.get(cid), out.get(replacement_id)
+            # A compound row is all-or-nothing on replay. If either
+            # candidate definition is absent/corrupt, apply neither half.
+            if old is None or new is None or cid == replacement_id:
+                return
+            old["state"] = STATE_SUPERSEDED
+            old["superseded_by"] = replacement_id
+            old.setdefault("history", []).append({
+                "state": STATE_SUPERSEDED, "ts": row.get("ts", ""),
+                "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+            })
+            new["state"] = STATE_PROMOTED
+            new["supersedes"] = cid
+            new.setdefault("history", []).append({
+                "state": STATE_PROMOTED, "ts": row.get("ts", ""),
+                "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+            })
+            return
+        cand = out.get(cid)
+        if cand is None:
+            # Lifecycle row for an unknown candidate: keep the history
+            # rather than drop it, so a hand-repaired log stays inspectable.
+            cand = {"candidate_id": cid, "type": "", "scope": {},
+                    "payload": {}, "evidence": [], "state": STATE_PROPOSED,
+                    "history": [], "orphan": True}
+            out[cid] = cand
+        if kind == ROW_EVIDENCE:
+            self._merge_evidence(cand, row.get("evidence"))
+            return
+        if kind == ROW_LIFECYCLE:
+            state = row.get("state")
+            if state in STATES:
+                cand["state"] = state
+            self._merge_evidence(cand, row.get("evidence"))
+            if row.get("superseded_by"):
+                cand["superseded_by"] = row["superseded_by"]
+            if row.get("supersedes"):
+                cand["supersedes"] = row["supersedes"]
+            cand["history"].append({
+                "state": row.get("state", ""), "ts": row.get("ts", ""),
+                "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+            })
 
     @staticmethod
     def _merge_evidence(cand: dict, ids) -> None:
@@ -309,11 +324,6 @@ class CandidateLedger:
             if eid and eid not in seen:
                 known.append(eid)
                 seen.add(eid)
-
-    def reload(self) -> None:
-        self._by_id = None
-        self._stamp = (-1, -1)
-        self._quarantined = []
 
     # -- queries -----------------------------------------------------------
     def all(self) -> list[dict]:
@@ -342,7 +352,40 @@ class CandidateLedger:
         reason = _validate_row(row)
         if reason:
             raise ValueError(f"invalid candidate ledger row: {reason}")
-        append_jsonl(self.path, row)
+        with append_lock(self.path):
+            # THE STAMP IS READ INSIDE THE WRITE'S OWN LOCK. That is the whole
+            # reason this no longer goes through `append_jsonl`, which takes
+            # the lock internally and gives the caller nowhere to stand.
+            #
+            # Every write moved the file stamp, so the next read replayed and
+            # re-validated the entire ledger for it: 461 ms at 20 000 rows,
+            # and the largest remaining item on the reaction path once the
+            # evidence log stopped doing the same thing. A reaction pays it
+            # once or twice.
+            #
+            # THE CALLER HAS ALREADY APPLIED THE ROW. `propose`, `transition`
+            # and `supersede` each mutate `self._by_id` themselves; all that
+            # was missing is the stamp catching up, so the next read stops
+            # believing the file moved out from under it. The first draft of
+            # this also called `_apply_row` here, and the row landed TWICE —
+            # a duplicate `history` entry, invisible to every functional test
+            # because it does not change any state the policy reads. Caught
+            # only by diffing an incremental projection against a cold replay,
+            # which `test_ledger.py` now does.
+            #
+            # WHAT MAKES IT SAFE is that `current` is decided under the lock
+            # that also guards the append. If a second writer got in since our
+            # projection was built, `current` is False, the stamp is left
+            # stale, and the next `_project` replays and picks up both rows.
+            # Reading the stamp outside the lock would leave a window where
+            # the other row is dropped from the projection AND the refreshed
+            # stamp hides it — `tools/candidates_admin.py` bypasses the
+            # instance lock, so that second writer exists.
+            current = (self._by_id is not None
+                       and self._stamp == _file_stamp(self.path))
+            append_jsonl_unlocked(self.path, row)
+            if current:
+                self._stamp = _file_stamp(self.path)
 
     def health_metadata(self, *, warning_bytes: int | None = None) -> dict:
         # Force validation even when no caller has projected the ledger yet.
@@ -394,10 +437,16 @@ class CandidateLedger:
         return fresh
 
     def transition(self, cid: str, state: str, *, ts: str, actor: str,
-                   reason: str = "", evidence=(), supersedes: str = "",
-                   superseded_by: str = "") -> bool:
+                   reason: str = "", evidence=()) -> bool:
         """Append one lifecycle event. False when the transition is not legal
-        from the candidate's current state (nothing is written)."""
+        from the candidate's current state (nothing is written).
+
+        It used to take `supersedes` / `superseded_by` as well, and no caller
+        ever passed either: supersession is written as its own
+        `ROW_SUPERSESSION` row by `supersede()`. `_apply_row` still READS both
+        fields off a lifecycle row, and that half stays — it is how a
+        schema-1 log written by an older build still projects, and
+        `tools/candidates_admin.py` prints them."""
         cand = self.get(cid)
         if cand is None or state not in _ALLOWED_FROM:
             return False
@@ -407,17 +456,9 @@ class CandidateLedger:
                "state": state, "ts": ts, "actor": actor,
                "reason": str(reason or "")[:300],
                "evidence": [str(e) for e in (evidence or ())]}
-        if supersedes:
-            row["supersedes"] = supersedes
-        if superseded_by:
-            row["superseded_by"] = superseded_by
         self._append(row)
         cand["state"] = state
         self._merge_evidence(cand, row["evidence"])
-        if supersedes:
-            cand["supersedes"] = supersedes
-        if superseded_by:
-            cand["superseded_by"] = superseded_by
         cand.setdefault("history", []).append(
             {"state": state, "ts": ts, "actor": actor, "reason": row["reason"]})
         return True
@@ -474,17 +515,6 @@ class CandidateLedger:
             "state": STATE_PROMOTED, "ts": ts, "actor": actor,
             "reason": row["reason"],
         })
-        return True
-
-
-def _ends_with_newline(path: Path) -> bool:
-    try:
-        with path.open("rb") as fh:
-            if fh.seek(0, 2) == 0:
-                return True
-            fh.seek(-1, 2)
-            return fh.read(1) == b"\n"
-    except OSError:
         return True
 
 
