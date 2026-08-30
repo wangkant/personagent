@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent 消息路径与学习闭环</title>
-  <desc id="architecture-desc">QQ 经 OneBot、其他平台经 AstrBot 进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
+  <desc id="architecture-desc">QQ 可以经 NapCat 直连，也可以和其他平台一样经 AstrBot 接入；两种入口汇入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -72,8 +72,8 @@
   <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">系统 / 消息路径</text>
-  <text class="headline ink" x="40" y="61">一个 agent 路径，接入任意聊天平台</text>
-  <text class="small muted" x="40" y="86">两端只替换传输层；人设、安全和学习机制始终共享。</text>
+  <text class="headline ink" x="40" y="61">两种接入选择，一条 agent 路径</text>
+  <text class="small muted" x="40" y="86">QQ 可直连或经 AstrBot 接入；人设、安全和学习机制始终共享。</text>
   <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
 
   <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
@@ -82,13 +82,13 @@
 
   <rect class="surface" x="40" y="152" width="126" height="52" rx="7"/>
   <rect class="frame" x="40.5" y="152.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="170">QQ / OneBot</text>
-  <text class="tiny muted" x="54" y="189">NapCat · Lagrange</text>
+  <text class="label ink" x="54" y="170">QQ / NapCat</text>
+  <text class="tiny muted" x="54" y="189">默认直连</text>
 
   <rect class="surface" x="40" y="228" width="126" height="52" rx="7"/>
   <rect class="frame" x="40.5" y="228.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="246">其他平台 / AstrBot</text>
-  <text class="tiny muted" x="54" y="265">Telegram · Discord · …</text>
+  <text class="label ink" x="54" y="246">AstrBot</text>
+  <text class="tiny muted" x="54" y="265">QQ · Telegram · …</text>
 
   <path class="flow" d="M166 178H220" marker-end="url(#architecture-arrow)"/>
   <path class="flow" d="M166 254H220" marker-end="url(#architecture-arrow)"/>
@@ -99,6 +99,7 @@
   <rect class="code" x="220" y="228" width="126" height="52" rx="6"/>
   <text class="eyebrow blue" x="234" y="244">网关接入</text>
   <text class="tiny ink" x="234" y="263">/webhook/gateway</text>
+  <text class="tiny coral" x="40" y="302">QQ 入站必须二选一 · 禁止双开</text>
 
   <path class="flow" d="M346 178H362V216H380" marker-end="url(#architecture-arrow)"/>
   <path class="flow" d="M346 254H362V216"/>
