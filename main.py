@@ -193,6 +193,16 @@ GATEWAY_SOURCE_MAX_AGE_SECONDS = _parse_int_config(
 GATEWAY_OWNER_IDS = tuple(
     s.strip() for s in os.getenv("GATEWAY_OWNER_IDS", "").split(",") if s.strip()
 )
+# Forwarder platforms allowed to mint BARE ids instead of "<platform>:<id>"
+# ones — set this to the forwarder's QQ adapter name (AstrBot calls it
+# "aiocqhttp") to route QQ through the same door as every other platform
+# without renaming a single conversation. Empty by default, and deliberately
+# an operator setting rather than something the forwarder asserts: bare ids
+# are the spelling OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are written in.
+GATEWAY_NATIVE_PLATFORMS = tuple(
+    s.strip() for s in os.getenv("GATEWAY_NATIVE_PLATFORMS", "").split(",")
+    if s.strip()
+)
 
 # ========== Logging ==========
 logger = logging.getLogger("bot")
@@ -544,6 +554,7 @@ async def lifespan(app: FastAPI):
                 tavily_key=TAVILY_API_KEY,
                 lang=AGENT_LANG,
                 gateway_owner_ids=GATEWAY_OWNER_IDS,
+                gateway_native_platforms=GATEWAY_NATIVE_PLATFORMS,
             )
             # The append-only ledger is authoritative. Repair stale derived
             # retrieval views before the server can accept a request.

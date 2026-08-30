@@ -95,6 +95,19 @@ def platform_of(key: str) -> str:
     return value.split(":", 1)[0] or NATIVE_PLATFORM
 
 
+def is_native(key: str) -> bool:
+    """Does this key claim NATIVE-platform authority.
+
+    True for "123456" and "private:777", false for "telegram:c1" and
+    "dm:telegram:1". OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are all
+    compared against bare ids, so a key that reads as native is asking to be
+    measured against them — whichever door it arrived through. That is the
+    question the whitelist gates have to ask: a forwarder authorized to mint
+    native ids must not thereby escape the whitelists those ids belong to.
+    """
+    return platform_of(key) == NATIVE_PLATFORM
+
+
 def dm_routing_key(user_id: str) -> str:
     """The routing/memory key for a one-to-one conversation with `user_id`."""
     return f"{DM_ROUTING_PREFIX}{user_id}"

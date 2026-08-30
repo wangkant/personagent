@@ -49,7 +49,47 @@ import contextvars
 import logging
 from typing import Optional
 
+from . import channels
+
 logger = logging.getLogger("agent.gateway")
+
+
+def _ns_mid(platform: str, native: bool, conversation_id, mid) -> str:
+    """Namespace a MESSAGE id.
+
+    A non-native platform gets the conversation in the key too, because
+    several of them (Telegram, Slack) issue message ids per chat: the same raw
+    mid routinely appears in two rooms, and a bare "<platform>:<mid>" would let
+    the dedupe ring swallow the second one.
+
+    A native mid must stay bare for the opposite reason. QQ mids are already
+    globally unique, and the ring holds them bare from the NapCat path — so
+    namespacing one would make the same message delivered by both doors look
+    like two messages, and it would be answered twice.
+    """
+    return str(mid) if native else f"{platform}:{conversation_id}:{mid}"
+
+
+def _ns(platform: str, native: bool, raw: object) -> str:
+    """Namespace a USER or GROUP id — unless the platform is native.
+
+    A key with NO namespace is QQ (`channels.NATIVE_PLATFORM`), and every store
+    on disk has been keyed that way since QQ was the only channel. So a QQ
+    message that reaches the agent through a forwarder rather than from NapCat
+    has to mint exactly the ids NapCat would have: prefix it and it addresses a
+    different conversation than the one it came from, orphaning everything
+    already learned about that room and everyone in it. Worse, the ledgers
+    content-address their rows over `conv_id`, so the rename cannot be repaired
+    by rewriting a field — every id derived from it changes too.
+
+    `native` is NOT the forwarder's decision. It is the operator's, via
+    GATEWAY_NATIVE_PLATFORMS, because minting a bare id claims QQ authority:
+    bare ids are what OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are compared
+    against. A forwarder that could assert it for itself could address any QQ
+    conversation the agent can reach. Default empty — every platform is
+    namespaced until an operator says otherwise.
+    """
+    return str(raw) if native else f"{platform}:{raw}"
 
 # Set (to a GatewaySink) only inside Agent.handle_gateway. The NapCat send
 # funnels check it first and divert into the sink instead of doing HTTP, so
@@ -122,12 +162,25 @@ class GatewaySink:
         return True
 
 
-def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
+def synthesize_onebot_payload(
+        event: dict, bot_qq: str, native_platforms=()) -> dict:
     """Convert a neutral inbound event (schema in the module docstring) into
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
     unchanged. Mentions of the platform self_id are normalized to bot_qq so
-    _is_at_me fires exactly like a real QQ @-mention."""
+    _is_at_me fires exactly like a real QQ @-mention.
+
+    `native_platforms` is the operator's list of forwarder platforms whose ids
+    are minted bare instead of namespaced — see `_ns`. Empty by default, which
+    is exactly the behaviour every existing deployment already has."""
     platform = str(event.get("platform", "") or "gateway").strip()
+    native = platform in (native_platforms or ())
+    if not native and platform == channels.NATIVE_PLATFORM:
+        # An unauthorized forwarder must not mint "qq:123" either. It looks
+        # namespaced, but platform_of() reads the segment before the colon and
+        # would report the NATIVE platform — so this event's evidence would
+        # compare compatible with real QQ evidence, which is the cross-platform
+        # mixing that function exists to prevent. Give it a name that cannot.
+        platform = "gateway"
     message_type = event.get("message_type", "group")
     conversation_id = (
         event.get("conversation_id")
@@ -136,7 +189,7 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
     )
     self_id = str(event.get("self_id", ""))
     sender_name = str(event.get("sender_name", "") or "?")
-    user_id = f"{platform}:{event.get('user_id', '')}"
+    user_id = _ns(platform, native, event.get("user_id", ""))
 
     message: list[dict] = []
     has_self_mention = False
@@ -152,7 +205,8 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
                 message.append({"type": "at", "data": {"qq": bot_qq}})
                 has_self_mention = True
             else:
-                message.append({"type": "at", "data": {"qq": f"{platform}:{target}"}})
+                message.append(
+                    {"type": "at", "data": {"qq": _ns(platform, native, target)}})
         elif t == "image":
             url = str(seg.get("url") or "")
             b64 = str(seg.get("b64") or "")
@@ -166,7 +220,8 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
             reply_id = seg.get("message_id", seg.get("id"))
             data = {}
             if reply_id is not None and reply_id != "":
-                data["id"] = f"{platform}:{conversation_id}:{reply_id}"
+                data["id"] = _ns_mid(
+                    platform, native, conversation_id, reply_id)
             message.append({"type": "reply", "data": data})
     # Some platforms signal "this message addresses the bot" without a real
     # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at
@@ -185,7 +240,8 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
         "_platform": platform,
     }
     if message_type == "group":
-        payload["group_id"] = f"{platform}:{event.get('conversation_id', '')}"
+        payload["group_id"] = _ns(
+            platform, native, event.get("conversation_id", ""))
     mid = event.get("message_id")
     if mid is not None and mid != "":
         # Namespace the dedupe key by conversation as well: several platforms
@@ -193,5 +249,5 @@ def synthesize_onebot_payload(event: dict, bot_qq: str) -> dict:
         # routinely appears in two different chats and a bare
         # "<platform>:<mid>" key would silently swallow the second message.
         # Private events use the sender as the conversation.
-        payload["message_id"] = f"{platform}:{conversation_id}:{mid}"
+        payload["message_id"] = _ns_mid(platform, native, conversation_id, mid)
     return payload

@@ -211,6 +211,85 @@ def test_synthesize_mid_namespacing() -> None:
           pv["message_id"] == "telegram:42:700", repr(pv["message_id"]))
 
 
+def test_a_native_platform_mints_the_ids_napcat_would() -> None:
+    """QQ forwarded by a gateway must land on the SAME keys as QQ from NapCat.
+
+    This is what lets one forwarder carry every platform. Namespace the QQ ids
+    and the agent addresses a conversation that does not exist: memory, history
+    and every candidate scope are keyed bare, and the ledgers content-address
+    their rows over conv_id, so the rename cannot be undone by rewriting a
+    field — every id derived from it moves too.
+
+    The last two checks are the ones that keep this safe rather than merely
+    working. A bare id is the spelling OWNER_QQ / QQ_GROUPS /
+    PRIVATE_ALLOWED_QQS are written in, so minting one is a claim of QQ
+    authority: it is the operator's to grant, and a forwarder that has not
+    been granted it must not reach that spelling by naming itself "qq"."""
+    base = {
+        "platform": "aiocqhttp",
+        "user_id": "10001",
+        "sender_name": "Alice",
+        "self_id": BOT_QQ,
+        "message_id": 700,
+        "is_at_me": False,
+        "segments": [{"type": "mention", "user_id": "10002", "name": "Bob"},
+                     {"type": "text", "text": "hi"}],
+        "raw_text": "hi",
+    }
+    group = dict(base, message_type="group", conversation_id="220000")
+    native = synthesize_onebot_payload(group, BOT_QQ, ("aiocqhttp",))
+
+    check("native: the sender id is bare",
+          native["user_id"] == "10001", repr(native["user_id"]))
+    check("native: the group id is bare",
+          native["group_id"] == "220000", repr(native["group_id"]))
+    check("native: a third-party mention is bare",
+          native["message"][0] == {"type": "at", "data": {"qq": "10002"}},
+          repr(native["message"][0]))
+    # Not merely "unprefixed" — the conversation must not be folded in either.
+    # The dedupe ring already holds NapCat's bare mids, so a namespaced one
+    # would read as a second, unseen message and get answered twice.
+    check("native: the message id is the bare mid",
+          native["message_id"] == "700", repr(native["message_id"]))
+
+    private = synthesize_onebot_payload(
+        dict(base, message_type="private"), BOT_QQ, ("aiocqhttp",))
+    check("native: a DM keeps the bare sender id",
+          private["user_id"] == "10001" and private["message_id"] == "700",
+          f"{private['user_id']!r} {private['message_id']!r}")
+
+    # The whitelists are what these ids are measured against, so the agent has
+    # to read them as native — that check is the reason it is safe for a
+    # gateway request to carry them at all.
+    check("native: the minted ids read as native authority",
+          channels.is_native(native["user_id"])
+          and channels.is_native(native["group_id"]))
+
+    # Default: unchanged. Every deployment that names no native platform sees
+    # exactly the behaviour it saw before this existed.
+    namespaced = synthesize_onebot_payload(group, BOT_QQ)
+    check("default: the same event is still namespaced",
+          namespaced["user_id"] == "aiocqhttp:10001"
+          and namespaced["group_id"] == "aiocqhttp:220000"
+          and namespaced["message_id"] == "aiocqhttp:220000:700",
+          repr(namespaced["user_id"]))
+    check("default: namespaced ids do not read as native authority",
+          not channels.is_native(namespaced["user_id"])
+          and not channels.is_native(namespaced["group_id"]))
+
+    # A forwarder that calls itself "qq" without being granted native status
+    # must gain nothing by it. "qq:10001" is not bare, but platform_of() reads
+    # the segment before the colon, so left alone it would report the NATIVE
+    # platform and this event's evidence would compare compatible with real QQ.
+    impostor = synthesize_onebot_payload(dict(group, platform="qq"), BOT_QQ)
+    check("impostor: naming yourself qq does not confer native authority",
+          not channels.is_native(impostor["user_id"]),
+          repr(impostor["user_id"]))
+    check("impostor: nor does the evidence land on the native platform",
+          channels.platform_of(impostor["user_id"]) != channels.NATIVE_PLATFORM,
+          channels.platform_of(impostor["user_id"]))
+
+
 def test_synthesize_image_segments() -> None:
     event = {
         "platform": "slack",
@@ -1060,6 +1139,92 @@ async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
     handled = await agent.handle(qq_payload)
     check("group whitelist: unlisted QQ group rejected",
           handled is False, repr(handled))
+
+
+async def regression_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
+    """A forwarder allowed to mint native ids does NOT thereby escape the
+    whitelists those ids are written in.
+
+    The gateway skips QQ_GROUPS and PRIVATE_ALLOWED_QQS because a namespaced
+    id like "telegram:-100" can never appear in either, so the forwarder's own
+    allowlist is the only filter that could apply. A native forwarder breaks
+    that reasoning: it mints exactly the spelling the QQ whitelists are in. Let
+    it skip them and holding the gateway token would be enough to DM as any QQ
+    the agent can reach — OWNER_QQ included, which is the closer persona and
+    the one that can write core memory."""
+    agent = make_agent(tmp)
+    agent.gateway_native_platforms = {"aiocqhttp"}
+    agent.allowed_groups = {"123456"}
+    agent.private_allowed_qqs = {"888"}
+    agent.owner_qq = "10000"
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        return "on my way", "called", ""
+
+    # Both, or the DM half of this test proves nothing: without a stubbed
+    # private path a rejected DM and a DM that merely failed to reach a model
+    # are the same empty result, and the assertion passes either way. Caught
+    # by mutation — the pre-change gate survived until this was added.
+    async def fake_chat_private(history, is_owner=False, pkey="",
+                                proactive=False):
+        return "hi back", ""
+
+    agent._think = fake_think
+    agent._chat_private = fake_chat_private
+
+    def native_group(gid):
+        return {
+            "platform": "aiocqhttp", "message_type": "group",
+            "conversation_id": gid, "user_id": "777", "sender_name": "Bob",
+            "self_id": BOT_QQ, "message_id": f"90{gid}", "is_at_me": True,
+            "segments": [{"type": "mention", "user_id": BOT_QQ, "name": "Bot"},
+                         {"type": "text", "text": " hi"}],
+            "raw_text": "@Bot hi",
+        }
+
+    unlisted = await agent.handle_gateway(native_group("999999"))
+    check("native gateway: an unlisted QQ group is rejected",
+          unlisted["handled"] is False and not unlisted["replies"],
+          repr(unlisted))
+
+    listed = await agent.handle_gateway(native_group("123456"))
+    check("native gateway: a listed QQ group is still served",
+          listed["handled"] is True and len(listed["replies"]) >= 1,
+          repr(listed))
+
+    def native_dm(uid, mid):
+        return {
+            "platform": "aiocqhttp", "message_type": "private",
+            "conversation_id": uid, "user_id": uid, "sender_name": "Someone",
+            "self_id": BOT_QQ, "message_id": mid, "is_at_me": False,
+            "segments": [{"type": "text", "text": "hi"}], "raw_text": "hi",
+        }
+
+    # The positive case first: it is what makes the rejection below evidence
+    # of the whitelist rather than of a broken private path.
+    allowed = await agent.handle_gateway(native_dm("888", 909))
+    check("native gateway: a whitelisted QQ DM is served",
+          allowed["handled"] is True and len(allowed["replies"]) >= 1,
+          repr(allowed))
+
+    stranger = await agent.handle_gateway(native_dm("555", 910))
+    check("native gateway: a non-whitelisted QQ DM is rejected",
+          stranger["handled"] is False and not stranger["replies"],
+          repr(stranger))
+
+    # Unchanged for everyone else: a namespaced platform still relies on the
+    # forwarder's allowlist, because QQ_GROUPS could never describe it.
+    foreign = await agent.handle_gateway({
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
+        "self_id": "999000", "message_id": 911, "is_at_me": True,
+        "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
+                     {"type": "text", "text": " hi"}],
+        "raw_text": "@Bot hi",
+    })
+    check("namespaced gateway: still bypasses QQ_GROUPS as before",
+          foreign["handled"] is True and len(foreign["replies"]) >= 1,
+          repr(foreign))
 
 
 async def regression_think_full_path_search_hint(tmp: Path) -> None:
@@ -2401,6 +2566,7 @@ async def main_async() -> None:
         await regression_send_retry_only_pre_send_failures(tmp / "mmmmm")
         await regression_agent_aclose_owns_resources(tmp / "mmmmmm")
         await regression_group_whitelist_gateway_bypass(tmp / "n")
+        await regression_native_gateway_obeys_the_qq_whitelists(tmp / "n2")
         await regression_think_full_path_search_hint(tmp / "o")
         await regression_eval_auto_append_examples(tmp / "p")
         await regression_proactive_group_postprocessing(tmp / "q")
@@ -2431,6 +2597,7 @@ def main() -> int:
     test_synthesize_private()
     test_synthesize_reply_keeps_namespaced_id()
     test_synthesize_mid_namespacing()
+    test_a_native_platform_mints_the_ids_napcat_would()
     test_synthesize_image_segments()
     test_message_to_reply_item()
     test_sink_closed_drop()

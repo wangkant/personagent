@@ -231,6 +231,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         message_debounce_sec: float = 2.5,
         lang: str = "",
         gateway_owner_ids: tuple = (),
+        gateway_native_platforms: tuple = (),
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -367,6 +368,17 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # access filter); this set only selects the closer owner persona.
         self.gateway_owner_ids: set = {
             str(i).strip() for i in (gateway_owner_ids or ()) if str(i).strip()
+        }
+
+        # Forwarder platforms whose ids are minted BARE instead of namespaced,
+        # so a QQ message relayed by a gateway lands on the same keys NapCat
+        # would have produced. Empty by default: a bare id carries QQ
+        # authority — it is what OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS
+        # are compared against — so which forwarder may claim it is the
+        # operator's call, never the forwarder's.
+        self.gateway_native_platforms: set = {
+            str(p).strip() for p in (gateway_native_platforms or ())
+            if str(p).strip()
         }
 
         # Proactive mechanism: a background loop that occasionally self-initiates
@@ -722,7 +734,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         the NapCat send funnels divert their messages into it, then the normal
         pipeline runs to completion and the collected replies go back in the
         HTTP response (the forwarder relays them to the source platform)."""
-        payload = synthesize_onebot_payload(event, self.bot_qq)
+        payload = synthesize_onebot_payload(
+            event, self.bot_qq, self.gateway_native_platforms)
         if payload.get("message_type") == "private":
             gateway_key = channels.dm_routing_key(payload.get("user_id", ""))
         else:
@@ -781,10 +794,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # contextvar — set only inside handle_gateway, unforgeable from the
         # network — never on payload flags: /webhook/qq accepts arbitrary
         # JSON, so a crafted "_gateway": true must not skip the whitelist.
+        # It also requires the id to be NAMESPACED. A forwarder in
+        # GATEWAY_NATIVE_PLATFORMS mints bare ids, and a bare id is exactly
+        # what this whitelist is written in — so letting it skip the check
+        # would let the forwarder DM as any QQ the agent can reach, including
+        # OWNER_QQ. Both conditions, or the pair of them lets an id claim QQ
+        # authority and dodge the QQ gate in one move.
         if message_type == "private":
             is_owner = (bool(self.owner_qq) and user_id == self.owner_qq) \
                 or user_id in self.gateway_owner_ids
-            if current_sink.get() is None:
+            if current_sink.get() is None or channels.is_native(user_id):
                 if not is_owner and user_id not in self.private_allowed_qqs:
                     return False
             if mid is not None:
@@ -798,12 +817,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
             return False
-        # QQ group whitelist (QQ_GROUPS) applies to the QQ path only: gateway
-        # groups carry ids like "telegram:-100..." that can never appear in
-        # QQ_GROUPS, and the forwarder plugin's own group_whitelist is the
-        # access filter for gateway conversations. Gate on the sink, which is
-        # set only inside handle_gateway.
-        if self.allowed_groups and current_sink.get() is None \
+        # QQ group whitelist (QQ_GROUPS) applies to every BARE group id, from
+        # either door. A namespaced gateway group like "telegram:-100..." can
+        # never appear in QQ_GROUPS, so the forwarder plugin's own
+        # group_whitelist is the access filter for those. But a forwarder in
+        # GATEWAY_NATIVE_PLATFORMS mints bare ids, and those are spelled the
+        # way QQ_GROUPS is — so they get measured against it like any other.
+        if self.allowed_groups \
+                and (current_sink.get() is None or channels.is_native(group_id)) \
                 and group_id not in self.allowed_groups:
             return False
         if mid is not None:
