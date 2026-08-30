@@ -651,6 +651,58 @@ async def main_async() -> None:
     test_every_setting_the_code_reads_is_in_the_template()
     test_event_schema_requires_stable_message_ids()
     test_startup_view_rebuild_can_fail_closed()
+    test_a_failed_log_rotation_does_not_swallow_the_record()
+
+
+def test_a_failed_log_rotation_does_not_swallow_the_record() -> None:
+    """A rollover that cannot happen must not take the log line with it.
+
+    Windows refuses `os.rename` on a file another handle holds open, and a
+    leftover uvicorn is a normal state here. `RotatingFileHandler.emit` calls
+    `doRollover` inside its own try, so the failure is not "rotation skipped"
+    — it is `handleError`, and the record is gone. The log starts losing lines
+    exactly when the file gets big enough to be worth rotating.
+
+    The bare handler runs alongside so the test shows the loss rather than
+    asserting an absence: if the stock class ever stopped dropping records,
+    this would stop being a fix worth having and the second check would say
+    so."""
+    def emit_three(handler):
+        for i in range(3):
+            handler.emit(logging.LogRecord(
+                "t", logging.INFO, __file__, 1, f"line-{i}", None, None))
+
+    original = logging.handlers.RotatingFileHandler.doRollover
+
+    def refuse(self):
+        raise OSError(32, "another process holds the file")
+
+    with tempfile.TemporaryDirectory() as td:
+        fixed_path = Path(td) / "fixed.log"
+        bare_path = Path(td) / "bare.log"
+        fixed = main_module.RollingLogThatSurvivesAFailedRotation(
+            str(fixed_path), maxBytes=1, backupCount=1, encoding="utf-8")
+        bare = logging.handlers.RotatingFileHandler(
+            str(bare_path), maxBytes=1, backupCount=1, encoding="utf-8")
+        raising = logging.raiseExceptions
+        logging.raiseExceptions = False  # handleError would print a traceback
+        logging.handlers.RotatingFileHandler.doRollover = refuse
+        try:
+            emit_three(fixed)
+            emit_three(bare)
+        finally:
+            logging.handlers.RotatingFileHandler.doRollover = original
+            logging.raiseExceptions = raising
+            fixed.close()
+            bare.close()
+
+        kept = fixed_path.read_text(encoding="utf-8")
+        lost = bare_path.read_text(encoding="utf-8")
+
+    check("failed rotation: every record still reaches the file",
+          all(f"line-{i}" in kept for i in range(3)), repr(kept[:160]))
+    check("failed rotation: the stock handler is the thing being fixed",
+          "line-2" not in lost, repr(lost[:160]))
 
 
 def main() -> int:

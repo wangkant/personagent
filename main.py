@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,31 @@ def _parse_int_config(
             "out-of-range %s=%r; using %d", name, raw, default)
         return default
     return value
+
+
+class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
+    """A rollover that cannot happen must not eat the log line.
+
+    Windows refuses `os.rename` on a file another handle holds open, and a
+    second uvicorn is a normal state here — killing one does not always take.
+    `RotatingFileHandler.emit` calls `doRollover` INSIDE its own try, so a
+    failed rotation is not "rotation skipped", it is `handleError`: the record
+    is never written. The log would start losing exactly the lines it exists
+    to keep, at the moment the file grew big enough to be worth rotating.
+
+    Downgraded to a rollover that did not happen — the current file stays open
+    and grows past `maxBytes` until some later attempt succeeds. An oversized
+    log is a nuisance; a missing one is why anyone set LOG_FILE.
+    """
+
+    def doRollover(self) -> None:
+        try:
+            super().doRollover()
+        except OSError:
+            # Reopen if the base class closed the stream before it failed, or
+            # every subsequent emit writes to a dead handle.
+            if self.stream is None:
+                self.stream = self._open()
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -227,7 +253,6 @@ def _configure_logging() -> None:
     if not log_file:
         return
     try:
-        from logging.handlers import RotatingFileHandler
         target = Path(log_file).expanduser().resolve()
         if any(
             isinstance(handler, RotatingFileHandler)
@@ -236,7 +261,7 @@ def _configure_logging() -> None:
         ):
             return
         target.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(
+        file_handler = RollingLogThatSurvivesAFailedRotation(
             str(target), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
         )
         file_handler.setFormatter(formatter)

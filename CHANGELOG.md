@@ -224,6 +224,16 @@ before it was changed and is covered by a test that fails without the fix.
   now carries `owned` alongside `handled`, set once the turn clears admission;
   the plugin gates on that and falls back to `handled` against an older agent.
 
+- **A failed log rotation no longer swallows the log line.** Windows refuses
+  `os.rename` on a file another handle holds open, and a leftover uvicorn is a
+  normal state on this platform. `RotatingFileHandler.emit` calls `doRollover`
+  inside its own try, so the failure is not "rotation skipped" — it is
+  `handleError`, and the record is never written. The log would start losing
+  exactly the lines it exists to keep, at the moment the file grew big enough
+  to be worth rotating. A rollover that cannot happen is now one that did not
+  happen: the file grows past `maxBytes` until a later attempt succeeds. Only
+  affects deployments that set `LOG_FILE`. Ported from the sibling engine,
+  where it was measured.
 - **The group send no longer simulates typing into a sink.** On QQ the sleep
   IS the pause the reader sees — this coroutine and the chat window are one
   timeline. Behind a gateway sink they are not: every chunk is collected and
