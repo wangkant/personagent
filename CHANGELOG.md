@@ -21,6 +21,19 @@ before it was changed and is covered by a test that fails without the fix.
   that is not a directory, an empty `BOT_NAME`, and any key `.env.example`
   does not list. Reported, never fatal — a deployment that is 90% configured
   should start and say what the other 10% is.
+- **`GATEWAY_NATIVE_PLATFORMS` — one forwarder can carry QQ too.** The gateway
+  namespaces every id as `<platform>:<raw>` so a forwarded identity can never
+  collide with a real QQ number. Right for Telegram, exactly wrong for QQ
+  itself: routing QQ through the same door renamed every conversation, so
+  memory, history and every candidate scope pointed at rooms and people that
+  do not exist — and not repairably, because the ledgers content-address their
+  rows over `conv_id`, so the rename moves every id derived from it. Naming a
+  platform here makes its ids arrive bare, identical to NapCat's. Empty by
+  default. It is an operator setting rather than something the forwarder
+  asserts, because a bare id is the spelling `OWNER_QQ`, `QQ_GROUPS` and
+  `PRIVATE_ALLOWED_QQS` are written in — and for the same reason those
+  whitelists now gate on the id's shape rather than on the sink, so a native
+  forwarder cannot both claim QQ authority and skip the QQ gate.
 - **`.env.example` is checked against the code.** The typo check treats the
   template as the authority on what a key may be called, so a test scans every
   `os.getenv` / `os.environ.get` in the package and asserts the template
@@ -188,6 +201,15 @@ before it was changed and is covered by a test that fails without the fix.
 - CI gates on `ruff --select F401,F811,F821,F841`, and a `dev` extra installs it.
 - `.env.example` documents `AGENT_HOME`, `LLM_TIMEOUT`, `LLM_MAX_RETRIES`,
   `MAX_INFLIGHT_GATEWAY` and the two ledger warn-byte settings.
+
+- **A gateway reply of silence no longer reads as "not my conversation".**
+  The response said only whether a reply came back, and the forwarder used
+  that to decide whether to suppress its own model. But this agent stays quiet
+  on purpose far more often than it speaks — a PASS, several messages merged
+  into one answer, the rhythm gate — so AstrBot's built-in model answered in
+  rooms the persona had deliberately sat out, as someone else. The response
+  now carries `owned` alongside `handled`, set once the turn clears admission;
+  the plugin gates on that and falls back to `handled` against an older agent.
 
 ### Performance
 

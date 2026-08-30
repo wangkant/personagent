@@ -140,6 +140,17 @@ class _UnhandledClient(_RecordingClient):
         return response
 
 
+class _SilentButOwnedClient(_RecordingClient):
+    """An agent that took the conversation and chose to say nothing."""
+
+    async def post(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        response = _Response()
+        response.json = lambda: {
+            "handled": False, "owned": True, "replies": []}
+        return response
+
+
 class _Event:
     def __init__(self, module, *, private: bool):
         message_type = (
@@ -239,7 +250,7 @@ def test_signed_request_uses_canonical_body_and_replay_headers():
     ).hexdigest()
 
     try:
-        delivered, replies = asyncio.run(plugin._post_to_agent(event))
+        delivered, _owned, replies = asyncio.run(plugin._post_to_agent(event))
     finally:
         module.time.time = real_time
         module.secrets.token_hex = real_token_hex
@@ -275,9 +286,9 @@ def test_off_host_endpoint_requires_https_and_a_token():
     )
 
     assert asyncio.run(
-        insecure._post_to_agent({"message": "hello"})) == (False, [])
+        insecure._post_to_agent({"message": "hello"})) == (False, False, [])
     assert asyncio.run(
-        no_token._post_to_agent({"message": "hello"})) == (False, [])
+        no_token._post_to_agent({"message": "hello"})) == (False, False, [])
     assert insecure._client.calls == []
     assert no_token._client.calls == []
 
@@ -293,7 +304,7 @@ def test_malformed_endpoint_is_rejected_without_a_request():
     )
 
     assert asyncio.run(
-        plugin._post_to_agent({"message": "hello"})) == (False, [])
+        plugin._post_to_agent({"message": "hello"})) == (False, False, [])
     assert plugin._client.calls == []
 
 
@@ -310,7 +321,7 @@ def test_forwarding_failure_does_not_stop_astrbot_fallback():
     event = _Event(module, private=True)
 
     async def fail(_neutral_event):
-        return False, []
+        return False, False, []
 
     plugin._post_to_agent = fail
 
@@ -341,6 +352,31 @@ def test_unhandled_gateway_response_does_not_stop_astrbot_fallback():
     assert event.stopped is False
 
 
+def test_a_silent_but_owned_conversation_blocks_the_fallback():
+    """The agent is quiet far more often than it speaks — a PASS, a debounce
+    merge, the rhythm gate. Treating that as "not mine" hands the room to
+    AstrBot's own model, which answers in it as someone else. The test above
+    pins the other direction: an agent too old to send `owned` still falls
+    back to `handled`, so nothing changes for it."""
+    module = _import_plugin()
+    plugin = _plugin_instance(
+        module,
+        {
+            "private_enabled": True,
+            "private_whitelist": ["user-1"],
+            "block_default": True,
+        },
+    )
+    plugin._client = _SilentButOwnedClient()
+    event = _Event(module, private=True)
+
+    async def collect():
+        return [item async for item in plugin.forward_to_agent(event)]
+
+    assert asyncio.run(collect()) == []
+    assert event.stopped is True
+
+
 def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
     module = _import_plugin()
     plugin = _plugin_instance(
@@ -356,7 +392,7 @@ def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
 
     async def succeed(neutral_event):
         captured.update(neutral_event)
-        return True, []
+        return True, True, []
 
     plugin._post_to_agent = succeed
 
@@ -398,6 +434,7 @@ if __name__ == "__main__":
         test_malformed_endpoint_is_rejected_without_a_request,
         test_forwarding_failure_does_not_stop_astrbot_fallback,
         test_unhandled_gateway_response_does_not_stop_astrbot_fallback,
+        test_a_silent_but_owned_conversation_blocks_the_fallback,
         test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback,
         test_missing_source_timestamp_is_not_forwarded_or_blocked,
     ]

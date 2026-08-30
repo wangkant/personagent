@@ -162,7 +162,7 @@ class LLMPersonaGateway(Star):
             "raw_text": raw_text,
         }
 
-        delivered, replies = await self._post_to_agent(neutral_event)
+        _replied, owned, replies = await self._post_to_agent(neutral_event)
 
         first = True
         for item in replies:
@@ -176,9 +176,12 @@ class LLMPersonaGateway(Star):
             first = False
             yield event.chain_result(chain)
 
-        if delivered and self.config.get("block_default", True):
-            # The agent owns these conversations: keep AstrBot's built-in
-            # LLM pipeline from producing a second reply.
+        if owned and self.config.get("block_default", True):
+            # Gate on ownership, not on whether a reply came back. The agent
+            # stays quiet on purpose far more often than it speaks — PASS, a
+            # debounce merge, the rhythm gate — and reading that as "not mine"
+            # hands the conversation to AstrBot's built-in model, which then
+            # answers as someone else in a room this persona chose to sit out.
             event.stop_event()
 
     def _map_segments(self, event: AstrMessageEvent, self_id: str):
@@ -278,14 +281,23 @@ class LLMPersonaGateway(Star):
             return False, "off-host agent_url requires a non-empty gateway_token"
         return True, ""
 
-    async def _post_to_agent(self, neutral_event: dict) -> tuple[bool, list]:
+    async def _post_to_agent(
+            self, neutral_event: dict) -> tuple[bool, bool, list]:
+        """POST one event; return (replied, owned, reply items).
+
+        `owned` is the agent's answer to "is this conversation mine", which is
+        NOT the same as whether it replied: a PASS, a debounce merge and a
+        rhythm-gate skip are all deliberate silence in a conversation it owns.
+        Falling back to `handled` keeps an older agent — one that does not send
+        the field — behaving exactly as it does today.
+        """
         url = str(self.config.get("agent_url") or DEFAULT_AGENT_URL)
         timeout = float(self.config.get("timeout_s") or DEFAULT_TIMEOUT_S)
         token = str(self.config.get("gateway_token") or "")
         allowed, reason = self._endpoint_is_allowed(url, token)
         if not allowed:
             logger.warning(f"llm_persona_gateway: refusing unsafe agent_url: {reason}")
-            return False, []
+            return False, False, []
 
         body = json.dumps(
             neutral_event,
@@ -317,11 +329,12 @@ class LLMPersonaGateway(Star):
             data = resp.json()
         except Exception as e:
             logger.warning(f"llm_persona_gateway: agent request failed: {e}")
-            return False, []
+            return False, False, []
         replies = data.get("replies") if isinstance(data, dict) else None
         if not isinstance(replies, list):
-            return False, []
-        return bool(data.get("handled")), [
+            return False, False, []
+        handled = bool(data.get("handled"))
+        return handled, bool(data.get("owned", handled)), [
             r for r in replies if isinstance(r, dict)
         ]
 

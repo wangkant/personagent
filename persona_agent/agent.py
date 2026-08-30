@@ -759,7 +759,22 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     self._gateway_inflight[gateway_key] = remaining
                 else:
                     self._gateway_inflight.pop(gateway_key, None)
-        return {"handled": bool(handled), "replies": sink.items}
+        # `owned` is not `handled`. See GatewaySink: a forwarder needs to know
+        # whether to suppress its own model, and "produced no reply" is the
+        # wrong signal for that — silence is frequently the persona's answer.
+        return {"handled": bool(handled), "owned": sink.owned,
+                "replies": sink.items}
+
+    def _claim_gateway_turn(self) -> None:
+        """Mark the current gateway turn as ours, whatever it decides to say.
+
+        Called once the admission gates pass, which is the moment the answer
+        to "is this conversation mine" is known — everything after it is about
+        what to say, including saying nothing.
+        """
+        sink = current_sink.get()
+        if sink is not None:
+            sink.owned = True
 
     async def _handle_inner(self, payload: dict) -> bool:
         if not self.enabled:
@@ -806,6 +821,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             if current_sink.get() is None or channels.is_native(user_id):
                 if not is_owner and user_id not in self.private_allowed_qqs:
                     return False
+            self._claim_gateway_turn()
             if mid is not None:
                 self._remember_msg_id(mid)
             # Gateway DM keys are forwarder-chosen → register in the LRU so an
@@ -827,6 +843,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 and (current_sink.get() is None or channels.is_native(group_id)) \
                 and group_id not in self.allowed_groups:
             return False
+        self._claim_gateway_turn()
         if mid is not None:
             self._remember_msg_id(mid)
         # Gateway group keys are forwarder-chosen → register in the LRU.

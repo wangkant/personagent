@@ -88,6 +88,43 @@ If (1) fails, the agent can never send. If (1) works and (2) never logs
 anything, the bridge's webhook is not configured or is pointed elsewhere. Both
 failures look identical from the outside — a bot that is running and silent.
 
+## More than one platform
+
+Everything above is the QQ path. For Telegram, Discord, Slack and the rest,
+the agent does not connect to the platform at all — a forwarder does, and
+POSTs a platform-neutral event to `POST /webhook/gateway`. The one in this
+repo is an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin at
+`integrations/astrbot/astrbot_plugin_llm_persona_gateway/`; copy it into
+AstrBot's `data/plugins/`, and configure the platforms in AstrBot's own UI.
+The persona, memory, learning and typing simulation stay here.
+
+Two settings and one decision:
+
+- `GATEWAY_TOKEN` — shared with the plugin. Required off-host, and the
+  request carries an HMAC-SHA256 envelope over `timestamp.nonce.body` with a
+  replay guard, so a token seen in a log is not enough on its own.
+- `GATEWAY_OWNER_IDS` — platform-prefixed ids (`telegram:12345`) that get the
+  owner branch in DMs. Gateway identities are namespaced `<platform>:<id>` so
+  they can never collide with a QQ number.
+- The decision: **does QQ go through the forwarder too?**
+
+Leave QQ on NapCat and you have two inbound paths but nothing to reconcile.
+Route it through the forwarder and there is one door and one place to
+configure platforms — but then set `GATEWAY_NATIVE_PLATFORMS` to the
+forwarder's QQ adapter name (`aiocqhttp` for AstrBot), or every QQ
+conversation arrives under a namespaced name it has never had before. Memory,
+history and every learned example are keyed the bare way, and the evidence and
+candidate ledgers content-address their rows over the conversation id — so the
+rename changes every id derived from it and cannot be undone by rewriting a
+field. `GATEWAY_NATIVE_PLATFORMS` keeps the ids identical to NapCat's.
+
+Naming a platform there grants its forwarder QQ authority, since bare ids are
+what `OWNER_QQ`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS` are compared against.
+Which is why those whitelists then apply to it, unlike to a namespaced
+platform — the forwarder's own allowlist is not the only filter any more.
+
+Do not run both doors for QQ at once; the same message would arrive twice.
+
 ## Exposing the webhook
 
 Keep the default loopback binding when the bridge and the agent share a

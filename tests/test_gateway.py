@@ -1141,6 +1141,54 @@ async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
           handled is False, repr(handled))
 
 
+async def regression_silence_still_claims_the_conversation(tmp: Path) -> None:
+    """Choosing not to speak is an answer, and the forwarder has to hear it.
+
+    The forwarder suppresses its own model only for conversations the agent
+    owns, and the response is all it has to go on. If "no reply" meant "not
+    mine", then every PASS — the most common outcome by design, plus the
+    debounce merge and the rhythm gate — would hand the room to a different
+    model, which would answer in it as someone else. Worse than not replying:
+    the persona's restraint is exactly what the forwarder would override."""
+    agent = make_agent(tmp)
+    agent.allowed_groups = set()
+
+    async def pass_think(group_id, mode, text="", caller_override=None):
+        return "PASS", "called", ""
+
+    agent._think = pass_think
+
+    quiet = await agent.handle_gateway({
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
+        "self_id": "999000", "message_id": 920, "is_at_me": True,
+        "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
+                     {"type": "text", "text": " hi"}],
+        "raw_text": "@Bot hi",
+    })
+    check("silence: a PASS produces no reply",
+          quiet["handled"] is False and not quiet["replies"], repr(quiet))
+    check("silence: but it still claims the conversation",
+          quiet["owned"] is True, repr(quiet))
+
+    # And the other half: a conversation the agent turned away must NOT be
+    # claimed, or the forwarder would silence its own model on behalf of an
+    # agent that never accepted the room.
+    agent.gateway_native_platforms = {"aiocqhttp"}
+    agent.allowed_groups = {"123456"}
+    refused = await agent.handle_gateway({
+        "platform": "aiocqhttp", "message_type": "group",
+        "conversation_id": "999999", "user_id": "777", "sender_name": "Bob",
+        "self_id": BOT_QQ, "message_id": 921, "is_at_me": True,
+        "segments": [{"type": "mention", "user_id": BOT_QQ, "name": "Bot"},
+                     {"type": "text", "text": " hi"}],
+        "raw_text": "@Bot hi",
+    })
+    check("silence: a refused conversation is not claimed",
+          refused["owned"] is False and refused["handled"] is False,
+          repr(refused))
+
+
 async def regression_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
     """A forwarder allowed to mint native ids does NOT thereby escape the
     whitelists those ids are written in.
@@ -2567,6 +2615,7 @@ async def main_async() -> None:
         await regression_agent_aclose_owns_resources(tmp / "mmmmmm")
         await regression_group_whitelist_gateway_bypass(tmp / "n")
         await regression_native_gateway_obeys_the_qq_whitelists(tmp / "n2")
+        await regression_silence_still_claims_the_conversation(tmp / "n3")
         await regression_think_full_path_search_hint(tmp / "o")
         await regression_eval_auto_append_examples(tmp / "p")
         await regression_proactive_group_postprocessing(tmp / "q")

@@ -53,14 +53,41 @@ loopback URL visible to AstrBot; never send the token over cleartext HTTP.
 | `group_whitelist` | list | `[]` | Group IDs to forward; empty = none. |
 | `private_enabled` | bool | `false` | Enable forwarding for explicitly allowlisted private senders. |
 | `private_whitelist` | list | `[]` | Allowed private senders; empty = none. |
-| `block_default` | bool | `true` | Call `event.stop_event()` only after the agent successfully accepts ownership (`handled: true`). Transport failures, invalid responses, and `handled: false` fall back to AstrBot's normal pipeline. |
+| `block_default` | bool | `true` | Call `event.stop_event()` once the agent claims the conversation (`owned: true`). Transport failures, invalid responses and conversations the agent turned away fall back to AstrBot's normal pipeline. |
 
-## Important: QQ / NapCat double-handling
+`owned` is not `handled`. The agent stays quiet on purpose far more often
+than it speaks — a PASS, several messages merged into one answer, the rhythm
+gate — and all of those return `handled: false`. Gating on that would hand
+the room to AstrBot's built-in model, which would then answer as someone else
+in a conversation the persona had decided to sit out. An agent too old to
+send `owned` falls back to `handled`, which is what it did before.
 
-If NapCat already feeds the agent directly through `POST /webhook/qq`, keep
-`aiocqhttp` in `excluded_platforms` (it is there by default). Otherwise the
-same QQ message would reach the agent twice — once from NapCat and once from
-this plugin.
+## QQ: two ways, and you must pick one
+
+**Default — NapCat feeds the agent directly.** `aiocqhttp` stays in
+`excluded_platforms`, QQ goes NapCat → `POST /webhook/qq`, and this plugin
+carries everything else. Nothing to configure.
+
+**Or route QQ through here too**, so AstrBot is the single place you configure
+every platform. Remove `aiocqhttp` from `excluded_platforms`, add the QQ group
+to `group_whitelist`, stop NapCat posting to `/webhook/qq`, and set
+`GATEWAY_NATIVE_PLATFORMS=aiocqhttp` on the agent.
+
+That last setting is not optional and not cosmetic. Without it the agent
+namespaces forwarded ids, so every QQ conversation arrives under a new name
+and the agent addresses rooms and people that do not exist — memory, history
+and every learned example are keyed the old way, and the ledgers
+content-address their rows over the conversation id, so it cannot be renamed
+back afterwards. With it, a QQ message relayed by AstrBot lands on exactly the
+keys NapCat would have produced.
+
+Do **not** do both at once: the same message would reach the agent twice.
+
+Two things to change on the AstrBot side before it can carry a busy QQ group,
+because both run before plugin handlers: raise or disable the rate-limit stage
+(30 messages / 60 s by default, and it stalls rather than drops), and review
+`content_safety.internal_keywords`, which is on by default and will silently
+drop messages the persona would have answered.
 
 ## Request authentication
 

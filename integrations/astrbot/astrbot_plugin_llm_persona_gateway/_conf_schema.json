@@ -16,7 +16,7 @@
   },
   "excluded_platforms": {
     "type": "list",
-    "description": "Platform adapter names that must NOT be forwarded. Keep aiocqhttp here when NapCat already feeds the agent directly, otherwise QQ messages would be handled twice.",
+    "description": "Platform adapter names that must NOT be forwarded. Keep aiocqhttp here when NapCat already feeds the agent directly through /webhook/qq, otherwise QQ messages would be handled twice. To make AstrBot the single inbound path for QQ as well, remove it, stop NapCat posting to /webhook/qq, and set GATEWAY_NATIVE_PLATFORMS=aiocqhttp on the agent so QQ ids stay spelled the way every store on disk already spells them.",
     "default": ["aiocqhttp"]
   },
   "group_whitelist": {

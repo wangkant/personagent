@@ -152,6 +152,13 @@ class GatewaySink:
     def __init__(self) -> None:
         self.items: list[dict] = []
         self.closed = False
+        # Set once this turn clears the admission gates. It answers a
+        # different question than `items`: whether the conversation is OURS,
+        # not whether we chose to speak in it. A forwarder that conflates the
+        # two hands every deliberate silence — a PASS, a debounce merge, a
+        # rhythm-gate skip — to its own built-in model, which then answers as
+        # someone else in a conversation this persona had decided to sit out.
+        self.owned = False
 
     def add(self, message) -> bool:
         if self.closed:
