@@ -26,8 +26,28 @@ Neutral inbound event schema (the body of POST /webhook/gateway):
         | {"type": "emoji", "name": str?}
         | {"type": "reply"}
       ],
-      "raw_text":        str
+      "raw_text":        str,
+      "proactive":       bool?                   # see below
     }
+
+`proactive` marks a turn NOBODY SENT. It says the text on this event is a cue
+the CALLER wrote to brief the persona — "they have been quiet a while, say
+something if you genuinely have something to say" — rather than a message
+from the person on the other end. Left out, which is every ordinary forwarded
+turn, nothing changes.
+
+It is what gives a platform reached only through a forwarder its proactive
+turns. The agent cannot open a conversation on such a platform: the reply
+sink closes when the request returns, so there is no channel to speak into
+between requests. Inverting it removes the problem instead of solving it —
+the forwarder issues the request on a schedule of its own, and if the persona
+has something to say the reply comes back in the response like any other.
+
+The flag is load-bearing, not decorative. Without it the caller's own
+directive is indistinguishable from the reader's words: it lands in
+`private_history` as `{"role": "user"}`, stays for 40 turns, can be quoted
+back at somebody who never wrote it, and can be promoted into a memory about
+them.
 
 Platform ids are namespaced as "<platform>:<raw id>" before they enter the
 pipeline, so memory / RAG / buffers can never collide with real QQ numbers.

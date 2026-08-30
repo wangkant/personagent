@@ -757,7 +757,7 @@ async def regression_forged_gateway_flag_rejected(tmp: Path) -> None:
     agent.private_allowed_qqs = set()
     reached: list[str] = []
 
-    async def fake_private(user_id, payload, is_owner=False):
+    async def fake_private(user_id, payload, is_owner=False, proactive=False):
         reached.append(user_id)
         return True
 
@@ -1139,6 +1139,142 @@ async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
     handled = await agent.handle(qq_payload)
     check("group whitelist: unlisted QQ group rejected",
           handled is False, repr(handled))
+
+
+async def regression_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
+    """A forwarder-only platform gets proactive turns by inverting them.
+
+    The agent cannot open a conversation on such a platform — the reply sink
+    closes when the request returns, so there is no channel to speak into
+    between requests. So the caller issues the request instead, marked
+    `proactive`, and the reply comes back through the sink like any other.
+
+    What the flag has to buy is that the cue stays out of the transcript.
+    Appended, the caller's own directive becomes something the reader
+    supposedly said: it sits in `private_history` for 40 turns, can be quoted
+    back at them, and can be promoted into a memory about them.
+
+    The last check is why it is an ARGUMENT and not a field on the payload.
+    `/webhook/qq` accepts arbitrary JSON, so a payload flag would let a forged
+    request tell the engine "this text is mine, do not write it down"."""
+    agent = make_agent(tmp)
+    agent.private_allowed_qqs = {"777"}
+    seen: list = []
+
+    async def fake_chat_private(history, is_owner=False, pkey="",
+                                proactive=False):
+        seen.append(([dict(m) for m in history], proactive))
+        return "hey, been a while", ""
+
+    async def fake_send(user_id, message):
+        return True
+
+    # NOT stubbed for the gateway call below: the sink diversion lives inside
+    # _napcat_send_private, so replacing it is what would make the reply
+    # vanish from `replies`. Stubbed only for the QQ leg further down.
+    agent._chat_private = fake_chat_private
+
+    cue = "they have been quiet for a day"
+    result = await agent.handle_gateway({
+        "platform": "telegram", "message_type": "private",
+        "conversation_id": "42", "user_id": "42", "sender_name": "Alice",
+        "self_id": "999000", "message_id": 940, "is_at_me": False,
+        "segments": [{"type": "text", "text": cue}], "raw_text": cue,
+        "proactive": True,
+    })
+    check("proactive: the persona still gets to answer",
+          result["handled"] is True and len(result["replies"]) >= 1,
+          repr(result))
+    check("proactive: the private path was told",
+          bool(seen) and seen[0][1] is True, repr(seen[:1]))
+    check("proactive: the cue never reaches the model as the reader's words",
+          bool(seen) and not any(m.get("role") == "user" for m in seen[0][0]),
+          repr(seen[0][0] if seen else None))
+    stored = agent.private_history.get("telegram:42", [])
+    check("proactive: and it is not written down afterwards",
+          all(m.get("content") != cue for m in stored), repr(stored))
+
+    # A forged flag on the QQ payload must change nothing: that path accepts
+    # arbitrary JSON from anyone who can reach the port.
+    seen.clear()
+    agent._napcat_send_private = fake_send
+    await agent.handle({
+        "post_type": "message", "message_type": "private",
+        "user_id": "777", "sender": {"user_id": "777", "nickname": "Bob"},
+        "raw_message": cue, "message_id": 941,
+        "message": [{"type": "text", "data": {"text": cue}}],
+        "proactive": True,
+    })
+    check("forged proactive: a payload flag does not make a turn proactive",
+          bool(seen) and seen[0][1] is False, repr(seen[:1]))
+    check("forged proactive: so the text is kept as the reader's words",
+          bool(seen) and any(m.get("content") == cue for m in seen[0][0]),
+          repr(seen[0][0] if seen else None))
+
+
+async def regression_a_collected_turn_does_not_simulate_typing(tmp: Path) -> None:
+    """Typing simulation is a pause the reader sees — but only on QQ, where
+    this coroutine and the chat window are the same timeline. Behind a sink
+    they are not: every chunk is collected and handed back as a finished list,
+    so the waiting happens before the caller has anything to show, and the
+    caller then emits the burst it already paced itself.
+
+    So the sleeps buy nothing there and are paid inside a held HTTP request,
+    against an admission slot held for the whole turn. Measured at 7.0s of a
+    12.3s turn when this was found on the private path. The group path kept
+    sleeping — and it is the one that carries the volume once a forwarder
+    brings QQ groups in.
+
+    Asserted by recording the calls rather than by timing the turn: a wall
+    clock would make this a test that fails on a slow machine instead of on a
+    regression."""
+    typed: list = []
+
+    def make(tmp_dir):
+        a = make_agent(tmp_dir)
+        a.allowed_groups = set()
+        a._typing_delay = lambda chunk: typed.append(chunk) or 0.0
+
+        async def fake_think(group_id, mode, text="", caller_override=None):
+            return "one thing. and another.", "called", ""
+
+        a._think = fake_think
+        return a
+
+    agent = make(tmp)
+    result = await agent.handle_gateway({
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
+        "self_id": "999000", "message_id": 930, "is_at_me": True,
+        "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
+                     {"type": "text", "text": " hi"}],
+        "raw_text": "@Bot hi",
+    })
+    check("collected turn: the reply is still produced",
+          result["handled"] is True and len(result["replies"]) >= 1,
+          repr(result))
+    check("collected turn: no typing simulation is paid for",
+          typed == [], repr(typed))
+
+    # The QQ path must still pace itself — there the sleep IS the pause, and
+    # deleting it would make the bot answer like a machine.
+    typed.clear()
+    qq = make(tmp / "qq")
+
+    async def fake_send(group_id, message):
+        return True
+
+    qq._napcat_send_group = fake_send
+    await qq.handle({
+        "post_type": "message", "message_type": "group",
+        "group_id": "123456", "user_id": "777",
+        "sender": {"user_id": "777", "nickname": "Bob"},
+        "raw_message": "@TestBot hi",
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": " hi"}}],
+        "message_id": 931,
+    })
+    check("QQ turn: typing simulation still runs", typed != [], repr(typed))
 
 
 async def regression_silence_still_claims_the_conversation(tmp: Path) -> None:
@@ -2616,6 +2752,8 @@ async def main_async() -> None:
         await regression_group_whitelist_gateway_bypass(tmp / "n")
         await regression_native_gateway_obeys_the_qq_whitelists(tmp / "n2")
         await regression_silence_still_claims_the_conversation(tmp / "n3")
+        await regression_a_collected_turn_does_not_simulate_typing(tmp / "n4")
+        await regression_a_proactive_turn_keeps_its_cue_transient(tmp / "n5")
         await regression_think_full_path_search_hint(tmp / "o")
         await regression_eval_auto_append_examples(tmp / "p")
         await regression_proactive_group_postprocessing(tmp / "q")

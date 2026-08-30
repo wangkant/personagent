@@ -250,6 +250,14 @@ class Transport:
         target_key = group_id
         self._sent_mids[target_key] = []
         text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
+        # The other half of the fix documented in _send_private_qq_unlocked:
+        # behind a sink these sleeps are not the pause anybody sees. The sink
+        # collects every chunk and hands the finished list back, so the waiting
+        # happens BEFORE the caller has anything to show, and the caller then
+        # emits the whole burst at once having already paced it itself. On the
+        # group path that cost is paid inside a held HTTP request — and this is
+        # the path that carries the volume once a forwarder brings QQ groups in.
+        collected = current_sink.get() is not None
         sent_stickers: list[str] = []
         if not text:
             return SendResult()
@@ -273,7 +281,8 @@ class Transport:
                 if not file_path or not file_path.exists():
                     logger.info("[Agent] sticker tag %r → no match, skipping", value)
                     continue
-                await asyncio.sleep(random.uniform(0.6, 1.4))
+                if not collected:
+                    await asyncio.sleep(random.uniform(0.6, 1.4))
                 try:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 except Exception as e:
@@ -305,7 +314,8 @@ class Transport:
                 # Delay before every chunk including the first — feels like typing
                 # rather than instant emit. Already had debounce + _think latency
                 # upstream, so an extra ~1-3s on first chunk reads natural.
-                await asyncio.sleep(self._typing_delay(chunk))
+                if not collected:
+                    await asyncio.sleep(self._typing_delay(chunk))
                 if is_first and at_user_id:
                     message = [
                         {"type": "at", "data": {"qq": str(at_user_id)}},

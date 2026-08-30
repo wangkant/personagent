@@ -34,6 +34,19 @@ before it was changed and is covered by a test that fails without the fix.
   `PRIVATE_ALLOWED_QQS` are written in — and for the same reason those
   whitelists now gate on the id's shape rather than on the sink, so a native
   forwarder cannot both claim QQ authority and skip the QQ gate.
+- **A proactive turn over the gateway (`"proactive": true`).** A platform
+  reached only through a forwarder could never be spoken to first: the reply
+  sink closes when the request returns, so there is no channel between
+  requests, and the proactive loops skip any namespaced conversation for want
+  of anywhere to send. Inverting the turn removes the problem instead of
+  solving it — the caller issues the request on a schedule of its own, and the
+  reply comes back in the response like any other. The flag marks the event's
+  text as a cue the caller wrote rather than the reader's words, which is what
+  keeps it out of `private_history`, out of the reaction store's `ctx_lines`,
+  and out of anything promotable. Read off the event and threaded as an
+  argument, never carried on the payload: `/webhook/qq` accepts arbitrary
+  JSON, so a payload field would let a forged request tell the engine "this
+  text is mine, do not write it down". Ported from the sibling engine.
 - **`.env.example` is checked against the code.** The typo check treats the
   template as the authority on what a key may be called, so a test scans every
   `os.getenv` / `os.environ.get` in the package and asserts the template
@@ -210,6 +223,16 @@ before it was changed and is covered by a test that fails without the fix.
   rooms the persona had deliberately sat out, as someone else. The response
   now carries `owned` alongside `handled`, set once the turn clears admission;
   the plugin gates on that and falls back to `handled` against an older agent.
+
+- **The group send no longer simulates typing into a sink.** On QQ the sleep
+  IS the pause the reader sees — this coroutine and the chat window are one
+  timeline. Behind a gateway sink they are not: every chunk is collected and
+  handed back as a finished list, so the waiting happens before the caller has
+  anything to show, and the caller then emits the burst it already paced. The
+  private path was fixed when this was measured at 7.0s of a 12.3s turn; the
+  group path kept sleeping, inside a held HTTP request holding an admission
+  slot — and it is the path that carries the volume once a forwarder brings QQ
+  groups in. Asserted by recording the calls, not by timing the turn.
 
 ### Performance
 

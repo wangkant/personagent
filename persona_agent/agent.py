@@ -685,11 +685,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         t.add_done_callback(self._bg_tasks.discard)
         return t
 
-    async def handle(self, payload: dict) -> bool:
+    async def handle(self, payload: dict, *, proactive: bool = False) -> bool:
+        # `proactive`: this turn's text is a cue its CALLER wrote, not a
+        # message from the person on the other end. See _handle_private.
         # Top-level guard so any failure in the message pipeline is logged
         # loudly instead of silently dying as an unretrieved-task warning.
         try:
-            return await self._handle_inner(payload)
+            return await self._handle_inner(payload, proactive=proactive)
         except Exception:
             logger.exception("[Agent] handle failed")
             return False
@@ -745,8 +747,19 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             self._touch_gateway_conv(gateway_key)
         sink = GatewaySink()
         tok = current_sink.set(sink)
+        # READ OFF `event`, never off `payload`: synthesize_onebot_payload
+        # builds a fixed set of OneBot keys and would drop it.
+        #
+        # THREADED AS AN ARGUMENT, and that is a trust decision rather than a
+        # style one. `/webhook/qq` accepts arbitrary JSON, so a payload field
+        # would let a forged request tell the engine "this text is mine, do
+        # not write it down" — the same forgery `_handle_inner` refuses for
+        # `"_gateway": true` by gating on the sink instead. An argument can
+        # only be set here, and this method is only reachable through the
+        # signed gateway envelope.
+        proactive = bool(event.get("proactive"))
         try:
-            handled = await self.handle(payload)
+            handled = await self.handle(payload, proactive=proactive)
         finally:
             # Close before reset: background tasks spawned during handling
             # inherit a context that still references this sink, and a send
@@ -776,7 +789,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if sink is not None:
             sink.owned = True
 
-    async def _handle_inner(self, payload: dict) -> bool:
+    async def _handle_inner(self, payload: dict, *,
+                            proactive: bool = False) -> bool:
         if not self.enabled:
             return False
         if payload.get("post_type") and payload.get("post_type") != "message":
@@ -828,7 +842,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # over-the-cap flood evicts the least-recently-active conversation.
             if current_sink.get() is not None:
                 self._touch_gateway_conv(channels.dm_routing_key(user_id))
-            return await self._handle_private(user_id, payload, is_owner=is_owner)
+            # `proactive` reaches the private path only. A group turn has no
+            # equivalent: _maybe_proactive_groups composes and sends its own,
+            # and it needs no cue to discard.
+            return await self._handle_private(user_id, payload,
+                                              is_owner=is_owner,
+                                              proactive=proactive)
 
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
@@ -1228,8 +1247,23 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         return send_result.success
 
     async def _handle_private(self, user_id: str, payload: dict,
-                              is_owner: bool = True) -> bool:
-        """Run one private turn in send/commit order without blocking intake."""
+                              is_owner: bool = True,
+                              proactive: bool = False) -> bool:
+        """Run one private turn in send/commit order without blocking intake.
+
+        `proactive` means NOBODY SENT THIS TURN. The text is a cue its caller
+        wrote to brief the persona — "they have been quiet a while, speak if
+        you genuinely have something to say" — and treating it as the other
+        person's words is how a caller's own directive ends up quoted back at
+        somebody who never wrote it, or promoted into a memory about them.
+
+        `_maybe_proactive_dms` has always kept its cue transient by never
+        going through here at all. This is how a gateway caller says the same
+        thing, which is what lets a platform reached only through a forwarder
+        have proactive turns: the caller issues the request, so the reply
+        comes back through the sink like any other. The request/response shape
+        is not the obstacle it looks like — it just has to be inverted.
+        """
         pkey = channels.dm_routing_key(user_id)
         async with self.send_locks[pkey]:
             self._private_send_owners[pkey] = asyncio.current_task()
@@ -1238,7 +1272,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if not text:
                     return False
 
-                if self.react_learn:
+                # Nothing to react TO on a proactive turn: the text is the
+                # caller's cue, so matching it against a pending reaction
+                # would attribute the caller's words to the reader.
+                if self.react_learn and not proactive:
                     entry = self.pending_reactions.match(
                         channels.dm_learning_key(user_id),
                         sender_uid=user_id, is_private=True, now=time.time())
@@ -1252,12 +1289,19 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 async with self.locks[pkey]:
                     self.last_dm_activity_at[user_id] = time.time()
                     history = list(self.private_history.get(user_id, []))
-                    history.append({"role": "user", "content": text})
+                    # The one line this flag is about. Appended, the cue stays
+                    # for 40 turns as something the reader supposedly said.
+                    # Left out, _chat_private's own internal cue applies —
+                    # it fires only when the last turn is not a user message,
+                    # so the two halves depend on each other.
+                    if not proactive:
+                        history.append({"role": "user", "content": text})
                     history = history[-40:]
 
                 try:
                     reply, auto_mem = await self._chat_private(
-                        history, is_owner=is_owner, pkey=pkey)
+                        history, is_owner=is_owner, pkey=pkey,
+                        proactive=proactive)
                 except Exception as e:
                     logger.warning("[Agent] private-chat LLM failed: %s", e)
                     return False
@@ -1294,7 +1338,11 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     self._commit_core_memory(pkey, pending_core)
                     if auto_mem:
                         self._save_auto_memory(pkey, auto_mem)
-                    if self.react_learn:
+                    # Same leak as the history append, one file over:
+                    # `ctx_lines` would store the caller's cue as a line the
+                    # reader wrote. And what a proactive reply answers is not
+                    # a message at all, so there is nothing to attribute.
+                    if self.react_learn and not proactive:
                         self.pending_reactions.record(
                             channels.dm_learning_key(user_id), reply=reply,
                             ctx_lines=[f"user: {text[:100]}"],

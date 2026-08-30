@@ -125,6 +125,38 @@ platform — the forwarder's own allowlist is not the only filter any more.
 
 Do not run both doors for QQ at once; the same message would arrive twice.
 
+**Keep NapCat's HTTP server on either way.** AstrBot talks to NapCat over a
+reverse WebSocket, which covers inbound and replies — but it is not the
+channel this agent uses. Everything the agent does on its own initiative goes
+out through `NAPCAT_API` directly: proactive messages, the catch-up sweep for
+`@`s it missed while offline, resolving an old quoted message, and OCR. Turn
+the HTTP server off because "AstrBot handles QQ now" and the bot keeps
+answering while quietly losing all four, with nothing in the log to say so.
+
+That direct channel is also why QQ loses nothing by moving inbound: the
+outbound path never depended on where the message came from.
+
+**Other platforms have no such channel** — the agent can only speak inside the
+request that brought a message, because the reply sink closes when that
+request returns. The proactive loops skip any conversation whose id is
+namespaced, for want of anywhere to send.
+
+For proactive turns that is worked around rather than solved, by inverting
+them: POST an ordinary gateway event with `"proactive": true`, and the text on
+it is read as a cue to the persona ("they have been quiet a while, say
+something if you genuinely have something to say") instead of as the other
+person's words. If it decides to speak, the reply comes back in the response
+like any other, and the caller relays it. Anything scheduling those requests
+works — AstrBot plugins can hold a background task or a cron entry.
+
+The flag is what keeps the cue out of the transcript. Without it the caller's
+own directive lands in the conversation history as something the reader said,
+stays for 40 turns, can be quoted back at them, and can be promoted into a
+memory about them.
+
+Delayed elicitation and the LLM-failure excuse are still lost on those
+platforms; both are fire-and-forget sends with no request to ride back on.
+
 ## Exposing the webhook
 
 Keep the default loopback binding when the bridge and the agent share a
