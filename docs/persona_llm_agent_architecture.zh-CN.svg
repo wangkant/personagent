@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent 消息路径与学习闭环</title>
-  <desc id="architecture-desc">QQ 可以经 NapCat 直连，也可以和其他平台一样经 AstrBot 接入；两种入口汇入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和平台路由；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
+  <desc id="architecture-desc">QQ 与其他聊天平台统一经 AstrBot 和一个网关端点进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和网关投递；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -72,38 +72,28 @@
   <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">系统 / 消息路径</text>
-  <text class="headline ink" x="40" y="61">两种接入选择，一条 agent 路径</text>
-  <text class="small muted" x="40" y="86">QQ 可直连或经 AstrBot 接入；人设、安全和学习机制始终共享。</text>
+  <text class="headline ink" x="40" y="61">一个网关，一条 agent 路径</text>
+  <text class="small muted" x="40" y="86">所有平台共享同一套人设、安全边界、记忆与学习闭环。</text>
   <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
 
   <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
   <text class="eyebrow violet" x="220" y="143">共享 FASTAPI AGENT</text>
   <text class="tiny muted" x="920" y="143" text-anchor="end">一条管线 / 任意平台</text>
 
-  <rect class="surface" x="40" y="152" width="126" height="52" rx="7"/>
-  <rect class="frame" x="40.5" y="152.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="170">QQ / NapCat</text>
-  <text class="tiny muted" x="54" y="189">默认直连</text>
+  <rect class="surface" x="40" y="181" width="126" height="70" rx="7"/>
+  <rect class="frame" x="40.5" y="181.5" width="125" height="69" rx="6.5"/>
+  <text class="label ink" x="54" y="198">聊天平台</text>
+  <text class="tiny muted" x="54" y="218">QQ · Telegram</text>
+  <text class="tiny muted" x="54" y="235">Discord · Slack · …</text>
 
-  <rect class="surface" x="40" y="228" width="126" height="52" rx="7"/>
-  <rect class="frame" x="40.5" y="228.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="246">AstrBot</text>
-  <text class="tiny muted" x="54" y="265">QQ · Telegram · …</text>
+  <path class="flow" d="M166 216H220" marker-end="url(#architecture-arrow)"/>
 
-  <path class="flow" d="M166 178H220" marker-end="url(#architecture-arrow)"/>
-  <path class="flow" d="M166 254H220" marker-end="url(#architecture-arrow)"/>
+  <rect class="code" x="220" y="181" width="126" height="70" rx="6"/>
+  <text class="eyebrow blue" x="234" y="198">ASTRBOT 网关</text>
+  <text class="tiny ink" x="234" y="218">/webhook/gateway</text>
+  <text class="tiny muted" x="234" y="235">签名 · 防重放</text>
 
-  <rect class="code" x="220" y="152" width="126" height="52" rx="6"/>
-  <text class="eyebrow blue" x="234" y="168">QQ 直连接入</text>
-  <text class="tiny ink" x="234" y="187">/webhook/qq</text>
-  <rect class="code" x="220" y="228" width="126" height="52" rx="6"/>
-  <text class="eyebrow blue" x="234" y="244">网关接入</text>
-  <text class="tiny ink" x="234" y="263">/webhook/gateway</text>
-  <text class="tiny coral" x="40" y="302">QQ 入站必须二选一 · 禁止双开</text>
-
-  <path class="flow" d="M346 178H362V216H380" marker-end="url(#architecture-arrow)"/>
-  <path class="flow" d="M346 254H362V216"/>
-  <circle class="blue" cx="362" cy="216" r="3"/>
+  <path class="flow" d="M346 216H380" marker-end="url(#architecture-arrow)"/>
 
   <rect class="blue-region" x="380" y="160" width="140" height="112" rx="7"/>
   <text class="eyebrow blue" x="394" y="178">预处理 + 上下文</text>
@@ -132,8 +122,8 @@
   <text class="tiny ink" x="844" y="199">语义正则</text>
   <text class="tiny ink" x="844" y="215">字符白名单</text>
   <line class="rule" x1="844" y1="230" x2="926" y2="230"/>
-  <text class="tiny muted" x="844" y="244">/send_group_msg</text>
-  <text class="tiny muted" x="844" y="259">网关回复</text>
+  <text class="tiny muted" x="844" y="244">网关响应</text>
+  <text class="tiny muted" x="844" y="259">owned / handled</text>
 
   <rect class="surface" x="200" y="348" width="740" height="122" rx="10"/>
   <rect class="frame" x="200.5" y="348.5" width="739" height="121" rx="9.5"/>

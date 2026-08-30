@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent message path and learning loop</title>
-  <desc id="architecture-desc">QQ can enter directly through NapCat or, like other platforms, through AstrBot; both ingress choices converge on one FastAPI agent. Messages move left to right through ingestion, context enrichment, mode selection, JSON generation, validation, and platform routing. Beneath the main path, reactions and asynchronous evaluation are recorded as append-only evidence; only the candidates the promotion policy approves are materialized and hot-reloaded into few-shot retrieval.</desc>
+  <desc id="architecture-desc">QQ and other chat platforms enter through AstrBot and one gateway endpoint, then share one FastAPI agent. Messages move left to right through ingestion, context enrichment, mode selection, JSON generation, validation, and gateway delivery. Beneath the main path, reactions and asynchronous evaluation are recorded as append-only evidence; only the candidates the promotion policy approves are materialized and hot-reloaded into few-shot retrieval.</desc>
   <style>
     svg {
       --bg: #f8fafc;
@@ -72,38 +72,28 @@
   <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
 
   <text class="eyebrow violet" x="40" y="32">SYSTEM / MESSAGE PATH</text>
-  <text class="headline ink" x="40" y="61">Two ingress choices, one agent path</text>
-  <text class="small muted" x="40" y="86">QQ may enter directly or through AstrBot; persona, safety, and learning stay shared.</text>
+  <text class="headline ink" x="40" y="61">One gateway, one agent path</text>
+  <text class="small muted" x="40" y="86">Every platform shares the same persona, safety boundary, memory, and learning loop.</text>
   <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
 
   <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
   <text class="eyebrow violet" x="220" y="143">SHARED FASTAPI AGENT</text>
   <text class="tiny muted" x="920" y="143" text-anchor="end">ONE PIPELINE / ANY PLATFORM</text>
 
-  <rect class="surface" x="40" y="152" width="126" height="52" rx="7"/>
-  <rect class="frame" x="40.5" y="152.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="170">QQ / NapCat</text>
-  <text class="tiny muted" x="54" y="189">direct · default</text>
+  <rect class="surface" x="40" y="181" width="126" height="70" rx="7"/>
+  <rect class="frame" x="40.5" y="181.5" width="125" height="69" rx="6.5"/>
+  <text class="label ink" x="54" y="198">chat platforms</text>
+  <text class="tiny muted" x="54" y="218">QQ · Telegram</text>
+  <text class="tiny muted" x="54" y="235">Discord · Slack · …</text>
 
-  <rect class="surface" x="40" y="228" width="126" height="52" rx="7"/>
-  <rect class="frame" x="40.5" y="228.5" width="125" height="51" rx="6.5"/>
-  <text class="label ink" x="54" y="246">AstrBot</text>
-  <text class="tiny muted" x="54" y="265">QQ · Telegram · …</text>
+  <path class="flow" d="M166 216H220" marker-end="url(#architecture-arrow)"/>
 
-  <path class="flow" d="M166 178H220" marker-end="url(#architecture-arrow)"/>
-  <path class="flow" d="M166 254H220" marker-end="url(#architecture-arrow)"/>
+  <rect class="code" x="220" y="181" width="126" height="70" rx="6"/>
+  <text class="eyebrow blue" x="234" y="198">ASTRBOT GATEWAY</text>
+  <text class="tiny ink" x="234" y="218">/webhook/gateway</text>
+  <text class="tiny muted" x="234" y="235">signed · replay-safe</text>
 
-  <rect class="code" x="220" y="152" width="126" height="52" rx="6"/>
-  <text class="eyebrow blue" x="234" y="168">DIRECT INGRESS</text>
-  <text class="tiny ink" x="234" y="187">/webhook/qq</text>
-  <rect class="code" x="220" y="228" width="126" height="52" rx="6"/>
-  <text class="eyebrow blue" x="234" y="244">GATEWAY INGRESS</text>
-  <text class="tiny ink" x="234" y="263">/webhook/gateway</text>
-  <text class="tiny coral" x="40" y="302">QQ: choose one inbound route · never both</text>
-
-  <path class="flow" d="M346 178H362V216H380" marker-end="url(#architecture-arrow)"/>
-  <path class="flow" d="M346 254H362V216"/>
-  <circle class="blue" cx="362" cy="216" r="3"/>
+  <path class="flow" d="M346 216H380" marker-end="url(#architecture-arrow)"/>
 
   <rect class="blue-region" x="380" y="160" width="140" height="112" rx="7"/>
   <text class="eyebrow blue" x="394" y="178">PREFLIGHT + CONTEXT</text>
@@ -132,8 +122,8 @@
   <text class="tiny ink" x="844" y="199">semantic regex</text>
   <text class="tiny ink" x="844" y="215">character whitelist</text>
   <line class="rule" x1="844" y1="230" x2="926" y2="230"/>
-  <text class="tiny muted" x="844" y="244">/send_group_msg</text>
-  <text class="tiny muted" x="844" y="259">gateway reply</text>
+  <text class="tiny muted" x="844" y="244">gateway response</text>
+  <text class="tiny muted" x="844" y="259">owned / handled</text>
 
   <rect class="surface" x="200" y="348" width="740" height="122" rx="10"/>
   <rect class="frame" x="200.5" y="348.5" width="739" height="121" rx="9.5"/>
