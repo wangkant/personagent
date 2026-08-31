@@ -75,9 +75,9 @@ async def main(holdout_path: Path, runs: int) -> None:
     # Spin up an Agent purely for the vision aesthetic pipeline. Most
     # fields aren't exercised; we just need vision_model + glm_* creds.
     agent = Agent(
-        api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        model=os.getenv("DEEPSEEK_MODEL", ""),
+        api_key=os.getenv("LLM_API_KEY", ""),
+        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("LLM_MODEL", ""),
         bot_qq=os.getenv("BOT_QQ", ""),
         bot_name=os.getenv("BOT_NAME", ""),
         private_model=(os.getenv("PRIVATE_MODEL", "")

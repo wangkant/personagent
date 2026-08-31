@@ -162,9 +162,9 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     state_dir = state_dir.resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key=os.getenv("DEEPSEEK_API_KEY", "") or "benchmark-key",
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        api_key=os.getenv("LLM_API_KEY", "") or "benchmark-key",
+        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("LLM_MODEL", "deepseek-chat"),
         bot_qq="10001", bot_name=bot_name,
         napcat_api="http://127.0.0.1:9",
         memory_file=str(state_dir / "memory.json"), persona="benchmark persona",
@@ -607,10 +607,10 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
     import httpx
 
     base = (os.getenv("BENCH_JUDGE_BASE_URL")
-            or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")).rstrip("/")
-    key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
+            or os.getenv("LLM_BASE_URL", "https://api.deepseek.com")).rstrip("/")
+    key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
     if not key:
-        sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or DEEPSEEK_API_KEY")
+        sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or LLM_API_KEY")
     url = base + ("" if base.endswith("/chat/completions") else "/v1/chat/completions"
                   if not base.endswith("/v1") else "/chat/completions")
 
@@ -689,7 +689,7 @@ async def cmd_run(args) -> int:
     (out / "meta.json").write_text(json.dumps({
         "rounds": args.rounds, "lang": args.lang, "style": args.style,
         "seed_state": args.seed_state, "holdout_votes": args.holdout_votes,
-        "gen_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        "gen_model": os.getenv("LLM_MODEL", "deepseek-chat"),
         "eval_model": os.getenv("EVAL_MODEL", ""),
         "evolve_threshold": int(os.getenv("EVOLVE_THRESHOLD", 3)),
     }, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")

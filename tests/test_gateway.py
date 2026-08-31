@@ -833,12 +833,12 @@ def test_quickstart_set_env_values() -> None:
     commented-out keys, and append keys that don't exist yet."""
     from quickstart import set_env_values
     src = ("# ==== section ====\n"
-           "DEEPSEEK_API_KEY=\n"
+           "LLM_API_KEY=\n"
            "BOT_NAME=old\n"
            "# BOT_NAME=commented reference\n")
-    out = set_env_values(src, {"DEEPSEEK_API_KEY": "sk-1", "BOT_NAME": "New",
+    out = set_env_values(src, {"LLM_API_KEY": "sk-1", "BOT_NAME": "New",
                                "BRAND_NEW": "v"})
-    check("env writer: fills blank key in place", "DEEPSEEK_API_KEY=sk-1" in out, out)
+    check("env writer: fills blank key in place", "LLM_API_KEY=sk-1" in out, out)
     check("env writer: replaces existing value", "BOT_NAME=New" in out, out)
     check("env writer: preserves comments",
           "# ==== section ====" in out and "# BOT_NAME=commented reference" in out, out)

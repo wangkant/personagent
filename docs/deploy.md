@@ -10,10 +10,10 @@ not mention.
 **To get one reply out of `python try_chat.py`: one setting.**
 
 ```
-DEEPSEEK_API_KEY=...
+LLM_API_KEY=...
 ```
 
-`DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` only matter if you are not using
+`LLM_BASE_URL` and `LLM_MODEL` only matter if you are not using
 DeepSeek — the names are historical, and any OpenAI-compatible `/v1` endpoint
 works (OpenAI, Zhipu, Moonshot, Together, a local ollama or llama.cpp). There
 is no `persona.txt` requirement; a default persona ships in the code.
@@ -21,7 +21,7 @@ is no `persona.txt` requirement; a default persona ships in the code.
 **To run live on QQ: three.**
 
 ```
-DEEPSEEK_API_KEY=...
+LLM_API_KEY=...
 BOT_NAME=...          # what the persona is called, and what it answers to
 BOT_QQ=...            # the bot account's number
 ```

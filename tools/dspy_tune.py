@@ -141,10 +141,10 @@ def cmd_tune(judge_model: str = "deepseek-chat"):
         print("No 'better' pairs in seed or runtime feedback — cannot run BootstrapFewShot.")
         return
 
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    api_key = os.getenv("LLM_API_KEY", "")
+    base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
     lm = dspy.LM(
-        model=f"openai/{os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')}",
+        model=f"openai/{os.getenv('LLM_MODEL', 'deepseek-chat')}",
         api_key=api_key,
         base_url=base_url,
     )

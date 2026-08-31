@@ -78,7 +78,7 @@ async def probe_one(scn: dict, bot_name: str, lang: str, state_root: Path) -> di
 async def main_async(args) -> int:
     scns = bench.load_scenarios(Path(args.candidates))
     print(f"probing {len(scns)} scenario(s) with the weak style guide "
-          f"(model={bench.os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')})")
+          f"(model={bench.os.getenv('LLM_MODEL', 'deepseek-chat')})")
     import persona_agent.agent as pa
     pa.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
 

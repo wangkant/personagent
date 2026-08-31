@@ -153,7 +153,7 @@ def _env_current_key(env_path: Path) -> str:
     """The currently-configured API key in .env ('' if blank/missing)."""
     if not env_path.exists():
         return ""
-    m = re.search(r"^DEEPSEEK_API_KEY=(.*)$", env_path.read_text(encoding="utf-8"),
+    m = re.search(r"^LLM_API_KEY=(.*)$", env_path.read_text(encoding="utf-8"),
                   re.MULTILINE)
     return (m.group(1).strip() if m else "")
 
@@ -240,9 +240,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         lang = _ask("Language - en or zh", default="en").lower()
 
     values = {
-        "DEEPSEEK_API_KEY": api_key,
-        "DEEPSEEK_BASE_URL": base_url,
-        "DEEPSEEK_MODEL": model,
+        "LLM_API_KEY": api_key,
+        "LLM_BASE_URL": base_url,
+        "LLM_MODEL": model,
         "BOT_NAME": bot_name,
         "AGENT_LANG": lang,
     }
@@ -357,7 +357,7 @@ def main() -> None:
         if os.name == "nt"
         else "source .venv/bin/activate"
     )
-    print("  1. edit .env (at minimum: DEEPSEEK_API_KEY, BOT_NAME)")
+    print("  1. edit .env (at minimum: LLM_API_KEY, BOT_NAME)")
     print("  2. edit persona.txt (your bot's personality)")
     print(f"  3. activate venv: {activate}")
     print("  4. try it now, no QQ needed:  python try_chat.py")

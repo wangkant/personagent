@@ -32,9 +32,9 @@ GROUP_ID = "trial"
 
 def _build_agent(lang: str) -> Agent:
     return Agent(
-        api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        api_key=os.getenv("LLM_API_KEY", ""),
+        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("LLM_MODEL", "deepseek-chat"),
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
         private_model=(os.getenv("PRIVATE_MODEL", "")
@@ -88,7 +88,7 @@ async def main() -> int:
 
     agent = _build_agent(args.lang.strip().lower())
     if not agent.enabled:
-        print("DEEPSEEK_API_KEY is not set. Copy .env.example to .env and fill it in "
+        print("LLM_API_KEY is not set. Copy .env.example to .env and fill it in "
               "(only the primary model key is required for this trial).")
         return 1
 

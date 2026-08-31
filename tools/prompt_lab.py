@@ -42,7 +42,7 @@ FEEDBACK_FILE = resolve_runtime_lang_file("feedback", "jsonl", AGENT_LANG)
 EXAMPLES_SEED_FILE = resolve_seed_lang_file("examples", "jsonl", AGENT_LANG)
 EXAMPLES_FILE = resolve_runtime_lang_file("examples", "jsonl", AGENT_LANG)
 
-# NOT `DEEPSEEK_MODEL`. This lab generates through the Anthropic SDK on
+# NOT `LLM_MODEL`. This lab generates through the Anthropic SDK on
 # purpose — the point is to tune against a DIFFERENT vendor than the one under
 # test — and it was handing that SDK the chat model's id, so every generation
 # 404'd. The `except Exception` in the fixture loop printed `failed:` and moved

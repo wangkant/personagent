@@ -25,7 +25,7 @@ from .paths import ROOT
 logger = logging.getLogger("agent")
 
 #: Without this there is no model to call and nothing works at all.
-REQUIRED = ("DEEPSEEK_API_KEY",)
+REQUIRED = ("LLM_API_KEY",)
 
 #: Set, but empty, is a different thing from unset for these: the agent runs
 #: and behaves oddly rather than not running.

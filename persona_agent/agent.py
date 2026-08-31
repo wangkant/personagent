@@ -599,7 +599,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
         self.enabled = bool(api_key)
         if not self.enabled:
-            logger.warning("[Agent] DEEPSEEK_API_KEY not configured; %s disabled", bot_name)
+            logger.warning("[Agent] LLM_API_KEY not configured; %s disabled", bot_name)
         if self.enabled and not self.bot_name:
             logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
                            "explicit @-mentions (set BOT_NAME so it answers to its name)")

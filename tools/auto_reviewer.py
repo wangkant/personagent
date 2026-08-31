@@ -15,8 +15,8 @@ Usage:
                                                       # reviewed; no model call
     python tools/auto_reviewer.py --no-write          # review, print, no write
 
-Uses the same OpenAI-compatible endpoint as the agent (DEEPSEEK_API_KEY /
-DEEPSEEK_BASE_URL); REVIEWER_MODEL falls back to EVAL_MODEL, then the chat
+Uses the same OpenAI-compatible endpoint as the agent (LLM_API_KEY /
+LLM_BASE_URL); REVIEWER_MODEL falls back to EVAL_MODEL, then the chat
 model.
 """
 from __future__ import annotations
@@ -53,12 +53,12 @@ def _runtime_file(value: str) -> Path:
 EVAL_FILE = _runtime_file(os.getenv("EVAL_FILE", "eval.jsonl"))
 CANDIDATES_FILE = resolve_runtime_state_file("candidates.jsonl")
 
-API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-BASE_URL = (os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")).rstrip("/")
+API_KEY = os.getenv("LLM_API_KEY", "")
+BASE_URL = (os.getenv("LLM_BASE_URL", "https://api.deepseek.com")).rstrip("/")
 REVIEWER_MODEL = (
     os.getenv("REVIEWER_MODEL", "")
     or os.getenv("EVAL_MODEL", "")
-    or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    or os.getenv("LLM_MODEL", "deepseek-chat")
 )
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 # Keep the newest N machine-generated pairs (0 = no cap) — mirrors the running
@@ -124,7 +124,7 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
     if not pending:
         return []
     if not API_KEY:
-        logger.error("DEEPSEEK_API_KEY not configured; cannot call reviewer")
+        logger.error("LLM_API_KEY not configured; cannot call reviewer")
         return []
 
     written: list[dict] = []

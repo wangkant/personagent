@@ -185,6 +185,18 @@ before it was changed and is covered by a test that fails without the fix.
 
 ### Changed
 
+- **BREAKING: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` are
+  now `LLM_API_KEY`, `LLM_BASE_URL` and `LLM_MODEL`.** The agent has only ever
+  spoken the OpenAI-compatible `/v1` endpoint and runs against Zhipu, Moonshot,
+  OpenRouter or a local llama.cpp exactly as well, but a vendor's name on the
+  three settings every deployment MUST set read as a requirement, and
+  `DEEPSEEK_BASE_URL=https://openrouter.ai/api` is a line nobody should have to
+  write. The new names match `LLM_TIMEOUT` and `LLM_MAX_RETRIES`, which were
+  already spelled that way. The old names are NOT honoured: an existing `.env`
+  has to be updated. Preflight makes that loud rather than mysterious — the
+  missing `LLM_API_KEY` is reported as a required setting, and each leftover
+  `DEEPSEEK_*` key as one `.env.example` does not list.
+
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
   suppressed only the write, so reaching for it to find out what the tool
   would do got you billed for finding out. The old behaviour is `--no-write`.

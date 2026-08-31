@@ -394,18 +394,18 @@ def test_preflight_reports_the_right_deployments() -> None:
 
     # --- must stay quiet ---------------------------------------------------
     check("preflight: a minimal working config is silent",
-          not levels(env={"DEEPSEEK_API_KEY": "sk-x"}))
+          not levels(env={"LLM_API_KEY": "sk-x"}))
     check("preflight: settings the offline tools read are not typos",
-          not levels(env={"DEEPSEEK_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
+          not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
                           "PROMPT_LAB_MODEL": "m", "REVIEWER_MODEL": "r",
                           "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY": "1",
                           "ANTHROPIC_PRIVATE_MODEL": "p"}))
     check("preflight: proxy variables are not typos",
-          not levels(env={"DEEPSEEK_API_KEY": "sk-x", "HTTP_PROXY": "p",
+          not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
                           "HTTPS_PROXY": "p", "NO_PROXY": "localhost"}))
 
     import os as _os
-    _os.environ["DEEPSEEK_API_KEY"] = "sk-from-the-environment"
+    _os.environ["LLM_API_KEY"] = "sk-from-the-environment"
     try:
         # A container, a systemd unit and a CI runner all configure this way
         # and ship no `.env`. Reading only the file told them every turn
@@ -413,20 +413,20 @@ def test_preflight_reports_the_right_deployments() -> None:
         check("preflight: configuration in the environment counts as set",
               not levels(env={}))
     finally:
-        del _os.environ["DEEPSEEK_API_KEY"]
+        del _os.environ["LLM_API_KEY"]
 
     # --- must still fire ---------------------------------------------------
     check("preflight: a missing required setting is an error",
-          ("ERROR", "DEEPSEEK_API_KEY") in levels(env={}))
+          ("ERROR", "LLM_API_KEY") in levels(env={}))
     check("preflight: a misspelling is named as one",
           ("ERROR", "DEEPSEK_API_KEY") in levels(env={"DEEPSEK_API_KEY": "x"}))
     check("preflight: an empty BOT_QQ on a QQ config is a warning",
           ("WARN", "BOT_QQ") in levels(env={
-              "DEEPSEEK_API_KEY": "x", "NAPCAT_API": "http://127.0.0.1:3000"}))
+              "LLM_API_KEY": "x", "NAPCAT_API": "http://127.0.0.1:3000"}))
 
     # --- and it must never raise, which is its own docstring's promise -----
     for hostile in ({"AGENT_HOME": "~nosuchuser/x"}, {"AGENT_HOME": "\x00"},
-                    {"": "x"}, {"DEEPSEEK_API_KEY": None}):
+                    {"": "x"}, {"LLM_API_KEY": None}):
         try:
             preflight.check_config(env=hostile)
             raised = ""
@@ -436,7 +436,7 @@ def test_preflight_reports_the_right_deployments() -> None:
 
     with tempfile.TemporaryDirectory() as d:
         home = Path(d)
-        (home / ".env").write_text("DEEPSEEK_API_KEY=x\nBOT_NAME=Mira\n",
+        (home / ".env").write_text("LLM_API_KEY=x\nBOT_NAME=Mira\n",
                                    encoding="utf-8")
         # The multi-persona layout `.env.example` itself recommends: a home
         # with its own `.env` and no template. This used to report EVERY
@@ -454,15 +454,15 @@ def test_preflight_reports_the_right_deployments() -> None:
         # there is nothing to say, or it does not and the BOM is named. A
         # report that lists findings without explaining the invisible
         # character is the failure this is guarding against.
-        (home / ".env.example").write_text("DEEPSEEK_API_KEY=\n",
+        (home / ".env.example").write_text("LLM_API_KEY=\n",
                                            encoding="utf-8")
-        (home / ".env").write_bytes(b"\xef\xbb\xbfDEEPSEEK_API_KEY=x\n")
+        (home / ".env").write_bytes(b"\xef\xbb\xbfLLM_API_KEY=x\n")
         with_bom = levels(root=home)
         check("preflight: a BOM on .env is either harmless or named as one",
               not with_bom or ("ERROR", ".env") in with_bom, repr(with_bom))
         # ...while a BOM on the TEMPLATE must not accuse a real key.
-        (home / ".env.example").write_bytes(b"\xef\xbb\xbfDEEPSEEK_API_KEY=\n")
-        (home / ".env").write_text("DEEPSEEK_API_KEY=x\n", encoding="utf-8")
+        (home / ".env.example").write_bytes(b"\xef\xbb\xbfLLM_API_KEY=\n")
+        (home / ".env").write_text("LLM_API_KEY=x\n", encoding="utf-8")
         check("preflight: a BOM on the template accuses nobody",
               not levels(root=home), repr(levels(root=home)))
 

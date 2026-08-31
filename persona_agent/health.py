@@ -30,13 +30,13 @@ def _get(url, timeout=10):
 def check_private_chat():
     """Private-chat model probe. Private and group chat share the provider's
     OpenAI-compatible endpoint (/v1/chat/completions); PRIVATE_MODEL
-    is just an alternate model name on that endpoint (blank = DEEPSEEK_MODEL),
-    authenticated with the primary DEEPSEEK_API_KEY — mirroring the agent."""
-    key = os.getenv("DEEPSEEK_API_KEY", "")
-    base = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    is just an alternate model name on that endpoint (blank = LLM_MODEL),
+    authenticated with the primary LLM_API_KEY — mirroring the agent."""
+    key = os.getenv("LLM_API_KEY", "")
+    base = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
     model = (os.getenv("PRIVATE_MODEL", "")
              or os.getenv("ANTHROPIC_PRIVATE_MODEL", "")  # pre-0.1.2 name
-             or os.getenv("DEEPSEEK_MODEL", ""))
+             or os.getenv("LLM_MODEL", ""))
     if not (key and model):
         return None, "not configured"
     payload = {"model": model, "max_tokens": 8,
@@ -49,9 +49,9 @@ def check_private_chat():
 def check_primary_chat_tools():
     """Primary OpenAI-compatible chat endpoint, exercised with the same /v1
     function-calling path the web-search decision uses."""
-    key = os.getenv("DEEPSEEK_API_KEY", "")
-    base = (os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com") or "").rstrip("/")
-    model = os.getenv("FALLBACK_MODEL") or os.getenv("DEEPSEEK_MODEL") or "deepseek-chat"
+    key = os.getenv("LLM_API_KEY", "")
+    base = (os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/")
+    model = os.getenv("FALLBACK_MODEL") or os.getenv("LLM_MODEL") or "deepseek-chat"
     if not key:
         return None, "not configured"
     payload = {"model": model, "max_tokens": 30, "messages": [{"role": "user", "content": "what is the weather today"}],
@@ -99,8 +99,8 @@ def check_eval():
     if ("moonshot" in em or "kimi" in em) and glm_key and glm_base:
         key, base = glm_key, glm_base
     else:
-        key = os.getenv("DEEPSEEK_API_KEY", "")
-        base = (os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com") or "").rstrip("/")
+        key = os.getenv("LLM_API_KEY", "")
+        base = (os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/")
     if not (key and base):
         return None, "not configured"
     payload = {"model": model, "max_tokens": 16, "messages": [{"role": "user", "content": "reply with: ok"}]}

@@ -155,9 +155,9 @@ MAX_INFLIGHT_GATEWAY = _parse_int_config(
 )
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 BOT_QQ = os.getenv("BOT_QQ", "")
 BOT_NAME = os.getenv("BOT_NAME", "")
 # Language of the agent: 'en' (default, primary build) or 'zh' (Chinese variant).
@@ -182,7 +182,7 @@ OWNER_QQ = os.getenv("OWNER_QQ", "")
 OWNER_NAME = os.getenv("OWNER_NAME", "")
 OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
 # Alternate model name for private chats, served by the same OpenAI-compatible
-# primary endpoint. Blank = use DEEPSEEK_MODEL.
+# primary endpoint. Blank = use LLM_MODEL.
 # ANTHROPIC_PRIVATE_MODEL is the pre-0.1.2 name — still honored so an existing
 # .env keeps working. It never meant an Anthropic endpoint.
 PRIVATE_MODEL = (os.getenv("PRIVATE_MODEL", "")
@@ -551,9 +551,9 @@ async def lifespan(app: FastAPI):
         runtime_lock.acquire()
         try:
             agent = Agent(
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_BASE_URL,
-                model=DEEPSEEK_MODEL,
+                api_key=LLM_API_KEY,
+                base_url=LLM_BASE_URL,
+                model=LLM_MODEL,
                 bot_qq=BOT_QQ,
                 bot_name=BOT_NAME,
                 private_model=PRIVATE_MODEL,
