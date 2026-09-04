@@ -262,8 +262,8 @@ that fails without it.
   The README demo animation shows two lines of the room's chat above each
   incoming message and grows from two scenes to four: reply, pass, a reply
   that saves a memory, and a direct call answered with a sticker.
-  The architecture diagram is redrawn: both ingress doors (`/webhook/gateway`
-  via AstrBot, `/webhook/qq` via NapCat) converge on one five-stage path, the
+  The architecture diagram is redrawn: every platform, QQ included via NapCat,
+  enters through AstrBot and `/webhook/gateway` into one five-stage path, the
   learning column runs bottom-up from signals to promoted views and hot-reloads
   into prompt assembly, every arrow is labelled, and nothing overflows its box.
 

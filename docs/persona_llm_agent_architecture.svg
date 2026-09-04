@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent: message path and learning loop</title>
-  <desc id="architecture-desc">Chat platforms reach one FastAPI process through an AstrBot forwarder posting to /webhook/gateway, or QQ directly through NapCat posting to /webhook/qq. Every event passes ingest, decide, prompt assembly, generation and validation before a reply is delivered or PASS sends nothing. Off the hot path, reactions and evaluations are appended to an evidence log, turned into inert candidates, and only what the promotion policy approves is materialized and hot-reloaded into prompt assembly.</desc>
+  <desc id="architecture-desc">Chat platforms, QQ included via NapCat, reach one FastAPI process through an AstrBot forwarder posting to /webhook/gateway. Every event passes ingest, decide, prompt assembly, generation and validation before a reply is delivered or PASS sends nothing. Off the hot path, reactions and evaluations are appended to an evidence log, turned into inert candidates, and only what the promotion policy approves is materialized and hot-reloaded into prompt assembly.</desc>
   <style>
     svg {
       --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
@@ -47,18 +47,15 @@
   <text class="headline ink" x="40" y="62">One message boundary, one learning gate</text>
   <text class="small muted" x="40" y="88">Every platform enters the same pipeline; nothing learned reaches a prompt until promotion approves it.</text>
   <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
-  <rect class="surface" x="40" y="128" width="215" height="64" rx="8"/><text class="label ink" x="54" y="146">Chat platforms</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · Lark · KOOK</text><text class="small muted" x="54" y="183"></text>
-  <path class="flow" d="M255 160H282" marker-end="url(#arch-arrow)"/>
-  <rect class="surface" x="282" y="128" width="220" height="64" rx="8"/><text class="label ink" x="296" y="146">AstrBot + forwarder plugin</text><text class="small muted" x="296" y="166">allowlist · HMAC envelope · nonce</text><text class="small muted" x="296" y="183"></text>
-  <rect class="surface-dashed" x="530" y="128" width="190" height="64" rx="8"/><text class="label ink" x="544" y="146">NapCat (OneBot v11)</text><text class="small muted" x="544" y="166">direct QQ, optional</text><text class="small muted" x="544" y="183"></text>
+  <rect class="surface" x="40" y="128" width="225" height="64" rx="8"/><text class="label ink" x="54" y="146">Chat platforms</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · Lark · KOOK</text><text class="small muted" x="54" y="183"></text>
+  <path class="flow" d="M265 160H292" marker-end="url(#arch-arrow)"/>
+  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + forwarder plugin</text><text class="small muted" x="306" y="166">QQ via NapCat · allowlist · HMAC envelope</text><text class="small muted" x="306" y="183"></text>
   <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
   <text class="eyebrow violet" x="60" y="244">PERSONAGENT · ONE FASTAPI PROCESS</text>
   <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>
   <text class="eyebrow mint" x="670" y="244">LEARNING · OFF THE HOT PATH, UNDER RUNTIME/</text>
-  <path class="flow" d="M392 192V262" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono ink" x="400" y="214">POST /webhook/gateway</text>
-  <path class="flow-dashed" d="M560 192V262" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono muted" x="568" y="214">POST /webhook/qq</text>
+  <path class="flow" d="M407 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono ink" x="415" y="214">POST /webhook/gateway</text>
   <rect class="stage" x="150" y="262" width="430" height="62" rx="8"/><text class="label blue" x="164" y="280">Ingest</text><text class="small muted" x="164" y="300">token / HMAC · replay guard · admission limit · dedup</text><text class="small muted" x="164" y="317">normalize · enrich images, URLs, share cards</text>
   <path class="flow" d="M210 324V342" marker-end="url(#arch-arrow)"/>
   <text class="tiny muted" x="218" y="333">event</text>
@@ -75,7 +72,7 @@
   <path class="flow-dashed" d="M150 533H120V355H150" marker-end="url(#arch-arrow)"/>
   <text class="tiny mono muted" x="126" y="444" transform="rotate(-90 126 444)" text-anchor="middle">"mem" → runtime/memory.json</text>
   <path class="flow-coral" d="M150 615H70V192" marker-end="url(#arch-arrow)"/>
-  <text class="tiny coral" x="60" y="666">replies ride back in the HTTP response · direct QQ sends through NAPCAT_API</text>
+  <text class="tiny coral" x="60" y="666">replies ride back in the HTTP response</text>
   <rect class="stage" x="690" y="262" width="250" height="62" rx="8"/><text class="label mint" x="704" y="280">Promoted views</text><text class="small muted mono" x="704" y="300">runtime/promoted.*.&lt;lang&gt;.jsonl</text><text class="small muted" x="704" y="317">atomic rewrite · rebuilt from the ledger</text>
   <path class="flow-mint" d="M750 342V324" marker-end="url(#arch-arrow)"/>
   <text class="tiny mint" x="758" y="333">materialize</text>

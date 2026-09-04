@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent：消息路径与学习闭环</title>
-  <desc id="architecture-desc">聊天平台经 AstrBot 转发插件 POST 到 /webhook/gateway，或 QQ 经 NapCat 直接 POST 到 /webhook/qq，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
+  <desc id="architecture-desc">聊天平台（QQ 经 NapCat 接入）统一经 AstrBot 转发插件 POST 到 /webhook/gateway，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
   <style>
     svg {
       --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
@@ -47,18 +47,15 @@
   <text class="headline ink" x="40" y="62">一条消息边界，一道学习门</text>
   <text class="small muted" x="40" y="88">所有平台走同一条管线；学到的任何东西在晋升批准前都进不了 Prompt。</text>
   <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
-  <rect class="surface" x="40" y="128" width="215" height="64" rx="8"/><text class="label ink" x="54" y="146">聊天平台</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · 飞书 · KOOK</text><text class="small muted" x="54" y="183"></text>
-  <path class="flow" d="M255 160H282" marker-end="url(#arch-arrow)"/>
-  <rect class="surface" x="282" y="128" width="220" height="64" rx="8"/><text class="label ink" x="296" y="146">AstrBot + 转发插件</text><text class="small muted" x="296" y="166">白名单 · HMAC 信封 · nonce</text><text class="small muted" x="296" y="183"></text>
-  <rect class="surface-dashed" x="530" y="128" width="190" height="64" rx="8"/><text class="label ink" x="544" y="146">NapCat（OneBot v11）</text><text class="small muted" x="544" y="166">直连 QQ，可选</text><text class="small muted" x="544" y="183"></text>
+  <rect class="surface" x="40" y="128" width="225" height="64" rx="8"/><text class="label ink" x="54" y="146">聊天平台</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · 飞书 · KOOK</text><text class="small muted" x="54" y="183"></text>
+  <path class="flow" d="M265 160H292" marker-end="url(#arch-arrow)"/>
+  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + 转发插件</text><text class="small muted" x="306" y="166">QQ 经 NapCat · 白名单 · HMAC 信封</text><text class="small muted" x="306" y="183"></text>
   <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
   <text class="eyebrow violet" x="60" y="244">personagent · 单个 FastAPI 进程</text>
   <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>
   <text class="eyebrow mint" x="670" y="244">学习 · 热路径之外，位于 runtime/</text>
-  <path class="flow" d="M392 192V262" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono ink" x="400" y="214">POST /webhook/gateway</text>
-  <path class="flow-dashed" d="M560 192V262" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono muted" x="568" y="214">POST /webhook/qq</text>
+  <path class="flow" d="M407 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono ink" x="415" y="214">POST /webhook/gateway</text>
   <rect class="stage" x="150" y="262" width="430" height="62" rx="8"/><text class="label blue" x="164" y="280">接入</text><text class="small muted" x="164" y="300">token / HMAC · 重放防护 · 并发准入 · 去重</text><text class="small muted" x="164" y="317">归一化 · 补充图片、链接、分享卡片上下文</text>
   <path class="flow" d="M210 324V342" marker-end="url(#arch-arrow)"/>
   <text class="tiny muted" x="218" y="333">事件</text>
@@ -75,7 +72,7 @@
   <path class="flow-dashed" d="M150 533H120V355H150" marker-end="url(#arch-arrow)"/>
   <text class="tiny mono muted" x="126" y="444" transform="rotate(-90 126 444)" text-anchor="middle">"mem" → runtime/memory.json</text>
   <path class="flow-coral" d="M150 615H70V192" marker-end="url(#arch-arrow)"/>
-  <text class="tiny coral" x="60" y="666">回复随 HTTP 响应返回 · 直连 QQ 经 NAPCAT_API 发送</text>
+  <text class="tiny coral" x="60" y="666">回复随 HTTP 响应返回</text>
   <rect class="stage" x="690" y="262" width="250" height="62" rx="8"/><text class="label mint" x="704" y="280">已晋升视图</text><text class="small muted mono" x="704" y="300">runtime/promoted.*.&lt;lang&gt;.jsonl</text><text class="small muted" x="704" y="317">原子重写 · 可由账本重建</text>
   <path class="flow-mint" d="M750 342V324" marker-end="url(#arch-arrow)"/>
   <text class="tiny mint" x="758" y="333">物化</text>
