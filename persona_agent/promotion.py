@@ -185,10 +185,13 @@ def scope_compatible(a: dict, b: dict, *,
     moment for being worded differently, which in practice means nothing is ever
     corroborated. The label is kept in the scope record for audit.
     """
-    for key in ("lang", "platform", "persona", "persona_hash",
-                "persona_version"):
+    for key in ("lang", "platform", "persona", "persona_version"):
         if str(a.get(key) or "") != str(b.get(key) or ""):
             return False
+    # Through the lineage, not the raw hash: an edited persona document is
+    # the same character; a new PERSONA_VERSION is not.
+    if evidence.persona_identity(a) != evidence.persona_identity(b):
+        return False
     if require_same_conversation and str(a.get("conv_id") or "") != str(b.get("conv_id") or ""):
         return False
     return _label_compatible(a.get("mode", ""), b.get("mode", ""))

@@ -69,10 +69,11 @@ QQ / Telegram / Discord / Slack / Lark / KOOK / …
              personagent /webhook/gateway
 ```
 
-1. Run `python quickstart.py`, then start the agent with `python main.py` (or `start.sh` / `start.ps1`, which use the wizard's `.venv`).
-2. Copy the bundled [AstrBot forwarder](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) into AstrBot's `data/plugins/` directory.
-3. In the plugin, allowlist the conversations this persona owns and point `agent_url` to `http://127.0.0.1:8080/webhook/gateway`.
-4. To include QQ, remove `aiocqhttp` from `excluded_platforms` and set:
+1. Run `python quickstart.py` and say yes to "connect to an AstrBot install": the wizard copies the bundled [forwarder plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) into AstrBot's `data/plugins/`, generates the shared `GATEWAY_TOKEN` and writes it to both sides, writes the allowlists you give it, and, if QQ is included, sets `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`. Non-interactive: `python quickstart.py --astrbot <AstrBot data dir> [--qq]`.
+2. Restart AstrBot (or reload plugins in its WebUI). Platforms themselves are configured in AstrBot.
+3. Start the agent with `python main.py` (or `start.sh` / `start.ps1`, which use the wizard's `.venv`).
+
+Doing it by hand instead: copy the plugin folder into `data/plugins/`, set `agent_url` to `http://127.0.0.1:8080/webhook/gateway`, the same non-empty `gateway_token` as the agent's `GATEWAY_TOKEN`, and the allowlists; to include QQ, remove `aiocqhttp` from `excluded_platforms` and set:
 
    ```dotenv
    GATEWAY_NATIVE_PLATFORMS=aiocqhttp
@@ -93,7 +94,7 @@ Every message crosses the same boundary:
 3. **Generate and validate** — call the model through a structured contract, then filter and validate the result.
 4. **Learn asynchronously** — record reactions and evaluations as evidence without blocking the live reply.
 
-Evidence alone changes nothing. Automatic promotion requires compatible corroboration, and every promoted candidate can be audited, rolled back, or superseded. Mutable state stays under `runtime/`; the append-only ledgers remain the source of truth.
+Evidence alone changes nothing. Automatic promotion requires compatible corroboration, and every promoted candidate can be audited, rolled back, or superseded. Editing the persona document keeps everything learned; a new `PERSONA_VERSION` starts a clean slate. Mutable state stays under `runtime/`; the append-only ledgers remain the source of truth.
 
 ## Configuration
 
@@ -121,6 +122,8 @@ python tools/healthcheck.py                  # full diagnostic; model probes spe
 python tools/candidates_admin.py list        # what the bot has learned, and from which evidence
 python -m pytest -q                          # offline regression suite
 ```
+
+In any chat the persona owns, `@<BOT_NAME> what have you learned` (or `你学到了什么`) answers with that room's memories, the promoted replies and "not this, this" pairs in effect, proposals still waiting for a second voice, and the recent self-scores; `what do you remember` lists the memories. Neither calls the model.
 
 Back up `AGENT_RUNTIME_DIR` together with private persona files, and never commit runtime state. It may contain credentials, account identifiers, conversation excerpts, reactions, and learned material. If the bot starts cleanly and never answers, work through [when the bot goes quiet](docs/deploy.md#when-the-bot-goes-quiet).
 

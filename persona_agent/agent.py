@@ -20,6 +20,7 @@ import httpx
 from . import candidates as candidate_ledger_mod
 from . import channels
 from . import evidence as evidence_mod
+from . import lineage as lineage_mod
 from . import reactions
 from .gateway import GatewaySink, current_sink, synthesize_onebot_payload
 from .paths import (
@@ -476,6 +477,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self.persona_version = os.getenv("PERSONA_VERSION", "").strip()
         self.persona_hash = hashlib.sha256(
             (self.persona or "").encode("utf-8")).hexdigest()[:12]
+        self._lineage_registered_for: tuple | None = None
         self._view_examples_cache: list = []
         self._view_examples_stamp: tuple = (-1.0, -1)
         self._view_pairs_cache: list = []
@@ -586,6 +588,31 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
     @property
     def promoted_feedback_file(self) -> Path:
         return self.learning_dir / f"promoted.feedback.{self.agent_lang}.jsonl"
+
+    @property
+    def persona_lineage(self) -> lineage_mod.PersonaLineage:
+        """Lazy like the ledgers: harnesses redirect the learning dir after
+        __init__, and the file has to follow it. First access records the
+        current revision and registers the lineage for scope comparison."""
+        obj = self._sidecar("_persona_lineage", lineage_mod.PersonaLineage,
+                            self.learning_dir / lineage_mod.FILE_NAME)
+        key = (obj.path, self.persona_version, self.persona_hash)
+        if self._lineage_registered_for != key:
+            _root, extended = obj.extend(self.persona_version, self.persona_hash)
+            hashes = obj.hashes(self.persona_version)
+            evidence_mod.register_persona_lineage(self.persona_version, hashes)
+            self._lineage_registered_for = key
+            if extended:
+                logger.info(
+                    "[Agent] persona document changed (hash %s); %d earlier "
+                    "revision(s) stay in learning scope. Set PERSONA_VERSION to "
+                    "start a new character instead.",
+                    self.persona_hash, len(hashes) - 1)
+        return obj
+
+    @property
+    def persona_identity(self) -> str:
+        return self.persona_lineage.root(self.persona_version) or self.persona_hash
 
     @property
     def evidence_log(self) -> evidence_mod.EvidenceLog:
@@ -2554,6 +2581,76 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
 
+    def _live_scope(self, conv_id: str) -> dict:
+        """This turn's scope, normalised the way the ledger stores one."""
+        return evidence_mod.normalize_scope({
+            "lang": self.agent_lang,
+            "platform": self._conv_platform(conv_id) if conv_id else "",
+            "conv_id": conv_id,
+            "persona": self.bot_name,
+            "persona_hash": self.persona_hash,
+            "persona_version": self.persona_version,
+        })
+
+    def _scope_authorizes(self, scope, current_scope: dict) -> bool:
+        """May a promoted row with ``scope`` reach a prompt in ``current_scope``?
+        Persona is compared through its lineage, everything else exactly."""
+        if not isinstance(scope, dict):
+            return False
+        return (all(str(scope.get(key) or "") == str(value or "")
+                    for key, value in current_scope.items() if key != "persona_hash")
+                and evidence_mod.persona_identity(scope) == self.persona_identity)
+
+    def _learned_summary(self, group_id: str) -> str:
+        """What this room has taught the bot, in chat-sized form: memories,
+        promoted material, proposals still waiting for a second voice, and the
+        recent self-scores. Reads state only; no model call."""
+        zh = self.agent_lang == "zh"
+        current_scope = self._live_scope(group_id)
+        self._reload_views_if_stale()
+        examples = [r for r in self._view_examples_cache
+                    if self._scope_authorizes(r.get("scope"), current_scope)]
+        pairs = [r for r in self._view_pairs_cache
+                 if self._scope_authorizes(r.get("scope"), current_scope)]
+        try:
+            pending = [c for c in self.candidate_ledger.pending()
+                       if (c.get("scope") or {}).get("conv_id") == group_id]
+        except Exception as e:
+            logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
+            pending = []
+        scores = []
+        if self.eval_enable:
+            scores = [int(r["score"]) for r in read_jsonl((self.eval_file,))
+                      if r.get("group_id") == group_id and isinstance(r.get("score"), int)][-10:]
+        memories = len(self.memories.get(group_id, []))
+
+        def clip(s: str) -> str:
+            s = " ".join(str(s or "").split())
+            return s if len(s) <= 40 else s[:39] + "…"
+
+        lines = []
+        if zh:
+            lines.append("这个群教会我的：")
+            lines.append(f"- 记忆 {memories} 条（问我「记得什么」可以看）")
+            lines.append(f"- 已生效：{len(examples)} 条好的回复、{len(pairs)} 组「别这样说→这样说」")
+        else:
+            lines.append("What this chat has taught me:")
+            lines.append(f"- {memories} memories (ask \"what do you remember\" for the list)")
+            lines.append(f"- in effect: {len(examples)} good replies, {len(pairs)} \"not this, this\" pairs")
+        for r in pairs[-2:]:
+            lines.append(f"  · {clip(r.get('reply'))} → {clip(r.get('better'))}")
+        for r in examples[-2:]:
+            lines.append(f"  · {clip(r.get('reply'))}")
+        if zh:
+            lines.append(f"- 等第二个人佐证的提议：{len(pending)} 条")
+        else:
+            lines.append(f"- waiting for a second voice: {len(pending)} proposal(s)")
+        if scores:
+            avg = sum(scores) / len(scores)
+            lines.append(("- 最近自评：{:.1f}/5（最近 {} 条）" if zh
+                          else "- recent self-scores: {:.1f}/5 over the last {}").format(avg, len(scores)))
+        return "\n".join(lines)
+
     def _reload_views_if_stale(self) -> None:
         """Hot-reload the materialized views of promoted candidates.
 
@@ -2846,31 +2943,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # side used to build a raw one, so any field over its limit — a
         # `persona_version` of 45 characters, say — made every promoted row
         # unretrievable on every turn, with nothing logged anywhere.
-        current_scope = evidence_mod.normalize_scope({
-            "lang": self.agent_lang,
-            "platform": self._conv_platform(conv_id) if conv_id else "",
-            "conv_id": conv_id,
-            "persona": self.bot_name,
-            "persona_hash": self.persona_hash,
-            "persona_version": self.persona_version,
-        })
+        current_scope = self._live_scope(conv_id)
 
         def _authorized_view(rows: list) -> list:
-            authorized = []
-            for row in rows:
-                scope = row.get("scope")
-                if not isinstance(scope, dict):
-                    # Automatic authority without an enforcement scope is not
-                    # safe to reuse. A startup rebuild upgrades old views.
-                    continue
-                if not conv_id:
-                    continue
-                if all(str(scope.get(key) or "") == str(value or "")
-                       for key, value in current_scope.items()):
-                    authorized.append(row)
-            # Warn (edge-triggered) when a non-empty view is refused whole:
-            # a one-byte persona edit changes persona_hash and silently
-            # orphans the entire learned corpus.
+            # A row without an enforcement scope, or a turn without a
+            # conversation, authorizes nothing: startup rebuild upgrades old views.
+            authorized = [row for row in rows
+                          if conv_id and self._scope_authorizes(row.get("scope"), current_scope)]
+            # Warn (edge-triggered) when a non-empty view is refused whole.
             if authorized:
                 self._scope_drop_warned = False
             elif rows and not self._scope_drop_warned:
@@ -2878,9 +2958,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 logger.warning(
                     "[Agent] all %d promoted row(s) refused by scope for "
                     "conv_id=%r — nothing learned can reach a prompt until "
-                    "these agree. Live scope: %r. Usual causes: the persona "
-                    "document was edited (persona_hash), BOT_NAME changed "
-                    "(persona), or PERSONA_VERSION was bumped.",
+                    "these agree. Live scope: %r. Usual causes: BOT_NAME changed "
+                    "(persona), PERSONA_VERSION was bumped, or the rows predate "
+                    "the persona lineage — adopt their hash with "
+                    "`tools/candidates_admin.py lineage adopt <hash>`.",
                     len(rows), conv_id, current_scope)
             return authorized
 
@@ -3210,8 +3291,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         user_id: str = "",
         user_name: str = "",
     ) -> Optional[str]:
-        remember_pat, forget_pat, recall_pat = self._memory_cmd_patterns()
+        remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
         is_owner = bool(user_id) and user_id == self.owner_qq
+        if learned_pat.search(text):
+            return self._learned_summary(group_id)
         m = remember_pat.search(text)
         if m:
             content = m.group(1).strip()
@@ -3285,8 +3368,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         return None
 
     def _memory_cmd_patterns(self) -> tuple:
-        """remember / forget / recall regexes, cached per bot_name (tests
-        reassign bot_name after init). English + legacy Chinese forms."""
+        """remember / forget / recall / learned regexes, cached per bot_name
+        (tests reassign bot_name after init). English + legacy Chinese forms."""
         cached = getattr(self, "_mem_cmd_pats", None)
         if cached and cached[0] == self.bot_name:
             return cached[1]
@@ -3298,6 +3381,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                        re.IGNORECASE),
             re.compile(head + r"(?:what do you remember|what'?s in your memory|memory\?|"
                        r"(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
+                       re.IGNORECASE),
+            re.compile(head + r"(?:what (?:have|did) you learn(?:ed)?|what'?ve you learned|"
+                       r"learned\?|(?:你)?(?:学到|学会|学了)(?:了)?(?:什么|啥))",
                        re.IGNORECASE),
         )
         self._mem_cmd_pats = (self.bot_name, pats)

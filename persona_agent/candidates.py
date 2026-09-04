@@ -31,6 +31,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from .evidence import persona_identity
 from .storage import (
     append_jsonl_unlocked,
     append_lock,
@@ -103,7 +104,9 @@ def candidate_id(ctype: str, scope: dict, reply: str, better: str = "") -> str:
         "lang": scope.get("lang", ""),
         "platform": scope.get("platform", ""),
         "persona": scope.get("persona", ""),
-        "persona_hash": scope.get("persona_hash", ""),
+        # Lineage root, so a corroboration arriving after a persona edit
+        # lands on the same candidate instead of minting a twin.
+        "persona_hash": persona_identity(scope),
         "persona_version": scope.get("persona_version", ""),
         "conv_id": scope.get("conv_id", ""),
         "reply": (reply or "").strip(),

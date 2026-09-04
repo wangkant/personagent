@@ -1007,6 +1007,34 @@ async def regression_forget_no_overdelete(tmp: Path) -> None:
           "has a ragdoll cat" not in texts2 and "cat" in texts2, repr(texts2))
 
 
+async def regression_learned_summary_command(tmp: Path) -> None:
+    """'what have you learned' shows this room's memories, promoted material
+    and pending proposals without a model call."""
+    agent = make_agent(tmp)
+    g = "g-learned"
+    import json as _json
+    agent.memories[g] = [{"text": "Alice likes cats", "time": 1.0}]
+    agent.examples_file = tmp / "examples.jsonl"  # views live beside the learned pool
+    scope = dict(agent._live_scope(g))
+    base = {"scenario": "s", "mode": "called", "context": ["[u|qq=2] hi"],
+            "src": "promoted_candidate"}
+    agent.promoted_feedback_file.write_text(_json.dumps(dict(
+        base, reply="as an AI I cannot", better="nah, no idea", rating="better",
+        scope=scope)) + "\n", encoding="utf-8")
+    agent.promoted_examples_file.write_text("\n".join(_json.dumps(r) for r in (
+        dict(base, reply="lol same", scope=scope),
+        dict(base, reply="OTHER ROOM", scope=dict(scope, conv_id="elsewhere")),
+    )) + "\n", encoding="utf-8")
+    out = agent._handle_memory_command(g, "TestBot what have you learned?") or ""
+    check("learned: memories counted", "1 memories" in out, out)
+    check("learned: promoted pair shown", "as an AI I cannot → nah, no idea" in out, out)
+    check("learned: promoted example shown", "lol same" in out, out)
+    check("learned: other room's material excluded", "OTHER ROOM" not in out, out)
+    check("learned: pending count present", "0 proposal(s)" in out, out)
+    check("learned: not matched by an ordinary sentence",
+          agent._handle_memory_command(g, "TestBot did you learn python") is None)
+
+
 async def regression_memory_commands_are_caller_scoped(tmp: Path) -> None:
     agent = make_agent(tmp)
     g = "g-memory"
@@ -2738,6 +2766,7 @@ async def main_async() -> None:
         await integration_same_mid_distinct_conversations(tmp / "g")
         await regression_forged_gateway_flag_rejected(tmp / "h")
         await regression_forget_no_overdelete(tmp / "i")
+        await regression_learned_summary_command(tmp / "ii")
         await regression_memory_commands_are_caller_scoped(tmp / "ii")
         await regression_auto_memory_preserves_manual(tmp / "j")
         await regression_throttle_send(tmp / "k")

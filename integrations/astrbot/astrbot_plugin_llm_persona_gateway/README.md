@@ -22,6 +22,11 @@ long as the agent "thinks and types" — that is expected, and the default
 
 ## Install
 
+The agent's setup wizard does all of this: `python quickstart.py` (answer yes
+to connecting AstrBot) or `python quickstart.py --astrbot <AstrBot data dir>
+[--qq]` copies the folder, generates the shared token and writes it to both
+sides, and writes the allowlists. By hand:
+
 1. Copy this folder into your AstrBot `data/plugins/` directory:
 
    ```

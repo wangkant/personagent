@@ -160,6 +160,27 @@ def classify_strength(event: dict) -> str:
 # `agent._examples_for_prompt` reads a live scope through `normalize_scope`
 # before comparing. They did not agree, and the failure was silent — see
 # `normalize_scope`.
+# Persona lineage: (persona_version, persona_hash) -> lineage root. Registered
+# from persona_lineage.json by the agent and the CLI; every hash in one lineage
+# is the same character for scope purposes, so editing the document does not
+# orphan what was learned. A new PERSONA_VERSION is a new lineage.
+_PERSONA_LINEAGE: dict[tuple[str, str], str] = {}
+
+
+def register_persona_lineage(version: str, hashes) -> None:
+    hashes = [str(h) for h in hashes if h]
+    if not hashes:
+        return
+    for h in hashes:
+        _PERSONA_LINEAGE[(version or "", h)] = hashes[0]
+
+
+def persona_identity(scope: dict) -> str:
+    """The persona a scope belongs to: its lineage root when known, else its hash."""
+    phash = str(scope.get("persona_hash") or "")
+    return _PERSONA_LINEAGE.get((str(scope.get("persona_version") or ""), phash), phash)
+
+
 SCOPE_LIMITS = {
     "lang": 16,
     "platform": 32,

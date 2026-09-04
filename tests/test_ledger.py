@@ -302,6 +302,15 @@ async def test_incompatible_scopes_are_not_combined(tmp: Path) -> None:
     check("5: conversation scope can be widened by configuration",
           promotion.scope_compatible(base, dict(base, conv_id="g2"),
                                      require_same_conversation=False))
+    evidence.register_persona_lineage("", ["h", "h-edited"])
+    check("5: a later revision of the same persona is compatible",
+          promotion.scope_compatible(base, dict(base, persona_hash="h-edited")))
+    check("5: the same revision under another PERSONA_VERSION is not",
+          not promotion.scope_compatible(
+              base, dict(base, persona_hash="h-edited", persona_version="2")))
+    check("5: a revision maps to its lineage's candidate id",
+          candidates.candidate_id("positive_example", dict(base, persona_hash="h-edited"), "r")
+          == candidates.candidate_id("positive_example", base, "r"))
 
     qq_id = candidates.candidate_id(
         candidates.TYPE_PAIR, dict(base, platform="qq"), "bad", "good")

@@ -110,6 +110,12 @@ repo is an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin at
 AstrBot's `data/plugins/`, and configure the platforms in AstrBot's own UI.
 The persona, memory, learning and typing simulation stay here.
 
+`python quickstart.py` connects the two for you: it copies the plugin into
+AstrBot's `data/plugins/`, generates `GATEWAY_TOKEN` and writes it to `.env`
+and to the plugin's config, writes the allowlists, and sets
+`GATEWAY_NATIVE_PLATFORMS` when QQ is included. `--astrbot <data dir> [--qq]`
+does the same without the wizard. What follows is what it writes and why.
+
 Two settings and one decision:
 
 - `GATEWAY_TOKEN` — shared with the plugin. Required off-host, and the
@@ -209,7 +215,11 @@ In rough order of likelihood:
 3. **A BOM on `.env`.** The first setting's name carries it and never reaches
    the process, and the file looks correct in every editor.
 4. **The bridge's webhook is not reaching you.** See the verification above.
-5. **The persona document changed.** `persona_hash` scopes everything the bot
-   has learned, so editing `persona.txt` — even a typo fix — orphans the
-   promoted material. The agent logs a warning when an entire promoted view is
-   refused; there is no re-scoping tool yet, so the learned corpus starts over.
+5. **`BOT_NAME` or `PERSONA_VERSION` changed.** Either starts a new character
+   and the promoted material of the old one is refused, with a warning when an
+   entire view is dropped. Editing `persona.txt` itself does not do this any
+   more: every revision seen under one `PERSONA_VERSION` shares the learning
+   scope (`runtime/persona_lineage.json`). Rows learned before that file
+   existed can be folded in with
+   `python tools/candidates_admin.py lineage adopt <hash>` (the hash is on the
+   candidate's scope in `show`), then `rebuild`.

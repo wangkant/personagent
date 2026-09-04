@@ -3,9 +3,10 @@
     python quickstart.py
 
 After installing the environment it walks you through first-time
-configuration interactively (API provider, key, bot name, language - and
-optionally the live-QQ settings), writes the answers into `.env`, and can
-drop you straight into a terminal chat. No manual .env editing needed.
+configuration interactively (API provider, key, bot name, language), writes
+the answers into `.env`, can connect the agent to an AstrBot install (copies
+the forwarder plugin, generates the shared token, writes the allowlists), and
+can drop you straight into a terminal chat. No manual editing needed.
 
 Idempotent - re-running reports what's already in place and only offers the
 wizard again if you want to reconfigure. Non-interactive environments (CI,
@@ -14,8 +15,10 @@ bootstrap.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -33,14 +36,8 @@ PROVIDERS = [
     ("Other OpenAI-compatible", "", ""),
 ]
 
-NAPCAT_SNIPPET = """{
-  "http": { "enable": true, "host": "127.0.0.1", "port": 3000 },
-  "webhook": {
-    "enable": true,
-    "url": "http://127.0.0.1:8080/webhook/qq",
-    "timeout": 5000
-  }
-}"""
+PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
+PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
 
 
 def _info(msg: str) -> None:
@@ -149,13 +146,96 @@ def write_env(env_path: Path, values: dict) -> None:
     os.replace(tmp, env_path)
 
 
-def _env_current_key(env_path: Path) -> str:
-    """The currently-configured API key in .env ('' if blank/missing)."""
+def _env_get(env_path: Path, key: str) -> str:
+    """The current value of ``key`` in .env ('' if blank/missing)."""
     if not env_path.exists():
         return ""
-    m = re.search(r"^LLM_API_KEY=(.*)$", env_path.read_text(encoding="utf-8"),
-                  re.MULTILINE)
+    m = re.search(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
     return (m.group(1).strip() if m else "")
+
+
+def _env_current_key(env_path: Path) -> str:
+    return _env_get(env_path, "LLM_API_KEY")
+
+
+# ---------------------------------------------------------------------------
+# AstrBot: the plugin, its config file, the shared token
+# ---------------------------------------------------------------------------
+
+def find_astrbot_data() -> Path | None:
+    """A likely AstrBot data directory next to this checkout or under $HOME."""
+    home = Path.home()
+    for cand in (ROOT.parent / "astrbot" / "data", ROOT.parent / "AstrBot" / "data",
+                 home / "AstrBot" / "data", home / "astrbot" / "data"):
+        if (cand / "plugins").is_dir():
+            return cand
+    return None
+
+
+def install_astrbot_plugin(data_dir: Path) -> Path:
+    """Copy the forwarder into ``<data>/plugins/``; safe to repeat."""
+    dest = data_dir / "plugins" / PLUGIN_NAME
+    shutil.copytree(PLUGIN_SRC, dest, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    return dest
+
+
+def astrbot_plugin_config(existing: dict | None, *, agent_url: str, token: str,
+                          qq: bool, groups: list[str], private: list[str]) -> dict:
+    """The plugin's config document. Keys we do not manage are kept."""
+    cfg = dict(existing or {})
+    cfg["agent_url"] = agent_url
+    cfg["gateway_token"] = token
+    cfg["excluded_platforms"] = [] if qq else ["aiocqhttp"]
+    cfg["group_whitelist"] = [str(g).strip() for g in groups if str(g).strip()]
+    cfg["private_whitelist"] = [str(u).strip() for u in private if str(u).strip()]
+    cfg["private_enabled"] = bool(cfg["private_whitelist"])
+    cfg.setdefault("timeout_s", 180)
+    cfg.setdefault("block_default", True)
+    return cfg
+
+
+def astrbot_config_path(data_dir: Path) -> Path:
+    return data_dir / "config" / f"{PLUGIN_NAME}_config.json"
+
+
+def write_astrbot_config(data_dir: Path, cfg: dict) -> Path:
+    path = astrbot_config_path(data_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def read_astrbot_config(data_dir: Path) -> dict:
+    path = astrbot_config_path(data_dir)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))  # AstrBot writes a BOM
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool,
+                    groups: list[str], private: list[str]) -> Path:
+    """Install the plugin and write both halves of the handshake: the shared
+    token into .env (via ``values``) and the plugin config into AstrBot."""
+    token = values.get("GATEWAY_TOKEN") or _env_get(env_path, "GATEWAY_TOKEN") \
+        or secrets.token_urlsafe(32)
+    values["GATEWAY_TOKEN"] = token
+    values["GATEWAY_NATIVE_PLATFORMS"] = "aiocqhttp" if qq else ""
+    port = _env_get(env_path, "PORT") or "8080"
+    install_astrbot_plugin(data_dir)
+    cfg = astrbot_plugin_config(
+        read_astrbot_config(data_dir),
+        agent_url=f"http://127.0.0.1:{port}/webhook/gateway", token=token,
+        qq=qq, groups=groups, private=private)
+    return write_astrbot_config(data_dir, cfg)
+
+
+def _split_ids(raw: str) -> list[str]:
+    return [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -247,21 +327,41 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         "AGENT_LANG": lang,
     }
 
-    # 4. Live QQ deployment (optional)
+    # 4. Connect to AstrBot (optional): the plugin, the token, the allowlists.
     print()
-    live = _ask_yn("Deploy to a live QQ group (needs NapCat + a spare QQ "
-                   "account)? Choosing no still lets you chat in the terminal",
-                   default_yes=False)
+    astrbot_data = None
+    live = _ask_yn("Connect to an AstrBot install now (its plugin gets copied "
+                   "and configured for you)? Choosing no still lets you chat "
+                   "in the terminal", default_yes=False)
     if live:
-        values["BOT_QQ"] = _ask("Bot account's QQ number", required=True)
-        values["QQ_GROUPS"] = _ask("Group ID(s) to listen on, comma-separated "
-                                   "(empty = every group)")
-        owner_qq = _ask("Owner QQ - a 'favorite person' the bot is closer to "
-                        "(Enter to skip)")
-        if owner_qq:
-            values["OWNER_QQ"] = owner_qq
-            owner_name = _ask("Owner display name", required=True)
-            values["OWNER_NAME"] = owner_name
+        guess = find_astrbot_data()
+        while True:
+            raw = _ask("AstrBot data directory (the one holding plugins/ and config/)",
+                       default=str(guess) if guess else "", required=True)
+            astrbot_data = Path(raw).expanduser()
+            if (astrbot_data / "plugins").is_dir():
+                break
+            print(f"    no plugins/ folder under {astrbot_data}; start AstrBot once, "
+                  "or give the path to its data directory")
+        qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?", default_yes=True)
+        if qq:
+            values["BOT_QQ"] = _ask("Bot account's QQ number", required=True)
+            owner_qq = _ask("Owner QQ - a 'favorite person' the bot is closer to "
+                            "(Enter to skip)")
+            if owner_qq:
+                values["OWNER_QQ"] = owner_qq
+                values["OWNER_NAME"] = _ask("Owner display name", required=True)
+        groups = _split_ids(_ask("Group / channel IDs the persona should join, "
+                                 "comma-separated (as AstrBot shows them; "
+                                 "empty = none yet)"))
+        private = _split_ids(_ask("Sender IDs allowed to DM it, comma-separated "
+                                  "(empty = no DMs)"))
+        if qq:
+            values["QQ_GROUPS"] = ",".join(g for g in groups if g.isdigit())
+        cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
+                                   qq=qq, groups=groups, private=private)
+        _info(f"plugin installed under {astrbot_data / 'plugins' / PLUGIN_NAME}")
+        _info(f"plugin config written to {cfg_path}")
 
     write_env(env_path, values)
     copy_persona_template(lang)
@@ -281,12 +381,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     print(f"  persona:  edit persona.txt to shape who {bot_name} is")
     if live:
         print()
-        print("  NapCat: log in a spare QQ account, then paste this into its")
-        print("  OneBot HTTP config (http server + webhook -> this agent):")
-        print()
-        for line in NAPCAT_SNIPPET.splitlines():
-            print(f"    {line}")
-        print()
+        print("  AstrBot: restart it (or reload plugins in its WebUI) so it picks")
+        print("  up the forwarder; the shared token is already in both places.")
+        print("  Platforms (QQ, Telegram, ...) are configured in AstrBot itself.")
         print("  then start the agent with:")
         print(f"    {_venv_python(venv)} main.py")
         print()
@@ -301,14 +398,21 @@ def run_wizard(venv: Path, env_path: Path) -> None:
 
 
 USAGE = """\
-usage: python quickstart.py [--no-input]
+usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq]]
 
 Sets the project up: creates .venv, installs requirements.txt, copies
 .env.example to .env and persona.example to persona.txt, then runs a short
-wizard to fill in the API key and bot name.
+wizard to fill in the API key and bot name and, if you want, to connect the
+agent to an AstrBot install (plugin copied, shared token generated and
+written to both sides, allowlists written).
 
-  --no-input   skip the wizard (classic bootstrap; also implied by a
-               non-interactive stdin, e.g. CI or a pipe)
+  --no-input          skip the wizard (classic bootstrap; also implied by a
+                      non-interactive stdin, e.g. CI or a pipe)
+  --astrbot DATA_DIR  without the wizard: install and configure the AstrBot
+                      plugin against that data directory (allowlists stay
+                      empty; fill them in the plugin config or the WebUI)
+  --qq                with --astrbot: route QQ through AstrBot too
+                      (GATEWAY_NATIVE_PLATFORMS=aiocqhttp)
 
 Re-running is safe: existing files are kept, and the wizard asks before
 reconfiguring anything already set.
@@ -326,12 +430,24 @@ def main() -> None:
     if {"-h", "--help"} & set(argv):
         print(USAGE)
         return
-    unknown = [arg for arg in argv if arg != "--no-input"]
+    astrbot_dir: Path | None = None
+    if "--astrbot" in argv:
+        i = argv.index("--astrbot")
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            print(USAGE)
+            sys.exit("--astrbot needs the AstrBot data directory")
+        astrbot_dir = Path(argv[i + 1]).expanduser()
+        del argv[i:i + 2]
+    qq_flag = "--qq" in argv
+    unknown = [arg for arg in argv if arg not in ("--no-input", "--qq")]
     if unknown:
         print(USAGE)
         sys.exit(f"unrecognised argument(s): {' '.join(unknown)}")
+    if qq_flag and astrbot_dir is None:
+        print(USAGE)
+        sys.exit("--qq only makes sense with --astrbot")
 
-    no_input = "--no-input" in argv
+    no_input = "--no-input" in argv or astrbot_dir is not None
     venv = ensure_venv()
     ensure_deps(venv)
     _copy_template(".env.example", ".env")
@@ -350,6 +466,16 @@ def main() -> None:
     # Classic non-interactive bootstrap (CI / piped stdin / --no-input).
     lang = (os.getenv("AGENT_LANG") or "en").strip().lower()
     copy_persona_template(lang)
+    if astrbot_dir is not None:
+        if not (astrbot_dir / "plugins").is_dir():
+            sys.exit(f"no plugins/ folder under {astrbot_dir}; is that AstrBot's data directory?")
+        values: dict = {}
+        cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_dir,
+                                   qq=qq_flag, groups=[], private=[])
+        write_env(env_path, values)
+        _info(f"AstrBot plugin installed and configured: {cfg_path}")
+        _info("allowlists are empty: add group_whitelist / private_whitelist there "
+              "or in AstrBot's WebUI, then restart AstrBot")
     print()
     _info("done. next steps:")
     activate = (
@@ -360,12 +486,12 @@ def main() -> None:
     print("  1. edit .env (at minimum: LLM_API_KEY, BOT_NAME)")
     print("  2. edit persona.txt (your bot's personality)")
     print(f"  3. activate venv: {activate}")
-    print("  4. try it now, no QQ needed:  python try_chat.py")
-    print("  5. for a live group, run:     python main.py")
+    print("  4. try it now, no account needed:  python try_chat.py")
+    print("  5. for live chats, run:            python main.py")
     print()
     _info(
-        "for a live deployment, set up NapCat (or another OneBot v11 client) "
-        "separately and point its webhook to http://127.0.0.1:8080/webhook/qq"
+        "to go live, connect an AstrBot install: "
+        "python quickstart.py --astrbot <AstrBot data dir> [--qq]"
     )
 
 

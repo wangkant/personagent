@@ -547,6 +547,41 @@ def test_promoted_views_are_a_third_retrieval_source() -> None:
         check("view: unusable pair rows are skipped", a._view_pairs_cache == [])
 
 
+def test_persona_edit_keeps_promoted_rows_in_scope() -> None:
+    """A one-byte persona edit used to orphan the whole learned corpus. Every
+    hash seen under one PERSONA_VERSION is one character; a new version is a
+    new one."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        a.persona_lineage  # record the first revision
+        scope = {
+            "lang": a.agent_lang, "platform": "qq", "conv_id": "g1",
+            "persona": a.bot_name, "persona_hash": a.persona_hash,
+            "persona_version": a.persona_version,
+        }
+        write_jsonl(a.promoted_examples_file,
+                    [dict(ex("promoted reply"), src="promoted_candidate",
+                          candidate_id="c1", scope=scope)])
+        b = make_agent(tmp)
+        b.persona_hash = "edited000000"
+        block = b._examples_for_prompt("hi", "called", conv_id="g1")
+        check("lineage: a persona edit keeps promoted rows in scope",
+              "promoted reply" in block, block)
+        check("lineage: both revisions are recorded",
+              set(b.persona_lineage.hashes(b.persona_version))
+              == {a.persona_hash, "edited000000"},
+              str(b.persona_lineage.versions()))
+        check("lineage: the file lives beside the ledgers",
+              (tmp / "persona_lineage.json").is_file())
+        c = make_agent(tmp)
+        c.persona_hash = "third0000000"
+        c.persona_version = "v2"
+        block = c._examples_for_prompt("hi", "called", conv_id="g1")
+        check("lineage: a new PERSONA_VERSION starts a clean slate",
+              "promoted reply" not in block, block)
+
+
 def test_promoted_views_enforce_full_scope() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -662,6 +697,7 @@ def main() -> int:
     test_feedback_auto_pool_capped()
     test_feedback_write_survives_a_full_pool()
     test_promoted_views_are_a_third_retrieval_source()
+    test_persona_edit_keeps_promoted_rows_in_scope()
     test_promoted_views_enforce_full_scope()
     test_relevance_outranks_recency()
     test_future_timestamp_cannot_outrank_a_match()

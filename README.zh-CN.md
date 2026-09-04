@@ -69,10 +69,11 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
            personagent /webhook/gateway
 ```
 
-1. 运行 `python quickstart.py`，再使用 `python main.py` 启动 Agent（也可用 `start.sh` / `start.ps1`，它们会使用向导创建的 `.venv`）。
-2. 把仓库内置的 [AstrBot 转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)复制到 AstrBot 的 `data/plugins/` 目录。
-3. 在插件中把该人设负责的会话加入白名单，并把 `agent_url` 指向 `http://127.0.0.1:8080/webhook/gateway`。
-4. 接入 QQ 时，从 `excluded_platforms` 中移除 `aiocqhttp`，并设置：
+1. 运行 `python quickstart.py`，在「连接 AstrBot」一步选是：向导会把内置的[转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)复制到 AstrBot 的 `data/plugins/`，生成共享的 `GATEWAY_TOKEN` 并写入两边，写入你给的白名单；若接入 QQ，还会设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`。无交互版本：`python quickstart.py --astrbot <AstrBot data 目录> [--qq]`。
+2. 重启 AstrBot（或在其 WebUI 里重载插件）。平台本身在 AstrBot 中配置。
+3. 用 `python main.py` 启动 Agent（也可用 `start.sh` / `start.ps1`，它们会使用向导创建的 `.venv`）。
+
+手动做的话：把插件目录复制到 `data/plugins/`，把 `agent_url` 指向 `http://127.0.0.1:8080/webhook/gateway`，`gateway_token` 与 Agent 的 `GATEWAY_TOKEN` 设为同一个非空值，填好白名单；接入 QQ 时从 `excluded_platforms` 中移除 `aiocqhttp`，并设置：
 
    ```dotenv
    GATEWAY_NATIVE_PLATFORMS=aiocqhttp
@@ -93,7 +94,7 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
 3. **生成与校验**——按结构化协议调用模型，再过滤和验证输出。
 4. **异步学习**——把反应与评估记录为证据，不阻塞实时回复。
 
-单有证据不会改变行为。自动晋升需要相互兼容的交叉验证，所有已晋升候选都可以审计、回滚或取代。可变状态统一写入 `runtime/`，只追加账本始终是唯一事实来源。
+单有证据不会改变行为。自动晋升需要相互兼容的交叉验证，所有已晋升候选都可以审计、回滚或取代。修改人设文档不会丢掉已学内容；换一个 `PERSONA_VERSION` 才会从零开始。可变状态统一写入 `runtime/`，只追加账本始终是唯一事实来源。
 
 ## 配置
 
@@ -121,6 +122,8 @@ python tools/healthcheck.py                  # 完整诊断，模型探针会消
 python tools/candidates_admin.py list        # 机器人学到了什么、依据哪些证据
 python -m pytest -q                          # 离线回归测试
 ```
+
+在任何一个人设负责的会话里，`@<BOT_NAME> 你学到了什么`（或 `what have you learned`）会回答这个群的记忆数、已生效的好回复和「别这样说→这样说」配对、还在等第二个人佐证的提议数，以及最近的自评分；`记得什么` 列出记忆。两者都不调用模型。
 
 请将 `AGENT_RUNTIME_DIR` 与私有人设文件一起备份，并且不要提交运行状态；其中可能包含凭证、账号标识、对话片段、用户反应和学习内容。如果机器人正常启动却从不回复，按[机器人沉默时的排查清单](docs/deploy.md#when-the-bot-goes-quiet)逐项检查。
 

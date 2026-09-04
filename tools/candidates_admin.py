@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=False)
 
-from persona_agent import candidates, evidence, promotion
+from persona_agent import candidates, evidence, lineage, promotion
 from persona_agent.paths import resolve_runtime_lang_file
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
@@ -125,6 +125,28 @@ def cmd_list(args, ledger, log, policy) -> int:
             print(f"{'':14} why not: {decision.reason}")
     print(f"\n{len(rows)} candidate(s). "
           f"'show <id>' for the evidence behind one.")
+    return 0
+
+
+def cmd_lineage(args, lineages, paths) -> int:
+    if args.action == "adopt":
+        if not args.persona_hash:
+            print("adopt needs the persona hash to fold in (see a candidate's scope)")
+            return 1
+        if lineages.adopt(args.version, args.persona_hash):
+            print(f"adopted {args.persona_hash} into PERSONA_VERSION={args.version or '(unset)'}; "
+                  f"run `rebuild` so the views pick it up")
+        else:
+            print("already in the lineage")
+        return 0
+    versions = lineages.versions()
+    if not versions:
+        print("no lineage recorded yet (written on the agent's first learning turn)")
+        return 0
+    for version, hashes in versions.items():
+        print(f"PERSONA_VERSION={version or '(unset)'}")
+        for i, h in enumerate(hashes):
+            print(f"  {h}  {'root' if i == 0 else 'revision ' + str(i)}")
     return 0
 
 
@@ -270,11 +292,24 @@ def main() -> int:
 
     sub.add_parser("rebuild", help="re-derive the retrieval views from the log")
 
+    lin = sub.add_parser("lineage", help="persona revisions that share one learning scope")
+    lin.add_argument("action", nargs="?", default="show", choices=("show", "adopt"))
+    lin.add_argument("persona_hash", nargs="?", default="",
+                     help="with adopt: a pre-lineage hash to fold into the current character")
+    lin.add_argument("--version", default=os.getenv("PERSONA_VERSION", "").strip(),
+                     help="PERSONA_VERSION the hash belongs to (default: current)")
+
     args = p.parse_args()
     paths = _paths(args.lang.strip().lower())
     ledger = candidates.CandidateLedger(paths["ledger"])
     log = evidence.EvidenceLog(paths["evidence"])
     policy = promotion.Policy.from_env()
+    lineages = lineage.PersonaLineage(Path(paths["evidence"]).parent / lineage.FILE_NAME)
+    for version, hashes in lineages.versions().items():
+        evidence.register_persona_lineage(version, hashes)
+
+    if args.cmd == "lineage":
+        return cmd_lineage(args, lineages, paths)
 
     if args.cmd == "list":
         return cmd_list(args, ledger, log, policy)

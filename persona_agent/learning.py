@@ -45,6 +45,7 @@ class Learning:
         """The scope every evidence event carries: which character, which
         language, which room. Two events may only corroborate each other when
         these agree (see promotion.scope_compatible)."""
+        _ = self.persona_lineage  # registers the lineage before any comparison
         return {
             "lang": self.agent_lang,
             "platform": self._conv_platform(conv_id),

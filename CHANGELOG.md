@@ -29,6 +29,31 @@ is covered by a test that fails without it.
 
 ### Added
 
+- **Editing the persona no longer orphans what the bot has learned.** Learning
+  scope was keyed on a hash of the persona text, so a typo fix refused every
+  promoted row with one warning and no way back. Every hash seen under one
+  `PERSONA_VERSION` is now one character: `runtime/persona_lineage.json`
+  records the revisions, evidence and candidates compare through the lineage
+  root, and a correction arriving after an edit lands on the same candidate
+  instead of minting a twin. A new `PERSONA_VERSION` or `BOT_NAME` is still a
+  clean slate, on purpose. `tools/candidates_admin.py lineage` shows the
+  lineage; `lineage adopt <hash>` folds in rows from before the file existed.
+- **`quickstart.py` connects AstrBot.** Going live used to mean copying the
+  plugin folder by hand, inventing a token, pasting it into the AstrBot WebUI
+  and into `.env`, editing two allowlists and remembering
+  `GATEWAY_NATIVE_PLATFORMS`. The wizard now asks for AstrBot's data
+  directory, copies the plugin, generates the token once and writes it to
+  both sides, writes the allowlists you give it, and sets the native-platform
+  flag when QQ is included; `--astrbot <data dir> [--qq]` does it without
+  prompts. Re-running keeps the existing token so AstrBot never falls out of
+  step. The NapCat questions and snippet are gone from the wizard.
+- **`@<BOT_NAME> what have you learned` / `你学到了什么`.** What a room has
+  taught the bot was visible only through `tools/candidates_admin.py`. The
+  command answers in chat with the room's memory count, the promoted replies
+  and pairs in effect (latest two of each, quoted), the proposals still
+  waiting for a second voice, and the average of the last ten self-scores
+  when evaluation is on. Same entry point as the memory commands, no model
+  call, scoped to the room it is asked in.
 - **`persona_agent/preflight.py` — a misspelled setting is no longer silent.**
   The deployment surface is 80 settings and four of them matter for a first
   reply; everything else has a default, which is fine except that it makes a
