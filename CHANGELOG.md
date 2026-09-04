@@ -144,6 +144,13 @@ is covered by a test that fails without it.
 
 ### Fixed
 
+- **`what do you remember` is delivered again.** A memory tagged with who it
+  is about rendered as `[about Alice] ...`, and `[` is a character the output
+  policy hard-refuses, so the whole list was dropped at the validator and the
+  room saw nothing. Found by sending the command through the gateway on a
+  live agent. Tagged memories now read `about Alice: ...`, list markers are
+  gone (the policy strips them anyway), and both memory commands are tested
+  to survive the default character policy verbatim.
 - **The terminal trial validates with the persona's own style.** `try_chat.py`
   called `_sanitize_reply(reply, lang)` without the `ReplyStyle` every
   production site passes, so a persona that opts into emoji, extra charsets or

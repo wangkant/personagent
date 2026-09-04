@@ -489,10 +489,9 @@ def main() -> None:
     print("  4. try it now, no account needed:  python try_chat.py")
     print("  5. for live chats, run:            python main.py")
     print()
-    _info(
-        "to go live, connect an AstrBot install: "
-        "python quickstart.py --astrbot <AstrBot data dir> [--qq]"
-    )
+    if astrbot_dir is None:
+        _info("to go live, connect an AstrBot install: "
+              "python quickstart.py --astrbot <AstrBot data dir> [--qq]")
 
 
 if __name__ == "__main__":

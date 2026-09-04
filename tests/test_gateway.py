@@ -1026,11 +1026,14 @@ async def regression_learned_summary_command(tmp: Path) -> None:
         dict(base, reply="OTHER ROOM", scope=dict(scope, conv_id="elsewhere")),
     )) + "\n", encoding="utf-8")
     out = agent._handle_memory_command(g, "TestBot what have you learned?") or ""
-    check("learned: memories counted", "1 memories" in out, out)
-    check("learned: promoted pair shown", "as an AI I cannot → nah, no idea" in out, out)
+    check("learned: memories counted", out.startswith("1 memory, "), out)
+    check("learned: promoted pair shown",
+          "was: as an AI I cannot, better: nah, no idea" in out and len(out.splitlines()) <= 3, out)
     check("learned: promoted example shown", "lol same" in out, out)
     check("learned: other room's material excluded", "OTHER ROOM" not in out, out)
-    check("learned: pending count present", "0 proposal(s)" in out, out)
+    check("learned: pending count present", "0 awaiting a second voice" in out, out)
+    check("learned: survives the default character policy verbatim",
+          agent._sanitize_reply(out, agent.agent_lang, agent.reply_style) == out, out)
     check("learned: not matched by an ordinary sentence",
           agent._handle_memory_command(g, "TestBot did you learn python") is None)
 
@@ -1055,6 +1058,10 @@ async def regression_memory_commands_are_caller_scoped(tmp: Path) -> None:
         user_name="Alice") or ""
     check("memory auth: caller cannot enumerate another user's memory",
           "Bob private detail" not in recalled, recalled)
+    check("recall: a tagged memory survives the character policy verbatim",
+          "about Alice: Bob likes chess" in recalled
+          and agent._sanitize_reply(recalled, agent.agent_lang, agent.reply_style) == recalled,
+          recalled)
     agent._handle_memory_command(
         g, "TestBot forget Bob private", user_id="alice",
         user_name="Alice")

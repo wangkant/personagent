@@ -2626,29 +2626,27 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
         def clip(s: str) -> str:
             s = " ".join(str(s or "").split())
-            return s if len(s) <= 40 else s[:39] + "…"
+            return s if len(s) <= 30 else s[:27] + "..."
 
-        lines = []
+        # Plain lines, ASCII separators: the reply crosses the character policy
+        # like any other, which strips middle dots, arrows, the ellipsis and
+        # list markers.
+        n_ex, n_pr, n_pd = len(examples), len(pairs), len(pending)
         if zh:
-            lines.append("这个群教会我的：")
-            lines.append(f"- 记忆 {memories} 条（问我「记得什么」可以看）")
-            lines.append(f"- 已生效：{len(examples)} 条好的回复、{len(pairs)} 组「别这样说→这样说」")
+            head = f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，待佐证 {n_pd} 条"
         else:
-            lines.append("What this chat has taught me:")
-            lines.append(f"- {memories} memories (ask \"what do you remember\" for the list)")
-            lines.append(f"- in effect: {len(examples)} good replies, {len(pairs)} \"not this, this\" pairs")
-        for r in pairs[-2:]:
-            lines.append(f"  · {clip(r.get('reply'))} → {clip(r.get('better'))}")
-        for r in examples[-2:]:
-            lines.append(f"  · {clip(r.get('reply'))}")
-        if zh:
-            lines.append(f"- 等第二个人佐证的提议：{len(pending)} 条")
-        else:
-            lines.append(f"- waiting for a second voice: {len(pending)} proposal(s)")
+            head = (f"{memories} memor{'y' if memories == 1 else 'ies'}, "
+                    f"{n_ex} repl{'y' if n_ex == 1 else 'ies'} and {n_pr} fix{'' if n_pr == 1 else 'es'} learned, "
+                    f"{n_pd} awaiting a second voice")
         if scores:
-            avg = sum(scores) / len(scores)
-            lines.append(("- 最近自评：{:.1f}/5（最近 {} 条）" if zh
-                          else "- recent self-scores: {:.1f}/5 over the last {}").format(avg, len(scores)))
+            head += ("，最近自评 {:.1f}/5" if zh else ", recent self-score {:.1f}/5").format(
+                sum(scores) / len(scores))
+        lines = [head]
+        for r in pairs[-1:]:
+            lines.append((f"原来：{clip(r.get('reply'))}，改成：{clip(r.get('better'))}" if zh
+                          else f"was: {clip(r.get('reply'))}, better: {clip(r.get('better'))}"))
+        for r in examples[-1:]:
+            lines.append(f"{clip(r.get('reply'))}")
         return "\n".join(lines)
 
     def _reload_views_if_stale(self) -> None:
@@ -3359,10 +3357,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     "nothing in there",
                     "blank slate",
                 ])
+            # No brackets, no list markers: the reply crosses the character
+            # policy, which hard-refuses `[` and strips leading `- `, so the
+            # tagged form was never delivered.
             lines: list[str] = []
             for it in items:
-                tag = f"[about {it.get('user_name')}] " if it.get("user_name") else ""
-                lines.append(f"- {tag}{it['text']}")
+                tag = f"about {it.get('user_name')}: " if it.get("user_name") else ""
+                lines.append(f"{tag}{it['text']}")
             return "Here's what I remember:\n" + "\n".join(lines)
 
         return None
