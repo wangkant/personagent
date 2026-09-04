@@ -40,7 +40,11 @@ The wizard creates `.venv`, installs dependencies, writes `.env`, creates a pers
 # Open the trial again
 .venv/bin/python try_chat.py                 # macOS / Linux
 .venv\Scripts\python.exe try_chat.py        # Windows
+.venv/bin/python try_chat.py --lang zh       # Chinese persona and data
+.venv/bin/python try_chat.py --owner         # speak as the configured owner
 ```
+
+The trial runs the production reply path: persona, retrieval, structured output, filters, and validator. Inside it, `/owner <msg>` speaks one line as the owner, `/as <name> <msg>` as another participant, `/reset` clears the buffer, and `/quit` exits.
 
 ## Why personagent
 
@@ -65,7 +69,7 @@ QQ / Telegram / Discord / Slack / Lark / KOOK / …
              personagent /webhook/gateway
 ```
 
-1. Run `python quickstart.py`, then start the agent with `python main.py`.
+1. Run `python quickstart.py`, then start the agent with `python main.py` (or `start.sh` / `start.ps1`, which use the wizard's `.venv`).
 2. Copy the bundled [AstrBot forwarder](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) into AstrBot's `data/plugins/` directory.
 3. In the plugin, allowlist the conversations this persona owns and point `agent_url` to `http://127.0.0.1:8080/webhook/gateway`.
 4. To include QQ, remove `aiocqhttp` from `excluded_platforms` and set:
@@ -76,7 +80,7 @@ QQ / Telegram / Discord / Slack / Lark / KOOK / …
 
 This keeps QQ identity, memory, and learning scopes stable while every platform enters through the same gateway. Keep `NAPCAT_API` configured for QQ-specific background actions. The plugin is default-deny and will forward nothing until its allowlists are configured.
 
-For cross-host deployment, use HTTPS or a private tunnel and set the same non-empty `GATEWAY_TOKEN` in the plugin and agent. A public agent bind also requires `WEBHOOK_SECRET`. See the [deployment guide](docs/deploy.md) for the complete checklist.
+For cross-host deployment, use HTTPS or a private tunnel and set the same non-empty `GATEWAY_TOKEN` in the plugin and agent. A public agent bind (`HOST=0.0.0.0`) also requires `WEBHOOK_SECRET`; startup refuses a non-loopback bind without both. See the [deployment guide](docs/deploy.md) for the complete checklist, including how to verify each direction on its own.
 
 ## Architecture
 
@@ -93,7 +97,15 @@ Evidence alone changes nothing. Automatic promotion requires compatible corrobor
 
 ## Configuration
 
-`.env.example` is the complete annotated reference. The setup wizard writes only the essentials, and startup preflight reports missing or misspelled settings.
+`.env.example` is the complete annotated reference. The setup wizard fills in the essentials; the startup preflight (also the first section of `tools/healthcheck.py`) reports missing required settings and any key the template does not list, so a typo is loud instead of silently ignored.
+
+| Area | Settings |
+|---|---|
+| Model | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` — any OpenAI-compatible `/v1` endpoint. `PRIVATE_MODEL`, `FALLBACK_MODEL`, and `JUDGE_MODEL` share it. |
+| Persona | `BOT_NAME`, `AGENT_LANG`, `PERSONA_FILE`, `PERSONA_CARD_FILE` — the card's `reply_style` opts into emoji and extra character sets. |
+| Gateway | `GATEWAY_TOKEN`, `GATEWAY_OWNER_IDS`, `GATEWAY_NATIVE_PLATFORMS`; QQ-specific `BOT_QQ`, `NAPCAT_API`, `OWNER_QQ`. |
+| Learning | `PROMOTE_AUTO` (conservative promotion, on); `EVAL_ENABLE` and `EVOLVE_AUTO` (self-evaluation and unattended diagnosis, off). |
+| State | `AGENT_HOME` (deployment root; relative persona paths resolve under it), `AGENT_RUNTIME_DIR` (`runtime/`, gitignored). |
 
 ```dotenv
 AGENT_LANG=en  # English persona and data
@@ -103,12 +115,14 @@ AGENT_LANG=en  # English persona and data
 ## Operations
 
 ```bash
-curl http://127.0.0.1:8080/health   # liveness; no model call
-python tools/healthcheck.py          # full diagnostic; model probes spend credits
-python -m pytest -q                  # offline regression suite
+curl http://127.0.0.1:8080/health           # liveness; no model call
+curl http://127.0.0.1:8080/health/details   # dependency probes; needs X-Gateway-Token once GATEWAY_TOKEN is set
+python tools/healthcheck.py                  # full diagnostic; model probes spend credits
+python tools/candidates_admin.py list        # what the bot has learned, and from which evidence
+python -m pytest -q                          # offline regression suite
 ```
 
-Back up `AGENT_RUNTIME_DIR` together with private persona files, and never commit runtime state. It may contain credentials, account identifiers, conversation excerpts, reactions, and learned material.
+Back up `AGENT_RUNTIME_DIR` together with private persona files, and never commit runtime state. It may contain credentials, account identifiers, conversation excerpts, reactions, and learned material. If the bot starts cleanly and never answers, work through [when the bot goes quiet](docs/deploy.md#when-the-bot-goes-quiet).
 
 ## Documentation
 
@@ -126,3 +140,7 @@ Third-party protocol clients may violate platform terms or trigger account contr
 ## License
 
 [MIT](LICENSE) © 2026 Qiankang Wang.
+
+## Acknowledgements
+
+Built on the [OneBot v11](https://github.com/botuniverse/onebot-11) event model, [NapCat](https://github.com/NapNeko/NapCatQQ), [AstrBot](https://github.com/AstrBotDevs/AstrBot), [FastAPI](https://github.com/fastapi/fastapi), and [httpx](https://github.com/encode/httpx), with ideas from [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557), and [BlenderBot 3x](https://arxiv.org/abs/2306.04707). The lorebook and output-filter model follows SillyTavern's World Info and regex extensions.

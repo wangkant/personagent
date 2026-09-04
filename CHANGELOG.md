@@ -256,6 +256,9 @@ that fails without it.
   duplicated persona block and a reference to a `0.1.2` release that never
   existed, and documents the `GLM_BASE_URL` default. The launchers no longer
   call the project `persona-llm-agent`.
+  Both READMEs gain a six-row settings table, the trial's flags and in-session
+  commands, the `/health/details` header rule, `candidates_admin.py list`, a
+  pointer to the quiet-bot checklist, and their acknowledgements back.
 
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
   suppressed only the write, so reaching for it to find out what the tool

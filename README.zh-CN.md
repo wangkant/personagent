@@ -40,7 +40,11 @@ python quickstart.py
 # 再次进入终端试用
 .venv/bin/python try_chat.py                 # macOS / Linux
 .venv\Scripts\python.exe try_chat.py        # Windows
+.venv/bin/python try_chat.py --lang zh       # 中文人设与数据
+.venv/bin/python try_chat.py --owner         # 以配置好的主人身份对话
 ```
+
+终端试用走的就是生产回复链路：人设、检索、结构化输出、过滤器和验证器。会话内 `/owner <消息>` 以主人身份发一句，`/as <名字> <消息>` 以另一位参与者身份发言，`/reset` 清空上下文，`/quit` 退出。
 
 ## 为什么选择 personagent
 
@@ -65,7 +69,7 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
            personagent /webhook/gateway
 ```
 
-1. 运行 `python quickstart.py`，再使用 `python main.py` 启动 Agent。
+1. 运行 `python quickstart.py`，再使用 `python main.py` 启动 Agent（也可用 `start.sh` / `start.ps1`，它们会使用向导创建的 `.venv`）。
 2. 把仓库内置的 [AstrBot 转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)复制到 AstrBot 的 `data/plugins/` 目录。
 3. 在插件中把该人设负责的会话加入白名单，并把 `agent_url` 指向 `http://127.0.0.1:8080/webhook/gateway`。
 4. 接入 QQ 时，从 `excluded_platforms` 中移除 `aiocqhttp`，并设置：
@@ -76,7 +80,7 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
 
 这样既能保持 QQ 身份、记忆和学习作用域不变，又能让所有平台统一进入同一个网关。QQ 专属的后台动作仍需配置 `NAPCAT_API`。插件默认拒绝所有来源，只有显式加入白名单的会话才会被转发。
 
-跨主机部署必须使用 HTTPS 或私有隧道，并在插件与 Agent 中设置相同的非空 `GATEWAY_TOKEN`。Agent 绑定公网地址时还必须配置 `WEBHOOK_SECRET`。完整步骤见[部署指南](docs/deploy.md)。
+跨主机部署必须使用 HTTPS 或私有隧道，并在插件与 Agent 中设置相同的非空 `GATEWAY_TOKEN`。Agent 绑定公网地址（`HOST=0.0.0.0`）时还必须配置 `WEBHOOK_SECRET`，两者缺一启动就会拒绝。完整步骤见[部署指南](docs/deploy.md)（英文），其中包括如何分别验证两个方向。
 
 ## 架构
 
@@ -93,7 +97,15 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
 
 ## 配置
 
-`.env.example` 是完整且带注释的权威参考。配置向导只写入首次运行所需的内容；启动预检会报告缺失或拼写错误的设置。
+`.env.example` 是完整且带注释的权威参考。配置向导只填入首次运行所需的几项；启动预检（也是 `tools/healthcheck.py` 的第一部分）会报告缺失的必填项以及模板里没有的任何 key，拼错的设置不会再被静默忽略。
+
+| 范围 | 设置 |
+|---|---|
+| 模型 | `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`——任意 OpenAI 兼容的 `/v1` 接口。`PRIVATE_MODEL`、`FALLBACK_MODEL`、`JUDGE_MODEL` 共用同一接口。 |
+| 人设 | `BOT_NAME`、`AGENT_LANG`、`PERSONA_FILE`、`PERSONA_CARD_FILE`——人设卡里的 `reply_style` 用来开启 emoji 和额外字符集。 |
+| 网关 | `GATEWAY_TOKEN`、`GATEWAY_OWNER_IDS`、`GATEWAY_NATIVE_PLATFORMS`；QQ 专属 `BOT_QQ`、`NAPCAT_API`、`OWNER_QQ`。 |
+| 学习 | `PROMOTE_AUTO`（保守晋升，默认开）；`EVAL_ENABLE` 与 `EVOLVE_AUTO`（自评与无人值守诊断，默认关）。 |
+| 状态 | `AGENT_HOME`（部署根目录；相对的人设路径按它解析）、`AGENT_RUNTIME_DIR`（`runtime/`，已被 Git 忽略）。 |
 
 ```dotenv
 AGENT_LANG=en  # 英文人设与数据
@@ -103,12 +115,14 @@ AGENT_LANG=en  # 英文人设与数据
 ## 运维
 
 ```bash
-curl http://127.0.0.1:8080/health   # 存活探针，不调用模型
-python tools/healthcheck.py          # 完整诊断，模型探针会消耗额度
-python -m pytest -q                  # 离线回归测试
+curl http://127.0.0.1:8080/health           # 存活探针，不调用模型
+curl http://127.0.0.1:8080/health/details   # 依赖探测；配置了 GATEWAY_TOKEN 后需带 X-Gateway-Token 头
+python tools/healthcheck.py                  # 完整诊断，模型探针会消耗额度
+python tools/candidates_admin.py list        # 机器人学到了什么、依据哪些证据
+python -m pytest -q                          # 离线回归测试
 ```
 
-请将 `AGENT_RUNTIME_DIR` 与私有人设文件一起备份，并且不要提交运行状态；其中可能包含凭证、账号标识、对话片段、用户反应和学习内容。
+请将 `AGENT_RUNTIME_DIR` 与私有人设文件一起备份，并且不要提交运行状态；其中可能包含凭证、账号标识、对话片段、用户反应和学习内容。如果机器人正常启动却从不回复，按[机器人沉默时的排查清单](docs/deploy.md#when-the-bot-goes-quiet)逐项检查。
 
 ## 文档
 
@@ -126,3 +140,7 @@ python -m pytest -q                  # 离线回归测试
 ## 许可证
 
 [MIT](LICENSE) © 2026 Qiankang Wang。
+
+## 致谢
+
+基于 [OneBot v11](https://github.com/botuniverse/onebot-11) 事件模型、[NapCat](https://github.com/NapNeko/NapCatQQ)、[AstrBot](https://github.com/AstrBotDevs/AstrBot)、[FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 构建，思路借鉴 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)。世界书与输出过滤器的模型参考了 SillyTavern 的 World Info 与正则扩展。
