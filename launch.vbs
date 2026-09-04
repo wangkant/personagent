@@ -24,7 +24,7 @@ Option Explicit
 ' ---- EDIT THESE ----
 Const BOT_QQ      = "0000000000"
 Const NAPCAT_DIR  = "C:\path\to\NapCat.Shell"
-Const AGENT_DIR   = "C:\path\to\persona-llm-agent"
+Const AGENT_DIR   = "C:\path\to\personagent"
 ' --------------------
 
 Dim WS

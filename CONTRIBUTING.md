@@ -19,13 +19,16 @@ protocol + validator), so it is the fastest way to reproduce a persona bug.
 Run what CI runs — one command, every suite:
 
 ```bash
-python -m pip install "pytest>=8,<10"
+python -m pip install -e ".[dev]"
 python -m pytest -q
-python -m compileall -q .
+ruff check . --select F401,F811,F821,F841
+python -m compileall -q persona_agent main.py try_chat.py quickstart.py tools tests
 ```
 
-CI runs exactly this on Python 3.10 / 3.11 / 3.12 on Linux, and again on
-Windows. Run it before opening a PR.
+CI runs this on Python 3.10 / 3.11 / 3.12 on Linux and on Windows (3.12),
+plus `bash -n start.sh` and `python tests/test_launchers.py`, and builds and
+imports the wheel and sdist. The ruff line is a dead-and-undefined-names gate,
+not a style gate. Run it before opening a PR.
 
 The suites themselves are framework-free stdlib scripts; pytest is only the
 runner. Each stays directly executable for a fast single-file loop:
@@ -44,10 +47,10 @@ pytest-style file would never run while `pytest -q` still reported success.
 every new `tests/test_*.py` a `main()` and an `if __name__ == "__main__":`
 guard.
 
-**Tests must never write the repo's real state files.** `memory.json`,
-`core_memory.json`, `seen_msg_ids.json`, `runtime/` and the sticker library all
-live at the repo root; a test that forgets to redirect them will quietly
-overwrite a running deployment's learned data. Copy the `make_agent()` helper
+**Tests must never write the repo's real state files.** Everything mutable
+lives under `runtime/` (root-level `memory.json` and friends are legacy names
+that startup migrates there once); a test that forgets to redirect them will
+quietly overwrite a running deployment's learned data. Copy the `make_agent()` helper
 from `tests/test_retrieval.py`, which redirects every path into a temp dir.
 
 The evidence log, the candidate ledger and both promoted views resolve from
@@ -91,7 +94,7 @@ like this" and "why did it stop" both have answers.
 | Module | Owns |
 |---|---|
 | `persona_agent/agent.py` | Orchestration: message intake, modes, debounce, `_think`, prompt assembly |
-| `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) — pure constants |
+| `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |
 | `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting |
 | `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
@@ -102,6 +105,12 @@ like this" and "why did it stop" both have answers.
 | `persona_agent/promotion.py` | The promotion policy: strength, scope compatibility, conflicts, thresholds — plus the pre-ledger gate kept for compatibility |
 | `persona_agent/reactions.py` | Reaction attribution + adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | eval → candidate conversion, dedup, pool trimming (pure logic) |
+| `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
+| `persona_agent/channels.py` | The one place conversation / memory / learning keys are derived from an event |
+| `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
+| `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
+| `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup |
+| `persona_agent/health.py`, `preflight.py` | Dependency probes; startup config check (missing / misspelled keys) |
 
 New behaviour goes in the mixin that owns the concern. If a change needs state
 from two mixins, it probably belongs in `agent.py`.

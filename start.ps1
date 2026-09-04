@@ -1,4 +1,4 @@
-# persona-llm-agent — one-click start (Windows)
+# personagent — one-click start (Windows)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
@@ -6,7 +6,7 @@ $port = if ($env:PORT) { $env:PORT } else { 8080 }
 $bindHost = if ($env:HOST) { $env:HOST } else { '127.0.0.1' }
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   persona-llm-agent" -ForegroundColor Cyan
+Write-Host "   personagent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Prefer the venv that quickstart.py creates; fall back to a global interpreter.
@@ -23,16 +23,9 @@ if (Test-Path $venvPy) {
     $pySource = $py.Source
 }
 
-# Dependency check.
-#
-# Two Windows PowerShell 5.1 traps live in these few lines, and the previous
-# version hit both. `2>$null` on a NATIVE command makes PS wrap each stderr
-# line in an ErrorRecord; under $ErrorActionPreference='Stop' that becomes a
-# terminating NativeCommandError, so the install below was unreachable and a
-# missing dependency simply killed the launcher. And `$?` is not a native exit
-# status: any stderr output sets it to $false even on success, so a healthy
-# install would reinstall on every start. Suspend Stop across the probe and
-# read $LASTEXITCODE instead.
+# Dependency check. PS 5.1 traps: `2>$null` on a native command becomes a
+# terminating error under Stop, and `$?` goes false on any stderr output, so
+# suspend Stop and read $LASTEXITCODE instead.
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 & $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" > $null 2>&1

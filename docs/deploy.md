@@ -49,6 +49,11 @@ Four requirements that nothing else states:
 4. **`data/` must sit next to the package.** If it does not, the root detector
    falls back to the working directory and every seed lookup silently misses.
 
+Two path rules that follow from `AGENT_HOME`: `AGENT_RUNTIME_DIR` must resolve
+beneath it (startup raises otherwise), and a relative `PERSONA_FILE` /
+`PERSONA_CARD_FILE` is resolved under it too, so a persona kept outside the
+checkout needs an absolute path.
+
 ## The OneBot bridge
 
 This is the largest piece of the deployment and none of it lives in this
@@ -164,6 +169,14 @@ machine. If they do not, set `HOST=0.0.0.0` **and both** `WEBHOOK_SECRET` and
 `GATEWAY_TOKEN`. Startup refuses a non-loopback `HOST` without them, including
 for a QQ-only deployment: `/webhook/gateway` is mounted whether or not you use
 it, so binding a public interface without a gateway token would leave it open.
+
+## The detailed health endpoint
+
+`GET /health` is free and unauthenticated. `GET /health/details` probes the
+upstream services (cached 60 s) and is gated: with `GATEWAY_TOKEN` blank it
+answers loopback only; once a token is configured it answers **only** requests
+carrying a matching `X-Gateway-Token` header, and loopback alone is refused.
+A degraded critical dependency turns it into HTTP 503.
 
 ## Costs to know about
 

@@ -248,18 +248,13 @@ that fails without it.
 - **The ingestion-only constants (URL patterns, OG regexes, vision prompts)
   live on `ContentIngestion`**, the mixin that reads them, instead of on
   `Agent`.
-- **Docs**: README (both languages) now documents the config preflight,
-  `AGENT_HOME`, `GATEWAY_NATIVE_PLATFORMS`, the `proactive: true` gateway
-  turn, the `owned` / `handled` response fields, the `/health/details` token
-  rule (token configured ⇒ header only, loopback alone refused),
-  `EVOLVE_AUTO`'s dependency on `EVAL_ENABLE`, what `python -m pytest -q`
-  actually runs, the ruff gate CI runs, the launchers and `stickers/` in the
-  repository map, and a "when the bot goes quiet" pointer into
-  `docs/deploy.md`. The Chinese README had fallen behind on the
-  `GATEWAY_TOKEN` startup refusal and the healthcheck cost. `CONTRIBUTING.md`'s
-  module map lists all nineteen modules and its install line pulls the
-  runtime deps. `.env.example` lost a duplicated persona block and a
-  reference to a `0.1.2` release that never existed. The launchers no longer
+- **Docs**: `docs/deploy.md` states the `/health/details` token rule (token
+  configured ⇒ header only, loopback alone refused) and the two path rules
+  that follow from `AGENT_HOME`. `CONTRIBUTING.md`'s module map lists every
+  module, its install line pulls the runtime deps, and it names the ruff gate
+  and launcher checks CI runs beyond `pytest`. `.env.example` lost a
+  duplicated persona block and a reference to a `0.1.2` release that never
+  existed, and documents the `GLM_BASE_URL` default. The launchers no longer
   call the project `persona-llm-agent`.
 
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
