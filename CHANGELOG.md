@@ -259,6 +259,9 @@ that fails without it.
   Both READMEs gain a six-row settings table, the trial's flags and in-session
   commands, the `/health/details` header rule, `candidates_admin.py list`, a
   pointer to the quiet-bot checklist, and their acknowledgements back.
+  The README demo animation shows two lines of the room's chat above each
+  incoming message and grows from two scenes to four: reply, pass, a reply
+  that saves a memory, and a direct call answered with a sticker.
 
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
   suppressed only the write, so reaching for it to find out what the tool
