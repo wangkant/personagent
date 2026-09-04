@@ -69,8 +69,8 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
            personagent /webhook/gateway
 ```
 
-1. 运行 `python quickstart.py`，在「连接 AstrBot」一步选是：向导会把内置的[转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)复制到 AstrBot 的 `data/plugins/`，生成共享的 `GATEWAY_TOKEN` 并写入两边，写入你给的白名单；若接入 QQ，还会设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`。无交互版本：`python quickstart.py --astrbot <AstrBot data 目录> [--qq]`。
-2. 重启 AstrBot（或在其 WebUI 里重载插件）。平台本身在 AstrBot 中配置。
+1. 运行 `python quickstart.py`，在「连接 AstrBot」一步选是：向导会把内置的[转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)复制到 AstrBot 的 `data/plugins/`，生成共享的 `GATEWAY_TOKEN` 并写入两边，写入你给的白名单；若接入 QQ，还会设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`；贴一个 bot token 就能直接在 AstrBot 的配置里开启 Telegram / Discord / Slack / KOOK / 飞书。无交互版本：`python quickstart.py --astrbot <AstrBot data 目录> [--qq] [--platform telegram --token <bot token>]`。
+2. 重启 AstrBot（或在其 WebUI 里重载插件）。其他平台在 AstrBot 中配置。
 3. 用 `python main.py` 启动 Agent（也可用 `start.sh` / `start.ps1`，它们会使用向导创建的 `.venv`）。
 
 手动做的话：把插件目录复制到 `data/plugins/`，把 `agent_url` 指向 `http://127.0.0.1:8080/webhook/gateway`，`gateway_token` 与 Agent 的 `GATEWAY_TOKEN` 设为同一个非空值，填好白名单；接入 QQ 时从 `excluded_platforms` 中移除 `aiocqhttp`，并设置：

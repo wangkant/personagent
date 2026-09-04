@@ -47,6 +47,19 @@ non-empty secret in the plugin's `gateway_token` and the agent's
 `GATEWAY_TOKEN`. A private tunnel is also suitable when it terminates at a
 loopback URL visible to AstrBot; never send the token over cleartext HTTP.
 
+## What changes per platform
+
+The agent speaks one neutral dialect; the plugin translates at the edges,
+using each platform's own mechanisms rather than its own formats:
+
+| Platform | Inbound | Outbound |
+| --- | --- | --- |
+| Telegram | Reply-to-bot wake artifact stripped; stickers arrive as image + emoji (adapter) | AstrBot's typing indicator runs for the whole round-trip; mentions rendered by the adapter |
+| Discord | `<@id>` becomes a mention segment named from `Message.mentions`; `<#id>`, `<@&id>` and custom emoji become `#channel`, `@role`, `:name:` | mentions as `<@id>` (adapter) |
+| Slack | `<url\|label>` links and `&amp;`-style entities unfolded | mention rendered as Slack's `<@id>` mrkdwn, since the adapter drops At components |
+| QQ (aiocqhttp), KOOK, Lark | as the adapter delivers them | mentions via the adapter |
+| all | videos, files and voice messages arrive as a note the persona can react to (`(sent a video)`, `(sent a file: deck.pdf)`, `(sent a voice message)`) | typing indicator wherever AstrBot's event API supports it |
+
 ## Configuration
 
 | Key | Type | Default | Description |

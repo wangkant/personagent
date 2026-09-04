@@ -49,6 +49,7 @@ import hashlib
 import hmac
 import json
 import random
+import re
 import secrets
 import time
 from urllib.parse import urlsplit
@@ -63,6 +64,78 @@ import astrbot.api.message_components as Comp
 
 DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
 DEFAULT_TIMEOUT_S = 180
+
+# Discord leaves mentions, channels and custom emoji as raw markup in the text
+# (discord.py's own syntax); Slack escapes links as <url|label>. Both are
+# unfolded before the agent sees them, using the platform's own objects for
+# names where it provides them.
+_DISCORD_USER = re.compile(r"<@!?(\d+)>")
+_DISCORD_ROLE = re.compile(r"<@&(\d+)>")
+_DISCORD_CHANNEL = re.compile(r"<#(\d+)>")
+_DISCORD_EMOJI = re.compile(r"<a?:(\w+):\d+>")
+_SLACK_LINK = re.compile(r"<(https?://[^|>]+)(?:\|([^>]*))?>")
+_MEDIA_NOTES = (("Video", "(sent a video)"), ("Record", "(sent a voice message)"))
+
+
+def _comp_is(comp, name: str) -> bool:
+    cls = getattr(Comp, name, None)
+    return cls is not None and isinstance(comp, cls)
+
+
+def _adapt_inbound(platform: str, event, segments: list) -> list:
+    """Platform-specific unfolding of text the adapter left raw."""
+    if platform not in ("discord", "slack"):
+        return segments
+    raw = getattr(event.message_obj, "raw_message", None)
+    out = []
+    for seg in segments:
+        if seg.get("type") != "text":
+            out.append(seg)
+        elif platform == "discord":
+            out.extend(_discord_text(seg.get("text") or "", raw))
+        else:
+            out.append(dict(seg, text=_slack_text(seg.get("text") or "")))
+    return out
+
+def _discord_text(text: str, raw) -> list:
+    """Split Discord text into text + mention segments, resolving names
+    from discord.py's Message.mentions / role_mentions / channel_mentions."""
+    def names(attr, label):
+        table = {}
+        for obj in getattr(raw, attr, None) or []:
+            oid = str(getattr(obj, "id", "") or "")
+            if oid:
+                table[oid] = str(getattr(obj, label, "") or getattr(obj, "name", "") or "")
+        return table
+    users = names("mentions", "display_name")
+    roles = names("role_mentions", "name")
+    channels = names("channel_mentions", "name")
+
+    def plain(chunk: str) -> str:
+        chunk = _DISCORD_EMOJI.sub(lambda m: f":{m.group(1)}:", chunk)
+        chunk = _DISCORD_ROLE.sub(lambda m: "@" + (roles.get(m.group(1)) or "role"), chunk)
+        return _DISCORD_CHANNEL.sub(lambda m: "#" + (channels.get(m.group(1)) or "channel"), chunk)
+
+    out = []
+    pos = 0
+    for m in _DISCORD_USER.finditer(text):
+        before = plain(text[pos:m.start()])
+        if before:
+            out.append({"type": "text", "text": before})
+        uid = m.group(1)
+        out.append({"type": "mention", "user_id": uid, "name": users.get(uid, "")})
+        pos = m.end()
+    tail = plain(text[pos:])
+    if tail or not out:
+        out.append({"type": "text", "text": tail})
+    return out
+
+def _slack_text(text: str) -> str:
+    """Slack's mrkdwn escapes: <url|label> and the three HTML entities."""
+    text = _SLACK_LINK.sub(lambda m: f"{m.group(2)} ({m.group(1)})" if m.group(2) else m.group(1), text)
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
 
 
 class LLMPersonaGateway(Star):
@@ -114,7 +187,7 @@ class LLMPersonaGateway(Star):
             if sender_id not in whitelist:
                 return
 
-        segments, is_at_me = self._map_segments(event, self_id)
+        segments, is_at_me = self._map_segments(event, self_id, platform)
         raw_text = event.message_str or ""
         if platform == "telegram":
             # The Telegram adapter encodes "reply to the bot" as a wake-prefix
@@ -162,19 +235,27 @@ class LLMPersonaGateway(Star):
             "raw_text": raw_text,
         }
 
-        _replied, owned, replies = await self._post_to_agent(neutral_event)
+        # AstrBot's own typing indicator, where the adapter has one (Telegram
+        # today): the round-trip covers the agent's thinking and its typing
+        # simulation, which is exactly when a person expects to see "typing".
+        await self._typing(event, True)
+        try:
+            _replied, owned, replies = await self._post_to_agent(neutral_event)
 
-        first = True
-        for item in replies:
-            chain = self._build_chain(item, platform, is_group, conversation_id)
-            if not chain:
-                continue
-            if not first:
-                # Small pause between consecutive replies so multi-bubble
-                # answers read naturally instead of arriving as a burst.
-                await asyncio.sleep(random.uniform(0.8, 1.8))
-            first = False
-            yield event.chain_result(chain)
+            first = True
+            for item in replies:
+                chain = self._build_chain(item, platform, is_group, conversation_id)
+                if not chain:
+                    continue
+                if not first:
+                    # Small pause between consecutive replies so multi-bubble
+                    # answers read naturally instead of arriving as a burst.
+                    await self._typing(event, True)
+                    await asyncio.sleep(random.uniform(0.8, 1.8))
+                first = False
+                yield event.chain_result(chain)
+        finally:
+            await self._typing(event, False)
 
         if owned and self.config.get("block_default", True):
             # Gate on ownership, not on whether a reply came back. The agent
@@ -184,12 +265,32 @@ class LLMPersonaGateway(Star):
             # answers as someone else in a room this persona chose to sit out.
             event.stop_event()
 
-    def _map_segments(self, event: AstrMessageEvent, self_id: str):
+    @staticmethod
+    async def _typing(event, on: bool) -> None:
+        fn = getattr(event, "send_typing" if on else "stop_typing", None)
+        if fn is None:
+            return
+        try:
+            await fn()
+        except Exception as e:  # an indicator must never cost a reply
+            logger.debug(f"llm_persona_gateway: typing indicator failed: {e}")
+
+    def _map_segments(self, event: AstrMessageEvent, self_id: str, platform: str = ""):
         """Map AstrBot message components to neutral segments."""
         segments = []
         is_at_me = False
         components = getattr(event.message_obj, "message", None) or []
         for comp in components:
+            if _comp_is(comp, "File"):
+                name = str(getattr(comp, "name", "") or "")
+                segments.append({"type": "text",
+                                 "text": f"(sent a file: {name})" if name else "(sent a file)"})
+                continue
+            media = next((note for cname, note in _MEDIA_NOTES
+                          if _comp_is(comp, cname)), None)
+            if media:
+                segments.append({"type": "text", "text": media})
+                continue
             if isinstance(comp, Comp.Plain):
                 segments.append({"type": "text", "text": comp.text or ""})
             elif isinstance(comp, Comp.At):
@@ -237,7 +338,7 @@ class LLMPersonaGateway(Star):
                     reply_seg["message_id"] = reply_id
                 segments.append(reply_seg)
             # Any other component type carries nothing the agent understands.
-        return segments, is_at_me
+        return _adapt_inbound(platform, event, segments), is_at_me
 
     @staticmethod
     def _strip_tg_wake_artifact(text: str, self_id: str) -> str:
@@ -351,13 +452,19 @@ class LLMPersonaGateway(Star):
         # name= matters: the Telegram send path renders outbound mentions
         # from At.name only (qq is ignored there, and name defaults to ""),
         # while aiocqhttp reads qq — pass both so every adapter works.
+        # The Slack adapter sends Plain and Image blocks only and drops At, so
+        # the mention goes out in Slack's own mrkdwn form inside the text.
+        def mention():
+            if platform == "slack":
+                return Comp.Plain(f"<@{at_target}>")
+            return Comp.At(qq=at_target, name=at_target)
+
         if rtype == "text":
             text = item.get("text") or ""
             if not text:
                 return None
             if at_target:
-                return prefix + [Comp.At(qq=at_target, name=at_target),
-                                 Comp.Plain(" " + text)]
+                return prefix + [mention(), Comp.Plain(" " + text)]
             return prefix + [Comp.Plain(text)]
         if rtype == "image":
             b64 = item.get("b64") or ""
@@ -365,7 +472,7 @@ class LLMPersonaGateway(Star):
                 return None
             chain = list(prefix)
             if at_target:
-                chain.append(Comp.At(qq=at_target, name=at_target))
+                chain.append(mention())
             chain.append(Comp.Image.fromBase64(b64))
             return chain
         logger.warning(f"llm_persona_gateway: dropping unknown reply type {rtype!r}")

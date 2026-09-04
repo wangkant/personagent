@@ -99,16 +99,29 @@ def _import_plugin():
     class Reply(Segment):
         pass
 
+    class Video(Segment):
+        pass
+
+    class File(Segment):
+        pass
+
+    class Record(Segment):
+        pass
+
     components.Plain = Plain
     components.At = At
     components.Image = Image
     components.Face = Face
     components.Reply = Reply
+    components.Video = Video
+    components.File = File
+    components.Record = Record
 
     spec = importlib.util.spec_from_file_location("astrbot_gateway_tested", PLUGIN)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
+    module.Comp = components
     return module
 
 
@@ -152,7 +165,7 @@ class _SilentButOwnedClient(_RecordingClient):
 
 
 class _Event:
-    def __init__(self, module, *, private: bool):
+    def __init__(self, module, *, private: bool, platform: str = "telegram"):
         message_type = (
             module.MessageType.FRIEND_MESSAGE
             if private
@@ -160,14 +173,22 @@ class _Event:
         )
         self.message_obj = types.SimpleNamespace(
             type=message_type, message=[], message_id="incoming-1",
-            timestamp=1_725_000_000,
+            timestamp=1_725_000_000, raw_message=None,
         )
         self.message_str = "hello"
         self._private = private
+        self._platform = platform
         self.stopped = False
+        self.typing = []
+
+    async def send_typing(self):
+        self.typing.append("on")
+
+    async def stop_typing(self):
+        self.typing.append("off")
 
     def get_platform_name(self):
-        return "telegram"
+        return self._platform
 
     def get_self_id(self):
         return "bot"
@@ -404,6 +425,78 @@ def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
     assert event.stopped is True
 
 
+def _run(plugin, event):
+    async def collect():
+        return [item async for item in plugin.forward_to_agent(event)]
+    return asyncio.run(collect())
+
+
+def test_typing_indicator_brackets_the_round_trip():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"private_enabled": True, "private_whitelist": ["user-1"]})
+    event = _Event(module, private=True)
+
+    async def two_bubbles(_neutral):
+        return True, True, [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]
+
+    plugin._post_to_agent = two_bubbles
+    module.asyncio.sleep = _no_sleep
+    out = _run(plugin, event)
+    assert len(out) == 2
+    # on before the request, on again before the second bubble, off at the end
+    assert event.typing == ["on", "on", "off"], event.typing
+
+
+async def _no_sleep(_seconds):
+    return None
+
+
+def test_discord_text_unfolds_mentions_emoji_and_channels():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    event = _Event(module, private=False, platform="discord")
+    event.message_obj.raw_message = types.SimpleNamespace(
+        mentions=[types.SimpleNamespace(id=42, display_name="Bob")],
+        role_mentions=[types.SimpleNamespace(id=7, name="mods")],
+        channel_mentions=[types.SimpleNamespace(id=9, name="general")],
+    )
+    event.message_obj.message = [module.Comp.Plain("hey <@42> see <#9> <a:party:1> <@&7> <@!99>")]
+    segments, _ = plugin._map_segments(event, "bot", "discord")
+    assert segments == [
+        {"type": "text", "text": "hey "},
+        {"type": "mention", "user_id": "42", "name": "Bob"},
+        {"type": "text", "text": " see #general :party: @mods "},
+        {"type": "mention", "user_id": "99", "name": ""},
+    ], segments
+
+
+def test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    event = _Event(module, private=False, platform="slack")
+    event.message_obj.message = [module.Comp.Plain("look <https://x.io|the site> &amp; <https://y.io>")]
+    segments, _ = plugin._map_segments(event, "bot", "slack")
+    assert segments == [{"type": "text", "text": "look the site (https://x.io) & https://y.io"}], segments
+    chain = plugin._build_chain({"type": "text", "text": "hi", "at_user_id": "slack:U1"}, "slack", True, "C1")
+    assert [type(c).__name__ for c in chain] == ["Plain", "Plain"], chain
+    assert chain[0].text == "<@U1>", chain[0].__dict__
+    chain = plugin._build_chain({"type": "text", "text": "hi", "at_user_id": "discord:5"}, "discord", True, "C1")
+    assert type(chain[0]).__name__ == "At", chain
+
+
+def test_media_components_become_notes_the_agent_can_read():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    event = _Event(module, private=False)
+    event.message_obj.message = [
+        module.Comp.Video(file="v.mp4"), module.Comp.File(name="deck.pdf"),
+        module.Comp.Record(file="a.ogg"), module.Comp.Plain("thoughts?"),
+    ]
+    segments, _ = plugin._map_segments(event, "bot", "telegram")
+    assert [s["text"] for s in segments] == [
+        "(sent a video)", "(sent a file: deck.pdf)", "(sent a voice message)", "thoughts?"], segments
+
+
 def test_missing_source_timestamp_is_not_forwarded_or_blocked():
     module = _import_plugin()
     plugin = _plugin_instance(
@@ -437,6 +530,10 @@ if __name__ == "__main__":
         test_a_silent_but_owned_conversation_blocks_the_fallback,
         test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback,
         test_missing_source_timestamp_is_not_forwarded_or_blocked,
+        test_typing_indicator_brackets_the_round_trip,
+        test_discord_text_unfolds_mentions_emoji_and_channels,
+        test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn,
+        test_media_components_become_notes_the_agent_can_read,
     ]
     for test in tests:
         test()

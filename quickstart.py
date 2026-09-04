@@ -238,6 +238,68 @@ def _split_ids(raw: str) -> list[str]:
     return [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
 
 
+# AstrBot platform adapters the wizard can switch on. The shapes are AstrBot's
+# own (its config template, 4.25); we only fill the credential fields.
+PLATFORMS = {
+    "telegram": (("telegram_token", "Telegram bot token (from @BotFather)"),),
+    "discord": (("discord_token", "Discord bot token"),),
+    "slack": (("bot_token", "Slack bot token (xoxb-...)"),
+              ("app_token", "Slack app-level token (xapp-..., Socket Mode)")),
+    "kook": (("kook_bot_token", "KOOK bot token"),),
+    "lark": (("app_id", "Lark / Feishu app id"), ("app_secret", "Lark / Feishu app secret")),
+}
+_PLATFORM_DEFAULTS = {
+    "telegram": {"start_message": "", "telegram_api_base_url": "https://api.telegram.org/bot",
+                 "telegram_file_base_url": "https://api.telegram.org/file/bot",
+                 "telegram_command_register": False, "telegram_command_auto_refresh": False,
+                 "telegram_command_register_interval": 300, "telegram_polling_restart_delay": 5.0},
+    "discord": {"discord_proxy": "", "discord_command_register": False,
+                "discord_activity_name": "", "discord_allow_bot_messages": False},
+    "slack": {"signing_secret": "", "slack_connection_mode": "socket", "unified_webhook_mode": True,
+              "webhook_uuid": "", "slack_webhook_host": "0.0.0.0", "slack_webhook_port": 6197,
+              "slack_webhook_path": "/astrbot-slack-webhook/callback"},
+    "kook": {"kook_reconnect_delay": 1, "kook_max_reconnect_delay": 60, "kook_max_retry_delay": 60,
+             "kook_heartbeat_interval": 30, "kook_heartbeat_timeout": 6,
+             "kook_max_heartbeat_failures": 3, "kook_max_consecutive_failures": 5},
+    "lark": {"domain": "https://open.feishu.cn", "lark_connection_mode": "socket",
+             "webhook_uuid": "", "lark_encrypt_key": "", "lark_verification_token": ""},
+}
+
+
+def astrbot_platform_entry(kind: str, creds: dict) -> dict:
+    """One entry for AstrBot's `platform` list."""
+    if kind not in PLATFORMS:
+        raise ValueError(f"unknown platform {kind!r}; one of {', '.join(PLATFORMS)}")
+    missing = [key for key, _ in PLATFORMS[kind] if not creds.get(key)]
+    if missing:
+        raise ValueError(f"{kind} needs {', '.join(missing)}")
+    entry = {"id": kind, "type": kind, "enable": True}
+    entry.update(_PLATFORM_DEFAULTS[kind])
+    entry.update({key: creds[key] for key, _ in PLATFORMS[kind]})
+    return entry
+
+
+def astrbot_main_config_path(data_dir: Path) -> Path:
+    return data_dir / "cmd_config.json"
+
+
+def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
+    """Add or replace the entry with the same id in AstrBot's cmd_config.json.
+    AstrBot must have started once (the file is its), and reads it on start."""
+    path = astrbot_main_config_path(data_dir)
+    cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+    platforms = cfg.get("platform")
+    if not isinstance(platforms, list):
+        platforms = []
+    platforms = [p for p in platforms if not (isinstance(p, dict) and p.get("id") == entry["id"])]
+    platforms.append(entry)
+    cfg["platform"] = platforms
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Wizard
 # ---------------------------------------------------------------------------
@@ -362,6 +424,15 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                                    qq=qq, groups=groups, private=private)
         _info(f"plugin installed under {astrbot_data / 'plugins' / PLUGIN_NAME}")
         _info(f"plugin config written to {cfg_path}")
+        if astrbot_main_config_path(astrbot_data).exists():
+            kind = _ask("Also switch on a platform in AstrBot now - "
+                        + " / ".join(PLATFORMS) + " (Enter to skip)").lower()
+            if kind in PLATFORMS:
+                creds = {key: _ask(prompt, required=True) for key, prompt in PLATFORMS[kind]}
+                write_astrbot_platform(astrbot_data, astrbot_platform_entry(kind, creds))
+                _info(f"{kind} adapter written to AstrBot's config; it comes up on the next restart")
+            elif kind:
+                print(f"    (unknown platform {kind!r}; skipped - add it in AstrBot's WebUI)")
 
     write_env(env_path, values)
     copy_persona_template(lang)
@@ -398,7 +469,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
 
 
 USAGE = """\
-usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq]]
+usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq] [--platform KIND --token T ...]]
 
 Sets the project up: creates .venv, installs requirements.txt, copies
 .env.example to .env and persona.example to persona.txt, then runs a short
@@ -413,6 +484,10 @@ written to both sides, allowlists written).
                       empty; fill them in the plugin config or the WebUI)
   --qq                with --astrbot: route QQ through AstrBot too
                       (GATEWAY_NATIVE_PLATFORMS=aiocqhttp)
+  --platform KIND     with --astrbot: switch on that adapter in AstrBot's own
+                      config (telegram, discord, slack, kook, lark), using
+                      --token T (and --app-token T for slack, or
+                      --app-id ID --app-secret S for lark)
 
 Re-running is safe: existing files are kept, and the wizard asks before
 reconfiguring anything already set.
@@ -439,13 +514,28 @@ def main() -> None:
         astrbot_dir = Path(argv[i + 1]).expanduser()
         del argv[i:i + 2]
     qq_flag = "--qq" in argv
+
+    def take(flag: str) -> str:
+        if flag not in argv:
+            return ""
+        i = argv.index(flag)
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            print(USAGE)
+            sys.exit(f"{flag} needs a value")
+        value = argv[i + 1]
+        del argv[i:i + 2]
+        return value
+
+    platform_kind = take("--platform").lower()
+    platform_creds = {"token": take("--token"), "app_token": take("--app-token"),
+                      "app_id": take("--app-id"), "app_secret": take("--app-secret")}
     unknown = [arg for arg in argv if arg not in ("--no-input", "--qq")]
     if unknown:
         print(USAGE)
         sys.exit(f"unrecognised argument(s): {' '.join(unknown)}")
-    if qq_flag and astrbot_dir is None:
+    if (qq_flag or platform_kind) and astrbot_dir is None:
         print(USAGE)
-        sys.exit("--qq only makes sense with --astrbot")
+        sys.exit("--qq and --platform only make sense with --astrbot")
 
     no_input = "--no-input" in argv or astrbot_dir is not None
     venv = ensure_venv()
@@ -476,6 +566,19 @@ def main() -> None:
         _info(f"AstrBot plugin installed and configured: {cfg_path}")
         _info("allowlists are empty: add group_whitelist / private_whitelist there "
               "or in AstrBot's WebUI, then restart AstrBot")
+        if platform_kind:
+            token = platform_creds["token"]
+            creds = {"telegram": {"telegram_token": token}, "discord": {"discord_token": token},
+                     "slack": {"bot_token": token, "app_token": platform_creds["app_token"]},
+                     "kook": {"kook_bot_token": token},
+                     "lark": {"app_id": platform_creds["app_id"],
+                              "app_secret": platform_creds["app_secret"]}}.get(platform_kind, {})
+            try:
+                path = write_astrbot_platform(
+                    astrbot_dir, astrbot_platform_entry(platform_kind, creds))
+            except (ValueError, OSError) as exc:
+                sys.exit(f"platform not written: {exc}")
+            _info(f"{platform_kind} adapter written to {path}; restart AstrBot to bring it up")
     print()
     _info("done. next steps:")
     activate = (

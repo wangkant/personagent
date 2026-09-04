@@ -69,8 +69,8 @@ QQ / Telegram / Discord / Slack / Lark / KOOK / …
              personagent /webhook/gateway
 ```
 
-1. Run `python quickstart.py` and say yes to "connect to an AstrBot install": the wizard copies the bundled [forwarder plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) into AstrBot's `data/plugins/`, generates the shared `GATEWAY_TOKEN` and writes it to both sides, writes the allowlists you give it, and, if QQ is included, sets `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`. Non-interactive: `python quickstart.py --astrbot <AstrBot data dir> [--qq]`.
-2. Restart AstrBot (or reload plugins in its WebUI). Platforms themselves are configured in AstrBot.
+1. Run `python quickstart.py` and say yes to "connect to an AstrBot install": the wizard copies the bundled [forwarder plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) into AstrBot's `data/plugins/`, generates the shared `GATEWAY_TOKEN` and writes it to both sides, writes the allowlists you give it, sets `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` if QQ is included, and can switch on a platform in AstrBot's own config from a bot token (Telegram, Discord, Slack, KOOK, Lark). Non-interactive: `python quickstart.py --astrbot <AstrBot data dir> [--qq] [--platform telegram --token <bot token>]`.
+2. Restart AstrBot (or reload plugins in its WebUI). Any other platform is configured in AstrBot itself.
 3. Start the agent with `python main.py` (or `start.sh` / `start.ps1`, which use the wizard's `.venv`).
 
 Doing it by hand instead: copy the plugin folder into `data/plugins/`, set `agent_url` to `http://127.0.0.1:8080/webhook/gateway`, the same non-empty `gateway_token` as the agent's `GATEWAY_TOKEN`, and the allowlists; to include QQ, remove `aiocqhttp` from `excluded_platforms` and set:

@@ -71,9 +71,40 @@ def test_connect_writes_both_sides() -> None:
         check("connect: rerun can exclude qq again", values2["GATEWAY_NATIVE_PLATFORMS"] == "")
 
 
+def test_platform_entry_replaces_same_id_and_keeps_the_rest() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        data = Path(d)
+        cfg = {"platform": [{"id": "telegram", "type": "telegram", "enable": True,
+                             "telegram_token": "old"},
+                            {"id": "kook", "type": "kook", "enable": False}],
+               "other": {"kept": 1}}
+        (data / "cmd_config.json").write_text("\ufeff" + json.dumps(cfg), encoding="utf-8")
+        entry = quickstart.astrbot_platform_entry("telegram", {"telegram_token": "new"})
+        check("platform: entry carries AstrBot's own fields",
+              entry["type"] == "telegram" and entry["telegram_token"] == "new"
+              and "telegram_api_base_url" in entry, repr(entry))
+        quickstart.write_astrbot_platform(data, entry)
+        out = json.loads((data / "cmd_config.json").read_text(encoding="utf-8"))
+        ids = [p["id"] for p in out["platform"]]
+        check("platform: same id replaced, others kept", ids == ["kook", "telegram"], repr(ids))
+        check("platform: token updated", out["platform"][1]["telegram_token"] == "new")
+        check("platform: unrelated config kept", out["other"] == {"kept": 1})
+        try:
+            quickstart.astrbot_platform_entry("slack", {"bot_token": "x"})
+            check("platform: missing credential rejected", False)
+        except ValueError as exc:
+            check("platform: missing credential rejected", "app_token" in str(exc), str(exc))
+        try:
+            quickstart.astrbot_platform_entry("irc", {})
+            check("platform: unknown kind rejected", False)
+        except ValueError:
+            check("platform: unknown kind rejected", True)
+
+
 def main() -> int:
     test_plugin_config_is_merged_not_replaced()
     test_connect_writes_both_sides()
+    test_platform_entry_replaces_same_id_and_keeps_the_rest()
     if FAILURES:
         print(f"{len(FAILURES)} check(s) FAILED: {FAILURES}")
         return 1

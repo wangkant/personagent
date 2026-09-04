@@ -38,6 +38,19 @@ is covered by a test that fails without it.
   instead of minting a twin. A new `PERSONA_VERSION` or `BOT_NAME` is still a
   clean slate, on purpose. `tools/candidates_admin.py lineage` shows the
   lineage; `lineage adopt <hash>` folds in rows from before the file existed.
+- **A platform from one token.** The AstrBot step of `quickstart.py` (and
+  `--platform telegram --token ...`, also discord / slack / kook / lark) writes
+  the adapter entry into AstrBot's own config, shaped exactly as AstrBot's
+  template, so going from a bot token to a persona in a chat is one wizard run
+  and one AstrBot restart.
+- **The forwarder adapts at the edges, with each platform's own mechanisms.**
+  AstrBot's typing indicator runs for the whole agent round-trip (Telegram
+  shows it today); Discord's `<@id>`, `<#id>`, `<@&id>` and custom-emoji markup
+  are unfolded into mention segments and readable names using
+  `Message.mentions`; Slack's `<url|label>` links and entities are unfolded,
+  and outbound mentions use Slack's `<@id>` mrkdwn because the adapter drops
+  At components; videos, files and voice messages arrive as a note the persona
+  can react to instead of vanishing.
 - **`quickstart.py` connects AstrBot.** Going live used to mean copying the
   plugin folder by hand, inventing a token, pasting it into the AstrBot WebUI
   and into `.env`, editing two allowlists and remembering
