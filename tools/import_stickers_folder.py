@@ -18,7 +18,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -32,6 +31,7 @@ load_dotenv(ROOT / ".env", override=False)
 import httpx
 from persona_agent.paths import resolve_runtime_state_file
 from persona_agent.storage import atomic_write_text
+from persona_agent.textproc import strip_json_fences
 
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4").rstrip("/")
@@ -138,7 +138,7 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
             return None
         text = ((r.json().get("choices") or [{}])[0]
                 .get("message", {}).get("content", "") or "").strip()
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
+        text = strip_json_fences(text)
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:

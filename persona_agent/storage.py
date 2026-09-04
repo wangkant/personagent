@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import errno
 import json
+import logging
 import os
 import tempfile
 import time
@@ -16,8 +17,31 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+logger = logging.getLogger("agent.storage")
+
 PRIVATE_FILE_MODE = 0o600
 DEFAULT_LOCK_TIMEOUT_SEC = 30.0
+DEFAULT_WARNING_BYTES = 50_000_000
+
+
+def file_stamp(path: str | Path) -> tuple[int, int]:
+    """(size, mtime_ns) of ``path``; (0, 0) when it cannot be stat'ed."""
+    try:
+        stat = Path(path).stat()
+        return stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return 0, 0
+
+
+def warning_bytes(env_name: str, override: int | None = None,
+                  default: int = DEFAULT_WARNING_BYTES) -> int:
+    """Ledger size at which health reporting warns: ``override``, else ``env_name``."""
+    if override is not None:
+        return max(0, int(override))
+    try:
+        return max(0, int(os.getenv(env_name, str(default))))
+    except ValueError:
+        return default
 
 
 class LockUnavailable(RuntimeError):
@@ -197,6 +221,23 @@ def append_jsonl(path: str | Path, row: dict, *,
     # Serialize before taking the lock so a bad object cannot hold up writers.
     json.dumps(row, ensure_ascii=False)
     with append_lock(path, timeout=lock_timeout):
+        return append_jsonl_unlocked(path, row)
+
+
+def append_jsonl_rotating(path: str | Path, row: dict, *, max_bytes: int,
+                          lock_timeout: float | None = DEFAULT_LOCK_TIMEOUT_SEC) -> int:
+    """Locked append that first moves ``path`` aside to ``<path>.old`` past ``max_bytes``."""
+    path = Path(path)
+    json.dumps(row, ensure_ascii=False)
+    with append_lock(path, timeout=lock_timeout):
+        try:
+            if path.exists() and path.stat().st_size > max_bytes:
+                old = path.with_suffix(path.suffix + ".old")
+                if old.exists():
+                    old.unlink()
+                path.replace(old)
+        except OSError as exc:
+            logger.warning("log rotation failed for %s: %s", path, exc)
         return append_jsonl_unlocked(path, row)
 
 

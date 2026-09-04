@@ -48,6 +48,7 @@ load_dotenv(ROOT / ".env", override=False)
 
 from persona_agent.agent import Agent
 from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.preflight import private_model_from_env
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
 
@@ -80,8 +81,7 @@ async def main(holdout_path: Path, runs: int) -> None:
         model=os.getenv("LLM_MODEL", ""),
         bot_qq=os.getenv("BOT_QQ", ""),
         bot_name=os.getenv("BOT_NAME", ""),
-        private_model=(os.getenv("PRIVATE_MODEL", "")
-                       or os.getenv("ANTHROPIC_PRIVATE_MODEL", "")),  # pre-0.1.2 name
+        private_model=private_model_from_env(),
         vision_model=os.getenv("VISION_MODEL", ""),
         glm_api_key=os.getenv("GLM_API_KEY", ""),
         glm_base_url=os.getenv("GLM_BASE_URL", ""),

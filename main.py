@@ -21,7 +21,7 @@ load_dotenv(override=False)
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from persona_agent import preflight
+from persona_agent import __version__, preflight
 from persona_agent.agent import Agent
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT, runtime_dir
@@ -183,10 +183,7 @@ OWNER_NAME = os.getenv("OWNER_NAME", "")
 OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
 # Alternate model name for private chats, served by the same OpenAI-compatible
 # primary endpoint. Blank = use LLM_MODEL.
-# ANTHROPIC_PRIVATE_MODEL is the pre-0.1.2 name — still honored so an existing
-# .env keeps working. It never meant an Anthropic endpoint.
-PRIVATE_MODEL = (os.getenv("PRIVATE_MODEL", "")
-                 or os.getenv("ANTHROPIC_PRIVATE_MODEL", ""))
+PRIVATE_MODEL = preflight.private_model_from_env()
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 # Defaults below match .env.example so behavior is identical whether or not a
 # .env is present (no silent drift between the template and the code).
@@ -353,7 +350,7 @@ class ReplayGuard:
             key: stamp for key, stamp in self._seen.items()
             if stamp >= cutoff
         }
-        changed = pruned != self._seen
+        changed = len(pruned) != len(self._seen)
         self._seen = pruned
         if abs(now - timestamp) > self.ttl_seconds or nonce in self._seen:
             if changed:
@@ -450,6 +447,21 @@ def _validate_event_payload(payload: dict, *, gateway: bool) -> bool:
     return isinstance(payload.get("message", []), list)
 
 
+def _event_is_fresh(
+    payload: dict,
+    key: str,
+    *,
+    now: int | None,
+    max_age_seconds: int,
+) -> bool:
+    try:
+        event_time = int(payload.get(key))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    current = int(time.time()) if now is None else int(now)
+    return abs(current - event_time) <= max(1, int(max_age_seconds))
+
+
 def _gateway_event_is_fresh(
     payload: dict,
     *,
@@ -457,12 +469,8 @@ def _gateway_event_is_fresh(
     max_age_seconds: int = GATEWAY_SOURCE_MAX_AGE_SECONDS,
 ) -> bool:
     """Validate source-event age independently of forwarding-envelope age."""
-    try:
-        event_time = int(payload.get("source_timestamp"))
-    except (TypeError, ValueError, OverflowError):
-        return False
-    current = int(time.time()) if now is None else int(now)
-    return abs(current - event_time) <= max(1, int(max_age_seconds))
+    return _event_is_fresh(payload, "source_timestamp", now=now,
+                           max_age_seconds=max_age_seconds)
 
 
 def _onebot_event_is_fresh(
@@ -472,12 +480,8 @@ def _onebot_event_is_fresh(
     max_age_seconds: int = 300,
 ) -> bool:
     """Reject stale signed OneBot events before their IDs age out of dedup."""
-    try:
-        event_time = int(payload.get("time"))
-    except (TypeError, ValueError):
-        return False
-    current = int(time.time()) if now is None else int(now)
-    return abs(current - event_time) <= max(1, int(max_age_seconds))
+    return _event_is_fresh(payload, "time", now=now,
+                           max_age_seconds=max_age_seconds)
 
 
 _webhook_admission = AdmissionLimiter(MAX_INFLIGHT_WEBHOOKS)
@@ -634,7 +638,7 @@ async def lifespan(app: FastAPI):
         if runtime_lock is not None:
             runtime_lock.release()
 
-app = FastAPI(title="QQ Persona Agent", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="personagent", version=__version__, lifespan=lifespan)
 
 
 # /health caches its probe results briefly so monitoring polls don't spam the

@@ -98,6 +98,17 @@ def _needs_leading_newline(path: Path) -> bool:
     except OSError:
         return False
 
+def epoch(ts) -> float:
+    """ISO timestamp -> epoch seconds; 0.0 when unparsable. Naive stamps are
+    read as local time, matching every other timestamp in the pipeline."""
+    if not ts:
+        return 0.0
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError, OSError, OverflowError):
+        return 0.0
+
+
 def _retrieval_fields(rec: dict) -> tuple[str, str, float]:
     """Precompute what the few-shot relevance scorer needs, once per record at
     load time instead of once per record on every LLM turn: the lowercased

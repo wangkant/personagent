@@ -16,7 +16,6 @@ on its own is testimony, not instruction."""
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -25,8 +24,8 @@ from pathlib import Path
 
 
 from . import candidates, channels, evidence, evolution, promotion, reactions
-from .pools import _needs_leading_newline
-from .storage import append_jsonl_unlocked, append_lock
+from .textproc import apply_k2_quirks, salvage_json_object
+from .storage import append_jsonl_rotating
 
 logger = logging.getLogger("agent")
 
@@ -38,19 +37,9 @@ class Learning:
 
     # ---------------- Evidence -> candidate -> promotion ----------------
 
-    @staticmethod
-    def _conv_platform(conv_id: str) -> str:
-        """Platform namespace of a conversation id.
-
-        Gateway conversations are namespaced ``<platform>:<id>`` (gateway.py);
-        QQ group ids are bare numbers and QQ DMs are ``dm:<uid>``. Evidence from
-        two platforms is never combined, so this has to be right rather than
-        merely plausible."""
-        # `channels` owns the key vocabulary. `dm:` and `private:` are DM
-        # MARKERS, not platforms, and reading the whole prefix as QQ stamped
-        # every Telegram and Discord DM `platform="qq"` — see the module
-        # docstring for what that let `scope_compatible` combine.
-        return channels.platform_of(conv_id)
+    # `channels` owns the key vocabulary: `dm:`/`private:` are DM markers,
+    # not platforms, and reading them as QQ once merged cross-platform evidence.
+    _conv_platform = staticmethod(channels.platform_of)
 
     def _scope_fields(self, conv_id: str) -> dict:
         """The scope every evidence event carries: which character, which
@@ -90,6 +79,8 @@ class Learning:
         ledger = self.candidate_ledger
         promoted: list[str] = []
         try:
+            events = self.evidence_log.all()
+            peers = ledger.all()
             for cand in ledger.pending():
                 if not promotion.supports_candidate(event, cand,
                                                    policy=self.promotion_policy):
@@ -98,7 +89,7 @@ class Learning:
                 if not ledger.link_evidence(cid, [event["event_id"]], ts=ts,
                                             note="late corroboration"):
                     continue
-                decision = self._decide_promotion(cid)
+                decision = self._decide_promotion(cid, events=events, peers=peers)
                 if decision.promote and ledger.promote(
                         cid, ts=ts, actor="auto", reason=decision.reason,
                         evidence=[event["event_id"]]):
@@ -205,20 +196,27 @@ class Learning:
                            type(e).__name__, e)
             return "error"
 
-    def _decide_promotion(self, cid: str) -> promotion.Decision:
-        """Run the promotion policy against everything currently known."""
+    def _decide_promotion(self, cid: str, *, events: list | None = None,
+                          peers: list | None = None) -> promotion.Decision:
+        """Run the promotion policy against everything currently known.
+        ``events`` / ``peers`` let a scan over many candidates read each
+        ledger once."""
         ledger = self.candidate_ledger
         cand = ledger.get(cid)
         if cand is None:
             return promotion.Decision(False, "unknown candidate")
         log = self.evidence_log
+        if events is None:
+            events = log.all()
+        if peers is None:
+            peers = ledger.all()
         return promotion.decide(
             cand,
             linked_events=log.many(cand.get("evidence") or []),
             # Built by `promotion`, not here: the operator CLI needs the same
             # list and a second copy of the filter is what let the two drift.
-            related_events=promotion.related_events(cand, log.all()),
-            peers=ledger.all(),
+            related_events=promotion.related_events(cand, events),
+            peers=peers,
             now=time.time(),
             policy=self.promotion_policy,
             owner_id=str(getattr(self, "owner_qq", "") or ""),
@@ -393,12 +391,7 @@ class Learning:
                 "max_tokens": 1500,
                 "response_format": {"type": "json_object"},
             }
-            # K2-family reasoning models burn the budget on reasoning_content;
-            # short-JSON evals need thinking disabled (same as vision path).
-            # K2.6 also only accepts temperature=0.6.
-            if "k2" in em:
-                eval_payload["thinking"] = {"type": "disabled"}
-                eval_payload["temperature"] = 0.6
+            apply_k2_quirks(eval_payload, em)
             async with self._http(timeout=15) as client:
                 r = await client.post(
                     eval_url,
@@ -412,17 +405,7 @@ class Learning:
                 _msg = r.json()["choices"][0]["message"]
                 raw = (_msg.get("content") or _msg.get("reasoning_content") or "")
 
-            # Robust parse: model may wrap JSON in ```json fences or prose.
-            data = None
-            try:
-                data = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                m = re.search(r"\{.*\}", raw, re.S)
-                if m:
-                    try:
-                        data = json.loads(m.group(0))
-                    except json.JSONDecodeError:
-                        data = None
+            data = salvage_json_object(raw)
             if not isinstance(data, dict):
                 # Last-ditch salvage: pull the score straight out of truncated or
                 # prose-wrapped output (K2.6 emits CoT prose then a possibly
@@ -469,10 +452,7 @@ class Learning:
                 record["sticker_files"] = sticker_files
                 for fn in sticker_files:
                     self.stickers.record_quality(fn, sticker_score)
-            self._append_with_rotation(
-                self.eval_file,
-                json.dumps(record, ensure_ascii=False) + "\n",
-            )
+            self._append_with_rotation(self.eval_file, record)
 
             if score <= 2:
                 logger.warning("[Agent] LOW-SCORE reply (%d/5) mode=%s: %s | reason=%s",
@@ -560,44 +540,12 @@ class Learning:
                            type(e).__name__, e)
 
     @staticmethod
-    def _append_with_rotation(path: Path, line: str, max_bytes: int = 5_000_000) -> None:
-        """Append one JSONL row, rotating to path.old past max_bytes.
-
-        Rotation and write happen under the same lock every other writer of
-        this file takes, and the row goes through storage.append_jsonl_unlocked
-        so it is fsynced and a missing trailing newline is repaired. This was a
-        bare open("a") with an unlocked rename: eval.jsonl lost its tail on
-        power loss, and a rotation racing an append could drop the row into the
-        file that had just been moved aside."""
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def _append_with_rotation(path: Path, row: dict,
+                              max_bytes: int = 5_000_000) -> None:
+        """Locked, rotating append; a failed write is logged, never raised."""
         try:
-            row = json.loads(line)
-        except (json.JSONDecodeError, TypeError):
-            row = None
-        try:
-            with append_lock(path):
-                try:
-                    sz = path.stat().st_size if path.exists() else 0
-                except OSError:
-                    sz = 0
-                if sz > max_bytes:
-                    old = path.with_suffix(path.suffix + ".old")
-                    try:
-                        if old.exists():
-                            old.unlink()
-                        path.rename(old)
-                    except OSError as e:
-                        logger.warning("[Agent] log rotation failed for %s: %s",
-                                       path, e)
-                if isinstance(row, dict):
-                    append_jsonl_unlocked(path, row)
-                else:
-                    # Not a JSON object; callers always pass one, but keep the
-                    # old behaviour rather than silently dropping the line.
-                    with path.open("a", encoding="utf-8") as f:
-                        if _needs_leading_newline(path):
-                            f.write("\n")
-                        f.write(line)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            append_jsonl_rotating(path, row, max_bytes=max_bytes)
         except OSError as e:
             logger.warning("[Agent] log write failed for %s: %s", path, e)
 
@@ -630,7 +578,7 @@ class Learning:
                     "reactor": reactor_name, "is_owner": False,
                     "reaction_text": (reaction_text or "")[:120],
                     "applied": "blocked", "reason": "hard-blocked teacher",
-                }], max_bytes=20_000_000)
+                }], max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES)
                 return
             history_line = ("" if is_owner else
                             self.teacher_stats.history_line(reactor_uid,
@@ -800,7 +748,7 @@ class Learning:
             if entry.get("fixes"):
                 audit["via"] = "retry-completion-candidate"
             evolution.append_jsonl(self.candidates_file, [audit],
-                                   max_bytes=20_000_000)
+                                   max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES)
         except Exception as e:
             logger.warning("[Agent] reaction processing failed: %s: %s",
                            type(e).__name__, e)

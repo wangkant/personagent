@@ -215,7 +215,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
 
     # 1. Provider
     print("  Which chat API will the bot use?")
-    for i, (name, base, model) in enumerate(PROVIDERS, 1):
+    for i, (name, base, _model) in enumerate(PROVIDERS, 1):
         hint = f" ({base})" if base else ""
         print(f"    {i}. {name}{hint}")
     while True:

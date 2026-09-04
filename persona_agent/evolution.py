@@ -24,9 +24,11 @@ transport (retry / fallback / throttling included).
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterable
 from pathlib import Path
+
+from .paths import read_jsonl
+from .textproc import strip_json_fences
 
 from .storage import append_jsonl_unlocked, append_lock, atomic_write_text
 
@@ -78,8 +80,7 @@ def build_review_prompt(ev: dict, lang: str) -> str:
 
 def parse_review(raw: str) -> dict | None:
     """Parse the reviewer model's one-line JSON diagnosis. None on garbage."""
-    raw = (raw or "").strip()
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+    raw = strip_json_fences(raw)
     try:
         diag = json.loads(raw)
     except json.JSONDecodeError:
@@ -101,27 +102,10 @@ def parse_review(raw: str) -> dict | None:
     return diag
 
 
-def _read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out: list[dict] = []
-    for ln in path.read_text(encoding="utf-8").splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            r = json.loads(ln)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(r, dict):
-            out.append(r)
-    return out
-
-
 def load_evals(path: Path, threshold: int) -> list[dict]:
     """Eval entries with score <= threshold, in file order."""
     out: list[dict] = []
-    for r in _read_jsonl(path):
+    for r in read_jsonl((path,)):
         try:
             score = int(r.get("score", 5))
         except (TypeError, ValueError):
@@ -133,12 +117,12 @@ def load_evals(path: Path, threshold: int) -> list[dict]:
 
 def load_reviewed_ts(path: Path) -> set[str]:
     """src_eval_ts of every candidate ever written — the review dedup set."""
-    return {r["src_eval_ts"] for r in _read_jsonl(path) if r.get("src_eval_ts")}
+    return {r["src_eval_ts"] for r in read_jsonl((path,)) if r.get("src_eval_ts")}
 
 
 def load_pending_candidates(path: Path) -> list[dict]:
     """Candidates not yet approved/rejected (no 'applied' verdict)."""
-    return [r for r in _read_jsonl(path) if not r.get("applied")]
+    return [r for r in read_jsonl((path,)) if not r.get("applied")]
 
 
 def candidate_record(ev: dict, diag: dict, applied: str = "") -> dict:
@@ -198,7 +182,7 @@ def load_feedback_keys(paths: Path | Iterable[Path]) -> set[tuple[str, str]]:
     return {
         (str(r.get("reply") or "").strip(), str(r.get("better") or "").strip())
         for path in paths
-        for r in _read_jsonl(path)
+        for r in read_jsonl((path,))
     }
 
 
@@ -277,7 +261,7 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
     # read-modify-write of the whole file, so any row appended between the
     # read and the atomic replace would be discarded with no trace.
     with append_lock(path):
-        records = _read_jsonl(path)
+        records = read_jsonl((path,))
         auto_at = [i for i, r in enumerate(records) if is_auto(r)]
         if len(auto_at) <= max_auto + max(0, slack):
             return None
@@ -299,7 +283,7 @@ def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:
     # appending to it: without the lock, every row written between the read
     # and the replace is silently dropped.
     with append_lock(path):
-        records = _read_jsonl(path)
+        records = read_jsonl((path,))
         for r in records:
             ts = r.get("src_eval_ts")
             if ts in verdicts and not r.get("applied"):

@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.preflight import private_model_from_env  # noqa: E402
 
 GROUP_ID = "trial"
 
@@ -37,8 +38,7 @@ def _build_agent(lang: str) -> Agent:
         model=os.getenv("LLM_MODEL", "deepseek-chat"),
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
-        private_model=(os.getenv("PRIVATE_MODEL", "")
-                       or os.getenv("ANTHROPIC_PRIVATE_MODEL", "")),  # pre-0.1.2 name
+        private_model=private_model_from_env(),
         owner_qq=os.getenv("OWNER_QQ", "") or "1969",
         owner_name=os.getenv("OWNER_NAME", "") or "owner",
         owner_relationship=os.getenv("OWNER_RELATIONSHIP", ""),
@@ -59,7 +59,8 @@ async def _turn(agent: Agent, name: str, uid: str, text: str, mode: str) -> None
     reply, intent, mem = await agent._think(
         GROUP_ID, mode=mode, latest_text=text, caller_override=(name, uid),
     )
-    safe = agent._sanitize_reply(reply, agent.agent_lang) if reply else ""
+    safe = (agent._sanitize_reply(reply, agent.agent_lang, agent.reply_style)
+            if reply else "")
     if not safe or safe.strip().upper() == "PASS":
         print(f"  {agent.bot_name} > (stays quiet)")
         if reply and not safe:

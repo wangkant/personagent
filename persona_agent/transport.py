@@ -11,6 +11,7 @@ import logging
 import random
 import re
 import time
+from functools import partial
 
 import httpx
 
@@ -76,17 +77,9 @@ class Transport:
         next-oldest one."""
         self._gateway_conv_lru[key] = time.monotonic()
         count = len(self._gateway_conv_lru)
-        # A one-bit "already warned" flag, NOT a `count == threshold`
-        # transition check: `dict[key] = value` on an EXISTING key (the
-        # common case -- most touches are a conversation that was already
-        # in the LRU, and this method runs on every touch, several times
-        # per gateway message) does not change len(). Once a deployment's
-        # live conversation count settles AT or ABOVE the threshold,
-        # `count == _GATEWAY_CONV_WARN_THRESHOLD` would be true again on
-        # every subsequent re-touch of an existing key -- not just once --
-        # spamming a warning per message in exactly the steady state it
-        # exists to flag. `getattr(..., False)` avoids needing an __init__
-        # addition in agent.py for a flag only this one warning needs.
+        # One-shot flag, not `count == threshold`: re-touching an existing key
+        # leaves len() unchanged, so the equality would fire on every message
+        # once the count settles at the threshold.
         if (count >= _GATEWAY_CONV_WARN_THRESHOLD
                 and not getattr(self, "_gateway_conv_warned", False)):
             self._gateway_conv_warned = True
@@ -186,26 +179,27 @@ class Transport:
             self._last_send_mono = now
             return True
 
-    async def _napcat_send_group(self, group_id: str, message) -> bool:
-        """Send to NapCat with a small bounded retry on connect/timeout errors.
-
-        message: str or list of segments. Returns True on success so callers
-        (e.g. _send_qq) can stop emitting later chunks on a hard failure and
-        avoid truncated / out-of-order replies."""
+    async def _napcat_send(self, endpoint: str, id_field: str, target_id: str,
+                           message, *, throttle_key: str, mids_key: str,
+                           label: str) -> bool:
+        """POST one message to NapCat with a small bounded retry on
+        connect/timeout errors. message: str or list of segments. Returns True
+        on success so callers can stop emitting later chunks on a hard failure
+        (truncated / out-of-order replies, silently dropped DMs)."""
         sink = current_sink.get()
         if sink is not None:
             # Gateway capture: hand the reply back over HTTP instead of
             # posting to NapCat (gateway ids aren't ints anyway).
             return sink.add(message)
-        if not await self._throttle_send(f"group:{group_id}"):
+        if not await self._throttle_send(throttle_key):
             return False
         attempts = 3  # 1 initial + 2 retries
         for attempt in range(attempts):
             try:
                 async with self._local_http(timeout=10) as client:
                     r = await client.post(
-                        f"{self.napcat_api}/send_group_msg",
-                        json={"group_id": int(group_id), "message": message},
+                        f"{self.napcat_api}/{endpoint}",
+                        json={id_field: int(target_id), "message": message},
                     )
                 if r.status_code == 200:
                     # Remember the outbound message_id: reaction learning needs
@@ -213,73 +207,67 @@ class Transport:
                     try:
                         _mid = ((r.json() or {}).get("data") or {}).get("message_id")
                         if _mid is not None:
-                            self._sent_mids.setdefault(group_id, []).append(str(_mid))
+                            self._sent_mids.setdefault(mids_key, []).append(str(_mid))
                     except Exception:
                         pass
                     return True
                 # Non-200 is a server-side reject, not a transient network
                 # error — retrying rarely helps, so log and stop.
-                logger.warning("[Agent] NapCat returned %d: %s",
-                               r.status_code, r.text[:200])
+                logger.warning("[Agent] NapCat %s returned %d: %s",
+                               label, r.status_code, r.text[:200])
                 return False
             except (httpx.ConnectError, httpx.ConnectTimeout,
                     httpx.PoolTimeout) as e:
                 if attempt == attempts - 1:
-                    logger.warning("[Agent] send group msg failed after %d attempts: %s",
-                                   attempts, e)
+                    logger.warning("[Agent] send %s msg failed after %d attempts: %s",
+                                   label, attempts, e)
                     return False
                 await asyncio.sleep(0.5 * (attempt + 1))
             except (httpx.ReadTimeout, httpx.WriteTimeout) as e:
                 # The peer may have accepted the request before its response
                 # was lost. Retrying an ambiguous timeout duplicates a chat
                 # message, so fail this logical chunk instead of replaying it.
-                logger.warning("[Agent] send group msg outcome unknown; not retrying: %s", e)
+                logger.warning("[Agent] send %s msg outcome unknown; not retrying: %s",
+                               label, e)
                 return False
             except Exception as e:
-                logger.warning("[Agent] send group msg failed: %s", e)
+                logger.warning("[Agent] send %s msg failed: %s", label, e)
                 return False
         return False
 
-    async def _send_qq(self, group_id: str, text: str,
-                       at_user_id: str = "") -> SendResult:
-        """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
-        group. Returns full/partial delivery state, NapCat message IDs, and
-        sticker filenames used by reaction learning and quality evaluation."""
-        # Fresh mid list for this call; _napcat_send_group appends each sent
-        # chunk's message_id (same-group sends are serialized by send_locks).
-        target_key = group_id
-        self._sent_mids[target_key] = []
-        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
-        # The other half of the fix documented in _send_private_qq_unlocked:
-        # behind a sink these sleeps are not the pause anybody sees. The sink
-        # collects every chunk and hands the finished list back, so the waiting
-        # happens BEFORE the caller has anything to show, and the caller then
-        # emits the whole burst at once having already paced it itself. On the
-        # group path that cost is paid inside a held HTTP request — and this is
-        # the path that carries the volume once a forwarder brings QQ groups in.
+    async def _napcat_send_group(self, group_id: str, message) -> bool:
+        return await self._napcat_send(
+            "send_group_msg", "group_id", group_id, message,
+            throttle_key=f"group:{group_id}", mids_key=group_id, label="group")
+
+    async def _napcat_send_private(self, user_id: str, message) -> bool:
+        key = channels.dm_routing_key(user_id)
+        return await self._napcat_send(
+            "send_private_msg", "user_id", user_id, message,
+            throttle_key=key, mids_key=key, label="private")
+
+    async def _deliver_segments(self, segments, send, *, target_key: str,
+                                at_user_id: str = "", label: str = "") -> SendResult:
+        """Send parsed (kind, value) segments one chunk at a time through
+        ``send(message) -> bool``, stopping at the first failure so a reply is
+        never split across a network gap. ``at_user_id`` is prefixed to the
+        first chunk that actually goes out."""
+        # Behind a sink these sleeps are invisible: the sink hands the whole
+        # list back and the caller paces it itself. Only the split survives.
         collected = current_sink.get() is not None
-        sent_stickers: list[str] = []
-        if not text:
-            return SendResult()
+        at_head = ([{"type": "at", "data": {"qq": str(at_user_id)}}]
+                   if at_user_id else [])
         sendable = False
         sent_any = False
         delivered: list[str] = []
         failed = False
-        # On the QQ path an at target must be a bare QQ number — a hallucinated
-        # non-numeric [AT:] marker would produce a broken NapCat at segment, so
-        # drop the mention (the marker text was already stripped upstream).
-        # Gateway sends keep prefixed ids like "telegram:12345" as-is.
-        if at_user_id and not at_user_id.isdigit() and current_sink.get() is None:
-            logger.warning("[Agent] dropping non-numeric at target %r (group=%s)",
-                           at_user_id, group_id)
-            at_user_id = ""
-        segments = self._parse_sticker_markers(text)
-        is_first = True
+        sent_stickers: list[str] = []
         for kind, value in segments:
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value)
                 if not file_path or not file_path.exists():
-                    logger.info("[Agent] sticker tag %r → no match, skipping", value)
+                    logger.info("[Agent] sticker tag %r → no match, skipping%s",
+                                value, label)
                     continue
                 if not collected:
                     await asyncio.sleep(random.uniform(0.6, 1.4))
@@ -290,47 +278,36 @@ class Transport:
                     failed = True
                     continue
                 sendable = True
-                msg_segs: list = []
-                if is_first and at_user_id:
-                    msg_segs.append({"type": "at", "data": {"qq": str(at_user_id)}})
-                msg_segs.append({"type": "image", "data": {"file": f"base64://{img_b64}"}})
-                ok = await self._napcat_send_group(group_id, msg_segs)
-                is_first = False
-                if not ok:
+                message = at_head + [
+                    {"type": "image", "data": {"file": f"base64://{img_b64}"}}]
+                at_head = []
+                if not await send(message):
                     failed = True
                     logger.warning("[Agent] send aborted (sticker chunk failed), "
-                                   "dropping remaining segments (group=%s)", group_id)
+                                   "dropping remaining segments (%s)", target_key)
                     break
                 sent_any = True
                 try:
-                    rel = str(file_path.relative_to(self.stickers.dir)).replace("\\", "/")
-                    sent_stickers.append(rel)
+                    sent_stickers.append(
+                        str(file_path.relative_to(self.stickers.dir)).replace("\\", "/"))
                 except ValueError:
                     pass
                 continue
-            chunks = self._split_text(value)
-            for chunk in chunks:
+            for chunk in self._split_text(value):
                 sendable = True
-                # Delay before every chunk including the first — feels like typing
-                # rather than instant emit. Already had debounce + _think latency
-                # upstream, so an extra ~1-3s on first chunk reads natural.
+                # Delay before every chunk including the first — reads as
+                # typing rather than an instant emit.
                 if not collected:
                     await asyncio.sleep(self._typing_delay(chunk))
-                if is_first and at_user_id:
-                    message = [
-                        {"type": "at", "data": {"qq": str(at_user_id)}},
-                        {"type": "text", "data": {"text": chunk}},
-                    ]
+                if at_head:
+                    message = at_head + [{"type": "text", "data": {"text": chunk}}]
+                    at_head = []
                 else:
                     message = chunk
-                ok = await self._napcat_send_group(group_id, message)
-                is_first = False
-                if not ok:
+                if not await send(message):
                     failed = True
-                    # Stop on a hard failure so we don't emit a reply split
-                    # across a network gap (truncated / out-of-order chunks).
                     logger.warning("[Agent] send aborted (text chunk failed), "
-                                   "dropping remaining chunks (group=%s)", group_id)
+                                   "dropping remaining chunks (%s)", target_key)
                     break
                 sent_any = True
                 delivered.append(chunk)
@@ -344,58 +321,30 @@ class Transport:
             sticker_files=sent_stickers,
         )
 
-    async def _napcat_send_private(self, user_id: str, message) -> bool:
-        """Private send with a small bounded retry on connect/timeout errors
-        (mirrors _napcat_send_group). message: str or list of segments. Returns
-        True on success so callers can stop emitting later chunks on a hard
-        failure instead of silently dropping owner/whitelist DMs on a transient
-        NapCat blip."""
-        sink = current_sink.get()
-        if sink is not None:
-            # Gateway capture: hand the reply back over HTTP instead of
-            # posting to NapCat (gateway ids aren't ints anyway).
-            return sink.add(message)
-        if not await self._throttle_send(channels.dm_routing_key(user_id)):
-            return False
-        attempts = 3  # 1 initial + 2 retries
-        for attempt in range(attempts):
-            try:
-                async with self._local_http(timeout=10) as client:
-                    r = await client.post(
-                        f"{self.napcat_api}/send_private_msg",
-                        json={"user_id": int(user_id), "message": message},
-                    )
-                if r.status_code == 200:
-                    # Remember the outbound message_id: reaction learning needs
-                    # it to attribute later quote-replies to this bot message.
-                    try:
-                        _mid = ((r.json() or {}).get("data") or {}).get("message_id")
-                        if _mid is not None:
-                            self._sent_mids.setdefault(
-                                channels.dm_routing_key(user_id),
-                                []).append(str(_mid))
-                    except Exception:
-                        pass
-                    return True
-                # Non-200 is a server-side reject, not a transient network
-                # error — retrying rarely helps, so log and stop.
-                logger.warning("[Agent] NapCat private %d: %s", r.status_code, r.text[:200])
-                return False
-            except (httpx.ConnectError, httpx.ConnectTimeout,
-                    httpx.PoolTimeout) as e:
-                if attempt == attempts - 1:
-                    logger.warning("[Agent] send private msg failed after %d attempts: %s",
-                                   attempts, e)
-                    return False
-                await asyncio.sleep(0.5 * (attempt + 1))
-            except (httpx.ReadTimeout, httpx.WriteTimeout) as e:
-                logger.warning(
-                    "[Agent] send private msg outcome unknown; not retrying: %s", e)
-                return False
-            except Exception as e:
-                logger.warning("[Agent] send private msg failed: %s", e)
-                return False
-        return False
+    async def _send_qq(self, group_id: str, text: str,
+                       at_user_id: str = "") -> SendResult:
+        """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
+        group. Returns full/partial delivery state, NapCat message IDs, and
+        sticker filenames used by reaction learning and quality evaluation."""
+        # Fresh mid list for this call; _napcat_send_group appends each sent
+        # chunk's message_id (same-group sends are serialized by send_locks).
+        target_key = group_id
+        self._sent_mids[target_key] = []
+        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
+        if not text:
+            return SendResult()
+        # On the QQ path an at target must be a bare QQ number — a hallucinated
+        # non-numeric [AT:] marker would produce a broken NapCat at segment, so
+        # drop the mention (the marker text was already stripped upstream).
+        # Gateway sends keep prefixed ids like "telegram:12345" as-is.
+        if at_user_id and not at_user_id.isdigit() and current_sink.get() is None:
+            logger.warning("[Agent] dropping non-numeric at target %r (group=%s)",
+                           at_user_id, group_id)
+            at_user_id = ""
+        return await self._deliver_segments(
+            self._parse_sticker_markers(text),
+            partial(self._napcat_send_group, group_id),
+            target_key=target_key, at_user_id=at_user_id)
 
     async def _send_private_qq(self, user_id: str, text: str) -> SendResult:
         """Serialize standalone private sends.
@@ -422,74 +371,10 @@ class Transport:
         text = re.sub(r'\[AT:[^\]\s]+\]', '', text).strip()
         if not text:
             return SendResult()
-        segments = self._parse_sticker_markers(text)
-        # Typing rhythm belongs to whoever the user is actually watching.
-        #
-        # On QQ, sleeping here IS the pause the user sees: this coroutine and
-        # the chat window are the same timeline. Behind a `GatewaySink` they
-        # are not. The sink collects every chunk and hands the finished list
-        # back to `handle_gateway`'s caller, which does its own pacing —
-        # so these sleeps happen BEFORE the caller has been given anything
-        # to show. Measured 2026-08-06 behind a sink: 7.0s of the 12.3s turn
-        # was spent here, invisible, and the caller then emitted typing,
-        # chunk and done 0.00s apart because the waiting was already over.
-        #
-        # The sink extraction rerouted the DATA through it and left the
-        # TIMING behind. This is that half.
-        collected = current_sink.get() is not None
-        sendable = False
-        sent_any = False
-        delivered: list[str] = []
-        failed = False
-        sent_stickers: list[str] = []
-        for kind, value in segments:
-            if kind == "sticker":
-                file_path = self.stickers.pick_by_tag(value)
-                if not file_path or not file_path.exists():
-                    logger.info("[Agent] sticker tag %r → no match, skipping (private)", value)
-                    continue
-                if not collected:
-                    await asyncio.sleep(random.uniform(0.6, 1.4))
-                try:
-                    img_b64 = base64.b64encode(file_path.read_bytes()).decode()
-                except Exception as e:
-                    logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
-                    failed = True
-                    continue
-                sendable = True
-                msg = [{"type": "image", "data": {"file": f"base64://{img_b64}"}}]
-                if not await self._napcat_send_private(user_id, msg):
-                    failed = True
-                    break
-                sent_any = True
-                try:
-                    sent_stickers.append(
-                        str(file_path.relative_to(self.stickers.dir)).replace("\\", "/"))
-                except ValueError:
-                    pass
-                continue
-            # text chunk — split for typing simulation. The SPLIT still
-            # happens behind a sink (multi-bubble texture costs no time and
-            # the web layer wants the same units); only the WAIT is skipped.
-            chunks = self._split_text(value)
-            for chunk in chunks:
-                sendable = True
-                if not collected:
-                    await asyncio.sleep(self._typing_delay(chunk))
-                if not await self._napcat_send_private(user_id, chunk):
-                    failed = True
-                    break
-                sent_any = True
-                delivered.append(chunk)
-            if failed:
-                break
-        return SendResult(
-            success=sendable and not failed,
-            partial=sent_any and failed,
-            delivered=chr(10).join(delivered),
-            message_ids=list(self._sent_mids.get(target_key, [])),
-            sticker_files=sent_stickers,
-        )
+        return await self._deliver_segments(
+            self._parse_sticker_markers(text),
+            partial(self._napcat_send_private, user_id),
+            target_key=target_key, label=" (private)")
 
     async def check_missed_mentions(self) -> None:
         """On startup, pull the most recent ~10 group messages; if any of them

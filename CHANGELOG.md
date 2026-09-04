@@ -6,8 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-A debugging pass over the whole package. Every item below was reproduced
-before it was changed and is covered by a test that fails without the fix.
+A debugging pass over the whole package, followed by a simplification pass.
+Every fix below was reproduced before it was changed and is covered by a test
+that fails without it.
 
 ### Added
 
@@ -100,6 +101,25 @@ before it was changed and is covered by a test that fails without the fix.
   inherited OWNER rights over everyone else's entries.
 
 ### Fixed
+
+- **The terminal trial validates with the persona's own style.** `try_chat.py`
+  called `_sanitize_reply(reply, lang)` without the `ReplyStyle` every
+  production site passes, so a persona that opts into emoji, extra charsets or
+  a wider `max_chars` saw replies truncated or dropped in the trial that the
+  live bot would send unchanged — the opposite of what the tool is for.
+- **`PERSONA_FILE` and `PERSONA_CARD_FILE` resolve under `AGENT_HOME`**, as
+  `.env.example` has always said. They were resolved from the working
+  directory, so a deployment launched from anywhere but the checkout silently
+  fell back to the bundled example persona.
+- **`tools/healthcheck.py` no longer calls its probes "read-only".** They POST
+  a completion to every configured model and spend credit, which `README.md`
+  said and the tool's own `--help` denied. The config and ledger sections are
+  free; the service probes are not.
+- **`/openapi.json` reports the package version** instead of a hard-coded
+  `0.1.0`, and the app title is `personagent`.
+- **A OneBot event with an out-of-range `time` is rejected, not a 500.** The
+  freshness check caught `OverflowError` on the gateway path and not on the
+  QQ path; both now share one implementation.
 
 - **A truncated reply keeps its voice.** `_sanitize_reply` re-validates what
   it truncates, so a cut landing inside a `[STICKER:…]` marker or inside a ZWJ
@@ -196,6 +216,51 @@ before it was changed and is covered by a test that fails without the fix.
   has to be updated. Preflight makes that loud rather than mysterious — the
   missing `LLM_API_KEY` is reported as a required setting, and each leftover
   `DEEPSEEK_*` key as one `.env.example` does not list.
+- **Simplification pass, no behaviour change: −1,340 lines across the
+  package** (agent.py 3,896 → 3,363; prompts.py 1,296 → 874; transport.py
+  554 → 439). The reply post-processing pipeline that was copy-pasted at four
+  sites is one `_finalize_reply`; the group and private NapCat senders and
+  their segment loops are one `_napcat_send` / `_deliver_segments`; the
+  lazy-sidecar properties, JSON save/load, stale-file reload, pool-delta
+  bookkeeping and search formatters each have one implementation. Shared
+  helpers replaced copies: `textproc.strip_json_fences`, `salvage_json_object`
+  and `apply_k2_quirks` (five, two and six sites), `storage.file_stamp` /
+  `warning_bytes` / `append_jsonl_rotating`, `health.eval_endpoint`,
+  `preflight.private_model_from_env`, `pools.epoch`. `_call_llm` takes the
+  system prompt as a string: the `cache_control` block lists were flattened to
+  one string on arrival and no test or tool read the list form.
+- **Dead code removed**: `promotion._rewrite_is_unwitnessed` (superseded by
+  `witnessed_rewrites`), `EvidenceLog.get` / `.has`, `CandidatePool.sightings`,
+  the `_classify_api_error` branch whose both arms returned `"transient"`, an
+  unreachable `StopIteration` handler, and the language / persona-region /
+  trusted-directives blocks in `prompts.py` that nothing in this repository
+  or its siblings imports.
+- **Comments were cut to the "why".** The incident narratives above the
+  `[style]` parser, the fullwidth-twin and arrow-frame tables, the sanitizer
+  tiers and a dozen methods in `agent.py` are one to three lines each now;
+  `_call_llm`'s docstring is in English.
+- **Per-reply rebuilds hoisted**: the sticker/AT marker regexes and both
+  `str.maketrans` strip tables are module constants; `TZ_OFFSET_HOURS` is
+  parsed by one helper; `_handle_memory_command` compiles its three
+  bot-name patterns once per name instead of once per @-message.
+- **The corroboration scan reads each ledger once**, not once per pending
+  candidate (`_decide_promotion` accepts pre-fetched `events` / `peers`).
+- **The ingestion-only constants (URL patterns, OG regexes, vision prompts)
+  live on `ContentIngestion`**, the mixin that reads them, instead of on
+  `Agent`.
+- **Docs**: README (both languages) now documents the config preflight,
+  `AGENT_HOME`, `GATEWAY_NATIVE_PLATFORMS`, the `proactive: true` gateway
+  turn, the `owned` / `handled` response fields, the `/health/details` token
+  rule (token configured ⇒ header only, loopback alone refused),
+  `EVOLVE_AUTO`'s dependency on `EVAL_ENABLE`, what `python -m pytest -q`
+  actually runs, the ruff gate CI runs, the launchers and `stickers/` in the
+  repository map, and a "when the bot goes quiet" pointer into
+  `docs/deploy.md`. The Chinese README had fallen behind on the
+  `GATEWAY_TOKEN` startup refusal and the healthcheck cost. `CONTRIBUTING.md`'s
+  module map lists all nineteen modules and its install line pulls the
+  runtime deps. `.env.example` lost a duplicated persona block and a
+  reference to a `0.1.2` release that never existed. The launchers no longer
+  call the project `persona-llm-agent`.
 
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
   suppressed only the write, so reaching for it to find out what the tool

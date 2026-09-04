@@ -2715,8 +2715,7 @@ async def regression_declared_style_reaches_the_private_prompt(tmp: Path) -> Non
     agent._call_llm = fake_call
     await agent._chat_private([{"role": "user", "content": "hey"}],
                               is_owner=True, pkey="private:42")
-    blocks = captured.get("system") or []
-    text = "".join(b.get("text", "") for b in blocks)
+    text = captured.get("system") or ""
     check("style: the prompt states the DECLARED length band",
           "four to six lines" in text, text[:160])
     check("style: the prompt states the DECLARED vent move",

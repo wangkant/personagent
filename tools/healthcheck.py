@@ -3,8 +3,9 @@
 
 Run:  python tools/healthcheck.py
 Prints an OK/FAIL table and exits non-zero if any *critical* service is down.
-Shares its probes with the /health endpoint (see health.py). Probes are tiny
-and read-only — safe to run while the agent is live.
+Shares its probes with /health/details (see health.py). The config and ledger
+sections are free; each service probe sends one tiny request to the provider
+and spends a small amount of credit. Safe to run while the agent is live.
 """
 import os
 import sys
@@ -26,10 +27,11 @@ from persona_agent.preflight import check_config
 USAGE = """\
 usage: python tools/healthcheck.py
 
-Probes every external service the agent depends on and prints an OK/FAIL
-table. Exits non-zero if a service marked critical is down. The probes are
-tiny, read-only and unauthenticated, and are safe to run while the agent is
-live — but they DO reach the network, so this is not a no-op.
+Checks the configuration and ledgers (free, local), then probes every external
+service the agent depends on and prints an OK/FAIL table. Exits non-zero if a
+service marked critical is down. Each service probe sends one tiny request
+with your credentials and spends a small amount of credit — safe to run while
+the agent is live, but not a no-op.
 """
 
 

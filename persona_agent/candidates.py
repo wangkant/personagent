@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from .storage import (
@@ -37,7 +36,9 @@ from .storage import (
     append_lock,
     append_only_health,
     atomic_write_text,
+    file_stamp,
     read_validated_jsonl,
+    warning_bytes as _warning_bytes,
 )
 
 SCHEMA = 2
@@ -61,7 +62,7 @@ ROW_EVIDENCE = "evidence_link"
 ROW_SUPERSESSION = "supersession"
 
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
-_DEFAULT_WARNING_BYTES = 50_000_000
+_WARN_BYTES_ENV = "AGENT_CANDIDATE_LEDGER_WARN_BYTES"
 
 # Which states a transition may be written from. The ledger replays whatever it
 # contains — this is a write-time guard, so a mistaken admin command is refused
@@ -193,26 +194,6 @@ def _validate_row(row: dict) -> str | None:
     return "unknown ledger row kind"
 
 
-def _file_stamp(path: Path) -> tuple[int, int]:
-    try:
-        stat = path.stat()
-        return stat.st_size, stat.st_mtime_ns
-    except OSError:
-        return 0, 0
-
-
-def _warning_bytes(override: int | None = None) -> int:
-    if override is not None:
-        return max(0, int(override))
-    try:
-        return max(0, int(os.getenv(
-            "AGENT_CANDIDATE_LEDGER_WARN_BYTES",
-            str(_DEFAULT_WARNING_BYTES),
-        )))
-    except ValueError:
-        return _DEFAULT_WARNING_BYTES
-
-
 class CandidateLedger:
     """Append-only candidate + lifecycle log, projected into current state."""
 
@@ -226,7 +207,7 @@ class CandidateLedger:
     def _rows(self) -> list[dict]:
         result = read_validated_jsonl(self.path, _validate_row)
         self._quarantined = result.quarantined
-        self._stamp = _file_stamp(self.path)
+        self._stamp = file_stamp(self.path)
         return result.rows
 
     def _project(self) -> dict[str, dict]:
@@ -236,7 +217,7 @@ class CandidateLedger:
         projection, which is what makes "restart and replay produce identical
         state" a property of the design rather than a hope.
         """
-        if self._by_id is not None and self._stamp == _file_stamp(self.path):
+        if self._by_id is not None and self._stamp == file_stamp(self.path):
             return self._by_id
         out: dict[str, dict] = {}
         for row in self._rows():
@@ -353,46 +334,22 @@ class CandidateLedger:
         if reason:
             raise ValueError(f"invalid candidate ledger row: {reason}")
         with append_lock(self.path):
-            # THE STAMP IS READ INSIDE THE WRITE'S OWN LOCK. That is the whole
-            # reason this no longer goes through `append_jsonl`, which takes
-            # the lock internally and gives the caller nowhere to stand.
-            #
-            # Every write moved the file stamp, so the next read replayed and
-            # re-validated the entire ledger for it: 461 ms at 20 000 rows,
-            # and the largest remaining item on the reaction path once the
-            # evidence log stopped doing the same thing. A reaction pays it
-            # once or twice.
-            #
-            # THE CALLER HAS ALREADY APPLIED THE ROW. `propose`, `transition`
-            # and `supersede` each mutate `self._by_id` themselves; all that
-            # was missing is the stamp catching up, so the next read stops
-            # believing the file moved out from under it. The first draft of
-            # this also called `_apply_row` here, and the row landed TWICE —
-            # a duplicate `history` entry, invisible to every functional test
-            # because it does not change any state the policy reads. Caught
-            # only by diffing an incremental projection against a cold replay,
-            # which `test_ledger.py` now does.
-            #
-            # WHAT MAKES IT SAFE is that `current` is decided under the lock
-            # that also guards the append. If a second writer got in since our
-            # projection was built, `current` is False, the stamp is left
-            # stale, and the next `_project` replays and picks up both rows.
-            # Reading the stamp outside the lock would leave a window where
-            # the other row is dropped from the projection AND the refreshed
-            # stamp hides it — `tools/candidates_admin.py` bypasses the
-            # instance lock, so that second writer exists.
+            # Callers have already applied the row to `_by_id` (do not
+            # `_apply_row` here: it would land twice). Only advance the stamp
+            # when nobody else wrote since our projection — decided under the
+            # same lock as the append, or a foreign row could be hidden.
             current = (self._by_id is not None
-                       and self._stamp == _file_stamp(self.path))
+                       and self._stamp == file_stamp(self.path))
             append_jsonl_unlocked(self.path, row)
             if current:
-                self._stamp = _file_stamp(self.path)
+                self._stamp = file_stamp(self.path)
 
     def health_metadata(self, *, warning_bytes: int | None = None) -> dict:
         # Force validation even when no caller has projected the ledger yet.
         self._project()
         return append_only_health(
             self.path,
-            warning_bytes=_warning_bytes(warning_bytes),
+            warning_bytes=_warning_bytes(_WARN_BYTES_ENV, warning_bytes),
             quarantined_rows=len(self._quarantined),
         )
 
@@ -404,12 +361,9 @@ class CandidateLedger:
         rejected proposal or restart a promoted one.
         """
         cid = cand["candidate_id"]
-        existing = self.get(cid)
-        if existing is not None:
-            new = [e for e in (cand.get("evidence") or [])
-                   if e not in (existing.get("evidence") or [])]
-            if new:
-                self.link_evidence(cid, new, ts=cand.get("created_at", ""))
+        if self.get(cid) is not None:
+            self.link_evidence(cid, cand.get("evidence") or [],
+                               ts=cand.get("created_at", ""))
             return self.get(cid), False
         self._append(cand)
         projected = dict(cand)

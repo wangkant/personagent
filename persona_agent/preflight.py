@@ -53,6 +53,12 @@ TEMPLATE_EXEMPT = frozenset({
 })
 
 
+def private_model_from_env(env=None) -> str:
+    """PRIVATE_MODEL, honouring the pre-0.1.2 ANTHROPIC_PRIVATE_MODEL alias."""
+    env = os.environ if env is None else env
+    return env.get("PRIVATE_MODEL", "") or env.get("ANTHROPIC_PRIVATE_MODEL", "")
+
+
 class Finding:
     """One problem, at one level, about one key."""
 

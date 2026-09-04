@@ -27,14 +27,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from .storage import (
     append_jsonl_unlocked,
     append_lock,
     append_only_health,
+    file_stamp,
     read_validated_jsonl,
+    warning_bytes as _warning_bytes,
 )
 
 SCHEMA = 2
@@ -68,7 +69,7 @@ _ID_FIELDS = (
 )
 
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
-_DEFAULT_WARNING_BYTES = 50_000_000
+_WARN_BYTES_ENV = "AGENT_EVIDENCE_WARN_BYTES"
 
 
 def _text(value, limit: int = _MAX_TEXT) -> str:
@@ -105,24 +106,6 @@ def _validate_event(record: dict) -> str | None:
     if schema == SCHEMA and record["event_id"] != event_id(record):
         return "event_id does not match semantic payload"
     return None
-
-
-def _file_stamp(path: Path) -> tuple[int, int]:
-    try:
-        stat = path.stat()
-        return stat.st_size, stat.st_mtime_ns
-    except OSError:
-        return 0, 0
-
-
-def _warning_bytes(override: int | None = None) -> int:
-    if override is not None:
-        return max(0, int(override))
-    try:
-        return max(0, int(os.getenv(
-            "AGENT_EVIDENCE_WARN_BYTES", str(_DEFAULT_WARNING_BYTES))))
-    except ValueError:
-        return _DEFAULT_WARNING_BYTES
 
 
 def classify_strength(event: dict) -> str:
@@ -381,14 +364,9 @@ def opposes_rewrite(event: dict) -> bool:
     PROMOTED, so the window between proposal and promotion was open."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
-    # A PERSON has to have refused it. `promotion._rewrite_is_unwitnessed`
-    # excludes these two kinds forty lines away and for the same reason — a
-    # proposal nobody witnessed does not outrank one somebody made — and the
-    # thesis has to hold on both sides of the file. Without this, a
-    # self-review carrying `reaction_type="rejection"` would veto a
-    # two-strong user correction. Not reachable today; neither `_evolve_tick`
-    # nor `_evaluate_reply` sets a reaction type on a self event, which is
-    # precisely the kind of "not reachable today" that stops being true.
+    # A PERSON has to have refused it (`promotion.witnessed_rewrites` excludes
+    # the same two kinds): a self-review carrying reaction_type="rejection"
+    # must not veto a user correction.
     if event.get("kind") in (KIND_SELF_REVIEW, KIND_SELF_EVAL):
         return False
     return event.get("reaction_type") in ("rejection", "correction")
@@ -435,7 +413,7 @@ class EvidenceLog:
 
     # -- reads -------------------------------------------------------------
     def _load(self) -> list[dict]:
-        stamp = _file_stamp(self.path)
+        stamp = file_stamp(self.path)
         if self._events is None or stamp != self._stamp:
             result = read_validated_jsonl(self.path, _validate_event)
             self._events = result.rows
@@ -447,19 +425,9 @@ class EvidenceLog:
     def all(self) -> list[dict]:
         return list(self._load())
 
-    def get(self, eid: str) -> dict | None:
-        for e in self._load():
-            if e.get("event_id") == eid:
-                return e
-        return None
-
     def many(self, ids) -> list[dict]:
         wanted = set(ids or ())
         return [e for e in self._load() if e.get("event_id") in wanted]
-
-    def has(self, eid: str) -> bool:
-        self._load()
-        return eid in self._ids
 
     # -- writes ------------------------------------------------------------
     def append(self, event: dict) -> bool:
@@ -476,41 +444,30 @@ class EvidenceLog:
         if reason:
             raise ValueError(f"invalid evidence event: {reason}")
         with append_lock(self.path):
-            # Refresh while holding the interprocess lock — a second process
-            # may have appended this content-addressed event since our cache
-            # was built — but ONLY when the file actually moved.
-            #
-            # This re-read and re-validated the WHOLE log on every append: at
-            # 20 000 rows, 452 ms, the single most expensive item on the
-            # reaction path, and 97 % of it was `event_id()` re-deriving the
-            # sha256 content address of rows already sitting on disk. The log
-            # is APPEND-ONLY, so an unchanged (size, mtime) stamp is proof
-            # that nobody added anything and the cache is exact — and size
-            # alone settles it, because an append always changes the size.
-            # The safety the old comment is about is preserved: when the stamp
-            # HAS moved, the full validating re-read still happens, under the
-            # same lock, before the dedup check.
-            if self._events is None or _file_stamp(self.path) != self._stamp:
+            # Another process may have appended since the cache was built;
+            # re-read under the lock, but only when the stamp moved (a full
+            # validating replay costs ~450 ms at 20k rows).
+            if self._events is None or file_stamp(self.path) != self._stamp:
                 result = read_validated_jsonl(self.path, _validate_event)
                 self._events = result.rows
                 self._ids = {row["event_id"] for row in result.rows}
                 self._quarantined = result.quarantined
             if eid in self._ids:
-                self._stamp = _file_stamp(self.path)
+                self._stamp = file_stamp(self.path)
                 return False
             append_jsonl_unlocked(self.path, event)
             # Rebound rather than mutated in place: `all()` hands this list
             # out, and a caller holding one must not see it grow underneath.
             self._events = self._events + [event]
             self._ids = self._ids | {eid}
-            self._stamp = _file_stamp(self.path)
+            self._stamp = file_stamp(self.path)
         return True
 
     def health_metadata(self, *, warning_bytes: int | None = None) -> dict:
         self._load()
         return append_only_health(
             self.path,
-            warning_bytes=_warning_bytes(warning_bytes),
+            warning_bytes=_warning_bytes(_WARN_BYTES_ENV, warning_bytes),
             quarantined_rows=len(self._quarantined),
         )
 

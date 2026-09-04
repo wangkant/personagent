@@ -21,12 +21,12 @@ Pure logic only (no I/O, no clock reads — callers pass timestamps):
 from __future__ import annotations
 
 import json
-import re
 import time
 from collections import deque
 from pathlib import Path
 
 from .storage import atomic_write_text
+from .textproc import strip_json_fences
 
 REACTION_TYPES = {"correction", "rejection", "positive", "neutral"}
 
@@ -276,12 +276,18 @@ class PendingReplies:
         while q and now - q[0]["ts"] > self.ttl_sec:
             q.popleft()
             changed = True
-        if not q:
-            self._by_conv.pop(conv_id, None)
-            if conv_id not in self._awaiting_fix:
-                self._conversation_order.pop(conv_id, None)
+        self._drop_empty_pending(conv_id)
         if changed:
             self._save()
+
+    def _take(self, conv_id: str, q: deque, i: int, how: str) -> dict:
+        """Pop ``q[i]`` as a one-shot match attributed by ``how``."""
+        entry = q[i]
+        del q[i]
+        entry["matched_by"] = how
+        self._drop_empty_pending(conv_id)
+        self._save()
+        return entry
 
     def match(self, conv_id: str, *, sender_uid: str, quote_mid: str = "",
               at_bot: bool = False, is_private: bool = False,
@@ -304,33 +310,20 @@ class PendingReplies:
             qm = str(quote_mid)
             for i in range(len(q) - 1, -1, -1):
                 if qm in q[i]["mids"]:
-                    entry = q[i]
-                    del q[i]
-                    entry["matched_by"] = "quote"
-                    self._drop_empty_pending(conv_id)
-                    self._save()
-                    return entry
+                    return self._take(conv_id, q, i, "quote")
             # A quote of a non-pending (older / foreign) message is not a
             # reaction to anything we track — do NOT fall through to @-logic:
             # the quote already names its target.
             return None
         if at_bot or (is_private and str(sender_uid) == q[-1]["target_uid"]):
-            entry = q.pop()
-            entry["matched_by"] = "at" if at_bot else "dm"
-            self._drop_empty_pending(conv_id)
-            self._save()
-            return entry
+            return self._take(conv_id, q, -1, "at" if at_bot else "dm")
         # Elicited exception: the bot just asked THIS user what they meant, so
         # their next message counts even without an @ (short window).
         for i in range(len(q) - 1, -1, -1):
             e = q[i]
             if (e.get("elicited_uid") == str(sender_uid)
                     and now - e["ts"] <= self.elicit_window_sec):
-                del q[i]
-                e["matched_by"] = "elicited"
-                self._drop_empty_pending(conv_id)
-                self._save()
-                return e
+                return self._take(conv_id, q, i, "elicited")
         return None
 
 
@@ -356,8 +349,7 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
 
 def parse_adjudication(raw: str) -> dict | None:
     """Fail-closed parse of the adjudicator's one-line JSON."""
-    raw = (raw or "").strip()
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+    raw = strip_json_fences(raw)
     try:
         d = json.loads(raw)
     except json.JSONDecodeError:

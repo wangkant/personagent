@@ -36,10 +36,10 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from . import candidates, evidence
+from .pools import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
 from .storage import append_lock, atomic_write_text
 
 # ---------------------------------------------------------------------------
@@ -158,19 +158,6 @@ class Decision:
         return self.promote
 
 
-def epoch(ts) -> float:
-    """ISO timestamp -> epoch seconds; 0.0 when unparsable.
-
-    Naive timestamps are read as local time, matching every other timestamp in
-    the pipeline (see pools._retrieval_fields)."""
-    if not ts:
-        return 0.0
-    try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
-    except (ValueError, TypeError, OSError, OverflowError):
-        return 0.0
-
-
 def _label_compatible(a: str, b: str) -> bool:
     """An empty label claims nothing and is compatible with anything; two
     non-empty ones must match after normalization."""
@@ -284,55 +271,14 @@ _UNWITNESSED_KINDS = (evidence.KIND_SELF_REVIEW, evidence.KIND_SELF_EVAL)
 def witnessed_rewrites(events) -> frozenset:
     """Every rewrite a PERSON has argued for, in one pass over the events.
 
-    HOISTED OUT OF THE PEER LOOP, and that is the whole point of it existing.
-    `find_conflicts` asked `_rewrite_is_unwitnessed(peer, related_events)` once
-    per peer and each call re-scanned every related event, so the check was
-    O(peers x events) — a genuine quadratic, measured at 10x size -> 102x time
-    on a fixture where the candidates share a reply text:
-
-        C=E      100     500    1000    2000
-        ms      0.70    16.1    71.6   325.8
-
-    That fixture is not exotic. `learning._process_reaction`'s own comment
-    describes the state that produces it — one reaction re-adjudicated into a
-    second candidate proposing a different rewrite of the same reply, the two
-    then blocking each other permanently. Extrapolated to 20 000 in that
-    shape, a single decision projected to ~30 seconds.
-
-    One pass, then an O(1) membership test per peer."""
+    Computed once before the peer loop in `find_conflicts`, not once per peer:
+    a per-peer scan was O(peers x events) and candidates sharing a reply text
+    make that quadratic in practice."""
     return frozenset(
         str((event.get("adjudication") or {}).get("better") or "").strip()
         for event in events or ()
         if event.get("kind") not in _UNWITNESSED_KINDS
     ) - {""}
-
-
-def _rewrite_is_unwitnessed(cand: dict, events) -> bool:
-    """True when no PERSON has argued for this candidate's rewrite.
-
-    The evolution loop proposes `X -> Y` off a single self-review, and such a
-    candidate can never clear `min_strong` — a TYPE_PAIR is auto-promotable
-    only when its `better` was authored by a strong event, i.e. by a user's
-    correction or by the bot's own accepted retry, and an LLM-authored `Y`
-    matches one only by coincidence.
-
-    So before this check, an unpromotable proposal still held a VETO: the
-    user's real correction of the same reply became "a conflicting candidate
-    exists" and both sat in `proposed` forever, blocking each other, with the
-    view empty and a human required to break the tie. Measured — control run
-    `states: ['promoted']`, with an evolution proposal present
-    `states: ['proposed', 'proposed']`.
-
-    A proposal nobody witnessed does not get to outrank one somebody made."""
-    better = str(cand.get("better") or "").strip()
-    if not better:
-        return False
-    for ev in events or ():
-        if ev.get("kind") in _UNWITNESSED_KINDS:
-            continue
-        if str((ev.get("adjudication") or {}).get("better") or "").strip() == better:
-            return False
-    return True
 
 
 def related_events(cand: dict, events) -> list[dict]:
@@ -556,10 +502,6 @@ class CandidatePool:
             return 0.0
         age = max(0.0, (now - float(rec.get("ts", now))) / 86400.0)
         return _decayed(float(rec.get("weight", 0.0)), age)
-
-    def sightings(self, reply: str) -> int:
-        rec = self._d.get((reply or "").strip())
-        return int(rec.get("n", 0)) if rec else 0
 
     # -- mutations ---------------------------------------------------------
     def record(self, example: dict, source: str, now: float) -> tuple[bool, float]:

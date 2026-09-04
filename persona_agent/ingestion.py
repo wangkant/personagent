@@ -30,7 +30,8 @@ import httpx
 from httpcore._backends.auto import AutoBackend
 
 from .gateway import current_sink
-from .textproc import _detect_image_mime
+from .textproc import (_detect_image_mime, apply_k2_quirks,
+                       salvage_json_object, strip_json_fences)
 
 logger = logging.getLogger("agent")
 
@@ -66,19 +67,24 @@ class SafeFetchResult:
     content: bytes
 
 
+def _ip_obj_is_internal(ip) -> bool:
+    return (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
 def _is_internal_ip(value: str) -> bool:
+    """Unparsable counts as internal: the SSRF guard fails closed."""
     try:
         ip = ipaddress.ip_address(value.split("%", 1)[0])
     except ValueError:
         return True
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    )
+    return _ip_obj_is_internal(ip)
+
+
+def _cap_cache(cache: dict, cap: int = 200, drop: int = 50) -> None:
+    if len(cache) > cap:
+        for k in list(cache)[:drop]:
+            cache.pop(k, None)
 
 
 async def _resolve_public_target(url: str) -> tuple[str, str, int] | None:
@@ -362,6 +368,103 @@ async def safe_fetch_url(
 class ContentIngestion:
     """Mixed into Agent; see agent.py."""
 
+    _WBI_MIXIN_KEY_ENC_TAB = [
+        46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
+        27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+        37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
+        22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+    ]
+
+    # ============ Generic URL understanding ============
+    # URL terminator: whitespace, CJK characters (U+3000-303F punctuation,
+    # U+4E00-9FFF ideographs, U+FF00-FFEF full-width), or common ASCII
+    # brackets/pipes that would never appear inside a URL.
+    URL_PATTERN = re.compile(
+        r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
+    )
+    _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
+                     ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
+                     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
+
+    _OG_TITLE_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:title|twitter:title)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _OG_DESC_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:description|twitter:description|description)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _OG_SITE_PAT = re.compile(
+        r'<meta\s+(?:property|name)\s*=\s*["\']og:site_name["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _TITLE_TAG_PAT = re.compile(r'<title[^>]*>(.*?)</title>', re.IGNORECASE | re.DOTALL)
+
+    VISION_PROMPT = (
+        "This image is most likely a **reaction sticker / meme** in a group chat "
+        "(a conventional emotion symbol, not a real photo).\n"
+        "**Task: name the emotion/meme it conveys, at most ~20 words.**\n"
+        "\n"
+        "Hard rules:\n"
+        "1. If you can't make it out / can't open / fully black → reply \"can't see\". Never fabricate.\n"
+        "2. **Report meaning, not pixels.** Bad: \"a shiba dog sitting at a desk\"  Good: \"doge — smug / mocking\". Bad: \"a panda\"  Good: \"speechless panda — out of words\".\n"
+        "3. If there's **text on the image, quote it + describe the mood**. e.g. \"text 'you're right' — sarcastic agreement\" / \"text 'I'm about to lose it' — fake-angry\".\n"
+        "4. Famous memes: name them directly — doge, speechless panda, salaryman crying, sobbing cat, distressed mouse, NPC thinking, etc.\n"
+        "5. Real photo (not a sticker) → short subject description is fine. e.g. \"a real cat curled up on a couch\".\n"
+        "6. Don't prefix with \"this image / the picture shows / in the image\" — just say it."
+    )
+
+    # Aesthetic judgment prompt used by visual_recheck_aesthetic_all. The
+    # auto-tagger only sees the *context* a sticker is used in (and decides
+    # emotional intent) — it can't see the image itself, so it can't tell a
+    # cleanly-designed "smug" sticker from a tacky old WeChat-family-group
+    # one with the same emotional intent. This prompt asks the vision model
+    # to look at the image directly and judge whether the visual style
+    # matches the configured persona.
+    VISION_AESTHETIC_PROMPT = (
+        "Judge whether the visual aesthetic of this reaction sticker fits the kind "
+        "of taste a **clean modern internet-savvy user** would actually post — vs. "
+        "looking like content from an older family-group / chain-message subculture.\n"
+        "**Output one JSON line only: {\"tacky\": true|false, \"reason\": \"≤6 words\"}**\n"
+        "\n"
+        "tacky=true (doesn't fit, should ban) criteria:\n"
+        "- Older family-group / chain-message style: floral-script greetings (good morning / happy weekend / good fortune) + sparkle effects + roses / dancing cartoons\n"
+        "- Loud printed fonts on saturated color blocks / low-resolution outlined stickers\n"
+        "- Low-effort short-video-platform memes, visually crude\n"
+        "- 2010s subculture aesthetic / heavy-filter photo-editor style\n"
+        "- Stale cute style: crudely-rendered cartoon bears/dogs + hard subtitles\n"
+        "- Anything that screams 'you'd only see this in a family-group chat'\n"
+        "\n"
+        "tacky=false (OK to send) criteria:\n"
+        "- Clean modern design / classic doge / well-made sticker pack / film or TV screenshots / variety-show screencaps\n"
+        "- Cartoon characters but with polished visuals / clean color blocks / minimal text\n"
+        "- Real-person / celebrity / anime screencaps / contemporary popular memes\n"
+        "- Widely-recognized modern memes (doge family, dancing cat, sobbing cat, etc.)\n"
+        "\n"
+        "When in doubt, return false (better to keep one through than to mis-ban a good one). Only ban what's obviously dated/crude at a glance."
+    )
+
+    # Bump this whenever VISION_AESTHETIC_PROMPT criteria change. On the next
+    # startup, visual_recheck_aesthetic_all will re-judge every entry whose
+    # _visual_aesthetic_version is older — no manual JSON surgery needed.
+    VISUAL_AESTHETIC_VERSION = 1
+
+    # Tokens that signal "the vision model couldn't actually see the image" —
+    # if any of these appear in the caption we treat it as a non-caption and
+    # fall back to OCR / placeholder. Chinese tokens are kept because some
+    # vision endpoints answer in Chinese even when prompted in English.
+    _VISION_REJECT_TOKENS = (
+        # English
+        "can't see", "cannot see", "unable to see", "no image", "not visible",
+        "can't read", "cannot read", "can't open", "cannot open",
+        "unclear", "unrecognizable", "blank", "black screen", "empty image",
+        "failed to load", "cannot access",
+        # Chinese (legacy; many cn-region vision endpoints reply in Chinese)
+        "不清楚", "不确定", "看不到", "看不了", "看不清", "打不开",
+        "无法", "不存在", "无内容", "黑屏", "空白", "没看到",
+        "图片为空", "加载失败", "无法访问", "无法识别",
+    )
+
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
         """Fetch image bytes. Handles base64:// (inline data from a gateway
         b64-only image segment), file:// (local read for NapCat local-cache
@@ -636,9 +739,7 @@ class ContentIngestion:
                 info["summary"] = summary
 
         self.bili_info_cache[cache_key] = info
-        if len(self.bili_info_cache) > 200:
-            for k in list(self.bili_info_cache.keys())[:50]:
-                self.bili_info_cache.pop(k, None)
+        _cap_cache(self.bili_info_cache)
         logger.info("[Agent] bili view %s: %s", bvid, (info.get("title") or "(empty)")[:60])
         return info
 
@@ -746,11 +847,6 @@ class ContentIngestion:
             urls.append(u)
         return urls
 
-    @staticmethod
-    def _ip_is_internal(ip) -> bool:
-        return (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
-
     @classmethod
     def _host_is_internal(cls, url: str) -> bool:
         """Cheap, network-free SSRF pre-filter: True if the URL's host is
@@ -779,7 +875,7 @@ class ContentIngestion:
         if not host:
             return True
         try:
-            return cls._ip_is_internal(ipaddress.ip_address(host))
+            return _ip_obj_is_internal(ipaddress.ip_address(host))
         except ValueError:
             pass  # not an IP literal
         # Names that are internal by definition, so no lookup is needed.
@@ -1054,21 +1150,15 @@ class ContentIngestion:
         try:
             if not img_bytes or len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
                 return None
-            head = img_bytes[:16]
-            if head[:8] == b"\x89PNG\r\n\x1a\n":
-                mime = "image/png"
-            elif head[:3] == b"\xff\xd8\xff":
-                mime = "image/jpeg"
-            elif head[:4] == b"GIF8":
+            mime = _detect_image_mime(img_bytes)
+            if mime not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
+                return None
+            if mime == "image/gif":
                 frame = self._gif_first_frame_png(img_bytes)
                 if not frame:
                     return None
                 img_bytes = frame
                 mime = "image/png"
-            elif head[:4] == b"RIFF" and head[8:12] == b"WEBP":
-                mime = "image/webp"
-            else:
-                return None
             data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
 
             # Aggressive backoff: aesthetic recheck is a startup burst, free
@@ -1086,10 +1176,7 @@ class ContentIngestion:
                 "max_tokens": 60,
                 "temperature": 0,
             }
-            if "k2" in self.vision_model.lower():
-                payload["thinking"] = {"type": "disabled"}
-                # K2.6 only accepts temperature=0.6 (single-valued whitelist)
-                payload["temperature"] = 0.6
+            apply_k2_quirks(payload, self.vision_model)
             raw = ""
             async with self._http(timeout=30) as c:
                 for attempt in range(4):
@@ -1109,18 +1196,8 @@ class ContentIngestion:
                                 .get("message", {})
                                 .get("content", "") or "").strip()
                     break
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
-            data = None
-            try:
-                data = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                m = re.search(r"\{.*\}", raw, re.S)
-                if m:
-                    try:
-                        data = json.loads(m.group(0))
-                    except json.JSONDecodeError:
-                        data = None
-            if not isinstance(data, dict) or "tacky" not in data:
+            data = salvage_json_object(strip_json_fences(raw))
+            if data is None or "tacky" not in data:
                 return None
             return bool(data.get("tacky"))
         except Exception as e:
@@ -1231,15 +1308,7 @@ class ContentIngestion:
                 "max_tokens": 120,
                 "temperature": 0.3,
             }
-            # K2-family models are reasoning models — by default they spend
-            # the entire max_tokens budget on reasoning_content and leave
-            # the actual content empty. Short-caption tasks like this need
-            # thinking disabled. Older vision-preview models reject this
-            # field with HTTP 400, so gate on the model name.
-            if "k2" in self.vision_model.lower():
-                payload["thinking"] = {"type": "disabled"}
-                # K2.6 only accepts temperature=0.6 (single-valued whitelist)
-                payload["temperature"] = 0.6
+            apply_k2_quirks(payload, self.vision_model)
             async with self._http(timeout=30) as c:
                 r = None
                 last_exc = None
@@ -1319,9 +1388,7 @@ class ContentIngestion:
         return ""
 
     def _gc_image_cache(self) -> None:
-        if len(self.image_caption_cache) > 200:
-            for k in list(self.image_caption_cache.keys())[:50]:
-                self.image_caption_cache.pop(k, None)
+        _cap_cache(self.image_caption_cache)
 
     async def _ocr_image(self, url: str) -> str:
         """Call the OneBot /ocr_image endpoint (NapCat etc.) to extract text

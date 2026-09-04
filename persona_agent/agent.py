@@ -66,30 +66,12 @@ from .textproc import (
 from .transport import (
     _MAX_GATEWAY_CONVS,
     Transport,
-    # RE-EXPORTS, not uses. `agent` is the facade the suite imports from —
-    # `from persona_agent.agent import Agent, SendResult` in test_gateway and
-    # test_reactions, `_SEND_MAX_PER_MIN` in test_gateway — so these are API
-    # surface even though nothing in this module reads them. The noqa is
-    # load-bearing: an "unused import" autofix removed them once and three
-    # suites went red on the import line.
+    # Re-exports: tests import these from `persona_agent.agent`. Keep the noqa.
     _SEND_MAX_PER_MIN,  # noqa: F401
     SendResult,  # noqa: F401
 )
 
 logger = logging.getLogger("agent")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _load_persona_card() -> Optional[dict]:
@@ -99,7 +81,7 @@ def _load_persona_card() -> Optional[dict]:
     `textproc.ReplyStyle.from_card`). Any read or parse failure means "no
     card": the narrow default character policy applies, which is the
     fail-closed direction."""
-    card_path = Path(os.getenv("PERSONA_CARD_FILE", "persona.card.json"))
+    card_path = ROOT / os.getenv("PERSONA_CARD_FILE", "persona.card.json")
     if not card_path.is_file():
         return None
     try:
@@ -115,7 +97,7 @@ def _load_persona(lang: str = "en") -> str:
     the bundled persona.example.<lang>.txt, then DEFAULT_PERSONA. Falling back
     to the language-appropriate example keeps a fresh checkout coherent before
     the user writes their own persona.txt."""
-    persona_path = Path(os.getenv("PERSONA_FILE", "persona.txt"))
+    persona_path = ROOT / os.getenv("PERSONA_FILE", "persona.txt")
     if persona_path.is_file():
         try:
             return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
@@ -128,49 +110,6 @@ def _load_persona(lang: str = "en") -> str:
         except Exception:
             pass
     return DEFAULT_PERSONA
-
-
-def _resolve_lang_file(stem: str, ext: str, lang: str) -> Path:
-    """Resolve a bundled data file (under data/) by language: prefer
-    data/<stem>.<lang>.<ext>, and fall back to the bare data/<stem>.<ext> so
-    single-language or customized deployments keep working."""
-    return resolve_seed_lang_file(stem, ext, lang)
-
-
-
-
-
-
-
-
-# ---- Retrieval dataset loading (examples.jsonl / feedback.jsonl) ----
-# Curated seed/runtime pools and ledger-derived promoted views are read on the
-# reply hot path. Runtime pools may still grow through explicitly approved
-# offline edits, so reloads use incremental parsing where possible.
-# The two helpers below make the common case parse only the appended tail and
-# move the per-record string/timestamp work out of the per-turn scorer.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# 0.12 left judge mode triggering an LLM call on 88% of group messages.
-# With the LLM's reply-leaning prompts on top, end-to-end reply rate
-# becomes "chases every topic" rather than "occasionally chimes in".
-# 0.35 lets 35% of judge triggers skip before any LLM call — combined
-# with the model's own PASS signals, observed reply rate lands around
-# the "human who sometimes can't be bothered" range.
 
 
 class _PooledHTTP:
@@ -481,7 +420,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
         # Few-shot examples: curated seed/runtime rows plus a separate
         # ledger-derived view containing only promoted automatic candidates.
-        self.examples_seed_file = _resolve_lang_file(
+        self.examples_seed_file = resolve_seed_lang_file(
             "examples", "jsonl", self.agent_lang)
         self.examples_file = resolve_runtime_lang_file(
             "examples", "jsonl", self.agent_lang)
@@ -501,7 +440,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # phrase should only land in the pool once.
         self._auto_examples_seen: set[str] = set()
 
-        self.feedback_seed_file = _resolve_lang_file(
+        self.feedback_seed_file = resolve_seed_lang_file(
             "feedback", "jsonl", self.agent_lang)
         self.feedback_file = resolve_runtime_lang_file(
             "feedback", "jsonl", self.agent_lang)
@@ -541,14 +480,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._view_examples_stamp: tuple = (-1.0, -1)
         self._view_pairs_cache: list = []
         self._view_pairs_stamp: tuple = (-1.0, -1)
+        # Edge-triggered "every promoted row refused by scope" warning.
+        self._scope_drop_warned = False
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
-        self.output_filter_file = _resolve_lang_file("output_filter", "json", self.agent_lang)
+        self.output_filter_file = resolve_seed_lang_file("output_filter", "json", self.agent_lang)
         self._filters_cache: list = []
         self._filters_mtime: float = 0.0
 
         # SillyTavern-style lorebook (keyword-triggered context entries)
-        self.lorebook_file = _resolve_lang_file("lorebook", "json", self.agent_lang)
+        self.lorebook_file = resolve_seed_lang_file("lorebook", "json", self.agent_lang)
         self._lorebook_cache: list = []
         self._lorebook_mtime: float = 0.0
 
@@ -604,32 +545,27 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
                            "explicit @-mentions (set BOT_NAME so it answers to its name)")
 
+    def _sidecar(self, attr: str, cls, path: Path):
+        """Lazy sidecar of examples_file, rebuilt whenever the pool is repointed
+        (test harness, benchmark arm, AGENT_RUNTIME_DIR) so evidence never
+        accumulates against the wrong pool."""
+        obj = getattr(self, attr, None)
+        if obj is None or obj.path != path:
+            obj = cls(path)
+            setattr(self, attr, obj)
+        return obj
+
     @property
     def example_candidates(self) -> promotion.CandidatePool:
-        """Evidence gate in front of the example pool (see promotion.py).
-
-        Resolved lazily as a sidecar of examples_file rather than fixed at
-        construction: the pool is meaningless apart from the example file it
-        guards, and anything that repoints one — a test harness, a benchmark
-        arm, an AGENT_RUNTIME_DIR override — must move both together or it
-        will silently accumulate evidence against the wrong pool."""
-        want = self.examples_file.parent / "example_candidates.json"
-        pool = getattr(self, "_example_candidates", None)
-        if pool is None or pool.path != want:
-            pool = promotion.CandidatePool(want)
-            self._example_candidates = pool
-        return pool
+        """Evidence gate in front of the example pool (see promotion.py)."""
+        return self._sidecar("_example_candidates", promotion.CandidatePool,
+                             self.examples_file.parent / "example_candidates.json")
 
     @example_candidates.setter
     def example_candidates(self, pool: promotion.CandidatePool) -> None:
         self._example_candidates = pool
 
     # ---- Evidence ledger (sidecars of the learned example pool) ----------
-    # Resolved from examples_file's directory for the same reason
-    # example_candidates is: the log, the ledger and the views are only
-    # meaningful together with the pool they feed. Anything that repoints one —
-    # a test harness, a benchmark arm, AGENT_RUNTIME_DIR — moves all of them,
-    # so a test can never accumulate evidence into a live deployment's state.
 
     @property
     def learning_dir(self) -> Path:
@@ -653,12 +589,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
     @property
     def evidence_log(self) -> evidence_mod.EvidenceLog:
-        want = self.evidence_file
-        log = getattr(self, "_evidence_log", None)
-        if log is None or log.path != want:
-            log = evidence_mod.EvidenceLog(want)
-            self._evidence_log = log
-        return log
+        return self._sidecar("_evidence_log", evidence_mod.EvidenceLog,
+                             self.evidence_file)
 
     @evidence_log.setter
     def evidence_log(self, log: evidence_mod.EvidenceLog) -> None:
@@ -666,12 +598,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
     @property
     def candidate_ledger(self) -> candidate_ledger_mod.CandidateLedger:
-        want = self.candidate_ledger_file
-        ledger = getattr(self, "_candidate_ledger", None)
-        if ledger is None or ledger.path != want:
-            ledger = candidate_ledger_mod.CandidateLedger(want)
-            self._candidate_ledger = ledger
-        return ledger
+        return self._sidecar("_candidate_ledger", candidate_ledger_mod.CandidateLedger,
+                             self.candidate_ledger_file)
 
     @candidate_ledger.setter
     def candidate_ledger(self, ledger: candidate_ledger_mod.CandidateLedger) -> None:
@@ -747,16 +675,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             self._touch_gateway_conv(gateway_key)
         sink = GatewaySink()
         tok = current_sink.set(sink)
-        # READ OFF `event`, never off `payload`: synthesize_onebot_payload
-        # builds a fixed set of OneBot keys and would drop it.
-        #
-        # THREADED AS AN ARGUMENT, and that is a trust decision rather than a
-        # style one. `/webhook/qq` accepts arbitrary JSON, so a payload field
-        # would let a forged request tell the engine "this text is mine, do
-        # not write it down" — the same forgery `_handle_inner` refuses for
-        # `"_gateway": true` by gating on the sink instead. An argument can
-        # only be set here, and this method is only reachable through the
-        # signed gateway envelope.
+        # Read off `event` (synthesize drops unknown keys) and passed as an
+        # argument, not a payload flag: /webhook/qq accepts arbitrary JSON.
         proactive = bool(event.get("proactive"))
         try:
             handled = await self.handle(payload, proactive=proactive)
@@ -796,18 +716,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if payload.get("post_type") and payload.get("post_type") != "message":
             return False
 
-        # De-dup: same message_id may arrive via webhook and via catch-up replay.
-        # CHECK only — remembering moves past the admission gates below
-        # (private whitelist / group validation), otherwise forged or
-        # unauthorized message_ids crowd the 2000-slot dedup ring and churn
-        # seen_msg_ids.json rewrites.
-        # `str(mid)`, because the ring is keyed on the STRING spelling and the
-        # two producers disagree about type: the webhook path stringifies in
-        # main.py before handle() ever runs, while the catch-up replay passes
-        # NapCat's raw history dict straight through with an int. Comparing
-        # raw, `12345 in deque(["12345"])` is False — so every @ the catch-up
-        # sweep replayed was answered a SECOND time, which is the exact
-        # double-reply the persistence below exists to prevent.
+        # De-dup check only; remembering happens after the admission gates so
+        # unauthorized ids don't churn the ring. str(): catch-up replay passes
+        # NapCat's raw int while the webhook path stringifies.
         mid = payload.get("message_id")
         if mid is not None and str(mid) in self._seen_msg_ids:
             return False
@@ -815,20 +726,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
 
-        # Private chat: OWNER_QQ + anyone in PRIVATE_ALLOWED_QQS. Owner gets
-        # the closer "private overrides" branch; everyone else gets a more
-        # neutral "ordinary friend" branch. Gateway DMs bypass the QQ whitelist
-        # (the forwarding plugin's own config is the access filter) and use
-        # GATEWAY_OWNER_IDS for the owner branch. The bypass gates on the sink
-        # contextvar — set only inside handle_gateway, unforgeable from the
-        # network — never on payload flags: /webhook/qq accepts arbitrary
-        # JSON, so a crafted "_gateway": true must not skip the whitelist.
-        # It also requires the id to be NAMESPACED. A forwarder in
-        # GATEWAY_NATIVE_PLATFORMS mints bare ids, and a bare id is exactly
-        # what this whitelist is written in — so letting it skip the check
-        # would let the forwarder DM as any QQ the agent can reach, including
-        # OWNER_QQ. Both conditions, or the pair of them lets an id claim QQ
-        # authority and dodge the QQ gate in one move.
+        # Gateway DMs skip the QQ whitelist only when the sink contextvar is
+        # set (unforgeable from /webhook/qq) AND the id is namespaced: a bare
+        # id carries QQ authority and must be measured against the whitelist.
         if message_type == "private":
             is_owner = (bool(self.owner_qq) and user_id == self.owner_qq) \
                 or user_id in self.gateway_owner_ids
@@ -902,7 +802,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # ctrl_text: a linked page's og:title containing the bot name must not
         # force called mode — only the member's own words count.
         is_called = bool(self.bot_name) and self.bot_name in ctrl_text
-        is_noise = len(text.strip()) < 4 and not (is_at or is_called)
+        addressed = is_at or is_called
+        is_noise = len(text.strip()) < 4 and not addressed
 
         is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
 
@@ -920,7 +821,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     break
             _r_entry = self.pending_reactions.match(
                 group_id, sender_uid=user_id, quote_mid=_quote_mid,
-                at_bot=is_at or is_called, now=time.time())
+                at_bot=addressed, now=time.time())
             if _r_entry:
                 self._spawn(self._process_reaction(
                     _r_entry, text, nickname, user_id, is_owner_msg,
@@ -933,9 +834,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             self._append_buffer(group_id, nickname, text[:200], user_id)
             # Index this message for quote-reply resolution (Layer A, zero API):
             # a later "reply to this" can fetch the original text locally.
-            _mid = payload.get("message_id")
-            if _mid is not None:
-                self._index_msg(_mid, f"{nickname}: {text[:60]}")
+            if mid is not None:
+                self._index_msg(mid, f"{nickname}: {text[:60]}")
             self.last_activity_at[group_id] = time.time()  # silence tracking for the proactive loop
             self.active_users[group_id].append((user_id, nickname))
             if not is_noise:
@@ -947,7 +847,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # simulation could then hold the group lock for tens of seconds,
             # blocking message intake for the whole group. The send goes
             # through send_lock (same serialization as normal replies).
-            if is_called or is_at:
+            if addressed:
                 # ctrl_text: web page titles must not reach the memory-command
                 # regexes (a page named "BOT remember ... / BOT forget ..."
                 # would otherwise write/delete memories on the page author's
@@ -957,7 +857,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # Only non-memory-command messages continue to sticky/seq (a memory
             # command returns right after the out-of-lock send below).
             if mem_reply is None:
-                if is_at or is_called:
+                if addressed:
                     self._sticky_call[group_id] = {
                         "user_id": user_id,
                         "nickname": nickname,
@@ -971,7 +871,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if mem_reply is not None:
             async with self.send_locks[group_id]:
                 send_result = await self._send_qq(
-                    group_id, mem_reply, user_id if (is_at or is_called) else "")
+                    group_id, mem_reply, user_id if addressed else "")
             if not send_result.success:
                 logger.warning("[Agent] memory command delivery failed (group=%s)",
                                group_id)
@@ -991,7 +891,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         bare_after_strip = (
             text.replace(f"@{self.bot_name}", "").replace(self.bot_name, "").strip()
         )
-        is_bare_call = (is_at or is_called) and len(bare_after_strip) <= 4
+        is_bare_call = addressed and len(bare_after_strip) <= 4
         debounce_sec = 5.0 if is_bare_call else self.message_debounce_sec
         if debounce_sec > 0:
             try:
@@ -1025,7 +925,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             )
 
             caller_override = None
-            if is_at or is_called:
+            if addressed:
                 # The owner @/naming the bot still gets the warmer owner
                 # persona; anyone else goes through called. But the owner is no
                 # longer "always replied to" — un-addressed owner chatter takes
@@ -1118,51 +1018,17 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     self._spawn(_send_fallback())
                 return False
 
-            # auto_mem comes directly from the JSON-protocol `mem` field
-            # (see _think → _parse_model_output). PASS replies may still
-            # carry a non-empty mem worth keeping.
-            reply = reply or ""
-            # Pull the core-memory update tag but hold off persisting it.
-            reply, _pending_core = self._extract_core_update(reply)
-
-            # Pre-send regex filter: reject known self-outing / AI-tell patterns
-            filtered, blocked = self._apply_output_filter(reply)
-            if blocked:
-                logger.warning("[Agent] output_filter blocked (mode=%s, group=%s): %s | original=%s",
-                               mode, group_id, blocked, reply[:120])
+            # PASS replies may still carry a non-empty `mem` worth keeping.
+            final = self._finalize_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
+            if final is None:
                 return False
-            reply = filtered
-            had_visible_candidate = bool(reply.strip())
-
-            # Sanitize/validate BEFORE any reply state is committed. _send_qq
-            # re-runs _sanitize_reply (deterministic → no-op there), but its
-            # fail-closed rejections (reasoning leak / bad chars) used to fire
-            # only after buffer/last_reply_at/followup/eval were already
-            # committed — a phantom "sent" reply the group never saw. Now a
-            # rejection takes the PASS path below instead.
-            if reply:
-                reply = self._sanitize_reply(reply, self._validator_lang(), self.reply_style)
-            reply = reply.strip().strip('"').strip("「」")
-            at_uid = ""
-            # Non-digit targets included: gateway user ids look like
-            # "telegram:12345" (the QQ path drops non-numeric ats in _send_qq).
-            at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
-            if at_match:
-                at_uid = at_match.group(1)
-                reply = reply.replace(at_match.group(0), "").strip()
-                # Strip any leftover markers too (e.g. a second, hallucinated
-                # "[AT:Bob]"): the validator removes markers before
-                # whitelisting, so an un-stripped one would otherwise be sent
-                # as literal text.
-                reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+            reply, at_uid, _pending_core, had_visible_candidate = final
             if not at_uid and mode == "called":
                 at_uid = user_id
-            # A visible candidate that validation/normalization reduced to
-            # nothing is rejected, not treated as a state-bearing PASS.
+            # A visible candidate that validation reduced to nothing is
+            # rejected, not treated as a state-bearing PASS.
             if had_visible_candidate and not reply:
                 return False
-            # Word boundary: only swallow the "PASS"/"PASS."/"PASS —" sentinel
-            # variants, not genuine replies like "passable lol".
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 if mode == "followup":
@@ -1251,19 +1117,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                               proactive: bool = False) -> bool:
         """Run one private turn in send/commit order without blocking intake.
 
-        `proactive` means NOBODY SENT THIS TURN. The text is a cue its caller
-        wrote to brief the persona — "they have been quiet a while, speak if
-        you genuinely have something to say" — and treating it as the other
-        person's words is how a caller's own directive ends up quoted back at
-        somebody who never wrote it, or promoted into a memory about them.
-
-        `_maybe_proactive_dms` has always kept its cue transient by never
-        going through here at all. This is how a gateway caller says the same
-        thing, which is what lets a platform reached only through a forwarder
-        have proactive turns: the caller issues the request, so the reply
-        comes back through the sink like any other. The request/response shape
-        is not the obstacle it looks like — it just has to be inverted.
-        """
+        `proactive`: the text is the caller's cue, not the reader's words, so
+        it must never be appended to history or attributed to them."""
         pkey = channels.dm_routing_key(user_id)
         async with self.send_locks[pkey]:
             self._private_send_owners[pkey] = asyncio.current_task()
@@ -1308,17 +1163,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if not reply:
                     return False
 
-                reply, pending_core = self._extract_core_update(reply)
-                filtered, blocked = self._apply_output_filter(reply)
-                if blocked:
-                    logger.warning(
-                        "[Agent] output_filter blocked (private user=%s): %s | original=%s",
-                        user_id, blocked, reply[:120])
+                final = self._finalize_reply(reply, log_ctx=f"private user={user_id}")
+                if final is None:
                     return False
-                had_visible_candidate = bool(filtered.strip())
-                reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
-                reply = reply.strip().strip('"').strip("「」")
-                reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+                reply, _, pending_core, had_visible_candidate = final
                 if had_visible_candidate and not reply:
                     return False
                 if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
@@ -1355,28 +1203,31 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if self._private_send_owners.get(pkey) is asyncio.current_task():
                     self._private_send_owners.pop(pkey, None)
 
+    def _finalize_reply(self, reply: str, *, log_ctx: str):
+        """Post-LLM pipeline shared by every reply path: core-memory tag,
+        output filter, sanitize (before any state is committed), [AT:] marker.
+        Returns (reply, at_uid, pending_core, had_visible), or None if the
+        filter blocked the reply."""
+        reply, pending_core = self._extract_core_update(reply or "")
+        filtered, blocked = self._apply_output_filter(reply)
+        if blocked:
+            logger.warning("[Agent] output_filter blocked (%s): %s | original=%s",
+                           log_ctx, blocked, reply[:120])
+            return None
+        had_visible = bool(filtered.strip())
+        reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
+        reply = reply.strip().strip('"').strip("「」")
+        # Non-digit targets included: gateway ids look like "telegram:12345".
+        at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
+        at_uid = at_match.group(1) if at_match else ""
+        # Strip every marker (a second, hallucinated one would ship as text).
+        reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+        return reply, at_uid, pending_core, had_visible
+
     @staticmethod
     def _dm_scope_key(pkey: str) -> str:
-        """The LEARNING scope of a DM whose MEMORY namespace is `pkey`.
-
-        Two spellings, both load-bearing, and they are not interchangeable:
-        memory is namespaced `private:<uid>` while everything the DM path
-        writes to the ledger — evidence, candidates, pending reactions — is
-        scoped `dm:<uid>`. Retrieval was reading examples back under the
-        memory spelling, and `_authorized_view` compares all six scope fields,
-        of which these disagree on two (`conv_id`, and `platform`, which
-        `_conv_platform` reads as "private" for one and "qq" for the other).
-        Nothing a DM ever taught the bot could be authorized into a DM prompt.
-
-        DERIVED rather than passed alongside `pkey`, because a second
-        parameter that has to be kept in sync with the first is the shape of
-        the bug itself: a call site that forgot it would silently be back
-        here. Gateway DMs (`private:telegram:1`) map correctly too — the
-        writers spell those `dm:telegram:1`.
-
-        The mapping itself lives in `channels`, which is the one place it is
-        allowed to live: three call sites derived it independently and two got
-        it wrong."""
+        """Learning scope (`dm:<uid>`) of the DM whose memory namespace is
+        `pkey` (`private:<uid>`); derived, so no call site can desync them."""
         return channels.learning_key(pkey)
 
     async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "") -> tuple[str, str]:
@@ -1396,11 +1247,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
         )
-        # `is_owner` ALONE. OWNER_NAME ships empty (main.py) and is
-        # independently optional from OWNER_QQ, so gating the owner branch on
-        # both sent the owner down the STRANGER branch — handing the one
-        # person this bot is configured to know the "don't pretend to
-        # recognize them" instruction.
+        # Gate on `is_owner` alone: OWNER_NAME is optional and ships empty.
         if is_owner:
             owner_ref = self.owner_name or "the owner"
             persona_extra = (
@@ -1408,20 +1255,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 + (f" ({self.owner_relationship})" if self.owner_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
-            # WHAT THIS BLOCK IS FOR, now that the guides above it are the
-            # private ones. It used to open by correcting them — "STYLE_GUIDE /
-            # INTENT_RULES above are written for group-chat scenarios" — and
-            # then list the group moves that do not apply. Both halves became
-            # wrong when `_chat_private` switched to `private_style_guide` /
-            # `private_intent_rules`: the model was being told about two blocks
-            # that are not in its prompt, and the group PASS vocabulary was
-            # re-injected by the correction itself, into a prompt whose
-            # `private_output_protocol` exists precisely to remove it.
-            #
-            # What is left is the only thing the private renderers cannot
-            # carry: WHO this person is. Those blocks are persona-agnostic on
-            # purpose — they open the cached prefix — so the relationship has
-            # to be stated here or nowhere.
+            # The private guides are persona-agnostic, so WHO this person is
+            # has to be stated here.
             private_overrides = (
                 f"<private_overrides>\n"
                 f"- {owner_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
@@ -1436,10 +1271,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 "You're now in a one-on-one private chat with a friend "
                 "(less close than the owner).\n"
             )
-            # Same reason as the owner branch above: this states the
-            # RELATIONSHIP, which the persona-agnostic private guides cannot,
-            # and no longer corrects blocks that are not in the prompt or
-            # names the PASS vocabulary they were written to leave out.
             private_overrides = (
                 "<private_overrides>\n"
                 "- This is a friend, not an attacker — most DMs are just ordinary conversation.\n"
@@ -1449,32 +1280,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 "- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
                 "</private_overrides>\n\n"
             )
-        # Mirror the group path: split system into a cache_control=ephemeral
-        # stable head + an uncached dynamic tail, so the ~4-5K persona / rules
-        # prefix is billed at ~10% on cache hits. _call_llm accepts a
-        # list system and flattens it back to a string if the endpoint doesn't
-        # support cache_control.
-        # - static_block (cache): persona + the PRIVATE style guide, intent
-        #     rules and tool guide + rules. Constant per Agent, which is what
-        #     the cache prefix needs: `private_style_guide` interpolates the
-        #     persona's declared knobs but no persona-specific STRING, so the
-        #     prefix stays byte-identical across every turn of this persona.
-        # - semi_static_block (cache): sticker guide — only changes when new
-        #     stickers get tagged.
-        # - dynamic_block (no cache): private_overrides + few-shot examples +
-        #     time line + the private output protocol. The output contract
-        #     stays at the very end of the prompt so it's the last thing the
-        #     model reads before generating.
-        #
-        # THE PRIVATE VARIANTS, not the group constants. `prompts.py` grew a
-        # full 1:1 set — and the `[style]` block a persona document may end
-        # with is parsed into `self.persona_style` for them — but this path
-        # kept assembling itself from the GROUP constants, so every knob a
-        # persona declared was stripped from its prose and then ignored. It
-        # also meant a DM was reading the group PASS list: `private_output_
-        # protocol` exists partly because that list "produced a read receipt
-        # on perfectly ordinary turns ('ok', 'night', a one-word follow-up)".
-        # There is no PASS in a chat with one person in it.
+        # Static prefix first (provider prefix-caches it), dynamic tail last so
+        # the output protocol is the final thing the model reads. PRIVATE
+        # guide variants: the group ones carry a PASS list that has no place
+        # in a one-on-one chat.
         static_block = (
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
@@ -1516,13 +1325,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             f"[Current local time] {self._current_time_str()}\n\n"
             f"{private_output_protocol(self.persona_style)}"
         )
-        system = [
-            {"type": "text", "text": static_block,
-             "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": semi_static_block,
-             "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": dynamic_block},
-        ]
+        system = static_block + semi_static_block + dynamic_block
         messages = list(history)
         if proactive and (not messages or messages[-1].get("role") == "assistant"):
             # Chat endpoints want a trailing user turn; supply an explicit internal cue.
@@ -1544,12 +1347,18 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                          intent or "?", len(reasoning))
         return reply, mem
 
-
-
     async def _extract_text(self, payload: dict) -> str:
         parts: list[str] = []
         group_id = str(payload.get("group_id", ""))
         sender_uid = str(payload.get("user_id", ""))
+
+        # Fence text the speaker did not author (web pages, vision captions,
+        # sticker meanings, quoted messages) so it never reaches ctrl_text —
+        # a page titled "<BOT> remember X" must not drive is_called or memory
+        # commands, even when re-quoted.
+        def _fence(s: str) -> str:
+            return f"{_WEB_DESC_OPEN}{_unwrap_web_desc(s)}{_WEB_DESC_CLOSE}"
+
         for seg in payload.get("message", []):
             if not isinstance(seg, dict):
                 continue
@@ -1564,13 +1373,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 for url in self._extract_urls(txt):
                     desc = await self._describe_url(url)
                     if desc and desc != "[link]":
-                        # Wrap web-derived text in sentinel chars so handle()
-                        # can exclude it from control decisions (is_called /
-                        # memory commands): a third-party page whose og:title
-                        # contains the bot name (or a remember/forget command)
-                        # must not trigger forced replies or memory writes.
-                        desc = desc.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
-                        parts.append(f" {_WEB_DESC_OPEN}{desc}{_WEB_DESC_CLOSE}")
+                        parts.append(" " + _fence(desc))
             elif t == "at":
                 qq = str(d.get("qq", ""))
                 parts.append(f"@{self.bot_name}" if qq == self.bot_qq else f"@{qq}")
@@ -1582,28 +1385,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     continue
                 entry = self.stickers.lookup_by_file_field(file_field)
                 if entry and entry.get("auto_tagged") and entry.get("meaning"):
-                    # Fenced: `meaning` is a tagger-LLM reading of an image,
-                    # written with the surrounding (attacker-controllable) chat
-                    # as context, so it is model output over untrusted input —
-                    # the same trust class as a scraped page title.
-                    meaning = str(entry["meaning"]).replace(
-                        _WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
-                    parts.append(
-                        f"{_WEB_DESC_OPEN}[sticker: {meaning}]{_WEB_DESC_CLOSE}")
+                    parts.append(_fence(f"[sticker: {entry['meaning']}]"))
                     self._spawn(self._record_sticker_context(
                         entry["md5"], group_id, sender_uid,
                     ))
                     continue
                 desc = await self._describe_image(url)
-                # Fenced too: the caption is a vision model's reading of an
-                # image any group member can post, so its text is attacker-
-                # shaped. An image containing "<BOT> remember X" would
-                # otherwise reach the control plane through the caption.
-                if desc:
-                    desc = desc.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
-                    parts.append(f"{_WEB_DESC_OPEN}[image: {desc}]{_WEB_DESC_CLOSE}")
-                else:
-                    parts.append("[image]")
+                parts.append(_fence(f"[image: {desc}]") if desc else "[image]")
                 # Sticker stealing is a QQ-path feature: gateway images must
                 # not get cataloged into the QQ sticker library or burn
                 # tagging calls, so skip the spawn while the gateway sink is
@@ -1625,21 +1413,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 # bare "[reply]" if it can't be fetched (never blocks / drops).
                 qid = d.get("id")
                 quoted = await self._resolve_quote(qid, group_id) if qid else ""
-                # Fenced, because quoted text is by definition not authored by
-                # the person now speaking: A writing "<BOT> remember X" and B
-                # quoting it must not mean B issued the command.
-                #
-                # This also closes a laundering path that defeated the fences
-                # above. The buffer and _msg_index store the sentinel-stripped
-                # rendering, so web-derived enrichment re-entered ctrl_text the
-                # moment anyone quoted the message — attributed to the *quoter*,
-                # which let an attacker plant a memory under an innocent user,
-                # or have an owner's quote execute a page-authored "forget".
-                if quoted:
-                    quoted = quoted.replace(_WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
-                    parts.append(f"{_WEB_DESC_OPEN}[reply {quoted}]{_WEB_DESC_CLOSE}")
-                else:
-                    parts.append("[reply]")
+                parts.append(_fence(f"[reply {quoted}]") if quoted else "[reply]")
             elif t == "record":
                 # Voice message — no ASR pipeline; show a clean placeholder
                 # so the raw CQ-code (which would leak file paths) doesn't
@@ -1671,16 +1445,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                         logger.warning("[Agent] _describe_share failed: %s: %s",
                                        type(e).__name__, e)
                         desc = ""
-                    # Same fence as the text-URL branch above, for the same
-                    # reason: a share card's title/description is scraped from
-                    # a third-party page, so it is web-derived text. Unfenced,
-                    # a page whose og:description reads "<BOT> remember X" —
-                    # or "<BOT> forget ..." — reaches ctrl_text and drives
-                    # is_called and _handle_memory_command, i.e. a page author
-                    # writing and deleting the group's memories.
-                    desc = (desc or "[share-card]").replace(
-                        _WEB_DESC_OPEN, "").replace(_WEB_DESC_CLOSE, "")
-                    parts.append(f"{_WEB_DESC_OPEN}{desc}{_WEB_DESC_CLOSE}")
+                    parts.append(_fence(desc or "[share-card]"))
                 else:
                     parts.append("[share-card]")
         if parts:
@@ -1696,10 +1461,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._msg_index.pop(key, None)  # re-insert at the end to refresh recency
         self._msg_index[key] = rendered
         if len(self._msg_index) > self._msg_index_cap:
-            try:
-                del self._msg_index[next(iter(self._msg_index))]
-            except StopIteration:
-                pass
+            del self._msg_index[next(iter(self._msg_index))]
 
     async def _resolve_quote(self, mid, group_id: str) -> str:
         """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
@@ -1737,57 +1499,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         rendered = f"{name}: {raw}" if name else raw
         self._index_msg(key, rendered)  # cache so repeats in a burst skip the API
         return rendered
-
-
-
-
-
-
-
-
-    _WBI_MIXIN_KEY_ENC_TAB = [
-        46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
-        27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
-        37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
-        22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
-    ]
-
-
-
-
-    # ============ Generic URL understanding ============
-    # URL terminator: whitespace, CJK characters (U+3000-303F punctuation,
-    # U+4E00-9FFF ideographs, U+FF00-FFEF full-width), or common ASCII
-    # brackets/pipes that would never appear inside a URL.
-    URL_PATTERN = re.compile(
-        r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
-    )
-    _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
-                     ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
-                     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
-
-
-
-
-
-
-
-
-
-    _OG_TITLE_PAT = re.compile(
-        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:title|twitter:title)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
-        re.IGNORECASE,
-    )
-    _OG_DESC_PAT = re.compile(
-        r'<meta\s+(?:property|name)\s*=\s*["\'](?:og:description|twitter:description|description)["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
-        re.IGNORECASE,
-    )
-    _OG_SITE_PAT = re.compile(
-        r'<meta\s+(?:property|name)\s*=\s*["\']og:site_name["\'][^>]*content\s*=\s*["\']([^"\']+)["\']',
-        re.IGNORECASE,
-    )
-    _TITLE_TAG_PAT = re.compile(r'<title[^>]*>(.*?)</title>', re.IGNORECASE | re.DOTALL)
-
 
     def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
         buf = self.buffers[group_id]
@@ -1864,7 +1575,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         Unknown errors are treated as transient (Hermes's default: unknown = retryable).
         """
         msg = str(e).lower()
-        name = type(e).__name__.lower()
         # Prefer a structured HTTP status code when the exception exposes one
         # (httpx.HTTPStatusError.response.status_code, or a bare .status_code) so
         # a number inside a request id / token count isn't read as a status code.
@@ -1892,17 +1602,11 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if status in (400, 404, 422) or any(k in msg for k in (
                 "model not found", "bad request", "invalid request", "unprocessable")):
             return "fatal_request"
-        if ((status is not None and 500 <= status <= 599)
-                or any(k in name for k in ("timeout", "connect", "network", "protocol"))
-                or any(k in msg for k in ("timeout", "timed out", "connection",
-                                          "peer closed", "ssl", "eof", "server error",
-                                          "service unavailable", "internal error"))):
-            return "transient"
         return "transient"
 
     async def _call_llm(
         self,
-        system,  # str | list[dict] — list form enables cache_control segmentation
+        system: str,
         messages: list[dict],
         model: str,
         max_tokens: int = 4096,
@@ -1912,33 +1616,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         search_hint: str = "",
         json_object: bool = False,
     ) -> str:
-        """Unified LLM call → the provider's OpenAI-compatible endpoint
-        (/v1/chat/completions), over plain httpx — no vendor SDK. Carries
-        web_search, jittered retry + error-driven fallback, and empty-reply
-        logging.
-
-        `system` may be a plain string OR a list of `{"type":"text", "text":...}`
-        blocks (the old cache_control segmentation form); it is flattened into a
-        single system message. Providers like DeepSeek auto prefix-cache identical
-        prefixes, so no explicit cache_control is needed.
-
-        json_object=True 添加 response_format={"type":"json_object"}, 只给
-        期待 JSON 协议输出的调用点用。实测 (26 turns x 2 runs, deepseek-v4-flash):
-        thinking 模型会把协议里的 reasoning 字段当成自己隐藏的 reasoning_content
-        已经交差, content 里只吐裸聊天行 -- 9/26 轮被 fail-closed 解析器整条丢弃;
-        加 response_format 后 52 轮 0 次。裸文本不能用 parser 兜底放行: 那会删掉
-        _parse_model_output 文档写明的协议边界。
-
-        disable_thinking 在 DeepSeek /v1 端点同样有效 (thinking 字段), 用于
-        不需要推理的机械调用点。"""
+        """OpenAI-compatible /v1/chat/completions over plain httpx, with web
+        search, jittered retry and error-driven fallback. `json_object` forces
+        response_format: without it a thinking model drops the JSON protocol
+        on ~1/3 of turns (measured 9/26 → 0/52)."""
         if not (self.base_url and self.api_key):
             logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
             return ""
-        # `system` may be a str or a list of {"type":"text","text":...} blocks; flatten.
-        if isinstance(system, list):
-            sys_text = "".join(blk.get("text", "") for blk in system if isinstance(blk, dict))
-        else:
-            sys_text = system or ""
+        sys_text = system or ""
         _url = f"{self.base_url}/v1/chat/completions"
         _headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
@@ -2031,11 +1716,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                                    cur_model, kind, e)
                     raise
 
+        def _pick(d: dict) -> tuple[str, str]:
+            choice = (d.get("choices") or [{}])[0]
+            return (((choice.get("message") or {}).get("content") or "").strip(),
+                    choice.get("finish_reason", "?"))
+
         data, used_model = await _call_with_recovery()
         try:
-            _choice = (data.get("choices") or [{}])[0]
-            text = ((_choice.get("message") or {}).get("content") or "").strip()
-            finish = _choice.get("finish_reason", "?")
+            text, finish = _pick(data)
         except Exception as e:
             logger.warning("[Agent] failed to parse LLM response: %s; data=%.300s", e, str(data))
             return ""
@@ -2075,9 +1763,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 used_model, max_tokens, retry_tokens)
             try:
                 data = await _do_call(retry_tokens, used_model)
-                _choice = (data.get("choices") or [{}])[0]
-                text = ((_choice.get("message") or {}).get("content") or "").strip()
-                finish = _choice.get("finish_reason", "?")
+                text, finish = _pick(data)
             except Exception as e:
                 logger.warning("[Agent] retry at a larger budget failed: %s: %s",
                                type(e).__name__, e)
@@ -2133,12 +1819,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] Tavily search failed (q=%r): %s", query, e)
             return ""
+        return self._fmt_search(results, "content", max_results)
+
+    @staticmethod
+    def _fmt_search(results: list, body_key: str, n: int) -> str:
         lines = []
-        for r in results[:max_results]:
+        for r in results[:n]:
             title = (r.get("title") or "").strip()
-            content = (r.get("content") or "").strip()
-            if title or content:
-                lines.append((f"- {title}: {content}" if title else f"- {content}")[:300])
+            body = (r.get(body_key) or "").strip()
+            if title or body:
+                lines.append((f"- {title}: {body}" if title else f"- {body}")[:300])
         return "\n".join(lines)
 
     async def _web_search_ddg(self, query: str, max_results: int = 4) -> str:
@@ -2156,13 +1846,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] web_search DDG failed (q=%r): %s", query, e)
             return ""
-        lines = []
-        for r in results[:max_results]:
-            title = (r.get("title") or "").strip()
-            body = (r.get("body") or "").strip()
-            if title or body:
-                lines.append((f"- {title}: {body}" if title else f"- {body}")[:300])
-        return "\n".join(lines)
+        return self._fmt_search(results, "body", max_results)
 
     async def _decide_and_search(self, messages: list[dict], hint: str = "") -> str:
         """Let the model decide whether to web-search and with what query, via
@@ -2242,8 +1926,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         except Exception as e:
             logger.warning("[Agent] search-decide failed: %s", e)
             return ""
-
-
 
     async def _think(
         self,
@@ -2336,6 +2018,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             f" (latest line is from {latest_nick} (qq={latest_uid}))"
             if latest_nick else ""
         )
+        # judge / proactive only: lets the model open at a specific member.
+        active_text = self._active_users_for_prompt(group_id)
 
         if mode == "called":
             user_prompt = (
@@ -2375,7 +2059,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # to break the silence, but a strong PASS bias and a hard no-filler
             # rule so it reads like a person with a genuine thought, not a bot
             # filling dead air.
-            active_text = self._active_users_for_prompt(group_id)
             at_hint = ""
             if active_text:
                 at_hint = (
@@ -2395,10 +2078,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 f"you'd actually send (no quote prefix).\n"
                 f"{at_hint}"
             )
-            if active_text:
-                user_prompt += f"\n\nRecently active members: {active_text}"
         else:
-            active_text = self._active_users_for_prompt(group_id)
             at_hint = ""
             if active_text:
                 at_hint = (
@@ -2415,8 +2095,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 f"to say (no quote prefix).\n"
                 f"{at_hint}"
             )
-            if active_text:
-                user_prompt += f"\n\nRecently active members: {active_text}"
+        if active_text and mode not in ("called", "owner", "followup"):
+            user_prompt += f"\n\nRecently active members: {active_text}"
 
         user_prompt += blind_note
 
@@ -2431,17 +2111,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 f"Engage naturally — a touch more attentive than to others, lean towards replying — but **don't overdo intimacy, don't get cutesy, don't be clingy**.\n"
                 f"When they say something wrong or do something dumb, light teasing is fine (leave them an out), but **don't reverse-tease every time** — a flat acknowledgement, a lazy reply, or a sticker work too."
             )
-        # System prompt split into three blocks for provider prefix caching.
-        # The first two carry cache_control=ephemeral so persistent content
-        # is billed at ~10% on cache hits (5min TTL); the third stays
-        # uncached because it changes per call.
-        # - Block 1 (cache): persona + STYLE_GUIDE + INTENT_RULES +
-        #   TOOL_GUIDE + owner_block + REASONING_PROTOCOL — process-wide
-        #   constants.
-        # - Block 2 (cache): sticker guide — semi-static, only changes when
-        #   new stickers get tagged; stable enough to cache between calls.
-        # - Block 3 (no cache): few-shot examples + lorebook + memory —
-        #   focus/group/history dependent, varies every call.
+        # Static prefix first so the provider's prefix cache hits; the
+        # per-call tail (examples, lorebook, memory) goes last.
         static_block = (
             f"<persona>\n{self.persona}\n</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
@@ -2458,25 +2129,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             f"{self._core_memory_for_prompt(group_id)}"
             f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
-        dynamic_block = f"{examples_block}{context_block}"
-        system_content = [
-            {"type": "text", "text": static_block,
-             "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": semi_static_block,
-             "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": dynamic_block},
-        ]
-        # Lighter prompt for the cheap gate: drop the few-shot examples + the
-        # sticker guide. Those shape HOW to write a reply, not WHETHER to reply,
-        # so the PASS/REPLY decision doesn't need them — persona, the
-        # style/intent/reasoning rules, lorebook and memory all stay, so the
-        # decision keeps its full context. The reply stage below uses the
-        # complete prompt, so what the group actually sees is unchanged.
-        gate_system_content = [
-            {"type": "text", "text": static_block,
-             "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": context_block},
-        ]
+        system_content = static_block + semi_static_block + examples_block + context_block
+        # Gate prompt drops examples + sticker guide: they shape HOW to
+        # reply, not WHETHER.
+        gate_system_content = static_block + context_block
 
         # Model routing — two stages for self-initiated modes:
         #   1. GATE (cheapest model): judge / followup / proactive first ask the
@@ -2537,22 +2193,9 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         return reply, intent or "chat", mem
 
     def _remember_msg_id(self, mid) -> None:
-        """Append a message_id to the in-memory dedup ring and persist (throttled).
-
-        Without persistence, a restart would leave _seen_msg_ids empty, and
-        the startup check_missed_mentions would treat 2h-old @ mentions
-        as new — leading to double-replies on messages the bot already
-        responded to before going down.
-
-        The in-memory ring updates on every message (cheap); but rewriting the
-        whole ~50KB JSON per message blocks the event loop and is pure waste,
-        so flushing is throttled: write once N ids accumulate or enough time
-        passed. A crash loses at most the last few seen ids (worst case one or
-        two duplicate replies) — acceptable. Written atomically via .tmp +
-        rename so a mid-write crash can't corrupt the file."""
-        # One choke point for the type: the loader above already coerces the
-        # whole persisted ring to str, so an int banked here stopped matching
-        # across a restart as well as across the two live producers.
+        """Bank a message_id in the dedup ring and persist (throttled), so a
+        restart doesn't re-answer @s already handled. Always str: the two
+        producers disagree on int vs str."""
         self._seen_msg_ids.append(str(mid))
         self._seen_dirty += 1
         self._persist_seen()
@@ -2605,27 +2248,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                   if not client.is_closed),
                 return_exceptions=True)
         self.flush_state()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     # ---------------- Proactive (self-initiated) messaging ----------------
     async def loop_proactive(self) -> None:
@@ -2684,39 +2306,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             self.last_proactive_at[gid] = now
             if not reply or reply.strip().upper() == "PASS":
                 continue
-            # Mirror _handle_inner's post-processing — this path otherwise
-            # skips it entirely: the [CORE_UPDATE] tag would be silently
-            # stripped by _sanitize_reply instead of committed, the
-            # anti-AI-tell output filter would never run, and a model that
-            # follows the prompt's own "[AT:qq]" instruction would have the
-            # literal marker text shipped to the group.
-            reply, _pending_core = self._extract_core_update(reply)
-            filtered, blocked = self._apply_output_filter(reply)
-            if blocked:
-                # A blocked reply must not persist its core note (anti-poison).
-                logger.warning("[Agent] output_filter blocked (mode=proactive, group=%s): %s | original=%s",
-                               gid, blocked, reply[:120])
+            final = self._finalize_reply(reply, log_ctx=f"mode=proactive, group={gid}")
+            if final is None:
                 continue
-            reply = filtered
-            had_visible_candidate = bool(reply.strip())
-            # Sanitize BEFORE committing buffer/last_reply_at (same as
-            # _handle_inner): a fail-closed rejection later inside _send_qq
-            # would otherwise leave a phantom "sent" line in the buffer.
-            reply = self._sanitize_reply(reply, self._validator_lang(), self.reply_style)
-            reply = reply.strip().strip('"').strip("「」")
-            at_uid = ""
-            at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
-            if at_match:
-                at_uid = at_match.group(1)
-                reply = reply.replace(at_match.group(0), "").strip()
-                reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+            reply, at_uid, _pending_core, had_visible_candidate = final
             if had_visible_candidate and not reply:
                 continue
-            # Re-check PASS after post-processing: the early exact-match check
-            # doesn't catch "[CORE_UPDATE]...[/CORE_UPDATE]PASS" or a
-            # quote-wrapped '"PASS"' — post-stripping those reduce to a bare
-            # PASS that would ship to the group as literal text (bot-tell).
-            # Word-boundary form, same as _handle_inner.
+            # Re-check PASS: "[CORE_UPDATE]..[/CORE_UPDATE]PASS" or '"PASS"'
+            # only reduce to a bare PASS after post-processing.
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 continue
             # Serialize under send_lock (don't interleave chunks with a
@@ -2769,25 +2366,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
-            # Mark the attempt either way so a PASS doesn't re-roll every tick
-            # — the same sentence the group dispatcher above carries, and the
-            # same placement. Here the assignment sat inside the send-success
-            # branch instead, so the DOCUMENTED common case (the model answers
-            # PASS) reached `continue` first and the 24h cooldown never
-            # engaged: every 25-minute tick bought another _chat_private call.
+            # Mark the attempt before the PASS check so a PASS doesn't re-roll
+            # every tick.
             self.last_proactive_at[key] = now
 
-            reply = reply or ""
-            reply, pending_core = self._extract_core_update(reply)
-            filtered, blocked = self._apply_output_filter(reply)
-            if blocked:
-                logger.warning(
-                    "[Agent] output_filter blocked (proactive private user=%s): %s",
-                    uid, blocked)
+            final = self._finalize_reply(reply, log_ctx=f"proactive private user={uid}")
+            if final is None:
                 continue
-            reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
-            reply = reply.strip().strip('"').strip("「」")
-            reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+            reply, _, pending_core, _ = final
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 continue
 
@@ -2878,104 +2464,44 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
         return self.model
 
-    VISION_PROMPT = (
-        "This image is most likely a **reaction sticker / meme** in a group chat "
-        "(a conventional emotion symbol, not a real photo).\n"
-        "**Task: name the emotion/meme it conveys, at most ~20 words.**\n"
-        "\n"
-        "Hard rules:\n"
-        "1. If you can't make it out / can't open / fully black → reply \"can't see\". Never fabricate.\n"
-        "2. **Report meaning, not pixels.** Bad: \"a shiba dog sitting at a desk\"  Good: \"doge — smug / mocking\". Bad: \"a panda\"  Good: \"speechless panda — out of words\".\n"
-        "3. If there's **text on the image, quote it + describe the mood**. e.g. \"text 'you're right' — sarcastic agreement\" / \"text 'I'm about to lose it' — fake-angry\".\n"
-        "4. Famous memes: name them directly — doge, speechless panda, salaryman crying, sobbing cat, distressed mouse, NPC thinking, etc.\n"
-        "5. Real photo (not a sticker) → short subject description is fine. e.g. \"a real cat curled up on a couch\".\n"
-        "6. Don't prefix with \"this image / the picture shows / in the image\" — just say it."
-    )
+    @staticmethod
+    def _load_json_dict(path: Path, label: str) -> dict:
+        """JSON object from disk; missing or malformed → {}."""
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(loaded, dict):
+                raise ValueError("root must be an object")
+            return loaded
+        except FileNotFoundError:
+            return {}
+        except Exception as e:
+            logger.warning("[Agent] %s load failed: %s", label, e)
+            return {}
 
-    # Aesthetic judgment prompt used by visual_recheck_aesthetic_all. The
-    # auto-tagger only sees the *context* a sticker is used in (and decides
-    # emotional intent) — it can't see the image itself, so it can't tell a
-    # cleanly-designed "smug" sticker from a tacky old WeChat-family-group
-    # one with the same emotional intent. This prompt asks the vision model
-    # to look at the image directly and judge whether the visual style
-    # matches the configured persona.
-    VISION_AESTHETIC_PROMPT = (
-        "Judge whether the visual aesthetic of this reaction sticker fits the kind "
-        "of taste a **clean modern internet-savvy user** would actually post — vs. "
-        "looking like content from an older family-group / chain-message subculture.\n"
-        "**Output one JSON line only: {\"tacky\": true|false, \"reason\": \"≤6 words\"}**\n"
-        "\n"
-        "tacky=true (doesn't fit, should ban) criteria:\n"
-        "- Older family-group / chain-message style: floral-script greetings (good morning / happy weekend / good fortune) + sparkle effects + roses / dancing cartoons\n"
-        "- Loud printed fonts on saturated color blocks / low-resolution outlined stickers\n"
-        "- Low-effort short-video-platform memes, visually crude\n"
-        "- 2010s subculture aesthetic / heavy-filter photo-editor style\n"
-        "- Stale cute style: crudely-rendered cartoon bears/dogs + hard subtitles\n"
-        "- Anything that screams 'you'd only see this in a family-group chat'\n"
-        "\n"
-        "tacky=false (OK to send) criteria:\n"
-        "- Clean modern design / classic doge / well-made sticker pack / film or TV screenshots / variety-show screencaps\n"
-        "- Cartoon characters but with polished visuals / clean color blocks / minimal text\n"
-        "- Real-person / celebrity / anime screencaps / contemporary popular memes\n"
-        "- Widely-recognized modern memes (doge family, dancing cat, sobbing cat, etc.)\n"
-        "\n"
-        "When in doubt, return false (better to keep one through than to mis-ban a good one). Only ban what's obviously dated/crude at a glance."
-    )
-
-    # Bump this whenever VISION_AESTHETIC_PROMPT criteria change. On the next
-    # startup, visual_recheck_aesthetic_all will re-judge every entry whose
-    # _visual_aesthetic_version is older — no manual JSON surgery needed.
-    VISUAL_AESTHETIC_VERSION = 1
-
-    # Tokens that signal "the vision model couldn't actually see the image" —
-    # if any of these appear in the caption we treat it as a non-caption and
-    # fall back to OCR / placeholder. Chinese tokens are kept because some
-    # vision endpoints answer in Chinese even when prompted in English.
-    _VISION_REJECT_TOKENS = (
-        # English
-        "can't see", "cannot see", "unable to see", "no image", "not visible",
-        "can't read", "cannot read", "can't open", "cannot open",
-        "unclear", "unrecognizable", "blank", "black screen", "empty image",
-        "failed to load", "cannot access",
-        # Chinese (legacy; many cn-region vision endpoints reply in Chinese)
-        "不清楚", "不确定", "看不到", "看不了", "看不清", "打不开",
-        "无法", "不存在", "无内容", "黑屏", "空白", "没看到",
-        "图片为空", "加载失败", "无法访问", "无法识别",
-    )
-
-
-
-
-
-
-
-
-
+    @staticmethod
+    def _save_json(path: Path, obj, label: str) -> None:
+        try:
+            atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
+        except Exception as e:
+            logger.warning("[Agent] %s save failed: %s", label, e)
 
     def _load_memories(self) -> dict:
-        if not self.memory_file.exists():
-            return {}
-        try:
-            loaded = json.loads(self.memory_file.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError("memory root must be an object")
-            return {
-                str(conv_id): [row for row in rows if isinstance(row, dict)]
-                for conv_id, rows in loaded.items()
-                if isinstance(conv_id, str) and isinstance(rows, list)
-            }
-        except Exception as e:
-            logger.warning("[Agent] memory load failed: %s", e)
-            return {}
+        loaded = self._load_json_dict(self.memory_file, "memory")
+        return {
+            str(conv_id): [row for row in rows if isinstance(row, dict)]
+            for conv_id, rows in loaded.items()
+            if isinstance(conv_id, str) and isinstance(rows, list)
+        }
 
     def _save_memories(self) -> None:
-        try:
-            atomic_write_text(
-                self.memory_file,
-                json.dumps(self.memories, ensure_ascii=False, indent=2),
-            )
-        except Exception as e:
-            logger.warning("[Agent] memory save failed: %s", e)
+        self._save_json(self.memory_file, self.memories, "memory")
+
+    def _append_memory(self, group_id: str, item: dict) -> None:
+        items = self.memories.setdefault(group_id, [])
+        items.append(item)
+        if len(items) > self.memory_max:
+            self._evict_memory(items)
+        self._save_memories()
 
     def _reload_examples_if_stale(self) -> None:
         """Hot-reload the seed + runtime example pools.
@@ -3019,10 +2545,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         try:
             records, appended = self._read_pool_delta(
                 paths, "_pairs", self._pairs_mtime, stamp)
-            pairs = [
-                r for r in records
-                if r.get("rating") == "better" and r.get("better") and r.get("reply")
-            ]
+            pairs = [r for r in records if self._is_better_pair(r)]
             if appended:
                 self._pairs_cache.extend(pairs)
             else:
@@ -3050,27 +2573,32 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             try:
                 rows = read_jsonl((path,))
                 if pairs_only:
-                    rows = [r for r in rows
-                            if r.get("rating") == "better" and r.get("better")
-                            and r.get("reply")]
-                for rec in rows:
-                    rec["_rt"] = _retrieval_fields(rec)
-                setattr(self, attr + "_cache", rows)
+                    rows = [r for r in rows if self._is_better_pair(r)]
+                setattr(self, attr + "_cache", self._tag_rows(rows))
                 setattr(self, attr + "_stamp", stamp)
             except Exception as e:
                 logger.warning("[Agent] %s reload failed: %s", path.name, e)
 
     @staticmethod
-    def _pool_stamp(paths) -> tuple:
-        """Staleness signal for a (seed, runtime) pool: mtime AND size of each
-        file.
+    def _is_better_pair(r: dict) -> bool:
+        return bool(r.get("rating") == "better" and r.get("better") and r.get("reply"))
 
-        Size is not redundant. Filesystem mtime resolution is coarse enough
-        that an append landing in the same tick as the previous read leaves
-        mtime unchanged — and for the runtime files, which the agent appends to
-        itself after every banked reply, that would mean freshly learned
-        material sitting unseen until some later write happened to move the
-        clock."""
+    @staticmethod
+    def _tag_rows(rows: list) -> list:
+        """Precompute the per-row retrieval fields once at load, not per turn."""
+        for rec in rows:
+            rec["_rt"] = _retrieval_fields(rec)
+        return rows
+
+    def _set_pool_pos(self, attr: str, eof: int, offset: int, sig: bytes) -> None:
+        setattr(self, attr + "_eof", eof)
+        setattr(self, attr + "_offset", offset)
+        setattr(self, attr + "_sig", sig)
+
+    @staticmethod
+    def _pool_stamp(paths) -> tuple:
+        """(mtime, size) per file. Size too: an append within one mtime tick
+        would otherwise sit unseen."""
         out: list = []
         for p in paths:
             try:
@@ -3109,24 +2637,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 getattr(self, attr + "_offset"),
                 getattr(self, attr + "_sig"),
             )
+            self._set_pool_pos(attr, eof, offset, sig)
             if appended:
-                for rec in records:
-                    rec["_rt"] = _retrieval_fields(rec)
-                setattr(self, attr + "_eof", eof)
-                setattr(self, attr + "_offset", offset)
-                setattr(self, attr + "_sig", sig)
-                return records, True
+                return self._tag_rows(records), True
             # _read_jsonl_appended rejected the prefix and re-read the runtime
             # file whole; the seed still has to be prepended.
-            seed_records = read_jsonl((seed_path,))
-            for rec in records:
-                rec["_rt"] = _retrieval_fields(rec)
-            for rec in seed_records:
-                rec["_rt"] = _retrieval_fields(rec)
-            setattr(self, attr + "_eof", eof)
-            setattr(self, attr + "_offset", offset)
-            setattr(self, attr + "_sig", sig)
-            return seed_records + records, False
+            return self._tag_rows(read_jsonl((seed_path,)) + records), False
 
         seed_records = read_jsonl((seed_path,))
         if runtime_path.exists():
@@ -3134,26 +2650,32 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 runtime_path, 0, 0, b"")
         else:
             runtime_records, eof, offset, sig = [], 0, 0, b""
-        setattr(self, attr + "_eof", eof)
-        setattr(self, attr + "_offset", offset)
-        setattr(self, attr + "_sig", sig)
-        records = seed_records + runtime_records
-        for rec in records:
-            rec["_rt"] = _retrieval_fields(rec)
-        return records, False
+        self._set_pool_pos(attr, eof, offset, sig)
+        return self._tag_rows(seed_records + runtime_records), False
+
+    def _reload_json_if_stale(self, path: Path, attr: str, parse,
+                              name: str, unit: str) -> None:
+        """Re-read a JSON config when its mtime moves; a missing file empties
+        the cache. `parse(data)` returns the entries to cache."""
+        try:
+            mtime = path.stat().st_mtime
+        except FileNotFoundError:
+            setattr(self, attr + "_cache", [])
+            setattr(self, attr + "_mtime", 0.0)
+            return
+        if mtime <= getattr(self, attr + "_mtime"):
+            return
+        try:
+            entries = parse(json.loads(path.read_text(encoding="utf-8")))
+            setattr(self, attr + "_cache", entries)
+            setattr(self, attr + "_mtime", mtime)
+            logger.info("[Agent] %s loaded %d %s", name, len(entries), unit)
+        except Exception as e:
+            logger.warning("[Agent] %s.json load failed: %s", name, e)
 
     # -------- Output filter (SillyTavern regex-extension style) --------
     def _reload_filters_if_stale(self) -> None:
-        try:
-            mtime = self.output_filter_file.stat().st_mtime
-        except FileNotFoundError:
-            self._filters_cache = []
-            self._filters_mtime = 0.0
-            return
-        if mtime <= self._filters_mtime:
-            return
-        try:
-            data = json.loads(self.output_filter_file.read_text(encoding="utf-8"))
+        def parse(data) -> list:
             raw = data.get("filters", []) if isinstance(data, dict) else data
             compiled = []
             for f in raw:
@@ -3171,11 +2693,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 except re.error as e:
                     logger.warning("[Agent] output_filter '%s' regex compile failed: %s",
                                    f.get("name"), e)
-            self._filters_cache = compiled
-            self._filters_mtime = mtime
-            logger.info("[Agent] output_filter loaded %d rules", len(compiled))
-        except Exception as e:
-            logger.warning("[Agent] output_filter.json load failed: %s", e)
+            return compiled
+
+        self._reload_json_if_stale(self.output_filter_file, "_filters", parse,
+                                   "output_filter", "rules")
 
     def _apply_output_filter(self, reply: str) -> tuple[str, str]:
         """Pre-send regex sanity net. Returns (filtered_reply, blocked_reason).
@@ -3195,16 +2716,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
     # -------- Lorebook (SillyTavern World Info style) --------
     def _reload_lorebook_if_stale(self) -> None:
-        try:
-            mtime = self.lorebook_file.stat().st_mtime
-        except FileNotFoundError:
-            self._lorebook_cache = []
-            self._lorebook_mtime = 0.0
-            return
-        if mtime <= self._lorebook_mtime:
-            return
-        try:
-            data = json.loads(self.lorebook_file.read_text(encoding="utf-8"))
+        def parse(data) -> list:
             raw = data.get("entries", []) if isinstance(data, dict) else data
             entries = []
             for e in raw:
@@ -3219,11 +2731,10 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     "scan_depth": int(e.get("scan_depth", 5)),
                 })
             entries.sort(key=lambda x: -x["priority"])
-            self._lorebook_cache = entries
-            self._lorebook_mtime = mtime
-            logger.info("[Agent] lorebook loaded %d entries", len(entries))
-        except Exception as e:
-            logger.warning("[Agent] lorebook.json load failed: %s", e)
+            return entries
+
+        self._reload_json_if_stale(self.lorebook_file, "_lorebook", parse,
+                                   "lorebook", "entries")
 
     def _lorebook_for_prompt(self, history: list, focus_text: str = "") -> str:
         """Scan recent history + focus_text; inject keyword-matched entries.
@@ -3257,30 +2768,15 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
     CORE_MEMORY_MAX_CHARS = 400
 
     def _load_core_memory(self) -> dict[str, str]:
-        try:
-            loaded = json.loads(
-                self.core_memory_file.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError("core memory root must be an object")
-            return {
-                key: value
-                for key, value in loaded.items()
-                if isinstance(key, str) and isinstance(value, str)
-            }
-        except FileNotFoundError:
-            return {}
-        except Exception as e:
-            logger.warning("[Agent] core_memory.json load failed: %s", e)
-            return {}
+        loaded = self._load_json_dict(self.core_memory_file, "core_memory.json")
+        return {
+            key: value
+            for key, value in loaded.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
 
     def _save_core_memory(self) -> None:
-        try:
-            atomic_write_text(
-                self.core_memory_file,
-                json.dumps(self.core_memory, ensure_ascii=False, indent=2),
-            )
-        except Exception as e:
-            logger.warning("[Agent] core_memory save failed: %s", e)
+        self._save_json(self.core_memory_file, self.core_memory, "core_memory")
 
     def _core_memory_for_prompt(self, group_id: str) -> str:
         note = (self.core_memory.get(group_id) or "").strip()
@@ -3372,20 +2868,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 if all(str(scope.get(key) or "") == str(value or "")
                        for key, value in current_scope.items()):
                     authorized.append(row)
-            # SAY SOMETHING WHEN EVERYTHING IS REFUSED. Dropping 100% of a
-            # non-empty view logged nothing at all, which is the property that
-            # let an over-long PERSONA_VERSION delete the entire learning loop
-            # in silence for however long nobody looked. The scope contains
-            # `persona_hash`, so editing the persona document by ONE BYTE
-            # orphans the whole learned corpus the same way, and that is a
-            # trigger nobody has to opt into.
-            #
-            # Edge-triggered: once per transition, not once per turn, and it
-            # rearms when authority comes back so a later regression is not
-            # swallowed by the first one.
+            # Warn (edge-triggered) when a non-empty view is refused whole:
+            # a one-byte persona edit changes persona_hash and silently
+            # orphans the entire learned corpus.
             if authorized:
                 self._scope_drop_warned = False
-            elif rows and not getattr(self, "_scope_drop_warned", False):
+            elif rows and not self._scope_drop_warned:
                 self._scope_drop_warned = True
                 logger.warning(
                     "[Agent] all %d promoted row(s) refused by scope for "
@@ -3722,15 +3210,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         user_id: str = "",
         user_name: str = "",
     ) -> Optional[str]:
-        # Imperative memory commands. Match both English and (legacy) Chinese
-        # forms so a Chinese-locale fork doesn't lose this feature on upgrade.
-        # English: "BOT remember X", "BOT, remember X", "BOT remember: X"
-        # Chinese: "BOT 记住 X" / "BOT 记一下 X" / "BOT 记下 X"
-        remember_pat = re.compile(
-            rf"{re.escape(self.bot_name)}\s*[，,]?\s*"
-            rf"(?:remember|memorize|记(?:住|一下|下))\s*[：:，,]?\s*(.+)",
-            re.IGNORECASE,
-        )
+        remember_pat, forget_pat, recall_pat = self._memory_cmd_patterns()
+        is_owner = bool(user_id) and user_id == self.owner_qq
         m = remember_pat.search(text)
         if m:
             content = m.group(1).strip()
@@ -3744,23 +3225,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             if not content:
                 return "I can remember facts, not instructions"
             item: dict = {"text": content, "time": time.time()}
-            is_owner = bool(user_id) and user_id == self.owner_qq
             if user_id and not is_owner:
                 item["user_id"] = user_id
                 if user_name:
                     item["user_name"] = user_name
-            items = self.memories.setdefault(group_id, [])
-            items.append(item)
-            if len(items) > self.memory_max:
-                self._evict_memory(items)
-            self._save_memories()
+            self._append_memory(group_id, item)
             return random.choice(["noted", "got it, written down", "remembered", "mhm", "ok"])
 
-        forget_pat = re.compile(
-            rf"{re.escape(self.bot_name)}\s*[，,]?\s*"
-            rf"(?:forget|drop|忘(?:了|记|掉))\s*[：:，,]?\s*(.+)",
-            re.IGNORECASE,
-        )
         m = forget_pat.search(text)
         if m:
             query = m.group(1).strip()
@@ -3769,26 +3240,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 return random.choice(["forget what? be specific", "which one? say more"])
             items = self.memories.get(group_id, [])
             before = len(items)
-            # Only delete entries whose stored text contains the query; the old
-            # bidirectional substring match let a short memory ("cat") collide
-            # with a (usually long) forget sentence and wipe unrelated entries.
-            is_owner = bool(user_id) and user_id == self.owner_qq
-            # Authority fails CLOSED. This was `not user_id or is_owner`, so a
-            # message that arrived without attribution inherited OWNER rights
-            # over everyone else's memories — and an absent `post_type` is
-            # enough to skip main.py's user_id presence check.
-            # `is_owner` already requires a user_id, so it is the whole rule.
-            trusted_admin = is_owner
-            # Normalised, because "no attribution" is spelled two ways: stored
-            # entries omit the key (None) while the caller arrives as "". An
-            # anonymous caller still owns the unattributed entries — that is
-            # all it owns — and still cannot touch Alice's.
+            # One-directional match (query in text): a short memory ("cat")
+            # must not collide with a long forget sentence. Authority fails
+            # closed: only the owner (which requires a user_id) may delete
+            # others' entries; an anonymous caller owns only unattributed ones.
             caller = str(user_id or "")
             kept = [
                 it for it in items
                 if query not in it["text"]
                 or (
-                    not trusted_admin
+                    not is_owner
                     and str(it.get("user_id") or "") != caller
                 )
             ]
@@ -3802,15 +3263,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             self._save_memories()
             return random.choice(["forgotten", "dropped", "gone", "bye"])
 
-        recall_pat = re.compile(
-            rf"{re.escape(self.bot_name)}\s*[，,]?\s*"
-            rf"(?:what do you remember|what'?s in your memory|memory\?|"
-            rf"(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
-            re.IGNORECASE,
-        )
         if recall_pat.search(text):
             items = self.memories.get(group_id, [])
-            is_owner = bool(user_id) and user_id == self.owner_qq
             if user_id and not is_owner:
                 items = [
                     it for it in items
@@ -3830,7 +3284,24 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
         return None
 
-
+    def _memory_cmd_patterns(self) -> tuple:
+        """remember / forget / recall regexes, cached per bot_name (tests
+        reassign bot_name after init). English + legacy Chinese forms."""
+        cached = getattr(self, "_mem_cmd_pats", None)
+        if cached and cached[0] == self.bot_name:
+            return cached[1]
+        head = rf"{re.escape(self.bot_name)}\s*[，,]?\s*"
+        pats = (
+            re.compile(head + r"(?:remember|memorize|记(?:住|一下|下))\s*[：:，,]?\s*(.+)",
+                       re.IGNORECASE),
+            re.compile(head + r"(?:forget|drop|忘(?:了|记|掉))\s*[：:，,]?\s*(.+)",
+                       re.IGNORECASE),
+            re.compile(head + r"(?:what do you remember|what'?s in your memory|memory\?|"
+                       r"(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
+                       re.IGNORECASE),
+        )
+        self._mem_cmd_pats = (self.bot_name, pats)
+        return pats
 
     @staticmethod
     def _evict_memory(items: list[dict]) -> None:
@@ -3848,8 +3319,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         text = self._validate_memory_candidate(text)
         if not text:
             return
-        items = self.memories.setdefault(group_id, [])
-        if any(it["text"] == text for it in items):
+        if any(it["text"] == text for it in self.memories.get(group_id, [])):
             return
         item: dict = {"text": text, "time": time.time(), "auto": True}
         name_to_uid: dict[str, str] = {}
@@ -3865,11 +3335,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 item["user_id"] = uid
                 item["user_name"] = nm
                 break
-        items.append(item)
-        if len(items) > self.memory_max:
-            self._evict_memory(items)
-        self._save_memories()
-        subj = f" (about={item.get('user_name','?')})" if "user_id" in item else ""
+        self._append_memory(group_id, item)
+        subj =f" (about={item.get('user_name','?')})" if "user_id" in item else ""
         logger.info("[Agent] auto-memory (group=%s)%s: %s", group_id, subj, text[:60])
 
     @staticmethod

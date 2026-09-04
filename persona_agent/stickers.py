@@ -11,13 +11,11 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
-from .storage import append_jsonl_unlocked, append_lock, atomic_write_text
+from .storage import append_jsonl_rotating, atomic_write_text
+from .textproc import _detect_image_mime, strip_json_fences
 
 logger = logging.getLogger("agent.stickers")
 
-# Strong refs to fire-and-forget tag tasks. Without this, a task GC'd before
-# its finally (which discards from _tagging_inflight) leaks the inflight entry
-# forever → that sticker can never be retagged.
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
@@ -28,6 +26,10 @@ RECENT_USE_COOLDOWN_SEC = 300  # min gap before re-sending the same sticker; sen
 # startup, recheck_persona_fit_all will re-evaluate every entry whose
 # _persona_version is older than this — no manual JSON surgery needed.
 PERSONA_PROMPT_VERSION = 2
+
+_IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg",
+              "image/gif": "gif", "image/webp": "webp"}
+
 
 class StickerLibrary:
     def __init__(
@@ -63,6 +65,9 @@ class StickerLibrary:
         self._last_save = 0.0
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
+        # Strong refs to fire-and-forget tag tasks: one GC'd before its
+        # finally leaks its _tagging_inflight entry and the sticker is never
+        # retagged.
         self._bg_tasks: set[asyncio.Task] = set()
 
     def _spawn(self, coro) -> asyncio.Task:
@@ -120,25 +125,13 @@ class StickerLibrary:
 
     def _log_unknown(self, md5: str, src_user: str, src_group: str, url: str) -> None:
         try:
-            self.unknown_log.parent.mkdir(parents=True, exist_ok=True)
-            with append_lock(self.unknown_log):
-                try:
-                    if (self.unknown_log.exists()
-                            and self.unknown_log.stat().st_size > 2_000_000):
-                        old = self.unknown_log.with_suffix(
-                            self.unknown_log.suffix + ".old")
-                        if old.exists():
-                            old.unlink()
-                        self.unknown_log.replace(old)
-                except OSError:
-                    pass
-                append_jsonl_unlocked(self.unknown_log, {
-                    "ts": time.time(),
-                    "md5": md5,
-                    "src_user": src_user,
-                    "src_group": src_group,
-                    "url": url,
-                })
+            append_jsonl_rotating(self.unknown_log, {
+                "ts": time.time(),
+                "md5": md5,
+                "src_user": src_user,
+                "src_group": src_group,
+                "url": url,
+            }, max_bytes=2_000_000)
         except Exception:
             pass
 
@@ -240,15 +233,25 @@ class StickerLibrary:
 
     @staticmethod
     def _guess_ext(b: bytes) -> str:
-        if b[:8] == b"\x89PNG\r\n\x1a\n":
-            return "png"
-        if b[:3] == b"\xff\xd8\xff":
-            return "jpg"
-        if b[:4] == b"GIF8":
-            return "gif"
-        if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
-            return "webp"
-        return "bin"
+        return _IMAGE_EXT.get(_detect_image_mime(b), "bin")
+
+    @staticmethod
+    def _needs_tagging(entry: dict) -> bool:
+        return (not entry.get("auto_tagged")
+                and len(entry.get("seen_contexts", [])) >= MIN_CONTEXTS_TO_TAG)
+
+    def _remove_entry(self, filename: str, *, warn_on_unlink: bool = False) -> bool:
+        """Drop the record, its md5 index entry and the file. False if unknown."""
+        entry = self.entries.pop(filename, None)
+        if not entry:
+            return False
+        self._md5_index.pop(entry.get("md5", ""), None)
+        try:
+            (self.dir / filename).unlink(missing_ok=True)
+        except Exception as e:
+            if warn_on_unlink:
+                logger.warning("[stickers] purge unlink failed for %s: %s", filename, e)
+        return True
 
     def _evict_least_used(self) -> None:
         """Drop the bottom 10% by use_count (untagged ones first)."""
@@ -262,13 +265,7 @@ class StickerLibrary:
         )
         cut = max(1, len(ranked) // 10)
         for filename, _ in ranked[:cut]:
-            entry = self.entries.pop(filename, None)
-            if entry:
-                self._md5_index.pop(entry.get("md5", ""), None)
-                try:
-                    (self.dir / filename).unlink(missing_ok=True)
-                except Exception:
-                    pass
+            self._remove_entry(filename)
         logger.info("[stickers] evicted %d entries", cut)
 
     async def maybe_tag(self, md5: str) -> None:
@@ -280,9 +277,7 @@ class StickerLibrary:
         if not filename:
             return
         entry = self.entries.get(filename)
-        if not entry or entry.get("auto_tagged"):
-            return
-        if len(entry.get("seen_contexts", [])) < MIN_CONTEXTS_TO_TAG:
+        if not entry or not self._needs_tagging(entry):
             return
         if filename in self._tagging_inflight:
             return
@@ -350,7 +345,7 @@ class StickerLibrary:
                 disable_thinking=True,
                 json_object=True,
             )
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
+            raw = strip_json_fences(raw)
             try:
                 parsed = json.loads(raw)
             except json.JSONDecodeError:
@@ -437,7 +432,7 @@ class StickerLibrary:
                     disable_thinking=True,
                     json_object=True,
                 )
-                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw or "", flags=re.MULTILINE).strip()
+                raw = strip_json_fences(raw)
                 parsed = json.loads(raw)
                 v["persona_fit"] = bool(parsed.get("fit"))
                 v["_persona_version"] = PERSONA_PROMPT_VERSION
@@ -460,14 +455,7 @@ class StickerLibrary:
         if not unfit:
             return 0
         for filename in unfit:
-            entry = self.entries.pop(filename, None)
-            if not entry:
-                continue
-            self._md5_index.pop(entry.get("md5", ""), None)
-            try:
-                (self.dir / filename).unlink(missing_ok=True)
-            except Exception as e:
-                logger.warning("[stickers] purge unlink failed for %s: %s", filename, e)
+            self._remove_entry(filename, warn_on_unlink=True)
         self._save(force=True)  # entries + files just deleted — keep the index in sync on disk
         logger.info("[stickers] purged %d unfit entries", len(unfit))
         return len(unfit)
@@ -674,9 +662,7 @@ class StickerLibrary:
             return 0
         pending = [
             v["md5"] for v in self.entries.values()
-            if not v.get("auto_tagged")
-            and v.get("md5")
-            and len(v.get("seen_contexts", [])) >= MIN_CONTEXTS_TO_TAG
+            if self._needs_tagging(v) and v.get("md5")
         ]
         if not pending:
             return 0
@@ -689,9 +675,5 @@ class StickerLibrary:
     def stats(self) -> dict:
         total = len(self.entries)
         tagged = sum(1 for v in self.entries.values() if v.get("auto_tagged"))
-        pending = sum(
-            1 for v in self.entries.values()
-            if not v.get("auto_tagged")
-            and len(v.get("seen_contexts", [])) >= MIN_CONTEXTS_TO_TAG
-        )
+        pending = sum(1 for v in self.entries.values() if self._needs_tagging(v))
         return {"total": total, "tagged": tagged, "pending_tagging": pending}
