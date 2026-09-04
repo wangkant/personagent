@@ -1,159 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">persona-llm-agent message path and learning loop</title>
-  <desc id="architecture-desc">QQ and other chat platforms enter through AstrBot and one gateway endpoint, then share one FastAPI agent. Messages move left to right through ingestion, context enrichment, mode selection, JSON generation, validation, and gateway delivery. Beneath the main path, reactions and asynchronous evaluation are recorded as append-only evidence; only the candidates the promotion policy approves are materialized and hot-reloaded into few-shot retrieval.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">persona-llm-agent: message path and learning loop</title>
+  <desc id="architecture-desc">Chat platforms reach one FastAPI process through an AstrBot forwarder posting to /webhook/gateway, or QQ directly through NapCat posting to /webhook/qq. Every event passes ingest, decide, prompt assembly, generation and validation before a reply is delivered or PASS sends nothing. Off the hot path, reactions and evaluations are appended to an evidence log, turned into inert candidates, and only what the promotion policy approves is materialized and hot-reloaded into prompt assembly.</desc>
   <style>
     svg {
-      --bg: #f8fafc;
-      --surface: #ffffff;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #d9e2ec;
-      --line-strong: #98a2b3;
-      --blue: #1769aa;
-      --blue-soft: #eaf3fb;
-      --mint: #087f5b;
-      --mint-soft: #eaf8f2;
-      --violet: #7047b8;
-      --violet-soft: #f3effb;
-      --coral: #b5472f;
-      --coral-soft: #fdf0ec;
+      --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
+      --line: #d9e2ec; --line-strong: #98a2b3;
+      --blue: #1769aa; --blue-soft: #eaf3fb; --mint: #087f5b; --mint-soft: #eaf8f2;
+      --violet: #7047b8; --violet-soft: #f3effb; --coral: #b5472f; --coral-soft: #fdf0ec;
     }
-    text {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Microsoft YaHei", "PingFang SC", monospace;
-      dominant-baseline: middle;
-    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; dominant-baseline: middle; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .bg { fill: var(--bg); }
-    .surface { fill: var(--surface); }
-    .frame, .rule { fill: none; stroke: var(--line); }
-    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
-    .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
-    .blue-region { fill: var(--blue-soft); }
-    .mint-region { fill: var(--mint-soft); }
-    .violet-region { fill: var(--violet-soft); }
-    .coral-region { fill: var(--coral-soft); }
-    .code { fill: var(--surface); stroke: var(--line); }
-    .ink { fill: var(--ink); }
-    .muted { fill: var(--muted); }
-    .blue { fill: var(--blue); }
-    .mint { fill: var(--mint); }
-    .violet { fill: var(--violet); }
-    .coral { fill: var(--coral); }
-    .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
-    .eyebrow { font-size: 10.5px; font-weight: 650; letter-spacing: 1.2px; }
-    .label { font-size: 12.5px; font-weight: 650; }
-    .small { font-size: 10.5px; }
-    .tiny { font-size: 9.5px; }
+    .surface { fill: var(--surface); stroke: var(--line); }
+    .surface-dashed { fill: var(--surface); stroke: var(--line-strong); stroke-dasharray: 4 3; }
+    .frame { fill: none; stroke: var(--line); }
+    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.4; }
+    .flow-dashed { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 4 3; }
+    .flow-mint { fill: none; stroke: var(--mint); stroke-width: 1.6; }
+    .flow-coral { fill: none; stroke: var(--coral); stroke-width: 1.4; }
+    .violet-region { fill: var(--violet-soft); stroke: none; }
+    .mint-region { fill: var(--mint-soft); stroke: none; }
+    .stage { fill: var(--surface); stroke: var(--line); }
+    .ink { fill: var(--ink); } .muted { fill: var(--muted); } .blue { fill: var(--blue); }
+    .mint { fill: var(--mint); } .violet { fill: var(--violet); } .coral { fill: var(--coral); }
+    .headline { font-size: 21px; font-weight: 650; letter-spacing: -0.3px; }
+    .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; }
+    .label { font-size: 13px; font-weight: 650; }
+    .small { font-size: 11px; } .tiny { font-size: 10px; }
     @media (prefers-color-scheme: dark) {
       svg {
-        --bg: #0d1117;
-        --surface: #111821;
-        --ink: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --line-strong: #59636e;
-        --blue: #58a6ff;
-        --blue-soft: #101f30;
-        --mint: #56d49b;
-        --mint-soft: #10241d;
-        --violet: #bc8cff;
-        --violet-soft: #1c1726;
-        --coral: #ff8b73;
-        --coral-soft: #2a1714;
+        --bg: #0d1117; --surface: #111821; --ink: #e6edf3; --muted: #8b949e;
+        --line: #30363d; --line-strong: #59636e;
+        --blue: #58a6ff; --blue-soft: #101f30; --mint: #56d49b; --mint-soft: #10241d;
+        --violet: #bc8cff; --violet-soft: #1c1726; --coral: #ff8b73; --coral-soft: #2a1714;
       }
     }
   </style>
   <defs>
-    <marker id="architecture-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+    <marker id="arch-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
-
-  <rect class="bg" width="980" height="520" rx="12"/>
-  <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
-
-  <text class="eyebrow violet" x="40" y="32">SYSTEM / MESSAGE PATH</text>
-  <text class="headline ink" x="40" y="61">One gateway, one agent path</text>
-  <text class="small muted" x="40" y="86">Every platform shares the same persona, safety boundary, memory, and learning loop.</text>
-  <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
-
-  <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
-  <text class="eyebrow violet" x="220" y="143">SHARED FASTAPI AGENT</text>
-  <text class="tiny muted" x="920" y="143" text-anchor="end">ONE PIPELINE / ANY PLATFORM</text>
-
-  <rect class="surface" x="40" y="181" width="126" height="70" rx="7"/>
-  <rect class="frame" x="40.5" y="181.5" width="125" height="69" rx="6.5"/>
-  <text class="label ink" x="54" y="198">chat platforms</text>
-  <text class="tiny muted" x="54" y="218">QQ · Telegram</text>
-  <text class="tiny muted" x="54" y="235">Discord · Slack · …</text>
-
-  <path class="flow" d="M166 216H220" marker-end="url(#architecture-arrow)"/>
-
-  <rect class="code" x="220" y="181" width="126" height="70" rx="6"/>
-  <text class="eyebrow blue" x="234" y="198">ASTRBOT GATEWAY</text>
-  <text class="tiny ink" x="234" y="218">/webhook/gateway</text>
-  <text class="tiny muted" x="234" y="235">signed · replay-safe</text>
-
-  <path class="flow" d="M346 216H380" marker-end="url(#architecture-arrow)"/>
-
-  <rect class="blue-region" x="380" y="160" width="140" height="112" rx="7"/>
-  <text class="eyebrow blue" x="394" y="178">PREFLIGHT + CONTEXT</text>
-  <text class="small ink" x="394" y="201">dedup · debounce</text>
-  <text class="small ink" x="394" y="222">sticky-call</text>
-  <line class="rule" x1="394" y1="238" x2="506" y2="238"/>
-  <text class="tiny muted" x="394" y="253">vision + URL metadata</text>
-
-  <path class="flow" d="M520 216H550" marker-end="url(#architecture-arrow)"/>
-  <rect class="blue-region" x="550" y="160" width="112" height="112" rx="7"/>
-  <text class="eyebrow blue" x="564" y="178">MODE</text>
-  <text class="label ink" x="564" y="202">decide</text>
-  <text class="tiny muted" x="564" y="226">owner · called</text>
-  <text class="tiny muted" x="564" y="244">followup · judge</text>
-
-  <path class="flow" d="M662 216H692" marker-end="url(#architecture-arrow)"/>
-  <rect class="mint-region" x="692" y="160" width="108" height="112" rx="7"/>
-  <text class="eyebrow mint" x="706" y="178">LLM</text>
-  <text class="label ink" x="706" y="202">JSON call</text>
-  <text class="tiny muted" x="706" y="226">prompt cache</text>
-  <text class="tiny muted" x="706" y="244">fail closed</text>
-
-  <path class="flow" d="M800 216H830" marker-end="url(#architecture-arrow)"/>
-  <rect class="coral-region" x="830" y="160" width="110" height="112" rx="7"/>
-  <text class="eyebrow coral" x="844" y="178">VALIDATE + SEND</text>
-  <text class="tiny ink" x="844" y="199">semantic regex</text>
-  <text class="tiny ink" x="844" y="215">character whitelist</text>
-  <line class="rule" x1="844" y1="230" x2="926" y2="230"/>
-  <text class="tiny muted" x="844" y="244">gateway response</text>
-  <text class="tiny muted" x="844" y="259">owned / handled</text>
-
-  <rect class="surface" x="200" y="348" width="740" height="122" rx="10"/>
-  <rect class="frame" x="200.5" y="348.5" width="739" height="121" rx="9.5"/>
-  <text class="eyebrow mint" x="220" y="364">LEARNING LOOP / BENEATH THE MESSAGE PATH</text>
-
-  <rect class="mint-region" x="230" y="376" width="150" height="58" rx="7"/>
-  <text class="label mint" x="246" y="395">few-shot retrieval</text>
-  <text class="tiny muted" x="246" y="416">relevance + recency</text>
-
-  <rect class="code" x="410" y="376" width="140" height="58" rx="7"/>
-  <text class="label ink" x="426" y="395">promotion</text>
-  <text class="tiny muted" x="426" y="416">2 events, 1 strong</text>
-
-  <rect class="code" x="590" y="376" width="130" height="58" rx="7"/>
-  <text class="label ink" x="606" y="395">evidence</text>
-  <text class="tiny muted" x="606" y="416">append-only log</text>
-
-  <rect class="mint-region" x="760" y="376" width="120" height="58" rx="7"/>
-  <text class="label mint" x="776" y="395">signals</text>
-  <text class="tiny muted" x="776" y="416">reaction + self-eval</text>
-
-  <path class="mint-flow" d="M885 272V348H820V376" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M760 405H720" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M590 405H550" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M410 405H380" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M305 376V326H746V272" marker-end="url(#architecture-arrow)"/>
-  <text class="tiny mint" x="500" y="326" text-anchor="middle">HOT RELOAD · NO RESTART</text>
-
-  <text class="tiny muted" x="220" y="453">Primary: directed user reactions · fallback: async 1–5 self-evaluation</text>
-  <line class="rule" x1="40" y1="490" x2="940" y2="490"/>
-  <circle class="mint" cx="48" cy="506" r="3"/>
-  <text class="small muted" x="60" y="506">The next similar message inherits only what promotion approved; evidence alone changes nothing.</text>
+  <rect class="bg" width="1000" height="720" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="999" height="719" rx="11.5"/>
+  <text class="eyebrow violet" x="40" y="34">ARCHITECTURE</text>
+  <text class="headline ink" x="40" y="62">One message boundary, one learning gate</text>
+  <text class="small muted" x="40" y="88">Every platform enters the same pipeline; nothing learned reaches a prompt until promotion approves it.</text>
+  <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
+  <rect class="surface" x="40" y="128" width="215" height="64" rx="8"/><text class="label ink" x="54" y="146">Chat platforms</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · Lark · KOOK</text><text class="small muted" x="54" y="183"></text>
+  <path class="flow" d="M255 160H282" marker-end="url(#arch-arrow)"/>
+  <rect class="surface" x="282" y="128" width="220" height="64" rx="8"/><text class="label ink" x="296" y="146">AstrBot + forwarder plugin</text><text class="small muted" x="296" y="166">allowlist · HMAC envelope · nonce</text><text class="small muted" x="296" y="183"></text>
+  <rect class="surface-dashed" x="530" y="128" width="190" height="64" rx="8"/><text class="label ink" x="544" y="146">NapCat (OneBot v11)</text><text class="small muted" x="544" y="166">direct QQ, optional</text><text class="small muted" x="544" y="183"></text>
+  <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
+  <text class="eyebrow violet" x="60" y="244">PERSONAGENT · ONE FASTAPI PROCESS</text>
+  <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>
+  <text class="eyebrow mint" x="670" y="244">LEARNING · OFF THE HOT PATH, UNDER RUNTIME/</text>
+  <path class="flow" d="M392 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono ink" x="400" y="214">POST /webhook/gateway</text>
+  <path class="flow-dashed" d="M560 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono muted" x="568" y="214">POST /webhook/qq</text>
+  <rect class="stage" x="150" y="262" width="430" height="62" rx="8"/><text class="label blue" x="164" y="280">Ingest</text><text class="small muted" x="164" y="300">token / HMAC · replay guard · admission limit · dedup</text><text class="small muted" x="164" y="317">normalize · enrich images, URLs, share cards</text>
+  <path class="flow" d="M210 324V342" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="333">event</text>
+  <rect class="stage" x="150" y="342" width="430" height="62" rx="8"/><text class="label blue" x="164" y="360">Decide</text><text class="small muted" x="164" y="380">relationship and mode: owner · called · follow-up · judge · proactive</text><text class="small muted" x="164" y="397">debounce the burst · reply, or PASS</text>
+  <path class="flow" d="M210 404V422" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="413">reply?</text>
+  <rect class="stage" x="150" y="422" width="430" height="62" rx="8"/><text class="label blue" x="164" y="440">Assemble prompt</text><text class="small muted" x="164" y="460">persona + [style] · lorebook · scoped memory</text><text class="small muted" x="164" y="477">few-shot: seeds + promoted examples and pairs</text>
+  <path class="flow" d="M210 484V502" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="493">context</text>
+  <rect class="stage" x="150" y="502" width="430" height="62" rx="8"/><text class="label blue" x="164" y="520">Generate</text><text class="small muted" x="164" y="540">OpenAI-compatible /v1 · structured JSON</text><text class="small muted mono" x="164" y="557">{ "reasoning", "intent", "reply", "mem" }</text>
+  <path class="flow" d="M210 564V582" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="573">JSON</text>
+  <rect class="stage" x="150" y="582" width="430" height="62" rx="8"/><text class="label blue" x="164" y="600">Validate and deliver</text><text class="small muted" x="164" y="620">output filter · character policy · split · stickers</text><text class="small muted" x="164" y="637">malformed output fails closed · PASS sends nothing</text>
+  <path class="flow-dashed" d="M150 533H120V355H150" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono muted" x="126" y="444" transform="rotate(-90 126 444)" text-anchor="middle">"mem" → runtime/memory.json</text>
+  <path class="flow-coral" d="M150 615H70V192" marker-end="url(#arch-arrow)"/>
+  <text class="tiny coral" x="60" y="666">replies ride back in the HTTP response · direct QQ sends through NAPCAT_API</text>
+  <rect class="stage" x="690" y="262" width="250" height="62" rx="8"/><text class="label mint" x="704" y="280">Promoted views</text><text class="small muted mono" x="704" y="300">runtime/promoted.*.&lt;lang&gt;.jsonl</text><text class="small muted" x="704" y="317">atomic rewrite · rebuilt from the ledger</text>
+  <path class="flow-mint" d="M750 342V324" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="333">materialize</text>
+  <rect class="stage" x="690" y="342" width="250" height="62" rx="8"/><text class="label mint" x="704" y="360">Promotion</text><text class="small muted" x="704" y="380">≥ 2 compatible events, ≥ 1 strong</text><text class="small muted" x="704" y="397">same scope · rollback and supersession</text>
+  <path class="flow-mint" d="M750 422V404" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="413">decide</text>
+  <rect class="stage" x="690" y="422" width="250" height="62" rx="8"/><text class="label mint" x="704" y="440">Candidates</text><text class="small muted" x="704" y="460">versioned proposals · inert until promoted</text><text class="small muted" x="704" y="477">runtime/candidates.jsonl, append-only</text>
+  <path class="flow-mint" d="M750 502V484" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="493">propose</text>
+  <rect class="stage" x="690" y="502" width="250" height="62" rx="8"/><text class="label mint" x="704" y="520">Evidence log</text><text class="small muted" x="704" y="540">append-only · never alters behaviour</text><text class="small muted" x="704" y="557">scope: persona, version, lang, conv, mode</text>
+  <path class="flow-mint" d="M750 582V564" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="573">append</text>
+  <rect class="stage" x="690" y="582" width="250" height="62" rx="8"/><text class="label mint" x="704" y="600">Signals</text><text class="small muted" x="704" y="620">directed reactions · accepted retries</text><text class="small muted" x="704" y="637">self-eval · evolve diagnosis (both opt-in)</text>
+  <path class="flow-mint" d="M580 613H690" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="635" y="600" text-anchor="middle">reply + reactions</text>
+  <path class="flow-mint" d="M690 293H625V453H580" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="612" y="373" transform="rotate(-90 612 373)" text-anchor="middle">hot reload, no restart</text>
+  <line class="frame" x1="40" y1="676" x2="960" y2="676"/>
+  <circle class="mint" cx="48" cy="696" r="3"/>
+  <text class="small muted" x="60" y="696">Mutable state lives under runtime/; the append-only ledgers are the source of truth, so every promotion can be audited or reversed.</text>
 </svg>

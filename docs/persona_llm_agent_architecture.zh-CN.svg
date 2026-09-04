@@ -1,159 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">persona-llm-agent 消息路径与学习闭环</title>
-  <desc id="architecture-desc">QQ 与其他聊天平台统一经 AstrBot 和一个网关端点进入同一个 FastAPI agent。消息从左到右经过接入、上下文增强、模式判定、JSON 生成、校验和网关投递；下方的用户反应与异步评估被记为只追加的证据，只有通过晋升策略的候选才会物化并热加载到 few-shot 检索。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">persona-llm-agent：消息路径与学习闭环</title>
+  <desc id="architecture-desc">聊天平台经 AstrBot 转发插件 POST 到 /webhook/gateway，或 QQ 经 NapCat 直接 POST 到 /webhook/qq，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
   <style>
     svg {
-      --bg: #f8fafc;
-      --surface: #ffffff;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #d9e2ec;
-      --line-strong: #98a2b3;
-      --blue: #1769aa;
-      --blue-soft: #eaf3fb;
-      --mint: #087f5b;
-      --mint-soft: #eaf8f2;
-      --violet: #7047b8;
-      --violet-soft: #f3effb;
-      --coral: #b5472f;
-      --coral-soft: #fdf0ec;
+      --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
+      --line: #d9e2ec; --line-strong: #98a2b3;
+      --blue: #1769aa; --blue-soft: #eaf3fb; --mint: #087f5b; --mint-soft: #eaf8f2;
+      --violet: #7047b8; --violet-soft: #f3effb; --coral: #b5472f; --coral-soft: #fdf0ec;
     }
-    text {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Microsoft YaHei", "PingFang SC", monospace;
-      dominant-baseline: middle;
-    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; dominant-baseline: middle; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .bg { fill: var(--bg); }
-    .surface { fill: var(--surface); }
-    .frame, .rule { fill: none; stroke: var(--line); }
-    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
-    .mint-flow { fill: none; stroke: var(--mint); stroke-width: 1.5; }
-    .blue-region { fill: var(--blue-soft); }
-    .mint-region { fill: var(--mint-soft); }
-    .violet-region { fill: var(--violet-soft); }
-    .coral-region { fill: var(--coral-soft); }
-    .code { fill: var(--surface); stroke: var(--line); }
-    .ink { fill: var(--ink); }
-    .muted { fill: var(--muted); }
-    .blue { fill: var(--blue); }
-    .mint { fill: var(--mint); }
-    .violet { fill: var(--violet); }
-    .coral { fill: var(--coral); }
-    .headline { font-size: 20px; font-weight: 650; letter-spacing: -0.35px; }
-    .eyebrow { font-size: 10.5px; font-weight: 650; letter-spacing: 1.2px; }
-    .label { font-size: 12.5px; font-weight: 650; }
-    .small { font-size: 10.5px; }
-    .tiny { font-size: 9.5px; }
+    .surface { fill: var(--surface); stroke: var(--line); }
+    .surface-dashed { fill: var(--surface); stroke: var(--line-strong); stroke-dasharray: 4 3; }
+    .frame { fill: none; stroke: var(--line); }
+    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.4; }
+    .flow-dashed { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 4 3; }
+    .flow-mint { fill: none; stroke: var(--mint); stroke-width: 1.6; }
+    .flow-coral { fill: none; stroke: var(--coral); stroke-width: 1.4; }
+    .violet-region { fill: var(--violet-soft); stroke: none; }
+    .mint-region { fill: var(--mint-soft); stroke: none; }
+    .stage { fill: var(--surface); stroke: var(--line); }
+    .ink { fill: var(--ink); } .muted { fill: var(--muted); } .blue { fill: var(--blue); }
+    .mint { fill: var(--mint); } .violet { fill: var(--violet); } .coral { fill: var(--coral); }
+    .headline { font-size: 21px; font-weight: 650; letter-spacing: -0.3px; }
+    .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; }
+    .label { font-size: 13px; font-weight: 650; }
+    .small { font-size: 11px; } .tiny { font-size: 10px; }
     @media (prefers-color-scheme: dark) {
       svg {
-        --bg: #0d1117;
-        --surface: #111821;
-        --ink: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --line-strong: #59636e;
-        --blue: #58a6ff;
-        --blue-soft: #101f30;
-        --mint: #56d49b;
-        --mint-soft: #10241d;
-        --violet: #bc8cff;
-        --violet-soft: #1c1726;
-        --coral: #ff8b73;
-        --coral-soft: #2a1714;
+        --bg: #0d1117; --surface: #111821; --ink: #e6edf3; --muted: #8b949e;
+        --line: #30363d; --line-strong: #59636e;
+        --blue: #58a6ff; --blue-soft: #101f30; --mint: #56d49b; --mint-soft: #10241d;
+        --violet: #bc8cff; --violet-soft: #1c1726; --coral: #ff8b73; --coral-soft: #2a1714;
       }
     }
   </style>
   <defs>
-    <marker id="architecture-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+    <marker id="arch-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
-
-  <rect class="bg" width="980" height="520" rx="12"/>
-  <rect class="frame" x="0.5" y="0.5" width="979" height="519" rx="11.5"/>
-
-  <text class="eyebrow violet" x="40" y="32">系统 / 消息路径</text>
-  <text class="headline ink" x="40" y="61">一个网关，一条 agent 路径</text>
-  <text class="small muted" x="40" y="86">所有平台共享同一套人设、安全边界、记忆与学习闭环。</text>
-  <line class="rule" x1="40" y1="106" x2="940" y2="106"/>
-
-  <rect class="violet-region" x="200" y="126" width="740" height="184" rx="10"/>
-  <text class="eyebrow violet" x="220" y="143">共享 FASTAPI AGENT</text>
-  <text class="tiny muted" x="920" y="143" text-anchor="end">一条管线 / 任意平台</text>
-
-  <rect class="surface" x="40" y="181" width="126" height="70" rx="7"/>
-  <rect class="frame" x="40.5" y="181.5" width="125" height="69" rx="6.5"/>
-  <text class="label ink" x="54" y="198">聊天平台</text>
-  <text class="tiny muted" x="54" y="218">QQ · Telegram</text>
-  <text class="tiny muted" x="54" y="235">Discord · Slack · …</text>
-
-  <path class="flow" d="M166 216H220" marker-end="url(#architecture-arrow)"/>
-
-  <rect class="code" x="220" y="181" width="126" height="70" rx="6"/>
-  <text class="eyebrow blue" x="234" y="198">ASTRBOT 网关</text>
-  <text class="tiny ink" x="234" y="218">/webhook/gateway</text>
-  <text class="tiny muted" x="234" y="235">签名 · 防重放</text>
-
-  <path class="flow" d="M346 216H380" marker-end="url(#architecture-arrow)"/>
-
-  <rect class="blue-region" x="380" y="160" width="140" height="112" rx="7"/>
-  <text class="eyebrow blue" x="394" y="178">预处理 + 上下文</text>
-  <text class="small ink" x="394" y="201">去重 · 防抖</text>
-  <text class="small ink" x="394" y="222">sticky-call</text>
-  <line class="rule" x1="394" y1="238" x2="506" y2="238"/>
-  <text class="tiny muted" x="394" y="253">视觉 + URL 元信息</text>
-
-  <path class="flow" d="M520 216H550" marker-end="url(#architecture-arrow)"/>
-  <rect class="blue-region" x="550" y="160" width="112" height="112" rx="7"/>
-  <text class="eyebrow blue" x="564" y="178">模式</text>
-  <text class="label ink" x="564" y="202">判定</text>
-  <text class="tiny muted" x="564" y="226">owner · called</text>
-  <text class="tiny muted" x="564" y="244">followup · judge</text>
-
-  <path class="flow" d="M662 216H692" marker-end="url(#architecture-arrow)"/>
-  <rect class="mint-region" x="692" y="160" width="108" height="112" rx="7"/>
-  <text class="eyebrow mint" x="706" y="178">LLM</text>
-  <text class="label ink" x="706" y="202">JSON 调用</text>
-  <text class="tiny muted" x="706" y="226">提示词缓存</text>
-  <text class="tiny muted" x="706" y="244">失败即关闭</text>
-
-  <path class="flow" d="M800 216H830" marker-end="url(#architecture-arrow)"/>
-  <rect class="coral-region" x="830" y="160" width="110" height="112" rx="7"/>
-  <text class="eyebrow coral" x="844" y="178">校验 + 发送</text>
-  <text class="tiny ink" x="844" y="199">语义正则</text>
-  <text class="tiny ink" x="844" y="215">字符白名单</text>
-  <line class="rule" x1="844" y1="230" x2="926" y2="230"/>
-  <text class="tiny muted" x="844" y="244">网关响应</text>
-  <text class="tiny muted" x="844" y="259">owned / handled</text>
-
-  <rect class="surface" x="200" y="348" width="740" height="122" rx="10"/>
-  <rect class="frame" x="200.5" y="348.5" width="739" height="121" rx="9.5"/>
-  <text class="eyebrow mint" x="220" y="364">学习闭环 / 位于消息路径下方</text>
-
-  <rect class="mint-region" x="230" y="376" width="150" height="58" rx="7"/>
-  <text class="label mint" x="246" y="395">few-shot 检索</text>
-  <text class="tiny muted" x="246" y="416">相关度 + 新近度</text>
-
-  <rect class="code" x="410" y="376" width="140" height="58" rx="7"/>
-  <text class="label ink" x="426" y="395">晋升闸门</text>
-  <text class="tiny muted" x="426" y="416">2 条证据 · 1 条强</text>
-
-  <rect class="code" x="590" y="376" width="130" height="58" rx="7"/>
-  <text class="label ink" x="606" y="395">证据日志</text>
-  <text class="tiny muted" x="606" y="416">只追加事件</text>
-
-  <rect class="mint-region" x="760" y="376" width="120" height="58" rx="7"/>
-  <text class="label mint" x="776" y="395">学习信号</text>
-  <text class="tiny muted" x="776" y="416">用户反应 + 自评</text>
-
-  <path class="mint-flow" d="M885 272V348H820V376" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M760 405H720" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M590 405H550" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M410 405H380" marker-end="url(#architecture-arrow)"/>
-  <path class="mint-flow" d="M305 376V326H746V272" marker-end="url(#architecture-arrow)"/>
-  <text class="tiny mint" x="500" y="326" text-anchor="middle">热加载 · 无需重启</text>
-
-  <text class="tiny muted" x="220" y="453">主信号：定向用户反应 · 兜底信号：异步 1–5 分自评</text>
-  <line class="rule" x1="40" y1="490" x2="940" y2="490"/>
-  <circle class="mint" cx="48" cy="506" r="3"/>
-  <text class="small muted" x="60" y="506">下一条相似消息只继承被晋升的那部分；单有证据什么都不会改变。</text>
+  <rect class="bg" width="1000" height="720" rx="12"/>
+  <rect class="frame" x="0.5" y="0.5" width="999" height="719" rx="11.5"/>
+  <text class="eyebrow violet" x="40" y="34">架构</text>
+  <text class="headline ink" x="40" y="62">一条消息边界，一道学习门</text>
+  <text class="small muted" x="40" y="88">所有平台走同一条管线；学到的任何东西在晋升批准前都进不了 Prompt。</text>
+  <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
+  <rect class="surface" x="40" y="128" width="215" height="64" rx="8"/><text class="label ink" x="54" y="146">聊天平台</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · 飞书 · KOOK</text><text class="small muted" x="54" y="183"></text>
+  <path class="flow" d="M255 160H282" marker-end="url(#arch-arrow)"/>
+  <rect class="surface" x="282" y="128" width="220" height="64" rx="8"/><text class="label ink" x="296" y="146">AstrBot + 转发插件</text><text class="small muted" x="296" y="166">白名单 · HMAC 信封 · nonce</text><text class="small muted" x="296" y="183"></text>
+  <rect class="surface-dashed" x="530" y="128" width="190" height="64" rx="8"/><text class="label ink" x="544" y="146">NapCat（OneBot v11）</text><text class="small muted" x="544" y="166">直连 QQ，可选</text><text class="small muted" x="544" y="183"></text>
+  <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
+  <text class="eyebrow violet" x="60" y="244">personagent · 单个 FastAPI 进程</text>
+  <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>
+  <text class="eyebrow mint" x="670" y="244">学习 · 热路径之外，位于 runtime/</text>
+  <path class="flow" d="M392 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono ink" x="400" y="214">POST /webhook/gateway</text>
+  <path class="flow-dashed" d="M560 192V262" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono muted" x="568" y="214">POST /webhook/qq</text>
+  <rect class="stage" x="150" y="262" width="430" height="62" rx="8"/><text class="label blue" x="164" y="280">接入</text><text class="small muted" x="164" y="300">token / HMAC · 重放防护 · 并发准入 · 去重</text><text class="small muted" x="164" y="317">归一化 · 补充图片、链接、分享卡片上下文</text>
+  <path class="flow" d="M210 324V342" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="333">事件</text>
+  <rect class="stage" x="150" y="342" width="430" height="62" rx="8"/><text class="label blue" x="164" y="360">决策</text><text class="small muted" x="164" y="380">关系与模式：主人 · 被点名 · 追问 · 判定 · 主动</text><text class="small muted" x="164" y="397">合并消息突发 · 回复，或 PASS</text>
+  <path class="flow" d="M210 404V422" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="413">回复？</text>
+  <rect class="stage" x="150" y="422" width="430" height="62" rx="8"/><text class="label blue" x="164" y="440">组装 Prompt</text><text class="small muted" x="164" y="460">人设 + [style] · 世界书 · 作用域记忆</text><text class="small muted" x="164" y="477">few-shot：种子 + 已晋升的样例与配对</text>
+  <path class="flow" d="M210 484V502" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="493">上下文</text>
+  <rect class="stage" x="150" y="502" width="430" height="62" rx="8"/><text class="label blue" x="164" y="520">生成</text><text class="small muted" x="164" y="540">OpenAI 兼容 /v1 · 结构化 JSON</text><text class="small muted mono" x="164" y="557">{ "reasoning", "intent", "reply", "mem" }</text>
+  <path class="flow" d="M210 564V582" marker-end="url(#arch-arrow)"/>
+  <text class="tiny muted" x="218" y="573">JSON</text>
+  <rect class="stage" x="150" y="582" width="430" height="62" rx="8"/><text class="label blue" x="164" y="600">校验与投递</text><text class="small muted" x="164" y="620">输出过滤 · 字符策略 · 分段 · 表情包</text><text class="small muted" x="164" y="637">格式错误即拒绝 · PASS 不发任何消息</text>
+  <path class="flow-dashed" d="M150 533H120V355H150" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mono muted" x="126" y="444" transform="rotate(-90 126 444)" text-anchor="middle">"mem" → runtime/memory.json</text>
+  <path class="flow-coral" d="M150 615H70V192" marker-end="url(#arch-arrow)"/>
+  <text class="tiny coral" x="60" y="666">回复随 HTTP 响应返回 · 直连 QQ 经 NAPCAT_API 发送</text>
+  <rect class="stage" x="690" y="262" width="250" height="62" rx="8"/><text class="label mint" x="704" y="280">已晋升视图</text><text class="small muted mono" x="704" y="300">runtime/promoted.*.&lt;lang&gt;.jsonl</text><text class="small muted" x="704" y="317">原子重写 · 可由账本重建</text>
+  <path class="flow-mint" d="M750 342V324" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="333">物化</text>
+  <rect class="stage" x="690" y="342" width="250" height="62" rx="8"/><text class="label mint" x="704" y="360">晋升</text><text class="small muted" x="704" y="380">≥ 2 条兼容事件，≥ 1 条强信号</text><text class="small muted" x="704" y="397">作用域一致 · 回滚与取代保留历史</text>
+  <path class="flow-mint" d="M750 422V404" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="413">裁决</text>
+  <rect class="stage" x="690" y="422" width="250" height="62" rx="8"/><text class="label mint" x="704" y="440">候选</text><text class="small muted" x="704" y="460">带版本的提案 · 晋升前保持惰性</text><text class="small muted" x="704" y="477">runtime/candidates.jsonl，只追加</text>
+  <path class="flow-mint" d="M750 502V484" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="493">提案</text>
+  <rect class="stage" x="690" y="502" width="250" height="62" rx="8"/><text class="label mint" x="704" y="520">证据日志</text><text class="small muted" x="704" y="540">只追加 · 本身不改变行为</text><text class="small muted" x="704" y="557">作用域：人设、版本、语言、会话、模式</text>
+  <path class="flow-mint" d="M750 582V564" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="758" y="573">追加</text>
+  <rect class="stage" x="690" y="582" width="250" height="62" rx="8"/><text class="label mint" x="704" y="600">信号</text><text class="small muted" x="704" y="620">定向反应 · 被接受的重试</text><text class="small muted" x="704" y="637">自评 · 进化诊断（均需手动开启）</text>
+  <path class="flow-mint" d="M580 613H690" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="635" y="600" text-anchor="middle">回复 + 反应</text>
+  <path class="flow-mint" d="M690 293H625V453H580" marker-end="url(#arch-arrow)"/>
+  <text class="tiny mint" x="612" y="373" transform="rotate(-90 612 373)" text-anchor="middle">热加载，无需重启</text>
+  <line class="frame" x1="40" y1="676" x2="960" y2="676"/>
+  <circle class="mint" cx="48" cy="696" r="3"/>
+  <text class="small muted" x="60" y="696">可变状态统一位于 runtime/；只追加的账本是唯一事实来源，因此每次晋升都可审计、可回滚。</text>
 </svg>

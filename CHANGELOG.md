@@ -262,6 +262,10 @@ that fails without it.
   The README demo animation shows two lines of the room's chat above each
   incoming message and grows from two scenes to four: reply, pass, a reply
   that saves a memory, and a direct call answered with a sticker.
+  The architecture diagram is redrawn: both ingress doors (`/webhook/gateway`
+  via AstrBot, `/webhook/qq` via NapCat) converge on one five-stage path, the
+  learning column runs bottom-up from signals to promoted views and hot-reloads
+  into prompt assembly, every arrow is labelled, and nothing overflows its box.
 
 - **`tools/auto_reviewer.py --dry-run` no longer calls the model.** It
   suppressed only the write, so reaching for it to find out what the tool
