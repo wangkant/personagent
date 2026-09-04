@@ -6,9 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-A debugging pass over the whole package, followed by a simplification pass.
-Every fix below was reproduced before it was changed and is covered by a test
-that fails without it.
+## [0.3.0] — 2026-09-04
+
+AstrBot is the platform now: QQ enters through the same gateway as every
+other adapter, the three model settings are named for the protocol instead of
+a vendor, and the package is 1,300 lines lighter after a debugging pass and a
+simplification pass. Every fix below was reproduced before it was changed and
+is covered by a test that fails without it.
+
+### Deprecated
+
+- **The direct OneBot ingress — `/webhook/qq` fed by the client's own
+  webhook — and `launch.vbs`, which starts it.** Still served, still tested,
+  warned about once in the log on first use; removal comes in a later
+  release. The supported path is AstrBot with
+  `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`, which manages the QQ client itself and
+  keeps every id spelled the way the ledgers already know it. **No feature is
+  lost on that path**: `BOT_QQ`, `QQ_GROUPS` and the OneBot HTTP API
+  (`NAPCAT_API`) stay in use for identity and for the QQ-only background
+  actions — proactive sends, the catch-up sweep, OCR — exactly as before. Only
+  `WEBHOOK_SECRET` belongs to the deprecated door alone.
 
 ### Added
 
@@ -745,6 +762,7 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[0.3.0]: https://github.com/wangkant/personagent/releases/tag/v0.3.0
 [0.2.0]: https://github.com/wangkant/personagent/releases/tag/v0.2.0
 [0.1.1]: https://github.com/wangkant/personagent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/wangkant/personagent/releases/tag/v0.1.0

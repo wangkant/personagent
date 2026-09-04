@@ -78,7 +78,7 @@ QQ / Telegram / Discord / Slack / Lark / KOOK / …
    GATEWAY_NATIVE_PLATFORMS=aiocqhttp
    ```
 
-This keeps QQ identity, memory, and learning scopes stable while every platform enters through the same gateway. Keep `NAPCAT_API` configured for QQ-specific background actions. The plugin is default-deny and will forward nothing until its allowlists are configured.
+This keeps QQ identity, memory, and learning scopes stable while every platform enters through the same gateway. Keep the OneBot HTTP API (`NAPCAT_API`) reachable for QQ-specific background actions such as proactive sends and OCR. The plugin is default-deny and will forward nothing until its allowlists are configured. The older direct ingress, a OneBot client posting to `/webhook/qq`, is deprecated since 0.3.0: still served, but no longer the documented path.
 
 For cross-host deployment, use HTTPS or a private tunnel and set the same non-empty `GATEWAY_TOKEN` in the plugin and agent. A public agent bind (`HOST=0.0.0.0`) also requires `WEBHOOK_SECRET`; startup refuses a non-loopback bind without both. See the [deployment guide](docs/deploy.md) for the complete checklist, including how to verify each direction on its own.
 

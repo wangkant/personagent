@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent：消息路径与学习闭环</title>
-  <desc id="architecture-desc">聊天平台（QQ 经 NapCat 接入）统一经 AstrBot 转发插件 POST 到 /webhook/gateway，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
+  <desc id="architecture-desc">聊天平台（含 QQ）统一经 AstrBot 转发插件 POST 到 /webhook/gateway，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
   <style>
     svg {
       --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
@@ -49,7 +49,7 @@
   <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
   <rect class="surface" x="40" y="128" width="225" height="64" rx="8"/><text class="label ink" x="54" y="146">聊天平台</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · 飞书 · KOOK</text><text class="small muted" x="54" y="183"></text>
   <path class="flow" d="M265 160H292" marker-end="url(#arch-arrow)"/>
-  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + 转发插件</text><text class="small muted" x="306" y="166">QQ 经 NapCat · 白名单 · HMAC 信封</text><text class="small muted" x="306" y="183"></text>
+  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + 转发插件</text><text class="small muted" x="306" y="166">白名单 · HMAC 信封 · nonce</text><text class="small muted" x="306" y="183"></text>
   <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
   <text class="eyebrow violet" x="60" y="244">personagent · 单个 FastAPI 进程</text>
   <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>

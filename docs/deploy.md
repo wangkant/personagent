@@ -56,6 +56,13 @@ checkout needs an absolute path.
 
 ## The OneBot bridge
 
+> **Deprecated since 0.3.0.** The direct ingress described here — the
+> bridge's webhook posting to `/webhook/qq` — still works and is warned about
+> once at first use, but the supported path is AstrBot with
+> `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` (next section), which manages the QQ
+> client itself. Nothing below is lost on that path: the bridge's HTTP API
+> (`NAPCAT_API`) still carries the QQ-only background actions.
+
 This is the largest piece of the deployment and none of it lives in this
 repository. You need, roughly in order:
 

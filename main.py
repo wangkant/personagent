@@ -690,8 +690,22 @@ async def health_details(request: Request):
         },
     )
 
+_DIRECT_ROUTE_WARNED = False
+
+
+def _warn_direct_route_once() -> None:
+    global _DIRECT_ROUTE_WARNED
+    if not _DIRECT_ROUTE_WARNED:
+        _DIRECT_ROUTE_WARNED = True
+        logger.warning(
+            "[Agent] /webhook/qq (direct OneBot ingress) is deprecated since 0.3.0 and "
+            "will be removed in a later release; route QQ through AstrBot with "
+            "GATEWAY_NATIVE_PLATFORMS=aiocqhttp. Nothing changes for this deployment yet.")
+
+
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
+    _warn_direct_route_once()
     if not await _webhook_admission.try_acquire():
         return JSONResponse(
             status_code=429, content={"error": "webhook capacity exceeded"})

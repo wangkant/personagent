@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">persona-llm-agent: message path and learning loop</title>
-  <desc id="architecture-desc">Chat platforms, QQ included via NapCat, reach one FastAPI process through an AstrBot forwarder posting to /webhook/gateway. Every event passes ingest, decide, prompt assembly, generation and validation before a reply is delivered or PASS sends nothing. Off the hot path, reactions and evaluations are appended to an evidence log, turned into inert candidates, and only what the promotion policy approves is materialized and hot-reloaded into prompt assembly.</desc>
+  <desc id="architecture-desc">Chat platforms, QQ included, reach one FastAPI process through an AstrBot forwarder posting to /webhook/gateway. Every event passes ingest, decide, prompt assembly, generation and validation before a reply is delivered or PASS sends nothing. Off the hot path, reactions and evaluations are appended to an evidence log, turned into inert candidates, and only what the promotion policy approves is materialized and hot-reloaded into prompt assembly.</desc>
   <style>
     svg {
       --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
@@ -49,7 +49,7 @@
   <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
   <rect class="surface" x="40" y="128" width="225" height="64" rx="8"/><text class="label ink" x="54" y="146">Chat platforms</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · Lark · KOOK</text><text class="small muted" x="54" y="183"></text>
   <path class="flow" d="M265 160H292" marker-end="url(#arch-arrow)"/>
-  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + forwarder plugin</text><text class="small muted" x="306" y="166">QQ via NapCat · allowlist · HMAC envelope</text><text class="small muted" x="306" y="183"></text>
+  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + forwarder plugin</text><text class="small muted" x="306" y="166">allowlist · HMAC envelope · nonce</text><text class="small muted" x="306" y="183"></text>
   <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
   <text class="eyebrow violet" x="60" y="244">PERSONAGENT · ONE FASTAPI PROCESS</text>
   <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>

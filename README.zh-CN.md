@@ -78,7 +78,7 @@ QQ / Telegram / Discord / Slack / 飞书 / KOOK / …
    GATEWAY_NATIVE_PLATFORMS=aiocqhttp
    ```
 
-这样既能保持 QQ 身份、记忆和学习作用域不变，又能让所有平台统一进入同一个网关。QQ 专属的后台动作仍需配置 `NAPCAT_API`。插件默认拒绝所有来源，只有显式加入白名单的会话才会被转发。
+这样既能保持 QQ 身份、记忆和学习作用域不变，又能让所有平台统一进入同一个网关。主动消息、OCR 等 QQ 专属后台动作仍通过 OneBot HTTP API（`NAPCAT_API`）发出。插件默认拒绝所有来源，只有显式加入白名单的会话才会被转发。旧的直连入口（OneBot 客户端直接 POST 到 `/webhook/qq`）自 0.3.0 起标记废弃：仍然可用，但不再是文档推荐的路径。
 
 跨主机部署必须使用 HTTPS 或私有隧道，并在插件与 Agent 中设置相同的非空 `GATEWAY_TOKEN`。Agent 绑定公网地址（`HOST=0.0.0.0`）时还必须配置 `WEBHOOK_SECRET`，两者缺一启动就会拒绝。完整步骤见[部署指南](docs/deploy.md)（英文），其中包括如何分别验证两个方向。
 

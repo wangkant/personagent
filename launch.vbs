@@ -1,5 +1,9 @@
 ' Optional one-click launcher for Windows.
 '
+' DEPRECATED since 0.3.0 together with the direct OneBot ingress it starts
+' (/webhook/qq). It still works; the supported path is AstrBot, which manages
+' the QQ client itself. See docs/deploy.md.
+'
 ' What it does:
 '   1. Starts NapCat (your OneBot v11 client) in a minimized cmd window
 '   2. Waits a few seconds for NapCat to come up
