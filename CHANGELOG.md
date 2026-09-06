@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Direct OneBot sends now require a successful `status` / `retcode` and a
+  message receipt before committing delivery or reaction attribution. HTTP
+  200 responses containing failures, queued actions, or malformed payloads
+  stop the reply without replaying an ambiguous send.
+- Gateway cache pressure no longer deletes long-term memories or core notes.
+  Native QQ conversations stay outside the cache even when routed through
+  AstrBot; concurrent bursts return to the cache cap as requests finish.
+- Retrieval pools detect atomic file replacement, including replacements
+  with preserved size and timestamps or an unchanged tail. Output filters
+  and lorebooks reload restored older files and same-time size changes,
+  retaining their last valid contents during malformed edits.
+
+### Changed
+
+- Gateway LRU eviction uses insertion order instead of sorting timestamps
+  and no longer rewrites persistent memory files on cache eviction.
+
 ## [0.3.0] — 2026-09-04
 
 AstrBot is the platform now: QQ enters through the same gateway as every

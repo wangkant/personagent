@@ -193,6 +193,14 @@ A degraded critical dependency turns it into HTTP 503.
 
 ## Costs to know about
 
+The gateway retains transient state for up to 256 namespaced conversations,
+evicting idle sessions in least-recently-used order. Active requests are pinned
+and may temporarily exceed this cap; completion reclaims the excess. Native
+QQ conversations do not enter this cache. Eviction clears recent history and
+pending reactions, but preserves long-term memories, core notes and learning
+ledgers. The memory maps are loaded from disk at startup and are not bounded
+by the transient conversation cap; back up `runtime/` to preserve learned state.
+
 - **`tools/healthcheck.py` spends credits.** Its probes POST to
   `/v1/chat/completions` on every configured endpoint — primary, private, eval
   and vision. The `GET /health` endpoint is the cheap one. The config and

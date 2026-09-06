@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import socket
 import sys
@@ -1540,7 +1541,12 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     agent.buffers["123456"].append({"name": "q", "text": "qq group", "user_id": "7"})
     agent.buffers["tg:0"].append({"name": "x", "text": "hi", "user_id": "9"})
     agent.counters["tg:0"] = 3
-    agent.memories["tg:0"] = [{"text": "m", "time": 1.0}]  # persistent entry must go too
+    agent.memories["tg:0"] = [{"text": "m", "time": 1.0}]
+    agent.core_memory["tg:0"] = "Alice likes tea"
+    agent._save_memories()
+    agent._save_core_memory()
+    saved_memory = agent.memory_file.read_bytes()
+    saved_core = agent.core_memory_file.read_bytes()
     agent._sent_mids["tg:0"] = ["out-1"]
     agent._last_elicit_at["tg:0"] = 123.0
     agent.pending_reactions.record(
@@ -1558,8 +1564,17 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     check("conv-evict: oldest evicted with its state",
           "tg:0" not in agent._gateway_conv_lru
           and "tg:0" not in agent.buffers and "tg:0" not in agent.counters)
-    check("conv-evict: persistent memories for the evicted gateway key dropped",
-          "tg:0" not in agent.memories, repr(list(agent.memories)))
+    check("conv-evict: durable memories survive cache pressure",
+          agent.memories.get("tg:0") == [{"text": "m", "time": 1.0}]
+          and agent.core_memory.get("tg:0") == "Alice likes tea")
+    check("conv-evict: persisted memory files are untouched",
+          agent.memory_file.read_bytes() == saved_memory
+          and agent.core_memory_file.read_bytes() == saved_core)
+    agent._append_memory("tg:other", {"text": "new memory", "time": 2.0})
+    agent._commit_core_memory("tg:other", "Bob likes coffee")
+    check("conv-evict: later saves and restart preserve evicted memories",
+          agent._load_memories().get("tg:0") == [{"text": "m", "time": 1.0}]
+          and agent._load_core_memory().get("tg:0") == "Alice likes tea")
     check("conv-evict: delivery and reaction state dropped",
           "tg:0" not in agent._sent_mids
           and "tg:0" not in agent._last_elicit_at
@@ -1609,6 +1624,60 @@ async def regression_gateway_inflight_is_pinned(tmp: Path) -> None:
           pinned_key not in getattr(
               agent, "_gateway_inflight", {pinned_key: 1}),
           repr(getattr(agent, "_gateway_inflight", None)))
+
+
+async def regression_gateway_burst_reclaims_idle_state(tmp: Path) -> None:
+    from persona_agent.agent import _MAX_GATEWAY_CONVS
+
+    agent = make_agent(tmp)
+    release = asyncio.Event()
+    started = asyncio.Event()
+    count = 0
+
+    async def blocked_extract(payload):
+        nonlocal count
+        count += 1
+        if count == _MAX_GATEWAY_CONVS + 3:
+            started.set()
+        await release.wait()
+        return ""
+
+    agent._extract_text = blocked_extract
+    tasks = [asyncio.create_task(agent.handle_gateway({
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": str(i), "user_id": "42", "self_id": "bot",
+        "segments": [],
+    })) for i in range(_MAX_GATEWAY_CONVS + 3)]
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        check("conv-burst: all active conversations stay pinned",
+              len(agent._gateway_conv_lru) == _MAX_GATEWAY_CONVS + 3)
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+    check("conv-burst: completion returns cache to its cap without new traffic",
+          len(agent._gateway_conv_lru) <= _MAX_GATEWAY_CONVS
+          and not agent._gateway_inflight,
+          repr(len(agent._gateway_conv_lru)))
+
+
+async def regression_native_gateway_never_enters_lru(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent.gateway_native_platforms = ("aiocqhttp",)
+    agent.buffers["123"].append({"name": "Alice", "text": "keep", "user_id": "42"})
+    await agent.handle_gateway({
+        "platform": "aiocqhttp", "message_type": "group",
+        "conversation_id": "123", "user_id": "42", "self_id": BOT_QQ,
+        "segments": [],
+    })
+    await agent.handle_gateway({
+        "platform": "aiocqhttp", "message_type": "private",
+        "conversation_id": "42", "user_id": "42", "self_id": BOT_QQ,
+        "segments": [],
+    })
+    check("native gateway: QQ state never becomes eligible for cache eviction",
+          not agent._gateway_conv_lru and "123" in agent.buffers
+          and not agent._gateway_inflight)
 
 
 async def regression_private_send_commit_serialized(tmp: Path) -> None:
@@ -1710,7 +1779,7 @@ async def regression_send_retry_only_pre_send_failures(tmp: Path) -> None:
 
         @staticmethod
         def json():
-            return {"data": {"message_id": "m"}}
+            return {"status": "ok", "retcode": 0, "data": {"message_id": "m"}}
 
     class FakeClient:
         def __init__(self, errors):
@@ -1753,6 +1822,49 @@ async def regression_send_retry_only_pre_send_failures(tmp: Path) -> None:
     check("send retry: pre-send connect failures are retried",
           connect_ok is True and connect_client.calls == 3,
           repr((connect_ok, connect_client.calls)))
+
+
+async def regression_send_requires_onebot_success(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    cases = [
+        ("confirmed", {"status": "ok", "retcode": 0, "data": {"message_id": 0}}, True),
+        ("rejected", {"status": "failed", "retcode": 1200, "data": {"message_id": 9}}, False),
+        ("queued", {"status": "async", "retcode": 1, "data": None}, False),
+        ("inconsistent", {"status": "ok", "retcode": 1400, "data": {}}, False),
+        ("missing envelope", {"data": {"message_id": 9}}, False),
+        ("missing receipt", {"status": "ok", "retcode": 0, "data": None}, False),
+        ("non-object", [], False),
+        ("invalid JSON", None, False),
+    ]
+    for label, body, expected in cases:
+        requests = []
+
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(200, content=(b"not json" if body is None
+                                               else json.dumps(body).encode()))
+
+        agent._sent_mids.clear()
+        agent._last_send_mono = 0.0
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            agent._http = lambda **kwargs: _ClientContext(client)
+            result = await agent._napcat_send_group("123", "hello")
+        check(f"send receipt: {label}", result is expected)
+        check(f"send receipt: {label} never replays an accepted HTTP request",
+              len(requests) == 1)
+        check(f"send receipt: {label} only records confirmed message ids",
+              agent._sent_mids.get("123", []) == (["0"] if expected else []))
+
+
+class _ClientContext:
+    def __init__(self, client):
+        self.client = client
+
+    async def __aenter__(self):
+        return self.client
+
+    async def __aexit__(self, *exc):
+        return False
 
 
 async def regression_agent_aclose_owns_resources(tmp: Path) -> None:
@@ -2371,7 +2483,7 @@ async def regression_private_message_ids(tmp: Path) -> None:
         text = ""
 
         def json(self):
-            return {"data": {"message_id": 123}}
+            return {"status": "ok", "retcode": 0, "data": {"message_id": 123}}
 
     class _HTTP:
         async def __aenter__(self):
@@ -2780,9 +2892,12 @@ async def main_async() -> None:
         await regression_mem_command_sends_outside_lock(tmp / "l")
         await regression_gateway_conv_eviction(tmp / "m")
         await regression_gateway_inflight_is_pinned(tmp / "mm")
+        await regression_gateway_burst_reclaims_idle_state(tmp / "burst")
+        await regression_native_gateway_never_enters_lru(tmp / "native-lru")
         await regression_private_send_commit_serialized(tmp / "mmm")
         await regression_group_outbound_orders_buffer(tmp / "mmmm")
         await regression_send_retry_only_pre_send_failures(tmp / "mmmmm")
+        await regression_send_requires_onebot_success(tmp / "receipts")
         await regression_agent_aclose_owns_resources(tmp / "mmmmmm")
         await regression_group_whitelist_gateway_bypass(tmp / "n")
         await regression_native_gateway_obeys_the_qq_whitelists(tmp / "n2")

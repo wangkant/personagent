@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -41,13 +42,16 @@ def _parse_jsonl(blob: bytes) -> list[dict]:
 
 def _read_jsonl_appended(
     path: Path, eof: int, offset: int, sig: bytes,
+    *, identity: tuple[int, int] | None = None,
 ) -> tuple[list[dict], bool, int, int, bytes]:
     """Read `path` as JSONL, reusing whatever a previous read already consumed.
 
     Fast path (append-only): taken when the previous read consumed complete
     lines all the way to the then-EOF (``offset == eof > 0``), the file has
     since grown, and the last ``_JSONL_SIG_BYTES`` bytes of that consumed
-    prefix are still byte-identical. Only the appended region is parsed.
+    prefix are still byte-identical. When ``identity`` is supplied, the open
+    file must also match the prior device/inode, guarding replacement between
+    the caller's stat and this open. Only the appended region is parsed.
 
     Every other shape falls back to parsing the whole file: first read, a
     shrink (the examples trim rewrites the file in place), an in-place rewrite,
@@ -64,6 +68,9 @@ def _read_jsonl_appended(
     with path.open("rb") as f:
         size = f.seek(0, 2)
         appended_only = bool(sig) and 0 < offset == eof < size
+        if appended_only and identity is not None:
+            st = os.fstat(f.fileno())
+            appended_only = (st.st_dev, st.st_ino) == identity
         if appended_only:
             f.seek(offset - len(sig))
             appended_only = f.read(len(sig)) == sig

@@ -202,6 +202,118 @@ def test_torn_append_waits_for_its_newline() -> None:
         check("reload: completed line == cold load", replies(a) == cold_replies(tmp))
 
 
+def test_atomic_replacement_does_not_reuse_a_matching_tail() -> None:
+    """An edited head plus an unchanged 64-byte tail is not an append."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        tail = ex("unchanged " * 30)
+        write_jsonl(a.examples_file, [ex("old"), tail])
+        a._reload_examples_if_stale()
+        replacement = tmp / "replacement.jsonl"
+        write_jsonl(replacement, [ex("new"), tail, ex("added")])
+        os.replace(replacement, a.examples_file)
+        a._reload_examples_if_stale()
+        check("reload: replaced file cannot append onto stale cached head",
+              replies(a) == ["new", "unchanged " * 30, "added"]
+              == cold_replies(tmp), repr(replies(a)))
+
+
+def test_atomic_replacement_with_preserved_metadata_is_seen() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        write_jsonl(a.examples_file, [ex("old")])
+        a._reload_examples_if_stale()
+        old_stat = a.examples_file.stat()
+        replacement = tmp / "replacement.jsonl"
+        write_jsonl(replacement, [ex("new")])
+        os.utime(replacement, ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns))
+        os.replace(replacement, a.examples_file)
+        a._reload_examples_if_stale()
+        check("reload: atomic replacement with same size and time is visible",
+              replies(a) == ["new"], repr(replies(a)))
+
+
+def test_json_config_reload_tracks_restores_and_failed_edits() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        a.output_filter_file = tmp / "filters.json"
+        a.lorebook_file = tmp / "lorebook.json"
+
+        def write_configs(word, stamp):
+            a.output_filter_file.write_text(json.dumps([
+                {"name": "block", "pattern": word, "action": "reject"},
+            ]), encoding="utf-8")
+            a.lorebook_file.write_text(json.dumps([
+                {"name": "fact", "keywords": ["tea"], "content": word},
+            ]), encoding="utf-8")
+            for path in (a.output_filter_file, a.lorebook_file):
+                os.utime(path, ns=(stamp, stamp))
+
+        def verify(word, label):
+            check(f"config reload: filter {label}",
+                  a._apply_output_filter(word)[0] == "")
+            check(f"config reload: lorebook {label}",
+                  word in a._lorebook_for_prompt([], focus_text="tea"))
+
+        stamp = 1_700_000_000_000_000_000
+        write_configs("first", stamp)
+        verify("first", "initial load")
+        write_configs("restored", stamp - 10_000_000_000)
+        verify("restored", "accepts older restored file")
+        write_configs("changed-size", stamp - 10_000_000_000)
+        verify("changed-size", "accepts size change with same mtime")
+
+        for path in (a.output_filter_file, a.lorebook_file):
+            path.write_text("{broken", encoding="utf-8")
+        verify("changed-size", "retains last valid config after malformed edit")
+        write_configs("repaired", stamp + 10_000_000_000)
+        verify("repaired", "recovers after malformed edit")
+        for path in (a.output_filter_file, a.lorebook_file):
+            path.unlink()
+        check("config reload: deleted filter clears cache",
+              a._apply_output_filter("repaired") == ("repaired", ""))
+        check("config reload: deleted lorebook clears cache",
+              a._lorebook_for_prompt([], focus_text="tea") == "")
+        write_configs("recreated", stamp)
+        verify("recreated", "loads recreated file")
+
+
+def test_json_config_stat_failure_preserves_valid_cache() -> None:
+    from unittest.mock import patch
+
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        a.output_filter_file = tmp / "filters.json"
+        a.lorebook_file = tmp / "lorebook.json"
+        a.output_filter_file.write_text(json.dumps([
+            {"name": "block", "pattern": "blocked", "action": "reject"},
+        ]), encoding="utf-8")
+        a.lorebook_file.write_text(json.dumps([
+            {"name": "tea", "keywords": ["tea"], "content": "Alice likes tea"},
+        ]), encoding="utf-8")
+        check("config I/O: initial filter rejects", a._apply_output_filter("blocked")[0] == "")
+        check("config I/O: initial lorebook loads",
+              "Alice likes tea" in a._lorebook_for_prompt([], focus_text="tea"))
+        original_stat = Path.stat
+
+        def unavailable(path, *args, **kwargs):
+            if path in (a.output_filter_file, a.lorebook_file):
+                raise PermissionError("temporarily unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", unavailable):
+            check("config I/O: stat failure does not disable a loaded filter",
+                  a._apply_output_filter("blocked")[0] == "")
+            check("config I/O: stat failure preserves loaded lorebook",
+                  "Alice likes tea" in a._lorebook_for_prompt([], focus_text="tea"))
+        check("config I/O: filter recovers when readable",
+              a._apply_output_filter("blocked")[0] == "")
+
+
 def test_shrink_and_rewrite_fall_back_to_full_reload() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -684,6 +796,10 @@ def main() -> int:
     test_append_is_incremental_and_matches_cold_load()
     test_same_mtime_append_is_still_seen()
     test_torn_append_waits_for_its_newline()
+    test_atomic_replacement_does_not_reuse_a_matching_tail()
+    test_atomic_replacement_with_preserved_metadata_is_seen()
+    test_json_config_reload_tracks_restores_and_failed_edits()
+    test_json_config_stat_failure_preserves_valid_cache()
     test_shrink_and_rewrite_fall_back_to_full_reload()
     test_force_reload_and_malformed_lines()
     test_file_without_trailing_newline_is_fully_parsed()

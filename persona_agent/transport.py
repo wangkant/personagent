@@ -75,6 +75,7 @@ class Transport:
         naturally bounded, so they never enter (or get evicted from) the LRU.
         A conversation whose lock is currently held is skipped in favor of the
         next-oldest one."""
+        self._gateway_conv_lru.pop(key, None)
         self._gateway_conv_lru[key] = time.monotonic()
         count = len(self._gateway_conv_lru)
         # One-shot flag, not `count == threshold`: re-touching an existing key
@@ -89,10 +90,18 @@ class Transport:
                 "losing their in-memory private_history once the cap is hit",
                 _GATEWAY_CONV_WARN_THRESHOLD, _MAX_GATEWAY_CONVS,
                 self.bot_qq)
-        if count <= _MAX_GATEWAY_CONVS:
+        self._trim_gateway_convs(keep=key)
+
+    def _trim_gateway_convs(self, *, keep: str = "") -> None:
+        """Reclaim idle state after admission or completion of a gateway burst."""
+        if len(self._gateway_conv_lru) <= _MAX_GATEWAY_CONVS:
             return
-        for old in sorted(self._gateway_conv_lru, key=self._gateway_conv_lru.get):
-            if old == key:
+        # Touching a key moves it to the end, so insertion order is LRU order.
+        # Snapshot because eviction removes entries while we walk the cache.
+        for old in tuple(self._gateway_conv_lru):
+            if len(self._gateway_conv_lru) <= _MAX_GATEWAY_CONVS:
+                break
+            if old == keep:
                 continue
             if self._gateway_inflight.get(old, 0):
                 continue
@@ -101,20 +110,14 @@ class Transport:
             if (lock and lock.locked()) or (send_lock and send_lock.locked()):
                 continue  # mid-handling — try the next-oldest instead
             self._evict_conversation(old)
-            break
 
     def _evict_conversation(self, key: str) -> None:
         """Drop all of a conversation's in-memory state (buffer / locks /
         counters / throttle window / ...).
 
-        The persisted memories / core_memory / pending-reply rows under the
-        same key are dropped too (`PendingReplies.drop_conversation` for the
-        pending table): `_save_memories` / `_save_core_memory` rewrite the
-        whole JSON dict, so they cannot preserve a key the in-memory dict no
-        longer holds without a read-merge layer that is not worth building for
-        a path that does not evict at volume. Only gateway conversations ever
-        enter the LRU — QQ groups/DMs never do — so real user data on the QQ
-        path is unaffected either way."""
+        Pending reactions expire with the session. Long-term memories remain
+        in their authoritative maps and files: a cache capacity decision must
+        not erase learned facts or cause the next whole-file save to do so."""
         self._gateway_conv_lru.pop(key, None)
         for d in (self.locks, self.send_locks, self.buffers, self.counters,
                   self.last_reply_at, self.active_users, self._msg_seq,
@@ -139,14 +142,6 @@ class Transport:
         # sit in was spelling the same mapping twice more.
         self._last_elicit_at.pop(reaction_key, None)
         self.pending_reactions.drop_conversation(reaction_key)
-        # Group-conversation memory key = the group_id itself; gateway DM
-        # memory key = "private:<uid>" = key.
-        had_memories = self.memories.pop(key, None) is not None
-        had_core = self.core_memory.pop(key, None) is not None
-        if had_memories:
-            self._save_memories()
-        if had_core:
-            self._save_core_memory()
         logger.info("[Agent] gateway conversation evicted (over the %d cap): %s",
                     _MAX_GATEWAY_CONVS, key)
 
@@ -202,14 +197,23 @@ class Transport:
                         json={id_field: int(target_id), "message": message},
                     )
                 if r.status_code == 200:
-                    # Remember the outbound message_id: reaction learning needs
-                    # it to attribute later quote-replies to this bot message.
-                    try:
-                        _mid = ((r.json() or {}).get("data") or {}).get("message_id")
-                        if _mid is not None:
-                            self._sent_mids.setdefault(mids_key, []).append(str(_mid))
-                    except Exception:
-                        pass
+                    # OneBot also returns HTTP 200 for failed and queued actions.
+                    # Only a synchronous success with a receipt can be committed
+                    # as delivered or attributed to later reaction evidence.
+                    result = r.json()
+                    if (not isinstance(result, dict)
+                            or result.get("status") != "ok"
+                            or type(result.get("retcode")) is not int
+                            or result["retcode"] != 0):
+                        logger.warning("[Agent] NapCat %s did not confirm delivery", label)
+                        return False
+                    data = result.get("data")
+                    mid = data.get("message_id") if isinstance(data, dict) else None
+                    if (type(mid) not in (int, str)
+                            or not str(mid).strip()):
+                        logger.warning("[Agent] NapCat %s returned no message receipt", label)
+                        return False
+                    self._sent_mids.setdefault(mids_key, []).append(str(mid))
                     return True
                 # Non-200 is a server-side reject, not a transient network
                 # error — retrying rarely helps, so log and stop.

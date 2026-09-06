@@ -426,7 +426,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self.examples_file = resolve_runtime_lang_file(
             "examples", "jsonl", self.agent_lang)
         self._examples_cache: list = []
-        self._examples_mtime: tuple = (-1.0, -1, -1.0, -1)  # see _pool_stamp
+        self._examples_mtime: tuple = ()  # see _pool_stamp
         # Append-aware reload bookkeeping for the RUNTIME file (see
         # _read_jsonl_appended): its size and consumed-byte offset at the last
         # read, plus a signature of the tail of that consumed prefix. The seed
@@ -446,7 +446,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self.feedback_file = resolve_runtime_lang_file(
             "feedback", "jsonl", self.agent_lang)
         self._pairs_cache: list = []
-        self._pairs_mtime: tuple = (-1.0, -1, -1.0, -1)  # see _pool_stamp
+        self._pairs_mtime: tuple = ()  # see _pool_stamp
         self._pairs_eof: int = 0
         self._pairs_offset: int = 0
         self._pairs_sig: bytes = b""
@@ -479,21 +479,21 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             (self.persona or "").encode("utf-8")).hexdigest()[:12]
         self._lineage_registered_for: tuple | None = None
         self._view_examples_cache: list = []
-        self._view_examples_stamp: tuple = (-1.0, -1)
+        self._view_examples_stamp: tuple = ()
         self._view_pairs_cache: list = []
-        self._view_pairs_stamp: tuple = (-1.0, -1)
+        self._view_pairs_stamp: tuple = ()
         # Edge-triggered "every promoted row refused by scope" warning.
         self._scope_drop_warned = False
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
         self.output_filter_file = resolve_seed_lang_file("output_filter", "json", self.agent_lang)
         self._filters_cache: list = []
-        self._filters_mtime: float = 0.0
+        self._filters_stamp: tuple = ()
 
         # SillyTavern-style lorebook (keyword-triggered context entries)
         self.lorebook_file = resolve_seed_lang_file("lorebook", "json", self.agent_lang)
         self._lorebook_cache: list = []
-        self._lorebook_mtime: float = 0.0
+        self._lorebook_stamp: tuple = ()
 
         # letta-style core memory (per-group short note, always in prompt)
         self.core_memory_file = resolve_runtime_state_file("core_memory.json")
@@ -699,7 +699,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             gateway_key = str(payload.get("group_id", ""))
         if gateway_key:
             self._gateway_inflight[gateway_key] += 1
-            self._touch_gateway_conv(gateway_key)
         sink = GatewaySink()
         tok = current_sink.set(sink)
         # Read off `event` (synthesize drops unknown keys) and passed as an
@@ -719,6 +718,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     self._gateway_inflight[gateway_key] = remaining
                 else:
                     self._gateway_inflight.pop(gateway_key, None)
+                self._trim_gateway_convs()
         # `owned` is not `handled`. See GatewaySink: a forwarder needs to know
         # whether to suppress its own model, and "produced no reply" is the
         # wrong signal for that — silence is frequently the persona's answer.
@@ -767,7 +767,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 self._remember_msg_id(mid)
             # Gateway DM keys are forwarder-chosen → register in the LRU so an
             # over-the-cap flood evicts the least-recently-active conversation.
-            if current_sink.get() is not None:
+            if current_sink.get() is not None and not channels.is_native(user_id):
                 self._touch_gateway_conv(channels.dm_routing_key(user_id))
             # `proactive` reaches the private path only. A group turn has no
             # equivalent: _maybe_proactive_groups composes and sends its own,
@@ -793,7 +793,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         if mid is not None:
             self._remember_msg_id(mid)
         # Gateway group keys are forwarder-chosen → register in the LRU.
-        if current_sink.get() is not None:
+        if current_sink.get() is not None and not channels.is_native(group_id):
             self._touch_gateway_conv(group_id)
 
         has_image = any(
@@ -2691,16 +2691,22 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         setattr(self, attr + "_sig", sig)
 
     @staticmethod
-    def _pool_stamp(paths) -> tuple:
-        """(mtime, size) per file. Size too: an append within one mtime tick
-        would otherwise sit unseen."""
+    def _pool_stamp(paths, *, strict: bool = False) -> tuple:
+        """Identity, nanosecond mtime and size per file, including replacements.
+
+        Strict callers distinguish an unreadable file from an absent one.
+        """
         out: list = []
         for p in paths:
             try:
                 st = p.stat()
-                out += [st.st_mtime, st.st_size]
+                out.append((st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size))
+            except FileNotFoundError:
+                out.append((0, 0, 0, 0))
             except OSError:
-                out += [0.0, 0]
+                if strict:
+                    raise
+                out.append((0, 0, 0, 0))
         return tuple(out)
 
     def _read_pool_delta(self, paths: tuple[Path, Path], attr: str,
@@ -2721,7 +2727,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         seed_path, runtime_path = paths
         can_append = (
             isinstance(prev_stamp, tuple) and len(prev_stamp) == len(stamp)
-            and prev_stamp[:2] == stamp[:2]       # seed mtime+size untouched
+            and prev_stamp[0] == stamp[0]         # seed untouched
+            and prev_stamp[1][:2] == stamp[1][:2]  # same runtime file
             and getattr(self, attr + "_sig")      # a prefix was consumed before
             and runtime_path.exists()
         )
@@ -2731,6 +2738,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 getattr(self, attr + "_eof"),
                 getattr(self, attr + "_offset"),
                 getattr(self, attr + "_sig"),
+                identity=prev_stamp[1][:2],
             )
             self._set_pool_pos(attr, eof, offset, sig)
             if appended:
@@ -2750,20 +2758,23 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
 
     def _reload_json_if_stale(self, path: Path, attr: str, parse,
                               name: str, unit: str) -> None:
-        """Re-read a JSON config when its mtime moves; a missing file empties
+        """Re-read a changed JSON config; a missing file empties
         the cache. `parse(data)` returns the entries to cache."""
         try:
-            mtime = path.stat().st_mtime
-        except FileNotFoundError:
-            setattr(self, attr + "_cache", [])
-            setattr(self, attr + "_mtime", 0.0)
+            stamp = self._pool_stamp((path,), strict=True)
+        except OSError as exc:
+            logger.warning("[Agent] %s stat failed: %s", name, exc)
             return
-        if mtime <= getattr(self, attr + "_mtime"):
+        if stamp == ((0, 0, 0, 0),):
+            setattr(self, attr + "_cache", [])
+            setattr(self, attr + "_stamp", stamp)
+            return
+        if stamp == getattr(self, attr + "_stamp"):
             return
         try:
             entries = parse(json.loads(path.read_text(encoding="utf-8")))
             setattr(self, attr + "_cache", entries)
-            setattr(self, attr + "_mtime", mtime)
+            setattr(self, attr + "_stamp", stamp)
             logger.info("[Agent] %s loaded %d %s", name, len(entries), unit)
         except Exception as e:
             logger.warning("[Agent] %s.json load failed: %s", name, e)
