@@ -77,6 +77,12 @@ def resolve_runtime_state_file(value: str | Path) -> Path:
 
     Keeping migration here makes service startup and maintenance tools agree:
     whichever runs first preserves the pre-runtime/ file.
+
+    An ABSOLUTE value is taken as given and is deliberately not fenced to the
+    runtime dir, unlike AGENT_RUNTIME_DIR itself: it is the escape hatch for
+    pointing one file at another disk. The asymmetry is intentional — the
+    cost is that a stale absolute path writes state where nothing that scans
+    the runtime dir will find it, with no error.
     """
     path = Path(value)
     if path.is_absolute():

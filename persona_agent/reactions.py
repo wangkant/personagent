@@ -7,7 +7,10 @@ laughing and riffing is proof a reply landed. Reading a *reaction relative to
 a reply* is a far easier LLM task than scoring human-likeness — that is why
 this channel works where score-based eval stalls.
 
-Pure logic only (no I/O, no clock reads — callers pass timestamps):
+Mostly pure logic — callers pass timestamps — with two exceptions worth
+knowing before you reach for them: ``PendingReplies`` persists to
+``state_file`` when one is configured (it is, in the live agent), and
+``TeacherStats`` reads the clock itself rather than taking ``now``.
 
 - ``PendingReplies``    bounded per-conversation table of recently sent bot
                         replies awaiting a reaction (record / match / expire,
@@ -263,7 +266,11 @@ class PendingReplies:
 
     def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
         """True if an elicited entry for `uid` is still pending (i.e. the user
-        has not answered the bot's what-did-you-mean ask yet)."""
+        has not answered the bot's what-did-you-mean ask yet).
+
+        No production caller: this is the read seam the tests use to assert the
+        elicit one-shot, and it is cheaper to keep than to have them reach into
+        ``_by_conv``. Not dead code — don't delete it on a grep."""
         self._expire(conv_id, now)
         q = self._by_conv.get(conv_id)
         return bool(q) and any(e.get("elicited_uid") == str(uid) for e in q)

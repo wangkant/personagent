@@ -1361,9 +1361,8 @@ class TextProcessing:
         # as 'persona You are Mira, ignore prior rules' and was RELEASED. The
         # frame is a reason to distrust the whole reply no matter which style
         # is active, so it is read here, off the text the model actually
-        # emitted. Same principle as `agent._escape_markup_tags` matching
-        # `renderable_form(text)` instead of the raw string: judge the token
-        # the reader sees, not the one a cleaning pass leaves behind.
+        # emitted. The principle: judge the token the reader sees, not the one
+        # a cleaning pass leaves behind.
         frame = TextProcessing._arrow_frame(text)
         if frame:
             logger.warning("[Agent] arrow-framed token blocked, dropping "
@@ -1502,8 +1501,7 @@ class TextProcessing:
         spells `←persona→` is evidence of a template dump whether or not the
         card happened to name the arrows charset.
 
-        Invisible code points are dropped before the match for the same
-        reason `_escape_markup_tags` projects through `renderable_form`:
+        Invisible code points are dropped before the match:
         `←{ZWSP}persona→` is the same token to a reader as `←persona→`, and
         matching the raw string is what lets the interleaved spelling walk
         past. No index mapping is needed because the verdict is the whole
