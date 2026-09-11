@@ -208,8 +208,7 @@ INTENT_RULES = (
 # bothered") that is a different persona's voice. A persona declares which
 # variant it wants and the ENGINE writes the sentence. No third-party string
 # is ever interpolated into a rule line, so this channel cannot be used to
-# author engine-authored text — which is the same reason `_persona_region`
-# exists, applied one layer up. An unknown key or an unknown value is
+# author engine-authored text. An unknown key or an unknown value is
 # ignored, not obeyed.
 #
 # WHAT IS NOT OVERRIDABLE, EVER: the two `SAFETY EXCEPTION` clauses. They
@@ -278,9 +277,10 @@ STYLE_KNOBS: dict[str, tuple[str, ...]] = {
 }
 
 # The declaration block inside a persona document. Square brackets, not a
-# tag: the engine escapes every tag-shaped token in a persona before assembly
-# (`neutralize_markup_tags`), so a tag-shaped declaration would arrive at the
-# parser already entity-escaped.
+# tag, so a declaration cannot be confused with the `<persona>` framing the
+# assembled prompt wraps this document in. Nothing escapes tag-shaped tokens
+# on the way in: the persona document is operator-authored, and is assembled
+# by raw interpolation (`agent.py`, f"<persona>\n{self.persona}\n</persona>").
 #
 # THE TERMINATOR — THE CURRENT RULE, AND THE FIRST THING TO READ. A line
 # continues the block only when ALL THREE hold:
@@ -459,6 +459,15 @@ def _consume_style_block(
         # push the declarations after it out into the persona region.
         if value in STYLE_KNOBS[key]:
             declared[key] = value
+        else:
+            # Say it. Rounds 1 and 2 above were both "my persona line vanished
+            # and nothing told me", and a typo'd option is the same experience
+            # for the author, who cannot tell a dropped line from an obeyed one.
+            logger.warning(
+                "[Agent] persona [style]: dropped %r — %r is not one of %s. "
+                "If that line was meant as prose, reword it so it does not "
+                "read as a declaration.",
+                line.strip(), value, "/".join(STYLE_KNOBS[key]))
         pos = end_of_line
     # Ran off the end of the document: unclosed, and nothing follows it.
     return pos, declared, False
