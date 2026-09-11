@@ -1,8 +1,14 @@
-"""Tests for the evidence gate in front of the example pool.
+"""Tests for what is left of the pre-ledger example pool.
 
-The rule being protected: a single positive signal must never mint a permanent
-example. These check the weights, the decay, the promotion threshold and the
-retraction path — the parts that decide what the agent will imitate forever.
+The weight-based gate this file used to cover (weights, decay, promotion
+threshold) is gone: nothing had called `CandidatePool.record` since the
+evidence ledger took over promotion, so those tests were exercising a second,
+divergent set of rules and reporting it as coverage of the live one. What the
+ledger decides now lives in tests/test_ledger.py.
+
+What is protected here is the part a deployment that learned before the ledger
+still depends on: its `example_candidates.json` keeps loading, and a human
+disagreement can still pull a reply out of the pool it was banked in.
 
 Run from the repo root:  python tests/test_promotion.py
 """
@@ -15,11 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from persona_agent import promotion  # noqa: E402
 from persona_agent.promotion import CandidatePool, retract_example  # noqa: E402
 
 _failures: list[str] = []
-DAY = 86400.0
 NOW = 1_800_000_000.0
 
 
@@ -38,93 +42,50 @@ def pool(tmp: Path) -> CandidatePool:
     return CandidatePool(tmp / "cand.json")
 
 
-def test_single_signal_never_promotes() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        for src in ("reaction_owner", "reaction_other", "self_eval"):
-            p = pool(tmp / src)
-            (tmp / src).mkdir(parents=True, exist_ok=True)
-            promote, conf = p.record(ex("one laugh"), src, NOW)
-            check(f"single {src} does not promote",
-                  not promote and conf < promotion.PROMOTE_AT, f"conf={conf}")
+def seed(tmp: Path, *replies: str) -> Path:
+    """Write a pool file in the shape the retired `record` used to leave behind.
+
+    Seeding from disk rather than through the class is the point: this is how
+    the file arrives now — written by a version that no longer runs."""
+    path = tmp / "cand.json"
+    path.write_text(json.dumps({
+        r: {"weight": 0.6, "ts": NOW, "n": 1,
+            "sources": ["reaction_owner"], "example": ex(r)}
+        for r in replies
+    }, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
-def test_corroboration_promotes() -> None:
+def test_a_legacy_pool_still_loads() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
+        seed(tmp, "banked earlier", "also banked")
         p = pool(tmp)
-        r = ex("two owner laughs")
-        check("owner 1/2: held", p.record(r, "reaction_owner", NOW)[0] is False)
-        check("owner 2/2: promoted", p.record(r, "reaction_owner", NOW)[0] is True)
-
-        p2 = CandidatePool(tmp / "b.json")
-        r2 = ex("three strangers")
-        p2.record(r2, "reaction_other", NOW)
-        p2.record(r2, "reaction_other", NOW)
-        check("stranger 3/3: promoted",
-              p2.record(r2, "reaction_other", NOW)[0] is True)
-
-        p3 = CandidatePool(tmp / "c.json")
-        r3 = ex("self eval only")
-        promoted = [p3.record(r3, "self_eval", NOW)[0] for _ in range(4)]
-        check("self-eval needs four", promoted == [False, False, False, True],
-              str(promoted))
+        check("legacy pool: rows written by the old gate are read back",
+              set(p._d) == {"banked earlier", "also banked"}, str(sorted(p._d)))
 
 
-def test_promotion_consumes_the_candidate() -> None:
-    """A banked reply must not keep re-promoting every time it lands again."""
+def test_a_corrupt_pool_file_degrades_to_empty() -> None:
     with tempfile.TemporaryDirectory() as d:
-        p = pool(Path(d))
-        r = ex("consumed")
-        p.record(r, "reaction_owner", NOW)
-        check("promoted once", p.record(r, "reaction_owner", NOW)[0] is True)
-        check("candidate cleared after promotion", p.confidence("consumed", NOW) == 0.0)
-        check("next sighting starts over",
-              p.record(r, "reaction_owner", NOW)[0] is False)
-
-
-def test_confidence_decays() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        p = pool(Path(d))
-        p.record(ex("fading"), "reaction_owner", NOW)
-        fresh = p.confidence("fading", NOW)
-        half = p.confidence("fading", NOW + promotion.HALF_LIFE_DAYS * DAY)
-        check("one half-life halves confidence", abs(half - fresh / 2) < 1e-6,
-              f"{fresh} -> {half}")
-        check("stale evidence cannot promote on its own",
-              p.record(ex("fading"), "reaction_owner",
-                       NOW + promotion.HALF_LIFE_DAYS * 2 * DAY)[0] is False)
-
-
-def test_stale_candidates_pruned() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        p = pool(Path(d))
-        p.record(ex("ancient"), "self_eval", NOW)
-        p.record(ex("recent"), "self_eval", NOW + 400 * DAY)
-        check("decayed-below-floor candidate dropped",
-              p.confidence("ancient", NOW + 400 * DAY) == 0.0)
-        check("recent candidate kept", p.confidence("recent", NOW + 400 * DAY) > 0)
+        tmp = Path(d)
+        (tmp / "cand.json").write_text("{not json", encoding="utf-8")
+        check("legacy pool: unreadable file loads as empty, does not raise",
+              pool(tmp)._d == {})
 
 
 def test_withdraw() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        p = pool(Path(d))
-        p.record(ex("disputed"), "reaction_owner", NOW)
-        check("withdraw reports a hit", p.withdraw("disputed") is True)
-        check("evidence gone", p.confidence("disputed", NOW) == 0.0)
-        check("withdrawing an unknown reply is a no-op", p.withdraw("never seen") is False)
-
-
-def test_persistence() -> None:
+    """The one mutation still reachable in production (learning.py)."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
+        seed(tmp, "disputed", "untouched")
         p = pool(tmp)
-        p.record(ex("survives restart"), "reaction_owner", NOW)
-        again = pool(tmp)
-        check("evidence survives a restart",
-              abs(again.confidence("survives restart", NOW) - 0.60) < 1e-6)
-        check("restart then corroborate promotes",
-              again.record(ex("survives restart"), "reaction_owner", NOW)[0] is True)
+        check("withdraw reports a hit", p.withdraw("disputed") is True)
+        check("withdraw drops only its own row",
+              set(p._d) == {"untouched"}, str(sorted(p._d)))
+        check("withdrawing an unknown reply is a no-op",
+              p.withdraw("never seen") is False)
+        check("withdraw is persisted, not just in memory",
+              set(pool(tmp)._d) == {"untouched"}, str(sorted(pool(tmp)._d)))
 
 
 def test_retract_example_from_pool() -> None:
@@ -146,25 +107,11 @@ def test_retract_example_from_pool() -> None:
               f.read_text(encoding="utf-8").strip() == "not json")
 
 
-def test_pool_is_bounded() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        p = pool(Path(d))
-        for i in range(promotion.MAX_CANDIDATES + 60):
-            p.record(ex(f"r{i}"), "self_eval", NOW + i)
-        check("candidate pool stays bounded",
-              len(p._d) <= promotion.MAX_CANDIDATES, f"{len(p._d)} entries")
-
-
 def main() -> int:
-    test_single_signal_never_promotes()
-    test_corroboration_promotes()
-    test_promotion_consumes_the_candidate()
-    test_confidence_decays()
-    test_stale_candidates_pruned()
+    test_a_legacy_pool_still_loads()
+    test_a_corrupt_pool_file_degrades_to_empty()
     test_withdraw()
-    test_persistence()
     test_retract_example_from_pool()
-    test_pool_is_bounded()
     print()
     if _failures:
         print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")

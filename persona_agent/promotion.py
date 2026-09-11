@@ -23,12 +23,9 @@ promotion requires corroboration:
 Weak evidence never promotes anything at any quantity, so laughter alone can no
 longer grow the example pool; it accrues on a candidate and waits for an anchor.
 
-Also here, the pre-ledger machinery kept for compatibility: ``CandidatePool``
-and ``retract_example``, the latter being how a human disagreement still pulls
-a row out of a learned pool written before the ledger existed. Of the pool,
-only ``withdraw`` has a live caller; ``record`` and its decay/prune helpers
-are retained for existing imports and on-disk state and are NOT an active
-gate, however thoroughly test_promotion.py exercises them.
+Also here, the pre-ledger leftovers: ``CandidatePool``, now read-and-withdraw
+only, and ``retract_example`` — how a human disagreement pulls a row out of a
+pool that was learned before the ledger existed. Neither promotes anything.
 
 Pure logic — no clock reads, no LLM. Callers pass `now`.
 """
@@ -452,40 +449,24 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
 
 
 # ---------------------------------------------------------------------------
-# Legacy weight-based gate (pre-ledger pools)
+# Legacy pre-ledger pool — read and retract only
 # ---------------------------------------------------------------------------
-# Kept working, not kept current: the ledger above is what new writes go
-# through. This is what guards the example pool of a deployment that learned
-# before the ledger existed, and it is still the path that pulls a rejected
-# reply back out of that pool.
-
-# What each signal is worth. Deliberately set so that no single event of any
-# kind can promote on its own: the cheapest path to the pool is two owner
-# reactions, and the self-eval channel needs four.
-# Each is set slightly above its exact share of PROMOTE_AT so the intended
-# count still clears the bar after the decay applied between sightings —
-# 4 x 0.25 lands exactly on 1.0 and then loses a hair to decay, which would
-# make "four self-evals promote" quietly false.
-WEIGHTS = {
-    "reaction_owner": 0.60,   # 2 promote
-    "reaction_other": 0.34,   # 3 promote
-    "self_eval": 0.26,        # 4 promote
-}
-PROMOTE_AT = 1.0
-HALF_LIFE_DAYS = 21.0
-# Below this a candidate is not worth carrying; it is dropped on the next touch.
-FLOOR = 0.08
-MAX_CANDIDATES = 400
-
-
-def _decayed(weight: float, age_days: float) -> float:
-    if age_days <= 0:
-        return weight
-    return weight * (0.5 ** (age_days / HALF_LIFE_DAYS))
+# The weight-based gate that used to live here (WEIGHTS / PROMOTE_AT / decay /
+# prune, and CandidatePool.record driving them) is gone: nothing had called
+# `record` since the ledger took over promotion, so it was a second, divergent
+# set of promotion rules that only its own tests still exercised — which read
+# as coverage of the live gate while protecting nothing.
+#
+# What remains is what a deployment that learned before the ledger still needs:
+# load `example_candidates.json` as written, and let a human disagreement pull
+# a reply back out of it.
 
 
 class CandidatePool:
-    """Replies with some evidence behind them, but not yet enough to imitate."""
+    """A pre-ledger candidate file, kept readable so `withdraw` still works.
+
+    New corroboration goes through the evidence ledger and `decide` above; this
+    never grows any more, it only shrinks."""
 
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -507,57 +488,12 @@ class CandidatePool:
         except OSError:
             pass
 
-    # -- queries -----------------------------------------------------------
-    def confidence(self, reply: str, now: float) -> float:
-        rec = self._d.get((reply or "").strip())
-        if not rec:
-            return 0.0
-        age = max(0.0, (now - float(rec.get("ts", now))) / 86400.0)
-        return _decayed(float(rec.get("weight", 0.0)), age)
-
-    # -- mutations ---------------------------------------------------------
-    def record(self, example: dict, source: str, now: float) -> tuple[bool, float]:
-        """Add evidence for `example`. Returns (should_promote, confidence).
-
-        On promotion the candidate is consumed, so a reply is banked once and
-        does not keep re-promoting every time someone laughs at it again.
-        """
-        reply = str(example.get("reply") or "").strip()
-        if not reply:
-            return False, 0.0
-        add = WEIGHTS.get(source, WEIGHTS["self_eval"])
-        prior = self.confidence(reply, now)
-        rec = self._d.get(reply, {})
-        total = prior + add
-        self._d[reply] = {
-            "weight": total,
-            "ts": now,
-            "n": int(rec.get("n", 0)) + 1,
-            "sources": sorted(set(rec.get("sources", []) + [source])),
-            "example": example,
-        }
-        if total >= PROMOTE_AT:
-            self._d.pop(reply, None)
-            self._save()
-            return True, total
-        self._prune(now)
-        self._save()
-        return False, total
-
     def withdraw(self, reply: str) -> bool:
         """Drop a candidate outright — a human disagreed with this reply."""
         if self._d.pop((reply or "").strip(), None) is not None:
             self._save()
             return True
         return False
-
-    def _prune(self, now: float) -> None:
-        for k in [k for k in self._d if self.confidence(k, now) < FLOOR]:
-            self._d.pop(k, None)
-        if len(self._d) > MAX_CANDIDATES:
-            ordered = sorted(self._d.items(), key=lambda kv: float(kv[1].get("ts", 0)))
-            for k, _ in ordered[: len(self._d) - MAX_CANDIDATES]:
-                self._d.pop(k, None)
 
 
 def retract_example(path: Path, reply: str) -> int:
