@@ -18,9 +18,12 @@ site-packages.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Iterable
 from pathlib import Path
+
+logger = logging.getLogger("agent")
 
 
 def _looks_like_root(path: Path) -> bool:
@@ -80,12 +83,24 @@ def resolve_runtime_state_file(value: str | Path) -> Path:
 
     An ABSOLUTE value is taken as given and is deliberately not fenced to the
     runtime dir, unlike AGENT_RUNTIME_DIR itself: it is the escape hatch for
-    pointing one file at another disk. The asymmetry is intentional — the
-    cost is that a stale absolute path writes state where nothing that scans
-    the runtime dir will find it, with no error.
+    pointing one file at another disk. It is still worth saying out loud when
+    one lands outside, because the failure it produces otherwise — a stale
+    AGENT_MEMORY_FILE from an old deploy quietly writing somewhere nothing
+    else reads — looks like amnesia, not like a path problem.
     """
     path = Path(value)
     if path.is_absolute():
+        try:
+            base = runtime_dir()
+        except ValueError:
+            base = None          # AGENT_RUNTIME_DIR is itself misconfigured
+        if base is not None:
+            try:
+                path.resolve().relative_to(base)
+            except (ValueError, OSError):
+                logger.warning(
+                    "[Agent] %s is outside the runtime dir (%s); state written "
+                    "there is invisible to everything that scans it", path, base)
         return path
     base = runtime_dir().resolve()
     target = (base / path).resolve()
