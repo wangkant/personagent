@@ -22,21 +22,32 @@ class PersonaLineage:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self._lineages: dict[str, list[str]] = {}
+        self._unreadable = False
         self._load()
 
     def _load(self) -> None:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            self._unreadable = True
+            logger.error("[Agent] persona lineage unreadable (%s): %s", self.path, exc)
             return
         raw = data.get("lineages") if isinstance(data, dict) else None
         if not isinstance(raw, dict):
+            self._unreadable = True
+            logger.error("[Agent] persona lineage malformed (%s)", self.path)
             return
         for version, hashes in raw.items():
             if isinstance(hashes, list):
                 self._lineages[str(version)] = [str(h) for h in hashes if h]
 
     def _save(self) -> None:
+        # A file that did not parse still holds history we cannot reconstruct;
+        # writing our (empty) view over it would destroy it for good.
+        if self._unreadable:
+            raise OSError(f"lineage did not parse, refusing to overwrite {self.path}")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(self.path, json.dumps(
             {"lineages": self._lineages}, ensure_ascii=False, indent=2) + "\n")
@@ -64,15 +75,27 @@ class PersonaLineage:
         try:
             self._save()
         except OSError as exc:
+            # Undo the append: leaving it in memory makes the early return above
+            # swallow every later retry, so the revision is lost at restart.
+            hashes.remove(persona_hash)
             logger.warning("[Agent] persona lineage not saved (%s): %s", self.path, exc)
+            return (hashes[0] if hashes else persona_hash), not was_empty
         return hashes[0], not was_empty
 
     def adopt(self, version: str, persona_hash: str) -> bool:
-        """Add a hash from before the lineage existed (operator recovery)."""
+        """Add a hash from before the lineage existed (operator recovery).
+
+        Unlike ``extend``, a failed write raises: this runs from the admin CLI,
+        where an operator who is told "adopted" must not be told it on a write
+        that never landed."""
         version = version or ""
         hashes = self._lineages.setdefault(version, [])
         if persona_hash in hashes:
             return False
         hashes.append(persona_hash)
-        self._save()
+        try:
+            self._save()
+        except OSError:
+            hashes.remove(persona_hash)
+            raise
         return True
