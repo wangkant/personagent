@@ -207,4 +207,8 @@ def run_checks() -> list:
 
 
 def all_critical_ok(results) -> bool:
-    return not any(r["critical"] and r["ok"] is False for r in results)
+    # A critical probe that never ran (ok is None, "not configured") is not a
+    # pass: one missing LLM_API_KEY skips BOTH chat probes, and counting that
+    # as healthy is how a botched key rotation stays green on the dashboard
+    # while the agent cannot answer a single message.
+    return not any(r["critical"] and r["ok"] is not True for r in results)
