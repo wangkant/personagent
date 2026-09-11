@@ -23,11 +23,12 @@ promotion requires corroboration:
 Weak evidence never promotes anything at any quantity, so laughter alone can no
 longer grow the example pool; it accrues on a candidate and waits for an anchor.
 
-Also here, the pre-ledger gate that still guards the legacy pools:
-``CandidatePool`` (weight-based corroboration, retained so existing imports and
-on-disk state keep working) and ``retract_example``, which is how a human
-disagreement still pulls a row out of a learned pool written before the ledger
-existed.
+Also here, the pre-ledger machinery kept for compatibility: ``CandidatePool``
+and ``retract_example``, the latter being how a human disagreement still pulls
+a row out of a learned pool written before the ledger existed. Of the pool,
+only ``withdraw`` has a live caller; ``record`` and its decay/prune helpers
+are retained for existing imports and on-disk state and are NOT an active
+gate, however thoroughly test_promotion.py exercises them.
 
 Pure logic — no clock reads, no LLM. Callers pass `now`.
 """
@@ -75,7 +76,9 @@ MIN_STRONG = 1
 # still proposed and waits in `candidates_admin.py list` for a human.
 MIN_SPEAKERS = 1
 # Evidence older than this stops counting as support. A correction from four
-# months and one persona revision ago is history, not a mandate.
+# months and one persona revision ago is history, not a mandate. 0 turns the
+# window off entirely — both directions of it, so stale rejections keep vetoing
+# too; it is not "maximum strictness".
 MAX_EVIDENCE_AGE_DAYS = 30.0
 # Combine evidence only within one conversation. The same wording can be right
 # in one room and wrong in the next, and cross-room combination is exactly how
@@ -344,7 +347,7 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
         # corrections on days 40 and 41, and the refused text promoted into
         # the prompt. A promoted pair rolled back for the same reason never
         # comes back; a proposed one only had to wait.
-        if (about_reply and now and max_age
+        if (about_reply and now and max_age > 0
                 and now - epoch(ev.get("ts")) > max_age):
             continue
         if not scope_compatible(candidates.scope_from_event(ev), scope,
@@ -381,14 +384,20 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
             continue
         if not supports_candidate(ev, cand, policy=policy):
             continue
-        if now and max_age:
+        if now and max_age > 0:
             age = now - epoch(ev.get("ts"))
             if age > max_age:
                 continue
         seen_ids.add(eid)
         supporting.append(ev)
 
-    strong = [e for e in supporting if e.get("strength") == evidence.STRONG]
+    # Re-derive rather than trust the stored field: `strength` is excluded from
+    # _ID_FIELDS, so it is the one promotion input an edit to evidence.jsonl can
+    # change without breaking event_id. Hand-editing a bystander's correction to
+    # "strong" would otherwise buy a rewrite that classify_strength exists to
+    # refuse. For untampered rows this is the same value make_event wrote.
+    strong = [e for e in supporting
+              if evidence.classify_strength(e) == evidence.STRONG]
     against = counter_evidence(cand, related_events, now=now, policy=policy)
     if against:
         return Decision(False, "compatible evidence disagrees — left for review",
