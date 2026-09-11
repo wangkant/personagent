@@ -242,8 +242,15 @@ def append_jsonl_rotating(path: str | Path, row: dict, *, max_bytes: int,
 
 
 def atomic_write_text(path: str | Path, text: str, *,
-                      encoding: str = "utf-8") -> None:
-    """Durably replace ``path`` using a unique same-directory temporary file."""
+                      encoding: str = "utf-8", fsync: bool = True) -> None:
+    """Durably replace ``path`` using a unique same-directory temporary file.
+
+    ``fsync=False`` keeps the atomic replace — a reader still sees either the
+    whole old file or the whole new one — but does not wait for the disk. The
+    wait is the entire cost here (measured ~4ms median, ~6ms p90 for a 35 KiB
+    file), and on an asyncio caller it is paid by every conversation, not just
+    the one saving. Pass it ONLY for state that can be rebuilt from elsewhere;
+    a ledger or a lineage must keep the default."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
@@ -258,10 +265,12 @@ def atomic_write_text(path: str | Path, text: str, *,
             fd = -1
             handle.write(text)
             handle.flush()
-            os.fsync(handle.fileno())
+            if fsync:
+                os.fsync(handle.fileno())
         os.replace(tmp, path)
         _set_private_permissions(path)
-        _sync_directory(path.parent)
+        if fsync:
+            _sync_directory(path.parent)
     except BaseException:
         if fd >= 0:
             os.close(fd)
