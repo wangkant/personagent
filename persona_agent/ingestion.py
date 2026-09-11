@@ -382,6 +382,11 @@ class ContentIngestion:
     URL_PATTERN = re.compile(
         r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
     )
+    #: Links described per text segment. Each one is a separate fetch awaited in
+    #: sequence before the message is buffered, so an uncapped count lets a
+    #: single message full of cache-busted URLs stall the whole intake loop.
+    #: Nobody pastes five links and expects all five summarised anyway.
+    MAX_URLS_PER_SEGMENT = 4
     _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
                      ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
                      ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
@@ -834,7 +839,8 @@ class ContentIngestion:
 
     @classmethod
     def _extract_urls(cls, text: str) -> list[str]:
-        """Pull http(s) URLs out of text, deduped, order preserved."""
+        """Pull http(s) URLs out of text, deduped, order preserved, capped at
+        ``MAX_URLS_PER_SEGMENT``."""
         if not text:
             return []
         urls = []
@@ -845,6 +851,8 @@ class ContentIngestion:
                 continue
             seen.add(u)
             urls.append(u)
+            if len(urls) >= cls.MAX_URLS_PER_SEGMENT:
+                break
         return urls
 
     @classmethod
@@ -1385,6 +1393,14 @@ class ContentIngestion:
             avg_token_len = sum(len(t) for t in tokens) / max(len(tokens), 1)
             if avg_token_len >= 2:
                 return ocr_text
+        # Remember the miss, the way _describe_url caches its "[link]". Vision
+        # and OCR have both had their turn on this exact image and come back
+        # with nothing; re-running them on every repost buys the same nothing at
+        # the price of the full vision retry ladder plus a NapCat round trip.
+        # The gateway-sink return above is deliberately NOT cached: that one is
+        # "not from here", not "never".
+        self.image_caption_cache[cache_key] = ""
+        self._gc_image_cache()
         return ""
 
     def _gc_image_cache(self) -> None:

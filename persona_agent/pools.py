@@ -88,23 +88,6 @@ def _read_jsonl_appended(
         new_sig = blob[:new_offset][-_JSONL_SIG_BYTES:]
     return records, appended_only, size, new_offset, new_sig
 
-def _needs_leading_newline(path: Path) -> bool:
-    """True when `path` has content that doesn't end in a newline.
-
-    Every JSONL writer here appends ``json.dumps(...) + "\\n"``, which glues
-    the new record onto an unterminated last line and destroys both. Files can
-    legitimately arrive in that state from hand-editing — and the head of
-    examples.jsonl is the hand-curated bootstrap pool, i.e. exactly the part
-    people edit by hand and the part nothing is ever allowed to drop."""
-    try:
-        with path.open("rb") as f:
-            if f.seek(0, 2) == 0:
-                return False
-            f.seek(-1, 2)
-            return f.read(1) != b"\n"
-    except OSError:
-        return False
-
 def epoch(ts) -> float:
     """ISO timestamp -> epoch seconds; 0.0 when unparsable. Naive stamps are
     read as local time, matching every other timestamp in the pipeline."""
@@ -126,19 +109,12 @@ def _retrieval_fields(rec: dict) -> tuple[str, str, float]:
     inline parse, which simply skipped the recency bonus on failure. Naive
     timestamps keep being read as local time (``.timestamp()`` and the old
     ``datetime.now(None) - ts`` agree on that), aware ones as absolute."""
-    epoch = 0.0
-    ts = rec.get("ts")
-    if ts:
-        try:
-            epoch = datetime.fromisoformat(
-                str(ts).replace("Z", "+00:00")).timestamp()
-        except (ValueError, TypeError, OSError, OverflowError):
-            epoch = 0.0
+    ts_epoch = epoch(rec.get("ts"))
     ctx = rec.get("context") or []
     if not isinstance(ctx, list):
         ctx = [ctx]
     return (
         str(rec.get("scenario") or "").lower(),
         " ".join(str(c) for c in ctx).lower(),
-        epoch,
+        ts_epoch,
     )

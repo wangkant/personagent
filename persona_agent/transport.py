@@ -266,13 +266,23 @@ class Transport:
         delivered: list[str] = []
         failed = False
         sent_stickers: list[str] = []
+        # One reply can carry several [STICKER:] markers, and pick_by_tag's own
+        # cooldown cannot help here: it stamps the winner only after returning,
+        # so a second marker for a narrow tag re-picks the same image through
+        # the cooled-down fallback. Sending the same sticker twice in one breath
+        # is the tell that there is a bot on the other end.
+        used_md5s: set[str] = set()
         for kind, value in segments:
             if kind == "sticker":
-                file_path = self.stickers.pick_by_tag(value)
+                file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
                 if not file_path or not file_path.exists():
                     logger.info("[Agent] sticker tag %r → no match, skipping%s",
                                 value, label)
                     continue
+                picked_md5 = str(
+                    (self.stickers.entries.get(file_path.name) or {}).get("md5", ""))
+                if picked_md5:
+                    used_md5s.add(picked_md5)
                 if not collected:
                     await asyncio.sleep(random.uniform(0.6, 1.4))
                 try:
