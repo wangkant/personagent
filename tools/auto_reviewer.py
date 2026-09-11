@@ -187,6 +187,7 @@ def apply_candidates(auto_yes: bool) -> None:
     now = datetime.now().isoformat(timespec="seconds")
 
     approved: list[dict] = []
+    approved_ts: list[str] = []   # parallel to `approved`, for the cap rollback below
     verdicts: dict[str, str] = {}
     for i, cand in enumerate(pending, 1):
         pair = evolution.pair_from_candidate(cand, now)
@@ -220,6 +221,7 @@ def apply_candidates(auto_yes: bool) -> None:
                 verdict = ""
         if verdict == "y":
             approved.append(pair)
+            approved_ts.append(ts)
             existing.add((pair["reply"], pair["better"]))
             verdicts[ts] = "auto" if auto_yes else "approved"
         elif verdict == "n":
@@ -238,8 +240,15 @@ def apply_candidates(auto_yes: bool) -> None:
                     trimmed[0], trimmed[1], FEEDBACK_MAX_AUTO)
     n = evolution.append_jsonl(feedback, approved)
     if n < len(approved):
-        logger.warning("feedback file at size cap: %d of %d pairs written",
-                       n, len(approved))
+        # append_jsonl writes a prefix and stops at the cap. Marking the dropped
+        # tail "approved" anyway would strand it: load_pending_candidates skips
+        # anything with an `applied` field, so those candidates would be neither
+        # in the feedback pool nor ever offered again. Leave them pending.
+        for ts in approved_ts[n:]:
+            verdicts.pop(ts, None)
+        logger.warning("feedback file at size cap: %d of %d pairs written; "
+                       "the other %d stay pending for the next run",
+                       n, len(approved), len(approved) - n)
     evolution.mark_candidates(CANDIDATES_FILE, verdicts)
     logger.info("apply done: %d approved -> %s, %d rejected, %d left pending",
                 n, feedback.name,

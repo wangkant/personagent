@@ -108,8 +108,8 @@ class Learning:
     #: unlike `eval.jsonl`, so reaching this is terminal rather than a wrap.
     CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
 
-    def _audit_candidate(self, ev: dict, diag: dict, applied: str) -> None:
-        """Write one review audit row — and SAY SO when the file refuses it.
+    def _append_audit_row(self, row: dict, label: str) -> None:
+        """Append one audit row — and SAY SO when the file refuses it.
 
         `src_eval_ts` in this file is the only review-dedup key, so a row that
         does not land means the same eval is re-diagnosed on every tick,
@@ -117,11 +117,13 @@ class Learning:
         silently past its byte cap and returns 0, and nobody read that return
         — so the loop kept spending and the audit trail, which is the only
         record of WHY the agent talks the way it does, went quiet at the same
-        moment and for the same reason."""
+        moment and for the same reason.
+
+        Every audit write goes through here: a caller that appends directly
+        re-opens exactly that hole."""
         try:
             written = evolution.append_jsonl(
-                self.candidates_file,
-                [evolution.candidate_record(ev, diag, applied=applied)],
+                self.candidates_file, [row],
                 max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES,
             )
         except Exception as e:
@@ -131,10 +133,16 @@ class Learning:
         if not written:
             logger.error(
                 "[Agent] candidates.jsonl has hit its %d-byte cap — the audit "
-                "row for %s was DROPPED, so that eval will be re-diagnosed on "
-                "every evolve tick and the audit trail is no longer being "
-                "written. Archive or truncate the file.",
-                self.CANDIDATE_AUDIT_MAX_BYTES, str(ev.get("ts", "?"))[:19])
+                "row for %s was DROPPED, so the audit trail is no longer being "
+                "written and any eval it deduped is re-diagnosed on every "
+                "evolve tick. Archive or truncate the file.",
+                self.CANDIDATE_AUDIT_MAX_BYTES, label)
+
+    def _audit_candidate(self, ev: dict, diag: dict, applied: str) -> None:
+        """Write one review audit row for `ev`."""
+        self._append_audit_row(
+            evolution.candidate_record(ev, diag, applied=applied),
+            str(ev.get("ts", "?"))[:19])
 
     def _record_and_corroborate(self, event: dict, ts: str) -> bool:
         """Record an event, then let it speak for whatever is already waiting."""
@@ -573,13 +581,13 @@ class Learning:
             # Hard poison shield: users whose teachings are consistently
             # dismissed stop costing adjudicator calls at all (BB3x lesson).
             if not is_owner and self.teacher_stats.hard_block(reactor_uid):
-                evolution.append_jsonl(self.candidates_file, [{
+                self._append_audit_row({
                     "src": "user_reaction",
                     "ts": datetime.now().isoformat(timespec="seconds"),
                     "reactor": reactor_name, "is_owner": False,
                     "reaction_text": (reaction_text or "")[:120],
                     "applied": "blocked", "reason": "hard-blocked teacher",
-                }], max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES)
+                }, f"hard-block {reactor_name}")
                 return
             history_line = ("" if is_owner else
                             self.teacher_stats.history_line(reactor_uid,
