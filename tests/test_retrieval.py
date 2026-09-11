@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from persona_agent import evolution  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
-from persona_agent.pools import _needs_leading_newline  # noqa: E402
 
 _failures: list[str] = []
 
@@ -105,10 +104,7 @@ def bank_example(a: Agent, rec: dict) -> None:
     what the tests below check."""
     evolution.trim_pool(a.examples_file, max_auto=a.examples_max_auto,
                         is_auto=lambda r: "score" in r)
-    with a.examples_file.open("a", encoding="utf-8") as f:
-        if _needs_leading_newline(a.examples_file):
-            f.write("\n")
-        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    evolution.append_jsonl(a.examples_file, [rec])
 
 
 def bank_pair(a: Agent, rec: dict) -> int:
