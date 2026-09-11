@@ -826,6 +826,50 @@ def test_corroboration_means_people_not_events() -> None:
           promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "2"}).min_speakers == 2)
 
 
+def test_a_hand_edited_strength_cannot_buy_a_promotion() -> None:
+    """`strength` is derived once at write time and left out of `_ID_FIELDS`,
+    so it is the one promotion input an edit to evidence.jsonl can change
+    without breaking `event_id`. Promotion re-derives it instead of reading it,
+    or the "owner status does not make someone the affected recipient" rule
+    would be enforced only against people who do not edit the file."""
+    now = NOW
+    ts = stamp(NOW - 3600)
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+
+    def bystander(speaker: str) -> dict:
+        """Corrects a reply that was aimed at someone else."""
+        return evidence.make_event(
+            kind=evidence.KIND_REACTION, ts=ts, **scope,
+            speaker_id=speaker, recipient_id="victim", reply="bad line",
+            reaction_type="correction",
+            adjudication={"accept": True, "better": "fixed", "mode": "called"})
+
+    cand = candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=ts, evidence=[],
+        payload={"reply": "bad line", "better": "fixed", "mode": "called",
+                 "rating": "better"})
+
+    honest = [bystander("alice"), bystander("bob")]
+    check("strength: a bystander's correction is not strong",
+          all(e["strength"] == evidence.NEGATIVE_ONLY for e in honest),
+          str([e["strength"] for e in honest]))
+    clean = promotion.decide(cand, linked_events=honest, related_events=[],
+                             peers=[], now=now)
+    check("strength: two bystanders alone do not promote",
+          clean.promote is False, clean.reason)
+
+    tampered = [dict(honest[0], strength=evidence.STRONG), honest[1]]
+    # The point of the whole test: the integrity hash does NOT cover this edit,
+    # so nothing upstream of promotion is going to catch it.
+    check("strength: editing it leaves event_id intact",
+          tampered[0]["event_id"] == honest[0]["event_id"])
+    forged = promotion.decide(cand, linked_events=tampered, related_events=[],
+                              peers=[], now=now)
+    check("strength: a hand-edited `strong` still does not promote",
+          forged.promote is False, forged.reason)
+
+
 def test_moving_on_is_not_acceptance() -> None:
     """A `neutral` retry reaction means the person changed the subject. The
     "better" side of a retry-acceptance event is the agent's OWN retry text, so
@@ -1373,6 +1417,7 @@ def main() -> int:
         asyncio.run(test_legacy_rows_still_retractable(tmp / "t13b"))
         test_paths_never_touch_real_runtime_state(tmp / "t14")
         test_corroboration_means_people_not_events()
+        test_a_hand_edited_strength_cannot_buy_a_promotion()
         test_moving_on_is_not_acceptance()
         test_stale_evidence_is_refused()
         test_a_rejected_rewrite_is_not_promoted_later()

@@ -232,6 +232,59 @@ def test_auto_yes_cannot_direct_apply(tmp: Path) -> None:
           len(pending) == 1 and not pending[0].get("applied"), str(pending))
 
 
+def test_a_capped_feedback_write_leaves_the_rest_pending(tmp: Path) -> None:
+    """`append_jsonl` writes a prefix and stops at the byte cap, returning a
+    short count. Marking the whole approved batch applied stranded the tail it
+    dropped: never written to the pool, and filtered out of `pending` from then
+    on — approved, unwritten, and unreachable by any later run."""
+    import builtins
+
+    candidates_file = tmp / "candidates.jsonl"
+    feedback_file = tmp / "feedback.jsonl"
+    seed_file = tmp / "seed-feedback.jsonl"
+
+    def cand(ts: str, reply: str) -> dict:
+        diag = json.loads(json.dumps(GOOD_DIAG))
+        diag["pair_draft"]["reply"] = reply
+        return evolution.candidate_record(
+            {"ts": ts, "score": 1, "mode": "called", "reply": reply}, diag)
+
+    _write_jsonl(candidates_file, [cand("t1", "first bad reply"),
+                                   cand("t2", "second bad reply")])
+
+    real_append = evolution.append_jsonl
+
+    def cap_after_one(path, recs, **kw):
+        """Stand in for the byte cap: accept the first row, refuse the rest."""
+        return real_append(path, list(recs)[:1], **kw)
+
+    old_c, old_f = auto_reviewer.CANDIDATES_FILE, auto_reviewer._feedback_files
+    old_input = builtins.input
+    auto_reviewer.CANDIDATES_FILE = candidates_file
+    auto_reviewer._feedback_files = lambda: (seed_file, feedback_file)
+    evolution.append_jsonl = cap_after_one
+    builtins.input = lambda *_a, **_k: "y"
+    try:
+        auto_reviewer.apply_candidates(auto_yes=False)
+    finally:
+        auto_reviewer.CANDIDATES_FILE = old_c
+        auto_reviewer._feedback_files = old_f
+        evolution.append_jsonl = real_append
+        builtins.input = old_input
+
+    written = [json.loads(line) for line
+               in feedback_file.read_text(encoding="utf-8").splitlines()
+               if line.strip()]
+    pending = evolution.load_pending_candidates(candidates_file)
+    check("cap: only the pairs that fit are written",
+          len(written) == 1, str(len(written)))
+    check("cap: the dropped pair stays pending",
+          len(pending) == 1, str(pending))
+    check("cap: ...and it is the one that was not written",
+          bool(pending) and pending[0].get("src_eval_ts") == "t2",
+          str([p.get("src_eval_ts") for p in pending]))
+
+
 # ---------------------------------------------------------------------------
 # Integration: Agent._evolve_tick with a stubbed model
 # ---------------------------------------------------------------------------
@@ -357,6 +410,8 @@ def main() -> int:
         test_mark_candidates(Path(td))
     with tempfile.TemporaryDirectory() as td:
         test_auto_yes_cannot_direct_apply(Path(td))
+    with tempfile.TemporaryDirectory() as td:
+        test_a_capped_feedback_write_leaves_the_rest_pending(Path(td))
     with tempfile.TemporaryDirectory() as td:
         asyncio.run(integration_evolve_tick(Path(td)))
     print()
