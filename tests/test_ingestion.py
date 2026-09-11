@@ -272,6 +272,23 @@ async def test_dns_resolution_obeys_timeout() -> None:
     check("dns: resolution timeout is prompt", elapsed < 0.12, f"{elapsed:.3f}s")
 
 
+def test_url_fanout_is_capped() -> None:
+    """agent.py awaits a describe call for every URL this returns, in sequence,
+    before the message is buffered or its text truncated. Uncapped, one message
+    of cache-busted links stalls the intake loop for every group, not just its
+    own — so the cap belongs here, at the source of the list."""
+    cap = ContentIngestion.MAX_URLS_PER_SEGMENT
+    many = " ".join(f"https://example.com/a?i={i}" for i in range(20))
+    got = ContentIngestion._extract_urls(many)
+    check("urls: fanout is capped", len(got) == cap, str(len(got)))
+    check("urls: the cap keeps the first links, in order",
+          got == [f"https://example.com/a?i={i}" for i in range(cap)], str(got))
+    check("urls: dedup still collapses repeats",
+          ContentIngestion._extract_urls(
+              " ".join(["https://example.com/same"] * 10))
+          == ["https://example.com/same"])
+
+
 def test_gif_pixel_bomb_rejected_before_convert() -> None:
     converted = False
 
@@ -347,6 +364,7 @@ async def main() -> int:
     await test_url_limits_and_cache_keys()
     await test_dns_resolution_is_pinned_once()
     await test_dns_resolution_obeys_timeout()
+    test_url_fanout_is_capped()
     test_gif_pixel_bomb_rejected_before_convert()
     test_small_gif_still_converts()
     await test_bootstrap_uses_guarded_bounded_fetch()

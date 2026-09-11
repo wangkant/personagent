@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from persona_agent import evolution  # noqa: E402
+from persona_agent import lineage as lineage_mod  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
 
 _failures: list[str] = []
@@ -690,6 +691,73 @@ def test_persona_edit_keeps_promoted_rows_in_scope() -> None:
               "promoted reply" not in block, block)
 
 
+def _refuse_to_write(*_args, **_kwargs) -> None:
+    raise OSError("simulated: disk full")
+
+
+def test_a_failed_lineage_save_can_still_be_retried() -> None:
+    """A write that did not land must not look like one that did.
+
+    The hash goes into memory before the save; leaving it there on failure made
+    the `already recorded` early return swallow every retry, so the revision was
+    gone at restart — the orphaned-learning bug this module exists to prevent."""
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "persona_lineage.json"
+        lin = lineage_mod.PersonaLineage(path)
+        real = lineage_mod.atomic_write_text
+        lineage_mod.atomic_write_text = _refuse_to_write
+        try:
+            root, extended = lin.extend("v1", "hash_a")
+        finally:
+            lineage_mod.atomic_write_text = real
+        check("lineage: a failed save still returns a usable root",
+              root == "hash_a", root)
+        check("lineage: a failed save is not reported as an extension",
+              extended is False, str(extended))
+        check("lineage: a failed save leaves no file", not path.exists())
+        check("lineage: a failed save is rolled back in memory",
+              lin.hashes("v1") == [], str(lin.hashes("v1")))
+
+        root2, _ = lin.extend("v1", "hash_a")
+        check("lineage: the retry actually persists", path.is_file())
+        check("lineage: the retry agrees on the root", root2 == "hash_a", root2)
+        check("lineage: the hash is recorded exactly once",
+              lin.hashes("v1") == ["hash_a"], str(lin.hashes("v1")))
+        check("lineage: a cold reload sees the retried write",
+              lineage_mod.PersonaLineage(path).hashes("v1") == ["hash_a"])
+
+
+def test_an_unreadable_lineage_file_is_never_overwritten() -> None:
+    """docs/deploy.md sends operators to this file, so a hand-edit that breaks
+    the JSON is a real state. Replacing it with our empty view would turn
+    "unreadable" into "gone", and the history cannot be rebuilt."""
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "persona_lineage.json"
+        path.write_text('{"lineages": {"v1": ["aaa", "bbb"]',
+                        encoding="utf-8")           # truncated on purpose
+        before = path.read_text(encoding="utf-8")
+        lin = lineage_mod.PersonaLineage(path)
+
+        root, extended = lin.extend("v1", "ccc")
+        check("lineage: extend does not overwrite an unreadable file",
+              path.read_text(encoding="utf-8") == before)
+        check("lineage: extend still answers with a usable root",
+              root == "ccc", root)
+        check("lineage: the refused hash is not left in memory",
+              lin.hashes("v1") == [], str(lin.hashes("v1")))
+
+        raised = False
+        try:
+            lin.adopt("v1", "ccc")
+        except OSError:
+            raised = True
+        check("lineage: adopt refuses an unreadable file LOUDLY", raised)
+        check("lineage: adopt did not touch the file either",
+              path.read_text(encoding="utf-8") == before)
+        check("lineage: adopt rolled its hash back too",
+              lin.hashes("v1") == [], str(lin.hashes("v1")))
+
+
 def test_promoted_views_enforce_full_scope() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -810,6 +878,8 @@ def main() -> int:
     test_feedback_write_survives_a_full_pool()
     test_promoted_views_are_a_third_retrieval_source()
     test_persona_edit_keeps_promoted_rows_in_scope()
+    test_a_failed_lineage_save_can_still_be_retried()
+    test_an_unreadable_lineage_file_is_never_overwritten()
     test_promoted_views_enforce_full_scope()
     test_relevance_outranks_recency()
     test_future_timestamp_cannot_outrank_a_match()

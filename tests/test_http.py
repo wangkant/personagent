@@ -163,6 +163,35 @@ async def test_public_health_is_a_cheap_liveness_check() -> None:
         main_module.run_checks = original
 
 
+def test_a_skipped_critical_probe_is_not_a_pass() -> None:
+    """`ok` is tri-state: True passed, False failed, None never ran ("not
+    configured"). One blank LLM_API_KEY makes BOTH critical chat probes report
+    None, so counting None as a pass is exactly how a botched key rotation
+    keeps /health green while the agent cannot answer a single message."""
+    from persona_agent import health
+
+    def r(name: str, ok, critical: bool = True) -> dict:
+        return {"name": name, "ok": ok, "critical": critical,
+                "detail": "", "ms": 0}
+
+    check("health: all green is ok",
+          health.all_critical_ok([r("a", True), r("b", True)]) is True)
+    check("health: a failed critical probe is not ok",
+          health.all_critical_ok([r("a", True), r("b", False)]) is False)
+    check("health: a SKIPPED critical probe is not ok either",
+          health.all_critical_ok([r("a", True), r("b", None)]) is False)
+    check("health: a skipped non-critical probe is still ok",
+          health.all_critical_ok(
+              [r("a", True), r("b", None, critical=False)]) is True)
+    # The shape a missing LLM_API_KEY actually produces.
+    check("health: an unconfigured LLM does not report healthy",
+          health.all_critical_ok([
+              r("Private chat (openai)", None),
+              r("Primary chat (/v1 tools)", None),
+              r("OneBot bridge", True),
+              r("Vision", None, critical=False)]) is False)
+
+
 async def test_asgi_webhook_auth_and_schema() -> None:
     original_secret = main_module.WEBHOOK_SECRET
     original_token = main_module.GATEWAY_TOKEN
@@ -644,6 +673,7 @@ async def main_async() -> None:
     test_import_has_no_file_logging_side_effect()
     await test_admission_limiter_is_bounded()
     await test_public_health_is_a_cheap_liveness_check()
+    test_a_skipped_critical_probe_is_not_a_pass()
     await test_asgi_webhook_auth_and_schema()
     test_gateway_envelope_rejects_replay_and_stale_requests()
     test_gateway_envelope_refuses_a_bad_signature()
