@@ -192,9 +192,16 @@ class PendingReplies:
             },
         }
         try:
+            # No fsync: this runs on the event loop — record() is called for
+            # every incoming message and every reply sent — so the ~4ms wait
+            # would be charged to every other conversation too. The table is a
+            # short-TTL cache of replies still awaiting a reaction; losing the
+            # last few entries to a crash costs at most one learning turn, and
+            # the replace is still atomic, so it can never be read torn.
             atomic_write_text(
                 self.state_file,
                 json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                fsync=False,
             )
         except OSError:
             return
