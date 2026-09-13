@@ -208,9 +208,14 @@ class CandidateLedger:
 
     # -- projection --------------------------------------------------------
     def _rows(self) -> list[dict]:
+        # Stamp BEFORE the read, like EvidenceLog._load. Stamped after, a row
+        # another process appends DURING the read is missed by this projection
+        # and covered by a stamp that says the projection is current — so it
+        # stays invisible until something else touches the file.
+        stamp = file_stamp(self.path)
         result = read_validated_jsonl(self.path, _validate_row)
         self._quarantined = result.quarantined
-        self._stamp = file_stamp(self.path)
+        self._stamp = stamp
         return result.rows
 
     def _project(self) -> dict[str, dict]:

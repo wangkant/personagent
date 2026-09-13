@@ -39,6 +39,10 @@ PROVIDERS = [
 PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
 PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
 
+# Owner-only, matching `persona_agent.storage.PRIVATE_FILE_MODE`, which this
+# script cannot import: quickstart runs before the dependencies it installs.
+SECRET_FILE_MODE = 0o600
+
 
 def _info(msg: str) -> None:
     print(f"[quickstart] {msg}")
@@ -134,16 +138,37 @@ def write_env(env_path: Path, values: dict) -> None:
     # two lines — the exact interruption this atomicity exists for — leaves it
     # on disk for `git add -A` to stage.
     tmp = env_path.with_name(env_path.name + ".tmp")
-    tmp.write_text(updated, encoding="utf-8")
+    # 0600 at CREATION, before a single key is written: `write_text` opens at
+    # the umask default, so chmod'ing afterwards still leaves a window where
+    # the live API keys are world-readable.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, SECRET_FILE_MODE)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(updated)
     try:
-        # Carry the original's permissions across, or os.replace hands the
-        # secrets file a fresh umask-default mode and quietly widens a
-        # deliberate `chmod 600`. No-op on Windows.
+        # Carry the original's permissions across so a deliberate `chmod 400`
+        # survives os.replace — but NEVER widen. `.env` starts life as a copy
+        # of `.env.example`, a repo file at 0644, so carrying that mode across
+        # unchanged is how the first wizard run published LLM_API_KEY,
+        # GATEWAY_TOKEN and WEBHOOK_SECRET to every local account.
         if env_path.exists():
-            os.chmod(tmp, env_path.stat().st_mode & 0o7777)
+            os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
     except OSError:
-        pass
+        pass  # Windows ACLs do not map onto POSIX mode bits
     os.replace(tmp, env_path)
+
+
+def secure_env_file(env_path: Path) -> None:
+    """Narrow `.env` to owner-only; it holds live API keys.
+
+    `shutil.copy` from `.env.example` brings that repo file's 0644 with it,
+    and the non-interactive bootstrap never calls `write_env` at all — the
+    operator just edits the copied file by hand. So the copy itself has to be
+    narrowed, or the keys they paste in land world-readable.
+    """
+    try:
+        os.chmod(env_path, SECRET_FILE_MODE)
+    except OSError:
+        pass  # Windows ACLs do not map onto POSIX mode bits
 
 
 def _env_get(env_path: Path, key: str) -> str:
@@ -542,6 +567,7 @@ def main() -> None:
     ensure_deps(venv)
     _copy_template(".env.example", ".env")
     env_path = ROOT / ".env"
+    secure_env_file(env_path)
 
     interactive = not no_input and sys.stdin.isatty()
     if interactive:
