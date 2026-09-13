@@ -66,6 +66,14 @@ REVIEWER_VERSION = "self-reviewer/1"
 # Feedback is a curated dataset, not a log — refuse to grow it unbounded.
 FEEDBACK_MAX_BYTES = 5_000_000
 
+# candidates.jsonl has no rotation, unlike eval.jsonl, so reaching this is
+# terminal rather than a wrap. It lives HERE because that file has TWO writers —
+# the running agent (learning._append_audit_row) and tools/auto_reviewer.py —
+# and they had drifted: the tool took the FEEDBACK default, so it went blind at
+# 5 MB while the agent was still appending happily up to 20 MB, and the agent's
+# own "has hit its cap" error could never fire to explain the silence.
+CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
+
 
 def build_review_prompt(ev: dict, lang: str) -> str:
     tmpl = REVIEWER_PROMPTS.get(lang, REVIEWER_PROMPTS["en"])

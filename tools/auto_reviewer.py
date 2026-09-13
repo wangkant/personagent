@@ -128,41 +128,52 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
         return []
 
     written: list[dict] = []
-    try:
-        for ev in pending:
-            prompt = evolution.build_review_prompt(ev, AGENT_LANG)
-            try:
-                raw = await call_llm(prompt)
-            except Exception as e:
-                logger.warning("reviewer call failed (%s): %s: %s",
-                               str(ev.get("ts", "?"))[:19], type(e).__name__, e)
+    for ev in pending:
+        prompt = evolution.build_review_prompt(ev, AGENT_LANG)
+        try:
+            raw = await call_llm(prompt)
+        except Exception as e:
+            logger.warning("reviewer call failed (%s): %s: %s",
+                           str(ev.get("ts", "?"))[:19], type(e).__name__, e)
+            continue
+        diag = evolution.parse_review(raw)
+        if not diag:
+            logger.warning("reviewer output not JSON (%s): %s ...",
+                           str(ev.get("ts", "?"))[:19], raw[:120])
+            continue
+        record = evolution.candidate_record(ev, diag)
+        line = json.dumps(record, ensure_ascii=False)
+        if no_write:
+            print(line)
+        else:
+            # One locked, fsynced append per record instead of a bare
+            # long-lived handle. The running agent appends to this same
+            # file throughout — that is the documented workflow — and the
+            # unlocked handle lost ~25-30% of this run's own diagnoses.
+            # Worse, a torn line lands mid-multibyte on Chinese payloads,
+            # after which every reader of candidates.jsonl raises
+            # UnicodeDecodeError and the negative half of the learning
+            # loop stops permanently, including the code that could repair it.
+            # CHECK THE RETURN. append_jsonl refuses SILENTLY past the cap
+            # and returns 0, and `src_eval_ts` in this file is the only
+            # review-dedup key — so a row that does not land means this
+            # eval is re-diagnosed, and re-billed, on every later run,
+            # forever, while the log still says it was written.
+            if not evolution.append_jsonl(
+                    CANDIDATES_FILE, [record],
+                    max_bytes=evolution.CANDIDATE_AUDIT_MAX_BYTES):
+                logger.error(
+                    "candidates.jsonl has hit its %d-byte cap — the audit "
+                    "row for %s was DROPPED and this eval will be "
+                    "re-reviewed on every run. Archive or truncate it.",
+                    evolution.CANDIDATE_AUDIT_MAX_BYTES,
+                    str(ev.get("ts", "?"))[:19])
                 continue
-            diag = evolution.parse_review(raw)
-            if not diag:
-                logger.warning("reviewer output not JSON (%s): %s ...",
-                               str(ev.get("ts", "?"))[:19], raw[:120])
-                continue
-            record = evolution.candidate_record(ev, diag)
-            line = json.dumps(record, ensure_ascii=False)
-            if no_write:
-                print(line)
-            else:
-                # One locked, fsynced append per record instead of a bare
-                # long-lived handle. The running agent appends to this same
-                # file throughout — that is the documented workflow — and the
-                # unlocked handle lost ~25-30% of this run's own diagnoses.
-                # Worse, a torn line lands mid-multibyte on Chinese payloads,
-                # after which every reader of candidates.jsonl raises
-                # UnicodeDecodeError and the negative half of the learning
-                # loop stops permanently, including the code that could repair it.
-                evolution.append_jsonl(CANDIDATES_FILE, [record])
-            written.append(record)
-            logger.info("  [%s] %s → %s",
-                        str(ev.get("ts", "?"))[:19],
-                        diag.get("failure_mode", "?"),
-                        str(diag.get("constraint_to_add", ""))[:80])
-    finally:
-        pass
+        written.append(record)
+        logger.info("  [%s] %s → %s",
+                    str(ev.get("ts", "?"))[:19],
+                    diag.get("failure_mode", "?"),
+                    str(diag.get("constraint_to_add", ""))[:80])
     logger.info("review done: %d/%d written to %s", len(written), len(pending),
                 "stdout (--no-write)" if no_write else CANDIDATES_FILE.name)
     return written

@@ -104,9 +104,10 @@ class Learning:
                            type(e).__name__, e)
         return promoted
 
-    #: The audit trail's byte ceiling. `candidates.jsonl` has no rotation,
-    #: unlike `eval.jsonl`, so reaching this is terminal rather than a wrap.
-    CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
+    #: The audit trail's byte ceiling. Defined in `evolution` because
+    #: `tools/auto_reviewer.py` writes the same file and the two must agree —
+    #: they did not, and the disagreement was invisible from either side.
+    CANDIDATE_AUDIT_MAX_BYTES = evolution.CANDIDATE_AUDIT_MAX_BYTES
 
     def _append_audit_row(self, row: dict, label: str) -> None:
         """Append one audit row — and SAY SO when the file refuses it.

@@ -53,6 +53,26 @@ from persona_agent.preflight import private_model_from_env
 STICKERS_DIR = ROOT / "stickers" / "auto"
 
 
+def is_unstable(true_count: int, false_count: int) -> bool:
+    """Did the judge flip on this image, over the verdicts it actually gave.
+
+    Counted over the VALID verdicts only. Measured against the run count, a
+    None folds in as "the judge said False", so the metric is wrong in both
+    directions exactly when the endpoint partially fails — the condition it
+    exists to survive. Its own module returns None on a 429 that outlasts the
+    backoff, so partial failure is the expected shape, not the exotic one.
+
+    A module-level predicate rather than an expression inside the scoring
+    loop so the two cases that used to be wrong stay checkable without an
+    API key: (1, 0) with three Nones is stable, (3, 0) with two Nones is not
+    a flip.
+    """
+    valid = true_count + false_count
+    if valid >= 4:
+        return true_count >= 2 and false_count >= 2
+    return true_count > 0 and false_count > 0
+
+
 async def main(holdout_path: Path, runs: int) -> None:
     if not holdout_path.exists():
         print(f"holdout file not found: {holdout_path}")
@@ -84,7 +104,14 @@ async def main(holdout_path: Path, runs: int) -> None:
         private_model=private_model_from_env(),
         vision_model=os.getenv("VISION_MODEL", ""),
         glm_api_key=os.getenv("GLM_API_KEY", ""),
-        glm_base_url=os.getenv("GLM_BASE_URL", ""),
+        # `or`, not a bare getenv default: .env.example ships `GLM_BASE_URL=`
+        # blank, and a set-but-empty value defeats getenv's default. Passing ""
+        # leaves Agent.glm_base_url empty (agent.py keeps the empty string),
+        # every vision POST goes to a hostless "/chat/completions", and the
+        # whole holdout scores None — which reads as "the judge is broken" and
+        # sends the operator off to audit a VISION_MODEL and key that are fine.
+        glm_base_url=(os.getenv("GLM_BASE_URL", "")
+                      or "https://open.bigmodel.cn/api/paas/v4"),
     )
 
     results: dict[str, list] = defaultdict(list)
@@ -122,10 +149,8 @@ async def main(holdout_path: Path, runs: int) -> None:
         false_count = sum(1 for v in verdicts if v is False)
         none_count = sum(1 for v in verdicts if v is None)
         majority = (true_count > false_count)
-        is_unstable = 2 <= true_count <= (runs - 2) if runs >= 4 else (
-            0 < true_count < runs
-        )
-        if is_unstable:
+        unstable_here = is_unstable(true_count, false_count)
+        if unstable_here:
             unstable += 1
         if none_count == runs:
             judge_fail += 1
@@ -138,7 +163,7 @@ async def main(holdout_path: Path, runs: int) -> None:
                 fp += 1
             else:
                 tn += 1
-        flag = "!" if is_unstable else " "
+        flag = "!" if unstable_here else " "
         per_image_lines.append(
             f"  {flag} {fn[:38]:38s} expected={expected!s:>5s} "
             f"true={true_count}/{runs} false={false_count}/{runs} "
