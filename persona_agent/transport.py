@@ -288,8 +288,13 @@ class Transport:
                 try:
                     img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 except Exception as e:
+                    # Skipped, not failed — the same local miss as the
+                    # .exists() check above, one step later. `failed` means the
+                    # NETWORK stopped mid-reply: it breaks out of the remaining
+                    # segments and makes the caller withhold the core-memory,
+                    # auto-memory and eval commit. None of that is right for
+                    # text the group has already read.
                     logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
-                    failed = True
                     continue
                 sendable = True
                 message = at_head + [
@@ -395,8 +400,14 @@ class Transport:
         @ed or named the bot and weren't replied to, process one of them."""
         if not self.enabled:
             return
-        # Single source of truth: allowed_groups is parsed from QQ_GROUPS in __init__.
-        for group_id in list(self.buffers.keys()) or list(self.allowed_groups):
+        # Both, not `buffers or allowed_groups`: buffers gains a key for ANY
+        # conversation with traffic — a DM included — so the `or` stopped
+        # consulting the whitelist the moment one message arrived anywhere.
+        # A missed @ is by definition in a group with no traffic this run,
+        # which is exactly the group that fell out of the poll.
+        # allowed_groups is parsed from QQ_GROUPS in __init__.
+        for group_id in dict.fromkeys(
+                list(self.buffers.keys()) + list(self.allowed_groups)):
             # Gateway conversations ("<platform>:<id>") are inbound-only; the
             # NapCat history API can't poll them (and int() would crash).
             if ":" in group_id:

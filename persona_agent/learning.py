@@ -175,13 +175,16 @@ class Learning:
             projected, created = ledger.propose(cand)
             if already and not created:
                 return "held"  # nothing new to weigh
+            events = self.evidence_log.all()
             support = [
-                e["event_id"] for e in self.evidence_log.all()
+                e["event_id"] for e in events
                 if promotion.supports_candidate(e, projected,
                                                 policy=self.promotion_policy)
             ]
             ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
-            decision = self._decide_promotion(cid)
+            # Reuse the list the scan just built; that is what the parameter
+            # is for, and _corroborate_existing already passes it.
+            decision = self._decide_promotion(cid, events=events)
             label = "proposed" if created else "held"
             if decision.promote:
                 if ledger.promote(cid, ts=ts, actor="auto",
@@ -756,8 +759,7 @@ class Learning:
             }
             if entry.get("fixes"):
                 audit["via"] = "retry-completion-candidate"
-            evolution.append_jsonl(self.candidates_file, [audit],
-                                   max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES)
+            self._append_audit_row(audit, f"reaction {reaction_ev['event_id']}")
         except Exception as e:
             logger.warning("[Agent] reaction processing failed: %s: %s",
                            type(e).__name__, e)

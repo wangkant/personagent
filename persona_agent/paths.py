@@ -129,8 +129,12 @@ def read_jsonl(paths: Iterable[Path]) -> list[dict]:
     rows: list[dict] = []
     for path in paths:
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except (FileNotFoundError, OSError):
+            # errors="replace", like pools._parse_jsonl: read_text raises
+            # UnicodeDecodeError — a ValueError, so it escapes an OSError
+            # guard — and one bad byte in a retrieval pool then breaks the
+            # reload on every turn rather than costing the one row.
+            lines = path.read_bytes().decode("utf-8", "replace").splitlines()
+        except OSError:
             continue
         for line in lines:
             if not line.strip():

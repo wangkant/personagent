@@ -61,7 +61,6 @@ class StickerLibrary:
         # always current; a crash loses at most a few seconds of context /
         # use_count updates (self-healing, non-critical). Important writes use
         # _save(force=True).
-        self._dirty = False
         self._last_save = 0.0
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
@@ -109,7 +108,6 @@ class StickerLibrary:
         # an immediate crash (new sticker / completed tagging / purge).
         # Compact separators (no indent) keep the potentially-large write
         # cheaper; the file is machine-managed and gitignored.
-        self._dirty = True
         now = time.monotonic()
         if not force and (now - self._last_save) < SAVE_MIN_INTERVAL_SEC:
             return
@@ -118,7 +116,6 @@ class StickerLibrary:
                 self.file,
                 json.dumps(self.entries, ensure_ascii=False, separators=(',', ':')),
             )
-            self._dirty = False
             self._last_save = now
         except Exception as e:
             logger.warning("stickers.json save failed: %s", e)
@@ -604,12 +601,6 @@ class StickerLibrary:
                 continue
             if v.get("md5", "") in exclude:
                 continue
-            # Skip orphan records pointing to missing files; if the dead
-            # path wins the score, pick_by_tag returns it, _send_qq's
-            # .exists() check trips, and same-tag valid stickers never
-            # get chosen.
-            if not (self.dir / filename).exists():
-                continue
             score = 0.0
             entry_tags_lc = [((t or "").lower()) for t in v.get("tags", []) if t]
             meaning_lc = (v.get("meaning") or "").lower()
@@ -635,13 +626,19 @@ class StickerLibrary:
                 age_days = max(0.0, (now - first_seen) / 86400.0)
                 score += max(0.0, 0.6 - age_days * 0.02)
             score += random.uniform(0, 0.1)
+            # Orphan records pointing at a missing file must not win: the dead
+            # path would be returned, _deliver_segments' .exists() would trip,
+            # and same-tag valid stickers would never get chosen. Checked HERE
+            # rather than at the top of the loop so only an entry that actually
+            # beats the running best is stat'ed — the guard is unchanged, the
+            # syscall count drops from one per library entry to a handful.
             last = self._last_used.get(filename, 0)
             if now - last < RECENT_USE_COOLDOWN_SEC:
-                if score > cd_score:
+                if score > cd_score and (self.dir / filename).exists():
                     cd_score = score
                     cd_filename = filename
                 continue
-            if score > best_score:
+            if score > best_score and (self.dir / filename).exists():
                 best_score = score
                 best_filename = filename
         if (not best_filename or best_score < 1.0) and cd_filename and cd_score >= 1.0:
