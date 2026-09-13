@@ -34,7 +34,9 @@ load_dotenv(ROOT / ".env", override=False)
 import httpx
 from persona_agent.ingestion import safe_fetch_url
 from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.stickers import _IMAGE_EXT
 from persona_agent.storage import atomic_write_text
+from persona_agent.textproc import _detect_image_mime
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000").rstrip("/")
 OWNER_QQ = os.getenv("OWNER_QQ", "")
@@ -201,17 +203,24 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
         )
         if result is None:
             return None
+        # allowed_content_types only checks what the SERVER DECLARED. The
+        # production path validates the bytes too — ingestion._safe_get_bytes
+        # returns None unless _detect_image_mime matches, and steal() refuses
+        # anything else. This tool writes into that same library, so without
+        # the same check an error page served as image/png becomes a permanent
+        # sticker record with a `.bin` file behind it.
+        if not _detect_image_mime(result.content):
+            logger.debug("not an image by magic byte (%s)", url[:80])
+            return None
         return result.content
     except Exception as e:
         logger.debug("download failed (%s): %s", url[:80], e)
         return None
 
 def guess_ext(b: bytes) -> str:
-    if b[:8] == b"\x89PNG\r\n\x1a\n": return "png"
-    if b[:3] == b"\xff\xd8\xff":      return "jpg"
-    if b[:4] == b"GIF8":              return "gif"
-    if b[:4] == b"RIFF" and b[8:12] == b"WEBP": return "webp"
-    return "bin"
+    # Through the shared detector instead of a fourth private copy of the
+    # magic-byte table — the pair StickerLibrary._guess_ext already uses.
+    return _IMAGE_EXT.get(_detect_image_mime(b), "bin")
 
 def format_ctx_line(msg: dict) -> str:
     name = (msg.get("sender") or {}).get("card") or (msg.get("sender") or {}).get("nickname") or "?"

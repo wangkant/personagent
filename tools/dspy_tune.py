@@ -92,7 +92,16 @@ def metric_factory(judge_model: str):
     against the human-preferred 'good' reply. >=4 counts as success."""
     import dspy  # type: ignore
 
-    judge_lm = dspy.LM(judge_model)
+    # Same shape as the primary LM in cmd_tune: the provider prefix and the
+    # credentials are not optional. A bare dspy.LM(name) has no api_key and no
+    # base_url, so every judge call raises — and since the call sat outside the
+    # try below, that exception left `metric` entirely and killed the whole
+    # optimizer run instead of degrading to the 0.0 the try was written for.
+    judge_lm = dspy.LM(
+        model=f"openai/{judge_model}",
+        api_key=os.getenv("LLM_API_KEY", ""),
+        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+    )
 
     def metric(example, pred, trace=None):
         # example.good is the human-preferred reply; pred.reply is the candidate
@@ -105,11 +114,12 @@ def metric_factory(judge_model: str):
             f"Candidate: {pred.reply}\n\n"
             f"Output JSON only: {{\"score\": 1-5}}"
         )
-        with dspy.context(lm=judge_lm):
-            resp = judge_lm(prompt)
         try:
+            with dspy.context(lm=judge_lm):
+                resp = judge_lm(prompt)
             score = int(json.loads(resp[0])["score"])
         except Exception:
+            # A judge that cannot answer scores 0, it does not abort the run.
             return 0.0
         return score / 5.0
 
@@ -163,6 +173,14 @@ def cmd_tune(judge_model: str = "deepseek-chat"):
     optimizer = BootstrapFewShot(metric=metric_factory(judge_model), max_bootstrapped_demos=4)
     compiled = optimizer.compile(program, trainset=train)
     compiled.save(str(OUT_PROGRAM))
+    # DSPy writes this one through its own file I/O, so it lands at the umask
+    # default — and it is the file in this chain that embeds verbatim group
+    # chat (the bootstrapped demos quote real context and replies). Everything
+    # else holding conversation text is 0600 (storage.PRIVATE_FILE_MODE).
+    try:
+        os.chmod(OUT_PROGRAM, 0o600)
+    except OSError:
+        pass  # Windows ACLs do not map onto POSIX mode bits
     print(f"Saved tuned program to {OUT_PROGRAM}")
 
 

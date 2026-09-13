@@ -686,11 +686,25 @@ async def cmd_run(args) -> int:
     holdout = load_scenarios(DATA / f"scenarios.holdout.{args.lang}.jsonl")
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
+    gen_model = os.getenv("LLM_MODEL", "deepseek-chat")
+    # The judge belongs in meta.json for the same reason gen_model does: a
+    # score is only readable next to who produced it. Without it a finished
+    # run cannot be audited for the one failure this module's docstring calls
+    # disqualifying — the judge sharing a reward lineage with the model under
+    # test — so say it loudly here, before the arms spend anything.
+    if args.judge in ("anthropic", "openai") and args.judge_model:
+        if args.judge_model.strip().lower() == gen_model.strip().lower():
+            print(f"WARNING: judge model == model under test ({gen_model}). "
+                  f"These scores measure self-preference, not quality. "
+                  f"Set --judge-model to a different vendor's model.",
+                  file=sys.stderr)
     (out / "meta.json").write_text(json.dumps({
         "rounds": args.rounds, "lang": args.lang, "style": args.style,
         "seed_state": args.seed_state, "holdout_votes": args.holdout_votes,
-        "gen_model": os.getenv("LLM_MODEL", "deepseek-chat"),
+        "gen_model": gen_model,
         "eval_model": os.getenv("EVAL_MODEL", ""),
+        "judge": args.judge,
+        "judge_model": args.judge_model,
         "evolve_threshold": int(os.getenv("EVOLVE_THRESHOLD", 3)),
     }, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     arms = []

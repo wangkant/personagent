@@ -115,14 +115,27 @@ async def main_async(args) -> int:
     fams: dict[str, list[dict]] = {}
     for r in rows:
         fams.setdefault(r["family"], []).append(r)
+    # --judge-model defaults to empty and is documented as "skips the judge
+    # pass", so no row carries a `judge` key at all. `(r.get("judge") or 5)`
+    # then makes tell 0 for every family and the table reports
+    # "invisible-to-judge" / "inert" — a judgment nobody made, in the column
+    # the operator reads to decide whether a family is worth keeping.
+    judged = any(r.get("judge") is not None for r in rows)
     print(f"\n{'family':<14} {'n':>2} {'self<=2':>7} {'judge<=3':>8}  verdict")
     for fam, frs in sorted(fams.items()):
         trig = sum(1 for r in frs if (r["self_eval"] or 5) <= 2)
+        if not judged:
+            print(f"{fam:<14} {len(frs):>2} {trig:>7} {'-':>8}  "
+                  f"{'triggers' if trig else 'no-trigger'}")
+            continue
         tell = sum(1 for r in frs if (r.get("judge") or 5) <= 3)
         verdict = ("fires" if trig and tell else
                    "invisible-to-judge" if trig else
                    "no-trigger" if tell else "inert")
         print(f"{fam:<14} {len(frs):>2} {trig:>7} {tell:>8}  {verdict}")
+    if not judged:
+        print("\nNo judge ran (--judge-model empty), so the judge column is "
+              "unmeasured, not zero. Pass --judge-model for the tell verdicts.")
     print(f"\nWrote {out}")
     return 0
 
