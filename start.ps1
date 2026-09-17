@@ -8,7 +8,12 @@ Write-Host "   personagent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Reuse quickstart's venv; a global interpreter is only used to create it.
-$venvPy = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+$venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
+    '.venv/Scripts/python.exe'
+} else {
+    '.venv/bin/python'
+}
+$venvPy = Join-Path $PSScriptRoot $venvRelative
 if (Test-Path $venvPy) {
     $pySource = $venvPy
 } else {
@@ -24,6 +29,9 @@ if (Test-Path $venvPy) {
     }
     & $py.Source -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if (-not (Test-Path $venvPy)) {
+        throw "Virtual environment creation did not produce $venvRelative"
+    }
     $pySource = $venvPy
 }
 
