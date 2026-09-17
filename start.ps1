@@ -2,15 +2,18 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
-$port = if ($env:PORT) { $env:PORT } else { 8080 }
-$bindHost = if ($env:HOST) { $env:HOST } else { '127.0.0.1' }
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   personagent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Prefer the venv that quickstart.py creates; fall back to a global interpreter.
-$venvPy = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+# Reuse quickstart's venv; a global interpreter is only used to create it.
+$venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
+    '.venv/Scripts/python.exe'
+} else {
+    '.venv/bin/python'
+}
+$venvPy = Join-Path $PSScriptRoot $venvRelative
 if (Test-Path $venvPy) {
     $pySource = $venvPy
 } else {
@@ -20,7 +23,16 @@ if (Test-Path $venvPy) {
         Write-Host "error: python / python3 not found. Run 'python quickstart.py' first." -ForegroundColor Red
         exit 1
     }
-    $pySource = $py.Source
+    if (Test-Path (Join-Path $PSScriptRoot '.venv')) {
+        Write-Error "Incomplete .venv. Repair it with quickstart.py or move it aside."
+        exit 1
+    }
+    & $py.Source -m venv (Join-Path $PSScriptRoot '.venv')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if (-not (Test-Path $venvPy)) {
+        throw "Virtual environment creation did not produce $venvRelative"
+    }
+    $pySource = $venvPy
 }
 
 # Dependency check. PS 5.1 traps: `2>$null` on a native command becomes a
@@ -34,14 +46,13 @@ $ErrorActionPreference = $prevEAP
 if (-not $depsOk) {
     Write-Host "installing dependencies..." -ForegroundColor Yellow
     & $pySource -m pip install -r requirements.txt -q
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 # Avoid mojibake for non-ASCII console output on Windows
 $env:PYTHONIOENCODING = 'utf-8'
 
 Write-Host ""
-Write-Host "listen:   http://${bindHost}:$port" -ForegroundColor Cyan
-Write-Host "webhook:  http://${bindHost}:$port/webhook/qq" -ForegroundColor Cyan
-Write-Host ""
-
-& $pySource -m uvicorn main:app --host $bindHost --port $port
+# main.py loads .env before resolving HOST / PORT.
+& $pySource main.py
+exit $LASTEXITCODE

@@ -24,6 +24,7 @@ from pathlib import Path
 
 
 from . import candidates, channels, evidence, evolution, promotion, reactions
+from .endpoints import chat_completions_url
 from .textproc import apply_k2_quirks, salvage_json_object
 from .storage import append_jsonl_rotating
 
@@ -388,7 +389,7 @@ class Learning:
                 # /v1 prefix matches the main call path (_call_llm):
                 # DeepSeek accepts both aliases, but other OpenAI-compatible
                 # endpoints only serve /v1 — without it evals silently 404.
-                eval_url = f"{self.base_url}/v1/chat/completions"
+                eval_url = chat_completions_url(self.base_url)
                 eval_auth = self.api_key
             eval_payload = {
                 "model": self.eval_model,

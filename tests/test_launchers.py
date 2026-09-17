@@ -22,11 +22,11 @@ class LauncherTests(unittest.TestCase):
             package = modules / name
             package.mkdir(parents=True)
             (package / "__init__.py").write_text("", encoding="utf-8")
-        (modules / "uvicorn" / "__main__.py").write_text(
+        (root / "repo with spaces" / "main.py").write_text(
             "import json, os, sys\n"
             "from pathlib import Path\n"
             "Path(os.environ['LAUNCHER_CAPTURE']).write_text(\n"
-            "    json.dumps({'cwd': os.getcwd(), 'argv': sys.argv[1:]}),\n"
+            "    json.dumps({'cwd': os.getcwd(), 'host': os.getenv('HOST'), 'port': os.getenv('PORT')}),\n"
             "    encoding='utf-8')\n",
             encoding="utf-8",
         )
@@ -72,7 +72,7 @@ class LauncherTests(unittest.TestCase):
             env=env,
             text=True,
             capture_output=True,
-            timeout=30,
+            timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(capture.is_file(), result.stdout + result.stderr)
@@ -85,8 +85,8 @@ class LauncherTests(unittest.TestCase):
     def test_powershell_launcher_honors_configured_host(self) -> None:
         capture, _ = self._run_powershell_launcher("127.0.0.2")
         self.assertEqual(
-            capture["argv"],
-            ["main:app", "--host", "127.0.0.2", "--port", "8123"],
+            (capture["host"], capture["port"]),
+            ("127.0.0.2", "8123"),
         )
 
     @unittest.skipIf(os.name == "nt", "POSIX launcher behavior runs on Unix CI")
@@ -102,9 +102,9 @@ class LauncherTests(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, sys\n"
                 "from pathlib import Path\n"
-                "if sys.argv[1:3] == ['-m', 'uvicorn']:\n"
+                "if sys.argv[1:] == ['main.py']:\n"
                 "    Path(os.environ['LAUNCHER_CAPTURE']).write_text(\n"
-                "        json.dumps({'cwd': os.getcwd(), 'argv': sys.argv[3:]}),\n"
+                "        json.dumps({'cwd': os.getcwd(), 'argv': sys.argv[1:]}),\n"
                 "        encoding='utf-8')\n",
                 encoding="utf-8",
             )
@@ -123,14 +123,14 @@ class LauncherTests(unittest.TestCase):
                 env=env,
                 text=True,
                 capture_output=True,
-                timeout=30,
+                timeout=60,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             recorded = json.loads(capture.read_text(encoding="utf-8"))
             self.assertEqual(Path(recorded["cwd"]).resolve(), repo.resolve())
             self.assertEqual(
                 recorded["argv"],
-                ["main:app", "--host", "127.0.0.2", "--port", "8123"],
+                ["main.py"],
             )
 
     def test_vbs_launcher_quotes_editable_directories(self) -> None:
