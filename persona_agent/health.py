@@ -15,6 +15,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from .preflight import private_model_from_env
+from .endpoints import chat_completions_url
 from .textproc import apply_k2_quirks
 
 
@@ -43,7 +44,7 @@ def check_private_chat():
         return None, "not configured"
     payload = {"model": model, "max_tokens": 8,
                "messages": [{"role": "user", "content": "reply with: ok"}]}
-    r = _post_json(f"{base}/v1/chat/completions", payload, {"Authorization": f"Bearer {key}"})
+    r = _post_json(chat_completions_url(base), payload, {"Authorization": f"Bearer {key}"})
     txt = ((r["choices"][0]["message"] or {}).get("content") or "").strip()
     return True, (f"{model} -> {txt[:20]!r}" if txt else f"{model} responded")
 
@@ -60,7 +61,7 @@ def check_primary_chat_tools():
                "tools": [{"type": "function", "function": {"name": "web_search",
                           "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}}],
                "tool_choice": "auto"}
-    r = _post_json(f"{base}/v1/chat/completions", payload, {"Authorization": f"Bearer {key}"})
+    r = _post_json(chat_completions_url(base), payload, {"Authorization": f"Bearer {key}"})
     has_tools = "tool_calls" in (r["choices"][0]["message"] or {})
     return True, f"{model} function-calling {'available' if has_tools else 'reachable'}"
 
@@ -96,7 +97,7 @@ def eval_endpoint(model: str, *, glm_key: str, glm_base: str,
     em = (model or "").lower()
     if ("moonshot" in em or "kimi" in em) and glm_key and glm_base:
         return f"{glm_base}/chat/completions", glm_key
-    return f"{base_url}/v1/chat/completions", api_key
+    return chat_completions_url(base_url), api_key
 
 
 def check_eval():
@@ -194,6 +195,9 @@ def run_checks() -> list:
     {name, ok (True/False/None=skipped), critical, detail, ms}."""
     def _one(item):
         name, fn, critical = item
+        if fn is check_onebot and not os.getenv("BOT_QQ", "").strip():
+            return {"name": name, "ok": None, "critical": False,
+                    "detail": "not required (BOT_QQ is unset)", "ms": 0}
         t0 = time.time()
         try:
             ok, detail = fn()

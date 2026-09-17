@@ -354,8 +354,9 @@ def _probe_key(venv: Path, base_url: str, api_key: str, model: str) -> bool:
     not necessarily in the interpreter running this script)."""
     code = (
         "import sys, httpx\n"
+        "from persona_agent.endpoints import chat_completions_url\n"
         "base, key, model = sys.argv[1:4]\n"
-        "r = httpx.post(base.rstrip('/') + '/v1/chat/completions',\n"
+        "r = httpx.post(chat_completions_url(base),\n"
         "    headers={'Authorization': 'Bearer ' + key},\n"
         "    json={'model': model, 'max_tokens': 1,\n"
         "          'messages': [{'role': 'user', 'content': 'hi'}]},\n"
@@ -392,7 +393,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         print("    (enter a number 1-5)")
     name, base_url, model = PROVIDERS[int(choice) - 1]
     if not base_url:
-        base_url = _ask("Base URL (OpenAI-compatible root, no /v1)", required=True)
+        base_url = _ask("Base URL (provider root or /v1 URL)", required=True)
     model = _ask("Model name", default=model, required=True)
 
     # 2. Key (local providers like ollama don't need a real one)

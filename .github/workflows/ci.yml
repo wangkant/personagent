@@ -1,13 +1,13 @@
 name: CI
 
-# Run the offline regression suite on every push / PR to master. The tests
+# Run the offline regression suite on every push / PR to main. The tests
 # need no API keys or network (they stub the model and transport), so a plain
 # dependency install + one command is enough.
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -51,6 +51,7 @@ from .prompts import (
 )
 from .stickers import StickerLibrary
 from .storage import atomic_write_text
+from .endpoints import chat_completions_url
 from .textproc import (
     _SEARCH_HINT_RE,
     _TOPIC_LEXICON,
@@ -1651,7 +1652,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
             return ""
         sys_text = system or ""
-        _url = f"{self.base_url}/v1/chat/completions"
+        _url = chat_completions_url(self.base_url)
         _headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         async def _do_call(mtok: int, mdl: str):
@@ -1931,7 +1932,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             }
             async with self._http(timeout=20) as client:
                 resp = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    chat_completions_url(self.base_url),
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json=payload,
                 )
@@ -2435,7 +2436,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         try:
             async with self._http(timeout=15) as client:
                 r = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    chat_completions_url(self.base_url),
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={
                         "model": self.model,

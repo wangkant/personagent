@@ -88,53 +88,56 @@ async def main() -> int:
     args = p.parse_args()
 
     agent = _build_agent(args.lang.strip().lower())
-    if not agent.enabled:
-        print("LLM_API_KEY is not set. Copy .env.example to .env and fill it in "
-              "(only the primary model key is required for this trial).")
-        return 1
+    try:
+        if not agent.enabled:
+            print("LLM_API_KEY is not set. Copy .env.example to .env and fill it in "
+                  "(only the primary model key is required for this trial).")
+            return 1
 
-    you_uid = agent.owner_qq if args.owner else "2001"
-    you_name = (agent.owner_name or "owner") if args.owner else args.name
-    default_mode = "owner" if args.owner else "called"
+        you_uid = agent.owner_qq if args.owner else "2001"
+        you_name = (agent.owner_name or "owner") if args.owner else args.name
+        default_mode = "owner" if args.owner else "called"
 
-    print(f"=== try_chat — lang={agent.agent_lang}, model={agent.model} ===")
-    print(f"talking to '{agent.bot_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
+        print(f"=== try_chat — lang={agent.agent_lang}, model={agent.model} ===")
+        print(f"talking to '{agent.bot_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
 
-    while True:
-        try:
-            line = input(f"{you_name}> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nbye")
-            return 0
-        if not line:
-            continue
-        if line in ("/quit", "/exit", "/q"):
-            print("bye")
-            return 0
-        if line == "/reset":
-            agent.buffers.pop(GROUP_ID, None)
-            print("  (buffer cleared)")
-            continue
-
-        name, uid, mode, msg = you_name, you_uid, default_mode, line
-        if line.startswith("/owner "):
-            name, uid, mode, msg = (agent.owner_name or "owner"), agent.owner_qq, "owner", line[len("/owner "):]
-        elif line.startswith("/as "):
-            rest = line[len("/as "):].strip()
-            if " " in rest:
-                spk, msg = rest.split(" ", 1)
-                name, uid, mode = spk, "3001", "called"
-            else:
-                print("  usage: /as Name your message")
+        while True:
+            try:
+                line = input(f"{you_name}> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nbye")
+                return 0
+            if not line:
                 continue
-        if not msg.strip():
-            continue
+            if line in ("/quit", "/exit", "/q"):
+                print("bye")
+                return 0
+            if line == "/reset":
+                agent.buffers.pop(GROUP_ID, None)
+                print("  (buffer cleared)")
+                continue
 
-        try:
-            await _turn(agent, name, uid, msg.strip(), mode)
-        except Exception as e:
-            print(f"  [error: {type(e).__name__}: {e}]")
-        print()
+            name, uid, mode, msg = you_name, you_uid, default_mode, line
+            if line.startswith("/owner "):
+                name, uid, mode, msg = (agent.owner_name or "owner"), agent.owner_qq, "owner", line[len("/owner "):]
+            elif line.startswith("/as "):
+                rest = line[len("/as "):].strip()
+                if " " in rest:
+                    spk, msg = rest.split(" ", 1)
+                    name, uid, mode = spk, "3001", "called"
+                else:
+                    print("  usage: /as Name your message")
+                    continue
+            if not msg.strip():
+                continue
+
+            try:
+                await _turn(agent, name, uid, msg.strip(), mode)
+            except Exception as e:
+                print(f"  [error: {type(e).__name__}: {e}]")
+            print()
+    finally:
+        await agent.aclose()
 
 
 if __name__ == "__main__":
