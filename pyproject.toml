@@ -52,7 +52,7 @@ dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 [project.urls]
 Homepage = "https://github.com/wangkant/personagent"
 Issues = "https://github.com/wangkant/personagent/issues"
-Changelog = "https://github.com/wangkant/personagent/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/wangkant/personagent/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 # personagent is an application you deploy from a checkout, not a PyPI library:

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Launchers honor `.env` HOST/PORT through `main.py`; Windows creates an
+  isolated virtual environment, stops on dependency installation failure,
+  and propagates the service exit code.
+- OpenAI-compatible model URLs accept provider roots, `/v1` bases and full
+  chat endpoints consistently across chat, learning, diagnostics and setup.
+- Deployments without a QQ identity no longer fail diagnostics for an absent
+  OneBot bridge. Terminal trial exit closes clients and flushes pending state.
+
 - Direct OneBot sends now require a successful `status` / `retcode` and a
   message receipt before committing delivery or reaction attribution. HTTP
   200 responses containing failures, queued actions, or malformed payloads

@@ -78,7 +78,7 @@ elif sys.argv[1:3] == ["-m", "pip"]:
         self.write_python(self.root / ".venv/bin/python")
         result, calls = self.run_start(INSTALL_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(any(c[1:3] == ["-m", "uvicorn"] for c in calls))
+        self.assertFalse(any(c[1:] == ["main.py"] for c in calls))
 
     def test_failed_bootstrap_never_falls_back_to_global_install(self):
         result, calls = self.run_start(BOOTSTRAP_FAIL="1")
@@ -100,7 +100,7 @@ elif sys.argv[1:3] == ["-m", "pip"]:
         self.write_python(self.root / ".venv/bin/python")
         result, calls = self.run_start(DEPS_PRESENT="1")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls[-1][1:], ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8123"])
+        self.assertEqual(calls[-1][1:], ["main.py"])
 
 
 if __name__ == "__main__":
