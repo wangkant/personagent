@@ -92,6 +92,12 @@
       "reason": "customer-service opener - breaks character"
     },
     {
+      "name": "helpful_closer",
+      "pattern": "希望.{0,8}(有帮助|有用|能帮到)|(还有|如有|有其他|有任何).{0,6}(问题|疑问).{0,6}(随时|尽管)",
+      "action": "reject",
+      "reason": "helpful-assistant sign-off - the zh counterpart of the en helpful_closer rule"
+    },
+    {
       "name": "wiki_style_intro",
       "pattern": "^.{0,8}(这部|这剧|这本|这游戏|这电影|这小说|这动漫|这本书|这本小说).{0,10}(讲的是|主要讲|是一部|是一本|是一个|讲述了|讲述的是)",
       "action": "reject",
