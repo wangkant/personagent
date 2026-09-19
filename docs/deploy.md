@@ -145,13 +145,21 @@ Do not run both doors for QQ at once; the same message would arrive twice.
 
 **Keep NapCat's HTTP server on either way.** AstrBot talks to NapCat over a
 reverse WebSocket, which covers inbound and replies — but it is not the
-channel this agent uses. Everything the agent does on its own initiative goes
-out through `NAPCAT_API` directly: proactive messages, the catch-up sweep for
-`@`s it missed while offline, resolving an old quoted message, and OCR. Turn
-the HTTP server off because "AstrBot handles QQ now" and the bot keeps
-answering while quietly losing all four, with nothing in the log to say so.
+channel this agent uses. What the agent starts on its own goes out through
+`NAPCAT_API` directly, and those are the two that depend on it: proactive
+messages, and the catch-up sweep for `@`s it missed while offline. Turn the
+HTTP server off because "AstrBot handles QQ now" and the bot keeps answering
+while quietly losing both, with nothing in the log to say so.
 
-That direct channel is also why QQ loses nothing by moving inbound: the
+Two more that used to be listed here do **not** survive the move, and no
+setting brings them back: resolving an old quoted message falls back to the
+agent's own in-process message index, and the OCR fallback is skipped
+outright. Both bail the moment the gateway sink is set, which
+`handle_gateway` installs for every forwarded event — including a native
+`aiocqhttp` one. NapCat is only asked for those on the deprecated direct
+ingress.
+
+That direct channel is also why QQ loses little by moving inbound: the
 outbound path never depended on where the message came from.
 
 **Other platforms have no such channel** — the agent can only speak inside the
