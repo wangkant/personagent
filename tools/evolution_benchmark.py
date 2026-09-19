@@ -692,6 +692,12 @@ async def cmd_run(args) -> int:
     # run cannot be audited for the one failure this module's docstring calls
     # disqualifying — the judge sharing a reward lineage with the model under
     # test — so say it loudly here, before the arms spend anything.
+    if args.judge in ("anthropic", "openai") and not args.judge_model:
+        sys.exit(f"--judge {args.judge} needs a model id: pass --judge-model, "
+                 f"or set BENCH_JUDGE_MODEL in .env. There is no default, "
+                 f"because a judge that shares a vendor with the model under "
+                 f"test is the one failure this benchmark treats as "
+                 f"disqualifying.")
     if args.judge in ("anthropic", "openai") and args.judge_model:
         if args.judge_model.strip().lower() == gen_model.strip().lower():
             print(f"WARNING: judge model == model under test ({gen_model}). "
@@ -864,7 +870,7 @@ def main() -> int:
     r.add_argument("--holdout-votes", type=int, default=1)
     r.add_argument("--judge", default="export",
                    choices=["export", "anthropic", "openai"])
-    r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", "claude-opus-4-8"))
+    r.add_argument("--judge-model", default=os.getenv("BENCH_JUDGE_MODEL", ""))
     r.add_argument("--outdir", default=str(ROOT / "benchmark_runs" / "latest"))
     i = sub.add_parser("ingest")
     i.add_argument("--outdir", default=str(ROOT / "benchmark_runs" / "latest"))

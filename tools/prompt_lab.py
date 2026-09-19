@@ -47,7 +47,7 @@ EXAMPLES_FILE = resolve_runtime_lang_file("examples", "jsonl", AGENT_LANG)
 # test — and it was handing that SDK the chat model's id, so every generation
 # 404'd. The `except Exception` in the fixture loop printed `failed:` and moved
 # on, so the tool's whole loop was dead and said so once per fixture.
-MODEL = os.getenv("PROMPT_LAB_MODEL", "claude-sonnet-5")
+MODEL = os.getenv("PROMPT_LAB_MODEL", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
 
@@ -99,11 +99,11 @@ def build_system_prompt(examples: list) -> str:
 def get_client():
     # Fail once, before the fixture loop, rather than once per fixture inside
     # an `except Exception` that reads like a model quirk.
-    if not ANTHROPIC_API_KEY:
-        sys.exit("prompt_lab needs ANTHROPIC_API_KEY (and optionally "
-                 "PROMPT_LAB_MODEL, default claude-sonnet-5) in .env — it "
-                 "generates through a different vendor than the agent under "
-                 "test, which is the point of the lab.")
+    if not ANTHROPIC_API_KEY or not MODEL:
+        sys.exit("prompt_lab needs ANTHROPIC_API_KEY and PROMPT_LAB_MODEL in "
+                 ".env — it generates through a different vendor than the "
+                 "agent under test, which is the point of the lab, so there "
+                 "is no default model id for it to fall back on.")
     kwargs = {"api_key": ANTHROPIC_API_KEY}
     if ANTHROPIC_BASE_URL:
         kwargs["base_url"] = ANTHROPIC_BASE_URL
@@ -284,7 +284,8 @@ the same model. Needs:
 
   pip install -e ".[judge]"
   ANTHROPIC_API_KEY   in .env
-  PROMPT_LAB_MODEL    optional, default claude-sonnet-5
+  PROMPT_LAB_MODEL    in .env; required, and must name a model that vendor
+                      serves - there is deliberately no default
 
 Takes no flags; everything is chosen from the menu.
 """
