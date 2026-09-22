@@ -19,6 +19,7 @@ import httpx
 
 from . import candidates as candidate_ledger_mod
 from . import channels
+from .config_env import env_bool, env_float, env_int
 from . import evidence as evidence_mod
 from . import lineage as lineage_mod
 from . import reactions
@@ -210,17 +211,21 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._gateway_conv_lru: dict[str, float] = {}
         self._gateway_inflight: dict[str, int] = defaultdict(int)
         # LLM transient-error retry count (Hermes-style jittered backoff; 0 disables).
-        self.api_max_retries = int(os.getenv("LLM_MAX_RETRIES", "2") or 2)
+        self.api_max_retries = env_int("LLM_MAX_RETRIES", 2, minimum=0)
         # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
         self._http_pool: dict = {}
         # Main LLM call timeout (seconds); reasoning models can be slow.
-        self.llm_timeout = float(os.getenv("LLM_TIMEOUT", "120") or 120)
+        self.llm_timeout = env_float("LLM_TIMEOUT", 120.0, minimum=1.0)
         self.bot_qq = str(bot_qq)
         self.bot_name = bot_name
         # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
         # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
         # _spawn pattern main.py already uses for webhook tasks.
         self._bg_tasks: set[asyncio.Task] = set()
+        # Set by aclose(); read by _http so a use-after-close is visible
+        # rather than silently leaking a fresh, never-closed pool.
+        self._closed = False
+        self._warned_use_after_close = False
         # Empty-model fallback: a blank PRIVATE_MODEL in .env would
         # otherwise send {"model": ""} on every DM — a guaranteed 400 that also
         # arms the global fallback cooldown and downgrades group replies.
@@ -330,14 +335,14 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # after a quiet stretch, with per-target cooldowns and a low per-tick
         # probability, and the model is told to PASS unless it genuinely has
         # something to say. DMs go to the owner + the private whitelist only.
-        self.proactive_enable = os.getenv("PROACTIVE_ENABLE", "false").lower() == "true"
-        self.proactive_interval = int(os.getenv("PROACTIVE_INTERVAL", 1500))        # tick: 25 min
-        self.proactive_min_silence = int(os.getenv("PROACTIVE_MIN_SILENCE", 2700))  # group quiet ≥ 45 min
-        self.proactive_cooldown = int(os.getenv("PROACTIVE_COOLDOWN", 10800))       # ≥ 3h between group initiations
-        self.proactive_prob = float(os.getenv("PROACTIVE_PROB", 0.25))              # per eligible tick
-        self.proactive_dm_min_silence = int(os.getenv("PROACTIVE_DM_MIN_SILENCE", 14400))  # DM quiet ≥ 4h
-        self.proactive_dm_cooldown = int(os.getenv("PROACTIVE_DM_COOLDOWN", 86400))        # ≥ 24h between DMs
-        self.proactive_dm_prob = float(os.getenv("PROACTIVE_DM_PROB", 0.2))
+        self.proactive_enable = env_bool("PROACTIVE_ENABLE", False)
+        self.proactive_interval = env_int("PROACTIVE_INTERVAL", 1500, minimum=1)        # tick: 25 min
+        self.proactive_min_silence = env_int("PROACTIVE_MIN_SILENCE", 2700, minimum=0)  # group quiet ≥ 45 min
+        self.proactive_cooldown = env_int("PROACTIVE_COOLDOWN", 10800, minimum=0)       # ≥ 3h between group initiations
+        self.proactive_prob = env_float("PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0)              # per eligible tick
+        self.proactive_dm_min_silence = env_int("PROACTIVE_DM_MIN_SILENCE", 14400, minimum=0)  # DM quiet ≥ 4h
+        self.proactive_dm_cooldown = env_int("PROACTIVE_DM_COOLDOWN", 86400, minimum=0)        # ≥ 24h between DMs
+        self.proactive_dm_prob = env_float("PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0)
         # Last time any human message landed in a group / DM (silence tracking),
         # and the last time the bot proactively initiated (per group and "dm:<uid>").
         self.last_activity_at: dict[str, float] = defaultdict(float)
@@ -350,16 +355,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # corroborating evidence or an explicit human promotion. The shared
         # audit trail also prevents the CLI and loop from processing one eval
         # twice.
-        self.evolve_auto = os.getenv("EVOLVE_AUTO", "false").lower() == "true"
-        self.evolve_interval = int(float(os.getenv("EVOLVE_INTERVAL_HOURS", 6)) * 3600)
+        self.evolve_auto = env_bool("EVOLVE_AUTO", False)
+        self.evolve_interval = int(env_float("EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0) * 3600)
         # 3, not 2: on the evaluator's register scale (learning.py), 3 means
         # "human-plausible but drifting into helpful-assistant register" --
         # precisely the failure mode the loop exists to correct. Validated on
         # 8 known-label replies: every known tell (drafted letter, mini
         # tutorials) scored exactly 3, every casual line scored 5, so a
         # threshold of 2 would leave the loop with nothing to learn from.
-        self.evolve_threshold = int(os.getenv("EVOLVE_THRESHOLD", 3))
-        self.evolve_batch = int(os.getenv("EVOLVE_BATCH", 5))  # diagnoses per tick
+        self.evolve_threshold = env_int("EVOLVE_THRESHOLD", 3)
+        self.evolve_batch = env_int("EVOLVE_BATCH", 5, minimum=1)  # diagnoses per tick
         self.evolve_model = os.getenv("EVOLVE_MODEL", "") or self.eval_model
         self.candidates_file = resolve_runtime_state_file("candidates.jsonl")
 
@@ -372,21 +377,21 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # candidate; it does not write a retrieval pool — see the promotion
         # block below. LLM self-eval remains the fallback channel for replies
         # that never get a directed reaction.
-        self.react_learn = os.getenv("REACT_LEARN", "true").lower() == "true"
+        self.react_learn = env_bool("REACT_LEARN", True)
         self.react_model = os.getenv("REACT_MODEL", "") or self.judge_model
         self.pending_reactions = reactions.PendingReplies(
-            max_per_conv=int(os.getenv("REACT_MAX_PENDING", 4)),
-            ttl_sec=float(os.getenv("REACT_TTL_SEC", 900)),
-            fix_window_sec=float(os.getenv("REACT_FIX_WINDOW", 600)),
+            max_per_conv=env_int("REACT_MAX_PENDING", 4, minimum=1),
+            ttl_sec=env_float("REACT_TTL_SEC", 900.0, minimum=0.0),
+            fix_window_sec=env_float("REACT_FIX_WINDOW", 600.0, minimum=0.0),
             max_conversations=_MAX_GATEWAY_CONVS,
             state_file=self.memory_file.with_name("pending_reactions.json"),
         )
         # Elicitation: after an accepted rejection with no correction content,
         # the bot may (delayed, so it never talks over its own normal reply;
         # cooldown-limited, so it never begs) ask what the user actually meant.
-        self.react_elicit = os.getenv("REACT_ELICIT", "true").lower() == "true"
-        self.react_elicit_delay = float(os.getenv("REACT_ELICIT_DELAY", 120))
-        self.react_elicit_cooldown = float(os.getenv("REACT_ELICIT_COOLDOWN", 3600))
+        self.react_elicit = env_bool("REACT_ELICIT", True)
+        self.react_elicit_delay = env_float("REACT_ELICIT_DELAY", 120.0, minimum=0.0)
+        self.react_elicit_cooldown = env_float("REACT_ELICIT_COOLDOWN", 3600.0, minimum=0.0)
         self._last_elicit_at: dict[str, float] = defaultdict(float)
         # Per-user teaching reputation (never the owner); consistently bad
         # teachers are hard-blocked before any adjudicator call.
@@ -460,8 +465,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # path can add. The data/ seeds and the pre-ledger learned pools are
         # left exactly as they are; the offline tools still trim what they
         # write (see evolution.trim_pool). 0 = no cap.
-        self.examples_max_auto = int(os.getenv("EXAMPLES_MAX_AUTO", 500) or 0)
-        self.feedback_max_auto = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
+        self.examples_max_auto = env_int("EXAMPLES_MAX_AUTO", 500, minimum=0)
+        self.feedback_max_auto = env_int("FEEDBACK_MAX_AUTO", 500, minimum=0)
 
         # Evidence -> candidate -> promotion. A reaction is recorded as
         # evidence (append-only, immutable); adjudicating it proposes a
@@ -700,7 +705,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             gateway_key = str(payload.get("group_id", ""))
         if gateway_key:
             self._gateway_inflight[gateway_key] += 1
-        sink = GatewaySink()
+        # The sink needs to know which platform this turn came from: on a
+        # native platform `_ns` mints ids BARE for the ledgers, and an
+        # outbound mention has to be handed back namespaced or the forwarder
+        # cannot resolve it (see message_to_reply_item).
+        sink_platform = str(payload.get("_platform", "") or "")
+        sink = GatewaySink(
+            platform=sink_platform,
+            native=sink_platform in (self.gateway_native_platforms or ()),
+            bot_id=self.bot_qq,
+        )
         tok = current_sink.set(sink)
         # Read off `event` (synthesize drops unknown keys) and passed as an
         # argument, not a payload flag: /webhook/qq accepts arbitrary JSON.
@@ -1569,6 +1583,12 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         key = tuple(sorted((k, _norm(v)) for k, v in kwargs.items()))
         client = self._http_pool.get(key)
         if client is None or client.is_closed:
+            if self._closed and not self._warned_use_after_close:
+                self._warned_use_after_close = True
+                logger.warning(
+                    "[Agent] HTTP pool rebuilt after aclose() — this Agent is "
+                    "closed and the new connections will never be closed. A "
+                    "closed Agent should be discarded, not reused.")
             client = httpx.AsyncClient(**kwargs)
             self._http_pool[key] = client
         return _PooledHTTP(client)
@@ -2259,7 +2279,19 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             logger.debug("[Agent] sticker flush on shutdown failed: %s", e)
 
     async def aclose(self) -> None:
-        """Stop owned work, close transports, then persist final state."""
+        """Stop owned work, close transports, then persist final state.
+
+        One-way: after this returns the Agent is spent. `_http` builds its
+        pool lazily and rebuilds any entry whose client `is_closed`, so a
+        `handle()` on a closed Agent does not fail — it quietly mints a fresh
+        connection pool that nothing will ever close again. Two ways to get
+        there: a forced uvicorn shutdown that lands while a synchronous
+        `/webhook/gateway` turn is still running, and any host that embeds
+        `persona_agent.Agent` directly (it is a public, importable class) and
+        reuses the object after closing it. Neither is loud today; the flag
+        below makes both say so once.
+        """
+        self._closed = True
         tasks = [task for task in self._bg_tasks
                  if task is not asyncio.current_task()]
         for task in tasks:
