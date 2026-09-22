@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-22
+
+The interface pass: every error the HTTP surface returns carries a stable
+`code` beside its sentence, `/webhook/qq` says it is deprecated in its own
+headers, and the contracts that lived only in prose are now documented where
+a reader finds them or enforced by a test. Underneath, one settings record
+configures an `Agent` instead of 34 keyword parameters and two dozen reads of
+`os.environ`, one pair of functions reads and bounds-checks every setting in
+the package, and the suite guarding all of it is 292 pytest tests rather than
+20 subprocesses. The fix that matters most is the smallest: on the QQ path
+this project's own documentation recommends, every group @-mention the
+persona made was dropped between the two sides, with no log line on either.
+
 ### Added
 
 - **Every error the HTTP surface returns carries a stable `code`.** `error`
@@ -38,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the script on the one platform where only that script runs. The suite also
   pins the deliberate ordering difference from `start.sh`: a machine with no
   global python AND a broken `.venv` reports the missing interpreter.
+
+### Security
+
+- **`tools/dspy_tune.py` wrote `dspy_tuned.json` at the umask default.** The
+  file embeds verbatim group chat as few-shot examples, and every other
+  artifact in this repository holding conversation text is written `0600`. A
+  tuning run on a shared machine left the transcript readable by anyone on it.
 
 ### Fixed
 
@@ -117,6 +137,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with preserved size and timestamps or an unchanged tail. Output filters
   and lorebooks reload restored older files and same-time size changes,
   retaining their last valid contents during malformed edits.
+- **One pasted message could stall the whole intake loop.**
+  `_extract_urls` returned every distinct URL in a segment and the agent
+  awaited a fetch for each one in sequence, before the text was even
+  truncated. `MAX_URLS_PER_SEGMENT = 4` now, which is more than anyone pastes
+  expecting all of them summarised. A permanently broken image also caches its
+  miss, the way a failed link already cached `[link]`, instead of paying the
+  full vision retry ladder plus an OCR round trip on every repost.
+- **The same sticker could be sent twice in one reply.** `_deliver_segments`
+  never passed `exclude_md5s`, and `pick_by_tag` stamps its cooldown only
+  after it returns, so two markers for a narrow tag picked the same image.
+- **The zh output filter had no counterpart to the en `helpful_closer` rule**,
+  so a Chinese deployment shipped 「希望对你有帮助」 — the sign-off the zh persona
+  template tells the model to avoid and the en build already dropped. Kept
+  narrow: 希望 within 8 characters of 有帮助/有用/能帮到, or an explicit offer to
+  take further questions.
+- **`.env.example` shipped `EVOLVE_THRESHOLD=2` while the code defaults to
+  3**, and quickstart copies that template to `.env` — so every
+  wizard-created deployment ran the evolution loop at the one value the
+  comment beside that default argues against, which leaves it nothing to
+  learn from.
 
 ### Changed
 
@@ -235,6 +275,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reader's message.
 - Gateway LRU eviction uses insertion order instead of sorting timestamps
   and no longer rewrites persistent memory files on cache eviction.
+
+### Performance
+
+- **`PendingReplies._save` no longer fsyncs.** It runs from `record()` — every
+  incoming message and every reply sent — synchronously on the asyncio thread,
+  so the wait was charged to every other conversation as well: for a 35 KiB
+  table, 3.62 ms median against 0.79 ms without the two fsyncs. The replace
+  stays atomic, so the file can never be read torn; what is given up is the
+  guarantee that the last few seconds survive a power cut, on a short-TTL
+  cache of replies still awaiting a reaction, where losing the tail costs at
+  most one learning turn. `atomic_write_text` takes `fsync=False` and this is
+  its only caller — a ledger or a lineage keeps the default.
+- `pick_by_tag` stat'ed all 500 library entries per sticker; only an entry
+  that beats the running best needs it (measured: 500 syscalls down to 19).
 
 ## [0.3.0] — 2026-09-04
 
@@ -1037,6 +1091,7 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[0.4.0]: https://github.com/wangkant/personagent/releases/tag/v0.4.0
 [0.3.0]: https://github.com/wangkant/personagent/releases/tag/v0.3.0
 [0.2.0]: https://github.com/wangkant/personagent/releases/tag/v0.2.0
 [0.1.1]: https://github.com/wangkant/personagent/releases/tag/v0.1.1
