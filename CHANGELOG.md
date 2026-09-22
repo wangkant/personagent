@@ -6,8 +6,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every error the HTTP surface returns carries a stable `code`.** `error`
+  stays a sentence for a human reading a log; `code` is the half a client may
+  branch on. `/webhook/gateway` alone answers 403 for a peer that is not
+  allowed, an envelope that failed verification, and a source event outside
+  the freshness window — three faults whose fixes are an allowlist, a token
+  and NTP respectively, and which no caller could tell apart. Both 429s now
+  send `Retry-After`, and both POST routes have docstrings, so the one
+  asymmetry an integrator most needs — `/webhook/qq` is fire-and-forget while
+  `/webhook/gateway` answers synchronously — finally appears in `/docs`.
+- **`/webhook/qq` marks itself deprecated to the caller.** Every response from
+  it, success and error alike, carries `Deprecation: true`. Until now the
+  deprecation existed only as one line in this project's own log and as prose
+  in the README, and the route answered byte-for-byte like a fully supported
+  one. No `Sunset` header: removal is still "a later release", and emitting a
+  date would invent a deadline that has not been chosen.
+- **`tools/healthcheck.py --json`** — the same checks as one JSON object.
+  `check_config()`'s findings had no machine-readable path anywhere in the
+  repo; `run_checks()`'s probe data already had one through `/health/details`.
+- **`tools/import_stickers_folder.py --dry-run`** — preview the counts.
+  Matches `auto_reviewer.py`'s wording exactly: calls no model and writes
+  nothing. Every accepted file used to hit disk immediately and, unless
+  `--no-tag`, spend one paid vision call, with no way to look first.
+- **`start.ps1`'s failure contracts are tested on Windows**
+  (`tests/test_start_ps1_isolation.py`). The POSIX sibling suite is skipped on
+  `nt` and `test_launchers.py` only drove the happy path, so the two refusals
+  that matter — it will not touch an incomplete `.venv`, and it will not start
+  the server after a failed dependency install — were guaranteed by reading
+  the script on the one platform where only that script runs. The suite also
+  pins the deliberate ordering difference from `start.sh`: a machine with no
+  global python AND a broken `.venv` reports the missing interpreter.
+
 ### Fixed
 
+- **A group @-mention was silently lost on the supported QQ path.** Inbound,
+  `_ns` mints ids for a native platform BARE, because every store on disk is
+  keyed that way. Outbound, `at_user_id` is read by the forwarder, which
+  resolves `"<platform>:<raw>"` and drops anything bare — so with
+  `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`, the configuration this project's own
+  documentation steers QQ deployments toward, every mention the persona made
+  in a group disappeared without a log line on either side. The sink now
+  carries the platform for the turn and restores the prefix at the boundary,
+  leaving `_ns` and every id in every store untouched. The agent's own id is
+  never prefixed, so a reply can never @ the bot itself.
+- **A typo in a numeric setting took the process down instead of being
+  reported.** `main.py` routed all of its own settings through
+  `_parse_int_config` ("without crashing module import"), but `Agent.__init__`
+  read twenty-odd numbers with a bare `int()`/`float()`. `REACT_TTL_SEC=15m` —
+  and the `.env.example` comment beside it literally reads `900 # ... (15 min)`
+  — raised out of the constructor one line after `preflight.check_config()`
+  had reported the configuration fine. All of them, plus `TZ_OFFSET_HOURS` and
+  `MAX_IMAGE_BYTES`, now fall back to the declared default and say so.
+- **An empty `LLM_MODEL` is reported at startup.** `os.getenv` applies its
+  default only when the key is ABSENT, so `LLM_MODEL=` in a hand-edited `.env`
+  sent `{"model": ""}` on every completion — a guaranteed 400 that also arms
+  the fallback cooldown. `PRIVATE_MODEL` was given a runtime fallback for
+  exactly this; the primary model had neither that nor a preflight check.
+- **An `LLM_BASE_URL` on a custom version path is reported at startup.**
+  `chat_completions_url` accepts a provider root or a `/v1` base and asks
+  callers on a `/v4`-style path to supply the complete endpoint; nothing
+  enforced it, so such a base silently became `.../v4/v1/chat/completions` and
+  the first sign was a 404 on every reply. Checked in preflight rather than in
+  `chat_completions_url`, which is on the per-turn hot path.
+- **`evolution.trim_pool`'s default said everything was machine-generated**,
+  the exact reverse of the guarantee three lines above it in its own docstring
+  ("Hand-curated entries are NEVER dropped"). A caller that omitted the
+  predicate overwrote the curated seed pool a fresh checkout retrieves from.
+  Both real callers pass one, so no existing behaviour changes; omitting it is
+  now a safe no-op instead of a destructive one.
+- **The AstrBot plugin never retried, and reported every failure identically.**
+  The agent deliberately un-burns a nonce when its own write fails, precisely
+  so a correct client can resend the same signed bytes — and the shipped
+  client sent once, so that resilience was unreachable and a transient disk
+  error meant a permanently lost message. It now retries 429 and 500 with the
+  identical envelope, dividing one budget across the attempts so the reused
+  timestamp cannot age out of the replay window. A read timeout is its own
+  branch (not `ConnectTimeout`/`PoolTimeout`, which happen before the agent is
+  reached) and says what actually happens: the agent does not check whether
+  the caller is still connected, so it finishes the turn and commits the reply
+  and the evidence for a message nobody will see, while AstrBot's own model
+  answers the same turn in another voice. Failures are logged at a level that
+  matches the cause, and a 403 quotes the agent's own reason rather than
+  guessing "bad token" at a drifting clock.
+- **`tools/dspy_tune.py` never loaded `.env`** — the only credential-reading
+  tool in `tools/` that did not, so a user who followed the documentation got
+  an empty `LLM_API_KEY`. Its judge also shared the measured model's
+  credentials and, by default, its exact model id, so an out-of-the-box tuning
+  run graded its own homework; that now warns. `dspy_tune.py` and
+  `auto_reviewer.py` also propagate exit codes like every other tool here —
+  `auto_reviewer` checks for the key directly, because an empty result cannot
+  distinguish "nothing pending" from "never configured".
+- **`quickstart.py` was blind to `AGENT_HOME`.** See the entry above.
 - Launchers honor `.env` HOST/PORT through `main.py`; Windows creates an
   isolated virtual environment, stops on dependency installation failure,
   and propagates the service exit code.
@@ -15,7 +106,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chat endpoints consistently across chat, learning, diagnostics and setup.
 - Deployments without a QQ identity no longer fail diagnostics for an absent
   OneBot bridge. Terminal trial exit closes clients and flushes pending state.
-
 - Direct OneBot sends now require a successful `status` / `retcode` and a
   message receipt before committing delivery or reaction attribution. HTTP
   200 responses containing failures, queued actions, or malformed payloads
@@ -30,6 +120,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **An unrecognised boolean keeps its declared default instead of silently
+  reading as False.** `raw == "true"` was fixed once in `promotion.Policy`
+  after `PROMOTE_AUTO=1` disabled promotion entirely and said nothing; six
+  settings still spelled it that way, among them `AGENT_ENABLE`, which decides
+  whether the agent works at all. Note the direction: `AGENT_ENABLE=banana`
+  used to mean False and now falls back to the documented default of true,
+  with a warning. That is the point of the fix rather than a regression hidden
+  inside it, but it is a behaviour change for any deployment relying on a
+  malformed value to keep the agent off.
+- `RuntimeInstanceLock`'s parameter is named `deployment_root`, which is what
+  its only caller passes. Called `runtime_directory`, it invited a future
+  maintainer to hand it `paths.runtime_dir()` — and two processes sharing one
+  `AGENT_HOME` with different `AGENT_RUNTIME_DIR`s would then both acquire the
+  lock, which is exactly what "one process per root" promises cannot happen.
+- The `file://` image jail is a module-level function
+  (`_resolve_jailed_file_url`) rather than inline in an async method, matching
+  its http(s) sibling `safe_fetch_url`. The Windows drive-letter strip and the
+  traversal checks are now reachable without standing up an Agent.
+- Documentation caught up with the code: the gateway's inbound schema
+  documents `source_timestamp`, which `main.py` has always required and the
+  forwarder plugin's own copy already listed; `channels` and `lineage` appear
+  in the package module map and `lineage` in CONTRIBUTING's table; the
+  READMEs document `candidates_admin.py`'s `reject` and `supersede`; and
+  `SendResult.message_ids` states that it is always empty behind a gateway
+  sink, which is why quote-based reaction matching cannot fire on a forwarded
+  platform.
+- Unknown or malformed inbound gateway segments are logged at DEBUG instead of
+  vanishing. Dropping them stays the behaviour — a forwarder may legitimately
+  send a type this version predates — but a typo (`iamge`) and a sticker from
+  next year's plugin were indistinguishable, and both quietly truncated the
+  reader's message.
 - Gateway LRU eviction uses insertion order instead of sorting timestamps
   and no longer rewrites persistent memory files on cache eviction.
 
