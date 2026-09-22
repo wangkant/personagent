@@ -208,7 +208,15 @@ def _warn_if_agent_home_diverges(env_path: Path) -> None:
     configured = _configured_agent_home(env_path)
     if not configured:
         return
-    resolved = Path(configured).expanduser().resolve()
+    try:
+        resolved = Path(configured).expanduser().resolve()
+    except (OSError, RuntimeError):
+        # `expanduser()` on `~/...` RAISES when no home directory can be
+        # determined. preflight.py guards the same call for the same reason;
+        # here it would take down the wizard over a diagnostic.
+        _info(f"AGENT_HOME is set to {configured}, which cannot be resolved - "
+              "check it before starting the agent.")
+        return
     if resolved != ROOT:
         _info(f"AGENT_HOME is set to {resolved} - that is where persona.txt and "
               f".env need to live for the agent to read them, not this checkout "
