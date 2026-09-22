@@ -66,7 +66,7 @@ using each platform's own mechanisms rather than its own formats:
 | --- | --- | --- | --- |
 | `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | Agent gateway endpoint. |
 | `gateway_token` | string | `""` | Shared secret for bearer authentication and the signed timestamp/nonce/body envelope. Must match `GATEWAY_TOKEN`; required off-host. |
-| `timeout_s` | int | `180` | HTTP timeout per round-trip. The agent simulates typing delays, keep it generous. |
+| `timeout_s` | int | `180` | HTTP timeout per round-trip. The agent simulates typing delays, keep it generous. Too low is not "replies arrive slowly": the agent does not notice the caller left, so it finishes the turn and commits the reply and what it learned from it, while AstrBot's own model answers the same turn in a different voice. |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Platform adapter names never forwarded. |
 | `group_whitelist` | list | `[]` | Group IDs to forward; empty = none. |
 | `private_enabled` | bool | `false` | Enable forwarding for explicitly allowlisted private senders. |
