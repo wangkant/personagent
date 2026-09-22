@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.textproc import TextProcessing  # noqa: E402
 from persona_agent.preflight import private_model_from_env  # noqa: E402
 
 GROUP_ID = "trial"
@@ -59,7 +60,8 @@ async def _turn(agent: Agent, name: str, uid: str, text: str, mode: str) -> None
     reply, intent, mem = await agent._think(
         GROUP_ID, mode=mode, latest_text=text, caller_override=(name, uid),
     )
-    safe = (agent._sanitize_reply(reply, agent.agent_lang, agent.reply_style)
+    safe = (TextProcessing._sanitize_reply(
+            reply, agent.agent_lang, agent.reply_style)
             if reply else "")
     if not safe or safe.strip().upper() == "PASS":
         print(f"  {agent.bot_name} > (stays quiet)")

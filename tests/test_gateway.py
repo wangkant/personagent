@@ -24,6 +24,7 @@ from persona_agent import promotion
 from persona_agent.agent import Agent, SendResult
 from persona_agent.learning import Learning
 from persona_agent.textproc import (
+    TextProcessing,
     _strip_web_desc,
     _unwrap_web_desc,
 )
@@ -412,7 +413,7 @@ def test_parser_rejects_naked_text() -> None:
         "I should reply because the latest message asks a direct question",
         "sounds good to me",
     ):
-        reply, reasoning, intent, mem = Agent._parse_model_output(raw)
+        reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
         check("parser: non-JSON text fails closed",
               reply == "" and reasoning and intent == "" and mem == "",
               repr((raw, reply, reasoning, intent, mem)))
@@ -420,15 +421,15 @@ def test_parser_rejects_naked_text() -> None:
         '{"reasoning":"x","intent":"chat","reply":{"nested":"leak"},'
         '"mem":["instruction"]}'
     )
-    reply, reasoning, intent, mem = Agent._parse_model_output(malformed)
+    reply, reasoning, intent, mem = TextProcessing._parse_model_output(malformed)
     check("parser: non-string protocol fields fail closed",
           reply == "" and mem == "", repr((reply, reasoning, intent, mem)))
 
 
 def test_validator_accepts_prefixed_at_marker() -> None:
-    ok, reason = Agent._validate_reply_safe("[AT:telegram:42] sup", lang="en")
+    ok, reason = TextProcessing._validate_reply_safe("[AT:telegram:42] sup", lang="en")
     check("validator: prefixed AT marker passes", ok, reason)
-    ok, reason = Agent._validate_reply_safe("[AT:telegram:42]", lang="en")
+    ok, reason = TextProcessing._validate_reply_safe("[AT:telegram:42]", lang="en")
     check("validator: marker-only reply passes", ok, reason)
 
 
@@ -907,12 +908,12 @@ def test_quickstart_set_env_values() -> None:
 def test_sticker_marker_whitespace() -> None:
     """A stray space inside a sticker marker ('[STICKER: doge]') must still
     parse as a sticker and must NOT make the validator fail-close the reply."""
-    segs = Agent._parse_sticker_markers("haha [STICKER: doge]")
+    segs = TextProcessing._parse_sticker_markers("haha [STICKER: doge]")
     check("sticker marker: spaced marker parsed as sticker",
           ("sticker", "doge") in segs, repr(segs))
-    ok, reason = Agent._validate_reply_safe("haha [STICKER: doge]")
+    ok, reason = TextProcessing._validate_reply_safe("haha [STICKER: doge]")
     check("sticker marker: spaced marker passes validator", ok, reason)
-    out = Agent._sanitize_reply("haha [STICKER: doge]")
+    out = TextProcessing._sanitize_reply("haha [STICKER: doge]")
     check("sticker marker: spaced marker survives sanitize (reply not dropped)",
           out != "", repr(out))
 
@@ -920,10 +921,10 @@ def test_sticker_marker_whitespace() -> None:
 def test_sanitize_strips_core_update() -> None:
     """Residual CORE_UPDATE tags (paired or the malformed colon form) must be
     scrubbed from a reply, never shown verbatim in chat."""
-    out = Agent._sanitize_reply("okay okay [CORE_UPDATE]new note[/CORE_UPDATE]")
+    out = TextProcessing._sanitize_reply("okay okay [CORE_UPDATE]new note[/CORE_UPDATE]")
     check("sanitize: paired CORE_UPDATE stripped",
           "CORE_UPDATE" not in out and "okay okay" in out, repr(out))
-    out2 = Agent._sanitize_reply("fine [CORE_UPDATE: some impression]")
+    out2 = TextProcessing._sanitize_reply("fine [CORE_UPDATE: some impression]")
     check("sanitize: colon-form CORE_UPDATE stripped",
           "CORE_UPDATE" not in out2, repr(out2))
 
@@ -1091,7 +1092,7 @@ async def test_learned_summary_command(tmp: Path) -> None:
     check("learned: other room's material excluded", "OTHER ROOM" not in out, out)
     check("learned: pending count present", "0 awaiting a second voice" in out, out)
     check("learned: survives the default character policy verbatim",
-          agent._sanitize_reply(out, agent.agent_lang, agent.reply_style) == out, out)
+          TextProcessing._sanitize_reply(out, agent.agent_lang, agent.reply_style) == out, out)
     check("learned: not matched by an ordinary sentence",
           agent._handle_memory_command(g, "TestBot did you learn python") is None)
 
@@ -1118,7 +1119,7 @@ async def test_memory_commands_are_caller_scoped(tmp: Path) -> None:
           "Bob private detail" not in recalled, recalled)
     check("recall: a tagged memory survives the character policy verbatim",
           "about Alice: Bob likes chess" in recalled
-          and agent._sanitize_reply(recalled, agent.agent_lang, agent.reply_style) == recalled,
+          and TextProcessing._sanitize_reply(recalled, agent.agent_lang, agent.reply_style) == recalled,
           recalled)
     agent._handle_memory_command(
         g, "TestBot forget Bob private", user_id="alice",

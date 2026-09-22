@@ -92,7 +92,9 @@ like this" and "why did it stop" both have answers.
 
 ## Code layout
 
-`Agent` is composed from mixins, one per concern:
+`Agent` is composed from three mixins — `ingestion.py`, `transport.py`,
+`learning.py` — plus modules it calls by name. One concern per module
+either way:
 
 | Module | Owns |
 |---|---|
@@ -116,8 +118,13 @@ like this" and "why did it stop" both have answers.
 | `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup |
 | `persona_agent/health.py`, `preflight.py` | Dependency probes; startup config check (missing / misspelled keys) |
 
-New behaviour goes in the mixin that owns the concern. If a change needs state
+New behaviour goes in the module that owns the concern. If a change needs state
 from two mixins, it probably belongs in `agent.py`.
+
+A module earns its place off the MRO by needing no agent state. `textproc.py`
+qualifies and is called by name (`TextProcessing._sanitize_reply(...)`), so a
+reply-safety gate can be tested without constructing an `Agent`. Reaching for
+`self` inside one of those is the signal the split is being undone.
 
 ## Style
 

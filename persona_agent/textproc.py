@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -1290,7 +1289,11 @@ DEFAULT_REPLY_STYLE = ReplyStyle()
 
 
 class TextProcessing:
-    """Mixed into Agent; see agent.py."""
+    """A namespace of pure text operations, not a mixin.
+
+    Nothing here reads agent state, so callers reach it by name rather
+    than through ``self``. Keeping it off Agent's MRO is what stops the
+    next person reaching for an attribute only Agent.__init__ creates."""
 
     @staticmethod
     def _sanitize_reply(text: str, lang: str = "en",
@@ -1836,14 +1839,6 @@ class TextProcessing:
             # Rule 1: whatever follows a hard break starts its own bubble.
             may_merge = not hard_break
         return result or [text]
-
-    @staticmethod
-    def _typing_delay(chunk: str) -> float:
-        """Simulate human typing speed: ~6-8 chars/sec + small pause. Capped at 7s."""
-        chars_per_sec = random.uniform(6.0, 8.0)
-        base = len(chunk) / chars_per_sec
-        pause = random.uniform(0.4, 1.2)
-        return min(base + pause, 7.0)
 
     @staticmethod
     def _is_sleep_hour() -> bool:

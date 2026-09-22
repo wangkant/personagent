@@ -137,7 +137,7 @@ class _PooledHTTP:
         return False  # shared client — never closed here
 
 
-class Agent(TextProcessing, ContentIngestion, Transport, Learning):
+class Agent(ContentIngestion, Transport, Learning):
     def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
         """Wire one agent from one settings record.
 
@@ -972,7 +972,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # needs to surface at least once to be a real member.
             first_appearance = self.last_reply_at[group_id] == 0.0
             if mode in ("judge", "followup") and not first_appearance:
-                if self._is_sleep_hour() and random.random() < SLEEP_PASS_PROB:
+                if (TextProcessing._is_sleep_hour()
+                        and random.random() < SLEEP_PASS_PROB):
                     logger.info("[Agent] PASS via sleep window (mode=%s, hour=%d, group=%s)",
                                 mode, time.localtime().tm_hour, group_id)
                     return False
@@ -1218,7 +1219,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                            log_ctx, blocked, reply[:120])
             return None
         had_visible = bool(filtered.strip())
-        reply = self._sanitize_reply(filtered, self._validator_lang(), self.reply_style)
+        reply = TextProcessing._sanitize_reply(
+            filtered, self._validator_lang(), self.reply_style)
         reply = reply.strip().strip('"').strip("「」")
         # Non-digit targets included: gateway ids look like "telegram:12345".
         at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
@@ -1325,7 +1327,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             f"{private_overrides}"
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
             f"{memory_blocks}\n\n"
-            f"[Current local time] {self._current_time_str()}\n\n"
+            f"[Current local time] {TextProcessing._current_time_str()}\n\n"
             f"{private_output_protocol(self.persona_style)}"
         )
         system = static_block + semi_static_block + dynamic_block
@@ -1344,7 +1346,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             enable_search=not proactive,
             json_object=True,
         )
-        reply, reasoning, intent, mem = self._parse_model_output(raw)
+        reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
         if reasoning:
             logger.debug("[Agent] private model metadata parsed (intent=%s, reasoning_chars=%d)",
                          intent or "?", len(reasoning))
@@ -1960,7 +1962,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # to fabricate. called/owner skip the PASS gate and must reply, so they're
         # the ones that otherwise answer media they never saw.
         blind_note = ""
-        if history and self._is_blind_content(history[-1].get("text", "")):
+        if history and TextProcessing._is_blind_content(
+                history[-1].get("text", "")):
             blind_note = (
                 "\n⚠️ This turn's trigger is something you **can't see** (image / voice / "
                 "video / file / forwarded chat, or a quoted message that couldn't be fetched) "
@@ -1979,7 +1982,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                     break
 
         time_line = (
-            f"[meta] Current local time: {self._current_time_str()}. "
+            f"[meta] Current local time: {TextProcessing._current_time_str()}. "
             f"**For internal time awareness only** — don't volunteer the time, "
             f"don't make timing jokes, unless asked. Numbers in the chat "
             f"context that look like times refer to past events, not now.\n\n"
@@ -2168,7 +2171,8 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
                 # the decision stable and cuts pointless chime-ins / cold PASSes.
                 temperature=0.3,
             )
-            gate_reply, _gr, gate_intent, _gm = self._parse_model_output(gate_raw)
+            gate_reply, _gr, gate_intent, _gm = TextProcessing._parse_model_output(
+                gate_raw)
             if not gate_reply or gate_reply.strip().upper() == "PASS":
                 # Stayed quiet — only the cheap gate call was spent.
                 return "", gate_intent or "chat", ""
@@ -2195,7 +2199,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
             # rendered prompt (see _decide_and_search).
             search_hint=latest_text,
         )
-        reply, reasoning, intent, mem = self._parse_model_output(raw)
+        reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
         if reasoning:
             logger.debug("[Agent] group model metadata parsed (mode=%s intent=%s, reasoning_chars=%d)",
                          mode, intent or "?", len(reasoning))
@@ -2287,7 +2291,7 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         while True:
             try:
                 await asyncio.sleep(self.proactive_interval)
-                if self._is_sleep_hour():
+                if TextProcessing._is_sleep_hour():
                     continue
                 acted = await self._maybe_proactive_groups()
                 if not acted:

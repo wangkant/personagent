@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from . import channels
 from .gateway import current_sink
+from .textproc import TextProcessing
 
 logger = logging.getLogger("agent")
 
@@ -154,6 +155,14 @@ class Transport:
         self.pending_reactions.drop_conversation(reaction_key)
         logger.info("[Agent] gateway conversation evicted (over the %d cap): %s",
                     _MAX_GATEWAY_CONVS, key)
+
+    @staticmethod
+    def _typing_delay(chunk: str) -> float:
+        """Simulate human typing speed: ~6-8 chars/sec + small pause. Capped at 7s."""
+        chars_per_sec = random.uniform(6.0, 8.0)
+        base = len(chunk) / chars_per_sec
+        pause = random.uniform(0.4, 1.2)
+        return min(base + pause, 7.0)
 
     async def _throttle_send(self, target_key: str) -> bool:
         """Outbound send throttle (anti-flood / platform rate-control). A
@@ -322,7 +331,7 @@ class Transport:
                 except ValueError:
                     pass
                 continue
-            for chunk in self._split_text(value):
+            for chunk in TextProcessing._split_text(value):
                 sendable = True
                 # Delay before every chunk including the first — reads as
                 # typing rather than an instant emit.
@@ -359,7 +368,8 @@ class Transport:
         # chunk's message_id (same-group sends are serialized by send_locks).
         target_key = group_id
         self._sent_mids[target_key] = []
-        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
+        text = TextProcessing._sanitize_reply(
+            text, self._validator_lang(), self.reply_style)
         if not text:
             return SendResult()
         # On the QQ path an at target must be a bare QQ number — a hallucinated
@@ -371,7 +381,7 @@ class Transport:
                            at_user_id, group_id)
             at_user_id = ""
         return await self._deliver_segments(
-            self._parse_sticker_markers(text),
+            TextProcessing._parse_sticker_markers(text),
             partial(self._napcat_send_group, group_id),
             target_key=target_key, at_user_id=at_user_id)
 
@@ -392,7 +402,8 @@ class Transport:
             self, user_id: str, text: str) -> SendResult:
         target_key = channels.dm_routing_key(user_id)
         self._sent_mids[target_key] = []
-        text = self._sanitize_reply(text, self._validator_lang(), self.reply_style)
+        text = TextProcessing._sanitize_reply(
+            text, self._validator_lang(), self.reply_style)
         # Private chat is 1:1 — there's no "target someone" semantics. The
         # model still occasionally emits [AT:xxx] (STYLE_GUIDE teaches the
         # marker); the group path extracts it, private has no extractor — left
@@ -401,7 +412,7 @@ class Transport:
         if not text:
             return SendResult()
         return await self._deliver_segments(
-            self._parse_sticker_markers(text),
+            TextProcessing._parse_sticker_markers(text),
             partial(self._napcat_send_private, user_id),
             target_key=target_key, label=" (private)")
 

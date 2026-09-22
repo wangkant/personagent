@@ -188,7 +188,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   back — harmless when every suite had its own process, and the reason three
   gateway tests and one reaction test failed the first time they shared one.
   It is scoped to the test now.
-
+- **`TextProcessing` is off `Agent`'s MRO.** It was already its own module
+  with its own suite, but inheritance still let any of its eighteen helpers
+  reach for `self`, and the send path in `transport.py` imported none of
+  them — it simply assumed the mixin would be there. Callers now name it
+  (`TextProcessing._sanitize_reply(...)`), so the compiler, not a convention,
+  keeps the reply-safety gates free of agent state. Every method is a
+  `staticmethod` and was already called with the full argument list, so the
+  resolved function is identical at every call site.
+- **Typing simulation moved from `textproc.py` to `transport.py`.**
+  `_typing_delay` computes a sleep from a chunk length; it is send pacing,
+  which `transport.py` has always claimed to own, and it was the one helper
+  in the text module that nothing in the text suite covered. It stays a
+  method rather than becoming a free function because the gateway tests stub
+  it per instance to keep sends instant.
 - **An unrecognised boolean keeps its declared default instead of silently
   reading as False.** `raw == "true"` was fixed once in `promotion.Policy`
   after `PROMOTE_AUTO=1` disabled promotion entirely and said nothing; six
