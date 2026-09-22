@@ -29,6 +29,7 @@ import httpcore
 import httpx
 from httpcore._backends.auto import AutoBackend
 
+from .config_env import env_int
 from .gateway import current_sink
 from .textproc import (_detect_image_mime, apply_k2_quirks,
                        salvage_json_object, strip_json_fences)
@@ -37,10 +38,7 @@ logger = logging.getLogger("agent")
 
 # Hard ceiling on any image the bot will decode or forward. Bounds both
 # memory and what a hostile URL can push through the vision path.
-try:
-    MAX_IMAGE_BYTES = max(1, int(os.getenv("MAX_IMAGE_BYTES", "5000000")))
-except ValueError:
-    MAX_IMAGE_BYTES = 5_000_000
+MAX_IMAGE_BYTES = env_int("MAX_IMAGE_BYTES", 5_000_000, minimum=1)
 
 MAX_URL_LENGTH = 4096
 MAX_HTML_WIRE_BYTES = 128 * 1024
@@ -365,6 +363,52 @@ async def safe_fetch_url(
 
 
 
+def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
+    """Resolve a ``file://`` image URL, or None if it escapes the jail.
+
+    The http(s) half of this defence graduated into a module-level function
+    long ago (``safe_fetch_url``), and not only for testing —
+    ``tools/bootstrap_from_history.py`` imports it as a CLI primitive. The
+    file:// half stayed inlined in an async method, so the parts most worth
+    isolating could only be reached by standing up an Agent: the Windows
+    drive-letter strip below, UNC paths, and ``..`` segments.
+
+    Returns the resolved path only when NAPCAT_IMAGE_DIR is set, the target
+    resolves inside it, it is a regular file, and it is within
+    MAX_IMAGE_BYTES. The size check belongs here rather than after the read:
+    it is a property of the resolved path, and checking it first avoids
+    reading a large file to then discard it.
+    """
+    from urllib.parse import urlparse, unquote
+
+    local = unquote(urlparse(url).path)
+    # "/C:/x" is what a Windows file:// URL parses to; strip the leading
+    # slash or Path() reads it as an absolute POSIX path and the jail
+    # comparison below is made against the wrong thing.
+    if len(local) > 3 and local[0] == "/" and local[2] == ":":
+        local = local[1:]
+    try:
+        path = Path(local).resolve()
+    except Exception:
+        return None
+    allowed = (allowed_dir or "").strip()
+    if not allowed:
+        logger.warning(
+            "[Agent] refusing file:// because NAPCAT_IMAGE_DIR is unset")
+        return None
+    try:
+        allowed_path = Path(allowed).resolve(strict=True)
+        if not path.is_relative_to(allowed_path):
+            logger.warning(
+                "[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
+            return None
+        if not path.is_file() or path.stat().st_size > MAX_IMAGE_BYTES:
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
 class ContentIngestion:
     """Mixed into Agent; see agent.py."""
 
@@ -493,29 +537,11 @@ class ContentIngestion:
                 return None
             return data
         if url.startswith("file://"):
-            from urllib.parse import urlparse, unquote
-            parsed = urlparse(url)
-            local = unquote(parsed.path)
-            if len(local) > 3 and local[0] == "/" and local[2] == ":":
-                local = local[1:]
-            try:
-                path = Path(local).resolve()
-            except Exception:
+            path = _resolve_jailed_file_url(
+                url, os.getenv("NAPCAT_IMAGE_DIR", ""))
+            if path is None:
                 return None
-            allowed = os.getenv("NAPCAT_IMAGE_DIR", "").strip()
-            if not allowed:
-                logger.warning("[Agent] refusing file:// because NAPCAT_IMAGE_DIR is unset")
-                return None
-            try:
-                allowed_path = Path(allowed).resolve(strict=True)
-                if not path.is_relative_to(allowed_path):
-                    logger.warning("[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
-                    return None
-                stat = path.stat()
-                if not path.is_file() or stat.st_size > MAX_IMAGE_BYTES:
-                    return None
-            except (OSError, ValueError):
-                return None
+            local = str(path)
             try:
                 with path.open("rb") as fh:
                     data = fh.read(MAX_IMAGE_BYTES + 1)
