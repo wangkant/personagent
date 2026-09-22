@@ -65,6 +65,22 @@ import astrbot.api.message_components as Comp
 DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
 DEFAULT_TIMEOUT_S = 180
 
+# Retry policy for _post_to_agent. Only statuses where resending the exact
+# same bytes is safe get a retry: 500 is the agent failing after accepting
+# the envelope, and 429 is the gateway's admission gate, which runs before
+# envelope verification (see gateway_webhook in the agent's main.py), so a
+# 429 never burns a nonce and is always safe to resend. 400/403/413 mean the
+# envelope or body itself is the problem -- resending unchanged bytes would
+# just fail the same way again.
+_RETRYABLE_STATUSES = frozenset({429, 500})
+_RETRY_BACKOFFS_S = (0.3, 0.8)
+# The agent rejects a signed envelope once its timestamp is older than this
+# (ReplayGuard / _gateway_event_is_fresh in the agent's main.py). A retry
+# reuses the original signed timestamp rather than re-signing, so all
+# attempts together must land well inside this window.
+_GATEWAY_REPLAY_WINDOW_S = 300
+_RETRY_WINDOW_SAFETY_MARGIN_S = 20
+
 # Discord leaves mentions, channels and custom emoji as raw markup in the text
 # (discord.py's own syntax); Slack escapes links as <url|label>. Both are
 # unfolded before the agent sees them, using the platform's own objects for
@@ -382,6 +398,47 @@ class LLMPersonaGateway(Star):
             return False, "off-host agent_url requires a non-empty gateway_token"
         return True, ""
 
+    @staticmethod
+    def _log_http_failure(exc, status: int) -> None:
+        """Report one failed agent call at a level that matches its cause.
+
+        403 in particular must carry the agent's own words: the gateway
+        answers 403 for a peer that is not on the allowlist, for an envelope
+        that failed HMAC or replayed, and for a source event outside the
+        freshness window. Reporting all three as "bad token" sends the
+        operator to rotate a key when the real fault is a drifting clock.
+        """
+        detail = ""
+        try:
+            payload = exc.response.json()
+            if isinstance(payload, dict):
+                detail = str(payload.get("error") or "")
+        except Exception:
+            detail = ""
+        if status == 403:
+            logger.error(
+                "llm_persona_gateway: agent refused the request (403): "
+                + (detail or "check gateway_token, the peer allowlist, and "
+                             "this host's clock"))
+        elif status == 413:
+            logger.warning(
+                "llm_persona_gateway: agent rejected the body as too large "
+                f"(413){': ' + detail if detail else ''} -- usually an "
+                "oversized inline image")
+        elif status == 429:
+            logger.info(
+                "llm_persona_gateway: agent at capacity (429); this turn was "
+                "dropped. Expected backpressure, not a fault.")
+        elif status == 400:
+            logger.warning(
+                "llm_persona_gateway: agent rejected the event schema (400)"
+                f"{': ' + detail if detail else ''} -- this is a bug in this "
+                "plugin, not a configuration problem")
+        else:
+            logger.warning(
+                f"llm_persona_gateway: agent request failed ({status})"
+                f"{': ' + detail if detail else ''}")
+
     async def _post_to_agent(
             self, neutral_event: dict) -> tuple[bool, bool, list]:
         """POST one event; return (replied, owned, reply items).
@@ -422,14 +479,54 @@ class LLMPersonaGateway(Star):
                     "X-Gateway-Signature": f"sha256={signature}",
                 }
             )
-        try:
-            resp = await self._client.post(
-                url, content=body, headers=headers, timeout=timeout
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning(f"llm_persona_gateway: agent request failed: {e}")
+        # The signed timestamp above is minted ONCE and every retry resends it
+        # unchanged -- that is deliberate (the agent un-burns a nonce when its
+        # own write fails, precisely so a correct client can resend the same
+        # bytes), but it means all attempts together have to finish inside the
+        # agent's replay window or the last one is rejected as stale. Divide
+        # one budget across the attempts instead of giving each the full
+        # timeout, which for the 180s default would blow the 300s window on
+        # the second try.
+        budget = min(
+            timeout,
+            (_GATEWAY_REPLAY_WINDOW_S - _RETRY_WINDOW_SAFETY_MARGIN_S)
+            / (len(_RETRY_BACKOFFS_S) + 1),
+        ) if token else timeout
+        attempts = len(_RETRY_BACKOFFS_S) + 1
+        data = None
+        for attempt in range(attempts):
+            try:
+                resp = await self._client.post(
+                    url, content=body, headers=headers, timeout=budget
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                if status in _RETRYABLE_STATUSES and attempt < attempts - 1:
+                    await asyncio.sleep(_RETRY_BACKOFFS_S[attempt])
+                    continue
+                self._log_http_failure(e, status)
+                return False, False, []
+            except (httpx.ReadTimeout, httpx.WriteTimeout):
+                # NOT httpx.TimeoutException: that also covers ConnectTimeout
+                # and PoolTimeout, which happen before the request reaches the
+                # agent, where the warning below would simply be false.
+                logger.error(
+                    "llm_persona_gateway: timed out waiting for the agent "
+                    f"({budget:.0f}s). The agent does not check whether the "
+                    "caller is still connected, so it is finishing this turn "
+                    "and committing the reply, the debounce state and the "
+                    "learning evidence for a message nobody will see -- and "
+                    "AstrBot's own model is about to answer the same turn in "
+                    "a different voice. Raise timeout_s if this recurs."
+                )
+                return False, False, []
+            except Exception as e:
+                logger.warning(f"llm_persona_gateway: agent request failed: {e}")
+                return False, False, []
+        if data is None:
             return False, False, []
         replies = data.get("replies") if isinstance(data, dict) else None
         if not isinstance(replies, list):
