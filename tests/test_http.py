@@ -122,6 +122,57 @@ def test_numeric_config_parser_is_bounded() -> None:
           parser("PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
 
 
+def test_error_bodies_carry_a_stable_code() -> None:
+    """`error` is prose for a human and free to be reworded; `code` is the
+    half a client may branch on. /webhook/gateway answers 403 for three
+    unrelated causes whose fixes differ (allowlist / token / clock), so the
+    status alone is not actionable."""
+    builder = getattr(main_module, "_error", None)
+    check("error builder exists", callable(builder))
+    if not callable(builder):
+        return
+
+    resp = builder(403, "unauthenticated", "authentication required")
+    body = json.loads(bytes(resp.body).decode())
+    check("error body keeps the human sentence",
+          body.get("error") == "authentication required", repr(body))
+    check("error body carries the machine code",
+          body.get("code") == "unauthenticated", repr(body))
+    check("error without retry_after sends no Retry-After",
+          "retry-after" not in {k.lower() for k in resp.headers.keys()},
+          repr(dict(resp.headers)))
+
+    resp = builder(429, "capacity_exceeded", "webhook capacity exceeded",
+                   retry_after=3)
+    check("429 advertises Retry-After",
+          resp.headers.get("Retry-After") == "3", repr(dict(resp.headers)))
+
+    marker = getattr(main_module, "_mark_deprecated", None)
+    check("deprecation stamp exists", callable(marker))
+    if callable(marker):
+        stamped = marker(builder(400, "invalid_schema", "invalid event schema"))
+        check("the deprecated ingress stamps Deprecation on errors too",
+              stamped.headers.get("Deprecation") == "true",
+              repr(dict(stamped.headers)))
+
+
+def test_webhook_routes_are_documented_for_openapi() -> None:
+    """FastAPI builds each route's OpenAPI description from the decorated
+    function's docstring. Both POST routes were bare, so the one asymmetry a
+    third-party integrator most needs — /webhook/qq is fire-and-forget while
+    /webhook/gateway answers synchronously — appeared nowhere in /docs."""
+    for name in ("qq_webhook", "gateway_webhook"):
+        fn = getattr(main_module, name, None)
+        doc = (getattr(fn, "__doc__", "") or "").strip()
+        check(f"{name} has a docstring for OpenAPI", bool(doc), repr(doc[:40]))
+    gw_doc = (getattr(main_module, "gateway_webhook").__doc__ or "").lower()
+    check("the gateway docstring states the synchronous contract",
+          "synchronous" in gw_doc, repr(gw_doc[:80]))
+    qq_doc = (getattr(main_module, "qq_webhook").__doc__ or "").lower()
+    check("the qq docstring states the deprecation",
+          "deprecated" in qq_doc, repr(qq_doc[:80]))
+
+
 def test_import_has_no_file_logging_side_effect() -> None:
     handlers = logging.getLogger().handlers
     check("main import does not open a repository log file",
@@ -670,6 +721,8 @@ async def main_async() -> None:
     await test_invalid_content_length_still_streams_safely()
     test_exposure_guard_fails_closed()
     test_numeric_config_parser_is_bounded()
+    test_error_bodies_carry_a_stable_code()
+    test_webhook_routes_are_documented_for_openapi()
     test_import_has_no_file_logging_side_effect()
     await test_admission_limiter_is_bounded()
     await test_public_health_is_a_cheap_liveness_check()
