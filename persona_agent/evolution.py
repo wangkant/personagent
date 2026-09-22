@@ -229,7 +229,7 @@ def append_jsonl(path: Path, records: list[dict],
 
 
 def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
-              is_auto=lambda r: True) -> tuple[int, int] | None:
+              is_auto=lambda r: False) -> tuple[int, int] | None:
     """Cap the machine-generated half of a growing retrieval dataset.
 
     examples.jsonl / feedback.jsonl are scanned on the reply hot path but only
@@ -241,6 +241,12 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
     `max_auto` machine entries makes retrieval track the persona as it is now.
 
     Hand-curated entries are NEVER dropped: `is_auto` is what tells them apart
+    — which is why its default says NOTHING is auto. The default used to be
+    the opposite, so a caller that omitted the predicate got the exact reverse
+    of the guarantee above: on a fresh checkout the oldest rows are the
+    curated seed pool, and they were the first thing overwritten. Both real
+    callers pass a predicate, so this changes no existing behaviour; it makes
+    the omission safe instead of destructive.
     (examples carry a "score", machine feedback pairs carry a "src"), and the
     curated head is the bootstrap pool a fresh checkout retrieves from.
 
