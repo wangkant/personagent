@@ -27,6 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from dotenv import load_dotenv
+load_dotenv(ROOT / ".env", override=False)
+
 from persona_agent.paths import (
     read_jsonl,
     resolve_runtime_lang_file,
@@ -92,6 +96,22 @@ def metric_factory(judge_model: str):
     against the human-preferred 'good' reply. >=4 counts as success."""
     import dspy  # type: ignore
 
+    # The judge must not be the model being measured, or the loop grades its
+    # own homework (see tools/evolution_benchmark.py). judge_model here
+    # defaults to the same "deepseek-chat" .env.example gives LLM_MODEL, so
+    # an out-of-the-box run scores itself unless --judge-model is overridden;
+    # warn rather than sys.exit because this file's scaffold/quick-start role
+    # means --judge-model always has a default and a hard failure here would
+    # break running it with no arguments beyond that default.
+    if judge_model.strip().lower() == os.getenv("LLM_MODEL", "deepseek-chat").strip().lower():
+        print(
+            f"WARNING: --judge-model ({judge_model}) matches LLM_MODEL "
+            f"({os.getenv('LLM_MODEL', 'deepseek-chat')}) -- the judge would "
+            f"be scoring the same model it is grading. Pass a different "
+            f"--judge-model.",
+            file=sys.stderr,
+        )
+
     # Same shape as the primary LM in cmd_tune: the provider prefix and the
     # credentials are not optional. A bare dspy.LM(name) has no api_key and no
     # base_url, so every judge call raises — and since the call sat outside the
@@ -126,30 +146,30 @@ def metric_factory(judge_model: str):
     return metric
 
 
-def cmd_bootstrap():
+def cmd_bootstrap() -> int | None:
     pairs = load_pairs()
     goods = load_goods()
     print(f"Loaded {len(pairs)} pairs, {len(goods)} good examples")
     if not pairs and not goods:
         print("Nothing to bootstrap from. Add entries to the runtime feedback file first.")
-        return
+        return 1
     print("Pairs head:")
     for p in pairs[:3]:
         print(f"  [BAD] {p['bad']}\n  [OK]  {p['good']}\n")
 
 
-def cmd_tune(judge_model: str = "deepseek-chat"):
+def cmd_tune(judge_model: str = "deepseek-chat") -> int | None:
     try:
         import dspy  # type: ignore
     except ImportError:
         print("dspy not installed. pip install dspy-ai")
-        return
+        return 1
 
     pairs = load_pairs()
     goods = load_goods()
     if not pairs:
         print("No 'better' pairs in seed or runtime feedback — cannot run BootstrapFewShot.")
-        return
+        return 1
 
     api_key = os.getenv("LLM_API_KEY", "")
     base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
@@ -184,19 +204,19 @@ def cmd_tune(judge_model: str = "deepseek-chat"):
     print(f"Saved tuned program to {OUT_PROGRAM}")
 
 
-def main():
+def main() -> int | None:
     p = argparse.ArgumentParser()
     p.add_argument("--bootstrap", action="store_true", help="dry-run: load and preview pairs")
     p.add_argument("--tune", action="store_true", help="run BootstrapFewShot optimizer")
     p.add_argument("--judge-model", default="deepseek-chat")
     args = p.parse_args()
     if args.bootstrap:
-        cmd_bootstrap()
+        return cmd_bootstrap()
     elif args.tune:
-        cmd_tune(args.judge_model)
+        return cmd_tune(args.judge_model)
     else:
         p.print_help()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

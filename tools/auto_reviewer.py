@@ -7,6 +7,16 @@ Stage 2 (apply, opt-in): pending candidates are converted into preference
 pairs and appended to runtime/feedback.<lang>.jsonl, which the running agent
 hot-reloads into few-shot retrieval — no restart needed.
 
+Blast radius: a pair approved here goes straight into the auto-pool that
+every prompt retrieval draws from unconditionally, for every room and every
+persona this deployment serves, and it survives PERSONA_VERSION changes —
+unlike ledger-promoted rows (persona_agent/promotion.py), which must pass
+scope authorization before they apply beyond the conversation that produced
+them. This is intentional: --apply is a human looking at each pair before it
+lands, which is exactly what the promotion scope rules exempt. It is also
+global reach from one room's correction, so if you want a room- or
+persona-scoped correction instead, use tools/candidates_admin.py.
+
 Usage:
     python tools/auto_reviewer.py                     # review only (as before)
     python tools/auto_reviewer.py --apply             # review, then y/n/e gate
@@ -284,10 +294,21 @@ async def main() -> int:
                    help="review with the model and print the diagnoses, but "
                         "do not write candidates.jsonl")
     p.add_argument("--apply", action="store_true",
-                   help="after reviewing, interactively approve pairs into feedback")
+                   help="after reviewing, interactively approve pairs into "
+                        "feedback -- the shared auto-pool every room and "
+                        "persona draws from; see tools/candidates_admin.py "
+                        "for room/persona-scoped promotion instead")
     p.add_argument("--yes", action="store_true",
                    help="deprecated unsafe mode; refused without writing feedback")
     args = p.parse_args()
+
+    # review_pending() returning [] means either "nothing pending" (fine,
+    # exit 0) or "LLM_API_KEY not configured" (a cron job silently never
+    # reviewing anything, ever) -- the empty list alone can't tell those
+    # apart, so check the key directly instead of inferring from the result.
+    if not args.dry_run and not API_KEY:
+        logger.error("LLM_API_KEY not configured; cannot call reviewer")
+        return 1
 
     await review_pending(args.threshold, args.limit,
                          no_write=args.no_write or args.dry_run,
