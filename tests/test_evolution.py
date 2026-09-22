@@ -1,32 +1,26 @@
 """Tests for the self-evolution loop (evolution.py + Agent.loop_evolve).
 
-Run from the repo root with no test framework required:
+Run from the repo root:
 
-    python tests/test_evolution.py
+    python -m pytest tests/test_evolution.py
 """
 from __future__ import annotations
 
-import asyncio
 import json
-import sys
-import tempfile
 from pathlib import Path
 
-# Make the repo root importable when invoked as `python tests/test_evolution.py`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from persona_agent import evolution  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
-from tools import auto_reviewer  # noqa: E402
-
-_failures: list[str] = []
+from persona_agent import evolution
+from persona_agent.agent import Agent
+from tools import auto_reviewer
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -322,7 +316,7 @@ def _make_agent(tmp: Path) -> Agent:
     return a
 
 
-async def integration_evolve_tick(tmp: Path) -> None:
+async def test_evolve_tick(tmp: Path) -> None:
     a = _make_agent(tmp)
     _write_jsonl(a.eval_file, [
         {"ts": "t1", "score": 1, "mode": "called",
@@ -397,30 +391,3 @@ async def integration_evolve_tick(tmp: Path) -> None:
           added3 == 0 and len(a.candidate_ledger.all()) == 1)
     check("tick: unusable draft still marked reviewed",
           evolution.load_reviewed_ts(a.candidates_file) == {"t1", "t9"})
-
-
-def main() -> int:
-    test_parse_review()
-    test_pair_from_candidate()
-    with tempfile.TemporaryDirectory() as td:
-        test_loaders(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        test_append_and_dedup(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        test_mark_candidates(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        test_auto_yes_cannot_direct_apply(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        test_a_capped_feedback_write_leaves_the_rest_pending(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        asyncio.run(integration_evolve_tick(Path(td)))
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

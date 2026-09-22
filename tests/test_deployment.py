@@ -10,7 +10,6 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 from persona_agent.endpoints import chat_completions_url
 
 
@@ -55,8 +54,3 @@ class DeploymentTests(unittest.TestCase):
                 config = json.loads(result.stdout)
                 self.assertEqual(config['host'], '127.0.0.2')
                 self.assertEqual(config['port'], expected)
-
-
-
-if __name__ == '__main__':
-    unittest.main()

@@ -431,7 +431,7 @@ def _run(plugin, event):
     return asyncio.run(collect())
 
 
-def test_typing_indicator_brackets_the_round_trip():
+def test_typing_indicator_brackets_the_round_trip(monkeypatch):
     module = _import_plugin()
     plugin = _plugin_instance(module, {"private_enabled": True, "private_whitelist": ["user-1"]})
     event = _Event(module, private=True)
@@ -440,7 +440,9 @@ def test_typing_indicator_brackets_the_round_trip():
         return True, True, [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]
 
     plugin._post_to_agent = two_bubbles
-    module.asyncio.sleep = _no_sleep
+    # `module.asyncio` IS the asyncio module, so this has to be undone: a bare
+    # assignment left every later test in the run without a real sleep.
+    monkeypatch.setattr(module.asyncio, "sleep", _no_sleep)
     out = _run(plugin, event)
     assert len(out) == 2
     # on before the request, on again before the second bubble, off at the end
@@ -516,25 +518,3 @@ def test_missing_source_timestamp_is_not_forwarded_or_blocked():
     assert asyncio.run(collect()) == []
     assert plugin._client.calls == []
     assert event.stopped is False
-
-
-if __name__ == "__main__":
-    tests = [
-        test_reply_component_preserves_quoted_message_id,
-        test_default_configuration_forwards_neither_groups_nor_private_messages,
-        test_signed_request_uses_canonical_body_and_replay_headers,
-        test_off_host_endpoint_requires_https_and_a_token,
-        test_malformed_endpoint_is_rejected_without_a_request,
-        test_forwarding_failure_does_not_stop_astrbot_fallback,
-        test_unhandled_gateway_response_does_not_stop_astrbot_fallback,
-        test_a_silent_but_owned_conversation_blocks_the_fallback,
-        test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback,
-        test_missing_source_timestamp_is_not_forwarded_or_blocked,
-        test_typing_indicator_brackets_the_round_trip,
-        test_discord_text_unfolds_mentions_emoji_and_channels,
-        test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn,
-        test_media_components_become_notes_the_agent_can_read,
-    ]
-    for test in tests:
-        test()
-    print(f"ok: {len(tests)} AstrBot plugin tests")

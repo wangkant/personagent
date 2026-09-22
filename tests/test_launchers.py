@@ -137,7 +137,3 @@ class LauncherTests(unittest.TestCase):
         source = (ROOT / "launch.vbs").read_text(encoding="ascii")
         self.assertIn('cd /d """ & NAPCAT_DIR & """', source)
         self.assertIn('cd /d """ & AGENT_DIR & """', source)
-
-
-if __name__ == "__main__":
-    unittest.main()

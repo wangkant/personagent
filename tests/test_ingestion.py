@@ -1,36 +1,29 @@
 """Security regression tests for URL and image ingestion.
 
-Run directly:
-    python tests/test_ingestion.py
+Run from the repo root:
+
+    python -m pytest tests/test_ingestion.py
 """
 from __future__ import annotations
 
-import asyncio
 import gzip
 import io
 import re
 import socket
-import sys
 import time
-from pathlib import Path
 from unittest.mock import patch
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from persona_agent.ingestion import ContentIngestion, safe_fetch_url
 from tools.bootstrap_from_history import download_sticker
 
 
-FAILURES: list[str] = []
+def check(name: str, cond: bool, detail: str = "") -> None:
+    """Assert `cond`, naming the property so a failure reads as English.
 
-
-def check(name: str, condition: bool, detail: str = "") -> None:
-    if condition:
-        print(f"[PASS] {name}")
-        return
-    FAILURES.append(name)
-    print(f"[FAIL] {name}: {detail}")
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 class Harness(ContentIngestion):
@@ -354,26 +347,3 @@ async def test_bootstrap_uses_guarded_bounded_fetch() -> None:
         f"{len(got_large)} bytes" if got_large is not None else "",
     )
     check("bootstrap: public URL reached bounded stream", calls == 1, repr(calls))
-
-
-async def main() -> int:
-    await test_html_wire_cap()
-    await test_html_decoded_cap()
-    await test_gzip_site_og_tags_are_actually_parsed()
-    await test_html_content_type()
-    await test_url_limits_and_cache_keys()
-    await test_dns_resolution_is_pinned_once()
-    await test_dns_resolution_obeys_timeout()
-    test_url_fanout_is_capped()
-    test_gif_pixel_bomb_rejected_before_convert()
-    test_small_gif_still_converts()
-    await test_bootstrap_uses_guarded_bounded_fetch()
-    if FAILURES:
-        print(f"\n{len(FAILURES)} test(s) failed")
-        return 1
-    print("\nall tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))

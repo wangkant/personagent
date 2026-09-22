@@ -1,12 +1,11 @@
 """Tests for bounded webhook request-body reads.
 
-Run from the repo root with no test framework required:
+Run from the repo root:
 
-    python tests/test_http.py
+    python -m pytest tests/test_http.py
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import json
@@ -14,25 +13,22 @@ import logging
 import logging.handlers
 import tempfile
 import time
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import main as main_module  # noqa: E402
-import httpx  # noqa: E402
-from main import RequestBodyTooLarge, _read_body_limited  # noqa: E402
-from persona_agent import learning as learning_module  # noqa: E402
-
-_failures: list[str] = []
+import main as main_module
+import httpx
+from main import RequestBodyTooLarge, _read_body_limited
+from persona_agent import learning as learning_module
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 class FakeRequest:
@@ -729,29 +725,6 @@ def test_startup_view_rebuild_can_fail_closed() -> None:
     check("startup promoted-view rebuild fails closed", raised)
 
 
-async def main_async() -> None:
-    await test_accepts_body_at_limit()
-    await test_rejects_stream_over_limit_without_header()
-    await test_rejects_large_content_length_before_stream()
-    await test_invalid_content_length_still_streams_safely()
-    test_exposure_guard_fails_closed()
-    test_numeric_config_parser_is_bounded()
-    test_error_bodies_carry_a_stable_code()
-    test_webhook_routes_are_documented_for_openapi()
-    test_import_has_no_file_logging_side_effect()
-    await test_admission_limiter_is_bounded()
-    await test_public_health_is_a_cheap_liveness_check()
-    test_a_skipped_critical_probe_is_not_a_pass()
-    await test_asgi_webhook_auth_and_schema()
-    test_gateway_envelope_rejects_replay_and_stale_requests()
-    test_gateway_envelope_refuses_a_bad_signature()
-    test_preflight_reports_the_right_deployments()
-    test_every_setting_the_code_reads_is_in_the_template()
-    test_event_schema_requires_stable_message_ids()
-    test_startup_view_rebuild_can_fail_closed()
-    test_a_failed_log_rotation_does_not_swallow_the_record()
-
-
 def test_a_failed_log_rotation_does_not_swallow_the_record() -> None:
     """A rollover that cannot happen must not take the log line with it.
 
@@ -801,17 +774,3 @@ def test_a_failed_log_rotation_does_not_swallow_the_record() -> None:
           all(f"line-{i}" in kept for i in range(3)), repr(kept[:160]))
     check("failed rotation: the stock handler is the thing being fixed",
           "line-2" not in lost, repr(lost[:160]))
-
-
-def main() -> int:
-    asyncio.run(main_async())
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

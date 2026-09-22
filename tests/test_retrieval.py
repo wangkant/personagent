@@ -13,34 +13,30 @@ which is where automatic learning now lands (tests/test_ledger.py owns the
 promotion rules; the case here checks it reaches the prompt without disturbing
 the append-aware loaders).
 
-Run from the repo root with no test framework required:
+Run from the repo root:
 
-    python tests/test_retrieval.py
+    python -m pytest tests/test_retrieval.py
 """
 from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path
 
-# Make the repo root importable when invoked as `python tests/test_retrieval.py`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from persona_agent import evolution  # noqa: E402
-from persona_agent import lineage as lineage_mod  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
-
-_failures: list[str] = []
+from persona_agent import evolution
+from persona_agent import lineage as lineage_mod
+from persona_agent.agent import Agent
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def make_agent(tmp: Path) -> Agent:
@@ -854,45 +850,3 @@ def test_empty_pool_returns_nothing() -> None:
         a = make_agent(Path(d))
         check("rank: empty pool yields no examples block",
               a._examples_for_prompt(focus_text="anything", mode="called") == "")
-
-
-def main() -> int:
-    test_append_is_incremental_and_matches_cold_load()
-    test_same_mtime_append_is_still_seen()
-    test_torn_append_waits_for_its_newline()
-    test_atomic_replacement_does_not_reuse_a_matching_tail()
-    test_atomic_replacement_with_preserved_metadata_is_seen()
-    test_json_config_reload_tracks_restores_and_failed_edits()
-    test_json_config_stat_failure_preserves_valid_cache()
-    test_shrink_and_rewrite_fall_back_to_full_reload()
-    test_force_reload_and_malformed_lines()
-    test_file_without_trailing_newline_is_fully_parsed()
-    test_auto_example_dedup_set_tracks_appends()
-    test_feedback_append_onto_unterminated_file()
-    test_feedback_pairs_reload()
-    test_examples_auto_pool_capped_curated_kept()
-    test_examples_cap_disabled_keeps_everything()
-    test_seed_pool_never_trimmed_and_always_retrieved()
-    test_all_curated_pool_never_trimmed()
-    test_feedback_auto_pool_capped()
-    test_feedback_write_survives_a_full_pool()
-    test_promoted_views_are_a_third_retrieval_source()
-    test_persona_edit_keeps_promoted_rows_in_scope()
-    test_a_failed_lineage_save_can_still_be_retried()
-    test_an_unreadable_lineage_file_is_never_overwritten()
-    test_promoted_views_enforce_full_scope()
-    test_relevance_outranks_recency()
-    test_future_timestamp_cannot_outrank_a_match()
-    test_no_signal_falls_back_to_the_newest_entries()
-    test_pair_rewrite_not_repeated_as_a_positive_example()
-    test_empty_pool_returns_nothing()
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

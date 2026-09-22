@@ -10,27 +10,28 @@ What is protected here is the part a deployment that learned before the ledger
 still depends on: its `example_candidates.json` keeps loading, and a human
 disagreement can still pull a reply out of the pool it was banked in.
 
-Run from the repo root:  python tests/test_promotion.py
+Run from the repo root:
+
+    python -m pytest tests/test_promotion.py
 """
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from persona_agent.promotion import CandidatePool, retract_example
 
-from persona_agent.promotion import CandidatePool, retract_example  # noqa: E402
-
-_failures: list[str] = []
 NOW = 1_800_000_000.0
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    print(f"[{'PASS' if cond else 'FAIL'}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def ex(reply: str) -> dict:
@@ -105,20 +106,3 @@ def test_retract_example_from_pool() -> None:
         retract_example(f, "drop me")
         check("malformed row preserved",
               f.read_text(encoding="utf-8").strip() == "not json")
-
-
-def main() -> int:
-    test_a_legacy_pool_still_loads()
-    test_a_corrupt_pool_file_degrades_to_empty()
-    test_withdraw()
-    test_retract_example_from_pool()
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

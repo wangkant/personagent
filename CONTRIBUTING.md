@@ -26,26 +26,29 @@ python -m compileall -q persona_agent main.py try_chat.py quickstart.py tools te
 ```
 
 CI runs this on Python 3.10 / 3.11 / 3.12 on Linux and on Windows (3.12),
-plus `bash -n start.sh` and `python tests/test_launchers.py`, and builds and
-imports the wheel and sdist. The ruff line is a dead-and-undefined-names gate,
-not a style gate. Run it before opening a PR.
+plus `bash -n start.sh`, and builds and imports the wheel and sdist. The ruff
+line is a dead-and-undefined-names gate, not a style gate. Run it before
+opening a PR.
 
-The suites themselves are framework-free stdlib scripts; pytest is only the
-runner. Each stays directly executable for a fast single-file loop:
+One file, or one test, for a fast loop:
 
 ```bash
-python tests/test_gateway.py
+python -m pytest tests/test_gateway.py
+python -m pytest tests/test_gateway.py -k throttle
 ```
 
-Tests use a lightweight `check(name, cond)` harness. Add new checks next to the
-behaviour they cover, and register the test function in that file's `main()`.
+A test is a module-level `test_*` function in `tests/test_*.py`; pytest finds
+it, and nothing has to be registered anywhere. `pytest.ini` puts the repo root
+and `tools/` on the import path, so a suite imports `persona_agent`, `main`,
+`quickstart` and the CLI tools the way a deployment does.
 
-**A new test file must be runnable as a script.** `pytest.ini` collects only
-`tests/test_pytest_entry.py`, which discovers the script suites — so a plain
-pytest-style file would never run while `pytest -q` still reported success.
-`test_every_test_file_is_collected` now fails by name when that happens: give
-every new `tests/test_*.py` a `main()` and an `if __name__ == "__main__":`
-guard.
+Two fixtures live in `tests/conftest.py`: `tmp` is a per-test scratch
+directory, and an `async def` test runs on its own event loop, so the only
+thing this repository needs installed to run its tests is pytest itself.
+
+Most suites state one property per line through a local
+`check(name, cond, detail)`, which asserts and names what failed. Add new
+checks next to the behaviour they cover; plain `assert` is equally welcome.
 
 **Tests must never write the repo's real state files.** Everything mutable
 lives under `runtime/` (root-level `memory.json` and friends are legacy names

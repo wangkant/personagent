@@ -1,8 +1,8 @@
 """Persistence primitive tests.
 
-Run from the repository root:
+Run from the repo root:
 
-    python tests/test_storage.py
+    python -m pytest tests/test_storage.py
 """
 from __future__ import annotations
 
@@ -12,26 +12,20 @@ import os
 import stat
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
-try:
-    from persona_agent import paths, storage
-except ImportError:
-    paths = None
-    storage = None
-
-_failures: list[str] = []
+from persona_agent import paths, storage
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _append_worker(path: str, worker: int, count: int) -> None:
@@ -295,31 +289,3 @@ def test_appended_rows_are_byte_exact(tmp: Path) -> None:
     check("append: no CR anywhere in the file", cr not in raw2, repr(raw2))
     check("append: second row appended cleanly",
           raw2 == b'{"x":1}' + lf + b'{"y":2}' + lf, repr(raw2))
-
-
-def main() -> int:
-    if storage is None or paths is None:
-        check("storage module is importable", False,
-              "persona_agent.storage does not exist")
-    else:
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
-            test_runtime_instance_lock(tmp / "instance")
-            test_cross_process_append(tmp / "append")
-            test_atomic_write(tmp / "atomic")
-            test_appended_rows_are_byte_exact(tmp / "bytes")
-            test_validated_jsonl_quarantines_in_place(tmp / "validation")
-            test_runtime_dir_stays_under_agent_home(tmp / "home")
-            test_cli_tools_follow_runtime_dir()
-            test_cli_tools_migrate_legacy_state_when_run_first(
-                tmp / "legacy-home")
-    if _failures:
-        print(f"\n{len(_failures)} test(s) failed")
-        return 1
-    print("\nall tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    multiprocessing.freeze_support()
-    raise SystemExit(main())

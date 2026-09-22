@@ -1,32 +1,28 @@
 """Tests for reaction learning (persona_agent/reactions.py + agent glue).
 
-Run from the repo root, no test framework:
+Run from the repo root:
 
-    python tests/test_reactions.py
+    python -m pytest tests/test_reactions.py
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from persona_agent import evidence, reactions  # noqa: E402
-from persona_agent.agent import Agent, SendResult  # noqa: E402
-
-_failures: list[str] = []
+from persona_agent import evidence, reactions
+from persona_agent.agent import Agent, SendResult
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +261,7 @@ def _pending_entry():
             "target_name": "alex", "mids": ["m1"], "ts": 0.0}
 
 
-async def integration_process_reaction(tmp: Path) -> None:
+async def test_process_reaction(tmp: Path) -> None:
     """The write path: a reaction becomes evidence, an adjudication becomes a
     candidate, and neither is allowed to reach retrieval on its own. The
     promotion rules themselves are tested in tests/test_ledger.py."""
@@ -353,7 +349,7 @@ async def integration_process_reaction(tmp: Path) -> None:
           and not a.promoted_examples_file.exists())
 
 
-async def integration_retry_and_elicit(tmp: Path) -> None:
+async def test_retry_and_elicit(tmp: Path) -> None:
     import time as _time
     a = _make_agent(tmp)
 
@@ -524,28 +520,3 @@ def test_teacher_forgiveness_window(tmp: Path) -> None:
               reactions.TeacherStats(nan_path).hard_block("u3") in (True, False))
     finally:
         time.time = real
-
-
-def main() -> int:
-    test_pending_replies()
-    test_pending_replies_survive_restart_bounded()
-    test_parse_and_shapes()
-    test_retry_and_elicited()
-    with tempfile.TemporaryDirectory() as td:
-        test_teacher_stats(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        test_teacher_forgiveness_window(Path(td))
-    with tempfile.TemporaryDirectory() as td:
-        asyncio.run(integration_process_reaction(Path(td)))
-    with tempfile.TemporaryDirectory() as td:
-        asyncio.run(integration_retry_and_elicit(Path(td)))
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

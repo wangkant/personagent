@@ -139,14 +139,3 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(self._server_started(),
                          "a failed dependency install must not start the server")
-
-
-def main() -> int:
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(
-        StartPs1IsolationTests)
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
-    return 0 if result.wasSuccessful() else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

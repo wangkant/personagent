@@ -1,33 +1,30 @@
 """Tests for the self-evolution benchmark (tools/evolution_benchmark.py).
 
-Run from the repo root, no test framework:
+Run from the repo root:
 
-    python tests/test_benchmark.py
+    python -m pytest tests/test_benchmark.py
 """
 from __future__ import annotations
 
-import asyncio  # noqa: E402
+import asyncio
 import json
-import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "tools"))
 
-import evolution_benchmark as bench  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
-from persona_agent import evolution  # noqa: E402
-
-_failures: list[str] = []
+import evolution_benchmark as bench
+from persona_agent.agent import Agent
+from persona_agent import evolution
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def test_scenario_sets() -> None:
@@ -490,27 +487,3 @@ def test_export_writes_blind_inbox() -> None:
               set(rec) == {"item_id", "context", "reply"}
               and not any(k in rec for k in ("arm", "round", "family", "scenario_id")))
         check("exported reply present", rec["reply"] == "hi there")
-
-
-def main() -> int:
-    test_scenario_sets()
-    test_seed_buffer()
-    test_drive_scenario_stubbed()
-    test_isolated_agent_state_stays_in_one_tree()
-    test_run_arm_isolation_and_growth()
-    test_real_evolution_pipeline_with_external_calls_stubbed()
-    test_inbox_is_blind_and_ingest()
-    test_pass_sentinel_is_protocol_not_text()
-    test_void_runs_are_reported_not_plotted()
-    test_outputs()
-    test_export_writes_blind_inbox()
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
