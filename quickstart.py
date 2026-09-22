@@ -183,6 +183,39 @@ def _env_current_key(env_path: Path) -> str:
     return _env_get(env_path, "LLM_API_KEY")
 
 
+def _configured_agent_home(env_path: Path) -> str:
+    """AGENT_HOME as the agent will actually see it.
+
+    ``main.py``/``try_chat.py`` call ``load_dotenv(override=False)``, so an
+    AGENT_HOME already exported in the shell wins; otherwise whatever this
+    run's .env already has (written by a *previous* wizard run) takes effect
+    the moment it's loaded. Either way it happened before this run touches
+    anything, so both have to be checked here.
+    """
+    return os.environ.get("AGENT_HOME", "").strip() or _env_get(env_path, "AGENT_HOME")
+
+
+def _warn_if_agent_home_diverges(env_path: Path) -> None:
+    """Flag an AGENT_HOME that points away from this checkout.
+
+    quickstart always writes .env and persona.txt under ROOT (this checkout),
+    but persona_agent.paths honours AGENT_HOME when resolving where it reads
+    them from. Left unchecked, the wizard reports success while the agent is
+    reading a persona.txt that doesn't exist where it's looking - most often
+    because AGENT_HOME was written into .env by an earlier wizard run and
+    quietly carries forward, not because anyone exported it deliberately.
+    """
+    configured = _configured_agent_home(env_path)
+    if not configured:
+        return
+    resolved = Path(configured).expanduser().resolve()
+    if resolved != ROOT:
+        _info(f"AGENT_HOME is set to {resolved} - that is where persona.txt and "
+              f".env need to live for the agent to read them, not this checkout "
+              f"({ROOT}). This wizard only writes into the checkout; move the "
+              "files there yourself, or unset AGENT_HOME, once setup is done.")
+
+
 # ---------------------------------------------------------------------------
 # AstrBot: the plugin, its config file, the shared token
 # ---------------------------------------------------------------------------
@@ -380,6 +413,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     print("  Answers are written to .env (which stays your annotated")
     print("  reference - only the relevant lines are filled in).")
     print()
+    _warn_if_agent_home_diverges(env_path)
 
     # 1. Provider
     print("  Which chat API will the bot use?")
