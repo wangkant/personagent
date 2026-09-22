@@ -49,15 +49,16 @@ jobs:
         run: |
           python -m pip install "ruff>=0.6,<1"
           ruff check . --select F401,F811,F821,F841
-      - name: Run isolated script suites through pytest
+      - name: Run the test suite
         run: |
           python -m pytest -q
           python -m compileall -q .
 
   windows:
-    # The real suite must run here, not just the launchers. Windows is the
-    # platform this is actually deployed on, and it is the only one that
-    # executes storage.FileLock's msvcrt branch — the lock every runtime JSONL
+    # The real suite must run here, not just the launchers — and it does:
+    # `pytest -q` collects tests/test_launchers.py like any other module.
+    # Windows is the platform this is actually deployed on, and the only one
+    # that executes storage.FileLock's msvcrt branch — the lock every runtime JSONL
     # writer now depends on for not losing records, since Windows O_APPEND is
     # seek-to-end-then-write rather than an atomic append. Until this job ran
     # the suite, that branch was executed by no CI job on any platform.
@@ -74,12 +75,10 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt "pytest>=8,<10"
-      - name: Run isolated script suites through pytest
+      - name: Run the test suite
         run: |
           python -m pytest -q
           python -m compileall -q .
-      - name: Exercise Windows launchers from a foreign working directory
-        run: python tests/test_launchers.py
 
   packaging:
     # The test job runs from a checkout, which hides packaging breakage: a

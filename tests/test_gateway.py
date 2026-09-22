@@ -1,8 +1,8 @@
 """Tests for the platform-neutral gateway layer (gateway.py + agent hooks).
 
-Run from the repo root with no test framework required:
+Run from the repo root:
 
-    python tests/test_gateway.py
+    python -m pytest tests/test_gateway.py
 """
 from __future__ import annotations
 
@@ -18,33 +18,30 @@ from pathlib import Path
 
 import httpx
 
-# Make the repo root importable when invoked as `python tests/test_gateway.py`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from persona_agent import channels  # noqa: E402
-from persona_agent import paths as agent_paths  # noqa: E402
-from persona_agent import promotion  # noqa: E402
-from persona_agent.agent import Agent, SendResult  # noqa: E402
-from persona_agent.learning import Learning  # noqa: E402
-from persona_agent.textproc import (  # noqa: E402
+from persona_agent import channels
+from persona_agent import paths as agent_paths
+from persona_agent import promotion
+from persona_agent.agent import Agent, SendResult
+from persona_agent.learning import Learning
+from persona_agent.textproc import (
     _strip_web_desc,
     _unwrap_web_desc,
 )
 from persona_agent.gateway import (GatewaySink, current_sink,
                                    message_to_reply_item,
-                                   synthesize_onebot_payload)  # noqa: E402
-from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE  # noqa: E402
+                                   synthesize_onebot_payload)
+from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
 
 BOT_QQ = "10001"
 
-_failures: list[str] = []
-
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 # ---------------------------------------------------------------------------
@@ -603,7 +600,7 @@ def test_runtime_learning_paths(tmp: Path) -> None:
             os.environ["AGENT_RUNTIME_DIR"] = old
 
 
-async def integration_round_trip(tmp: Path) -> None:
+async def test_round_trip(tmp: Path) -> None:
     agent = make_agent(tmp)
 
     async def fake_think(group_id, mode, text="", caller_override=None):
@@ -644,7 +641,7 @@ async def integration_round_trip(tmp: Path) -> None:
           result2["handled"] is False and result2["replies"] == [], repr(result2))
 
 
-async def integration_second_marker_stripped(tmp: Path) -> None:
+async def test_second_marker_stripped(tmp: Path) -> None:
     """A second, hallucinated [AT:] marker must be stripped from the outgoing
     text instead of leaking literally: the validator removes markers before
     whitelisting, so nothing downstream would catch the leftover."""
@@ -676,7 +673,7 @@ async def integration_second_marker_stripped(tmp: Path) -> None:
           "[AT:" not in joined and "omw" in joined, repr(result))
 
 
-async def unit_b64_image_fetch(tmp: Path) -> None:
+async def test_b64_image_fetch(tmp: Path) -> None:
     """base64:// pseudo-URLs (b64-only gateway inbound images) decode to
     bytes locally instead of being routed through httpx."""
     agent = make_agent(tmp)
@@ -687,7 +684,7 @@ async def unit_b64_image_fetch(tmp: Path) -> None:
     check("b64 fetch: invalid data returns None", bad is None, repr(bad))
 
 
-async def regression_bounded_image_inputs(tmp: Path) -> None:
+async def test_bounded_image_inputs(tmp: Path) -> None:
     """Every image source is bounded, contained, and signature-validated."""
     agent = make_agent(tmp)
     png = b"\x89PNG\r\n\x1a\n" + b"x" * 32
@@ -775,7 +772,7 @@ async def regression_bounded_image_inputs(tmp: Path) -> None:
           data is None, None if data is None else str(len(data)))
 
 
-async def integration_same_mid_distinct_conversations(tmp: Path) -> None:
+async def test_same_mid_distinct_conversations(tmp: Path) -> None:
     """F6 regression: per-chat message counters (Telegram/Slack) produce the
     same raw mid in different chats; both messages must be handled instead of
     the second being swallowed by the dedupe ring."""
@@ -810,7 +807,7 @@ async def integration_same_mid_distinct_conversations(tmp: Path) -> None:
           r2["handled"] is True, repr(r2))
 
 
-async def regression_forged_gateway_flag_rejected(tmp: Path) -> None:
+async def test_forged_gateway_flag_rejected(tmp: Path) -> None:
     """F3 regression: a forged "_gateway": true in a /webhook/qq-style
     payload (no sink set) must not bypass the private-chat whitelist, while
     the same DM through handle_gateway (sink set) must still pass."""
@@ -855,7 +852,7 @@ async def regression_forged_gateway_flag_rejected(tmp: Path) -> None:
           repr((result, reached)))
 
 
-async def regression_no_sink_send(tmp: Path) -> None:
+async def test_no_sink_send(tmp: Path) -> None:
     """QQ-path regression: with no sink set, a non-numeric group id must not
     raise out of _napcat_send_group — it takes the network-failure path."""
     agent = make_agent(tmp)
@@ -863,7 +860,7 @@ async def regression_no_sink_send(tmp: Path) -> None:
     check("regression: no-sink send returns False without raising", ok is False, repr(ok))
 
 
-async def regression_numeric_at_kept_in_payload(tmp: Path) -> None:
+async def test_numeric_at_kept_in_payload(tmp: Path) -> None:
     """The non-numeric at-target guard must not affect numeric QQ targets and
     must drop prefixed ids on the QQ path (no sink)."""
     agent = make_agent(tmp)
@@ -1047,7 +1044,7 @@ def test_memory_candidates_reject_instructions() -> None:
               and '"Alice likes cats"' in rendered, rendered)
 
 
-async def regression_forget_no_overdelete(tmp: Path) -> None:
+async def test_forget_no_overdelete(tmp: Path) -> None:
     """'forget X' must only delete memories whose text contains X — not memories
     that happen to be a substring of the forget sentence (the old bidirectional
     match wrongly wiped unrelated short memories)."""
@@ -1068,7 +1065,7 @@ async def regression_forget_no_overdelete(tmp: Path) -> None:
           "has a ragdoll cat" not in texts2 and "cat" in texts2, repr(texts2))
 
 
-async def regression_learned_summary_command(tmp: Path) -> None:
+async def test_learned_summary_command(tmp: Path) -> None:
     """'what have you learned' shows this room's memories, promoted material
     and pending proposals without a model call."""
     agent = make_agent(tmp)
@@ -1099,7 +1096,7 @@ async def regression_learned_summary_command(tmp: Path) -> None:
           agent._handle_memory_command(g, "TestBot did you learn python") is None)
 
 
-async def regression_memory_commands_are_caller_scoped(tmp: Path) -> None:
+async def test_memory_commands_are_caller_scoped(tmp: Path) -> None:
     agent = make_agent(tmp)
     g = "g-memory"
     agent.owner_qq = "owner"
@@ -1131,7 +1128,7 @@ async def regression_memory_commands_are_caller_scoped(tmp: Path) -> None:
           repr(agent.memories[g]))
 
 
-async def regression_auto_memory_preserves_manual(tmp: Path) -> None:
+async def test_auto_memory_preserves_manual(tmp: Path) -> None:
     """A burst of auto memories must not evict a manual ('remember') memory."""
     agent = make_agent(tmp)
     agent.memory_max = 3
@@ -1147,7 +1144,7 @@ async def regression_auto_memory_preserves_manual(tmp: Path) -> None:
           "manual important" in texts and len(texts) == 3, repr(texts))
 
 
-async def regression_throttle_send(tmp: Path) -> None:
+async def test_throttle_send(tmp: Path) -> None:
     """Outbound throttle: enforces a min interval between sends and drops beyond
     the per-target 60s cap (anti-flood). Never touches group/send locks."""
     from persona_agent.agent import _SEND_MAX_PER_MIN
@@ -1165,7 +1162,7 @@ async def regression_throttle_send(tmp: Path) -> None:
           sum(results) == _SEND_MAX_PER_MIN and results[-1] is False, repr(results))
 
 
-async def regression_mem_command_sends_outside_lock(tmp: Path) -> None:
+async def test_mem_command_sends_outside_lock(tmp: Path) -> None:
     """A memory command ('remember…') must send with the group lock RELEASED
     (so a long memory dump can't block the group), and still return handled=True."""
     agent = make_agent(tmp)
@@ -1191,7 +1188,7 @@ async def regression_mem_command_sends_outside_lock(tmp: Path) -> None:
           lock_held_during_send == [False], repr(lock_held_during_send))
 
 
-async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
+async def test_group_whitelist_gateway_bypass(tmp: Path) -> None:
     """With the QQ group whitelist configured (QQ_GROUPS), gateway groups
     (sink set) must still be handled, while an unlisted QQ group on the
     no-sink path is rejected — the whitelist the docs promise."""
@@ -1237,7 +1234,7 @@ async def regression_group_whitelist_gateway_bypass(tmp: Path) -> None:
           handled is False, repr(handled))
 
 
-async def regression_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
+async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
     """A forwarder-only platform gets proactive turns by inverting them.
 
     The agent cannot open a conversation on such a platform — the reply sink
@@ -1308,7 +1305,7 @@ async def regression_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None
           repr(seen[0][0] if seen else None))
 
 
-async def regression_a_collected_turn_does_not_simulate_typing(tmp: Path) -> None:
+async def test_a_collected_turn_does_not_simulate_typing(tmp: Path) -> None:
     """Typing simulation is a pause the reader sees — but only on QQ, where
     this coroutine and the chat window are the same timeline. Behind a sink
     they are not: every chunk is collected and handed back as a finished list,
@@ -1373,7 +1370,7 @@ async def regression_a_collected_turn_does_not_simulate_typing(tmp: Path) -> Non
     check("QQ turn: typing simulation still runs", typed != [], repr(typed))
 
 
-async def regression_silence_still_claims_the_conversation(tmp: Path) -> None:
+async def test_silence_still_claims_the_conversation(tmp: Path) -> None:
     """Choosing not to speak is an answer, and the forwarder has to hear it.
 
     The forwarder suppresses its own model only for conversations the agent
@@ -1421,7 +1418,7 @@ async def regression_silence_still_claims_the_conversation(tmp: Path) -> None:
           repr(refused))
 
 
-async def regression_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
+async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
     """A forwarder allowed to mint native ids does NOT thereby escape the
     whitelists those ids are written in.
 
@@ -1507,7 +1504,7 @@ async def regression_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
           repr(foreign))
 
 
-async def regression_think_full_path_search_hint(tmp: Path) -> None:
+async def test_think_full_path_search_hint(tmp: Path) -> None:
     """_think's full prompt-build path must run end to end (a search_hint
     referencing an undefined name once broke every group reply with a
     NameError), and search_hint must carry the real trigger text rather than
@@ -1527,7 +1524,7 @@ async def regression_think_full_path_search_hint(tmp: Path) -> None:
           captured.get("search_hint") == "what is black myth wukong", repr(captured))
 
 
-async def regression_eval_auto_append_examples(tmp: Path) -> None:
+async def test_eval_auto_append_examples(tmp: Path) -> None:
     """A score-5 reply must be recorded as evidence and proposed as a candidate
     — and must never reach the few-shot pool on its own.
 
@@ -1592,7 +1589,7 @@ async def regression_eval_auto_append_examples(tmp: Path) -> None:
           "the agent promoted its own homework")
 
 
-async def regression_gateway_conv_eviction(tmp: Path) -> None:
+async def test_gateway_conv_eviction(tmp: Path) -> None:
     """Gateway conversation keys are LRU-capped so a runaway/malicious
     forwarder can't grow the per-conversation dicts without bound. In-flight
     (locked) conversations are skipped; QQ-path state is never touched."""
@@ -1648,7 +1645,7 @@ async def regression_gateway_conv_eviction(tmp: Path) -> None:
     check("conv-evict: QQ group state untouched", "123456" in agent.buffers)
 
 
-async def regression_gateway_inflight_is_pinned(tmp: Path) -> None:
+async def test_gateway_inflight_is_pinned(tmp: Path) -> None:
     from persona_agent.agent import _MAX_GATEWAY_CONVS
 
     agent = make_agent(tmp)
@@ -1686,7 +1683,7 @@ async def regression_gateway_inflight_is_pinned(tmp: Path) -> None:
           repr(getattr(agent, "_gateway_inflight", None)))
 
 
-async def regression_gateway_burst_reclaims_idle_state(tmp: Path) -> None:
+async def test_gateway_burst_reclaims_idle_state(tmp: Path) -> None:
     from persona_agent.agent import _MAX_GATEWAY_CONVS
 
     agent = make_agent(tmp)
@@ -1721,7 +1718,7 @@ async def regression_gateway_burst_reclaims_idle_state(tmp: Path) -> None:
           repr(len(agent._gateway_conv_lru)))
 
 
-async def regression_native_gateway_never_enters_lru(tmp: Path) -> None:
+async def test_native_gateway_never_enters_lru(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.gateway_native_platforms = ("aiocqhttp",)
     agent.buffers["123"].append({"name": "Alice", "text": "keep", "user_id": "42"})
@@ -1740,7 +1737,7 @@ async def regression_native_gateway_never_enters_lru(tmp: Path) -> None:
           and not agent._gateway_inflight)
 
 
-async def regression_private_send_commit_serialized(tmp: Path) -> None:
+async def test_private_send_commit_serialized(tmp: Path) -> None:
     agent = make_agent(tmp)
     pkey = "private:42"
     send_started = asyncio.Event()
@@ -1779,7 +1776,7 @@ async def regression_private_send_commit_serialized(tmp: Path) -> None:
           repr(agent.private_history["42"]))
 
 
-async def regression_group_outbound_orders_buffer(tmp: Path) -> None:
+async def test_group_outbound_orders_buffer(tmp: Path) -> None:
     agent = make_agent(tmp)
     send_started = asyncio.Event()
     release_send = asyncio.Event()
@@ -1830,7 +1827,7 @@ async def regression_group_outbound_orders_buffer(tmp: Path) -> None:
           repr(rendered))
 
 
-async def regression_send_retry_only_pre_send_failures(tmp: Path) -> None:
+async def test_send_retry_only_pre_send_failures(tmp: Path) -> None:
     agent = make_agent(tmp)
 
     class FakeResponse:
@@ -1884,7 +1881,7 @@ async def regression_send_retry_only_pre_send_failures(tmp: Path) -> None:
           repr((connect_ok, connect_client.calls)))
 
 
-async def regression_send_requires_onebot_success(tmp: Path) -> None:
+async def test_send_requires_onebot_success(tmp: Path) -> None:
     agent = make_agent(tmp)
     cases = [
         ("confirmed", {"status": "ok", "retcode": 0, "data": {"message_id": 0}}, True),
@@ -1927,7 +1924,7 @@ class _ClientContext:
         return False
 
 
-async def regression_agent_aclose_owns_resources(tmp: Path) -> None:
+async def test_agent_aclose_owns_resources(tmp: Path) -> None:
     agent = make_agent(tmp)
     task_cancelled = asyncio.Event()
     sticker_cancelled = asyncio.Event()
@@ -1995,7 +1992,7 @@ def test_sticker_tagger_uses_judge_model() -> None:
               repr((a.stickers.tagger_model, a.judge_model)))
 
 
-async def regression_proactive_group_postprocessing(tmp: Path) -> None:
+async def test_proactive_group_postprocessing(tmp: Path) -> None:
     """The proactive group path must run the same post-processing as reactive
     replies: [AT:qq] extracted into at_user_id (not shipped as literal text),
     [CORE_UPDATE] committed, and mem persisted."""
@@ -2046,7 +2043,7 @@ async def regression_proactive_group_postprocessing(tmp: Path) -> None:
           acted2 is False and len(sent) == 1, repr((acted2, [s[1] for s in sent])))
 
 
-async def regression_proactive_dm_saves_mem(tmp: Path) -> None:
+async def test_proactive_dm_saves_mem(tmp: Path) -> None:
     """Proactive DMs use the same marker/filter/commit contract as reactive DMs."""
     agent = make_agent(tmp)
     agent.owner_qq = "55"
@@ -2092,7 +2089,7 @@ async def regression_proactive_dm_saves_mem(tmp: Path) -> None:
           repr(agent.memories.get("private:55")))
 
 
-async def regression_closed_gateway_sink_is_send_failure(tmp: Path) -> None:
+async def test_closed_gateway_sink_is_send_failure(tmp: Path) -> None:
     agent = make_agent(tmp)
     sink = GatewaySink()
     sink.closed = True
@@ -2110,7 +2107,7 @@ async def regression_closed_gateway_sink_is_send_failure(tmp: Path) -> None:
     check("closed gateway sink: nothing captured", sink.items == [], repr(sink.items))
 
 
-async def regression_pass_never_commits_model_memory(tmp: Path) -> None:
+async def test_pass_never_commits_model_memory(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.allowed_groups = set()
 
@@ -2157,7 +2154,7 @@ async def regression_pass_never_commits_model_memory(tmp: Path) -> None:
           repr(agent.memories.get("private:42")))
 
 
-async def regression_web_text_cannot_reach_control_plane(tmp: Path) -> None:
+async def test_web_text_cannot_reach_control_plane(tmp: Path) -> None:
     """A share card's and an image caption's text are web/attacker-derived, so
     they must be fenced out of the control plane exactly like a scraped page
     title already is.
@@ -2237,7 +2234,7 @@ async def regression_web_text_cannot_reach_control_plane(tmp: Path) -> None:
           "remember" not in sctrl, f"ctrl={sctrl!r}")
 
 
-async def regression_ocr_delegation_is_ssrf_gated(tmp: Path) -> None:
+async def test_ocr_delegation_is_ssrf_gated(tmp: Path) -> None:
     """The OCR fallback hands a URL to the protocol client, which fetches it
     with no SSRF controls of its own — a delegated fetch, so it must be gated
     here. It runs exactly when the direct fetch failed, and for an internal URL
@@ -2277,7 +2274,7 @@ async def regression_ocr_delegation_is_ssrf_gated(tmp: Path) -> None:
     check("ocr: nothing forwarded to the protocol client", posts == [], repr(posts))
 
 
-async def regression_share_card_type_confusion(tmp: Path) -> None:
+async def test_share_card_type_confusion(tmp: Path) -> None:
     """Share-card JSON is fully sender-controlled: non-string fields (int
     prompt, dict title, list url) must degrade to a placeholder instead of
     raising out of _extract_text and dropping the whole inbound message."""
@@ -2310,7 +2307,7 @@ async def regression_share_card_type_confusion(tmp: Path) -> None:
           "look at this" in text, repr(text))
 
 
-async def regression_b64_caption_cache_key(tmp: Path) -> None:
+async def test_b64_caption_cache_key(tmp: Path) -> None:
     """Gateway base64:// pseudo-URLs must be hashed before use as caption-cache
     keys — the raw string can be multiple MB of base64 per entry."""
     agent = make_agent(tmp)
@@ -2328,7 +2325,7 @@ async def regression_b64_caption_cache_key(tmp: Path) -> None:
     check("b64 cache: hashed key round-trips", hit == "a cute cat sticker", repr(hit))
 
 
-async def regression_ssrf_redirect_hops(tmp: Path) -> None:
+async def test_ssrf_redirect_hops(tmp: Path) -> None:
     """A public URL that 302s to an internal address must be refused at the
     redirect hop (the initial-URL _host_is_internal check can't see it), while
     public->public redirects keep working."""
@@ -2386,7 +2383,7 @@ async def regression_ssrf_redirect_hops(tmp: Path) -> None:
           repr((data2, fetched)))
 
 
-async def regression_memory_first_person_render(tmp: Path) -> None:
+async def test_memory_first_person_render(tmp: Path) -> None:
     """In zh mode, stored first-person memories must render with the speaker's
     name (the old r'\\b我\\b' pattern never matched inside Chinese text — CJK
     chars count as word chars, so the disambiguation was dead code)."""
@@ -2413,7 +2410,7 @@ async def regression_memory_first_person_render(tmp: Path) -> None:
           "I like spicy food" in out3, repr(out3))
 
 
-async def regression_rejected_reply_not_committed(tmp: Path) -> None:
+async def test_rejected_reply_not_committed(tmp: Path) -> None:
     """A reply the sanitizer fail-closes (bad token char) must take the PASS
     path BEFORE any state commit: no phantom bot line in the buffer, no
     last_reply_at/followup window, no on_reply, no send."""
@@ -2461,7 +2458,7 @@ async def regression_rejected_reply_not_committed(tmp: Path) -> None:
           agent.memories.get("555") in (None, []), repr(agent.memories.get("555")))
 
 
-async def regression_delivery_failure_not_committed(tmp: Path) -> None:
+async def test_delivery_failure_not_committed(tmp: Path) -> None:
     """Transport failure must not create assistant history, bot buffer lines,
     timestamps, memory, or a handled=True result."""
     from types import SimpleNamespace
@@ -2533,7 +2530,7 @@ async def regression_delivery_failure_not_committed(tmp: Path) -> None:
           repr(agent.memories.get("private:42")))
 
 
-async def regression_private_message_ids(tmp: Path) -> None:
+async def test_private_message_ids(tmp: Path) -> None:
     """Private sends expose the message IDs returned by NapCat."""
     agent = make_agent(tmp)
     agent._typing_delay = lambda _: 0.0
@@ -2562,7 +2559,7 @@ async def regression_private_message_ids(tmp: Path) -> None:
           getattr(result, "message_ids", None) == ["123"], repr(result))
 
 
-async def regression_truncated_reply_retries_once(tmp: Path) -> None:
+async def test_truncated_reply_retries_once(tmp: Path) -> None:
     """An empty reply with finish_reason=length must be diagnosed, not shrugged at.
 
     A reasoning model spends the budget on its chain of thought and can hit the
@@ -2657,7 +2654,7 @@ async def regression_truncated_reply_retries_once(tmp: Path) -> None:
     check("truncation: an empty stop is not retried", budgets == [1200], repr(budgets))
 
 
-async def regression_partial_delivery_is_committed(tmp: Path) -> None:
+async def test_partial_delivery_is_committed(tmp: Path) -> None:
     """A partially delivered reply must still be recorded.
 
     Multi-chunk replies are ordinary — _split_text splits on sentence
@@ -2716,7 +2713,7 @@ async def regression_partial_delivery_is_committed(tmp: Path) -> None:
           evaluated == [], repr(evaluated))
 
 
-async def regression_llm_fail_fallback_outside_lock(tmp: Path) -> None:
+async def test_llm_fail_fallback_outside_lock(tmp: Path) -> None:
     """The called-mode LLM-failure fallback must send with the group lock
     RELEASED and the send lock HELD (it used to send inside the group lock and
     without send_locks, stalling Phase-1 absorption during send retries)."""
@@ -2758,7 +2755,7 @@ async def regression_llm_fail_fallback_outside_lock(tmp: Path) -> None:
           len(bot_lines) == 1, repr(bot_lines))
 
 
-async def regression_web_desc_not_control_plane(tmp: Path) -> None:
+async def test_web_desc_not_control_plane(tmp: Path) -> None:
     """Fetched og:title/description must never drive control decisions: a page
     titled with the bot name + a memory command must not force called mode nor
     write/delete memories — while the enrichment still reaches the buffer."""
@@ -2887,7 +2884,7 @@ def test_every_napcat_call_goes_through_local_http() -> None:
           not offenders, ", ".join(offenders))
 
 
-async def regression_declared_style_reaches_the_private_prompt(tmp: Path) -> None:
+async def test_declared_style_reaches_the_private_prompt(tmp: Path) -> None:
     """A `[style]` block a persona declares must actually change the DM.
 
     `prompts.py` grew a full 1:1 renderer set — `private_style_guide`,
@@ -2931,100 +2928,3 @@ async def regression_declared_style_reaches_the_private_prompt(tmp: Path) -> Non
           "~40-80 characters" not in text, "")
     check("style: a DM reads the 1:1 protocol, not the group one",
           REASONING_PROTOCOL not in text and STYLE_GUIDE not in text, "")
-
-
-async def main_async() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        await integration_round_trip(tmp / "a")
-        await regression_no_sink_send(tmp / "b")
-        await regression_numeric_at_kept_in_payload(tmp / "c")
-        await integration_second_marker_stripped(tmp / "d")
-        await unit_b64_image_fetch(tmp / "e")
-        await regression_bounded_image_inputs(tmp / "f")
-        await integration_same_mid_distinct_conversations(tmp / "g")
-        await regression_forged_gateway_flag_rejected(tmp / "h")
-        await regression_forget_no_overdelete(tmp / "i")
-        await regression_learned_summary_command(tmp / "ii")
-        await regression_memory_commands_are_caller_scoped(tmp / "ii")
-        await regression_auto_memory_preserves_manual(tmp / "j")
-        await regression_throttle_send(tmp / "k")
-        await regression_mem_command_sends_outside_lock(tmp / "l")
-        await regression_gateway_conv_eviction(tmp / "m")
-        await regression_gateway_inflight_is_pinned(tmp / "mm")
-        await regression_gateway_burst_reclaims_idle_state(tmp / "burst")
-        await regression_native_gateway_never_enters_lru(tmp / "native-lru")
-        await regression_private_send_commit_serialized(tmp / "mmm")
-        await regression_group_outbound_orders_buffer(tmp / "mmmm")
-        await regression_send_retry_only_pre_send_failures(tmp / "mmmmm")
-        await regression_send_requires_onebot_success(tmp / "receipts")
-        await regression_agent_aclose_owns_resources(tmp / "mmmmmm")
-        await regression_group_whitelist_gateway_bypass(tmp / "n")
-        await regression_native_gateway_obeys_the_qq_whitelists(tmp / "n2")
-        await regression_silence_still_claims_the_conversation(tmp / "n3")
-        await regression_a_collected_turn_does_not_simulate_typing(tmp / "n4")
-        await regression_a_proactive_turn_keeps_its_cue_transient(tmp / "n5")
-        await regression_think_full_path_search_hint(tmp / "o")
-        await regression_eval_auto_append_examples(tmp / "p")
-        await regression_proactive_group_postprocessing(tmp / "q")
-        await regression_proactive_dm_saves_mem(tmp / "r")
-        await regression_closed_gateway_sink_is_send_failure(tmp / "rr")
-        await regression_pass_never_commits_model_memory(tmp / "rrr")
-        await regression_share_card_type_confusion(tmp / "s")
-        await regression_web_text_cannot_reach_control_plane(tmp / "wt")
-        await regression_ocr_delegation_is_ssrf_gated(tmp / "ocr")
-        await regression_b64_caption_cache_key(tmp / "t")
-        await regression_ssrf_redirect_hops(tmp / "u")
-        await regression_memory_first_person_render(tmp / "v")
-        await regression_rejected_reply_not_committed(tmp / "w")
-        await regression_delivery_failure_not_committed(tmp / "x")
-        await regression_private_message_ids(tmp / "y")
-        await regression_truncated_reply_retries_once(tmp / "tr")
-        await regression_partial_delivery_is_committed(tmp / "pd")
-        await regression_llm_fail_fallback_outside_lock(tmp / "z")
-        await regression_web_desc_not_control_plane(tmp / "zz")
-        await regression_declared_style_reaches_the_private_prompt(tmp / "sty")
-
-
-def main() -> int:
-    test_synthesize_group_self_mention()
-    test_core_update_prompt_contract_is_consistent()
-    test_synthesize_mention_other_user()
-    test_synthesize_is_at_me_prepend()
-    test_synthesize_private()
-    test_synthesize_reply_keeps_namespaced_id()
-    test_synthesize_mid_namespacing()
-    test_a_native_platform_mints_the_ids_napcat_would()
-    test_synthesize_image_segments()
-    test_message_to_reply_item()
-    test_native_mention_is_namespaced_on_the_way_out()
-    test_unknown_segment_types_are_dropped_not_crashed()
-    test_sink_closed_drop()
-    test_parser_rejects_naked_text()
-    test_validator_accepts_prefixed_at_marker()
-    test_plugin_reply_id_strip()
-    test_quickstart_set_env_values()
-    test_sticker_marker_whitespace()
-    test_sanitize_strips_core_update()
-    test_evict_memory_prefers_auto()
-    test_host_is_internal()
-    test_host_is_internal_never_resolves()
-    test_pick_group_model_mode_exempt()
-    test_extract_core_update_no_persist()
-    test_memory_candidates_reject_instructions()
-    test_sticker_tagger_uses_judge_model()
-    test_the_channel_key_table_is_one_table()
-    test_every_napcat_call_goes_through_local_http()
-    with tempfile.TemporaryDirectory() as d:
-        test_runtime_learning_paths(Path(d))
-    asyncio.run(main_async())
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

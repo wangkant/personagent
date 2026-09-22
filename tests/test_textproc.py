@@ -1,8 +1,8 @@
 """The reply sanitizer's character policy.
 
-Run from the repo root with no test framework required:
+Run from the repo root:
 
-    python tests/test_textproc.py
+    python -m pytest tests/test_textproc.py
 
 Two halves of one code path. Half (a) is a LIVE PRODUCTION BUG measured
 against the bundled personas of the day: the emoji strip covered the
@@ -51,17 +51,9 @@ is somebody else's test, and it exists.
 """
 from __future__ import annotations
 
-import sys
 import unicodedata
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from _report import run_suite, use_utf8_stdout  # noqa: E402
-
-use_utf8_stdout()
-
-from persona_agent.textproc import (  # noqa: E402
+from persona_agent.textproc import (
     MAX_REPLY_CHARS,
     OPTIONAL_CHARSETS,
     TRUNCATION_SEAM,
@@ -72,17 +64,14 @@ from persona_agent.textproc import (  # noqa: E402
     _focus_tokens,
 )
 
-_failures: list[str] = []
-
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    """The house reporter, on a stream that cannot raise — this suite prints
-    emoji and kana in its failure details, and `tests/_report.py` records the
-    measurement of what cp936 does to those."""
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 # Every optional charset at once, plus emoji: the widest character policy a
@@ -2269,69 +2258,3 @@ def test_a_single_character_trigger_still_scores_for_retrieval() -> None:
     check("multi-character runs are unchanged",
           _focus_tokens("今天天气", "zh") == {"今天", "天天", "天气"},
           repr(_focus_tokens("今天天气", "zh")))
-
-
-def main() -> None:
-    run_suite([
-        test_a_compatibility_twin_inherits_the_fate_of_its_fold,
-        test_truncation_never_creates_what_the_validator_refuses,
-        test_a_separator_stays_with_the_clause_it_terminates,
-        test_a_single_character_trigger_still_scores_for_retrieval,
-        test_the_six_measured_emoji_cases_no_longer_drop_the_reply,
-        test_an_emoji_modifier_alone_cannot_drop_a_reply,
-        test_a_keycap_and_a_subdivision_flag_survive,
-        test_an_emoji_persona_keeps_its_emoji,
-        test_an_emoji_persona_still_loses_invisible_controls,
-        test_the_tag_block_is_not_a_smuggling_channel_for_an_emoji_persona,
-        test_a_bound_modifier_is_kept_only_where_it_modifies_something,
-        test_no_invisible_code_point_survives_under_any_style,
-        test_the_optional_charsets_are_opt_in_and_the_default_strips_not_drops,
-        test_the_ascii_arrow_stays_a_hard_reject,
-        test_the_arrows_opt_in_buys_narration_and_not_a_frame,
-        test_kana_counts_as_content_for_the_zh_language_gate,
-        test_typography_is_normalised_rather_than_widened,
-        test_ordinary_latin_and_prices_no_longer_drop_the_reply,
-        test_decorative_symbol_blocks_lose_the_glyph_not_the_message,
-        test_the_whole_dash_family_degrades_to_a_hyphen,
-        test_the_rest_of_the_quotation_marks_degrade_too,
-        test_the_line_and_paragraph_separators_are_line_breaks,
-        test_the_emoji_outside_an_emoji_block_lose_the_glyph_not_the_message,
-        test_the_doubled_punctuation_emoji_keep_their_emphasis,
-        test_the_new_tiers_did_not_widen_the_whitelist,
-        test_the_named_scripts_answer_instead_of_silencing,
-        test_the_script_tier_admits_letters_and_nothing_else,
-        test_the_scripts_punctuation_degrades_rather_than_silencing,
-        test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not,
-        test_over_length_truncates_with_a_visible_seam,
-        test_the_cut_lands_on_a_word_boundary_in_the_final_quarter,
-        test_a_truncation_that_eats_the_last_letter_drops_rather_than_releases,
-        test_a_leak_shape_past_the_cap_is_not_truncated_into_acceptance,
-        test_a_persona_cannot_raise_its_own_length_cap,
-        test_a_persona_cannot_shorten_its_leash_into_silence,
-        test_the_token_leak_corpus_is_still_rejected_after_the_widening,
-        test_the_corpus_detects_an_over_broad_widening,
-        test_no_style_can_release_more_than_the_cap_per_turn,
-        test_the_hard_reject_set_is_not_a_style_field,
-        test_the_hard_reject_set_is_closed_under_unicode_folding,
-        test_cjk_bracket_structure_is_stripped_rather_than_released,
-        test_reply_style_from_card_is_the_carrier,
-        test_a_card_cannot_widen_the_charset_by_accident,
-        test_omitting_the_style_is_the_pre_m2_fail_closed_default,
-        test_everything_the_old_whitelist_accepted_is_still_accepted,
-        test_a_script_named_in_no_tier_still_drops_the_whole_reply,
-        test_the_default_path_widening_admits_letters_and_prices_only,
-        test_the_reasoning_leak_guard_and_marker_strip_are_untouched,
-        test_fluent_deliberation_before_the_answer_is_a_leak,
-        test_no_persona_introduces_itself_as_its_vendor,
-        test_crlf_pacing_survives_and_no_bubble_is_a_wall,
-        test_the_raised_bands_still_split_into_bubbles_and_fit_the_cap,
-        test_the_bubble_split_is_unchanged,
-    ], check)
-    if _failures:
-        print(f"\n{len(_failures)} check(s) FAILED: " + ", ".join(_failures))
-        sys.exit(1)
-    print("\nall checks passed")
-
-
-if __name__ == "__main__":
-    main()

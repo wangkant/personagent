@@ -101,7 +101,3 @@ elif sys.argv[1:3] == ["-m", "pip"]:
         result, calls = self.run_start(DEPS_PRESENT="1")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[-1][1:], ["main.py"])
-
-
-if __name__ == "__main__":
-    unittest.main()

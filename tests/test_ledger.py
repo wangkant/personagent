@@ -7,28 +7,23 @@ tests assert each of those boundaries holds — including the ones that are only
 visible by their absence, like "five people laughed and the example pool is
 still empty".
 
-Run from the repo root, no test framework:
+Run from the repo root:
 
-    python tests/test_ledger.py
+    python -m pytest tests/test_ledger.py
 """
 from __future__ import annotations
 
-import asyncio
 import json
-import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+import pytest
 
-from persona_agent import candidates, evidence, promotion, reactions  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
-from persona_agent.paths import runtime_dir  # noqa: E402
+from persona_agent import candidates, evidence, promotion, reactions
+from persona_agent.agent import Agent
+from persona_agent.paths import runtime_dir
 
-_failures: list[str] = []
 NOW = 1_800_000_000.0
 
 
@@ -39,10 +34,31 @@ def stamp(seconds: float) -> str:
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    status = "PASS" if cond else "FAIL"
-    print(f"[{status}] {name}" + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
+
+
+def _runtime_listing() -> list[str]:
+    real = runtime_dir()
+    return sorted(p.name for p in real.glob("*")) if real.exists() else []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def real_runtime_directory_is_untouched():
+    """Not one test in this file may write the checkout's own runtime state.
+
+    Each redirects its paths into a temp tree, and a leak shows up as a file
+    that simply appears — so the assertion is over the module as a whole
+    rather than over any single test."""
+    before = _runtime_listing()
+    yield
+    after = _runtime_listing()
+    check("the real runtime directory was not written", after == before,
+          f"{before} -> {after}")
 
 
 # ---------------------------------------------------------------------------
@@ -757,7 +773,6 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
               real not in resolved.parents, str(resolved))
 
 
-
 def test_corroboration_means_people_not_events() -> None:
     """One member producing two events is not corroboration.
 
@@ -1390,55 +1405,3 @@ def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
     check("and the reason names a person, not a count",
           "person" in decision.reason and "/1 strong" not in decision.reason,
           decision.reason)
-
-
-def main() -> int:
-    real = runtime_dir()
-    before = sorted(p.name for p in real.glob("*")) if real.exists() else []
-
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        asyncio.run(test_one_positive_promotes_nothing(tmp / "t1"))
-        asyncio.run(test_repeated_weak_promotes_nothing(tmp / "t2"))
-        asyncio.run(test_single_correction_proposes_only(tmp / "t3"))
-        asyncio.run(test_two_events_with_a_strong_one_promote(tmp / "t4"))
-        test_expired_counter_evidence_does_not_block_new_corroboration()
-        asyncio.run(test_incompatible_scopes_are_not_combined(tmp / "t5"))
-        asyncio.run(test_conflicting_evidence_blocks_promotion(tmp / "t6"))
-        asyncio.run(test_retry_provides_supporting_evidence(tmp / "t7"))
-        asyncio.run(test_duplicate_events_are_idempotent(tmp / "t8"))
-        test_evidence_identity_includes_source_and_full_scope()
-        test_invalid_log_rows_are_quarantined_from_replay(tmp / "t8c")
-        asyncio.run(test_restart_and_replay_are_identical(tmp / "t9"))
-        asyncio.run(test_rollback_removes_from_retrieval(tmp / "t10"))
-        asyncio.run(test_supersession_replaces_the_active_preference(tmp / "t11"))
-        asyncio.run(test_logs_are_append_only(tmp / "t12"))
-        test_legacy_feedback_still_loads(tmp / "t13")
-        asyncio.run(test_legacy_rows_still_retractable(tmp / "t13b"))
-        test_paths_never_touch_real_runtime_state(tmp / "t14")
-        test_corroboration_means_people_not_events()
-        test_a_hand_edited_strength_cannot_buy_a_promotion()
-        test_moving_on_is_not_acceptance()
-        test_stale_evidence_is_refused()
-        test_a_rejected_rewrite_is_not_promoted_later()
-        test_an_unwitnessed_proposal_does_not_veto_a_real_correction()
-        test_the_live_projection_equals_a_cold_replay(tmp / "t15")
-        test_a_retry_acceptance_does_not_argue_against_its_own_pair()
-        test_related_events_covers_the_rewrite()
-        test_an_over_long_scope_field_stays_distinct()
-        test_a_positive_example_waits_for_a_person_and_says_so()
-
-    after = sorted(p.name for p in real.glob("*")) if real.exists() else []
-    check("14: the real runtime directory was not written",
-          before == after, f"{before} -> {after}")
-
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -4,23 +4,20 @@ from __future__ import annotations
 import io
 import json
 import os
-import sys
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-import quickstart  # noqa: E402
-
-FAILURES: list[str] = []
+import quickstart
 
 
-def check(name: str, condition: bool, detail: str = "") -> None:
-    print(f"[{'PASS' if condition else 'FAIL'}] {name}" + ("" if condition else f": {detail}"))
-    if not condition:
-        FAILURES.append(name)
+def check(name: str, cond: bool, detail: str = "") -> None:
+    """Assert `cond`, naming the property so a failure reads as English.
+
+    The suites state a property per line rather than one per function, and
+    they keep saying it that way; this turns each statement into the assert
+    pytest reports on."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def test_plugin_config_is_merged_not_replaced() -> None:
@@ -147,19 +144,3 @@ def test_agent_home_divergence_warning() -> None:
             os.environ.pop("AGENT_HOME", None)
         else:
             os.environ["AGENT_HOME"] = saved
-
-
-def main() -> int:
-    test_plugin_config_is_merged_not_replaced()
-    test_connect_writes_both_sides()
-    test_platform_entry_replaces_same_id_and_keeps_the_rest()
-    test_agent_home_divergence_warning()
-    if FAILURES:
-        print(f"{len(FAILURES)} check(s) FAILED: {FAILURES}")
-        return 1
-    print("all quickstart checks passed")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
