@@ -31,6 +31,12 @@ REQUIRED = ("LLM_API_KEY",)
 #: and behaves oddly rather than not running.
 WANTED = {
     "BOT_NAME": "the persona has no name, so it cannot notice being called",
+    # Emptied rather than unset is the whole point: `os.getenv` only applies
+    # its default when the key is ABSENT, so `LLM_MODEL=` in a hand-edited
+    # `.env` sends `{"model": ""}` on every completion — a guaranteed 400 that
+    # also arms the fallback cooldown. `PRIVATE_MODEL` was given a runtime
+    # fallback for exactly this (see agent.py); the primary model has none.
+    "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
 #: Names a live `.env` may legitimately carry that the template does not.
@@ -51,6 +57,36 @@ TEMPLATE_EXEMPT = frozenset({
     # deployment that legitimately sets it gets told it is a typo.
     "ANTHROPIC_PRIVATE_MODEL",
 })
+
+
+def _base_url_needs_full_path(base: str) -> bool:
+    """Does this base URL hit the gap `chat_completions_url` documents?
+
+    `endpoints.chat_completions_url` accepts a provider root or a `/v1` base
+    and asks callers on a custom version path (Zhipu's `/api/paas/v4`, say) to
+    supply the complete endpoint themselves. Nothing enforces that: give it a
+    `/v4` base and it silently returns `.../v4/v1/chat/completions`, which no
+    provider serves, and the first sign is a 404 on every reply.
+
+    Checked here rather than in `chat_completions_url` because that function
+    is on the per-turn hot path, where a warning per call would flood the log.
+    A startup finding says it once, before the first turn.
+
+    Deliberately narrow: only a trailing `/vN` segment that is not `/v1`. The
+    general fallback branch exists to serve multi-segment provider roots
+    behind a reverse proxy (`https://gateway.corp/llm-proxy`), so segment
+    counting would report those as broken when they are fine.
+    """
+    from urllib.parse import urlsplit
+
+    if not base:
+        return False
+    path = urlsplit(base.strip().rstrip("/")).path.rstrip("/")
+    if not path or path.endswith("/chat/completions"):
+        return False
+    last = path.rsplit("/", 1)[-1]
+    return (len(last) > 1 and last[0] == "v" and last[1:].isdigit()
+            and last != "v1")
 
 
 def private_model_from_env(env=None) -> str:
@@ -208,6 +244,15 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "is empty while the rest of the QQ configuration is set — the bot "
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
+
+    base_url = str(configured.get("LLM_BASE_URL") or "").strip()
+    if _base_url_needs_full_path(base_url):
+        findings.append(Finding(
+            "WARN", "LLM_BASE_URL",
+            f"ends in a custom version path ({base_url}) — `chat_completions_url`"
+            " only recognises a bare root or a /v1 base, so it will append"
+            " /v1/chat/completions and produce a URL the provider does not"
+            " serve. Give the complete /chat/completions endpoint instead"))
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))

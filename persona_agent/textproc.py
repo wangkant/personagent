@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
 
+from .config_env import env_float
+
 
 logger = logging.getLogger("agent")
 
@@ -189,10 +191,7 @@ SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
 def _env_tz_offset() -> float:
     """TZ_OFFSET_HOURS as hours (default UTC+8). Read on every call, never
     cached, so a reload or a test can change it between turns."""
-    try:
-        return float(os.getenv("TZ_OFFSET_HOURS", "8"))
-    except ValueError:
-        return 8.0
+    return env_float("TZ_OFFSET_HOURS", 8.0)
 
 
 # ===========================================================================
