@@ -23,7 +23,9 @@ Supporting modules, all pure logic with no agent state:
 - reactions  reaction attribution + adjudicator prompts
 - evolution  eval -> feedback conversion, dedup, pool trimming
 - gateway    platform-neutral inbound event schema + reply sink
+- channels   the one place conversation / memory / learning keys are derived from an event
 - stickers   sticker library: steal -> tag -> persona-fit gates -> feedback
+- lineage    which persona-document hashes count as one character, so an edit doesn't orphan what was learned
 - health     startup / runtime environment checks
 
 Entry points live at the repo root (main.py, try_chat.py, quickstart.py).

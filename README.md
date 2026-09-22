@@ -177,7 +177,9 @@ Feedback first becomes a candidate. Automatic promotion requires compatible evid
 .venv/bin/python tools/candidates_admin.py list --state promoted
 .venv/bin/python tools/candidates_admin.py show <id>
 .venv/bin/python tools/candidates_admin.py promote <id>
+.venv/bin/python tools/candidates_admin.py reject <id>
 .venv/bin/python tools/candidates_admin.py rollback <id>
+.venv/bin/python tools/candidates_admin.py supersede <old_id> <new_id>
 ```
 
 `REACT_LEARN`, `REACT_ELICIT`, and `PROMOTE_AUTO` are enabled by default. Feedback classification makes additional model calls; disable these settings in `.env` if you do not need them. `EVAL_ENABLE` and `EVOLVE_AUTO` are off by default. Rolling back a candidate stops its use but does not erase the underlying records.
