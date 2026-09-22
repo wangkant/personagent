@@ -18,6 +18,7 @@ Neutral inbound event schema (the body of POST /webhook/gateway):
       "sender_name":     str,
       "self_id":         str,                    # the bot's own id on the platform
       "message_id":      str | int | null,
+      "source_timestamp": int,                   # REQUIRED; unix seconds
       "is_at_me":        bool,
       "segments": [
         {"type": "text", "text": str}
@@ -29,6 +30,14 @@ Neutral inbound event schema (the body of POST /webhook/gateway):
       "raw_text":        str,
       "proactive":       bool?                   # see below
     }
+
+`source_timestamp` is the moment the SOURCE platform stamped the message, not
+the moment the forwarder sent it on: the two ages are checked separately, so a
+forwarder that retries for a minute is not mistaken for a replayed event. It is
+rejected when it differs from now by more than GATEWAY_SOURCE_MAX_AGE_SECONDS
+(`_gateway_event_is_fresh` in main.py), and it is required — an event without it
+is a 400, which is why it appears in `main._validate_event_payload`'s required
+tuple and in the forwarder plugin's own copy of this schema.
 
 `proactive` marks a turn NOBODY SENT. It says the text on this event is a cue
 the CALLER wrote to brief the persona — "they have been quiet a while, say
@@ -72,6 +81,10 @@ from typing import Optional
 from . import channels
 
 logger = logging.getLogger("agent.gateway")
+
+#: Inbound segment types this version understands. Anything else is dropped
+#: (see synthesize_onebot_payload) — listed here so the drop can say so.
+_KNOWN_SEGMENT_TYPES = frozenset({"text", "mention", "image", "emoji", "reply"})
 
 
 def _ns_mid(platform: str, native: bool, conversation_id, mid) -> str:
@@ -131,11 +144,26 @@ current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.Conte
 )
 
 
-def message_to_reply_item(message) -> dict:
+def message_to_reply_item(
+        message, *, platform: str = "", native: bool = False,
+        bot_id: str = "") -> dict:
     """Convert one NapCat-shaped message (str or v11 segment list, exactly
     what _napcat_send_group/_napcat_send_private receive) into one neutral
     reply item. The send paths only ever emit a bare text chunk, [at?, text]
-    or [at?, image base64://...], so a single folded item is lossless."""
+    or [at?, image base64://...], so a single folded item is lossless.
+
+    `platform`/`native` re-namespace an outbound mention. Inbound, `_ns` mints
+    ids for a native platform BARE, because every store on disk is keyed that
+    way — but `at_user_id` is read by the forwarder, not by a store, and the
+    forwarder resolves "<platform>:<raw>". So a mention that came in bare goes
+    back out bare, and the reference client drops it on the floor: on the
+    supported QQ path (GATEWAY_NATIVE_PLATFORMS=aiocqhttp) every group
+    @-mention silently disappeared. Restoring the prefix here keeps the two
+    spellings where they each belong — bare for the ledgers, namespaced on the
+    wire — and leaves `_ns` and every id in every store untouched.
+
+    `bot_id` is never prefixed: it is the agent's own id on the native side,
+    and addressing it would make the forwarder @ the bot itself."""
     if isinstance(message, str):
         return {"type": "text", "text": message}
     at_user_id = ""
@@ -159,6 +187,9 @@ def message_to_reply_item(message) -> dict:
     else:
         item = {"type": "text", "text": "".join(texts)}
     if at_user_id:
+        if (native and platform and ":" not in at_user_id
+                and at_user_id != str(bot_id)):
+            at_user_id = f"{platform}:{at_user_id}"
         item["at_user_id"] = at_user_id
     return item
 
@@ -169,7 +200,17 @@ class GatewaySink:
     (e.g. from a background task that inherited the context) is dropped with
     a warning instead of being silently lost in a dead response."""
 
-    def __init__(self) -> None:
+    def __init__(self, platform: str = "", native: bool = False,
+                 bot_id: str = "") -> None:
+        # Which platform this turn arrived from, and whether the operator
+        # authorized it to mint bare (native-spelled) ids. Both are needed to
+        # put an outbound mention back into the "<platform>:<raw>" form the
+        # forwarder resolves — see message_to_reply_item. The defaults
+        # reproduce the previous behaviour exactly, so a bare GatewaySink()
+        # is unchanged.
+        self.platform = str(platform or "")
+        self.native = bool(native)
+        self.bot_id = str(bot_id or "")
         self.items: list[dict] = []
         self.closed = False
         # Set once this turn clears the admission gates. It answers a
@@ -185,7 +226,9 @@ class GatewaySink:
             logger.warning("[Gateway] sink already closed; dropping late reply: %r",
                            str(message)[:120])
             return False
-        self.items.append(message_to_reply_item(message))
+        self.items.append(message_to_reply_item(
+            message, platform=self.platform, native=self.native,
+            bot_id=self.bot_id))
         return True
 
 
@@ -222,8 +265,20 @@ def synthesize_onebot_payload(
     has_self_mention = False
     for seg in event.get("segments") or []:
         if not isinstance(seg, dict):
+            logger.debug("[Gateway] %s: dropping non-dict segment %s",
+                         platform, type(seg).__name__)
             continue
         t = seg.get("type")
+        if t not in _KNOWN_SEGMENT_TYPES:
+            # Graceful degradation is intended — a forwarder may legitimately
+            # send a segment type this version predates. DEBUG, not WARNING,
+            # so forward-compatible traffic is not reported as a fault; but
+            # not silence either, because a typo ("iamge") and a sticker from
+            # next year's plugin look identical from here, and today both
+            # leave the reader's message quietly truncated.
+            logger.debug("[Gateway] %s: dropping unknown segment type %r",
+                         platform, t)
+            continue
         if t == "text":
             message.append({"type": "text", "data": {"text": str(seg.get("text", ""))}})
         elif t == "mention":

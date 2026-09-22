@@ -339,6 +339,66 @@ def test_message_to_reply_item() -> None:
           item == {"type": "image", "b64": "QUJD", "at_user_id": "telegram:42"}, repr(item))
 
 
+def test_native_mention_is_namespaced_on_the_way_out() -> None:
+    """A native platform mints ids BARE inbound, for the ledgers. Outbound,
+    `at_user_id` is read by the FORWARDER, which resolves "<platform>:<raw>"
+    and drops anything bare — so on the supported QQ path
+    (GATEWAY_NATIVE_PLATFORMS=aiocqhttp) every group @-mention silently
+    disappeared. The prefix has to be put back at the sink boundary."""
+    at_bare = [{"type": "at", "data": {"qq": "123456"}},
+               {"type": "text", "data": {"text": "oi"}}]
+
+    item = message_to_reply_item(at_bare)
+    check("native mention: unchanged when no platform is supplied",
+          item.get("at_user_id") == "123456", repr(item))
+
+    item = message_to_reply_item(at_bare, platform="aiocqhttp", native=True)
+    check("native mention: bare id is namespaced for the forwarder",
+          item.get("at_user_id") == "aiocqhttp:123456", repr(item))
+
+    item = message_to_reply_item(at_bare, platform="aiocqhttp", native=True,
+                                 bot_id="123456")
+    check("native mention: the bot's own id is never addressed",
+          item.get("at_user_id") == "123456", repr(item))
+
+    already = [{"type": "at", "data": {"qq": "telegram:42"}},
+               {"type": "text", "data": {"text": "hi"}}]
+    item = message_to_reply_item(already, platform="telegram", native=False)
+    check("non-native mention: an already-namespaced id is left alone",
+          item.get("at_user_id") == "telegram:42", repr(item))
+
+    item = message_to_reply_item(at_bare, platform="telegram", native=False)
+    check("non-native mention: a bare id is NOT promoted to namespaced",
+          item.get("at_user_id") == "123456", repr(item))
+
+    sink = GatewaySink(platform="aiocqhttp", native=True, bot_id="999")
+    sink.add(at_bare)
+    check("sink carries the platform into its items",
+          sink.items[0].get("at_user_id") == "aiocqhttp:123456",
+          repr(sink.items))
+
+
+def test_unknown_segment_types_are_dropped_not_crashed() -> None:
+    payload = synthesize_onebot_payload({
+        "platform": "telegram",
+        "message_type": "group",
+        "conversation_id": "c1",
+        "user_id": "u1",
+        "self_id": "bot",
+        "segments": [
+            {"type": "text", "text": "before"},
+            {"type": "iamge", "url": "http://x/y.png"},
+            {"type": "sticker_from_the_future", "id": "1"},
+            "not-a-dict",
+            {"type": "text", "text": "after"},
+        ],
+        "raw_text": "before after",
+    }, "10000")
+    kinds = [seg.get("type") for seg in payload["message"]]
+    check("unknown segments are dropped, known ones survive",
+          kinds == ["text", "text"], repr(kinds))
+
+
 def test_sink_closed_drop() -> None:
     sink = GatewaySink()
     accepted = sink.add("kept")
@@ -2937,6 +2997,8 @@ def main() -> int:
     test_a_native_platform_mints_the_ids_napcat_would()
     test_synthesize_image_segments()
     test_message_to_reply_item()
+    test_native_mention_is_namespaced_on_the_way_out()
+    test_unknown_segment_types_are_dropped_not_crashed()
     test_sink_closed_drop()
     test_parser_rejects_naked_text()
     test_validator_accepts_prefixed_at_marker()
