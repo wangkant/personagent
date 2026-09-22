@@ -1,9 +1,12 @@
 """quickstart's AstrBot handshake: plugin copy, config merge, shared token."""
 from __future__ import annotations
 
+import io
 import json
+import os
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,10 +104,56 @@ def test_platform_entry_replaces_same_id_and_keeps_the_rest() -> None:
             check("platform: unknown kind rejected", True)
 
 
+def test_agent_home_divergence_warning() -> None:
+    saved = os.environ.pop("AGENT_HOME", None)
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / ".env"
+
+            # Nothing set anywhere: quiet, since quickstart's ROOT is where the
+            # agent will look by default.
+            out = io.StringIO()
+            with redirect_stdout(out):
+                quickstart._warn_if_agent_home_diverges(env)
+            check("agent_home: silent when unset", out.getvalue() == "", repr(out.getvalue()))
+
+            # A previous wizard run left AGENT_HOME in .env pointing elsewhere;
+            # load_dotenv(override=False) in main.py/try_chat.py means this is
+            # what the agent actually uses, so it must be flagged even though
+            # nothing is exported in the shell right now.
+            elsewhere = Path(d) / "elsewhere"
+            env.write_text(f"AGENT_HOME={elsewhere}\n", encoding="utf-8")
+            check("agent_home: .env value is picked up",
+                  quickstart._configured_agent_home(env) == str(elsewhere))
+            out = io.StringIO()
+            with redirect_stdout(out):
+                quickstart._warn_if_agent_home_diverges(env)
+            check("agent_home: warns on divergence from .env",
+                  "AGENT_HOME" in out.getvalue() and str(elsewhere.resolve()) in out.getvalue(),
+                  repr(out.getvalue()))
+
+            # os.environ wins over .env (matches load_dotenv(override=False)),
+            # and pointing back at ROOT is not a divergence.
+            os.environ["AGENT_HOME"] = str(quickstart.ROOT)
+            check("agent_home: os.environ takes precedence over .env",
+                  quickstart._configured_agent_home(env) == str(quickstart.ROOT))
+            out = io.StringIO()
+            with redirect_stdout(out):
+                quickstart._warn_if_agent_home_diverges(env)
+            check("agent_home: silent when it resolves to ROOT", out.getvalue() == "",
+                  repr(out.getvalue()))
+    finally:
+        if saved is None:
+            os.environ.pop("AGENT_HOME", None)
+        else:
+            os.environ["AGENT_HOME"] = saved
+
+
 def main() -> int:
     test_plugin_config_is_merged_not_replaced()
     test_connect_writes_both_sides()
     test_platform_entry_replaces_same_id_and_keeps_the_rest()
+    test_agent_home_divergence_warning()
     if FAILURES:
         print(f"{len(FAILURES)} check(s) FAILED: {FAILURES}")
         return 1
