@@ -22,6 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from persona_agent import __version__, preflight
+from persona_agent.config_env import env_bool
 from persona_agent.agent import Agent
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT, runtime_dir
@@ -164,7 +165,7 @@ BOT_NAME = os.getenv("BOT_NAME", "")
 # Selects the reply validator mode, the per-language data files
 # (persona/examples/feedback/output_filter/lorebook), and the control-flow lexicons.
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
-AGENT_ENABLE = os.getenv("AGENT_ENABLE", "true").lower() == "true"
+AGENT_ENABLE = env_bool("AGENT_ENABLE", True)
 AGENT_TRIGGER_COUNT = _parse_int_config(
     "AGENT_TRIGGER_COUNT", os.getenv("AGENT_TRIGGER_COUNT", "30"), 30,
     minimum=1, maximum=10_000)
@@ -196,7 +197,7 @@ RATE_THRESHOLD = _parse_int_config(
 FALLBACK_DURATION = _parse_int_config(
     "FALLBACK_DURATION", os.getenv("FALLBACK_DURATION", "180"), 180,
     minimum=1, maximum=86_400)
-EVAL_ENABLE = os.getenv("EVAL_ENABLE", "false").lower() == "true"
+EVAL_ENABLE = env_bool("EVAL_ENABLE", False)
 EVAL_MODEL = os.getenv("EVAL_MODEL", "")
 EVAL_FILE = os.getenv("EVAL_FILE", "eval.jsonl")
 VISION_MODEL = os.getenv("VISION_MODEL", "")
@@ -494,6 +495,38 @@ class RequestBodyTooLarge(Exception):
     """Raised when a webhook body exceeds the configured byte limit."""
 
 
+def _error(status: int, code: str, message: str, *,
+           retry_after: int | None = None) -> JSONResponse:
+    """One shape for every error this service returns.
+
+    `error` stays exactly what it was — a sentence for a human reading a log.
+    `code` is the stable half, and it exists because the prose is not
+    actionable: `/webhook/gateway` alone answers 403 for a peer that is not
+    allowed, an envelope that failed verification, and a source event that is
+    too old, and the operator's next step differs for each (fix the
+    allowlist / rotate the token / fix NTP). A client cannot branch on an
+    English sentence, and the sentences are free to be reworded.
+
+    `code` values are contract. Add one rather than repurposing one.
+    """
+    headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+    return JSONResponse(status_code=status,
+                        content={"error": message, "code": code},
+                        headers=headers)
+
+
+def _mark_deprecated(response: JSONResponse) -> JSONResponse:
+    """Stamp a response from the deprecated `/webhook/qq` ingress.
+
+    Applied at every return point rather than only the success one, so a
+    branch added later cannot silently omit it. No `Sunset`: the CHANGELOG
+    and the startup warning both say "a later release" and no date has been
+    chosen — emitting one would invent a deadline the project has not set.
+    """
+    response.headers["Deprecation"] = "true"
+    return response
+
+
 async def _read_body_limited(request: Request, limit: int) -> bytes:
     """Read a request body without buffering more than ``limit`` bytes."""
     raw_length = request.headers.get("content-length", "")
@@ -666,7 +699,7 @@ async def health_details(request: Request):
     else:
         authorized = _is_loopback_host(client_host)
     if not authorized:
-        return JSONResponse(status_code=403, content={"error": "forbidden"})
+        return _error(403, "forbidden", "forbidden")
 
     now = time.time()
     if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
@@ -705,17 +738,32 @@ def _warn_direct_route_once() -> None:
 
 @app.post("/webhook/qq")
 async def qq_webhook(request: Request):
+    """DEPRECATED direct OneBot v11 ingress, fed by the client's own webhook.
+
+    Fire-and-forget: the event is validated, then handled on a background task
+    so NapCat never waits for the model round-trip. The reply is delivered by
+    a separate call to the OneBot HTTP API, so the response here is only
+    ``{"ok": true}`` and never carries it. That is the opposite of
+    ``/webhook/gateway``, which answers synchronously.
+
+    Deprecated since 0.3.0, removed in a later release; every response carries
+    ``Deprecation: true``. The supported path is AstrBot with
+    ``GATEWAY_NATIVE_PLATFORMS=aiocqhttp``. Set ``WEBHOOK_SECRET`` so NapCat
+    signs the body as ``x-signature: sha1=...`` — without it, anyone who can
+    reach this port can forge an event.
+    """
     _warn_direct_route_once()
     if not await _webhook_admission.try_acquire():
-        return JSONResponse(
-            status_code=429, content={"error": "webhook capacity exceeded"})
+        return _mark_deprecated(_error(
+            429, "capacity_exceeded", "webhook capacity exceeded",
+            retry_after=1))
     request.state.admission_handed_off = False
     try:
         peer = request.client.host if request.client is not None else ""
         if not _request_peer_is_allowed(peer, WEBHOOK_SECRET):
-            return JSONResponse(
-                status_code=403, content={"error": "authentication required"})
-        return await _qq_webhook_admitted(request)
+            return _mark_deprecated(_error(
+                403, "unauthenticated", "authentication required"))
+        return _mark_deprecated(await _qq_webhook_admitted(request))
     finally:
         if not request.state.admission_handed_off:
             await _webhook_admission.release()
@@ -725,8 +773,7 @@ async def _qq_webhook_admitted(request: Request):
     try:
         body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
     except RequestBodyTooLarge:
-        return JSONResponse(
-            status_code=413, content={"error": "request body too large"})
+        return _error(413, "body_too_large", "request body too large")
     # OneBot HMAC verification (opt-in via WEBHOOK_SECRET). Without it, anyone
     # who can reach this port can POST a forged event — impersonate OWNER_QQ,
     # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
@@ -737,7 +784,7 @@ async def _qq_webhook_admitted(request: Request):
         expected = "sha1=" + hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha1).hexdigest()
         if not hmac.compare_digest(sig, expected):
             logger.warning("webhook rejected: bad/absent x-signature")
-            return JSONResponse(status_code=403, content={"error": "bad signature"})
+            return _error(403, "bad_signature", "bad signature")
     try:
         payload = json.loads(body or b"{}")
     except Exception:
@@ -750,11 +797,9 @@ async def _qq_webhook_admitted(request: Request):
         payload.pop("_gateway", None)
         payload.pop("_platform", None)
     if not _validate_event_payload(payload, gateway=False):
-        return JSONResponse(
-            status_code=400, content={"error": "invalid event schema"})
+        return _error(400, "invalid_schema", "invalid event schema")
     if WEBHOOK_SECRET and not _onebot_event_is_fresh(payload):
-        return JSONResponse(
-            status_code=403, content={"error": "stale or missing event timestamp"})
+        return _error(403, "stale_event", "stale or missing event timestamp")
     if isinstance(payload, dict) and payload.get("message_id") not in (None, ""):
         payload["message_id"] = str(payload["message_id"])
     if agent:
@@ -770,19 +815,40 @@ async def _qq_webhook_admitted(request: Request):
                 await _webhook_admission.release()
         request.state.admission_handed_off = True
         _spawn(_safe_handle())
-    return {"ok": True}
+    # A JSONResponse rather than a bare dict so _mark_deprecated has something
+    # to stamp; the serialized body is byte-identical.
+    return JSONResponse(content={"ok": True})
 
 
 @app.post("/webhook/gateway")
 async def gateway_webhook(request: Request):
+    """Platform-neutral inbound endpoint for forwarder plugins.
+
+    SYNCHRONOUS round-trip, unlike ``/webhook/qq``: the forwarder needs the
+    replies in the response body to relay them to the source platform, so the
+    whole pipeline — debounce and typing simulation included — runs before
+    this returns. Set the plugin's HTTP timeout accordingly; a caller that
+    gives up early does not stop the turn, which still commits its reply and
+    everything it learned from it.
+
+    Body schema: see ``persona_agent/gateway.py``. The response is
+    ``{"handled": bool, "owned": bool, "replies": [...]}``, where ``owned``
+    says the conversation is this persona's whether or not it chose to speak —
+    a forwarder should suppress its own model on ``owned``, never on whether
+    ``replies`` is empty, because silence is frequently the answer.
+
+    Authentication is a bearer token plus an HMAC envelope over
+    timestamp/nonce/body (``X-Gateway-Token``, ``-Timestamp``, ``-Nonce``,
+    ``-Signature``). Errors carry a stable ``code``; branch on it, not on the
+    prose in ``error``.
+    """
     if not await _gateway_admission.try_acquire():
-        return JSONResponse(
-            status_code=429, content={"error": "webhook capacity exceeded"})
+        return _error(429, "capacity_exceeded", "webhook capacity exceeded",
+                      retry_after=3)
     try:
         peer = request.client.host if request.client is not None else ""
         if not _request_peer_is_allowed(peer, GATEWAY_TOKEN):
-            return JSONResponse(
-                status_code=403, content={"error": "authentication required"})
+            return _error(403, "unauthenticated", "authentication required")
         return await _gateway_webhook_admitted(request)
     finally:
         await _gateway_admission.release()
@@ -797,13 +863,16 @@ async def _gateway_webhook_admitted(request: Request):
     try:
         body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
     except RequestBodyTooLarge:
-        return JSONResponse(
-            status_code=413, content={"error": "request body too large"})
+        return _error(413, "body_too_large", "request body too large")
     if not _verify_gateway_envelope(body, request.headers, GATEWAY_TOKEN):
-        return JSONResponse(
-            status_code=403,
-            content={"error": "invalid, stale, or replayed gateway envelope"},
-        )
+        # One code for four causes (bad token, bad signature, timestamp
+        # outside the window, replayed nonce): _verify_gateway_envelope folds
+        # them into a bool before this sees them, and splitting that return is
+        # a bigger change than this one — its True/False contract is pinned by
+        # tests. `invalid_envelope` at least separates these from the other
+        # two 403s this route can answer.
+        return _error(403, "invalid_envelope",
+                      "invalid, stale, or replayed gateway envelope")
     try:
         event = json.loads(body or b"{}")
     except Exception:
@@ -813,11 +882,9 @@ async def _gateway_webhook_admitted(request: Request):
         # event.get(...) in synthesize_onebot_payload and 500.
         event = {}
     if not _validate_event_payload(event, gateway=True):
-        return JSONResponse(
-            status_code=400, content={"error": "invalid gateway event schema"})
+        return _error(400, "invalid_schema", "invalid gateway event schema")
     if not _gateway_event_is_fresh(event):
-        return JSONResponse(
-            status_code=403, content={"error": "stale gateway source event"})
+        return _error(403, "stale_source_event", "stale gateway source event")
     event["message_id"] = str(event["message_id"])
     if agent is None:
         return {"handled": False, "replies": []}
