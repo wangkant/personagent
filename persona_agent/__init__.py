@@ -1,8 +1,10 @@
 """persona_agent — the application package.
 
-``Agent`` is composed from one mixin per concern, so the orchestration in
-agent.py stays readable and each layer is testable on its own:
+``Agent`` is configured by one record and composed from one mixin per concern,
+so the orchestration in agent.py stays readable and each layer is testable on
+its own:
 
+- settings   everything the agent is configured with, built once and passed in
 - agent      orchestration: intake, modes, debounce, _think, prompt assembly
 - prompts    the persona contract (style guide, output protocol, intent rules)
 - textproc   pure text: tokenising, sanitising, whitelist validator, splitting
@@ -27,6 +29,7 @@ Supporting modules, all pure logic with no agent state:
 - stickers   sticker library: steal -> tag -> persona-fit gates -> feedback
 - lineage    which persona-document hashes count as one character, so an edit doesn't orphan what was learned
 - health     startup / runtime environment checks
+- config_env the one way to read a setting out of the environment
 
 Entry points live at the repo root (main.py, try_chat.py, quickstart.py).
 Read-only seed datasets live in data/; everything the agent learns at runtime

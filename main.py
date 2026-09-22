@@ -22,34 +22,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from persona_agent import __version__, preflight
-from persona_agent.config_env import env_bool
 from persona_agent.agent import Agent
+from persona_agent.config_env import env_bool, env_int, env_str
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT, runtime_dir
+from persona_agent.settings import AgentSettings
 from persona_agent.storage import RuntimeInstanceLock, atomic_write_text
-
-
-def _parse_int_config(
-    name: str,
-    raw,
-    default: int,
-    *,
-    minimum: int | None = None,
-    maximum: int | None = None,
-) -> int:
-    """Parse one integer setting without crashing module import."""
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        logging.getLogger("bot").warning(
-            "invalid %s=%r; using %d", name, raw, default)
-        return default
-    if ((minimum is not None and value < minimum)
-            or (maximum is not None and value > maximum)):
-        logging.getLogger("bot").warning(
-            "out-of-range %s=%r; using %d", name, raw, default)
-        return default
-    return value
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
@@ -113,120 +91,43 @@ def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
 
 
 # ========== Config ==========
+# The HTTP layer's own settings. Everything the AGENT is configured with lives
+# in `AgentSettings` and is read once, in `lifespan` — this file no longer
+# copies thirty settings from a module global into a keyword argument, which is
+# where a new knob used to get lost.
+#
 # Bind loopback by default: NapCat posts events from localhost
 # (NAPCAT_API=http://127.0.0.1:3000), so the webhook never needs to be
 # world-exposed. Set HOST=0.0.0.0 only for a split deployment, and then set
 # WEBHOOK_SECRET so forged OneBot payloads (impersonating OWNER_QQ, poisoning
 # memory, burning tokens) can't reach /webhook/qq.
-HOST = os.getenv("HOST", "127.0.0.1")
-PORT = _parse_int_config(
-    "PORT", os.getenv("PORT", "8080"), 8080, minimum=1, maximum=65535)
+HOST = env_str("HOST", "127.0.0.1")
+PORT = env_int("PORT", 8080, minimum=1, maximum=65535)
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
 # /webhook/qq body must carry a matching `x-signature: sha1=<hex>` header.
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
-MAX_WEBHOOK_BODY_BYTES = _parse_int_config(
-    "MAX_WEBHOOK_BODY_BYTES",
-    os.getenv("MAX_WEBHOOK_BODY_BYTES", "8000000"),
-    8_000_000,
-    minimum=1,
-    maximum=64_000_000,
-)
-MAX_INFLIGHT_WEBHOOKS = _parse_int_config(
-    "MAX_INFLIGHT_WEBHOOKS",
-    os.getenv("MAX_INFLIGHT_WEBHOOKS", "64"),
-    64,
-    minimum=1,
-    maximum=4096,
-)
+WEBHOOK_SECRET = env_str("WEBHOOK_SECRET")
+MAX_WEBHOOK_BODY_BYTES = env_int(
+    "MAX_WEBHOOK_BODY_BYTES", 8_000_000, minimum=1, maximum=64_000_000)
+MAX_INFLIGHT_WEBHOOKS = env_int(
+    "MAX_INFLIGHT_WEBHOOKS", 64, minimum=1, maximum=4096)
 # A SEPARATE budget, because the two endpoints hold their slot for wildly
 # different spans. /webhook/qq hands its slot to a background task within
 # milliseconds; /webhook/gateway answers synchronously and holds one for the
 # entire turn (~12s, see transport.py). Sharing one counter meant a burst of
 # gateway turns 429'd the cheap, non-blocking QQ webhooks alongside them.
-# Defaults to the same number, so an existing deployment keeps its capacity —
-# what changes is that the two can no longer starve each other.
-MAX_INFLIGHT_GATEWAY = _parse_int_config(
-    "MAX_INFLIGHT_GATEWAY",
-    # `.strip() or ...` so a blank line in .env means "same as above" rather
-    # than an unparseable value that warns on every start.
-    os.getenv("MAX_INFLIGHT_GATEWAY", "").strip() or MAX_INFLIGHT_WEBHOOKS,
-    MAX_INFLIGHT_WEBHOOKS,
-    minimum=1,
-    maximum=4096,
-)
-
-NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
-BOT_QQ = os.getenv("BOT_QQ", "")
-BOT_NAME = os.getenv("BOT_NAME", "")
-# Language of the agent: 'en' (default, primary build) or 'zh' (Chinese variant).
-# Selects the reply validator mode, the per-language data files
-# (persona/examples/feedback/output_filter/lorebook), and the control-flow lexicons.
-AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+# Defaults to MAX_INFLIGHT_WEBHOOKS, so an existing deployment keeps its
+# capacity and a blank line in .env means "same as above" — what changes is
+# that the two can no longer starve each other.
+MAX_INFLIGHT_GATEWAY = env_int(
+    "MAX_INFLIGHT_GATEWAY", MAX_INFLIGHT_WEBHOOKS, minimum=1, maximum=4096)
+# Whether to build the agent at all. Off leaves the HTTP layer answering
+# health checks and accepting (then dropping) events.
 AGENT_ENABLE = env_bool("AGENT_ENABLE", True)
-AGENT_TRIGGER_COUNT = _parse_int_config(
-    "AGENT_TRIGGER_COUNT", os.getenv("AGENT_TRIGGER_COUNT", "30"), 30,
-    minimum=1, maximum=10_000)
-AGENT_CONTEXT_LEN = _parse_int_config(
-    "AGENT_CONTEXT_LEN", os.getenv("AGENT_CONTEXT_LEN", "120"), 120,
-    minimum=10, maximum=10_000)
-AGENT_FOLLOWUP_WINDOW = _parse_int_config(
-    "AGENT_FOLLOWUP_WINDOW", os.getenv("AGENT_FOLLOWUP_WINDOW", "120"), 120,
-    minimum=0, maximum=86_400)
-AGENT_MEMORY_FILE = os.getenv("AGENT_MEMORY_FILE", "memory.json")
-AGENT_MEMORY_MAX = _parse_int_config(
-    "AGENT_MEMORY_MAX", os.getenv("AGENT_MEMORY_MAX", "50"), 50,
-    minimum=1, maximum=10_000)
-OWNER_QQ = os.getenv("OWNER_QQ", "")
-OWNER_NAME = os.getenv("OWNER_NAME", "")
-OWNER_RELATIONSHIP = os.getenv("OWNER_RELATIONSHIP", "")
-# Alternate model name for private chats, served by the same OpenAI-compatible
-# primary endpoint. Blank = use LLM_MODEL.
-PRIVATE_MODEL = preflight.private_model_from_env()
-FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
-# Defaults below match .env.example so behavior is identical whether or not a
-# .env is present (no silent drift between the template and the code).
-RATE_WINDOW = _parse_int_config(
-    "RATE_WINDOW", os.getenv("RATE_WINDOW", "120"), 120,
-    minimum=1, maximum=86_400)
-RATE_THRESHOLD = _parse_int_config(
-    "RATE_THRESHOLD", os.getenv("RATE_THRESHOLD", "30"), 30,
-    minimum=1, maximum=100_000)
-FALLBACK_DURATION = _parse_int_config(
-    "FALLBACK_DURATION", os.getenv("FALLBACK_DURATION", "180"), 180,
-    minimum=1, maximum=86_400)
-EVAL_ENABLE = env_bool("EVAL_ENABLE", False)
-EVAL_MODEL = os.getenv("EVAL_MODEL", "")
-EVAL_FILE = os.getenv("EVAL_FILE", "eval.jsonl")
-VISION_MODEL = os.getenv("VISION_MODEL", "")
-GLM_API_KEY = os.getenv("GLM_API_KEY", "")
-GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 # Gateway (platform-neutral forwarding): shared secret for /webhook/gateway
-# (blank = no auth) and platform-prefixed ids treated as owner in gateway DMs.
-GATEWAY_TOKEN = os.getenv("GATEWAY_TOKEN", "")
-GATEWAY_SOURCE_MAX_AGE_SECONDS = _parse_int_config(
-    "GATEWAY_SOURCE_MAX_AGE_SECONDS",
-    os.getenv("GATEWAY_SOURCE_MAX_AGE_SECONDS", "86400"),
-    86_400,
-    minimum=1,
-    maximum=604_800,
-)
-GATEWAY_OWNER_IDS = tuple(
-    s.strip() for s in os.getenv("GATEWAY_OWNER_IDS", "").split(",") if s.strip()
-)
-# Forwarder platforms allowed to mint BARE ids instead of "<platform>:<id>"
-# ones — set this to the forwarder's QQ adapter name (AstrBot calls it
-# "aiocqhttp") to route QQ through the same door as every other platform
-# without renaming a single conversation. Empty by default, and deliberately
-# an operator setting rather than something the forwarder asserts: bare ids
-# are the spelling OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are written in.
-GATEWAY_NATIVE_PLATFORMS = tuple(
-    s.strip() for s in os.getenv("GATEWAY_NATIVE_PLATFORMS", "").split(",")
-    if s.strip()
-)
+# (blank = no auth), and how old a forwarded event may be before it is refused.
+GATEWAY_TOKEN = env_str("GATEWAY_TOKEN")
+GATEWAY_SOURCE_MAX_AGE_SECONDS = env_int(
+    "GATEWAY_SOURCE_MAX_AGE_SECONDS", 86_400, minimum=1, maximum=604_800)
 
 # ========== Logging ==========
 logger = logging.getLogger("bot")
@@ -587,37 +488,7 @@ async def lifespan(app: FastAPI):
         runtime_lock = RuntimeInstanceLock(ROOT)
         runtime_lock.acquire()
         try:
-            agent = Agent(
-                api_key=LLM_API_KEY,
-                base_url=LLM_BASE_URL,
-                model=LLM_MODEL,
-                bot_qq=BOT_QQ,
-                bot_name=BOT_NAME,
-                private_model=PRIVATE_MODEL,
-                napcat_api=NAPCAT_API,
-                trigger_count=AGENT_TRIGGER_COUNT,
-                context_len=AGENT_CONTEXT_LEN,
-                followup_window=AGENT_FOLLOWUP_WINDOW,
-                memory_file=AGENT_MEMORY_FILE,
-                memory_max_per_group=AGENT_MEMORY_MAX,
-                owner_qq=OWNER_QQ,
-                owner_name=OWNER_NAME,
-                owner_relationship=OWNER_RELATIONSHIP,
-                fallback_model=FALLBACK_MODEL,
-                rate_window=RATE_WINDOW,
-                rate_threshold=RATE_THRESHOLD,
-                fallback_duration=FALLBACK_DURATION,
-                eval_enable=EVAL_ENABLE,
-                eval_model=EVAL_MODEL,
-                eval_file=EVAL_FILE,
-                vision_model=VISION_MODEL,
-                glm_api_key=GLM_API_KEY,
-                glm_base_url=GLM_BASE_URL,
-                tavily_key=TAVILY_API_KEY,
-                lang=AGENT_LANG,
-                gateway_owner_ids=GATEWAY_OWNER_IDS,
-                gateway_native_platforms=GATEWAY_NATIVE_PLATFORMS,
-            )
+            agent = Agent(AgentSettings.from_env())
             # The append-only ledger is authoritative. Repair stale derived
             # retrieval views before the server can accept a request.
             agent._rebuild_promoted_views(strict=True)
@@ -648,7 +519,8 @@ async def lifespan(app: FastAPI):
                 agent.stickers.purge_unfit()
         _spawn(_recheck_then_purge())
     logger.info("bot started on %s:%d (agent=%s, lang=%s)", HOST, PORT,
-                agent.enabled if agent else False, AGENT_LANG)
+                agent.enabled if agent else False,
+                agent.agent_lang if agent else "-")
     try:
         yield
     finally:

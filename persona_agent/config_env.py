@@ -113,3 +113,40 @@ def env_bool(name: str, default: bool, *, env=None) -> bool:
         return False
     logger.warning("invalid %s=%r; using %s", name, raw, default)
     return default
+
+
+def env_str(name: str, default: str = "", *, strip: bool = False, env=None) -> str:
+    """One string setting, with ``os.getenv`` semantics.
+
+    Deliberately NOT "empty means unset": ``LLM_MODEL=`` in a hand-edited
+    ``.env`` has to keep reading as the empty string, because that is the case
+    ``preflight.WANTED`` exists to report. Collapsing it into the default would
+    hide the very misconfiguration the preflight was written for.
+
+    ``strip=True`` for the settings whose value is an identifier rather than
+    prose (a language tag, a model name), where a trailing space in ``.env`` is
+    never what the operator meant.
+    """
+    source = os.environ if env is None else env
+    raw = source.get(name)
+    if raw is None:
+        return default
+    text = str(raw)
+    return text.strip() if strip else text
+
+
+def env_csv(name: str, default=(), *, env=None) -> tuple[str, ...]:
+    """One comma-separated list setting, as a tuple of non-empty items.
+
+    Four settings spell a list this way — ``QQ_GROUPS``,
+    ``PRIVATE_ALLOWED_QQS``, ``GATEWAY_OWNER_IDS`` and
+    ``GATEWAY_NATIVE_PLATFORMS`` — and each had its own copy of the same
+    ``split(",")`` / ``strip()`` / drop-empties comprehension. Blank entries are
+    dropped rather than kept as ``""``: a trailing comma is a typo, and an
+    empty id in an allowlist compares equal to an unset one.
+    """
+    source = os.environ if env is None else env
+    raw = source.get(name)
+    if raw is None:
+        return tuple(default)
+    return tuple(part.strip() for part in str(raw).split(",") if part.strip())

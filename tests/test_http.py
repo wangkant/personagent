@@ -110,16 +110,22 @@ def test_exposure_guard_fails_closed() -> None:
 
 
 def test_numeric_config_parser_is_bounded() -> None:
-    parser = getattr(main_module, "_parse_int_config", None)
-    check("numeric config parser exists", callable(parser))
-    if not callable(parser):
-        return
+    """main.py used to carry its own copy of this; the package's reader is now
+    the only one, so the bounds it enforces are the bounds every setting in
+    every module gets."""
+    from persona_agent.config_env import env_int
+
+    def parser(name, raw, default, **kw):
+        return env_int(name, default, env={name: raw}, **kw)
+
     check("numeric config: invalid value uses default",
           parser("PORT", "not-a-number", 8080, minimum=1, maximum=65535) == 8080)
     check("numeric config: out-of-range value uses default",
           parser("PORT", "70000", 8080, minimum=1, maximum=65535) == 8080)
     check("numeric config: valid value accepted",
           parser("PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
+    check("numeric config: main.py no longer has a second copy",
+          not hasattr(main_module, "_parse_int_config"))
 
 
 def test_error_bodies_carry_a_stable_code() -> None:
@@ -399,8 +405,11 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     actually covers what the code reads: a setting the code reads and the
     template omits would be reported to its operator as a typo.
 
-    Scanned rather than listed, so the two cannot drift apart again. `os.getenv`
-    and `os.environ.get` only — `Policy.from_env` reads through a dict
+    Scanned rather than listed, so the two cannot drift apart again.
+    `os.getenv`, `os.environ.get` and the `config_env` readers, which are how
+    most settings are read now — a key that moved from a bare `os.getenv` onto
+    `env_int`/`env_str` must not drop out of this scan, or the template check
+    silently stops covering it. `Policy.from_env` reads through a dict
     parameter and is out of reach of a syntactic scan, which is a gap worth
     naming rather than pretending away."""
     import ast
@@ -417,10 +426,16 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
         *sorted((root / "tools").glob("*.py")),
     ]
 
+    readers = {"env_int", "env_float", "env_bool", "env_str", "env_csv"}
+
     def is_env_read(call: ast.Call) -> bool:
         fn = call.func
+        if isinstance(fn, ast.Name):
+            return fn.id in readers
         if not isinstance(fn, ast.Attribute):
             return False
+        if fn.attr in readers:
+            return True
         if fn.attr == "getenv":
             return isinstance(fn.value, ast.Name) and fn.value.id == "os"
         if fn.attr == "get":

@@ -120,6 +120,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One settings record configures the agent, built once and passed in**
+  (`persona_agent/settings.py`). `Agent.__init__` took 34 keyword parameters,
+  read two dozen more settings out of `os.environ` in its own body, and
+  interleaved all of it with the runtime state it was also building;
+  `main.py` read the same deployment settings into module globals at import
+  time, each through its own bounds check, and copied about thirty of them
+  back out as keyword arguments. Adding a knob meant touching three places and
+  forgetting the third was silent — the setting simply never reached the
+  agent. `AgentSettings` now holds every default, bound and fallback, and the
+  constructor is three lines: put the configuration on, create the empty
+  runtime state, open the learning layer. `AgentSettings()` reads the
+  environment only for the operational knobs, so an embedded or benchmarked
+  agent is configured by its caller rather than by the surrounding `.env`;
+  `AgentSettings.from_env()` adds the deployment settings and is what the bot
+  process uses. Existing call sites are unchanged: `Agent(api_key=..., ...)`
+  builds the record from those same keywords. Defaults, bounds and resolution
+  order (the empty-model fallbacks, the URL trimming, the id-list parsing) are
+  identical — every attribute an `Agent` is built with was diffed across
+  clean, fully-set and malformed environments before and after.
+- **`main.py` reads its own settings through `config_env` too**, and its
+  private `_parse_int_config` is gone. That parser and the package's
+  `env_int` were the same function with different log channels, which is how
+  `main.py` came to be the only file whose settings were bounds-checked.
+  `config_env` gains `env_str` (deliberately keeping `os.getenv`'s
+  "set-but-empty is not unset", which is the case `preflight.WANTED` exists to
+  report) and `env_csv`, which replaces four hand-rolled copies of the same
+  comma-split. The `.env.example` template scan in `tests/test_http.py` now
+  recognises the `config_env` readers as well as `os.getenv`, so a setting
+  that moves onto one of them does not quietly drop out of the check that
+  keeps the template honest.
+
 - **An unrecognised boolean keeps its declared default instead of silently
   reading as False.** `raw == "true"` was fixed once in `promotion.Policy`
   after `PROMOTE_AUTO=1` disabled promotion entirely and said nothing; six

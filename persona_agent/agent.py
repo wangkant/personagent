@@ -13,13 +13,12 @@ import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Optional
 
 import httpx
 
 from . import candidates as candidate_ledger_mod
 from . import channels
-from .config_env import env_bool, env_float, env_int
 from . import evidence as evidence_mod
 from . import lineage as lineage_mod
 from . import reactions
@@ -50,6 +49,7 @@ from .prompts import (
     private_output_protocol,
     private_style_guide,
 )
+from .settings import AgentSettings
 from .stickers import StickerLibrary
 from .storage import atomic_write_text
 from .endpoints import chat_completions_url
@@ -138,60 +138,163 @@ class _PooledHTTP:
 
 
 class Agent(TextProcessing, ContentIngestion, Transport, Learning):
-    def __init__(
-        self,
-        api_key: str,
-        base_url: str = "https://api.deepseek.com",
-        model: str = "deepseek-chat",
-        bot_qq: str = "",
-        bot_name: str = "",
-        private_model: str = "",
-        napcat_api: str = "http://127.0.0.1:3000",
-        trigger_count: int = 30,
-        context_len: int = 120,
-        followup_window: int = 120,
-        memory_file: str = "memory.json",
-        memory_max_per_group: int = 50,
-        owner_qq: str = "",
-        owner_name: str = "",
-        owner_relationship: str = "",
-        persona: Optional[str] = None,
-        on_reply: Optional[Callable[[str, str], Awaitable[None]]] = None,
-        fallback_model: str = "",
-        rate_window: int = 60,
-        rate_threshold: int = 5,
-        fallback_duration: int = 300,
-        eval_enable: bool = True,
-        eval_model: str = "",
-        eval_file: str = "eval.jsonl",
-        vision_model: str = "",
-        glm_api_key: str = "",
-        glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4",
-        tavily_key: str = "",
-        stickers_dir: str = "stickers",
-        stickers_file: str = "stickers.json",
-        message_debounce_sec: float = 2.5,
-        lang: str = "",
-        gateway_owner_ids: tuple = (),
-        gateway_native_platforms: tuple = (),
-    ):
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self.model = model
+    def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
+        """Wire one agent from one settings record.
+
+        ``Agent(settings)`` is how the bot process builds it — see
+        ``AgentSettings.from_env``. ``Agent(api_key=..., bot_qq=...)`` is the
+        same act spelled shorter, for embedders, tools and the test suites:
+        those keywords ARE the settings fields, and they build the record here.
+
+        Nothing is parsed, defaulted or resolved below this line — that happens
+        once, in settings.py. What is left is the three things wiring an agent
+        actually is: put the configuration on it, create the empty runtime
+        state, and open the learning layer.
+        """
+        if settings is None:
+            settings = AgentSettings(**overrides)
+        else:
+            if not isinstance(settings, AgentSettings):
+                raise TypeError(
+                    "Agent() takes an AgentSettings, or its fields as "
+                    f"keywords, not {type(settings).__name__}")
+            if overrides:
+                # Silently merging them would make which of the two won a
+                # question about argument order rather than about the record.
+                raise TypeError(
+                    "Agent() takes a settings record or its fields as "
+                    "keywords, not both — use dataclasses.replace(settings, "
+                    "...) to vary one: " + ", ".join(sorted(overrides)))
+        #: What this agent was configured with, kept whole. The attributes
+        #: below are the live values, which a caller may change afterwards;
+        #: this stays the record of what was asked for.
+        self.settings = settings
+        self._apply_settings(settings)
+        self._init_runtime_state()
+        self._init_learning_state()
+
+        self.enabled = bool(self.api_key)
+        if not self.enabled:
+            logger.warning("[Agent] LLM_API_KEY not configured; %s disabled",
+                           self.bot_name)
+        if self.enabled and not self.bot_name:
+            logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
+                           "explicit @-mentions (set BOT_NAME so it answers to its name)")
+
+    def _apply_settings(self, s: AgentSettings) -> None:
+        """Put the configuration on the agent, one field per attribute.
+
+        A flat copy on purpose rather than reads through ``self.settings``:
+        every layer of this package and every tool reads ``self.model``,
+        ``self.judge_model``, ``self.proactive_enable`` and the rest directly,
+        and a test that assigns one of them expects the agent to behave
+        differently from the next call on.
+        """
+        self.api_key = s.api_key
+        self.base_url = s.base_url
+        self.model = s.model
         # Process-wide language. 'en' (default) is the primary build; 'zh'
         # selects the Chinese variant. Drives the reply validator, the
         # per-language data files, and the control-flow lexicons. Single
         # source of truth — everything language-dependent reads self.agent_lang.
-        self.agent_lang = (lang or os.getenv("AGENT_LANG") or "en").strip().lower()
-        self.fallback_model = fallback_model or model
-        # The "judgment" model: cheapest available, used only to gate self-initiated
-        # modes (judge / followup / proactive) — decide PASS vs reply. The reply
-        # that actually gets sent is always written by the main model. Defaults to
-        # the fallback (cheap) model; set JUDGE_MODEL to point at an even cheaper one.
-        self.judge_model = os.getenv("JUDGE_MODEL", "") or self.fallback_model or self.model
-        self.rate_window = rate_window
-        self.rate_threshold = rate_threshold
-        self.fallback_duration = fallback_duration
+        self.agent_lang = s.agent_lang
+        self.fallback_model = s.fallback_model
+        self.judge_model = s.judge_model
+        self.private_model = s.private_model
+        self.api_max_retries = s.api_max_retries
+        self.llm_timeout = s.llm_timeout
+        self.rate_window = s.rate_window
+        self.rate_threshold = s.rate_threshold
+        self.fallback_duration = s.fallback_duration
+
+        self.bot_qq = s.bot_qq
+        self.bot_name = s.bot_name
+        self.napcat_api = s.napcat_api
+        self.owner_qq = s.owner_qq
+        self.owner_name = s.owner_name
+        self.owner_relationship = s.owner_relationship
+        self.on_reply = s.on_reply
+
+        self.trigger_count = s.trigger_count
+        self.context_len = s.context_len
+        self.followup_window = s.followup_window
+        self.message_debounce_sec = s.message_debounce_sec
+
+        raw_persona = (
+            s.persona if s.persona is not None else _load_persona(self.agent_lang))
+        # A persona document may end with a [style] declaration block. Parsing
+        # strips it from the prose (so the model never reads raw knob config as
+        # persona text) and keeps the knobs for prompt variants that use them.
+        self.persona_style, self.persona = parse_persona_style(raw_persona)
+        # The per-persona character policy. Without a card (or with a broken
+        # one) this is the narrow fail-closed default.
+        self.reply_style = ReplyStyle.from_card(_load_persona_card())
+        # Scope identity of the current persona. The hash is always available;
+        # persona_version is an optional operator-set label recorded alongside
+        # it. Both are part of evidence-combination scope, so a persona rewrite
+        # stops old evidence from authorizing changes to the new character.
+        self.persona_version = s.persona_version
+        self.persona_hash = hashlib.sha256(
+            (self.persona or "").encode("utf-8")).hexdigest()[:12]
+
+        # Sets, not the settings' tuples: these are read on every inbound
+        # message and edited in place by the tests and the admin paths.
+        self.allowed_groups: set = set(s.allowed_groups)
+        self.private_allowed_qqs: set = set(s.private_allowed_qqs)
+        self.gateway_owner_ids: set = set(s.gateway_owner_ids)
+        self.gateway_native_platforms: set = set(s.gateway_native_platforms)
+
+        self.memory_file = resolve_runtime_state_file(s.memory_file)
+        self.memory_max = s.memory_max_per_group
+
+        self.eval_enable = s.eval_enable
+        self.eval_model = s.eval_model
+        self.eval_file = resolve_runtime_state_file(s.eval_file)
+
+        self.vision_model = s.vision_model
+        self.glm_api_key = s.glm_api_key
+        self.glm_base_url = s.glm_base_url
+        self.tavily_key = s.tavily_key
+
+        self.proactive_enable = s.proactive_enable
+        self.proactive_interval = s.proactive_interval
+        self.proactive_min_silence = s.proactive_min_silence
+        self.proactive_cooldown = s.proactive_cooldown
+        self.proactive_prob = s.proactive_prob
+        self.proactive_dm_min_silence = s.proactive_dm_min_silence
+        self.proactive_dm_cooldown = s.proactive_dm_cooldown
+        self.proactive_dm_prob = s.proactive_dm_prob
+
+        self.evolve_auto = s.evolve_auto
+        self.evolve_interval = s.evolve_interval
+        self.evolve_threshold = s.evolve_threshold
+        self.evolve_batch = s.evolve_batch
+        self.evolve_model = s.evolve_model
+
+        self.react_learn = s.react_learn
+        self.react_model = s.react_model
+        self.react_elicit = s.react_elicit
+        self.react_elicit_delay = s.react_elicit_delay
+        self.react_elicit_cooldown = s.react_elicit_cooldown
+
+        self.examples_max_auto = s.examples_max_auto
+        self.feedback_max_auto = s.feedback_max_auto
+        # Evidence -> candidate -> promotion. A reaction is recorded as
+        # evidence (append-only, immutable); adjudicating it proposes a
+        # versioned candidate; only a promoted candidate is materialized into
+        # the views retrieval reads. Nothing here writes examples_file or
+        # feedback_file: those hold the seed-era and hand-approved rows, which
+        # stay exactly as they are. See evidence.py / candidates.py /
+        # promotion.py, and tools/candidates_admin.py for the human controls.
+        self.promotion_policy = s.promotion_policy
+
+    def _init_runtime_state(self) -> None:
+        """The empty mutable state every agent starts with.
+
+        Everything here is per-process bookkeeping — locks, windows, caches,
+        de-dup rings. None of it is configuration, and the only disk read is
+        the seen-message ring, which exists precisely to survive a restart.
+        """
         self.model_calls: deque = deque()
         # Two independent fallback clocks:
         # _fallback_until = error-driven (real 429/5xx), applies to every mode
@@ -200,6 +303,17 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # to self-initiated modes — called/owner are exempt.
         self._fallback_until: float = 0.0
         self._freq_fallback_until: float = 0.0
+        # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
+        self._http_pool: dict = {}
+        # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
+        # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
+        # _spawn pattern main.py already uses for webhook tasks.
+        self._bg_tasks: set[asyncio.Task] = set()
+        # Set by aclose(); read by _http so a use-after-close is visible
+        # rather than silently leaking a fresh, never-closed pool.
+        self._closed = False
+        self._warned_use_after_close = False
+
         # Outbound throttle state: one small global gate lock (holds only
         # itself, never the group locks / send locks) + a per-target sliding
         # window. See _throttle_send.
@@ -210,43 +324,13 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         # _touch_gateway_conv.
         self._gateway_conv_lru: dict[str, float] = {}
         self._gateway_inflight: dict[str, int] = defaultdict(int)
-        # LLM transient-error retry count (Hermes-style jittered backoff; 0 disables).
-        self.api_max_retries = env_int("LLM_MAX_RETRIES", 2, minimum=0)
-        # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
-        self._http_pool: dict = {}
-        # Main LLM call timeout (seconds); reasoning models can be slow.
-        self.llm_timeout = env_float("LLM_TIMEOUT", 120.0, minimum=1.0)
-        self.bot_qq = str(bot_qq)
-        self.bot_name = bot_name
-        # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
-        # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
-        # _spawn pattern main.py already uses for webhook tasks.
-        self._bg_tasks: set[asyncio.Task] = set()
-        # Set by aclose(); read by _http so a use-after-close is visible
-        # rather than silently leaking a fresh, never-closed pool.
-        self._closed = False
-        self._warned_use_after_close = False
-        # Empty-model fallback: a blank PRIVATE_MODEL in .env would
-        # otherwise send {"model": ""} on every DM — a guaranteed 400 that also
-        # arms the global fallback cooldown and downgrades group replies.
-        # It's just an alternate model name served by the same OpenAI-compatible
-        # primary endpoint — not a second provider.
-        self.private_model = private_model or model
-        self.napcat_api = napcat_api.rstrip("/")
-        self.trigger_count = trigger_count
-        self.context_len = context_len
-        self.followup_window = followup_window
-        raw_persona = persona if persona is not None else _load_persona(self.agent_lang)
-        # A persona document may end with a [style] declaration block. Parsing
-        # strips it from the prose (so the model never reads raw knob config as
-        # persona text) and keeps the knobs for prompt variants that use them.
-        self.persona_style, self.persona = parse_persona_style(raw_persona)
-        # The per-persona character policy. Without a card (or with a broken
-        # one) this is the narrow fail-closed default.
-        self.reply_style = ReplyStyle.from_card(_load_persona_card())
-        self.owner_relationship = owner_relationship
-        self.on_reply = on_reply
-        self.buffers: dict[str, deque] = defaultdict(lambda: deque(maxlen=context_len))
+
+        # Bound at construction, like the rest of the buffer's shape: a later
+        # change to self.context_len must not silently give new conversations
+        # a different depth from the ones already running.
+        context_len = self.context_len
+        self.buffers: dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=context_len))
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -265,13 +349,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._private_send_owners: dict[str, asyncio.Task] = {}
         self.active_users: dict[str, deque] = defaultdict(lambda: deque(maxlen=20))
 
-        self.memory_file = resolve_runtime_state_file(memory_file)
-        self.memory_max = memory_max_per_group
-        self.memories: dict[str, list[dict]] = self._load_memories()
-
-        self.owner_qq = str(owner_qq) if owner_qq else ""
-        self.owner_name = owner_name
-
         self.image_caption_cache: dict[str, str] = {}
         self.bili_info_cache: dict[str, dict] = {}
         # Generic URL metadata cache (key=url, value=preformatted descriptor
@@ -284,127 +361,87 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._wbi_keys_ts: float = 0.0
         self.private_history: dict[str, list[dict]] = {}
 
-        self.eval_enable = eval_enable
-        self.eval_model = eval_model or self.fallback_model or self.model
-        self.eval_file = resolve_runtime_state_file(eval_file)
-
-        self.vision_model = (vision_model or "").strip()
-        self.glm_api_key = glm_api_key
-        self.glm_base_url = glm_base_url.rstrip("/") if glm_base_url else ""
-        self.tavily_key = (tavily_key or "").strip()
-
-        # Group listen whitelist (QQ_GROUPS); empty set = listen everywhere.
-        # This is what .env.example promises ("the group(s) to listen on") —
-        # without an in-code gate a bot invited into N groups replies in all
-        # of them regardless of the setting.
-        self.allowed_groups: set = {
-            g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()
-        }
-        # Private-chat whitelist: OWNER_QQ is always allowed; PRIVATE_ALLOWED_QQS
-        # (comma-separated) lists additional QQs that may DM the bot. They take
-        # the "ordinary friend" branch in _chat_private rather than the closer
-        # owner override. Empty = only OWNER_QQ can DM.
-        self.private_allowed_qqs: set = {
-            q.strip() for q in os.getenv("PRIVATE_ALLOWED_QQS", "").split(",") if q.strip()
-        }
-
-        # Gateway DM owners: platform-prefixed ids (e.g. "telegram:12345") that
-        # get the owner branch when they DM the bot through the gateway. The
-        # gateway path itself is open (the forwarding plugin's config is the
-        # access filter); this set only selects the closer owner persona.
-        self.gateway_owner_ids: set = {
-            str(i).strip() for i in (gateway_owner_ids or ()) if str(i).strip()
-        }
-
-        # Forwarder platforms whose ids are minted BARE instead of namespaced,
-        # so a QQ message relayed by a gateway lands on the same keys NapCat
-        # would have produced. Empty by default: a bare id carries QQ
-        # authority — it is what OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS
-        # are compared against — so which forwarder may claim it is the
-        # operator's call, never the forwarder's.
-        self.gateway_native_platforms: set = {
-            str(p).strip() for p in (gateway_native_platforms or ())
-            if str(p).strip()
-        }
-
-        # Proactive mechanism: a background loop that occasionally self-initiates
-        # a message (no incoming trigger) so the bot reads more like a real
-        # person who sometimes breaks the silence — not a 24/7 responder. Off by
-        # default; opt in with PROACTIVE_ENABLE=true. Heavily gated: only acts in
-        # chats it has already seen activity in, only outside sleep hours, only
-        # after a quiet stretch, with per-target cooldowns and a low per-tick
-        # probability, and the model is told to PASS unless it genuinely has
-        # something to say. DMs go to the owner + the private whitelist only.
-        self.proactive_enable = env_bool("PROACTIVE_ENABLE", False)
-        self.proactive_interval = env_int("PROACTIVE_INTERVAL", 1500, minimum=1)        # tick: 25 min
-        self.proactive_min_silence = env_int("PROACTIVE_MIN_SILENCE", 2700, minimum=0)  # group quiet ≥ 45 min
-        self.proactive_cooldown = env_int("PROACTIVE_COOLDOWN", 10800, minimum=0)       # ≥ 3h between group initiations
-        self.proactive_prob = env_float("PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0)              # per eligible tick
-        self.proactive_dm_min_silence = env_int("PROACTIVE_DM_MIN_SILENCE", 14400, minimum=0)  # DM quiet ≥ 4h
-        self.proactive_dm_cooldown = env_int("PROACTIVE_DM_COOLDOWN", 86400, minimum=0)        # ≥ 24h between DMs
-        self.proactive_dm_prob = env_float("PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0)
         # Last time any human message landed in a group / DM (silence tracking),
         # and the last time the bot proactively initiated (per group and "dm:<uid>").
         self.last_activity_at: dict[str, float] = defaultdict(float)
         self.last_dm_activity_at: dict[str, float] = defaultdict(float)
         self.last_proactive_at: dict[str, float] = defaultdict(float)
-
-        # Self-evolution loop: opt-in background task that closes the negative
-        # half of the learning loop unattended. Low-score eval entries become
-        # BAD/OK candidates, but never enter retrieval without compatible
-        # corroborating evidence or an explicit human promotion. The shared
-        # audit trail also prevents the CLI and loop from processing one eval
-        # twice.
-        self.evolve_auto = env_bool("EVOLVE_AUTO", False)
-        self.evolve_interval = int(env_float("EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0) * 3600)
-        # 3, not 2: on the evaluator's register scale (learning.py), 3 means
-        # "human-plausible but drifting into helpful-assistant register" --
-        # precisely the failure mode the loop exists to correct. Validated on
-        # 8 known-label replies: every known tell (drafted letter, mini
-        # tutorials) scored exactly 3, every casual line scored 5, so a
-        # threshold of 2 would leave the loop with nothing to learn from.
-        self.evolve_threshold = env_int("EVOLVE_THRESHOLD", 3)
-        self.evolve_batch = env_int("EVOLVE_BATCH", 5, minimum=1)  # diagnoses per tick
-        self.evolve_model = os.getenv("EVOLVE_MODEL", "") or self.eval_model
-        self.candidates_file = resolve_runtime_state_file("candidates.jsonl")
-
-        # Reaction learning: the PRIMARY self-evolution signal. Every sent
-        # reply waits (bounded, TTL) for a directed user reaction — a quote of
-        # the bot's message, an @/name-call, or the interlocutor's next DM.
-        # An in-process adjudicator (single LLM call) classifies the reaction
-        # (correction / rejection / positive / neutral) and filters banter and
-        # trolling. The verdict is recorded as evidence and may propose a
-        # candidate; it does not write a retrieval pool — see the promotion
-        # block below. LLM self-eval remains the fallback channel for replies
-        # that never get a directed reaction.
-        self.react_learn = env_bool("REACT_LEARN", True)
-        self.react_model = os.getenv("REACT_MODEL", "") or self.judge_model
-        self.pending_reactions = reactions.PendingReplies(
-            max_per_conv=env_int("REACT_MAX_PENDING", 4, minimum=1),
-            ttl_sec=env_float("REACT_TTL_SEC", 900.0, minimum=0.0),
-            fix_window_sec=env_float("REACT_FIX_WINDOW", 600.0, minimum=0.0),
-            max_conversations=_MAX_GATEWAY_CONVS,
-            state_file=self.memory_file.with_name("pending_reactions.json"),
-        )
-        # Elicitation: after an accepted rejection with no correction content,
-        # the bot may (delayed, so it never talks over its own normal reply;
-        # cooldown-limited, so it never begs) ask what the user actually meant.
-        self.react_elicit = env_bool("REACT_ELICIT", True)
-        self.react_elicit_delay = env_float("REACT_ELICIT_DELAY", 120.0, minimum=0.0)
-        self.react_elicit_cooldown = env_float("REACT_ELICIT_COOLDOWN", 3600.0, minimum=0.0)
         self._last_elicit_at: dict[str, float] = defaultdict(float)
-        # Per-user teaching reputation (never the owner); consistently bad
-        # teachers are hard-blocked before any adjudicator call.
-        self.teacher_stats = reactions.TeacherStats(
-            resolve_runtime_state_file("teacher_stats.json"))
         # Outbound message_ids of the current _send_qq call, per group —
         # written under the per-group send lock, consumed right after it.
         self._sent_mids: dict[str, list[str]] = {}
 
-        stickers_path = Path(stickers_dir)
+        self._msg_seq: dict[str, int] = defaultdict(int)
+        self._vision_in_flight: dict[str, int] = defaultdict(int)
+        self._sticky_call: dict[str, dict] = {}
+
+        # message_id ring for de-duping between webhook and periodic catch-up
+        # paths. Persisted to disk so a restart doesn't accidentally re-handle
+        # messages the bot already responded to before going down — without
+        # this, the startup check_missed_mentions sees an empty ring and may
+        # treat a still-recent @ mention as new.
+        self._seen_msg_ids: deque = deque(maxlen=2000)
+        self._seen_msg_file = resolve_runtime_state_file("seen_msg_ids.json")
+        self._load_seen_msg_ids()
+        # seen_msg_ids flush-throttle counters: the in-memory ring updates on
+        # every message; disk writes are batched (see _remember_msg_id).
+        self._seen_dirty = 0
+        self._seen_last_flush = 0.0
+
+        # Quote-reply resolution index: message_id -> "speaker: text". When a
+        # later message quotes an earlier one, _extract_text looks it up here
+        # (zero cost) before falling back to a NapCat get_msg call. Without it the
+        # quoted content never reaches the model and it has to guess who/what it
+        # is replying to → wrong-person / crossed-thread replies (off-topic).
+        self._msg_index: dict[str, str] = {}
+        self._msg_index_cap = 1000
+
+    def _load_seen_msg_ids(self) -> None:
+        """Refill the de-dup ring from disk; a missing or broken file is fine."""
+        try:
+            if self._seen_msg_file.exists():
+                with self._seen_msg_file.open("r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, list):
+                    self._seen_msg_ids.extend(
+                        str(value) for value in loaded[-2000:]
+                        if isinstance(value, (str, int))
+                    )
+                    logger.info("[Agent] loaded %d seen message_ids from disk",
+                                len(self._seen_msg_ids))
+        except Exception as e:
+            logger.warning("[Agent] seen_msg_ids load failed: %s: %s",
+                           type(e).__name__, e)
+
+    def _init_learning_state(self) -> None:
+        """Open everything the agent remembers with: memory, reactions, the
+        sticker library, the retrieval pools and the ledger views.
+
+        Runs after :meth:`_apply_settings` because all of it hangs off the
+        configured paths, the persona and the judgment model.
+        """
+        self.memories: dict[str, list[dict]] = self._load_memories()
+        # letta-style core memory (per-group short note, always in prompt)
+        self.core_memory_file = resolve_runtime_state_file("core_memory.json")
+        self.core_memory: dict[str, str] = self._load_core_memory()
+        self.candidates_file = resolve_runtime_state_file("candidates.jsonl")
+
+        self.pending_reactions = reactions.PendingReplies(
+            max_per_conv=self.settings.react_max_pending,
+            ttl_sec=self.settings.react_ttl_sec,
+            fix_window_sec=self.settings.react_fix_window,
+            max_conversations=_MAX_GATEWAY_CONVS,
+            state_file=self.memory_file.with_name("pending_reactions.json"),
+        )
+        # Per-user teaching reputation (never the owner); consistently bad
+        # teachers are hard-blocked before any adjudicator call.
+        self.teacher_stats = reactions.TeacherStats(
+            resolve_runtime_state_file("teacher_stats.json"))
+
+        stickers_path = Path(self.settings.stickers_dir)
         if not stickers_path.is_absolute():
             stickers_path = ROOT / stickers_path
-        stickers_json = Path(stickers_file)
+        stickers_json = Path(self.settings.stickers_file)
         if not stickers_json.is_absolute():
             stickers_json = resolve_runtime_state_file(stickers_json)
         # Pass a one-line persona digest down to the sticker library; it uses
@@ -457,32 +494,6 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._pairs_offset: int = 0
         self._pairs_sig: bytes = b""
 
-        # Retrieval pool caps. Both pools are scanned on every LLM turn but only
-        # ever surface 4 examples + 6 pairs, so an unbounded pool costs a longer
-        # scan per reply and dilutes retrieval with entries written under an
-        # older prompt. These now bound the materialized views of promoted
-        # candidates (candidates.rebuild_views) — the only rows the automatic
-        # path can add. The data/ seeds and the pre-ledger learned pools are
-        # left exactly as they are; the offline tools still trim what they
-        # write (see evolution.trim_pool). 0 = no cap.
-        self.examples_max_auto = env_int("EXAMPLES_MAX_AUTO", 500, minimum=0)
-        self.feedback_max_auto = env_int("FEEDBACK_MAX_AUTO", 500, minimum=0)
-
-        # Evidence -> candidate -> promotion. A reaction is recorded as
-        # evidence (append-only, immutable); adjudicating it proposes a
-        # versioned candidate; only a promoted candidate is materialized into
-        # the views retrieval reads. Nothing here writes examples_file or
-        # feedback_file: those hold the seed-era and hand-approved rows, which
-        # stay exactly as they are. See evidence.py / candidates.py /
-        # promotion.py, and tools/candidates_admin.py for the human controls.
-        self.promotion_policy = promotion.Policy.from_env()
-        # Scope identity of the current persona. The hash is always available;
-        # PERSONA_VERSION is an optional operator-set label recorded alongside
-        # it. Both are part of evidence-combination scope, so a persona rewrite
-        # stops old evidence from authorizing changes to the new character.
-        self.persona_version = os.getenv("PERSONA_VERSION", "").strip()
-        self.persona_hash = hashlib.sha256(
-            (self.persona or "").encode("utf-8")).hexdigest()[:12]
         self._lineage_registered_for: tuple | None = None
         self._view_examples_cache: list = []
         self._view_examples_stamp: tuple = ()
@@ -492,66 +503,16 @@ class Agent(TextProcessing, ContentIngestion, Transport, Learning):
         self._scope_drop_warned = False
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
-        self.output_filter_file = resolve_seed_lang_file("output_filter", "json", self.agent_lang)
+        self.output_filter_file = resolve_seed_lang_file(
+            "output_filter", "json", self.agent_lang)
         self._filters_cache: list = []
         self._filters_stamp: tuple = ()
 
         # SillyTavern-style lorebook (keyword-triggered context entries)
-        self.lorebook_file = resolve_seed_lang_file("lorebook", "json", self.agent_lang)
+        self.lorebook_file = resolve_seed_lang_file(
+            "lorebook", "json", self.agent_lang)
         self._lorebook_cache: list = []
         self._lorebook_stamp: tuple = ()
-
-        # letta-style core memory (per-group short note, always in prompt)
-        self.core_memory_file = resolve_runtime_state_file("core_memory.json")
-        self.core_memory: dict[str, str] = self._load_core_memory()
-
-        self.message_debounce_sec = max(0.0, message_debounce_sec)
-        self._msg_seq: dict[str, int] = defaultdict(int)
-
-        self._vision_in_flight: dict[str, int] = defaultdict(int)
-
-        self._sticky_call: dict[str, dict] = {}
-
-        # message_id ring for de-duping between webhook and periodic catch-up
-        # paths. Persisted to disk so a restart doesn't accidentally re-handle
-        # messages the bot already responded to before going down — without
-        # this, the startup check_missed_mentions sees an empty ring and may
-        # treat a still-recent @ mention as new.
-        self._seen_msg_ids: deque = deque(maxlen=2000)
-        self._seen_msg_file = resolve_runtime_state_file("seen_msg_ids.json")
-        try:
-            if self._seen_msg_file.exists():
-                with self._seen_msg_file.open("r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                if isinstance(loaded, list):
-                    self._seen_msg_ids.extend(
-                        str(value) for value in loaded[-2000:]
-                        if isinstance(value, (str, int))
-                    )
-                    logger.info("[Agent] loaded %d seen message_ids from disk",
-                                len(self._seen_msg_ids))
-        except Exception as e:
-            logger.warning("[Agent] seen_msg_ids load failed: %s: %s",
-                           type(e).__name__, e)
-        # seen_msg_ids flush-throttle counters: the in-memory ring updates on
-        # every message; disk writes are batched (see _remember_msg_id).
-        self._seen_dirty = 0
-        self._seen_last_flush = 0.0
-
-        # Quote-reply resolution index: message_id -> "speaker: text". When a
-        # later message quotes an earlier one, _extract_text looks it up here
-        # (zero cost) before falling back to a NapCat get_msg call. Without it the
-        # quoted content never reaches the model and it has to guess who/what it
-        # is replying to → wrong-person / crossed-thread replies (off-topic).
-        self._msg_index: dict[str, str] = {}
-        self._msg_index_cap = 1000
-
-        self.enabled = bool(api_key)
-        if not self.enabled:
-            logger.warning("[Agent] LLM_API_KEY not configured; %s disabled", bot_name)
-        if self.enabled and not self.bot_name:
-            logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
-                           "explicit @-mentions (set BOT_NAME so it answers to its name)")
 
     def _sidecar(self, attr: str, cls, path: Path):
         """Lazy sidecar of examples_file, rebuilt whenever the pool is repointed
