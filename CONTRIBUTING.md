@@ -107,6 +107,7 @@ like this" and "why did it stop" both have answers.
 | `persona_agent/evolution.py` | eval → candidate conversion, dedup, pool trimming (pure logic) |
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
 | `persona_agent/channels.py` | The one place conversation / memory / learning keys are derived from an event |
+| `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
 | `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup |

@@ -159,12 +159,21 @@ class FileLock:
 
 
 class RuntimeInstanceLock(FileLock):
-    """Non-blocking single-owner lock for one resolved runtime directory."""
+    """Non-blocking single-owner lock for one DEPLOYMENT ROOT.
 
-    def __init__(self, runtime_directory: str | Path):
-        runtime_directory = Path(runtime_directory)
+    The root is AGENT_HOME (`paths.ROOT`), which is what the only caller
+    passes — NOT `paths.runtime_dir()`, despite the name this parameter used
+    to have. The distinction is load-bearing: two processes may share one
+    AGENT_HOME while pointing AGENT_RUNTIME_DIR at different directories, and
+    a lock taken per runtime directory would let both of them start and
+    corrupt each other's ledgers, which is exactly what docs/deploy.md's
+    "one process per root" promises cannot happen.
+    """
+
+    def __init__(self, deployment_root: str | Path):
+        deployment_root = Path(deployment_root)
         super().__init__(
-            runtime_directory / ".personagent.instance.lock", timeout=0.0)
+            deployment_root / ".personagent.instance.lock", timeout=0.0)
 
 
 def append_lock_path(path: str | Path) -> Path:

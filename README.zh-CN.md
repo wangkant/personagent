@@ -176,7 +176,9 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 .venv/bin/python tools/candidates_admin.py list --state promoted
 .venv/bin/python tools/candidates_admin.py show <id>
 .venv/bin/python tools/candidates_admin.py promote <id>
+.venv/bin/python tools/candidates_admin.py reject <id>
 .venv/bin/python tools/candidates_admin.py rollback <id>
+.venv/bin/python tools/candidates_admin.py supersede <old_id> <new_id>
 ```
 
 `REACT_LEARN`、`REACT_ELICIT` 和 `PROMOTE_AUTO` 默认开启。反馈判定会额外调用模型；不需要时可在 `.env` 中关闭。`EVAL_ENABLE` 和 `EVOLVE_AUTO` 默认关闭。撤销候选项会停止使用它，但不会删除原始记录。

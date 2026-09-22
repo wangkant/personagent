@@ -57,6 +57,16 @@ class SendResult:
 
     success: bool = False
     partial: bool = False
+    #: Receipt ids for the chunks that went out. ALWAYS EMPTY behind a gateway
+    #: sink: `_napcat_send` diverts into the sink and returns before the
+    #: receipt is parsed, and the forwarder only learns the platform's own
+    #: message id after the HTTP response is already on its way back (the
+    #: outbound reply item has no id field to carry it). Consequence, and it
+    #: is narrower than it looks: `reactions.PendingReplies.match`'s
+    #: `quote_mid` path can never hit on a forwarded platform, so a reaction
+    #: there is attributable only by the `at_bot` fallback. DM replies are
+    #: unaffected — that path passes no `quote_mid` on any platform. Not a
+    #: defect to fix here: the synchronous round-trip is deliberate.
     message_ids: list[str] = field(default_factory=list)
     sticker_files: list[str] = field(default_factory=list)
     # The text the group actually saw. On a partial send this is the prefix
