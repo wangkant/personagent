@@ -120,6 +120,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The tests are pytest tests.** `pytest.ini` used to collect exactly one
+  file, `tests/test_pytest_entry.py`, which discovered the other suites by
+  looking for an `if __name__ == "__main__"` guard and ran each of them as a
+  subprocess. A suite was therefore one pytest test: 292 test functions
+  reached CI as 20 items, no test could be named on the command line, and a
+  failure was a captured stdout dump rather than a reported assertion. Each
+  suite is now an ordinary module of `test_*` functions, so
+  `python -m pytest tests/test_gateway.py -k throttle` works and a failure
+  points at the line. The count is the same run as before: 1803 assertions,
+  the same ones, over 292 tests.
+
+  Three pieces went with the subprocess runner. `tests/_report.py` reconfigured
+  stdout to UTF-8 so `print` could not raise on a Windows console codec, and
+  turned an escaping exception into one named failure instead of ending the
+  run — pytest does both itself, the first by falling back to escaped ASCII
+  when a write cannot encode, the second by construction. `run_script_suite`
+  snapshotted and restored the checkout's runtime and PII files around each
+  subprocess; the equivalent assertion that no test writes the real runtime
+  directory now runs as a module fixture in `tests/test_ledger.py`. The three
+  meta-tests existed to catch what the discovery step could silently drop — an
+  uncollected file, an unregistered function, the gateway suite run in a clean
+  checkout — and nothing is registered by hand any more.
+
+  `tests/conftest.py` carries what is left: `tmp`, the per-test scratch
+  directory the suites already took as an argument, and a hook that runs an
+  `async def` test on its own event loop, so pytest stays the only thing this
+  repository needs installed to run its tests. Twenty `sys.path.insert` lines
+  became `pythonpath = . tools` in `pytest.ini`.
+
+  Two behaviours genuinely changed. A suite's `check(name, cond, detail)` now
+  asserts instead of printing and continuing, so a test stops at its first
+  failed property rather than reporting all of them; the properties after it
+  belong to the same test and run again on the next attempt. And
+  `test_astrbot_plugin.py` replaced `asyncio.sleep` globally and never put it
+  back — harmless when every suite had its own process, and the reason three
+  gateway tests and one reaction test failed the first time they shared one.
+  It is scoped to the test now.
+
 - **An unrecognised boolean keeps its declared default instead of silently
   reading as False.** `raw == "true"` was fixed once in `promotion.Policy`
   after `PROMOTE_AUTO=1` disabled promotion entirely and said nothing; six
