@@ -8,6 +8,7 @@ Usage:
     python tools/import_stickers_folder.py "<your sticker folder>"
     python tools/import_stickers_folder.py --limit 50 <src_folder>     # import first N only
     python tools/import_stickers_folder.py --no-tag <src_folder>       # copy without tagging
+    python tools/import_stickers_folder.py --dry-run <src_folder>      # preview counts only
 """
 from __future__ import annotations
 
@@ -158,6 +159,13 @@ async def main():
     p.add_argument("src", help="source image folder")
     p.add_argument("--limit", type=int, default=0, help="import first N only (0 = all)")
     p.add_argument("--no-tag", action="store_true", help="copy only; skip tagging")
+    # Mirrors auto_reviewer.py's --dry-run: "calls no model and writes
+    # nothing". Every accepted file used to hit disk immediately and, unless
+    # --no-tag, cost one paid GLM vision call, with no way to preview counts
+    # first.
+    p.add_argument("--dry-run", action="store_true",
+                   help="show what would be imported; calls no model and "
+                        "writes nothing")
     args = p.parse_args()
 
     src = Path(args.src)
@@ -177,7 +185,7 @@ async def main():
         files = files[:args.limit]
     logger.info("source %s: %d files", src.name, len(files))
 
-    if not args.no_tag and not GLM_API_KEY:
+    if not args.dry_run and not args.no_tag and not GLM_API_KEY:
         logger.error("GLM_API_KEY not configured; cannot tag. Use --no-tag or fill in .env first")
         return 1
 
@@ -206,6 +214,21 @@ async def main():
                 continue
 
             filename = f"auto/{md5}.{ext}"
+
+            if args.dry_run:
+                # Same md5_index update the real path does below, so a second
+                # copy of a new image later in this same folder is counted as
+                # a dup instead of a second "new" — otherwise the preview
+                # count would overstate what a real run would import.
+                md5_index[md5] = filename
+                new_count += 1
+                if not args.no_tag:
+                    tagged_count += 1
+                logger.info("[%d/%d] %s: would import%s",
+                            i + 1, len(files), md5[:8],
+                            "" if args.no_tag else " + tag")
+                continue
+
             (ROOT / "stickers" / filename).write_bytes(img_bytes)
 
             entry = {
