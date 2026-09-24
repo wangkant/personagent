@@ -20,6 +20,24 @@ def check(name: str, cond: bool, detail: str = "") -> None:
     assert cond, name + (f" - {detail}" if detail else "")
 
 
+def test_a_leftover_env_tmp_does_not_keep_its_mode() -> None:
+    """os.open applies its mode only at creation, so a leftover .env.tmp from an
+    interrupted run kept whatever mode it had when the keys were written."""
+    with tempfile.TemporaryDirectory() as d:
+        env = Path(d) / ".env"
+        leftover = Path(d) / ".env.tmp"
+        leftover.write_text("STALE=1\n", encoding="utf-8")
+        os.chmod(leftover, 0o644)
+        quickstart.write_env(env, {"LLM_API_KEY": "sk-new"})
+        check("write_env: the leftover temp file is gone", not leftover.exists())
+        text = env.read_text(encoding="utf-8")
+        check("write_env: the new value is written", "LLM_API_KEY=sk-new" in text, text)
+        check("write_env: nothing from the leftover survives", "STALE" not in text, text)
+        if os.name != "nt":   # Windows ACLs do not map onto POSIX mode bits
+            mode = env.stat().st_mode & 0o777
+            check("write_env: the result is owner-only", mode == 0o600, oct(mode))
+
+
 def test_plugin_config_is_merged_not_replaced() -> None:
     cfg = quickstart.astrbot_plugin_config(
         {"timeout_s": 300, "block_default": False, "custom": 1},

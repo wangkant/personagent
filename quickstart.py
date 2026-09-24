@@ -141,7 +141,10 @@ def write_env(env_path: Path, values: dict) -> None:
     # 0600 at CREATION, before a single key is written: `write_text` opens at
     # the umask default, so chmod'ing afterwards still leaves a window where
     # the live API keys are world-readable.
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, SECRET_FILE_MODE)
+    # The mode applies only at creation, so a leftover .env.tmp would keep its
+    # old one: remove it and create the file fresh.
+    tmp.unlink(missing_ok=True)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, SECRET_FILE_MODE)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(updated)
     try:

@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A failed persona-lineage save no longer drops the earlier revisions out of
+  scope.** `extend()` rolls the new hash back when the save fails, and the
+  agent then registered a lineage without its own hash, so everything learned
+  under earlier revisions stopped counting for the rest of the process. The
+  running hash is now scoped in regardless.
+- **An image seen during a vision outage is described once the outage ends.** A
+  vision timeout, 429 or network failure was cached as a miss, so the image
+  stayed undescribed for as long as the cache kept it. A miss is now cached
+  only when vision and OCR both answered.
+- **`/health` probes the private chat with the agent's default model when
+  `LLM_MODEL` is unset**, instead of failing the probe as "not configured" on a
+  working agent. An explicit blank `LLM_MODEL` still reads as blank, as it does
+  for the agent, so preflight keeps reporting it.
+- **A leftover `.env.tmp` no longer keeps its old mode.** `os.open` applies the
+  mode only when it creates the file, so a temp file left by an interrupted
+  wizard run kept whatever mode it had; it is now removed and created fresh,
+  owner-only.
+
 ## [0.4.0] — 2026-09-24
 
 The interface pass: every error the HTTP surface returns carries a stable

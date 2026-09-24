@@ -222,16 +222,13 @@ def apply_candidates(auto_yes: bool) -> None:
             logger.info("[%d/%d] duplicate of an existing pair -> skipped", i, len(pending))
             continue
 
-        if auto_yes:
-            verdict = "y"
-        else:
-            print(f"\n[{i}/{len(pending)}] {cand.get('failure_mode', '?')} "
-                  f"(score {cand.get('src_score', '?')}/5, mode {pair['mode']})")
-            print(f"  diagnosis:  {cand.get('bad_diagnosis', '')}")
-            print(f"  constraint: {cand.get('constraint_to_add', '')}")
-            print(f"  BAD: {pair['reply']}")
-            print(f"  OK : {pair['better']}")
-            verdict = input("  approve? [y]es / [n]o / [e]dit better / Enter=skip: ").strip().lower()
+        print(f"\n[{i}/{len(pending)}] {cand.get('failure_mode', '?')} "
+              f"(score {cand.get('src_score', '?')}/5, mode {pair['mode']})")
+        print(f"  diagnosis:  {cand.get('bad_diagnosis', '')}")
+        print(f"  constraint: {cand.get('constraint_to_add', '')}")
+        print(f"  BAD: {pair['reply']}")
+        print(f"  OK : {pair['better']}")
+        verdict = input("  approve? [y]es / [n]o / [e]dit better / Enter=skip: ").strip().lower()
 
         if verdict == "e":
             edited = input("  new 'better' text: ").strip()
@@ -244,7 +241,7 @@ def apply_candidates(auto_yes: bool) -> None:
             approved.append(pair)
             approved_ts.append(ts)
             existing.add((pair["reply"], pair["better"]))
-            verdicts[ts] = "auto" if auto_yes else "approved"
+            verdicts[ts] = "approved"
         elif verdict == "n":
             verdicts[ts] = "rejected"
         # anything else: leave pending for a later run

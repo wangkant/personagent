@@ -1383,17 +1383,18 @@ class ContentIngestion:
                     len(todo), marked)
         return marked
 
-    async def _describe_image_glm(self, url: str) -> str:
+    async def _describe_image_glm(self, url: str) -> str | None:
         """OpenAI-compatible vision call (the name is historical — it was
         originally written for Zhipu GLM-4V but is now used by any vision
         model that exposes the OpenAI /chat/completions shape with
         image_url). Fetches the image bytes, sends as a base64 data URL —
         raw URLs trigger format errors on some providers; base64 is the
-        reliable path."""
+        reliable path. None = the call failed (fetch, network, HTTP) and may
+        succeed later; "" = the image has no usable caption."""
         try:
             img_bytes = await self._fetch_image_bytes(url)
             if not img_bytes:
-                return ""
+                return None
             if len(img_bytes) < 200:
                 logger.debug("[Agent] GLM image too small (%d bytes), skipping", len(img_bytes))
                 return ""
@@ -1477,7 +1478,7 @@ class ContentIngestion:
                     logger.warning("[Agent] GLM vision HTTP %d: %s (exc=%s)",
                                    r.status_code if r else 0,
                                    (r.text if r else "")[:200], last_exc)
-                    return ""
+                    return None
                 data = r.json()
                 text = (data.get("choices", [{}])[0]
                             .get("message", {})
@@ -1486,7 +1487,7 @@ class ContentIngestion:
         except Exception as e:
             logger.debug("[Agent] GLM vision failed: %s: %s",
                          type(e).__name__, e)
-            return ""
+            return None
 
     async def _describe_image(self, url: str) -> str:
         """Vision goes through the OpenAI-compatible endpoint (_describe_image_glm
@@ -1502,6 +1503,7 @@ class ContentIngestion:
         if self._vision_configured():
             # OpenAI-compatible: glm-* / moonshot-* / kimi-* / deepseek-vl-* / qwen-vl-* …
             caption = await self._describe_image_glm(url)
+        vision_failed = caption is None
         if caption:
             return caption
 
@@ -1518,14 +1520,16 @@ class ContentIngestion:
             avg_token_len = sum(len(t) for t in tokens) / max(len(tokens), 1)
             if avg_token_len >= 2:
                 return ocr_text
-        # Remember the miss, the way _describe_url caches its "[link]". Vision
-        # and OCR have both had their turn on this exact image and come back
-        # with nothing; re-running them on every repost buys the same nothing at
-        # the price of the full vision retry ladder plus a NapCat round trip.
-        # The gateway-sink return above is deliberately NOT cached: that one is
-        # "not from here", not "never".
-        self.image_caption_cache[cache_key] = ""
-        self._gc_image_cache()
+        # Remember the miss, the way _describe_url caches its "[link]", but only
+        # when both channels answered: re-running them on every repost buys the
+        # same nothing at the price of the vision retry ladder plus a NapCat
+        # round trip. _ocr_image caches only a reply it got, and a vision call
+        # that failed is "not now", which cached would blind this image for
+        # good. The gateway-sink return above is not cached either: that one
+        # is "not from here", not "never".
+        if not vision_failed and cache_key in self.image_caption_cache:
+            self.image_caption_cache[cache_key] = ""
+            self._gc_image_cache()
         return ""
 
     def _gc_image_cache(self) -> None:

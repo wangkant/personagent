@@ -25,6 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from persona_agent import evidence as evidence_mod
 from persona_agent import evolution
 from persona_agent import lineage as lineage_mod
 from persona_agent.agent import Agent
@@ -721,6 +722,25 @@ def test_a_failed_lineage_save_can_still_be_retried() -> None:
               lin.hashes("v1") == ["hash_a"], str(lin.hashes("v1")))
         check("lineage: a cold reload sees the retried write",
               lineage_mod.PersonaLineage(path).hashes("v1") == ["hash_a"])
+
+
+def test_a_failed_lineage_save_keeps_the_running_persona_in_scope() -> None:
+    """extend() rolls the hash back when the save fails; the running agent must
+    still register itself, or its earlier revisions fall out of scope."""
+    with tempfile.TemporaryDirectory() as d:
+        agent = make_agent(Path(d))
+        agent.persona_hash = "revision-never-saved"
+        scope_key = (agent.persona_version or "", agent.persona_hash)
+        evidence_mod._PERSONA_LINEAGE.pop(scope_key, None)
+        real = lineage_mod.atomic_write_text
+        lineage_mod.atomic_write_text = _refuse_to_write
+        try:
+            _ = agent.persona_lineage
+        finally:
+            lineage_mod.atomic_write_text = real
+        check("lineage: the running hash is in scope after a failed save",
+              scope_key in evidence_mod._PERSONA_LINEAGE)
+        evidence_mod._PERSONA_LINEAGE.pop(scope_key, None)
 
 
 def test_an_unreadable_lineage_file_is_never_overwritten() -> None:

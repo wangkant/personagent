@@ -52,7 +52,9 @@ def check_private_chat():
     FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
     Routed like the agent, or the probe would report on an endpoint DMs do
     not use."""
-    model = private_model_from_env() or os.getenv("LLM_MODEL", "")
+    # The agent's own default and semantics (settings.py): unset reads as the
+    # default model, an explicit blank stays blank for preflight to report.
+    model = private_model_from_env() or os.getenv("LLM_MODEL", "deepseek-chat")
     base, key = _llm_endpoint(model)
     if not (key and model):
         return None, "not configured"

@@ -642,6 +642,35 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
                       "Bearer sk-primary", "dm-model")], repr(posted))
 
 
+def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> None:
+    """With LLM_MODEL unset the agent runs its default model; the probe must
+    too, or a skipped critical probe fails /health on a working agent. An
+    explicit blank stays blank, as it does for the agent."""
+    from persona_agent import health
+
+    sent: list = []
+
+    def fake_post(url, payload, headers, timeout=30):
+        sent.append(payload["model"])
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(health, "_post_json", fake_post)
+    for name in ("LLM_MODEL", "PRIVATE_MODEL", "ANTHROPIC_PRIVATE_MODEL",
+                 "FALLBACK_MODEL", "FALLBACK_BASE_URL", "FALLBACK_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    ok, detail = health.check_private_chat()
+    check("health: the private probe runs with LLM_MODEL unset", ok is True, detail)
+    check("health: the private probe asks for the agent's default model",
+          sent == ["deepseek-chat"], repr(sent))
+
+    monkeypatch.setenv("LLM_MODEL", "")
+    sent.clear()
+    ok, detail = health.check_private_chat()
+    check("health: an explicit blank LLM_MODEL is still not configured",
+          ok is None and sent == [], f"{ok} {detail} {sent}")
+
+
 def test_gateway_envelope_refuses_a_bad_signature() -> None:
     """The signature is what binds the BODY to the token. Nothing tested it.
 

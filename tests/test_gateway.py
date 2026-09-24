@@ -3152,6 +3152,38 @@ async def test_b64_caption_cache_key(tmp: Path) -> None:
     check("b64 cache: hashed key round-trips", hit == "a cute cat sticker", repr(hit))
 
 
+async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
+    """A miss is cached only when vision and OCR both answered. A vision outage
+    cached as "" would leave every image seen during it undescribed for good."""
+    agent = make_agent(tmp)
+    agent.vision_model, agent.glm_api_key, agent.glm_base_url = "v", "k", "http://v"
+    url = "https://example.com/a.png"
+    key = agent._image_cache_key(url)
+
+    async def vision_down(_url):
+        return None
+
+    async def ocr_down(_url):
+        return ""
+
+    agent._describe_image_glm, agent._ocr_image = vision_down, ocr_down
+    got = await agent._describe_image(url)
+    check("vision cache: an outage yields no caption", got == "", repr(got))
+    check("vision cache: an outage is not cached", key not in agent.image_caption_cache)
+
+    async def vision_empty(_url):
+        return ""
+
+    async def ocr_garbage(_url):
+        agent.image_caption_cache[key] = "a b"   # what _ocr_image caches on a reply
+        return "a b"
+
+    agent._describe_image_glm, agent._ocr_image = vision_empty, ocr_garbage
+    await agent._describe_image(url)
+    check("vision cache: a miss both channels answered is cached",
+          agent.image_caption_cache.get(key) == "", repr(agent.image_caption_cache.get(key)))
+
+
 async def test_ssrf_redirect_hops(tmp: Path) -> None:
     """A public URL that 302s to an internal address must be refused at the
     redirect hop (the initial-URL _host_is_internal check can't see it), while

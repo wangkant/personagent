@@ -632,6 +632,11 @@ class Agent(ContentIngestion, Transport, Learning):
         if self._lineage_registered_for != key:
             _root, extended = obj.extend(self.persona_version, self.persona_hash)
             hashes = obj.hashes(self.persona_version)
+            # A failed save rolls the hash back out of the lineage, but this
+            # process still runs as it: scope it in, or every earlier revision
+            # falls out of scope until a restart manages to save.
+            if self.persona_hash and self.persona_hash not in hashes:
+                hashes.append(self.persona_hash)
             evidence_mod.register_persona_lineage(self.persona_version, hashes)
             self._lineage_registered_for = key
             if extended:
