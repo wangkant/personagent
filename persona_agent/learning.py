@@ -343,7 +343,7 @@ class Learning:
             )
 
             # Register framing, not "quality" framing. Measured on the same
-            # model (deepseek-v4-pro) and the same drafted-letter reply:
+            # model and the same drafted-letter reply:
             # "Rate the quality of this reply" returned 5/5 ("casual, helpful
             # suggestion ... without AI tells") while the register rubric below
             # returned 3 -- a quality frame rewards helpfulness, which is
@@ -387,18 +387,18 @@ class Learning:
             # Cross-vendor eval to avoid the main-model and judge-model sharing
             # the same RLHF reward lineage ("grading my own homework"). If the
             # configured eval_model name names a Moonshot/Kimi family model and
-            # GLM_* credentials are populated, route through that endpoint; the
-            # GLM_* config is OpenAI-compatible and is also used by the vision
-            # path. Otherwise the endpoint the agent calls that model on: the
+            # the vision endpoint is configured, route through it: it is
+            # OpenAI-compatible and is where those models are served.
+            # Otherwise the endpoint the agent calls that model on: the
             # primary's, or the fallback's when the eval model is the fallback
             # model (EVAL_MODEL defaults to it).
             em = self.eval_model.lower()
-            if ("moonshot" in em or "kimi" in em) and self.glm_api_key and self.glm_base_url:
-                eval_url = f"{self.glm_base_url}/chat/completions"
-                eval_auth = self.glm_api_key
+            if ("moonshot" in em or "kimi" in em) and self.vision_api_key and self.vision_base_url:
+                eval_url = f"{self.vision_base_url}/chat/completions"
+                eval_auth = self.vision_api_key
             else:
                 # The main call path's own resolution (_call_llm), /v1
-                # prefix included: DeepSeek accepts both aliases, but other
+                # prefix included: some providers accept both aliases, but most
                 # OpenAI-compatible endpoints only serve /v1 — without it
                 # evals silently 404.
                 eval_url, eval_auth = self._endpoint_for(self.eval_model)
@@ -409,7 +409,7 @@ class Learning:
                     {"role": "user", "content": eval_prompt},
                 ],
                 "temperature": 0,
-                # Evaluators (esp. kimi-k2.6) still emit chain-of-thought prose
+                # Reasoning evaluators still emit chain-of-thought prose
                 # before the JSON even with thinking disabled; too few tokens cut
                 # the trailing JSON in half and the parse fails. 800 leaves room
                 # for prose + JSON; the parser also salvages a truncated object.

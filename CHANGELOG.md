@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+
+- **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
+  `VISION_BASE_URL`.** They configure whichever OpenAI-compatible model
+  `VISION_MODEL` names, not one vendor's. The old names keep working exactly as
+  before, default endpoint included, and a new name that is set wins.
+  `VISION_BASE_URL` has no default: the vision model decides the provider, so
+  name its endpoint. The template used to ship `GLM_BASE_URL` blank while
+  calling blank the default, but a blank value has always turned vision off; it
+  now asks for the URL.
+
 ### Fixed
 
 - **A failed persona-lineage save no longer drops the earlier revisions out of
@@ -25,6 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mode only when it creates the file, so a temp file left by an interrupted
   wizard run kept whatever mode it had; it is now removed and created fresh,
   owner-only.
+
+### Changed
+
+- **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
+  `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /
+  `vision_base_url`, `Agent._describe_image_glm` is `_describe_image_vision`,
+  and `health.eval_endpoint` takes `vision_key` / `vision_base`. The default
+  chat model and endpoint are defined once, as `config_env.DEFAULT_LLM_MODEL`
+  and `DEFAULT_LLM_BASE_URL`, instead of in every file that fell back to them,
+  and logs and comments name the vision endpoint rather than a vendor.
+- **`tools/import_stickers_folder.py` no longer defaults `VISION_MODEL`** to
+  one vendor's model: tagging needs `VISION_MODEL` and the vision endpoint set,
+  as the agent does. `tools/sticker_holdout_eval.py` stops with that message up
+  front instead of scoring every sticker None.
 
 ## [0.4.0] — 2026-09-24
 

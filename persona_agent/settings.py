@@ -41,7 +41,8 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
 from . import promotion
-from .config_env import env_bool, env_csv, env_float, env_int, env_str
+from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool, env_csv,
+                         env_float, env_int, env_str, vision_endpoint_from_env)
 from .preflight import private_model_from_env
 
 
@@ -60,8 +61,8 @@ class AgentSettings:
 
     # ---- the LLM endpoint -------------------------------------------------
     api_key: str
-    base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-chat"
+    base_url: str = DEFAULT_LLM_BASE_URL
+    model: str = DEFAULT_LLM_MODEL
     #: Alternate model name for private chats, served by the same
     #: OpenAI-compatible primary endpoint — not a second provider, unless it
     #: is also ``fallback_model``'s name, which is served on the fallback's
@@ -159,8 +160,8 @@ class AgentSettings:
 
     # ---- vision, search, stickers -----------------------------------------
     vision_model: str = ""
-    glm_api_key: str = ""
-    glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    vision_api_key: str = ""
+    vision_base_url: str = ""
     tavily_key: str = ""
     stickers_dir: str = "stickers"
     stickers_file: str = "stickers.json"
@@ -283,8 +284,8 @@ class AgentSettings:
         self.base_url = str(self.base_url or "").rstrip("/")
         self.fallback_base_url = str(self.fallback_base_url or "").rstrip("/")
         self.napcat_api = str(self.napcat_api or "").rstrip("/")
-        self.glm_base_url = (
-            str(self.glm_base_url).rstrip("/") if self.glm_base_url else "")
+        self.vision_base_url = (
+            str(self.vision_base_url).rstrip("/") if self.vision_base_url else "")
         self.bot_qq = str(self.bot_qq)
         self.owner_qq = str(self.owner_qq) if self.owner_qq else ""
         self.vision_model = (self.vision_model or "").strip()
@@ -335,10 +336,11 @@ class AgentSettings:
         def _str(name: str, default: str = "", *, strip: bool = False) -> str:
             return env_str(name, default, strip=strip, env=env)
 
+        vision_key, vision_base = vision_endpoint_from_env(env)
         defaults = dict(
             api_key=_str("LLM_API_KEY"),
-            base_url=_str("LLM_BASE_URL", "https://api.deepseek.com"),
-            model=_str("LLM_MODEL", "deepseek-chat"),
+            base_url=_str("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
+            model=_str("LLM_MODEL", DEFAULT_LLM_MODEL),
             bot_qq=_str("BOT_QQ"),
             bot_name=_str("BOT_NAME"),
             private_model=private_model_from_env(env),
@@ -371,9 +373,8 @@ class AgentSettings:
             eval_model=_str("EVAL_MODEL"),
             eval_file=_str("EVAL_FILE", "eval.jsonl"),
             vision_model=_str("VISION_MODEL"),
-            glm_api_key=_str("GLM_API_KEY"),
-            glm_base_url=_str(
-                "GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+            vision_api_key=vision_key,
+            vision_base_url=vision_base,
             tavily_key=_str("TAVILY_API_KEY"),
             lang=_str("AGENT_LANG", "en", strip=True).lower(),
             gateway_owner_ids=env_csv("GATEWAY_OWNER_IDS", env=env),

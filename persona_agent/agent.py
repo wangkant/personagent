@@ -308,8 +308,8 @@ class Agent(ContentIngestion, Transport, Learning):
         self.eval_file = resolve_runtime_state_file(s.eval_file)
 
         self.vision_model = s.vision_model
-        self.glm_api_key = s.glm_api_key
-        self.glm_base_url = s.glm_base_url
+        self.vision_api_key = s.vision_api_key
+        self.vision_base_url = s.vision_base_url
         self.tavily_key = s.tavily_key
 
         self.proactive_enable = s.proactive_enable
@@ -521,8 +521,7 @@ class Agent(ContentIngestion, Transport, Learning):
             unknown_log=resolve_runtime_state_file("unknown_stickers.jsonl"),
             llm_caller=self._call_llm,
             # Cheap judgment model configured for THIS endpoint — a hardcoded
-            # provider literal here would 404 on Moonshot/OpenAI/Ollama
-            # deployments.
+            # model name here would 404 on every other provider.
             tagger_model=self.judge_model,
             persona_brief=persona_brief,
         )
@@ -1765,7 +1764,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
     # Every LLM call in this file goes through the provider's OpenAI-compatible
     # endpoint (/v1/chat/completions) over plain httpx — no vendor SDK. That is
-    # what keeps DeepSeek / GLM / Moonshot / OpenAI / Ollama interchangeable.
+    # what keeps every OpenAI-compatible provider interchangeable.
 
     def _http(self, **kwargs) -> "_PooledHTTP":
         """Pooled httpx client. Use exactly like a native ``AsyncClient`` context.
@@ -1916,8 +1915,8 @@ class Agent(ContentIngestion, Transport, Learning):
         `plain_text_fallback` is the other half of that trade. With
         response_format set AND a prior assistant turn in the history,
         DeepSeek answers whitespace with finish_reason "stop" (measured 4/4
-        on deepseek-v4-flash, reproduces on deepseek-chat; the same messages
-        without response_format: 0/4) — so every private-chat turn after the
+        on two of its models; the same messages without response_format:
+        0/4) — so every private-chat turn after the
         first could come back empty. Reshaping the stored assistant turns as
         protocol JSON does not help (also 4/4): the trigger is
         response_format itself. With the flag, a reply still blank after the

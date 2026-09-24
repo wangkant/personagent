@@ -111,7 +111,7 @@ For example, to allow emoji and set a reply length limit:
 { "reply_style": { "emoji": true, "max_chars": 320 } }
 ```
 
-Image understanding uses the separately configured `VISION_MODEL`, `GLM_API_KEY`, and `GLM_BASE_URL`. See [.env.example](.env.example) for the full settings. Editing the persona text preserves learned material. Changing `BOT_NAME` or `PERSONA_VERSION` changes the learning scope, so the old character's material no longer applies directly.
+Image understanding uses the separately configured `VISION_MODEL`, `VISION_API_KEY`, and `VISION_BASE_URL`. See [.env.example](.env.example) for the full settings. Editing the persona text preserves learned material. Changing `BOT_NAME` or `PERSONA_VERSION` changes the learning scope, so the old character's material no longer applies directly.
 
 ## Connect a platform
 

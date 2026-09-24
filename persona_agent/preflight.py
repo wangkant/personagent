@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from .paths import ROOT
 
 logger = logging.getLogger("agent")
@@ -57,6 +58,9 @@ TEMPLATE_EXEMPT = frozenset({
     # template scan for the same reason; both lists have to agree or a
     # deployment that legitimately sets it gets told it is a typo.
     "ANTHROPIC_PRIVATE_MODEL",
+    # The vision endpoint's pre-rename names, likewise still honoured
+    # (config_env.vision_endpoint_from_env) and not advertised.
+    "GLM_API_KEY", "GLM_BASE_URL",
 })
 
 
@@ -64,7 +68,7 @@ def _base_url_needs_full_path(base: str) -> bool:
     """Does this base URL hit the gap `chat_completions_url` documents?
 
     `endpoints.chat_completions_url` accepts a provider root or a `/v1` base
-    and asks callers on a custom version path (Zhipu's `/api/paas/v4`, say) to
+    and asks callers on a custom version path (`/api/paas/v4`, say) to
     supply the complete endpoint themselves. Nothing enforces that: give it a
     `/v4` base and it silently returns `.../v4/v1/chat/completions`, which no
     provider serves, and the first sign is a 404 on every reply.
@@ -262,7 +266,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     fallback_url = str(configured.get("FALLBACK_BASE_URL") or "").strip()
     fallback_key = str(configured.get("FALLBACK_API_KEY") or "").strip()
     fallback_model = str(configured.get("FALLBACK_MODEL") or "").strip()
-    primary_model = str(configured.get("LLM_MODEL") or "deepseek-chat").strip()
+    primary_model = str(configured.get("LLM_MODEL") or DEFAULT_LLM_MODEL).strip()
     if (fallback_url or fallback_key) and fallback_model in ("", primary_model):
         findings.append(Finding(
             "WARN", "FALLBACK_BASE_URL" if fallback_url else "FALLBACK_API_KEY",
@@ -272,7 +276,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     elif fallback_url and not fallback_key:
         fallback_host = urlsplit(fallback_url).hostname
         primary_url = str(configured.get("LLM_BASE_URL") or "").strip()
-        if fallback_host != urlsplit(primary_url or "https://api.deepseek.com").hostname:
+        if fallback_host != urlsplit(primary_url or DEFAULT_LLM_BASE_URL).hostname:
             findings.append(Finding(
                 "WARN", "FALLBACK_API_KEY",
                 f"is blank while FALLBACK_BASE_URL points at another host"

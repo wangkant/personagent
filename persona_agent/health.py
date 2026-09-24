@@ -14,6 +14,7 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, vision_endpoint_from_env
 from .preflight import private_model_from_env
 from .endpoints import chat_completions_url, endpoint_for
 from .textproc import apply_k2_quirks
@@ -38,9 +39,9 @@ def _llm_endpoint(model: str) -> tuple[str, str]:
     is on the primary's."""
     return endpoint_for(
         model,
-        primary_model=os.getenv("LLM_MODEL", "deepseek-chat"),
+        primary_model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         fallback_model=os.getenv("FALLBACK_MODEL", ""),
-        base_url=(os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/"),
+        base_url=(os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL) or "").rstrip("/"),
         api_key=os.getenv("LLM_API_KEY", ""),
         fallback_base_url=(os.getenv("FALLBACK_BASE_URL", "") or "").rstrip("/"),
         fallback_api_key=os.getenv("FALLBACK_API_KEY", ""))
@@ -54,7 +55,7 @@ def check_private_chat():
     not use."""
     # The agent's own default and semantics (settings.py): unset reads as the
     # default model, an explicit blank stays blank for preflight to report.
-    model = private_model_from_env() or os.getenv("LLM_MODEL", "deepseek-chat")
+    model = private_model_from_env() or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     base, key = _llm_endpoint(model)
     if not (key and model):
         return None, "not configured"
@@ -70,7 +71,7 @@ def check_primary_chat_tools():
     function-calling path the web-search decision uses — on the endpoint the
     agent would send that model to, which is the fallback's own when one is
     configured."""
-    model = os.getenv("FALLBACK_MODEL") or os.getenv("LLM_MODEL") or "deepseek-chat"
+    model = os.getenv("FALLBACK_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL
     base, key = _llm_endpoint(model)
     if not key:
         return None, "not configured"
@@ -84,9 +85,8 @@ def check_primary_chat_tools():
 
 
 def check_vision():
-    """Vision endpoint (OpenAI-compatible, e.g. Zhipu GLM-4V) via GLM_* config."""
-    key = os.getenv("GLM_API_KEY", "")
-    base = (os.getenv("GLM_BASE_URL", "") or "").rstrip("/")
+    """Vision endpoint: any OpenAI-compatible vision model, via VISION_*."""
+    key, base = vision_endpoint_from_env()
     model = os.getenv("VISION_MODEL", "")
     if not (key and base and model):
         return None, "not configured"
@@ -104,16 +104,16 @@ def check_vision():
     return True, f"{model} -> {txt[:20]!r}"
 
 
-def eval_endpoint(model: str, *, glm_key: str, glm_base: str,
+def eval_endpoint(model: str, *, vision_key: str, vision_base: str,
                   api_key: str, base_url: str) -> tuple[str, str]:
     """(url, bearer key) for the self-eval model.
 
-    A Moonshot/Kimi-family model with GLM_* credentials goes through the GLM
-    endpoint (its base already carries the version path); everything else
+    A Moonshot/Kimi-family model with vision credentials goes through the
+    vision endpoint (its base already carries the version path); everything else
     uses the `base_url` given under /v1, matching the main call path."""
     em = (model or "").lower()
-    if ("moonshot" in em or "kimi" in em) and glm_key and glm_base:
-        return f"{glm_base}/chat/completions", glm_key
+    if ("moonshot" in em or "kimi" in em) and vision_key and vision_base:
+        return f"{vision_base}/chat/completions", vision_key
     return chat_completions_url(base_url), api_key
 
 
@@ -123,10 +123,11 @@ def check_eval():
     if not model:
         return None, "not configured"
     base, key = _llm_endpoint(model)
+    vision_key, vision_base = vision_endpoint_from_env()
     url, key = eval_endpoint(
         model,
-        glm_key=os.getenv("GLM_API_KEY", ""),
-        glm_base=(os.getenv("GLM_BASE_URL", "") or "").rstrip("/"),
+        vision_key=vision_key,
+        vision_base=vision_base,
         api_key=key,
         base_url=base,
     )

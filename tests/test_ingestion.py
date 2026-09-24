@@ -378,7 +378,7 @@ def test_a_fetched_url_is_logged_as_its_host_only(caplog) -> None:
         return None
 
     caplog.set_level(logging.DEBUG, logger="agent")
-    Harness()._accept_vision_caption(TELEGRAM_FILE_URL, "a cat on a mat", "glm")
+    Harness()._accept_vision_caption(TELEGRAM_FILE_URL, "a cat on a mat", "api")
     with patch.object(ingestion, "_resolve_public_target", stalled):
         asyncio.run(safe_fetch_url(
             TELEGRAM_FILE_URL, timeout=0.01, max_wire_bytes=10,

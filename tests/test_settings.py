@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from persona_agent.config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL,
+                                      LEGACY_VISION_BASE_URL, vision_endpoint_from_env)
 from persona_agent.settings import AgentSettings
 
 
@@ -42,8 +44,8 @@ FULL_ENV = {
     "RATE_WINDOW": "13", "RATE_THRESHOLD": "14", "FALLBACK_DURATION": "15",
     "RATE_LIMIT_COOLDOWN": "16",
     "EVAL_ENABLE": "true", "EVAL_MODEL": "eval-model", "EVAL_FILE": "e.jsonl",
-    "VISION_MODEL": "v-model", "GLM_API_KEY": "glm", "TAVILY_API_KEY": " tav ",
-    "GLM_BASE_URL": "https://glm.example/v4/", "AGENT_LANG": " ZH ",
+    "VISION_MODEL": "v-model", "VISION_API_KEY": "vk", "TAVILY_API_KEY": " tav ",
+    "VISION_BASE_URL": "https://vision.example/v4/", "AGENT_LANG": " ZH ",
     "GATEWAY_OWNER_IDS": "telegram:1, discord:2 ,",
     "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
     "QQ_GROUPS": "g1,g2", "PRIVATE_ALLOWED_QQS": "p1",
@@ -52,11 +54,45 @@ FULL_ENV = {
 }
 
 
+def test_the_vision_endpoint_reads_new_names_and_honours_the_old() -> None:
+    """VISION_API_KEY / VISION_BASE_URL replace GLM_API_KEY / GLM_BASE_URL.
+    A deployment on the old names must behave exactly as before, default
+    included; the new names carry no vendor default."""
+    new = vision_endpoint_from_env({"VISION_API_KEY": "vk",
+                                    "VISION_BASE_URL": "https://v.example/v4/"})
+    check("vision: the new names are read, trailing slash trimmed",
+          new == ("vk", "https://v.example/v4"), repr(new))
+    check("vision: the new names have no default endpoint",
+          vision_endpoint_from_env({"VISION_API_KEY": "vk"}) == ("vk", ""))
+    check("vision: nothing set is nothing configured",
+          vision_endpoint_from_env({}) == ("", ""))
+    old = vision_endpoint_from_env({"GLM_API_KEY": "gk"})
+    check("vision: the old key alone still gets the old default endpoint",
+          old == ("gk", LEGACY_VISION_BASE_URL), repr(old))
+    check("vision: an old base URL set blank still reads blank, as before",
+          vision_endpoint_from_env({"GLM_API_KEY": "gk", "GLM_BASE_URL": ""})
+          == ("gk", ""))
+    both = vision_endpoint_from_env({
+        "VISION_API_KEY": "vk", "VISION_BASE_URL": "https://v.example/v4",
+        "GLM_API_KEY": "gk", "GLM_BASE_URL": "https://g.example/v4"})
+    check("vision: a set new name wins over the old one",
+          both == ("vk", "https://v.example/v4"), repr(both))
+    mixed = vision_endpoint_from_env({"VISION_API_KEY": "vk",
+                                      "GLM_BASE_URL": "https://g.example/v4"})
+    check("vision: a half-migrated .env keeps its old base URL",
+          mixed == ("vk", "https://g.example/v4"), repr(mixed))
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "GLM_API_KEY": "gk",
+                                    "GLM_BASE_URL": "https://g.example/v4/"})
+    check("vision: from_env still honours the old names",
+          (s.vision_api_key, s.vision_base_url) == ("gk", "https://g.example/v4"),
+          repr((s.vision_api_key, s.vision_base_url)))
+
+
 def test_plain_construction_ignores_deployment_settings() -> None:
     """The constructor's own defaults, not the `.env` around it."""
     plain = AgentSettings(api_key="k")
     check("plain: literal endpoint default",
-          plain.model == "deepseek-chat" and plain.base_url.endswith("deepseek.com"),
+          plain.model == DEFAULT_LLM_MODEL and plain.base_url == DEFAULT_LLM_BASE_URL,
           repr((plain.model, plain.base_url)))
     check("plain: constructor's rate window, not .env.example's",
           (plain.rate_window, plain.rate_threshold, plain.fallback_duration)
@@ -76,9 +112,9 @@ def test_from_env_reads_the_deployment() -> None:
     check("from_env: key, model, endpoint",
           (s.api_key, s.model) == ("sk-live", "live-model"))
     check("from_env: trailing slash trimmed off every base url",
-          (s.base_url, s.napcat_api, s.glm_base_url, s.fallback_base_url)
+          (s.base_url, s.napcat_api, s.vision_base_url, s.fallback_base_url)
           == ("https://llm.example/v1", "http://napcat:3000",
-              "https://glm.example/v4", "https://fb.example/v1"), repr(s.base_url))
+              "https://vision.example/v4", "https://fb.example/v1"), repr(s.base_url))
     check("from_env: the fallback's own key", s.fallback_api_key == "sk-fb")
     unset = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
     check("from_env: an unset fallback endpoint stays blank, meaning the primary's",

@@ -21,7 +21,7 @@ For every candidate scenario this probe reports two numbers:
 
 Usage:
     python tools/scenario_probe.py --candidates data/benchmark/candidates.jsonl \
-        --judge-model deepseek-v4-pro --outdir benchmark_runs/probe
+        --judge-model <a model other than LLM_MODEL> --outdir benchmark_runs/probe
 
 Writes probe_results.jsonl (one row per scenario: reply + both scores) and a
 per-family summary to stdout. Selection is left to the operator: the numbers
@@ -78,7 +78,7 @@ async def probe_one(scn: dict, bot_name: str, lang: str, state_root: Path) -> di
 async def main_async(args) -> int:
     scns = bench.load_scenarios(Path(args.candidates))
     print(f"probing {len(scns)} scenario(s) with the weak style guide "
-          f"(model={bench.os.getenv('LLM_MODEL', 'deepseek-chat')})")
+          f"(model={bench.os.getenv('LLM_MODEL', bench.DEFAULT_LLM_MODEL)})")
     import persona_agent.agent as pa
     pa.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
 

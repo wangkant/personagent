@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 
 from persona_agent import evolution  # noqa: E402
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
 
@@ -149,10 +150,11 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
 
     Model credentials come from the environment (the same vars main.py reads),
     so a live run generates and self-evals against the configured endpoints.
-    They default to a fake key + api.deepseek.com, which is correct for the
+    They default to a fake key + the default endpoint, which is correct for the
     tests — those stub `_call_llm`, so the key is never used."""
     import os
     from persona_agent.agent import Agent
+    from persona_agent.config_env import vision_endpoint_from_env
     # Absolute, always: the Agent ctor re-anchors RELATIVE state paths under
     # the repo's runtime/ dir (paths.resolve_runtime_state_file), so a relative
     # --outdir silently split one arm's state across two trees -- ctor-resolved
@@ -163,16 +165,18 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
         api_key=os.getenv("LLM_API_KEY", "") or "benchmark-key",
-        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
-        model=os.getenv("LLM_MODEL", "deepseek-chat"),
+        base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
+        model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         bot_qq="10001", bot_name=bot_name,
         napcat_api="http://127.0.0.1:9",
         memory_file=str(state_dir / "memory.json"), persona="benchmark persona",
         eval_enable=eval_enable, eval_file=str(state_dir / "eval.jsonl"),
         eval_model=os.getenv("EVAL_MODEL", ""),
         vision_model="",  # scenarios use [image: ...] markers, never real pixels
-        glm_api_key=os.getenv("GLM_API_KEY", ""),
-        glm_base_url=os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+        # The self-eval may route a Moonshot/Kimi model through the vision
+        # endpoint (learning.py), so it is passed even with vision off.
+        vision_api_key=vision_endpoint_from_env()[0],
+        vision_base_url=vision_endpoint_from_env()[1],
         stickers_dir=str(state_dir / "stickers"),
         stickers_file=str(state_dir / "stickers.json"),
         message_debounce_sec=0, lang=lang,
@@ -265,7 +269,7 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                 await agent._evaluate_reply(
                     "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
                 # Optional throttle between eval calls: a cross-vendor eval
-                # endpoint (e.g. Moonshot/kimi) rate-limits far below the tight
+                # endpoint may rate-limit far below the tight
                 # benchmark loop. BENCH_EVAL_DELAY seconds keeps it under the cap.
                 _delay = float(os.getenv("BENCH_EVAL_DELAY", "0"))
                 if _delay:
@@ -607,7 +611,7 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
     import httpx
 
     base = (os.getenv("BENCH_JUDGE_BASE_URL")
-            or os.getenv("LLM_BASE_URL", "https://api.deepseek.com")).rstrip("/")
+            or os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)).rstrip("/")
     key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
     if not key:
         sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or LLM_API_KEY")
@@ -686,7 +690,7 @@ async def cmd_run(args) -> int:
     holdout = load_scenarios(DATA / f"scenarios.holdout.{args.lang}.jsonl")
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
-    gen_model = os.getenv("LLM_MODEL", "deepseek-chat")
+    gen_model = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     # The judge belongs in meta.json for the same reason gen_model does: a
     # score is only readable next to who produced it. Without it a finished
     # run cannot be audited for the one failure this module's docstring calls

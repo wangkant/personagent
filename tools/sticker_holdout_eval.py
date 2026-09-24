@@ -48,6 +48,7 @@ load_dotenv(ROOT / ".env", override=False)
 
 from persona_agent.agent import Agent
 from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL, vision_endpoint_from_env
 from persona_agent.preflight import private_model_from_env
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
@@ -94,24 +95,24 @@ async def main(holdout_path: Path, runs: int) -> None:
     print(f"loaded {len(holdout)} holdout entries, runs={runs}")
 
     # Spin up an Agent purely for the vision aesthetic pipeline. Most
-    # fields aren't exercised; we just need vision_model + glm_* creds.
+    # fields aren't exercised; we just need the vision model and endpoint.
+    # Checked up front: without them every POST goes to a hostless URL and
+    # the whole holdout scores None, which reads as "the judge is broken".
+    vision_model = os.getenv("VISION_MODEL", "")
+    vision_key, vision_base = vision_endpoint_from_env()
+    if not (vision_model and vision_key and vision_base):
+        raise SystemExit("VISION_MODEL, VISION_API_KEY and VISION_BASE_URL "
+                         "must all be set")
     agent = Agent(
         api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+        base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         model=os.getenv("LLM_MODEL", ""),
         bot_qq=os.getenv("BOT_QQ", ""),
         bot_name=os.getenv("BOT_NAME", ""),
         private_model=private_model_from_env(),
-        vision_model=os.getenv("VISION_MODEL", ""),
-        glm_api_key=os.getenv("GLM_API_KEY", ""),
-        # `or`, not a bare getenv default: .env.example ships `GLM_BASE_URL=`
-        # blank, and a set-but-empty value defeats getenv's default. Passing ""
-        # leaves Agent.glm_base_url empty (agent.py keeps the empty string),
-        # every vision POST goes to a hostless "/chat/completions", and the
-        # whole holdout scores None — which reads as "the judge is broken" and
-        # sends the operator off to audit a VISION_MODEL and key that are fine.
-        glm_base_url=(os.getenv("GLM_BASE_URL", "")
-                      or "https://open.bigmodel.cn/api/paas/v4"),
+        vision_model=vision_model,
+        vision_api_key=vision_key,
+        vision_base_url=vision_base,
     )
 
     results: dict[str, list] = defaultdict(list)

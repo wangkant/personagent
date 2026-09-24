@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from .config_env import DEFAULT_LLM_MODEL
 from .storage import append_jsonl_rotating, atomic_write_text
 from .textproc import (_detect_image_mime, _example_field, _fence_user_data,
                        strip_json_fences)
@@ -39,7 +40,7 @@ class StickerLibrary:
         stickers_file: str | Path,
         unknown_log: str | Path,
         llm_caller: Optional[Callable[..., Awaitable[str]]] = None,
-        tagger_model: str = "deepseek-chat",
+        tagger_model: str = DEFAULT_LLM_MODEL,
         persona_brief: str = "",
     ):
         self.dir = Path(stickers_dir)

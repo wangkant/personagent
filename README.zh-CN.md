@@ -110,7 +110,7 @@ python quickstart.py
 { "reply_style": { "emoji": true, "max_chars": 320 } }
 ```
 
-图片理解需要 `VISION_MODEL`、`GLM_API_KEY` 和 `GLM_BASE_URL`，使用单独配置的视觉接口。完整设置见 [.env.example](.env.example)。修改人设正文不会重置已学内容；修改 `BOT_NAME` 或 `PERSONA_VERSION` 会切换学习作用域，旧角色的内容不再直接适用。
+图片理解需要 `VISION_MODEL`、`VISION_API_KEY` 和 `VISION_BASE_URL`，使用单独配置的视觉接口。完整设置见 [.env.example](.env.example)。修改人设正文不会重置已学内容；修改 `BOT_NAME` 或 `PERSONA_VERSION` 会切换学习作用域，旧角色的内容不再直接适用。
 
 ## 接入聊天平台
 

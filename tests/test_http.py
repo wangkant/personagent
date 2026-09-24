@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import main as main_module
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 import httpx
 from main import RequestBodyTooLarge, _read_body_limited
 from persona_agent import learning as learning_module
@@ -388,6 +389,8 @@ _UNDOCUMENTED_SETTINGS = {
     # A pre-0.1.2 alias kept working for existing deployments and
     # deliberately not advertised to new ones.
     "ANTHROPIC_PRIVATE_MODEL",
+    # The vision endpoint's pre-rename names, for the same reason.
+    "GLM_API_KEY", "GLM_BASE_URL",
 }
 
 
@@ -574,7 +577,7 @@ def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None
                      FALLBACK_BASE_URL="https://other.example/v1"))
     check("fallback endpoint: the primary's host sharing its key is silent",
           not levels(FALLBACK_MODEL="cheap",
-                     FALLBACK_BASE_URL="https://api.deepseek.com/beta"))
+                     FALLBACK_BASE_URL=DEFAULT_LLM_BASE_URL + "/beta"))
     check("fallback endpoint: another host handed the primary's key is named",
           ("WARN", "FALLBACK_API_KEY") in levels(
               FALLBACK_MODEL="cheap", FALLBACK_BASE_URL="https://other.example/v1"))
@@ -585,7 +588,7 @@ def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None
     check("fallback endpoint: a custom version path is named like the primary's",
           ("WARN", "FALLBACK_BASE_URL") in levels(
               FALLBACK_MODEL="cheap", FALLBACK_API_KEY="k",
-              FALLBACK_BASE_URL="https://open.bigmodel.cn/api/paas/v4"))
+              FALLBACK_BASE_URL="https://llm.example/api/v4"))
 
 
 def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:
@@ -602,8 +605,8 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
         return {"choices": [{"message": {"content": "ok"}}]}
 
     monkeypatch.setattr(health, "_post_json", fake_post)
-    for name in ("FALLBACK_BASE_URL", "FALLBACK_API_KEY", "GLM_API_KEY",
-                 "GLM_BASE_URL"):
+    for name in ("FALLBACK_BASE_URL", "FALLBACK_API_KEY", "VISION_API_KEY",
+                 "VISION_BASE_URL", "GLM_API_KEY", "GLM_BASE_URL"):
         monkeypatch.delenv(name, raising=False)
     for name, value in (("LLM_API_KEY", "sk-primary"), ("LLM_MODEL", "main"),
                         ("LLM_BASE_URL", "https://primary.example"),
@@ -662,7 +665,7 @@ def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> No
     ok, detail = health.check_private_chat()
     check("health: the private probe runs with LLM_MODEL unset", ok is True, detail)
     check("health: the private probe asks for the agent's default model",
-          sent == ["deepseek-chat"], repr(sent))
+          sent == [DEFAULT_LLM_MODEL], repr(sent))
 
     monkeypatch.setenv("LLM_MODEL", "")
     sent.clear()

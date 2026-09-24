@@ -13,9 +13,9 @@ not mention.
 LLM_API_KEY=...
 ```
 
-`LLM_BASE_URL` and `LLM_MODEL` only matter if you are not using
-DeepSeek — the names are historical, and any OpenAI-compatible `/v1` endpoint
-works (OpenAI, Zhipu, Moonshot, Together, a local ollama or llama.cpp). There
+`LLM_BASE_URL` and `LLM_MODEL` have working defaults; set them to use any
+other OpenAI-compatible `/v1` endpoint, hosted or a local ollama or
+llama.cpp server. There
 is no `persona.txt` requirement; a default persona ships in the code.
 
 **To run live on QQ: three.**

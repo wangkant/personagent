@@ -26,7 +26,8 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent.agent import Agent  # noqa: E402
-from persona_agent.config_env import env_bool  # noqa: E402
+from persona_agent.config_env import (  # noqa: E402
+    DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool)
 from persona_agent.textproc import TextProcessing  # noqa: E402
 from persona_agent.preflight import private_model_from_env  # noqa: E402
 
@@ -36,8 +37,8 @@ GROUP_ID = "trial"
 def _build_agent(lang: str) -> Agent:
     return Agent(
         api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
-        model=os.getenv("LLM_MODEL", "deepseek-chat"),
+        base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
+        model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
         private_model=private_model_from_env(),
@@ -52,8 +53,6 @@ def _build_agent(lang: str) -> Agent:
         # (the terminal can't send images anyway).
         eval_enable=False,
         vision_model="",
-        glm_api_key=os.getenv("GLM_API_KEY", ""),
-        glm_base_url=os.getenv("GLM_BASE_URL", ""),
         tavily_key=os.getenv("TAVILY_API_KEY", ""),
         lang=lang,
     )

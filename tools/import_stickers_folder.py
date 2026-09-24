@@ -33,10 +33,10 @@ import httpx
 from persona_agent.paths import resolve_runtime_state_file
 from persona_agent.storage import atomic_write_text
 from persona_agent.textproc import strip_json_fences
+from persona_agent.config_env import vision_endpoint_from_env
 
-GLM_API_KEY = os.getenv("GLM_API_KEY", "")
-GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4").rstrip("/")
-VISION_MODEL = os.getenv("VISION_MODEL", "glm-4v-flash")
+VISION_API_KEY, VISION_BASE_URL = vision_endpoint_from_env()
+VISION_MODEL = os.getenv("VISION_MODEL", "")
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 
 # Sentinels the vision model emits when it can't read the image; treated as
@@ -118,8 +118,8 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
     data_url = f"data:{mime};base64,{b64}"
     try:
         r = await client.post(
-            f"{GLM_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {GLM_API_KEY}"},
+            f"{VISION_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {VISION_API_KEY}"},
             json={
                 "model": VISION_MODEL,
                 "messages": [{
@@ -135,7 +135,7 @@ async def tag_image(client: httpx.AsyncClient, img_bytes: bytes, ext: str) -> di
             timeout=30,
         )
         if r.status_code != 200:
-            logger.debug("GLM HTTP %d: %s", r.status_code, r.text[:120])
+            logger.debug("vision HTTP %d: %s", r.status_code, r.text[:120])
             return None
         text = ((r.json().get("choices") or [{}])[0]
                 .get("message", {}).get("content", "") or "").strip()
@@ -161,7 +161,7 @@ async def main():
     p.add_argument("--no-tag", action="store_true", help="copy only; skip tagging")
     # Mirrors auto_reviewer.py's --dry-run: "calls no model and writes
     # nothing". Every accepted file used to hit disk immediately and, unless
-    # --no-tag, cost one paid GLM vision call, with no way to preview counts
+    # --no-tag, cost one paid vision call, with no way to preview counts
     # first.
     p.add_argument("--dry-run", action="store_true",
                    help="show what would be imported; calls no model and "
@@ -185,8 +185,10 @@ async def main():
         files = files[:args.limit]
     logger.info("source %s: %d files", src.name, len(files))
 
-    if not args.dry_run and not args.no_tag and not GLM_API_KEY:
-        logger.error("GLM_API_KEY not configured; cannot tag. Use --no-tag or fill in .env first")
+    if not args.dry_run and not args.no_tag and not (
+            VISION_MODEL and VISION_API_KEY and VISION_BASE_URL):
+        logger.error("VISION_MODEL, VISION_API_KEY and VISION_BASE_URL are needed to tag. "
+                     "Use --no-tag or fill in .env first")
         return 1
 
     new_count = 0

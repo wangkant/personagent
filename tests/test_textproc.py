@@ -2546,8 +2546,8 @@ def test_hidden_reasoning_is_turned_off_by_endpoint_not_model_name() -> None:
     check("elsewhere a K2 model still gets thinking off and its one temperature",
           payload == {"temperature": 0.6, "thinking": {"type": "disabled"}},
           repr(payload))
-    payload = apply_k2_quirks({"temperature": 0.3}, "glm-4v-flash",
-                              "https://open.bigmodel.cn/api/paas/v4")
+    payload = apply_k2_quirks({"temperature": 0.3}, "vision-model",
+                              "https://vision.example/api/v4")
     check("an ordinary model on an ordinary endpoint is left alone",
           payload == {"temperature": 0.3}, repr(payload))
 

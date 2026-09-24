@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=False)
 
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
 from persona_agent.paths import (
     read_jsonl,
     resolve_runtime_lang_file,
@@ -98,15 +99,15 @@ def metric_factory(judge_model: str):
 
     # The judge must not be the model being measured, or the loop grades its
     # own homework (see tools/evolution_benchmark.py). judge_model here
-    # defaults to the same "deepseek-chat" .env.example gives LLM_MODEL, so
+    # defaults to the same model LLM_MODEL defaults to, so
     # an out-of-the-box run scores itself unless --judge-model is overridden;
     # warn rather than sys.exit because this file's scaffold/quick-start role
     # means --judge-model always has a default and a hard failure here would
     # break running it with no arguments beyond that default.
-    if judge_model.strip().lower() == os.getenv("LLM_MODEL", "deepseek-chat").strip().lower():
+    if judge_model.strip().lower() == os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL).strip().lower():
         print(
             f"WARNING: --judge-model ({judge_model}) matches LLM_MODEL "
-            f"({os.getenv('LLM_MODEL', 'deepseek-chat')}) -- the judge would "
+            f"({os.getenv('LLM_MODEL', DEFAULT_LLM_MODEL)}) -- the judge would "
             f"be scoring the same model it is grading. Pass a different "
             f"--judge-model.",
             file=sys.stderr,
@@ -120,7 +121,7 @@ def metric_factory(judge_model: str):
     judge_lm = dspy.LM(
         model=f"openai/{judge_model}",
         api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
+        base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
     )
 
     def metric(example, pred, trace=None):
@@ -158,7 +159,7 @@ def cmd_bootstrap() -> int | None:
         print(f"  [BAD] {p['bad']}\n  [OK]  {p['good']}\n")
 
 
-def cmd_tune(judge_model: str = "deepseek-chat") -> int | None:
+def cmd_tune(judge_model: str = DEFAULT_LLM_MODEL) -> int | None:
     try:
         import dspy  # type: ignore
     except ImportError:
@@ -172,9 +173,9 @@ def cmd_tune(judge_model: str = "deepseek-chat") -> int | None:
         return 1
 
     api_key = os.getenv("LLM_API_KEY", "")
-    base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+    base_url = os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
     lm = dspy.LM(
-        model=f"openai/{os.getenv('LLM_MODEL', 'deepseek-chat')}",
+        model=f"openai/{os.getenv('LLM_MODEL', DEFAULT_LLM_MODEL)}",
         api_key=api_key,
         base_url=base_url,
     )
@@ -208,7 +209,7 @@ def main() -> int | None:
     p = argparse.ArgumentParser()
     p.add_argument("--bootstrap", action="store_true", help="dry-run: load and preview pairs")
     p.add_argument("--tune", action="store_true", help="run BootstrapFewShot optimizer")
-    p.add_argument("--judge-model", default="deepseek-chat")
+    p.add_argument("--judge-model", default=DEFAULT_LLM_MODEL)
     args = p.parse_args()
     if args.bootstrap:
         return cmd_bootstrap()

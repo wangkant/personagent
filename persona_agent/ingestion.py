@@ -1207,9 +1207,9 @@ class ContentIngestion:
 
     @staticmethod
     def _gif_first_frame_png(gif_bytes: bytes) -> bytes:
-        """Extract a GIF's first frame as PNG. GLM-4V and many other vision
-        endpoints reject GIF directly (error 1210 on Zhipu); the first frame
-        as PNG carries enough signal for a caption. Returns empty bytes on
+        """Extract a GIF's first frame as PNG. Many vision endpoints reject
+        GIF directly; the first frame as PNG carries enough signal for a
+        caption. Returns empty bytes on
         failure so the caller can fall back to OCR."""
         class _BoundedBuffer(io.BytesIO):
             def write(self, data) -> int:
@@ -1256,16 +1256,17 @@ class ContentIngestion:
                 close_image()
 
     def _vision_configured(self) -> bool:
-        """Whether the operator set up a vision model. glm_base_url has a
-        default, so it alone says nothing about consent to upload images."""
-        return bool(self.vision_model and self.glm_api_key and self.glm_base_url)
+        """Whether the operator set up a vision model. vision_base_url can carry
+        the pre-rename default, so it alone says nothing about consent to
+        upload images."""
+        return bool(self.vision_model and self.vision_api_key and self.vision_base_url)
 
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
         """Ask the vision model if a sticker is visually tacky / off-persona.
         Returns True (tacky → should ban), False (fine), or None on judgment
         failure (read error / API error / unparseable response — entry is
-        left untouched). Reuses the GLM-4V infra: MIME detection, first-frame
-        for GIF, base64 data URL."""
+        left untouched). Reuses the caption path's plumbing: MIME detection,
+        first-frame for GIF, base64 data URL."""
         try:
             if not img_bytes or len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
                 return None
@@ -1295,13 +1296,13 @@ class ContentIngestion:
                 "max_tokens": 60,
                 "temperature": 0,
             }
-            apply_k2_quirks(payload, self.vision_model, self.glm_base_url)
+            apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
             raw = ""
             async with self._http(timeout=30) as c:
                 for attempt in range(4):
                     r = await c.post(
-                        f"{self.glm_base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.glm_api_key}"},
+                        f"{self.vision_base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.vision_api_key}"},
                         json=payload,
                     )
                     if r.status_code == 429:
@@ -1383,11 +1384,9 @@ class ContentIngestion:
                     len(todo), marked)
         return marked
 
-    async def _describe_image_glm(self, url: str) -> str | None:
-        """OpenAI-compatible vision call (the name is historical — it was
-        originally written for Zhipu GLM-4V but is now used by any vision
-        model that exposes the OpenAI /chat/completions shape with
-        image_url). Fetches the image bytes, sends as a base64 data URL —
+    async def _describe_image_vision(self, url: str) -> str | None:
+        """OpenAI-compatible vision call, for any vision model that takes the
+        /chat/completions shape with image_url. Fetches the image bytes, sends as a base64 data URL —
         raw URLs trigger format errors on some providers; base64 is the
         reliable path. None = the call failed (fetch, network, HTTP) and may
         succeed later; "" = the image has no usable caption."""
@@ -1396,34 +1395,34 @@ class ContentIngestion:
             if not img_bytes:
                 return None
             if len(img_bytes) < 200:
-                logger.debug("[Agent] GLM image too small (%d bytes), skipping", len(img_bytes))
+                logger.debug("[Agent] vision: image too small (%d bytes), skipping", len(img_bytes))
                 return ""
             if len(img_bytes) > MAX_IMAGE_BYTES:
-                logger.warning("[Agent] GLM image too large (%d bytes), skipping", len(img_bytes))
+                logger.warning("[Agent] vision: image too large (%d bytes), skipping", len(img_bytes))
                 return ""
             mime = _detect_image_mime(img_bytes)
             if not mime:
-                logger.debug("[Agent] GLM unknown image magic %s",
+                logger.debug("[Agent] vision: unknown image magic %s",
                              img_bytes[:12].hex())
                 return ""
             if mime == "image/gif":
-                # GLM rejects GIFs (error 1210, format/parse). Pull the first
+                # Many vision endpoints reject GIFs. Pull the first
                 # frame as PNG so animated stickers/memes still get a caption.
                 # PIL decode/transcode is CPU-bound — run it in a thread so it
                 # doesn't stall the event loop.
                 frame = await asyncio.to_thread(self._gif_first_frame_png, img_bytes)
                 if not frame:
-                    logger.info("[Agent] GLM skip GIF (first-frame extract failed), fallback to OCR")
+                    logger.info("[Agent] vision: skip GIF (first-frame extract failed), fallback to OCR")
                     return ""
                 img_bytes = frame
                 mime = "image/png"
             elif mime == "image/heic":
-                # HEIC/HEIF — GLM doesn't accept this format; let caller fall through to OCR
-                logger.info("[Agent] GLM skip HEIC/HEIF, fallback to OCR")
+                # HEIC/HEIF — vision endpoints commonly reject it; let caller fall through to OCR
+                logger.info("[Agent] vision: skip HEIC/HEIF, fallback to OCR")
                 return ""
             elif mime == "image/avif":
-                # AVIF — GLM doesn't accept; OCR fallback
-                logger.info("[Agent] GLM skip AVIF, fallback to OCR")
+                # AVIF — commonly rejected too; OCR fallback
+                logger.info("[Agent] vision: skip AVIF, fallback to OCR")
                 return ""
             data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
 
@@ -1442,7 +1441,7 @@ class ContentIngestion:
                 "max_tokens": 120,
                 "temperature": 0.3,
             }
-            apply_k2_quirks(payload, self.vision_model, self.glm_base_url)
+            apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
             async with self._http(timeout=30) as c:
                 r = None
                 last_exc = None
@@ -1455,8 +1454,8 @@ class ContentIngestion:
                 for attempt in range(3):
                     try:
                         r = await c.post(
-                            f"{self.glm_base_url}/chat/completions",
-                            headers={"Authorization": f"Bearer {self.glm_api_key}"},
+                            f"{self.vision_base_url}/chat/completions",
+                            headers={"Authorization": f"Bearer {self.vision_api_key}"},
                             json=payload,
                         )
                     except Exception as e:
@@ -1475,7 +1474,7 @@ class ContentIngestion:
                         break  # retries exhausted; the non-200 branch below logs
                     await asyncio.sleep(2 ** attempt)  # 1s, 2s
                 if r is None or r.status_code != 200:
-                    logger.warning("[Agent] GLM vision HTTP %d: %s (exc=%s)",
+                    logger.warning("[Agent] vision HTTP %d: %s (exc=%s)",
                                    r.status_code if r else 0,
                                    (r.text if r else "")[:200], last_exc)
                     return None
@@ -1483,16 +1482,15 @@ class ContentIngestion:
                 text = (data.get("choices", [{}])[0]
                             .get("message", {})
                             .get("content", "") or "")
-                return self._accept_vision_caption(url, text, "glm")
+                return self._accept_vision_caption(url, text, "api")
         except Exception as e:
-            logger.debug("[Agent] GLM vision failed: %s: %s",
+            logger.debug("[Agent] vision failed: %s: %s",
                          type(e).__name__, e)
             return None
 
     async def _describe_image(self, url: str) -> str:
-        """Vision goes through the OpenAI-compatible endpoint (_describe_image_glm
-        is the general OpenAI-compatible path; the name is historical). OCR
-        fallback on miss. Filters garbage OCR (too short / single-char fragments)."""
+        """Vision goes through the OpenAI-compatible endpoint
+        (_describe_image_vision), with OCR as the fallback on a miss. Filters garbage OCR (too short / single-char fragments)."""
         if not url:
             return ""
         cache_key = self._image_cache_key(url)
@@ -1501,8 +1499,8 @@ class ContentIngestion:
 
         caption = ""
         if self._vision_configured():
-            # OpenAI-compatible: glm-* / moonshot-* / kimi-* / deepseek-vl-* / qwen-vl-* …
-            caption = await self._describe_image_glm(url)
+            # Any OpenAI-compatible vision model.
+            caption = await self._describe_image_vision(url)
         vision_failed = caption is None
         if caption:
             return caption

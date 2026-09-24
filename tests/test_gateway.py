@@ -2412,8 +2412,8 @@ async def test_visual_aesthetic_recheck_is_saved_past_the_throttle(
     sticker write moments earlier must not leave them unsaved behind the save
     throttle, least of all when nothing was banned and no purge follows."""
     agent = make_agent(tmp)
-    agent.vision_model, agent.glm_api_key = "vision-model", "vision-key"
-    agent.glm_base_url = "http://127.0.0.1:9/v1"
+    agent.vision_model, agent.vision_api_key = "vision-model", "vision-key"
+    agent.vision_base_url = "http://127.0.0.1:9/v1"
     (agent.stickers.dir / "s.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     agent.stickers.entries["s.png"] = {"md5": "m", "auto_tagged": True,
                                        "meaning": "smug"}
@@ -2438,8 +2438,8 @@ async def test_visual_aesthetic_recheck_is_saved_past_the_throttle(
 async def test_the_aesthetic_recheck_needs_vision_and_stamps_only_verdicts(
         tmp: Path, monkeypatch) -> None:
     """It runs on every startup. Without a vision model it must not upload
-    the sticker library anywhere (glm_base_url has a default, the key does
-    not), and a call that returned no verdict must not mark the sticker as
+    the sticker library anywhere (vision_base_url can carry a default, the key
+    does not), and a call that returned no verdict must not mark the sticker as
     judged, or setting VISION_MODEL later would recheck nothing."""
     agent = make_agent(tmp)
     (agent.stickers.dir / "s.png").write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -2462,8 +2462,8 @@ async def test_the_aesthetic_recheck_needs_vision_and_stamps_only_verdicts(
     check("sticker recheck: an unconfigured run stamps nothing",
           "_visual_aesthetic_version" not in agent.stickers.entries["s.png"])
 
-    agent.vision_model, agent.glm_api_key = "vision-model", "vision-key"
-    agent.glm_base_url = "http://127.0.0.1:9/v1"
+    agent.vision_model, agent.vision_api_key = "vision-model", "vision-key"
+    agent.vision_base_url = "http://127.0.0.1:9/v1"
     await agent.visual_recheck_aesthetic_all()
     check("sticker recheck: a configured run asks the judge", len(calls) == 1)
     check("sticker recheck: a failed judgment leaves the entry unstamped",
@@ -2632,9 +2632,8 @@ async def test_cache_hits_are_logged_in_either_spelling(tmp: Path, caplog) -> No
 
 def test_sticker_tagger_uses_judge_model() -> None:
     """The sticker tagger must follow the endpoint's configured cheap model
-    (judge_model), not a hardcoded provider literal — "deepseek-chat" 404s on
-    Moonshot/OpenAI/Ollama deployments, so no sticker would ever be
-    tagged."""
+    (judge_model), not a hardcoded model name, which 404s on every other
+    provider, so no sticker would ever be tagged."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = Agent(
@@ -3156,7 +3155,7 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
     """A miss is cached only when vision and OCR both answered. A vision outage
     cached as "" would leave every image seen during it undescribed for good."""
     agent = make_agent(tmp)
-    agent.vision_model, agent.glm_api_key, agent.glm_base_url = "v", "k", "http://v"
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
     url = "https://example.com/a.png"
     key = agent._image_cache_key(url)
 
@@ -3166,7 +3165,7 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
     async def ocr_down(_url):
         return ""
 
-    agent._describe_image_glm, agent._ocr_image = vision_down, ocr_down
+    agent._describe_image_vision, agent._ocr_image = vision_down, ocr_down
     got = await agent._describe_image(url)
     check("vision cache: an outage yields no caption", got == "", repr(got))
     check("vision cache: an outage is not cached", key not in agent.image_caption_cache)
@@ -3178,7 +3177,7 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
         agent.image_caption_cache[key] = "a b"   # what _ocr_image caches on a reply
         return "a b"
 
-    agent._describe_image_glm, agent._ocr_image = vision_empty, ocr_garbage
+    agent._describe_image_vision, agent._ocr_image = vision_empty, ocr_garbage
     await agent._describe_image(url)
     check("vision cache: a miss both channels answered is cached",
           agent.image_caption_cache.get(key) == "", repr(agent.image_caption_cache.get(key)))
@@ -3638,7 +3637,7 @@ async def test_disabled_thinking_speaks_openrouters_dialect_too(tmp: Path) -> No
           p.get("thinking") == {"type": "disabled"}, repr(p))
     check("openrouter: ...and in OpenRouter's own",
           p.get("reasoning") == {"enabled": False}, repr(p))
-    p = await call("https://open.bigmodel.cn/api/paas/v4/chat/completions", True)
+    p = await call("https://llm.example/api/v4/chat/completions", True)
     check("another vendor: thinking off, and no OpenRouter field leaks to it",
           p.get("thinking") == {"type": "disabled"} and "reasoning" not in p, repr(p))
     p = await call("https://openrouter.ai/api/v1", False)
@@ -3664,8 +3663,8 @@ async def test_a_vision_verdict_on_openrouter_does_not_think(tmp: Path) -> None:
 
     agent = make_agent(tmp)
     agent.vision_model = "qwen/qwen3.7-flash"
-    agent.glm_api_key = "vision-key"
-    agent.glm_base_url = "https://openrouter.ai/api/v1"
+    agent.vision_api_key = "vision-key"
+    agent.vision_base_url = "https://openrouter.ai/api/v1"
     payloads: list = []
 
     class _Resp:
@@ -3698,7 +3697,7 @@ async def test_a_vision_verdict_on_openrouter_does_not_think(tmp: Path) -> None:
 async def test_json_mode_blank_falls_back_to_plain_text(tmp: Path) -> None:
     """With `response_format: json_object` AND a prior assistant turn in the
     history, DeepSeek answers whitespace with finish_reason="stop". Measured,
-    4 trials per arm, deepseek-v4-flash (reproduces on deepseek-chat):
+    4 trials per arm, on two of its models:
 
         user only                                   blank 1/4
         user + assistant + user                     blank 4/4

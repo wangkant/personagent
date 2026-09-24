@@ -49,6 +49,7 @@ load_dotenv(ROOT / ".env", override=False)
 import httpx
 
 from persona_agent import evolution
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from persona_agent.paths import (
     resolve_runtime_lang_file,
     resolve_runtime_state_file,
@@ -64,11 +65,11 @@ EVAL_FILE = _runtime_file(os.getenv("EVAL_FILE", "eval.jsonl"))
 CANDIDATES_FILE = resolve_runtime_state_file("candidates.jsonl")
 
 API_KEY = os.getenv("LLM_API_KEY", "")
-BASE_URL = (os.getenv("LLM_BASE_URL", "https://api.deepseek.com")).rstrip("/")
+BASE_URL = (os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)).rstrip("/")
 REVIEWER_MODEL = (
     os.getenv("REVIEWER_MODEL", "")
     or os.getenv("EVAL_MODEL", "")
-    or os.getenv("LLM_MODEL", "deepseek-chat")
+    or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
 )
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 # Keep the newest N machine-generated pairs (0 = no cap) — mirrors the running
