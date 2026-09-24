@@ -1,7 +1,7 @@
 {
   "agent_url": {
     "type": "string",
-    "description": "URL of the persona agent's gateway endpoint (POST /webhook/gateway).",
+    "description": "URL of the persona agent's gateway endpoint (POST /webhook/gateway). Must be loopback, or HTTPS with gateway_token set; plain HTTP to any other host (e.g. another container) is refused and logged as 'refusing unsafe agent_url'.",
     "default": "http://127.0.0.1:8080/webhook/gateway"
   },
   "gateway_token": {
@@ -16,7 +16,7 @@
   },
   "excluded_platforms": {
     "type": "list",
-    "description": "Platform adapter names that must NOT be forwarded. Keep aiocqhttp here when NapCat already feeds the agent directly through /webhook/qq, otherwise QQ messages would be handled twice. To make AstrBot the single inbound path for QQ as well, remove it, stop NapCat posting to /webhook/qq, and set GATEWAY_NATIVE_PLATFORMS=aiocqhttp on the agent so QQ ids stay spelled the way every store on disk already spells them.",
+    "description": "Platform adapter names that must NOT be forwarded. To carry QQ (the supported path), remove aiocqhttp from this list and set GATEWAY_NATIVE_PLATFORMS=aiocqhttp on the agent so QQ ids stay spelled the way every store on disk already spells them. Keep aiocqhttp here only while NapCat still feeds the agent directly through the deprecated /webhook/qq, otherwise QQ messages would be handled twice.",
     "default": ["aiocqhttp"]
   },
   "group_whitelist": {

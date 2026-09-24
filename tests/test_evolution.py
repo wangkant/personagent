@@ -143,6 +143,15 @@ def test_pair_from_candidate() -> None:
     check("pair: missing source binding fails closed",
           evolution.pair_from_candidate(missing_source, "ts") is None)
 
+    # The reviewer sees the reply fenced in U+001E/U+001F; a model that copies
+    # the marks along with it still copied the reply verbatim.
+    fenced = json.loads(json.dumps(cand))
+    fenced["pair_draft"]["reply"] = f"\x1e{fenced['pair_draft']['reply']}\x1f"
+    p = evolution.pair_from_candidate(fenced, "ts")
+    check("pair: a copy carrying the fence marks is still bound",
+          p is not None and p["reply"] == GOOD_DIAG["pair_draft"]["reply"],
+          repr(p))
+
 
 # ---------------------------------------------------------------------------
 # Unit: append_jsonl cap + feedback dedup keys

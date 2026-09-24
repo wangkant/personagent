@@ -15,26 +15,17 @@ failure mode while the configuration lived in three places:
 3. The empty-model fallbacks resolve in dependency order. Each of these ships
    blank and has to end up as a name the endpoint actually serves; one of them
    resolving before its source is set means `{"model": ""}` on a live call.
-
-Run from the repo root:  python tests/test_settings.py
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from persona_agent.settings import AgentSettings  # noqa: E402
-
-_failures: list[str] = []
+from persona_agent.settings import AgentSettings
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    print(f"[{'PASS' if cond else 'FAIL'}] {name}"
-          + (f" — {detail}" if detail and not cond else ""))
-    if not cond:
-        _failures.append(name)
+    """Assert `cond`, naming the property so a failure reads as English."""
+    assert cond, name + (f" - {detail}" if detail else "")
 
 
 #: A deployment `.env` with every setting set to something distinctive.
@@ -46,7 +37,10 @@ FULL_ENV = {
     "AGENT_MEMORY_FILE": "m.json", "AGENT_MEMORY_MAX": "9",
     "OWNER_QQ": "42", "OWNER_NAME": "O", "OWNER_RELATIONSHIP": "rel",
     "PRIVATE_MODEL": "dm-model", "FALLBACK_MODEL": "cheap-model",
+    "FALLBACK_BASE_URL": "https://fb.example/v1/", "FALLBACK_API_KEY": "sk-fb",
+    "FALLBACK_THINKING": "true",
     "RATE_WINDOW": "13", "RATE_THRESHOLD": "14", "FALLBACK_DURATION": "15",
+    "RATE_LIMIT_COOLDOWN": "16",
     "EVAL_ENABLE": "true", "EVAL_MODEL": "eval-model", "EVAL_FILE": "e.jsonl",
     "VISION_MODEL": "v-model", "GLM_API_KEY": "glm", "TAVILY_API_KEY": " tav ",
     "GLM_BASE_URL": "https://glm.example/v4/", "AGENT_LANG": " ZH ",
@@ -67,6 +61,8 @@ def test_plain_construction_ignores_deployment_settings() -> None:
     check("plain: constructor's rate window, not .env.example's",
           (plain.rate_window, plain.rate_threshold, plain.fallback_duration)
           == (60, 5, 300))
+    check("plain: a 429 cools for seconds, not the failure window",
+          plain.rate_limit_cooldown == 20, repr(plain.rate_limit_cooldown))
     check("plain: self-eval on by default in-process", plain.eval_enable is True)
     check("plain: no deployment identity", not plain.bot_qq and not plain.owner_qq)
     empty = AgentSettings.from_env(env={}, api_key="k")
@@ -80,11 +76,21 @@ def test_from_env_reads_the_deployment() -> None:
     check("from_env: key, model, endpoint",
           (s.api_key, s.model) == ("sk-live", "live-model"))
     check("from_env: trailing slash trimmed off every base url",
-          (s.base_url, s.napcat_api, s.glm_base_url)
+          (s.base_url, s.napcat_api, s.glm_base_url, s.fallback_base_url)
           == ("https://llm.example/v1", "http://napcat:3000",
-              "https://glm.example/v4"), repr(s.base_url))
+              "https://glm.example/v4", "https://fb.example/v1"), repr(s.base_url))
+    check("from_env: the fallback's own key", s.fallback_api_key == "sk-fb")
+    unset = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
+    check("from_env: an unset fallback endpoint stays blank, meaning the primary's",
+          (unset.fallback_base_url, unset.fallback_api_key) == ("", ""),
+          repr((unset.fallback_base_url, unset.fallback_api_key)))
+    check("from_env: a fallback endpoint is sent `thinking` only when told it takes it",
+          s.fallback_thinking is True and unset.fallback_thinking is False)
     check("from_env: bounded integers", (s.trigger_count, s.context_len,
           s.followup_window, s.memory_max_per_group) == (7, 40, 11, 9))
+    check("from_env: the two cooldowns are read separately",
+          (s.fallback_duration, s.rate_limit_cooldown) == (15, 16),
+          repr((s.fallback_duration, s.rate_limit_cooldown)))
     check("from_env: .env.example's defaults are the ones that apply",
           AgentSettings.from_env(env={}).rate_window == 120
           and AgentSettings.from_env(env={}).eval_enable is False)
@@ -109,7 +115,7 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
     s = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "PORT": "nope", "AGENT_CONTEXT_LEN": "1",
         "AGENT_TRIGGER_COUNT": "0", "REACT_TTL_SEC": "15m",
-        "PROACTIVE_PROB": "2", "LLM_TIMEOUT": "0",
+        "PROACTIVE_PROB": "2", "LLM_TIMEOUT": "0", "RATE_LIMIT_COOLDOWN": "0",
     })
     check("bad values: bounded ints fall back",
           (s.context_len, s.trigger_count) == (120, 30))
@@ -117,6 +123,8 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
     check("bad values: out-of-range probability falls back",
           s.proactive_prob == 0.25)
     check("bad values: out-of-range timeout falls back", s.llm_timeout == 120.0)
+    check("bad values: out-of-range 429 cooldown falls back",
+          s.rate_limit_cooldown == 20, repr(s.rate_limit_cooldown))
 
 
 def test_the_empty_model_fallbacks_resolve_in_order() -> None:
@@ -193,20 +201,28 @@ def test_the_agent_accepts_the_record_and_its_fields() -> None:
         os.environ["AGENT_HOME"] = previous_home
 
 
-def main() -> int:
-    test_plain_construction_ignores_deployment_settings()
-    test_from_env_reads_the_deployment()
-    test_an_out_of_range_setting_falls_back_rather_than_raising()
-    test_the_empty_model_fallbacks_resolve_in_order()
-    test_post_init_is_idempotent()
-    test_the_agent_accepts_the_record_and_its_fields()
-    print()
-    if _failures:
-        print(f"{len(_failures)} test(s) FAILED: {', '.join(_failures)}")
-        return 1
-    print("all tests passed")
-    return 0
+def test_settings_named_in_log_messages_exist() -> None:
+    """A log line that tells the operator to change a setting must name one
+    that exists. The empty-reply warning used to say "raise LLM_MAX_TOKENS",
+    which no code reads and which preflight reports as an ERROR once added."""
+    import ast
+    import re
 
-
-if __name__ == "__main__":
-    sys.exit(main())
+    root = Path(__file__).resolve().parent.parent
+    env_example = (root / ".env.example").read_text(encoding="utf-8")
+    known = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", env_example, re.MULTILINE))
+    name = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b")
+    unknown = []
+    for path in sorted((root / "persona_agent").glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and node.args
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "logger"):
+                continue
+            for part in ast.walk(node.args[0]):
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    unknown += [f"{path.name}:{node.lineno} {setting}"
+                                for setting in name.findall(part.value)
+                                if setting not in known]
+    check("log messages name only real settings", not unknown, repr(unknown))

@@ -100,7 +100,7 @@ either way:
 |---|---|
 | `persona_agent/agent.py` | Orchestration: message intake, modes, debounce, `_think`, prompt assembly |
 | `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |
-| `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting |
+| `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting, the prompt's data frames |
 | `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
 | `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, conversation LRU |
@@ -110,6 +110,7 @@ either way:
 | `persona_agent/promotion.py` | The promotion policy: strength, scope compatibility, conflicts, thresholds — plus the pre-ledger gate kept for compatibility |
 | `persona_agent/reactions.py` | Reaction attribution + adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | eval → candidate conversion, dedup, pool trimming (pure logic) |
+| `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
 | `persona_agent/channels.py` | The one place conversation / memory / learning keys are derived from an event |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |

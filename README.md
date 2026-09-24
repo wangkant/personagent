@@ -24,7 +24,7 @@ personagent is built for character conversations. Replies depend on the persona,
 - **Images and links.** A configured vision model can describe images; supported links can be expanded into titles and summaries. Unparsed media, such as voice and video, appears as placeholder context.
 - **Platform forwarding.** QQ, Telegram, Discord, and other AstrBot platforms share the reply pipeline. Available features vary by platform.
 
-This is a Python application deployed from a repository checkout. personagent generates replies, AstrBot connects to the chat platform, and your configured OpenAI-compatible API provides the model. With a cloud model, relevant chat context is sent to that provider.
+This is a Python application deployed from a repository checkout. personagent generates replies, AstrBot connects to the chat platform, and your configured OpenAI-compatible API provides the model. With a cloud model, relevant chat context is sent to that provider. A configured fallback provider (`FALLBACK_MODEL`, `FALLBACK_BASE_URL`) is also called on ordinary turns, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context too.
 
 ![Illustrative chat between Alex and Nova about finishing work and dinner](assets/personagent-chat.en.png)
 
@@ -111,7 +111,7 @@ For example, to allow emoji and set a reply length limit:
 { "reply_style": { "emoji": true, "max_chars": 320 } }
 ```
 
-Image understanding uses the separately configured `VISION_MODEL`, `GLM_API_KEY`, and `GLM_BASE_URL`. Image understanding uses the separately configured `VISION_MODEL`, `GLM_API_KEY`, and `GLM_BASE_URL`. See [.env.example](.env.example) for the full settings. Editing the persona text preserves learned material. Changing `BOT_NAME` or `PERSONA_VERSION` changes the learning scope, so the old character's material no longer applies directly.
+Image understanding uses the separately configured `VISION_MODEL`, `GLM_API_KEY`, and `GLM_BASE_URL`. See [.env.example](.env.example) for the full settings. Editing the persona text preserves learned material. Changing `BOT_NAME` or `PERSONA_VERSION` changes the learning scope, so the old character's material no longer applies directly.
 
 ## Connect a platform
 
@@ -122,10 +122,10 @@ Chat platform → AstrBot + forwarder → personagent → Model API
                Relays the reply   ← Returns reply
 ```
 
-1. Run `python quickstart.py` from the personagent repository root. Choose AstrBot setup and provide its data directory. The wizard copies the forwarder plugin and writes a shared `GATEWAY_TOKEN` to both configurations.
-2. Check `agent_url` in the plugin settings. The same-host default is `http://127.0.0.1:8080/webhook/gateway`. For separate containers, use an Agent address reachable from the AstrBot container.
+1. Run `python quickstart.py` from the personagent repository root. Choose AstrBot setup and provide its data directory. The wizard copies the forwarder plugin and writes a shared `GATEWAY_TOKEN` to both configurations. Re-running the wizard keeps your current provider, model, key, name and language as the defaults. An existing setup can also connect AstrBot without the wizard: `python quickstart.py --astrbot <AstrBot data dir> [--qq]`.
+2. Check `agent_url` in the plugin settings. The same-host default is `http://127.0.0.1:8080/webhook/gateway`. The plugin only sends to a loopback address (same host, or containers sharing a network namespace or host networking) or to HTTPS with `gateway_token` set. Plain `http://` to another container or host, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe agent_url`, and AstrBot's own model answers instead.
 3. Add the intended groups or private conversations to the plugin's allowlists. The default forwards nothing; private chats also need `private_enabled=true`.
-4. Check `BOT_NAME` and `BOT_QQ` in personagent's `.env`. Use the bot account number for QQ. Other platforms currently also need a stable numeric `BOT_QQ` value for mention detection.
+4. Check `BOT_NAME` and `BOT_QQ` in personagent's `.env`. `BOT_QQ` is the bot's QQ account number and is needed only for QQ; leave it blank on other platforms.
 5. Restart AstrBot, then start personagent:
 
 **Windows (PowerShell)**
@@ -159,7 +159,7 @@ QQ also needs a OneBot v11 implementation such as NapCat, connected through Astr
 
 The default bind address is `127.0.0.1:8080`. For separate hosts, configure a reachable address; a non-loopback `HOST` requires both `GATEWAY_TOKEN` and `WEBHOOK_SECRET`. Use an HTTPS reverse proxy or a private tunnel, preserve the exact request body, and keep the two clocks within five minutes of each other.
 
-Non-QQ platforms return replies within the incoming gateway request and have no built-in independent proactive delivery channel. Scheduled proactive turns require an external caller to send gateway events with `proactive: true` and relay the results. See the [deployment guide](docs/deploy.md).
+Non-QQ platforms return replies within the incoming gateway request and have no built-in independent proactive delivery channel. Scheduled proactive DMs require an external caller to send private gateway events with `proactive: true` and relay the results; a group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md).
 
 </details>
 

@@ -7,7 +7,8 @@ its own:
 - settings   everything the agent is configured with, built once and passed in
 - agent      orchestration: intake, modes, debounce, _think, prompt assembly
 - prompts    the persona contract (style guide, output protocol, intent rules)
-- textproc   pure text: tokenising, sanitising, whitelist validator, splitting
+- textproc   pure text: tokenising, sanitising, whitelist validator, splitting,
+             the prompt's data frames
 - pools      append-aware JSONL loading for the retrieval datasets
 - ingestion  links, share cards, images, OCR, vision — with the SSRF guard
 - transport  throttling, chunking, typing simulation, sends, conversation LRU
@@ -24,6 +25,7 @@ Supporting modules, all pure logic with no agent state:
 
 - reactions  reaction attribution + adjudicator prompts
 - evolution  eval -> feedback conversion, dedup, pool trimming
+- endpoints  which endpoint serves a model name (the fallback may have its own)
 - gateway    platform-neutral inbound event schema + reply sink
 - channels   the one place conversation / memory / learning keys are derived from an event
 - stickers   sticker library: steal -> tag -> persona-fit gates -> feedback

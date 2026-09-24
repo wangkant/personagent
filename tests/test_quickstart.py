@@ -144,3 +144,38 @@ def test_agent_home_divergence_warning() -> None:
             os.environ.pop("AGENT_HOME", None)
         else:
             os.environ["AGENT_HOME"] = saved
+
+
+def test_rerunning_the_wizard_keeps_the_current_setup(monkeypatch, tmp_path, capsys) -> None:
+    """Enter-through on a re-run used to fall back to the first-run presets:
+    DeepSeek's URL and model with the OpenAI key, BOT_NAME=Nova, AGENT_LANG=en."""
+    env = tmp_path / ".env"
+    env.write_text(
+        "LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/\n"
+        "LLM_MODEL=gpt-4o-mini\nBOT_NAME=Mika\nAGENT_LANG=zh\n", encoding="utf-8")
+    prompts: list[str] = []
+
+    def scripted_input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        # A required prompt with no default re-asks forever on Enter.
+        assert len(prompts) < 50, "the wizard kept re-asking: " + prompts[-1]
+        return "n" if ("[Y/n]" in prompt or "[y/N]" in prompt) else ""
+
+    monkeypatch.setattr("builtins.input", scripted_input)
+    monkeypatch.setattr(quickstart, "copy_persona_template", lambda _lang: None)
+    monkeypatch.setattr(quickstart, "_probe_key", lambda *_a: True)
+    monkeypatch.setattr(quickstart, "_warn_if_agent_home_diverges", lambda _p: None)
+    monkeypatch.setattr(quickstart.subprocess, "call", lambda *_a, **_k: 0)
+
+    quickstart.run_wizard(tmp_path / ".venv", env)
+
+    get = lambda key: quickstart._env_get(env, key)  # noqa: E731
+    check("rerun: provider kept", get("LLM_BASE_URL").rstrip("/") == "https://api.openai.com",
+          get("LLM_BASE_URL"))
+    check("rerun: model kept", get("LLM_MODEL") == "gpt-4o-mini", get("LLM_MODEL"))
+    check("rerun: key kept", get("LLM_API_KEY") == "sk-test-abcd", get("LLM_API_KEY"))
+    check("rerun: name kept", get("BOT_NAME") == "Mika", get("BOT_NAME"))
+    check("rerun: language kept", get("AGENT_LANG") == "zh", get("AGENT_LANG"))
+    shown = "\n".join(prompts) + capsys.readouterr().out
+    check("rerun: the key is never printed", "sk-test-abcd" not in shown, shown)
+    check("rerun: the key is shown masked", "sk-…abcd" in shown, shown)

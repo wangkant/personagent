@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .paths import ROOT
 
@@ -35,7 +36,7 @@ WANTED = {
     # its default when the key is ABSENT, so `LLM_MODEL=` in a hand-edited
     # `.env` sends `{"model": ""}` on every completion — a guaranteed 400 that
     # also arms the fallback cooldown. `PRIVATE_MODEL` was given a runtime
-    # fallback for exactly this (see agent.py); the primary model has none.
+    # fallback for exactly this (see settings.py); the primary model has none.
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
@@ -77,8 +78,6 @@ def _base_url_needs_full_path(base: str) -> bool:
     behind a reverse proxy (`https://gateway.corp/llm-proxy`), so segment
     counting would report those as broken when they are fine.
     """
-    from urllib.parse import urlsplit
-
     if not base:
         return False
     path = urlsplit(base.strip().rstrip("/")).path.rstrip("/")
@@ -230,11 +229,12 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         findings.append(Finding(
             "INFO", "QQ_GROUPS",
             "is unset, so the bot listens in every group it is a member of"))
-    # BOT_QQ is silently load-bearing: `_is_at_me` returns False the moment it
-    # is empty, so a deployment that is otherwise complete starts cleanly,
-    # logs nothing, and never answers a mention. Exactly the failure class
-    # this module exists for — and only a warning, because `try_chat.py`
-    # supplies its own placeholder and needs none of this.
+    # BOT_QQ is silently load-bearing on QQ: a QQ @ carries the account's
+    # number and `_is_at_me` has nothing else to match it against, so a QQ
+    # deployment that is otherwise complete starts cleanly, logs nothing, and
+    # never answers a mention. Exactly the failure class this module exists
+    # for — and only a warning, because `try_chat.py` supplies its own
+    # placeholder and needs none of this.
     looks_like_qq = any(str(configured.get(key) or "").strip()
                         for key in ("NAPCAT_API", "QQ_GROUPS", "OWNER_QQ",
                                     "PRIVATE_ALLOWED_QQS"))
@@ -245,14 +245,39 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
 
-    base_url = str(configured.get("LLM_BASE_URL") or "").strip()
-    if _base_url_needs_full_path(base_url):
+    for key in ("LLM_BASE_URL", "FALLBACK_BASE_URL"):
+        url = str(configured.get(key) or "").strip()
+        if _base_url_needs_full_path(url):
+            findings.append(Finding(
+                "WARN", key,
+                f"ends in a custom version path ({url}) — `chat_completions_url`"
+                " only recognises a bare root or a /v1 base, so it will append"
+                " /v1/chat/completions and produce a URL the provider does not"
+                " serve. Give the complete /chat/completions endpoint instead"))
+
+    # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
+    # so both of its failure modes are silent: configured for a fallback that
+    # is the primary's own name, it is never called; pointed at another host
+    # without its own key, it is handed the primary's.
+    fallback_url = str(configured.get("FALLBACK_BASE_URL") or "").strip()
+    fallback_key = str(configured.get("FALLBACK_API_KEY") or "").strip()
+    fallback_model = str(configured.get("FALLBACK_MODEL") or "").strip()
+    primary_model = str(configured.get("LLM_MODEL") or "deepseek-chat").strip()
+    if (fallback_url or fallback_key) and fallback_model in ("", primary_model):
         findings.append(Finding(
-            "WARN", "LLM_BASE_URL",
-            f"ends in a custom version path ({base_url}) — `chat_completions_url`"
-            " only recognises a bare root or a /v1 base, so it will append"
-            " /v1/chat/completions and produce a URL the provider does not"
-            " serve. Give the complete /chat/completions endpoint instead"))
+            "WARN", "FALLBACK_BASE_URL" if fallback_url else "FALLBACK_API_KEY",
+            "is set, but FALLBACK_MODEL is blank or the same as LLM_MODEL — only"
+            " a distinct fallback model is sent to the fallback endpoint, so"
+            " this has no effect"))
+    elif fallback_url and not fallback_key:
+        fallback_host = urlsplit(fallback_url).hostname
+        primary_url = str(configured.get("LLM_BASE_URL") or "").strip()
+        if fallback_host != urlsplit(primary_url or "https://api.deepseek.com").hostname:
+            findings.append(Finding(
+                "WARN", "FALLBACK_API_KEY",
+                f"is blank while FALLBACK_BASE_URL points at another host"
+                f" ({fallback_host}), so LLM_API_KEY is sent there. Give the"
+                " fallback provider its own key"))
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))

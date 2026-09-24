@@ -42,8 +42,11 @@ tuple and in the forwarder plugin's own copy of this schema.
 `proactive` marks a turn NOBODY SENT. It says the text on this event is a cue
 the CALLER wrote to brief the persona — "they have been quiet a while, say
 something if you genuinely have something to say" — rather than a message
-from the person on the other end. Left out, which is every ordinary forwarded
-turn, nothing changes.
+from the person on the other end. The model reads it for that one call, as
+reference beside the engine's own proactive instructions (which are what
+allow the persona to stay silent), fenced as external material and cut at
+500 characters. Left out, which is every ordinary forwarded turn, nothing
+changes.
 
 It is what gives a platform reached only through a forwarder its proactive
 turns. The agent cannot open a conversation on such a platform: the reply
@@ -57,6 +60,11 @@ directive is indistinguishable from the reader's words: it lands in
 `private_history` as `{"role": "user"}`, stays for 40 turns, can be quoted
 back at somebody who never wrote it, and can be promoted into a memory about
 them.
+
+It is honoured on private events only. A group event carrying it is claimed
+(`owned` comes back true, so the forwarder keeps its own model quiet too) and
+dropped before the text is buffered: a room has no transient cue to carry it
+as, and it is never read as anyone's words.
 
 Platform ids are namespaced as "<platform>:<raw id>" before they enter the
 pipeline, so memory / RAG / buffers can never collide with real QQ numbers.
@@ -81,6 +89,13 @@ from typing import Optional
 from . import channels
 
 logger = logging.getLogger("agent.gateway")
+
+#: The id a forwarded mention of the bot itself is rewritten to when BOT_QQ is
+#: blank, which it is on every install without QQ: BOT_QQ is the bot's QQ
+#: account and nothing else. Without it the self mention became an @ of "" and
+#: _is_at_me could not recognise it. No namespaced id (those always contain
+#: ':') and no QQ number (digits) can equal it.
+GATEWAY_SELF_ID = "persona-self"
 
 #: Inbound segment types this version understands. Anything else is dropped
 #: (see synthesize_onebot_payload) — listed here so the drop can say so.
@@ -237,7 +252,8 @@ def synthesize_onebot_payload(
     """Convert a neutral inbound event (schema in the module docstring) into
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
     unchanged. Mentions of the platform self_id are normalized to bot_qq so
-    _is_at_me fires exactly like a real QQ @-mention.
+    _is_at_me fires exactly like a real QQ @-mention. The agent passes
+    GATEWAY_SELF_ID for it when BOT_QQ is blank (Agent._self_mention_id).
 
     `native_platforms` is the operator's list of forwarder platforms whose ids
     are minted bare instead of namespaced — see `_ns`. Empty by default, which

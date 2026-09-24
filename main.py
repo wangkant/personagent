@@ -20,6 +20,7 @@ load_dotenv(override=False)
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.requests import ClientDisconnect
 
 from persona_agent import __version__, preflight
 from persona_agent.agent import Agent
@@ -53,6 +54,19 @@ class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
             # every subsequent emit writes to a dead handle.
             if self.stream is None:
                 self.stream = self._open()
+
+    def _open(self):
+        # A rollover recreates the base file through _open, which uses the
+        # process umask: the one-time chmod at setup left bot.log and every
+        # backup world-readable after the first rotation. These lines hold
+        # message excerpts and user ids, so every file this opens is 0600.
+        stream = super()._open()
+        if os.name != "nt":
+            try:
+                os.chmod(self.baseFilename, 0o600)
+            except OSError:
+                pass
+        return stream
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -90,6 +104,80 @@ def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
     return bool(credential) or _is_loopback_host(peer_host or "")
 
 
+_LOCAL_HOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+_PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip",
+                  "cf-connecting-ip")
+_NON_LOCAL_WARNED: set[str] = set()
+
+
+def _host_header_name(host: str) -> str:
+    """The hostname of a Host header: port stripped, IPv6 brackets handled."""
+    value = host.strip().lower()
+    if value.startswith("["):
+        return value[1:].split("]", 1)[0]
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def _credentialless_request_is_local(request) -> tuple[bool, str]:
+    """Whether a request to an endpoint with no credential set really comes
+    from a local program, and if not, which header gave it away.
+
+    A loopback peer is not enough. A text/plain POST is a CORS "simple
+    request", so any page the operator opens can send one to 127.0.0.1 with
+    no preflight and forge an event as OWNER_QQ; DNS rebinding lets such a
+    page read the replies too; and a tunnel (cloudflared, frp, nginx) on the
+    same host forwards the whole internet from 127.0.0.1. Each of those
+    leaves a header that NapCat and the AstrBot plugin never send.
+    """
+    headers = request.headers
+    reason = ""
+    if "origin" in headers:
+        reason = "origin"
+    elif headers.get("sec-fetch-site", "none").strip().lower() != "none":
+        reason = "sec-fetch-site"
+    elif "host" in headers and _host_header_name(
+            headers["host"]) not in _LOCAL_HOST_NAMES:
+        reason = "host"
+    elif any(name in headers for name in _PROXY_HEADERS):
+        reason = "forwarded"
+    if not reason:
+        return True, ""
+    if reason not in _NON_LOCAL_WARNED:
+        _NON_LOCAL_WARNED.add(reason)
+        logger.warning(
+            "[main] refused a request to %s with no credential configured: "
+            "its %s header says it came from a browser, another host name or "
+            "a proxy. Local programs should call http://127.0.0.1; anything "
+            "else needs WEBHOOK_SECRET / GATEWAY_TOKEN set",
+            request.url.path, reason)
+    return False, reason
+
+
+def _refuse_non_local(request, credential: str) -> JSONResponse | None:
+    """The 403 for a credentialless endpoint reached by a non-local request."""
+    if credential:
+        return None
+    local, _reason = _credentialless_request_is_local(request)
+    if local:
+        return None
+    return _error(403, "non_local_request",
+                  "no credential is configured; only local requests accepted")
+
+
+def _ct_equal(supplied: str, expected: str) -> bool:
+    """Constant-time compare of a header value against a configured secret.
+
+    `hmac.compare_digest` raises TypeError on a non-ASCII str, and Starlette
+    decodes header bytes as latin-1, so one `\\xff` in a header turned an
+    unauthenticated request into a 500 with a traceback. Comparing bytes
+    also lets a non-ASCII secret work: latin-1 gives back the exact bytes the
+    client sent, which are the UTF-8 of the secret it was configured with.
+    """
+    return hmac.compare_digest(
+        str(supplied or "").encode("latin-1", "replace"),
+        str(expected or "").encode("utf-8"))
+
+
 # ========== Config ==========
 # The HTTP layer's own settings. Everything the AGENT is configured with lives
 # in `AgentSettings` and is read once, in `lifespan` — this file no longer
@@ -108,6 +196,11 @@ PORT = env_int("PORT", 8080, minimum=1, maximum=65535)
 WEBHOOK_SECRET = env_str("WEBHOOK_SECRET")
 MAX_WEBHOOK_BODY_BYTES = env_int(
     "MAX_WEBHOOK_BODY_BYTES", 8_000_000, minimum=1, maximum=64_000_000)
+# uvicorn has no body-read timeout, and a webhook holds an admission slot
+# while it reads. Without a deadline, a peer that sends a Content-Length and
+# then one byte keeps that slot forever, and a few of them 429 every real
+# event. A forwarder on the same host sends its body in milliseconds.
+BODY_READ_TIMEOUT_S = 30
 MAX_INFLIGHT_WEBHOOKS = env_int(
     "MAX_INFLIGHT_WEBHOOKS", 64, minimum=1, maximum=4096)
 # A SEPARATE budget, because the two endpoints hold their slot for wildly
@@ -304,7 +397,7 @@ def _verify_gateway_envelope(
     timestamp_raw = headers.get("x-gateway-timestamp", "")
     nonce = headers.get("x-gateway-nonce", "")
     supplied_signature = headers.get("x-gateway-signature", "")
-    if (not hmac.compare_digest(supplied_token, token)
+    if (not _ct_equal(supplied_token, token)
             or not timestamp_raw or not nonce or len(nonce) > 128):
         return False
     try:
@@ -317,7 +410,7 @@ def _verify_gateway_envelope(
     )
     expected = "sha256=" + hmac.new(
         token.encode("utf-8"), mac_input, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(supplied_signature, expected):
+    if not _ct_equal(supplied_signature, expected):
         return False
     guard = replay_guard or _gateway_replay
     return guard.accept(nonce, timestamp, int(time.time()) if now is None else now)
@@ -444,6 +537,25 @@ async def _read_body_limited(request: Request, limit: int) -> bytes:
     return bytes(body)
 
 
+async def _read_webhook_body(request: Request) -> bytes | JSONResponse:
+    """The body under both the size cap and a deadline, or the error to send.
+
+    A client that hangs up mid-body is not a server fault: Starlette raises
+    ClientDisconnect, which used to escape as an ASGI traceback per
+    connection. Nobody is left to read the 400; it only keeps the log quiet.
+    """
+    try:
+        return await asyncio.wait_for(
+            _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES),
+            BODY_READ_TIMEOUT_S)
+    except RequestBodyTooLarge:
+        return _error(413, "body_too_large", "request body too large")
+    except asyncio.TimeoutError:
+        return _error(408, "body_timeout", "request body not received in time")
+    except ClientDisconnect:
+        return _error(400, "client_disconnected", "client disconnected")
+
+
 def _on_bg_task_done(task: asyncio.Task) -> None:
     """Discard the strong ref AND retrieve the exception.
 
@@ -566,12 +678,15 @@ async def health_details(request: Request):
     """Authenticated/loopback-only diagnostics that may call paid services."""
     client_host = request.client.host if request.client else ""
     if GATEWAY_TOKEN:
-        authorized = hmac.compare_digest(
+        authorized = _ct_equal(
             request.headers.get("X-Gateway-Token", ""), GATEWAY_TOKEN)
     else:
         authorized = _is_loopback_host(client_host)
     if not authorized:
         return _error(403, "forbidden", "forbidden")
+    refused = _refuse_non_local(request, GATEWAY_TOKEN)
+    if refused is not None:
+        return refused
 
     now = time.time()
     if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
@@ -625,16 +740,21 @@ async def qq_webhook(request: Request):
     reach this port can forge an event.
     """
     _warn_direct_route_once()
+    # Refuse before admission, so a peer that may not call this at all cannot
+    # hold a slot. The signature covers the body and has to wait for it.
+    peer = request.client.host if request.client is not None else ""
+    if not _request_peer_is_allowed(peer, WEBHOOK_SECRET):
+        return _mark_deprecated(_error(
+            403, "unauthenticated", "authentication required"))
+    refused = _refuse_non_local(request, WEBHOOK_SECRET)
+    if refused is not None:
+        return _mark_deprecated(refused)
     if not await _webhook_admission.try_acquire():
         return _mark_deprecated(_error(
             429, "capacity_exceeded", "webhook capacity exceeded",
             retry_after=1))
     request.state.admission_handed_off = False
     try:
-        peer = request.client.host if request.client is not None else ""
-        if not _request_peer_is_allowed(peer, WEBHOOK_SECRET):
-            return _mark_deprecated(_error(
-                403, "unauthenticated", "authentication required"))
         return _mark_deprecated(await _qq_webhook_admitted(request))
     finally:
         if not request.state.admission_handed_off:
@@ -642,10 +762,9 @@ async def qq_webhook(request: Request):
 
 
 async def _qq_webhook_admitted(request: Request):
-    try:
-        body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
-    except RequestBodyTooLarge:
-        return _error(413, "body_too_large", "request body too large")
+    body = await _read_webhook_body(request)
+    if isinstance(body, JSONResponse):
+        return body
     # OneBot HMAC verification (opt-in via WEBHOOK_SECRET). Without it, anyone
     # who can reach this port can POST a forged event — impersonate OWNER_QQ,
     # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
@@ -654,7 +773,7 @@ async def _qq_webhook_admitted(request: Request):
     if WEBHOOK_SECRET:
         sig = request.headers.get("x-signature", "")
         expected = "sha1=" + hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha1).hexdigest()
-        if not hmac.compare_digest(sig, expected):
+        if not _ct_equal(sig, expected):
             logger.warning("webhook rejected: bad/absent x-signature")
             return _error(403, "bad_signature", "bad signature")
     try:
@@ -692,6 +811,23 @@ async def _qq_webhook_admitted(request: Request):
     return JSONResponse(content={"ok": True})
 
 
+_IGNORED_TOKEN_WARNED = False
+
+
+def _warn_ignored_gateway_token_once(request: Request) -> None:
+    """The forwarder has a token this process was not given: its envelope is
+    not being checked at all, which is rarely what the operator meant."""
+    global _IGNORED_TOKEN_WARNED
+    if (GATEWAY_TOKEN or _IGNORED_TOKEN_WARNED
+            or "x-gateway-token" not in request.headers):
+        return
+    _IGNORED_TOKEN_WARNED = True
+    logger.warning(
+        "[main] the forwarder sends X-Gateway-Token but GATEWAY_TOKEN is "
+        "blank here, so the token is ignored; set the same GATEWAY_TOKEN "
+        "in .env to have gateway requests authenticated")
+
+
 @app.post("/webhook/gateway")
 async def gateway_webhook(request: Request):
     """Platform-neutral inbound endpoint for forwarder plugins.
@@ -714,13 +850,25 @@ async def gateway_webhook(request: Request):
     ``-Signature``). Errors carry a stable ``code``; branch on it, not on the
     prose in ``error``.
     """
+    # Everything that needs no body is checked before admission: a caller
+    # without the token must not be able to hold one of the slots a real
+    # turn needs. The signature, nonce and replay checks still run after it,
+    # so a 429 never burns a nonce.
+    peer = request.client.host if request.client is not None else ""
+    if not _request_peer_is_allowed(peer, GATEWAY_TOKEN):
+        return _error(403, "unauthenticated", "authentication required")
+    refused = _refuse_non_local(request, GATEWAY_TOKEN)
+    if refused is not None:
+        return refused
+    _warn_ignored_gateway_token_once(request)
+    if GATEWAY_TOKEN and not _ct_equal(
+            request.headers.get("x-gateway-token", ""), GATEWAY_TOKEN):
+        return _error(403, "invalid_envelope",
+                      "invalid, stale, or replayed gateway envelope")
     if not await _gateway_admission.try_acquire():
         return _error(429, "capacity_exceeded", "webhook capacity exceeded",
                       retry_after=3)
     try:
-        peer = request.client.host if request.client is not None else ""
-        if not _request_peer_is_allowed(peer, GATEWAY_TOKEN):
-            return _error(403, "unauthenticated", "authentication required")
         return await _gateway_webhook_admitted(request)
     finally:
         await _gateway_admission.release()
@@ -732,10 +880,9 @@ async def _gateway_webhook_admitted(request: Request):
     forwarder needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
     before returning — set the plugin's HTTP timeout accordingly."""
-    try:
-        body = await _read_body_limited(request, MAX_WEBHOOK_BODY_BYTES)
-    except RequestBodyTooLarge:
-        return _error(413, "body_too_large", "request body too large")
+    body = await _read_webhook_body(request)
+    if isinstance(body, JSONResponse):
+        return body
     if not _verify_gateway_envelope(body, request.headers, GATEWAY_TOKEN):
         # One code for four causes (bad token, bad signature, timestamp
         # outside the window, replayed nonce): _verify_gateway_envelope folds

@@ -31,7 +31,7 @@ from httpcore._backends.auto import AutoBackend
 
 from .config_env import env_int
 from .gateway import current_sink
-from .textproc import (_detect_image_mime, apply_k2_quirks,
+from .textproc import (_detect_image_mime, _truncate_framed, apply_k2_quirks,
                        salvage_json_object, strip_json_fences)
 
 logger = logging.getLogger("agent")
@@ -66,7 +66,15 @@ class SafeFetchResult:
 
 
 def _ip_obj_is_internal(ip) -> bool:
-    return (ip.is_private or ip.is_loopback or ip.is_link_local
+    # A mapped address reaches the IPv4 host it names, so judge that host.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    # `not is_global` catches 100.64.0.0/10 (CGNAT, Tailscale, Alibaba's
+    # 100.100.100.200 metadata service), which none of the flags below cover;
+    # deprecated site-local fec0::/10 still reports is_global on 3.11.
+    return (not ip.is_global or getattr(ip, "is_site_local", False)
+            or ip.is_private or ip.is_loopback or ip.is_link_local
             or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
 
 
@@ -77,6 +85,32 @@ def _is_internal_ip(value: str) -> bool:
     except ValueError:
         return True
     return _ip_obj_is_internal(ip)
+
+
+def _url_for_log(url: str) -> str:
+    """`scheme://host[:port]/…` of a URL we fetch, for a log line.
+
+    The path and query are not ours to log. Telegram's file URLs carry the
+    bot token in the path (https://api.telegram.org/file/bot<TOKEN>/...),
+    AstrBot forwards them unchanged, and a URL slice put the token, or most
+    of it, into every caption line and the whole of it into every refused
+    hop. The host is what an operator needs to see which fetch misbehaved.
+    """
+    try:
+        parts = urlsplit(str(url))
+        scheme = parts.scheme.lower()
+        if scheme and scheme not in ("http", "https"):
+            # base64:// and file:// "hosts" are payload or path, not a host.
+            return f"{scheme[:16]}://…"
+        host = parts.hostname or ""
+        port = parts.port
+    except (TypeError, ValueError):
+        return "<unparsable url>"
+    if not scheme or not host:
+        return "<unparsable url>"
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{scheme}://{host}{f':{port}' if port else ''}/…"
 
 
 def _cap_cache(cache: dict, cap: int = 200, drop: int = 50) -> None:
@@ -254,7 +288,7 @@ async def safe_fetch_url(
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning("[Agent] DNS resolution timed out: %s", current[:120])
+            logger.warning("[Agent] DNS resolution timed out: %s", _url_for_log(current))
             return None
         if resolved is None and client_factory is not None:
             # Reserved .invalid names are used by the repository's injected
@@ -271,7 +305,8 @@ async def safe_fetch_url(
                 )
                 resolved = (test_host, "93.184.216.34", test_port)
         if resolved is None:
-            logger.warning("[Agent] refusing internal/unresolvable URL hop: %s", current[:120])
+            logger.warning("[Agent] refusing internal/unresolvable URL hop: %s",
+                           _url_for_log(current))
             return None
         hostname, pinned_ip, _port = resolved
         transport = _PinnedAsyncHTTPTransport(hostname, pinned_ip)
@@ -349,7 +384,7 @@ async def safe_fetch_url(
                         content=body,
                     )
         except Exception as e:
-            logger.debug("[Agent] safe fetch failed (%s): %s", current[:120], e)
+            logger.debug("[Agent] safe fetch failed (%s): %s", _url_for_log(current), e)
             return None
         finally:
             # A fake client factory may ignore the transport; closing twice is
@@ -358,7 +393,7 @@ async def safe_fetch_url(
                 await transport.aclose()
             except Exception:
                 pass
-    logger.warning("[Agent] redirect cap exceeded: %s", url[:120])
+    logger.warning("[Agent] redirect cap exceeded: %s", _url_for_log(url))
     return None
 
 
@@ -426,11 +461,17 @@ class ContentIngestion:
     URL_PATTERN = re.compile(
         r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
     )
-    #: Links described per text segment. Each one is a separate fetch awaited in
-    #: sequence before the message is buffered, so an uncapped count lets a
-    #: single message full of cache-busted URLs stall the whole intake loop.
-    #: Nobody pastes five links and expects all five summarised anyway.
-    MAX_URLS_PER_SEGMENT = 4
+    #: Links described per message. Each one is an outbound fetch made before
+    #: the message is buffered, so an uncapped count lets a single message full
+    #: of cache-busted URLs stall the intake loop and point the bot's own IP at
+    #: whatever host the sender names. Message-wide, not per text segment: an
+    #: inline @mention splits one paste into several segments, and a
+    #: per-segment cap multiplies by however many a sender produces. Nobody
+    #: pastes four links and expects all four summarised anyway.
+    MAX_URLS_PER_MESSAGE = 3
+    #: Wall clock for describing one message's links, which run concurrently:
+    #: a slow or tarpit host costs its own descriptor, never the turn.
+    LINK_ENRICHMENT_BUDGET_SEC = 10.0
     _URL_SKIP_EXT = (".zip", ".rar", ".7z", ".tar", ".gz", ".exe", ".msi", ".dmg",
                      ".apk", ".pdf", ".mp4", ".mp3", ".mov", ".avi", ".mkv",
                      ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
@@ -564,7 +605,7 @@ class ContentIngestion:
                 url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
                 max_bytes=MAX_IMAGE_BYTES)
         except Exception as e:
-            logger.debug("[Agent] http fetch failed (%s): %s", url, e)
+            logger.debug("[Agent] http fetch failed (%s): %s", _url_for_log(url), e)
             return None
 
     async def _steal_image_async(
@@ -615,7 +656,8 @@ class ContentIngestion:
         for m in buf[-n:]:
             if not m.get("user_id"):
                 continue
-            out.append(f"{m.get('name','?')}: {m.get('text','')[:80]}")
+            out.append(f"{m.get('name','?')}: "
+                       f"{_truncate_framed(m.get('text', ''), 80)}")
         return out
 
     @staticmethod
@@ -866,7 +908,7 @@ class ContentIngestion:
     @classmethod
     def _extract_urls(cls, text: str) -> list[str]:
         """Pull http(s) URLs out of text, deduped, order preserved, capped at
-        ``MAX_URLS_PER_SEGMENT``."""
+        ``MAX_URLS_PER_MESSAGE``."""
         if not text:
             return []
         urls = []
@@ -877,7 +919,7 @@ class ContentIngestion:
                 continue
             seen.add(u)
             urls.append(u)
-            if len(urls) >= cls.MAX_URLS_PER_SEGMENT:
+            if len(urls) >= cls.MAX_URLS_PER_MESSAGE:
                 break
         return urls
 
@@ -1027,6 +1069,43 @@ class ContentIngestion:
         self.url_info_cache[cache_key] = result
         return result
 
+    async def _describe_urls(self, urls: list[str]) -> list[str]:
+        """One descriptor per URL, aligned with `urls`: "" for a link that
+        failed, described to nothing, or was still loading when
+        ``LINK_ENRICHMENT_BUDGET_SEC`` ran out.
+
+        Concurrent, because in sequence each link's own timeout adds up and a
+        few slow hosts hold the turn. ``asyncio.wait`` rather than gather under
+        one timeout: it hands back what already finished, so a straggler costs
+        only its own descriptor. Aligned so the caller can make one call for
+        the whole message and still put each descriptor after its segment."""
+        if not urls:
+            return []
+        tasks = [asyncio.ensure_future(self._describe_url(u)) for u in urls]
+        try:
+            done, _ = await asyncio.wait(
+                tasks, timeout=self.LINK_ENRICHMENT_BUDGET_SEC)
+        finally:
+            stragglers = [t for t in tasks if not t.done()]
+            for t in stragglers:
+                t.cancel()
+        if stragglers:
+            await asyncio.gather(*stragglers, return_exceptions=True)
+            logger.info("[Agent] link enrichment: %d of %d links over the %gs "
+                        "budget", len(stragglers), len(urls),
+                        self.LINK_ENRICHMENT_BUDGET_SEC)
+        out: list[str] = []
+        for url, task in zip(urls, tasks):
+            desc = ""
+            if task in done:
+                try:
+                    desc = task.result()
+                except Exception as e:
+                    logger.debug("[Agent] link enrichment failed (%s): %s: %s",
+                                 url, type(e).__name__, e)
+            out.append(desc if desc and desc != "[link]" else "")
+        return out
+
     async def _fetch_oembed_youtube(self, url: str) -> str:
         """YouTube exposes a public oEmbed endpoint with no API key needed."""
         try:
@@ -1117,11 +1196,12 @@ class ContentIngestion:
         if text and len(text) >= 4 and not hit:
             self.image_caption_cache[self._image_cache_key(url)] = text
             self._gc_image_cache()
-            logger.info("[Agent] vision/%s (%s): %s", provider, url[:60], text[:60])
+            logger.info("[Agent] vision/%s (%s): %s", provider, _url_for_log(url),
+                        text[:60])
             return text
         logger.info(
             "[Agent] vision/%s rejected (%s, hit=%r, len=%d): %s",
-            provider, url[:60], hit, len(text), text[:80],
+            provider, _url_for_log(url), hit, len(text), text[:80],
         )
         return ""
 
@@ -1175,6 +1255,11 @@ class ContentIngestion:
             if callable(close_image):
                 close_image()
 
+    def _vision_configured(self) -> bool:
+        """Whether the operator set up a vision model. glm_base_url has a
+        default, so it alone says nothing about consent to upload images."""
+        return bool(self.vision_model and self.glm_api_key and self.glm_base_url)
+
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
         """Ask the vision model if a sticker is visually tacky / off-persona.
         Returns True (tacky → should ban), False (fine), or None on judgment
@@ -1210,7 +1295,7 @@ class ContentIngestion:
                 "max_tokens": 60,
                 "temperature": 0,
             }
-            apply_k2_quirks(payload, self.vision_model)
+            apply_k2_quirks(payload, self.vision_model, self.glm_base_url)
             raw = ""
             async with self._http(timeout=30) as c:
                 for attempt in range(4):
@@ -1249,7 +1334,15 @@ class ContentIngestion:
         at the pixels.
 
         Version-gated via _visual_aesthetic_version on each entry. Bump
-        VISUAL_AESTHETIC_VERSION to force re-judgment of all entries."""
+        VISUAL_AESTHETIC_VERSION to force re-judgment of all entries.
+
+        Runs on every startup, so it does nothing without a configured vision
+        model: sticker tagging needs only the text LLM, and a default install
+        would otherwise upload its whole sticker library, keyless, to the
+        default endpoint. Only a real verdict is stamped; a failed call
+        leaves the entry to be judged next time."""
+        if not self._vision_configured():
+            return 0
         todo = [
             (fn, v) for fn, v in self.stickers.entries.items()
             if v.get("auto_tagged")
@@ -1269,7 +1362,8 @@ class ContentIngestion:
                 logger.debug("[Agent] aesthetic read failed %s: %s", fn, e)
                 continue
             tacky = await self._judge_sticker_aesthetic(img_bytes)
-            v["_visual_aesthetic_version"] = self.VISUAL_AESTHETIC_VERSION
+            if tacky is not None:
+                v["_visual_aesthetic_version"] = self.VISUAL_AESTHETIC_VERSION
             if tacky is True:
                 v["persona_fit"] = False
                 marked += 1
@@ -1279,7 +1373,12 @@ class ContentIngestion:
             # spacing burns through the quota in seconds and most judgments
             # come back None from 429s.
             await asyncio.sleep(5.0)
-        self.stickers._save()
+        # Forced, like recheck_persona_fit_all: the version stamps record a
+        # paid vision call per sticker. When nothing was banned no purge
+        # follows to save them, and a write the throttle skipped left them in
+        # memory only, so a crash before the next save paid for the whole
+        # library again.
+        self.stickers._save(force=True)
         logger.info("[Agent] visual aesthetic recheck: scanned=%d banned=%d",
                     len(todo), marked)
         return marked
@@ -1342,7 +1441,7 @@ class ContentIngestion:
                 "max_tokens": 120,
                 "temperature": 0.3,
             }
-            apply_k2_quirks(payload, self.vision_model)
+            apply_k2_quirks(payload, self.vision_model, self.glm_base_url)
             async with self._http(timeout=30) as c:
                 r = None
                 last_exc = None
@@ -1400,7 +1499,7 @@ class ContentIngestion:
             return self.image_caption_cache[cache_key]
 
         caption = ""
-        if self.vision_model and self.glm_api_key and self.glm_base_url:
+        if self._vision_configured():
             # OpenAI-compatible: glm-* / moonshot-* / kimi-* / deepseek-vl-* / qwen-vl-* …
             caption = await self._describe_image_glm(url)
         if caption:
@@ -1448,11 +1547,12 @@ class ContentIngestion:
         if not url:
             return ""
         if not url.lower().startswith(("http://", "https://")):
-            logger.warning("[Agent] refusing non-HTTP OCR delegation: %s", url[:80])
+            logger.warning("[Agent] refusing non-HTTP OCR delegation: %s",
+                           _url_for_log(url))
             return ""
         if await _resolve_public_target(url) is None:
             logger.warning("[Agent] refusing OCR delegation for internal/"
-                           "unresolvable url: %s", url[:80])
+                           "unresolvable url: %s", _url_for_log(url))
             return ""
         cache_key = self._image_cache_key(url)
         if cache_key in self.image_caption_cache:
@@ -1471,9 +1571,11 @@ class ContentIngestion:
                 ).strip()[:120]
         except Exception as e:
             logger.warning("[Agent] NapCat OCR failed (%s): %s: %s",
-                           url[:80], type(e).__name__, str(e) or "(no message)")
+                           _url_for_log(url), type(e).__name__,
+                           str(e) or "(no message)")
             return ""
         self.image_caption_cache[cache_key] = text
         self._gc_image_cache()
-        logger.info("[Agent] OCR (%s): %s", url[:60], text[:60] or "(no text)")
+        logger.info("[Agent] OCR (%s): %s", _url_for_log(url),
+                    text[:60] or "(no text)")
         return text

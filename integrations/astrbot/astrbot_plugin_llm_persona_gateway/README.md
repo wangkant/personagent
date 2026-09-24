@@ -18,7 +18,9 @@ multi-platform transport for [personagent](https://github.com/wangkant/personage
 The persona, memory, debounce and typing simulation all live in the agent;
 this plugin only forwards and relays. The HTTP round-trip therefore takes as
 long as the agent "thinks and types" — that is expected, and the default
-180 s timeout covers it.
+180 s timeout covers it. Keep the agent's `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)`
+under `timeout_s`, or a slow model outlasts the plugin and AstrBot's own model
+answers instead.
 
 ## Install
 
@@ -42,10 +44,14 @@ sides, and writes the allowlists. By hand:
 
 The plugin starts **default-deny**: it forwards no groups and no private
 messages until you configure the allowlists. For same-host installs, keep the
-default loopback URL. For an agent on another host, use HTTPS and set the same
-non-empty secret in the plugin's `gateway_token` and the agent's
-`GATEWAY_TOKEN`. A private tunnel is also suitable when it terminates at a
-loopback URL visible to AstrBot; never send the token over cleartext HTTP.
+default loopback URL; containers qualify only when they share a network
+namespace or use host networking. For an agent in another container or on
+another host, use HTTPS and set the same non-empty secret in the plugin's
+`gateway_token` and the agent's `GATEWAY_TOKEN`. A private tunnel is also
+suitable when it terminates at a loopback URL visible to AstrBot. Plain
+`http://` to anything but loopback (e.g. `http://host.docker.internal:8080`)
+is refused even with a token: each message logs `refusing unsafe agent_url`
+and falls through to AstrBot's own model.
 
 ## What changes per platform
 
@@ -64,10 +70,10 @@ using each platform's own mechanisms rather than its own formats:
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | Agent gateway endpoint. |
+| `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | Agent gateway endpoint. Loopback, or HTTPS with `gateway_token` set; plain HTTP to any other host is refused. |
 | `gateway_token` | string | `""` | Shared secret for bearer authentication and the signed timestamp/nonce/body envelope. Must match `GATEWAY_TOKEN`; required off-host. |
-| `timeout_s` | int | `180` | HTTP timeout per round-trip. The agent simulates typing delays, keep it generous. Too low is not "replies arrive slowly": the agent does not notice the caller left, so it finishes the turn and commits the reply and what it learned from it, while AstrBot's own model answers the same turn in a different voice. |
-| `excluded_platforms` | list | `["aiocqhttp"]` | Platform adapter names never forwarded. |
+| `timeout_s` | int | `180` | HTTP timeout for each attempt (a 429 or 500 is retried while the signed envelope is still fresh, honouring `Retry-After`). The agent simulates typing delays, keep it generous. Too low is not "replies arrive slowly": the agent does not notice the caller left, so it finishes the turn and commits the reply and what it learned from it, while AstrBot's own model answers the same turn in a different voice. |
+| `excluded_platforms` | list | `["aiocqhttp"]` | Platform adapter names never forwarded. Remove `aiocqhttp` to route QQ through AstrBot (see below). |
 | `group_whitelist` | list | `[]` | Group IDs to forward; empty = none. |
 | `private_enabled` | bool | `false` | Enable forwarding for explicitly allowlisted private senders. |
 | `private_whitelist` | list | `[]` | Allowed private senders; empty = none. |
@@ -80,18 +86,21 @@ the room to AstrBot's built-in model, which would then answer as someone else
 in a conversation the persona had decided to sit out. An agent too old to
 send `owned` falls back to `handled`, which is what it did before.
 
-## QQ: two ways, and you must pick one
+## QQ: route it through AstrBot
 
-**Default — NapCat feeds the agent directly.** `aiocqhttp` stays in
-`excluded_platforms`, QQ goes NapCat → `POST /webhook/qq`, and this plugin
-carries everything else. Nothing to configure.
+**Supported — QQ goes through this plugin**, so AstrBot is the single place
+you configure every platform. Remove `aiocqhttp` from `excluded_platforms`,
+add the QQ group to `group_whitelist`, and set
+`GATEWAY_NATIVE_PLATFORMS=aiocqhttp` on the agent (`quickstart.py --astrbot
+<data dir> --qq` does the first and the last). If NapCat was posting to
+`/webhook/qq`, stop it.
 
-**Or route QQ through here too**, so AstrBot is the single place you configure
-every platform. Remove `aiocqhttp` from `excluded_platforms`, add the QQ group
-to `group_whitelist`, stop NapCat posting to `/webhook/qq`, and set
-`GATEWAY_NATIVE_PLATFORMS=aiocqhttp` on the agent.
+**Deprecated since 0.3.0 — NapCat feeds the agent directly** through
+`POST /webhook/qq`. The schema's default still keeps `aiocqhttp` in
+`excluded_platforms` so an existing NapCat-direct install does not suddenly
+receive every QQ message twice; new installs should not use it.
 
-That last setting is not optional and not cosmetic. Without it the agent
+`GATEWAY_NATIVE_PLATFORMS=aiocqhttp` is not optional and not cosmetic. Without it the agent
 namespaces forwarded ids, so every QQ conversation arrives under a new name
 and the agent addresses rooms and people that do not exist — memory, history
 and every learned example are keyed the old way, and the ledgers

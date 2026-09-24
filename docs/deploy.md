@@ -167,18 +167,25 @@ request that brought a message, because the reply sink closes when that
 request returns. The proactive loops skip any conversation whose id is
 namespaced, for want of anywhere to send.
 
-For proactive turns that is worked around rather than solved, by inverting
-them: POST an ordinary gateway event with `"proactive": true`, and the text on
-it is read as a cue to the persona ("they have been quiet a while, say
-something if you genuinely have something to say") instead of as the other
-person's words. If it decides to speak, the reply comes back in the response
-like any other, and the caller relays it. Anything scheduling those requests
-works — AstrBot plugins can hold a background task or a cron entry.
+For proactive turns in a DM that is worked around rather than solved, by
+inverting them: POST an ordinary private gateway event with
+`"proactive": true`, and the text on it is read as a cue to the persona
+("they have been quiet a day; their exam was this morning") instead of as the
+other person's words. It is reference, not orders: the engine's own
+proactive instructions still decide what the turn is and let the persona stay
+silent, and the cue is cut at 500 characters. If it decides to speak, the
+reply comes back in the response like any other, and the caller relays it.
+Anything scheduling those requests works — AstrBot plugins can hold a
+background task or a cron entry.
 
 The flag is what keeps the cue out of the transcript. Without it the caller's
 own directive lands in the conversation history as something the reader said,
 stays for 40 turns, can be quoted back at them, and can be promoted into a
 memory about them.
+
+Group conversations have no such turn. A group event marked `"proactive"` is
+claimed, so your forwarder keeps its own model out of the room, and then
+dropped: nothing is said, and the text is never read as anyone's words.
 
 Delayed elicitation and the LLM-failure excuse are still lost on those
 platforms; both are fire-and-forget sends with no request to ride back on.
@@ -190,6 +197,13 @@ machine. If they do not, set `HOST=0.0.0.0` **and both** `WEBHOOK_SECRET` and
 `GATEWAY_TOKEN`. Startup refuses a non-loopback `HOST` without them, including
 for a QQ-only deployment: `/webhook/gateway` is mounted whether or not you use
 it, so binding a public interface without a gateway token would leave it open.
+
+With a credential blank, its endpoint accepts only local programs calling
+`http://127.0.0.1` (or `localhost`) directly. A request carrying `Origin`,
+a cross-site `Sec-Fetch-Site`, any other `Host` name, or a proxy header
+(`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`) is refused
+with 403 `non_local_request`: that is a browser tab or a tunnel, not NapCat or
+the plugin. Put a tunnel in front only with the credential set.
 
 ## The detailed health endpoint
 
@@ -223,9 +237,10 @@ by the transient conversation cap; back up `runtime/` to preserve learned state.
 
 In rough order of likelihood:
 
-1. **`BOT_QQ` unset or wrong.** The mention detector returns false immediately,
-   so the bot starts cleanly, logs nothing, and never answers. `healthcheck`
-   warns about this now.
+1. **`BOT_QQ` unset or wrong on QQ.** A QQ @-mention carries the account's
+   number, so the mention detector never matches it: the bot starts cleanly,
+   logs nothing, and never answers. `healthcheck` warns about this now. Other
+   platforms need no `BOT_QQ`.
 2. **A misspelled setting.** Silent by construction — the default is used.
    `healthcheck` lists any key `.env.example` does not know.
 3. **A BOM on `.env`.** The first setting's name carries it and never reaches

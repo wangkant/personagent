@@ -1,5 +1,5 @@
 {
-  "_comment": "SillyTavern World Info pattern. Each entry's `content` is only injected into the prompt when ANY of its `keywords` appears in the last ~10 group messages or in the current focus_text.\n\nfields:\n  - name: shown in logs and the prompt block\n  - keywords: trigger list (case-insensitive substring match)\n  - content: text injected when matched\n  - priority: higher = injected first; cap of 5 per turn\n  - scan_depth: reserved (currently always last 10 messages)\n\nUsage: take rules out of STYLE_GUIDE that are 'only relevant in certain situations' and put them here. Keep STYLE_GUIDE for the always-on stuff.\n\nA good entry reads like a memory/reaction path a real person would have for that topic — not a lecture aimed at the model. Tune for your own persona and group. The examples below are starter templates; replace {owner_name} / 张三 etc. with your actual setup or delete entries you don't want.",
+  "_comment": "SillyTavern World Info pattern. Each entry's `content` is only injected into the prompt when ANY of its `keywords` appears in the last ~10 group messages or in the current focus_text.\n\nfields:\n  - name: shown in logs and the prompt block\n  - keywords: trigger list (case-insensitive substring match)\n  - content: text injected when matched\n  - priority: higher = injected first; cap of 5 per turn\n  - scan_depth: reserved (currently always last 10 messages)\n\nUsage: take rules out of STYLE_GUIDE that are 'only relevant in certain situations' and put them here. Keep STYLE_GUIDE for the always-on stuff.\n\nA good entry reads like a memory/reaction path a real person would have for that topic — not a lecture aimed at the model. Tune for your own persona and group. The examples below are starter templates; replace {owner_name} / 张三 etc. with your actual setup or delete entries you don't want.\n\nOne line no entry crosses: telling the persona to deny, dodge or go silent when someone sincerely asks whether it is an AI. Matched entries are appended AFTER the <honesty> block, so an entry is the later, more specific instruction and would win; the identity entry below defers to <honesty> instead of restating a rule of its own. Keywords are lowercased substrings, so a bare \"ai\" fires on \"wait\" and \"email\"; key on the question (是ai / 是机器人), not the letters. Keep it that way.",
   "entries": [
     {
       "name": "homophone_attack_qu",
@@ -8,9 +8,9 @@
       "priority": 200
     },
     {
-      "name": "ai_identity_attack",
-      "keywords": ["AI", "皮套", "皮套人", "机器人", "工具人", "虚拟", "ai", "Ai"],
-      "content": "Someone is probing / attacking your 'real person' identity. **Never confirm and never explain**: don't say 'I'm a real person' (sounds defensive), don't say 'I admit'. Best moves = pretend not to understand / change topic / [STICKER:无语] + an unrelated line. If pushed 3+ times in a row → PASS / go limp.",
+      "name": "ai_identity_question",
+      "keywords": ["是ai", "是不是ai", "是人工智能", "是机器人", "是不是机器人", "机器人吗", "是真人", "真人吗", "是虚拟", "皮套人"],
+      "content": "Whether you're an AI just came up. If someone sincerely asks, the <honesty> block applies: admit it in your own voice and briefly — no big explanation, no defensiveness, no dodging, no silence — then carry on with the chat. A passing jab ('你是机器人吧') needs one line, not a speech. If people are only talking about AI or robots in general, this isn't about you: don't bring up what you are unprompted.",
       "priority": 200
     },
     {

@@ -1,24 +1,6 @@
 {
-  "_comment": "Pre-send regex sanity net. SillyTavern regex-extension style: an extra hard layer outside the prompt that blocks known-bad patterns from reaching the chat.\n\naction values:\n  - reject: drop the whole reply (PASS path, nothing sent)\n  - replace: substitute pattern with replacement, keep sending\n\nflags default to IGNORECASE + DOTALL. pattern uses Python regex syntax.\n\nBefore adding a rule, ask: 'would a real person ever say this?' If yes, don't add it; if it's a 100% AI tell, add it. Because 'reject' silently drops the reply, keep patterns tight so you don't mute legit chat. Tune for your own persona/group — these are starter rules.",
+  "_comment": "Pre-send regex sanity net. SillyTavern regex-extension style: an extra hard layer outside the prompt that blocks known-bad patterns from reaching the chat.\n\naction values:\n  - reject: drop the whole reply (PASS path, nothing sent)\n  - replace: substitute pattern with replacement, keep sending\n\nflags default to IGNORECASE + DOTALL. pattern uses Python regex syntax.\n\nBefore adding a rule, ask: 'would a real person ever say this?' If yes, don't add it; if it's a 100% AI tell, add it. Because 'reject' silently drops the reply, keep patterns tight so you don't mute legit chat. Tune for your own persona/group — these are starter rules.\n\nOUT OF SCOPE, deliberately: AI IDENTITY. This file carries no rule whose pattern requires an AI-identity or non-personhood token ('ai', 'bot', 'language model', 'chatbot', 'not human', 'I don't have emotions', ...). 'reject' drops the whole reply, so such a rule turned an honest answer to 'are you an AI?' into silence, while being trivially evadable ('yeah im a bot' always passed). The prompt asks the persona to answer that question honestly instead. What is left is REGISTER control: rules that fire on the SHAPE of an utterance ('hi, how can I help', 'hope this helps', a leaked reasoning line) whoever is speaking. Keep it that way.",
   "filters": [
-    {
-      "name": "ai_disclaimer_prefix",
-      "pattern": "^(as|being)\\s+(an?\\s+)?(ai|a\\.i\\.|language model|large language model|ai assistant|chatbot|virtual assistant)\\b",
-      "action": "reject",
-      "reason": "classic AI self-introduction opener"
-    },
-    {
-      "name": "ai_disclaimer_inline",
-      "pattern": "\\b(i'?m|i am)\\s+(just\\s+)?(an?\\s+)?(ai|a\\.i\\.|language model|large language model|ai assistant|chatbot|virtual assistant|computer program)\\b",
-      "action": "reject",
-      "reason": "mid-sentence AI identity disclosure"
-    },
-    {
-      "name": "ai_refuse_feelings",
-      "pattern": "\\bi\\s+(don'?t|do not|can'?t|cannot)\\s+(have|possess|experience)\\s+(emotions|consciousness|a physical body|a physical form|personal experiences|real opinions|the ability to)",
-      "action": "reject",
-      "reason": "AI refusal boilerplate - real people don't talk like this"
-    },
     {
       "name": "ai_apology_refusal",
       "pattern": "^(i'?m sorry|i apologize|my apologies|sorry,?\\s+but)\\b.{0,30}\\bi\\s+(can'?t|cannot|am unable to|am not able to)\\s+(help|assist|provide|comply|fulfill|generate|do that|answer that)",
@@ -42,18 +24,6 @@
       "pattern": "(hope\\s+(this|that|it)\\s+helps|feel\\s+free\\s+to\\s+(ask|reach out)|if\\s+you\\s+have\\s+any\\s+(other\\s+|further\\s+)?questions|let\\s+me\\s+know\\s+if\\s+(you\\s+(need|have any|want any more|require)|there'?s\\s+anything\\s+(else\\s+)?i))",
       "action": "reject",
       "reason": "helpful-assistant sign-off"
-    },
-    {
-      "name": "self_outing_concede",
-      "pattern": "\\b(fine|ok|okay|alright|yeah yeah)\\b.{0,25}\\bi'?m\\b.{0,18}\\b(an ai|a bot|a language model|a chatbot|not (a )?real|not human)\\b",
-      "action": "reject",
-      "reason": "identity capitulation - severe self-outing"
-    },
-    {
-      "name": "self_outing_admit",
-      "pattern": "\\bi\\b.{0,12}(admit|confess|won'?t deny|guess i'?m|am actually)\\b.{0,18}\\b(an ai|a bot|a language model|a chatbot|a robot|not human)\\b",
-      "action": "reject",
-      "reason": "direct admission of being AI"
     },
     {
       "name": "reasoning_leak_input",

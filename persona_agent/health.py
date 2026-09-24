@@ -15,7 +15,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from .preflight import private_model_from_env
-from .endpoints import chat_completions_url
+from .endpoints import chat_completions_url, endpoint_for
 from .textproc import apply_k2_quirks
 
 
@@ -32,14 +32,28 @@ def _get(url, timeout=10):
         return json.load(r)
 
 
+def _llm_endpoint(model: str) -> tuple[str, str]:
+    """(base URL, key) the agent calls `model` on: the fallback model may have
+    its own endpoint (FALLBACK_BASE_URL / FALLBACK_API_KEY), every other name
+    is on the primary's."""
+    return endpoint_for(
+        model,
+        primary_model=os.getenv("LLM_MODEL", "deepseek-chat"),
+        fallback_model=os.getenv("FALLBACK_MODEL", ""),
+        base_url=(os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/"),
+        api_key=os.getenv("LLM_API_KEY", ""),
+        fallback_base_url=(os.getenv("FALLBACK_BASE_URL", "") or "").rstrip("/"),
+        fallback_api_key=os.getenv("FALLBACK_API_KEY", ""))
+
+
 def check_private_chat():
-    """Private-chat model probe. Private and group chat share the provider's
-    OpenAI-compatible endpoint (/v1/chat/completions); PRIVATE_MODEL
-    is just an alternate model name on that endpoint (blank = LLM_MODEL),
-    authenticated with the primary LLM_API_KEY — mirroring the agent."""
-    key = os.getenv("LLM_API_KEY", "")
-    base = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+    """Private-chat model probe. PRIVATE_MODEL is an alternate model name
+    (blank = LLM_MODEL) on the primary's endpoint — unless it is also the
+    FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
+    Routed like the agent, or the probe would report on an endpoint DMs do
+    not use."""
     model = private_model_from_env() or os.getenv("LLM_MODEL", "")
+    base, key = _llm_endpoint(model)
     if not (key and model):
         return None, "not configured"
     payload = {"model": model, "max_tokens": 8,
@@ -51,10 +65,11 @@ def check_private_chat():
 
 def check_primary_chat_tools():
     """Primary OpenAI-compatible chat endpoint, exercised with the same /v1
-    function-calling path the web-search decision uses."""
-    key = os.getenv("LLM_API_KEY", "")
-    base = (os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/")
+    function-calling path the web-search decision uses — on the endpoint the
+    agent would send that model to, which is the fallback's own when one is
+    configured."""
     model = os.getenv("FALLBACK_MODEL") or os.getenv("LLM_MODEL") or "deepseek-chat"
+    base, key = _llm_endpoint(model)
     if not key:
         return None, "not configured"
     payload = {"model": model, "max_tokens": 30, "messages": [{"role": "user", "content": "what is the weather today"}],
@@ -81,7 +96,7 @@ def check_vision():
     payload = {"model": model, "max_tokens": 64, "temperature": 0.3, "messages": [{"role": "user", "content": [
         {"type": "text", "text": "What color? one word."},
         {"type": "image_url", "image_url": {"url": data_url}}]}]}
-    apply_k2_quirks(payload, model)
+    apply_k2_quirks(payload, model, base)
     r = _post_json(f"{base}/chat/completions", payload, {"Authorization": f"Bearer {key}"})
     txt = (r["choices"][0]["message"].get("content") or "").strip()
     return True, f"{model} -> {txt[:20]!r}"
@@ -93,7 +108,7 @@ def eval_endpoint(model: str, *, glm_key: str, glm_base: str,
 
     A Moonshot/Kimi-family model with GLM_* credentials goes through the GLM
     endpoint (its base already carries the version path); everything else
-    uses the primary endpoint under /v1, matching the main call path."""
+    uses the `base_url` given under /v1, matching the main call path."""
     em = (model or "").lower()
     if ("moonshot" in em or "kimi" in em) and glm_key and glm_base:
         return f"{glm_base}/chat/completions", glm_key
@@ -105,17 +120,18 @@ def check_eval():
     model = os.getenv("EVAL_MODEL", "")
     if not model:
         return None, "not configured"
+    base, key = _llm_endpoint(model)
     url, key = eval_endpoint(
         model,
         glm_key=os.getenv("GLM_API_KEY", ""),
         glm_base=(os.getenv("GLM_BASE_URL", "") or "").rstrip("/"),
-        api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=(os.getenv("LLM_BASE_URL", "https://api.deepseek.com") or "").rstrip("/"),
+        api_key=key,
+        base_url=base,
     )
     if not key or url.startswith("/"):  # empty base URL
         return None, "not configured"
     payload = {"model": model, "max_tokens": 16, "messages": [{"role": "user", "content": "reply with: ok"}]}
-    apply_k2_quirks(payload, model)
+    apply_k2_quirks(payload, model, url)
     r = _post_json(url, payload, {"Authorization": f"Bearer {key}"})
     txt = (r["choices"][0]["message"].get("content") or "").strip()
     return True, f"{model} -> {txt[:20]!r}"

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from . import channels
 from .gateway import current_sink
-from .textproc import TextProcessing
+from .textproc import MAX_REPLY_MESSAGES, TextProcessing
 
 logger = logging.getLogger("agent")
 
@@ -78,6 +78,12 @@ class SendResult:
 
 class Transport:
     """Mixed into Agent; see agent.py."""
+
+    # The oldest @ check_missed_mentions will still replay. Long enough to
+    # cover a restart or a NapCat reconnect; short enough that an @ the
+    # seen-id ring has since forgotten (busy groups can cycle it within the
+    # half-hour between sweeps) is not answered again on every later sweep.
+    MISSED_MENTION_MAX_AGE_SEC = 3600
 
     def _touch_gateway_conv(self, key: str) -> None:
         """Record a gateway conversation as active; past _MAX_GATEWAY_CONVS,
@@ -147,6 +153,7 @@ class Transport:
         if channels.is_dm(key):
             uid = key.split(":", 1)[1]
             self.private_history.pop(uid, None)
+            self._dm_unanswered.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(reaction_key, None)
         # `reaction_key` IS `key` for a room, so the branch these two used to
@@ -192,6 +199,13 @@ class Transport:
             w.append(now)
             self._last_send_mono = now
             return True
+
+    def _send_budget(self, throttle_key: str) -> int:
+        """How many sends `_throttle_send` would still accept for this target
+        right now. Read-only: `.get` so asking does not mint a window."""
+        now = time.monotonic()
+        w = self._send_window.get(throttle_key) or ()
+        return _SEND_MAX_PER_MIN - sum(1 for t in w if t >= now - _SEND_WINDOW_SEC)
 
     async def _napcat_send(self, endpoint: str, id_field: str, target_id: str,
                            message, *, throttle_key: str, mids_key: str,
@@ -270,14 +284,27 @@ class Transport:
             throttle_key=key, mids_key=key, label="private")
 
     async def _deliver_segments(self, segments, send, *, target_key: str,
-                                at_user_id: str = "", label: str = "") -> SendResult:
-        """Send parsed (kind, value) segments one chunk at a time through
+                                at_user_id: str = "", label: str = "",
+                                throttle_key: str = "") -> SendResult:
+        """Send parsed (kind, value) segments one message at a time through
         ``send(message) -> bool``, stopping at the first failure so a reply is
         never split across a network gap. ``at_user_id`` is prefixed to the
-        first chunk that actually goes out."""
+        first message that actually goes out. How many messages one reply
+        becomes is capped in ``TextProcessing._delivery_units``; on NapCat
+        the cap is also held to what ``throttle_key``'s window will accept."""
         # Behind a sink these sleeps are invisible: the sink hands the whole
         # list back and the caller paces it itself. Only the split survives.
         collected = current_sink.get() is not None
+        # The per-target throttle refuses the 21st send in a minute, and a
+        # refusal ends the reply: under the plain cap of 24, a runaway reply
+        # of short lines lost its 21st-24th messages, the folded overflow
+        # among them. Fold where the throttle will still let the message
+        # through. Taken once up front, the budget only grows while the
+        # reply goes out (old stamps age out), and send_locks keep any other
+        # reply to this target from spending it in the meantime.
+        cap = MAX_REPLY_MESSAGES
+        if not collected and throttle_key:
+            cap = min(cap, self._send_budget(throttle_key))
         at_head = ([{"type": "at", "data": {"qq": str(at_user_id)}}]
                    if at_user_id else [])
         sendable = False
@@ -291,7 +318,7 @@ class Transport:
         # the cooled-down fallback. Sending the same sticker twice in one breath
         # is the tell that there is a bot on the other end.
         used_md5s: set[str] = set()
-        for kind, value in segments:
+        for kind, value in TextProcessing._delivery_units(segments, cap):
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
                 if not file_path or not file_path.exists():
@@ -331,26 +358,23 @@ class Transport:
                 except ValueError:
                     pass
                 continue
-            for chunk in TextProcessing._split_text(value):
-                sendable = True
-                # Delay before every chunk including the first — reads as
-                # typing rather than an instant emit.
-                if not collected:
-                    await asyncio.sleep(self._typing_delay(chunk))
-                if at_head:
-                    message = at_head + [{"type": "text", "data": {"text": chunk}}]
-                    at_head = []
-                else:
-                    message = chunk
-                if not await send(message):
-                    failed = True
-                    logger.warning("[Agent] send aborted (text chunk failed), "
-                                   "dropping remaining chunks (%s)", target_key)
-                    break
-                sent_any = True
-                delivered.append(chunk)
-            if failed:
+            sendable = True
+            # Delay before every chunk including the first — reads as
+            # typing rather than an instant emit.
+            if not collected:
+                await asyncio.sleep(self._typing_delay(value))
+            if at_head:
+                message = at_head + [{"type": "text", "data": {"text": value}}]
+                at_head = []
+            else:
+                message = value
+            if not await send(message):
+                failed = True
+                logger.warning("[Agent] send aborted (text chunk failed), "
+                               "dropping remaining chunks (%s)", target_key)
                 break
+            sent_any = True
+            delivered.append(value)
         return SendResult(
             success=sendable and not failed,
             partial=sent_any and failed,
@@ -383,7 +407,8 @@ class Transport:
         return await self._deliver_segments(
             TextProcessing._parse_sticker_markers(text),
             partial(self._napcat_send_group, group_id),
-            target_key=target_key, at_user_id=at_user_id)
+            target_key=target_key, at_user_id=at_user_id,
+            throttle_key=f"group:{group_id}")
 
     async def _send_private_qq(self, user_id: str, text: str) -> SendResult:
         """Serialize standalone private sends.
@@ -414,11 +439,19 @@ class Transport:
         return await self._deliver_segments(
             TextProcessing._parse_sticker_markers(text),
             partial(self._napcat_send_private, user_id),
-            target_key=target_key, label=" (private)")
+            target_key=target_key, label=" (private)",
+            throttle_key=target_key)
 
     async def check_missed_mentions(self) -> None:
         """On startup, pull the most recent ~10 group messages; if any of them
-        @ed or named the bot and weren't replied to, process one of them."""
+        @ed or named the bot within MISSED_MENTION_MAX_AGE_SEC and weren't
+        replied to, process one of them.
+
+        The seen-id ring is the only record of what was replied to, and it
+        holds the last 2000 ids across every conversation, so busy groups
+        push a quiet group's old @ out of it. The age bound is what stops that
+        @ from being answered again on every sweep; a message without a
+        timestamp is replayed as before."""
         if not self.enabled:
             return
         # Both, not `buffers or allowed_groups`: buffers gains a key for ANY
@@ -456,6 +489,11 @@ class Transport:
                         sender_id = str((msg.get("sender") or {}).get("user_id", ""))
                         if sender_id == self.bot_qq:
                             continue
+                        ts = msg.get("time")
+                        if (isinstance(ts, (int, float))
+                                and time.time() - ts
+                                > self.MISSED_MENTION_MAX_AGE_SEC):
+                            continue
                         raw = msg.get("raw_message", "")
                         # @s arrive in raw_message as CQ codes ([CQ:at,qq=...]);
                         # matching only "@<qq>" never hits, so match both forms.
@@ -472,7 +510,9 @@ class Transport:
         """Periodic catch-up loop. NapCat can drop webhooks during reboots / restarts;
         every `interval` seconds we re-poll recent group history and replay any @-mention
         that didn't go through handle() yet. The message_id ring in handle() makes the
-        replay idempotent."""
+        replay idempotent while the id is still in the ring; an @ older than
+        MISSED_MENTION_MAX_AGE_SEC is not replayed at all, so one the ring has
+        forgotten is not answered on every later sweep."""
         if not self.enabled:
             return
         while True:

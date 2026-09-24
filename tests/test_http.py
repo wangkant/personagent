@@ -558,6 +558,90 @@ def test_preflight_reports_the_right_deployments() -> None:
               not levels(root=home), repr(levels(root=home)))
 
 
+def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None:
+    """The fallback endpoint serves the fallback MODEL, and both ways to get it
+    wrong are silent: set up for a fallback that is the primary's own name, it
+    is never called; pointed at another provider without its own key, it is
+    handed the primary's."""
+    from persona_agent import preflight
+
+    def levels(**env):
+        return {(f.level, f.key) for f in preflight.check_config(
+            env={"LLM_API_KEY": "sk-x", **env})}
+
+    check("fallback endpoint: a complete one is silent",
+          not levels(FALLBACK_MODEL="cheap", FALLBACK_API_KEY="sk-o",
+                     FALLBACK_BASE_URL="https://other.example/v1"))
+    check("fallback endpoint: the primary's host sharing its key is silent",
+          not levels(FALLBACK_MODEL="cheap",
+                     FALLBACK_BASE_URL="https://api.deepseek.com/beta"))
+    check("fallback endpoint: another host handed the primary's key is named",
+          ("WARN", "FALLBACK_API_KEY") in levels(
+              FALLBACK_MODEL="cheap", FALLBACK_BASE_URL="https://other.example/v1"))
+    found = levels(FALLBACK_BASE_URL="https://other.example/v1",
+                   FALLBACK_API_KEY="sk-o")
+    check("fallback endpoint: without a distinct FALLBACK_MODEL it says it does nothing",
+          found == {("WARN", "FALLBACK_BASE_URL")}, repr(found))
+    check("fallback endpoint: a custom version path is named like the primary's",
+          ("WARN", "FALLBACK_BASE_URL") in levels(
+              FALLBACK_MODEL="cheap", FALLBACK_API_KEY="k",
+              FALLBACK_BASE_URL="https://open.bigmodel.cn/api/paas/v4"))
+
+
+def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:
+    """The tools probe asks for FALLBACK_MODEL and the eval probe for
+    EVAL_MODEL. With a fallback endpoint configured, the agent sends that
+    model there; a probe that still asked the primary for it would report
+    an outage that is not happening, and miss the one that is."""
+    from persona_agent import health
+
+    posted: list = []
+
+    def fake_post(url, payload, headers, timeout=30):
+        posted.append((url, headers["Authorization"], payload["model"]))
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(health, "_post_json", fake_post)
+    for name in ("FALLBACK_BASE_URL", "FALLBACK_API_KEY", "GLM_API_KEY",
+                 "GLM_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in (("LLM_API_KEY", "sk-primary"), ("LLM_MODEL", "main"),
+                        ("LLM_BASE_URL", "https://primary.example"),
+                        ("FALLBACK_MODEL", "cheap"), ("EVAL_MODEL", "cheap")):
+        monkeypatch.setenv(name, value)
+
+    health.check_primary_chat_tools()
+    health.check_eval()
+    primary = ("https://primary.example/v1/chat/completions", "Bearer sk-primary", "cheap")
+    check("health: unset, the fallback is probed on the primary's endpoint",
+          posted == [primary, primary], repr(posted))
+
+    monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
+    monkeypatch.setenv("FALLBACK_API_KEY", "sk-fallback")
+    posted.clear()
+    health.check_primary_chat_tools()
+    health.check_eval()
+    fallback = ("https://fallback.example/v1/chat/completions", "Bearer sk-fallback",
+                "cheap")
+    check("health: set, both probes follow the fallback model to its endpoint",
+          posted == [fallback, fallback], repr(posted))
+
+    # PRIVATE_MODEL is routed by name like every other: the fallback's name
+    # sends DMs to the fallback's endpoint, so that is where it is probed.
+    monkeypatch.delenv("ANTHROPIC_PRIVATE_MODEL", raising=False)
+    monkeypatch.setenv("PRIVATE_MODEL", "cheap")
+    posted.clear()
+    health.check_private_chat()
+    check("health: a private model that is the fallback's is probed where DMs go",
+          posted == [fallback], repr(posted))
+    monkeypatch.setenv("PRIVATE_MODEL", "dm-model")
+    posted.clear()
+    health.check_private_chat()
+    check("health: any other private model is probed on the primary's endpoint",
+          posted == [("https://primary.example/v1/chat/completions",
+                      "Bearer sk-primary", "dm-model")], repr(posted))
+
+
 def test_gateway_envelope_refuses_a_bad_signature() -> None:
     """The signature is what binds the BODY to the token. Nothing tested it.
 
@@ -774,3 +858,278 @@ def test_a_failed_log_rotation_does_not_swallow_the_record() -> None:
           all(f"line-{i}" in kept for i in range(3)), repr(kept[:160]))
     check("failed rotation: the stock handler is the thing being fixed",
           "line-2" not in lost, repr(lost[:160]))
+
+
+def _loopback_client(**kwargs) -> httpx.AsyncClient:
+    transport = httpx.ASGITransport(
+        app=main_module.app, client=("127.0.0.1", 1234), **kwargs)
+    return httpx.AsyncClient(
+        transport=transport, base_url="http://127.0.0.1:8080")
+
+
+async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> None:
+    """The token is checked before a slot is taken, so a peer that has none
+    is refused as unauthenticated instead of filling the slots and 429ing
+    the real forwarder for as long as it keeps its sockets open."""
+    original_token = main_module.GATEWAY_TOKEN
+    main_module.GATEWAY_TOKEN = "abc"
+    limiter = main_module._gateway_admission
+    taken = 0
+    try:
+        while await limiter.try_acquire():
+            taken += 1
+        async with _loopback_client() as client:
+            response = await client.post(
+                "/webhook/gateway", content=b"{}",
+                headers={"content-type": "application/json"})
+    finally:
+        for _ in range(taken):
+            await limiter.release()
+        main_module.GATEWAY_TOKEN = original_token
+    check("admission: a tokenless caller is refused before admission",
+          response.status_code == 403, repr((response.status_code, response.text)))
+
+
+async def test_a_non_ascii_token_header_is_refused_not_a_crash() -> None:
+    original_token = main_module.GATEWAY_TOKEN
+    main_module.GATEWAY_TOKEN = "abc"
+    try:
+        async with _loopback_client(raise_app_exceptions=False) as client:
+            gateway = await client.post(
+                "/webhook/gateway", content=b"{}",
+                headers={"x-gateway-token": b"\xff"})
+            details = await client.get(
+                "/health/details", headers={"x-gateway-token": b"\xff"})
+    finally:
+        main_module.GATEWAY_TOKEN = original_token
+    check("auth: a non-ASCII token on the gateway is a 403",
+          gateway.status_code == 403, repr(gateway.status_code))
+    check("auth: a non-ASCII token on health details is a 403",
+          details.status_code == 403, repr(details.status_code))
+    check("auth: a non-ASCII configured secret compares instead of raising",
+          main_module._ct_equal("\xc3\xa9", "é")
+          and not main_module._ct_equal("é", "é"))
+
+
+async def _drive_gateway(receive) -> list[dict]:
+    """Run one raw ASGI request against /webhook/gateway and collect what
+    the app sends. The token is set and supplied so the request gets past
+    every check that runs before the body is read."""
+    sent: list[dict] = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": "POST", "scheme": "http", "path": "/webhook/gateway",
+        "raw_path": b"/webhook/gateway", "root_path": "", "query_string": b"",
+        "headers": [
+            (b"host", b"127.0.0.1:8080"),
+            (b"content-type", b"application/json"),
+            (b"content-length", b"100"),
+            (b"x-gateway-token", b"abc"),
+        ],
+        "client": ("127.0.0.1", 1234), "server": ("127.0.0.1", 8080),
+    }
+    original_token = main_module.GATEWAY_TOKEN
+    main_module.GATEWAY_TOKEN = "abc"
+    try:
+        await main_module.app(scope, receive, send)
+    finally:
+        main_module.GATEWAY_TOKEN = original_token
+    return sent
+
+
+async def test_a_stalled_body_times_out_and_frees_its_slot() -> None:
+    import asyncio
+
+    calls = 0
+
+    async def receive():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"type": "http.request", "body": b"{", "more_body": True}
+        await asyncio.Event().wait()
+
+    original_timeout = getattr(main_module, "BODY_READ_TIMEOUT_S", None)
+    main_module.BODY_READ_TIMEOUT_S = 0.1
+    try:
+        sent = await asyncio.wait_for(_drive_gateway(receive), 3)
+    finally:
+        main_module.BODY_READ_TIMEOUT_S = original_timeout
+    start = next((m for m in sent if m["type"] == "http.response.start"), {})
+    check("body read: a stalled body is answered 408",
+          start.get("status") == 408, repr(sent[:1]))
+    check("body read: the admission slot is released",
+          main_module._gateway_admission.inflight == 0,
+          repr(main_module._gateway_admission.inflight))
+
+
+async def test_a_client_that_hangs_up_mid_body_raises_nothing() -> None:
+    messages = [
+        {"type": "http.request", "body": b"{", "more_body": True},
+        {"type": "http.disconnect"},
+    ]
+
+    async def receive():
+        return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+    error = None
+    try:
+        await _drive_gateway(receive)
+    except Exception as exc:  # the property is that nothing escapes
+        error = exc
+    check("body read: a mid-body disconnect is not an app exception",
+          error is None, repr(error))
+    check("body read: the admission slot is released after a disconnect",
+          main_module._gateway_admission.inflight == 0)
+
+
+def _gateway_event_body(message_id: str) -> bytes:
+    return json.dumps({
+        "platform": "telegram", "message_type": "group",
+        "conversation_id": "g", "user_id": "u", "message_id": message_id,
+        "segments": [], "source_timestamp": int(time.time()),
+    }, separators=(",", ":")).encode()
+
+
+def _qq_event_body(message_id: str) -> bytes:
+    return json.dumps({
+        "post_type": "message", "message_type": "group", "group_id": "g",
+        "user_id": "u", "message_id": message_id, "message": [],
+        "time": int(time.time()),
+    }, separators=(",", ":")).encode()
+
+
+async def test_without_a_credential_only_local_programs_are_accepted() -> None:
+    """With no secret set, a loopback peer alone is not enough: a browser
+    tab (Origin, Sec-Fetch-Site), a rebound host name (Host) and a tunnel on
+    the same machine (X-Forwarded-For) all arrive from 127.0.0.1 too, and
+    each would otherwise post events as anyone, the owner included."""
+    saved = (main_module.WEBHOOK_SECRET, main_module.GATEWAY_TOKEN,
+             main_module.agent, main_module.run_checks,
+             dict(main_module._health_cache))
+    main_module.WEBHOOK_SECRET = ""
+    main_module.GATEWAY_TOKEN = ""
+    main_module.agent = None
+    main_module.run_checks = lambda: []
+    main_module._health_cache.update({"ts": 0.0, "data": None})
+    json_type = {"content-type": "application/json"}
+    browser_like = {
+        "origin": {"origin": "https://evil.example"},
+        "sec-fetch-site": {"sec-fetch-site": "cross-site"},
+        "host": {"host": "evil.example:8080"},
+        "x-forwarded-for": {"x-forwarded-for": "203.0.113.9"},
+    }
+    try:
+        async with _loopback_client() as client:
+            plain_gw = await client.post(
+                "/webhook/gateway", content=_gateway_event_body("ok-1"),
+                headers=json_type)
+            plain_qq = await client.post(
+                "/webhook/qq", content=_qq_event_body("ok-2"),
+                headers=json_type)
+            plain_details = await client.get("/health/details")
+            refused = {}
+            for name, extra in browser_like.items():
+                refused[name] = (
+                    await client.post(
+                        "/webhook/gateway",
+                        content=_gateway_event_body("x-" + name),
+                        headers={**json_type, **extra}),
+                    await client.post(
+                        "/webhook/qq", content=_qq_event_body("x-" + name),
+                        headers={"content-type": "text/plain", **extra}),
+                    await client.get("/health/details", headers=extra),
+                )
+    finally:
+        (main_module.WEBHOOK_SECRET, main_module.GATEWAY_TOKEN,
+         main_module.agent, main_module.run_checks) = saved[:4]
+        main_module._health_cache.clear()
+        main_module._health_cache.update(saved[4])
+    check("local: a plain loopback gateway POST is accepted",
+          plain_gw.status_code == 200, repr(plain_gw.text))
+    check("local: a plain loopback QQ POST is accepted",
+          plain_qq.status_code == 200, repr(plain_qq.text))
+    check("local: plain loopback health details are answered",
+          plain_details.status_code in (200, 503), repr(plain_details.text))
+    for name, responses in refused.items():
+        for route, response in zip(
+                ("gateway", "qq", "health/details"), responses):
+            check(f"local: {name} is refused on {route}",
+                  response.status_code == 403
+                  and response.json().get("code") == "non_local_request",
+                  repr((response.status_code, response.text)))
+
+
+async def test_a_signed_request_with_an_origin_is_unaffected() -> None:
+    """The locality rule stands in for a credential; with a token set, the
+    envelope is the check and a browser-shaped header changes nothing."""
+    saved = (main_module.GATEWAY_TOKEN, main_module.agent,
+             main_module._gateway_replay)
+    main_module.GATEWAY_TOKEN = "gateway-secret"
+    main_module.agent = None
+    main_module._gateway_replay = main_module.ReplayGuard()
+    body = _gateway_event_body("signed-origin")
+    stamp = str(int(time.time()))
+    nonce = "origin-nonce"
+    signature = "sha256=" + hmac.new(
+        b"gateway-secret", stamp.encode() + b"." + nonce.encode() + b"." + body,
+        hashlib.sha256).hexdigest()
+    try:
+        async with _loopback_client() as client:
+            response = await client.post(
+                "/webhook/gateway", content=body, headers={
+                    "origin": "https://evil.example",
+                    "x-gateway-token": "gateway-secret",
+                    "x-gateway-timestamp": stamp,
+                    "x-gateway-nonce": nonce,
+                    "x-gateway-signature": signature,
+                })
+    finally:
+        (main_module.GATEWAY_TOKEN, main_module.agent,
+         main_module._gateway_replay) = saved
+    check("local: a signed gateway request is not judged by its headers",
+          response.status_code == 200, repr(response.text))
+
+
+def test_the_host_header_name_handles_ports_and_ipv6() -> None:
+    name = main_module._host_header_name
+    check("host: port stripped", name("127.0.0.1:8080") == "127.0.0.1")
+    check("host: bracketed IPv6", name("[::1]:8080") == "::1")
+    check("host: bare name", name("LocalHost") == "localhost")
+    check("host: foreign name", name("evil.example:8080") == "evil.example")
+
+
+def test_log_files_stay_private_across_rotation() -> None:
+    """Rotation recreates the base file under the process umask, so a
+    one-time chmod at setup left every file after the first rollover
+    world-readable, message excerpts and user ids included."""
+    import os
+
+    import pytest
+
+    if os.name == "nt":
+        pytest.skip("POSIX file modes")
+    previous = os.umask(0o022)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "bot.log"
+            handler = main_module.RollingLogThatSurvivesAFailedRotation(
+                str(base), maxBytes=200, backupCount=2, encoding="utf-8")
+            try:
+                for i in range(30):
+                    handler.emit(logging.LogRecord(
+                        "t", logging.INFO, __file__, 1,
+                        f"line-{i} " + "x" * 40, None, None))
+            finally:
+                handler.close()
+            backup = Path(str(base) + ".1")
+            modes = {p.name: p.stat().st_mode & 0o777 for p in (base, backup)}
+    finally:
+        os.umask(previous)
+    check("log files: base and backup are 0600 after rotation",
+          all(mode == 0o600 for mode in modes.values()),
+          repr({k: oct(v) for k, v in modes.items()}))

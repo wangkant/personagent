@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.config_env import env_bool  # noqa: E402
 from persona_agent.textproc import TextProcessing  # noqa: E402
 from persona_agent.preflight import private_model_from_env  # noqa: E402
 
@@ -44,6 +45,9 @@ def _build_agent(lang: str) -> Agent:
         owner_name=os.getenv("OWNER_NAME", "") or "owner",
         owner_relationship=os.getenv("OWNER_RELATIONSHIP", ""),
         fallback_model=os.getenv("FALLBACK_MODEL", ""),
+        fallback_base_url=os.getenv("FALLBACK_BASE_URL", ""),
+        fallback_api_key=os.getenv("FALLBACK_API_KEY", ""),
+        fallback_thinking=env_bool("FALLBACK_THINKING", False),
         # Trial defaults: don't spend tokens self-scoring, and skip vision
         # (the terminal can't send images anyway).
         eval_enable=False,

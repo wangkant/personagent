@@ -370,9 +370,14 @@ def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
 # Wizard
 # ---------------------------------------------------------------------------
 
-def _ask(prompt: str, default: str = "", required: bool = False) -> str:
-    """input() with a shown default; re-asks while a required answer is empty."""
-    suffix = f" [{default}]" if default else ""
+def _ask(prompt: str, default: str = "", required: bool = False,
+         shown_default: str | None = None) -> str:
+    """input() with a shown default; re-asks while a required answer is empty.
+
+    ``shown_default`` is what the prompt displays in place of ``default``, so
+    a secret can be kept on Enter without ever being printed."""
+    shown = default if shown_default is None else shown_default
+    suffix = f" [{shown}]" if shown else ""
     while True:
         answer = input(f"  {prompt}{suffix}: ").strip()
         if not answer:
@@ -380,6 +385,13 @@ def _ask(prompt: str, default: str = "", required: bool = False) -> str:
         if answer or not required:
             return answer
         print("    (required - please enter a value)")
+
+
+def _mask_secret(value: str) -> str:
+    """Enough of a key to recognise it, never enough to use it."""
+    if len(value) >= 12:
+        return f"{value[:3]}…{value[-4:]}"
+    return "…"
 
 
 def _ask_yn(prompt: str, default_yes: bool = True) -> bool:
@@ -423,31 +435,66 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     print()
     _warn_if_agent_home_diverges(env_path)
 
+    # A re-run (main() offers one when .env already holds a key, and the
+    # README sends existing users back here to connect AstrBot) starts from
+    # what .env says, not from the first-run presets: Enter-through used to
+    # swap the provider for DeepSeek while keeping another provider's key,
+    # rename the bot to Nova and flip every data file to English.
+    rerun = bool(_env_current_key(env_path))
+    current = {key: _env_get(env_path, key) if rerun else "" for key in (
+        "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "BOT_NAME", "AGENT_LANG",
+        "BOT_QQ", "OWNER_QQ", "OWNER_NAME")}
+    current_base = current["LLM_BASE_URL"].rstrip("/")
+    default_choice = "1"
+    if current_base:
+        default_choice = next(
+            (str(i) for i, (_n, base, _m) in enumerate(PROVIDERS, 1)
+             if base and base.rstrip("/") == current_base),
+            str(len(PROVIDERS)))
+
     # 1. Provider
     print("  Which chat API will the bot use?")
     for i, (name, base, _model) in enumerate(PROVIDERS, 1):
         hint = f" ({base})" if base else ""
         print(f"    {i}. {name}{hint}")
     while True:
-        choice = _ask("Choose 1-5", default="1")
+        choice = _ask("Choose 1-5", default=default_choice)
         if choice in {"1", "2", "3", "4", "5"}:
             break
         print("    (enter a number 1-5)")
     name, base_url, model = PROVIDERS[int(choice) - 1]
     if not base_url:
-        base_url = _ask("Base URL (provider root or /v1 URL)", required=True)
+        base_url = _ask("Base URL (provider root or /v1 URL)",
+                        default=current["LLM_BASE_URL"], required=True)
+    same_provider = bool(current_base) and base_url.rstrip("/") == current_base
+    if same_provider and current["LLM_MODEL"]:
+        model = current["LLM_MODEL"]
     model = _ask("Model name", default=model, required=True)
 
-    # 2. Key (local providers like ollama don't need a real one)
-    api_key = _ask("API key", default="ollama" if "localhost" in base_url else "",
-                   required=True)
+    # 2. Key (local providers like ollama don't need a real one). The current
+    # key is offered only for the provider it belongs to, and never printed.
+    if same_provider and current["LLM_API_KEY"]:
+        api_key = _ask("API key (Enter keeps the current one)",
+                       default=current["LLM_API_KEY"], required=True,
+                       shown_default=_mask_secret(current["LLM_API_KEY"]))
+    else:
+        api_key = _ask("API key", default="ollama" if "localhost" in base_url else "",
+                       required=True)
 
     # 3. Bot identity + language
     bot_name = _ask("Bot display name (what group members call it)",
-                    default="Nova", required=True)
+                    default=current["BOT_NAME"] or "Nova", required=True)
+    if current["BOT_NAME"] and bot_name != current["BOT_NAME"]:
+        print(f"    (renaming {current['BOT_NAME']} to {bot_name} starts a new "
+              "learning scope: nothing learned under the old name reaches its prompts)")
     lang = ""
+    current_lang = current["AGENT_LANG"].lower()
     while lang not in ("en", "zh"):
-        lang = _ask("Language - en or zh", default="en").lower()
+        lang = _ask("Language - en or zh",
+                    default=current_lang if current_lang in ("en", "zh") else "en").lower()
+    if current_lang in ("en", "zh") and lang != current_lang:
+        print(f"    (switching {current_lang} to {lang} switches the language of "
+              "every data file and of the reply validator)")
 
     values = {
         "LLM_API_KEY": api_key,
@@ -475,12 +522,15 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                   "or give the path to its data directory")
         qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?", default_yes=True)
         if qq:
-            values["BOT_QQ"] = _ask("Bot account's QQ number", required=True)
+            values["BOT_QQ"] = _ask("Bot account's QQ number",
+                                    default=current["BOT_QQ"], required=True)
             owner_qq = _ask("Owner QQ - a 'favorite person' the bot is closer to "
-                            "(Enter to skip)")
+                            "(Enter to " + ("keep" if current["OWNER_QQ"] else "skip") + ")",
+                            default=current["OWNER_QQ"])
             if owner_qq:
                 values["OWNER_QQ"] = owner_qq
-                values["OWNER_NAME"] = _ask("Owner display name", required=True)
+                values["OWNER_NAME"] = _ask("Owner display name",
+                                            default=current["OWNER_NAME"], required=True)
         groups = _split_ids(_ask("Group / channel IDs the persona should join, "
                                  "comma-separated (as AstrBot shows them; "
                                  "empty = none yet)"))

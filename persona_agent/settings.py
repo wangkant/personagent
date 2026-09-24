@@ -63,12 +63,26 @@ class AgentSettings:
     base_url: str = "https://api.deepseek.com"
     model: str = "deepseek-chat"
     #: Alternate model name for private chats, served by the same
-    #: OpenAI-compatible primary endpoint — not a second provider. A blank
+    #: OpenAI-compatible primary endpoint — not a second provider, unless it
+    #: is also ``fallback_model``'s name, which is served on the fallback's
+    #: endpoint (``endpoints.endpoint_for`` routes by name). A blank
     #: ``PRIVATE_MODEL`` in ``.env`` would otherwise send ``{"model": ""}`` on
-    #: every DM: a guaranteed 400 that also arms the global fallback cooldown
-    #: and downgrades group replies. Resolved to ``model`` when empty.
+    #: every DM: a guaranteed 400 per DM. Resolved to ``model`` when empty.
     private_model: str = ""
     fallback_model: str = ""
+    #: The fallback model's own endpoint, so the primary provider's outage is
+    #: not also the fallback's. Blank = the primary's ``base_url`` /
+    #: ``api_key``, read at call time. Only a ``fallback_model`` distinct from
+    #: ``model`` is sent there (see ``endpoints.endpoint_for``).
+    fallback_base_url: str = ""
+    fallback_api_key: str = ""
+    #: Whether a ``fallback_base_url`` on another host than ``base_url``
+    #: accepts DeepSeek's ``thinking`` field. Off by default because the
+    #: field is not ignored elsewhere — Groq answers ``400 property
+    #: 'thinking' is unsupported``, OpenAI rejects unknown arguments — and the
+    #: gate, search decision and sticker tagger run on the judge model, which
+    #: defaults to the fallback, so a 400 there silences them on every turn.
+    fallback_thinking: bool = False
     #: The "judgment" model: cheapest available, used only to gate
     #: self-initiated modes (judge / followup / proactive) — decide PASS vs
     #: reply. The reply that actually gets sent is always written by the main
@@ -153,11 +167,19 @@ class AgentSettings:
 
     # ---- model-error fallback ---------------------------------------------
     #: Two independent fallback clocks share these numbers: the error-driven
-    #: one (real 429/5xx, applies to every mode) and the frequency-driven
-    #: self-throttle (self-initiated modes only; called/owner are exempt).
+    #: one, kept per model (a failed model is skipped in every mode, for
+    #: ``fallback_duration``, or ``rate_limit_cooldown`` after a 429) and the
+    #: frequency-driven self-throttle (self-initiated modes only; called/owner
+    #: are exempt).
     rate_window: int = 60
     rate_threshold: int = 5
     fallback_duration: int = 300
+    #: How long a model that answered 429 is skipped. Its own clock because a
+    #: throttled model is metered, not broken: one 429 under the 300s window
+    #: routed every turn for five minutes to the fallback, though the primary
+    #: answered most calls. The call that hit the 429 has already failed over;
+    #: this only has to keep the next few turns off the same wall.
+    rate_limit_cooldown: int = 20
 
     # ---- the proactive loop -----------------------------------------------
     #: A background loop that occasionally self-initiates a message (no
@@ -259,6 +281,7 @@ class AgentSettings:
 
     def __post_init__(self) -> None:
         self.base_url = str(self.base_url or "").rstrip("/")
+        self.fallback_base_url = str(self.fallback_base_url or "").rstrip("/")
         self.napcat_api = str(self.napcat_api or "").rstrip("/")
         self.glm_base_url = (
             str(self.glm_base_url).rstrip("/") if self.glm_base_url else "")
@@ -333,12 +356,17 @@ class AgentSettings:
             owner_name=_str("OWNER_NAME"),
             owner_relationship=_str("OWNER_RELATIONSHIP"),
             fallback_model=_str("FALLBACK_MODEL"),
+            fallback_base_url=_str("FALLBACK_BASE_URL"),
+            fallback_api_key=_str("FALLBACK_API_KEY"),
+            fallback_thinking=env_bool("FALLBACK_THINKING", False, env=env),
             rate_window=env_int(
                 "RATE_WINDOW", 120, minimum=1, maximum=86_400, env=env),
             rate_threshold=env_int(
                 "RATE_THRESHOLD", 30, minimum=1, maximum=100_000, env=env),
             fallback_duration=env_int(
                 "FALLBACK_DURATION", 180, minimum=1, maximum=86_400, env=env),
+            rate_limit_cooldown=env_int(
+                "RATE_LIMIT_COOLDOWN", 20, minimum=1, maximum=86_400, env=env),
             eval_enable=env_bool("EVAL_ENABLE", False, env=env),
             eval_model=_str("EVAL_MODEL"),
             eval_file=_str("EVAL_FILE", "eval.jsonl"),

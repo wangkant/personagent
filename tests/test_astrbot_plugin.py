@@ -11,6 +11,8 @@ import sys
 import types
 from pathlib import Path
 
+import httpx
+
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = (
@@ -88,6 +90,11 @@ def _import_plugin():
     class At(Segment):
         pass
 
+    class AtAll(At):
+        # AstrBot's AtAll is an At whose qq is "all".
+        def __init__(self, **kwargs):
+            super().__init__(qq="all", **kwargs)
+
     class Image(Segment):
         @classmethod
         def fromBase64(cls, value):
@@ -110,6 +117,7 @@ def _import_plugin():
 
     components.Plain = Plain
     components.At = At
+    components.AtAll = AtAll
     components.Image = Image
     components.Face = Face
     components.Reply = Reply
@@ -518,3 +526,155 @@ def test_missing_source_timestamp_is_not_forwarded_or_blocked():
     assert asyncio.run(collect()) == []
     assert plugin._client.calls == []
     assert event.stopped is False
+
+
+def _group_addressing(module, platform, components, *, wake_flag,
+                      message_str="hello"):
+    """Forward one whitelisted group event; return what the agent was sent."""
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    event = _Event(module, private=False, platform=platform)
+    event.message_obj.message = components
+    event.message_str = message_str
+    event.is_at_or_wake_command = wake_flag
+    captured = {}
+
+    async def capture(neutral_event):
+        captured.update(neutral_event)
+        return False, False, []
+
+    plugin._post_to_agent = capture
+    _run(plugin, event)
+    return captured
+
+
+def test_an_at_all_announcement_does_not_address_the_persona():
+    """AstrBot raises is_at_or_wake_command for every @all (ignore_at_all is
+    off by default). Reading that as an @ of the bot made the persona answer
+    every group notice and adjudicate it as a reaction to itself."""
+    module = _import_plugin()
+    sent = _group_addressing(
+        module, "aiocqhttp",
+        [module.Comp.AtAll(), module.Comp.Plain(" meeting at 8")],
+        wake_flag=True, message_str="meeting at 8")
+    assert sent["is_at_me"] is False, sent
+
+
+def test_a_slash_command_does_not_address_the_persona():
+    """'/' is AstrBot's default wake prefix, so /help (or another bot's
+    Telegram command) sets the wake flag without saying anything to us."""
+    module = _import_plugin()
+    sent = _group_addressing(
+        module, "aiocqhttp", [module.Comp.Plain("/help")],
+        wake_flag=True, message_str="/help")
+    assert sent["is_at_me"] is False, sent
+
+
+def test_a_telegram_reply_to_the_bot_addresses_it_and_loses_the_artifact():
+    module = _import_plugin()
+    for prefix in ("/ ", "/@bot "):
+        sent = _group_addressing(
+            module, "telegram",
+            [module.Comp.Reply(id="77", sender_id="123456"),
+             module.Comp.Plain(prefix + "hello")],
+            wake_flag=True, message_str=prefix + "hello")
+        assert sent["is_at_me"] is True, (prefix, sent)
+        assert sent["segments"][1] == {"type": "text", "text": "hello"}, sent
+        assert sent["raw_text"] == "hello", sent
+
+
+def test_a_real_at_of_the_bot_still_addresses_it():
+    module = _import_plugin()
+    sent = _group_addressing(
+        module, "aiocqhttp",
+        [module.Comp.At(qq="bot", name="Bot"), module.Comp.Plain(" hi")],
+        wake_flag=True)
+    assert sent["is_at_me"] is True, sent
+
+
+class _StatusResponse:
+    def __init__(self, status, headers=None):
+        self.status_code = status
+        self.headers = headers or {}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                f"HTTP {self.status_code}", request=None, response=self)
+
+    def json(self):
+        if self.status_code >= 400:
+            return {"error": "busy"}
+        return {"handled": True, "replies": [{"type": "text", "text": "ok"}]}
+
+
+class _ScriptedClient(_RecordingClient):
+    """Answers each post with the next scripted response."""
+
+    def __init__(self, responses):
+        super().__init__()
+        self._responses = list(responses)
+
+    async def post(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return self._responses.pop(0)
+
+
+def _retry_rig(monkeypatch, module, config, responses, *, now=1_725_000_000):
+    plugin = _plugin_instance(module, config)
+    plugin._client = _ScriptedClient(responses)
+    sleeps = []
+
+    async def record_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", record_sleep)
+    clock = {"now": now}
+    monkeypatch.setattr(module.time, "time", lambda: clock["now"])
+    return plugin, sleeps, clock
+
+
+def test_each_attempt_gets_the_full_timeout(monkeypatch):
+    """The agent checks the envelope's age on arrival, so there is no reason
+    to split timeout_s across attempts — doing so capped every signed request
+    at 93 s whatever the operator set."""
+    module = _import_plugin()
+    for config in ({"gateway_token": "t", "timeout_s": 180}, {"timeout_s": 180}):
+        plugin, _sleeps, _clock = _retry_rig(
+            monkeypatch, module, config, [_StatusResponse(200)])
+        delivered, _owned, _replies = asyncio.run(
+            plugin._post_to_agent({"message": "hi"}))
+        assert delivered is True
+        assert plugin._client.calls[0][1]["timeout"] == 180, config
+
+
+def test_a_429_is_retried_after_its_retry_after(monkeypatch):
+    module = _import_plugin()
+    for config in ({"gateway_token": "t"}, {}):
+        plugin, sleeps, _clock = _retry_rig(
+            monkeypatch, module, config,
+            [_StatusResponse(429, {"Retry-After": "3"}), _StatusResponse(200)])
+        delivered, _owned, replies = asyncio.run(
+            plugin._post_to_agent({"message": "hi"}))
+        assert delivered is True, config
+        assert replies == [{"type": "text", "text": "ok"}]
+        assert sleeps == [3.0], (config, sleeps)
+        assert len(plugin._client.calls) == 2
+
+
+def test_no_retry_once_the_signed_envelope_would_arrive_stale(monkeypatch):
+    module = _import_plugin()
+    plugin, sleeps, clock = _retry_rig(
+        monkeypatch, module, {"gateway_token": "t"},
+        [_StatusResponse(500), _StatusResponse(200)])
+    real_post = plugin._client.post
+
+    async def slow_post(url, **kwargs):
+        response = await real_post(url, **kwargs)
+        clock["now"] += 290  # the first attempt failed 290 s after signing
+        return response
+
+    plugin._client.post = slow_post
+    assert asyncio.run(
+        plugin._post_to_agent({"message": "hi"})) == (False, False, [])
+    assert len(plugin._client.calls) == 1
+    assert sleeps == []

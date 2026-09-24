@@ -24,7 +24,7 @@ personagent 主要用于角色闲聊。回复的语气和内容取决于人设�
 - **处理图片和链接。** 配置视觉模型后可获取图片描述；部分网页链接可展开为标题和简介。语音、视频等未解析内容会以占位信息进入上下文。
 - **接入多个平台。** 通过 AstrBot 转发消息，QQ、Telegram、Discord 等平台使用同一套回复逻辑。各平台可用功能有所不同，见下方接入说明。
 
-这是一个自行部署的 Python 应用。personagent 负责生成回复，AstrBot 负责连接聊天平台，模型由你配置的 OpenAI 兼容接口提供。使用云端模型时，相关聊天上下文会发送给该供应商。
+这是一个自行部署的 Python 应用。personagent 负责生成回复，AstrBot 负责连接聊天平台，模型由你配置的 OpenAI 兼容接口提供。使用云端模型时，相关聊天上下文会发送给该供应商。如果配置了备用供应商（`FALLBACK_MODEL`、`FALLBACK_BASE_URL`），它在普通回合中也会被调用（回复判断、搜索决策、反应评判、自评和表情包标注），同样会收到聊天上下文。
 
 ![群聊示意：小林与小夏聊下班和晚饭](assets/personagent-chat.zh-CN.png)
 
@@ -110,7 +110,7 @@ python quickstart.py
 { "reply_style": { "emoji": true, "max_chars": 320 } }
 ```
 
-图片理解需要 `VISION_MODEL`、`GLM_API_KEY` 和 `GLM_BASE_URL`，使用单独配置的视觉接口。图片理解需要 `VISION_MODEL`、`GLM_API_KEY` 和 `GLM_BASE_URL`，使用单独配置的视觉接口。完整设置见 [.env.example](.env.example)。修改人设正文不会重置已学内容；修改 `BOT_NAME` 或 `PERSONA_VERSION` 会切换学习作用域，旧角色的内容不再直接适用。
+图片理解需要 `VISION_MODEL`、`GLM_API_KEY` 和 `GLM_BASE_URL`，使用单独配置的视觉接口。完整设置见 [.env.example](.env.example)。修改人设正文不会重置已学内容；修改 `BOT_NAME` 或 `PERSONA_VERSION` 会切换学习作用域，旧角色的内容不再直接适用。
 
 ## 接入聊天平台
 
@@ -121,10 +121,10 @@ python quickstart.py
           将回复发回聊天平台 ← 返回回复
 ```
 
-1. 在 personagent 仓库根目录运行 `python quickstart.py`，选择连接 AstrBot，填写它的 data 目录。向导会复制转发插件，并将共享的 `GATEWAY_TOKEN` 写入两边配置。
-2. 在 AstrBot 的插件配置页检查 `agent_url`。同机部署默认使用 `http://127.0.0.1:8080/webhook/gateway`；分别放在容器里时，应使用 AstrBot 容器能够访问的 Agent 地址。
+1. 在 personagent 仓库根目录运行 `python quickstart.py`，选择连接 AstrBot，填写它的 data 目录。向导会复制转发插件，并将共享的 `GATEWAY_TOKEN` 写入两边配置。再次运行向导时，当前的供应商、模型、密钥、名字和语言会作为默认值保留。已经配置好的环境也可以不走向导，直接运行 `python quickstart.py --astrbot <AstrBot data 目录> [--qq]` 连接 AstrBot。
+2. 在 AstrBot 的插件配置页检查 `agent_url`。同机部署默认使用 `http://127.0.0.1:8080/webhook/gateway`；插件只会发往回环地址（同一台机器，或共享网络命名空间 / 使用 host 网络的容器），或者设置了 `gateway_token` 的 HTTPS 地址。指向其他容器或主机的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe agent_url`，随后由 AstrBot 自己的模型回复。
 3. 填入群聊或私聊白名单。插件默认不转发任何会话，私聊还需要设置 `private_enabled=true`。
-4. 检查 personagent 的 `.env` 中的 `BOT_NAME` 和 `BOT_QQ`。QQ 使用机器人实际账号；其他平台当前也需要给 `BOT_QQ` 填一个稳定的数字，供 @ 检测使用。
+4. 检查 personagent 的 `.env` 中的 `BOT_NAME` 和 `BOT_QQ`。`BOT_QQ` 是机器人的 QQ 账号，只有接入 QQ 时才需要；其他平台请留空。
 5. 重启 AstrBot，再启动 personagent：
 
 **Windows（PowerShell）**
@@ -158,7 +158,7 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 
 默认监听 `127.0.0.1:8080`。跨机器部署时，设置可访问的地址；使用非回环 `HOST` 必须同时配置 `GATEWAY_TOKEN` 和 `WEBHOOK_SECRET`。通过 HTTPS 反向代理或私有隧道连接，代理应保留原始请求体，两端时钟偏差不能超过五分钟。
 
-非 QQ 平台的回复通过当前网关请求返回，没有内置的独立主动发送通道。若要定时主动发言，需要外部调度器发送带 `proactive: true` 的网关事件，并负责转发结果。详细配置见[部署指南](docs/deploy.md)。
+非 QQ 平台的回复通过当前网关请求返回，没有内置的独立主动发送通道。若要定时主动私聊，需要外部调度器发送带 `proactive: true` 的私聊网关事件，并负责转发结果；带此标记的群聊事件会被认领后丢弃。详细配置见[部署指南](docs/deploy.md)。
 
 </details>
 

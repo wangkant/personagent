@@ -202,6 +202,10 @@ def test_retry_and_elicited() -> None:
     check("has_elicited false after consume", not p.has_elicited("g3", "42", 111.0))
 
     p.record("g4", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
+    # Still inside the TTL, past the elicit window: the read seam must say
+    # what match() would do.
+    check("has_elicited false past the elicit window",
+          not p.has_elicited("g4", "42", now=100.0 + 51))
     check("elicited window expires",
           p.match("g4", sender_uid="42", now=100.0 + 51) is None)
 

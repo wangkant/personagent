@@ -76,8 +76,8 @@ _RETRYABLE_STATUSES = frozenset({429, 500})
 _RETRY_BACKOFFS_S = (0.3, 0.8)
 # The agent rejects a signed envelope once its timestamp is older than this
 # (ReplayGuard / _gateway_event_is_fresh in the agent's main.py). A retry
-# reuses the original signed timestamp rather than re-signing, so all
-# attempts together must land well inside this window.
+# reuses the original signed timestamp rather than re-signing, so each retry
+# must START well inside this window (the age is checked on arrival).
 _GATEWAY_REPLAY_WINDOW_S = 300
 _RETRY_WINDOW_SAFETY_MARGIN_S = 20
 
@@ -212,17 +212,22 @@ class LLMPersonaGateway(Star):
             # but not the component chain — strip the artifact from both so
             # the agent never sees it as user text.
             raw_text = self._strip_tg_wake_artifact(raw_text, self_id)
+            stripped = False
             for seg in segments:
                 if seg.get("type") == "text":
-                    seg["text"] = self._strip_tg_wake_artifact(
-                        seg.get("text") or "", self_id
-                    )
+                    before = seg.get("text") or ""
+                    seg["text"] = self._strip_tg_wake_artifact(before, self_id)
+                    stripped = seg["text"] != before
                     break
-        if is_group and bool(getattr(event, "is_at_or_wake_command", False)):
-            # Some adapters signal "this message addresses the bot" only via
-            # the pipeline wake flag (e.g. a Telegram reply-to-bot emits no
-            # At component at all).
-            is_at_me = True
+            # That artifact, next to a quote, is the only sign a Telegram
+            # reply-to-bot carries: the Reply's sender_id is numeric while
+            # self_id is the username, and no At is emitted. AstrBot's
+            # is_at_or_wake_command is NOT used for this — it is also set by
+            # any "/" wake-prefix text and by every @all, and _map_segments
+            # already sees real @s and replies to the bot on its own.
+            if is_group and stripped and any(
+                    seg.get("type") == "reply" for seg in segments):
+                is_at_me = True
 
         conversation_id = group_id if is_group else sender_id
         source_timestamp = (
@@ -344,8 +349,8 @@ class LLMPersonaGateway(Star):
                 # Quoting one of the bot's own messages addresses the bot,
                 # even on platforms that emit no At component for it. (On
                 # Telegram sender_id is numeric while self_id is the bot
-                # username, so this match never fires there — the wake-flag
-                # OR in forward_to_agent covers that case.)
+                # username, so this match never fires there — forward_to_agent
+                # reads the adapter's reply-to-bot text artifact instead.)
                 if self_id and str(getattr(comp, "sender_id", "") or "") == self_id:
                     is_at_me = True
                 reply_id = str(getattr(comp, "id", "") or "")
@@ -439,6 +444,20 @@ class LLMPersonaGateway(Star):
                 f"llm_persona_gateway: agent request failed ({status})"
                 f"{': ' + detail if detail else ''}")
 
+    @staticmethod
+    def _retry_wait(response, status: int, attempt: int) -> float:
+        """Seconds to wait before resending. A 429 comes from the agent's
+        admission gate, which says how long it expects to stay full; retrying
+        sooner just spends every attempt against the same full gate."""
+        if status == 429:
+            try:
+                wait = float(response.headers.get("Retry-After"))
+            except (TypeError, ValueError, AttributeError):
+                wait = None
+            if wait is not None and 0 <= wait < float("inf"):
+                return wait
+        return _RETRY_BACKOFFS_S[attempt]
+
     async def _post_to_agent(
             self, neutral_event: dict) -> tuple[bool, bool, list]:
         """POST one event; return (replied, owned, reply items).
@@ -464,9 +483,11 @@ class LLMPersonaGateway(Star):
             separators=(",", ":"),
         ).encode("utf-8")
         headers = {"Content-Type": "application/json"}
+        signed_ts = None
         if token:
             headers["X-Gateway-Token"] = token
-            timestamp = str(int(time.time()))
+            signed_ts = int(time.time())
+            timestamp = str(signed_ts)
             nonce = secrets.token_hex(16)
             signed = timestamp.encode() + b"." + nonce.encode() + b"." + body
             signature = hmac.new(
@@ -482,22 +503,17 @@ class LLMPersonaGateway(Star):
         # The signed timestamp above is minted ONCE and every retry resends it
         # unchanged -- that is deliberate (the agent un-burns a nonce when its
         # own write fails, precisely so a correct client can resend the same
-        # bytes), but it means all attempts together have to finish inside the
-        # agent's replay window or the last one is rejected as stale. Divide
-        # one budget across the attempts instead of giving each the full
-        # timeout, which for the 180s default would blow the 300s window on
-        # the second try.
-        budget = min(
-            timeout,
-            (_GATEWAY_REPLAY_WINDOW_S - _RETRY_WINDOW_SAFETY_MARGIN_S)
-            / (len(_RETRY_BACKOFFS_S) + 1),
-        ) if token else timeout
+        # bytes). The agent checks the envelope's age when a request ARRIVES,
+        # before the turn runs, so only the START of each attempt has to fall
+        # inside the replay window; how long the turn then takes does not
+        # matter. Every attempt therefore gets the full timeout_s, and a retry
+        # is sent only while it would still start inside the window.
         attempts = len(_RETRY_BACKOFFS_S) + 1
         data = None
         for attempt in range(attempts):
             try:
                 resp = await self._client.post(
-                    url, content=body, headers=headers, timeout=budget
+                    url, content=body, headers=headers, timeout=timeout
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -505,8 +521,16 @@ class LLMPersonaGateway(Star):
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
                 if status in _RETRYABLE_STATUSES and attempt < attempts - 1:
-                    await asyncio.sleep(_RETRY_BACKOFFS_S[attempt])
-                    continue
+                    wait = self._retry_wait(e.response, status, attempt)
+                    if signed_ts is None or time.time() + wait < (
+                            signed_ts + _GATEWAY_REPLAY_WINDOW_S
+                            - _RETRY_WINDOW_SAFETY_MARGIN_S):
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.warning(
+                        f"llm_persona_gateway: not retrying ({status}): the "
+                        "signed envelope would be too old for the agent by "
+                        "the time the retry arrived")
                 self._log_http_failure(e, status)
                 return False, False, []
             except (httpx.ReadTimeout, httpx.WriteTimeout):
@@ -515,12 +539,15 @@ class LLMPersonaGateway(Star):
                 # agent, where the warning below would simply be false.
                 logger.error(
                     "llm_persona_gateway: timed out waiting for the agent "
-                    f"({budget:.0f}s). The agent does not check whether the "
-                    "caller is still connected, so it is finishing this turn "
-                    "and committing the reply, the debounce state and the "
-                    "learning evidence for a message nobody will see -- and "
-                    "AstrBot's own model is about to answer the same turn in "
-                    "a different voice. Raise timeout_s if this recurs."
+                    f"(timeout_s={timeout:.0f}). The agent does not check "
+                    "whether the caller is still connected, so it is finishing "
+                    "this turn and committing the reply, the debounce state "
+                    "and the learning evidence for a message nobody will see "
+                    "-- and AstrBot's own model is about to answer the same "
+                    "turn in a different voice. If this recurs, raise "
+                    "timeout_s or lower the agent's LLM_TIMEOUT / "
+                    "LLM_MAX_RETRIES: keep LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) "
+                    "under timeout_s."
                 )
                 return False, False, []
             except Exception as e:

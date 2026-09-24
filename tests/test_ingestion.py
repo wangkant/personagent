@@ -13,6 +13,8 @@ import socket
 import time
 from unittest.mock import patch
 
+import pytest
+
 from persona_agent.ingestion import ContentIngestion, safe_fetch_url
 from tools.bootstrap_from_history import download_sticker
 
@@ -270,7 +272,7 @@ def test_url_fanout_is_capped() -> None:
     before the message is buffered or its text truncated. Uncapped, one message
     of cache-busted links stalls the intake loop for every group, not just its
     own — so the cap belongs here, at the source of the list."""
-    cap = ContentIngestion.MAX_URLS_PER_SEGMENT
+    cap = ContentIngestion.MAX_URLS_PER_MESSAGE
     many = " ".join(f"https://example.com/a?i={i}" for i in range(20))
     got = ContentIngestion._extract_urls(many)
     check("urls: fanout is capped", len(got) == cap, str(len(got)))
@@ -347,3 +349,61 @@ async def test_bootstrap_uses_guarded_bounded_fetch() -> None:
         f"{len(got_large)} bytes" if got_large is not None else "",
     )
     check("bootstrap: public URL reached bounded stream", calls == 1, repr(calls))
+
+
+TELEGRAM_FILE_URL = "https://api.telegram.org/file/bot123:SECRETSECRET/photos/x.jpg"
+
+
+def test_a_fetched_url_is_logged_as_its_host_only(caplog) -> None:
+    """Telegram file URLs carry the bot token in the path and AstrBot
+    forwards them as is; a slice of the URL put the token in the log."""
+    import asyncio
+    import logging
+
+    from persona_agent import ingestion
+    from persona_agent.ingestion import _url_for_log
+
+    shown = _url_for_log(TELEGRAM_FILE_URL)
+    check("url log: the host is kept", "api.telegram.org" in shown, shown)
+    check("url log: the path is not", "SECRET" not in shown, shown)
+    check("url log: base64 payloads are not echoed",
+          _url_for_log("base64://QUJDREVGRw==") == "base64://…")
+    check("url log: garbage is named, not echoed",
+          _url_for_log("not a url") == "<unparsable url>")
+
+    async def stalled(url):
+        await asyncio.sleep(1)
+
+    async def refused(url):
+        return None
+
+    caplog.set_level(logging.DEBUG, logger="agent")
+    Harness()._accept_vision_caption(TELEGRAM_FILE_URL, "a cat on a mat", "glm")
+    with patch.object(ingestion, "_resolve_public_target", stalled):
+        asyncio.run(safe_fetch_url(
+            TELEGRAM_FILE_URL, timeout=0.01, max_wire_bytes=10,
+            max_decoded_bytes=10))
+    with patch.object(ingestion, "_resolve_public_target", refused):
+        asyncio.run(safe_fetch_url(
+            TELEGRAM_FILE_URL, timeout=1, max_wire_bytes=10,
+            max_decoded_bytes=10))
+    lines = [record.getMessage() for record in caplog.records]
+    check("url log: the three sites logged", len(lines) >= 3, repr(lines))
+    check("url log: no line carries the token",
+          not any("SECRET" in line for line in lines), repr(lines))
+
+
+@pytest.mark.parametrize("address, internal", [
+    ("100.64.0.1", True),               # CGNAT / Tailscale
+    ("100.100.100.200", True),          # Alibaba Cloud ECS metadata
+    ("::ffff:100.100.100.200", True),   # the same, IPv4-mapped
+    ("::ffff:127.0.0.1", True),
+    ("fec0::1", True),                  # deprecated site-local
+    ("93.184.216.34", False),
+    ("2606:4700::1111", False),
+])
+def test_every_non_global_address_is_internal(address, internal) -> None:
+    from persona_agent.ingestion import _is_internal_ip
+
+    check(f"ssrf: {address} internal={internal}",
+          _is_internal_ip(address) is internal)
