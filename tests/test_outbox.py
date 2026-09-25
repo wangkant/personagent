@@ -221,15 +221,15 @@ async def test_a_long_poll_wakes_when_something_is_queued(tmp: Path) -> None:
     check("long-poll: tells the connector how long to wait next",
           answer["next_wait_s"] == outbox_mod.DEFAULT_WAIT_S)
 
-    again = await box.pull("fw1", wait_s=0)
-    check("at most once: a later pull does not hand it out again",
-          again["deliveries"] == [], repr(again))
     await box.pull("fw2", wait_s=0, acks=[{"delivery_id": d["delivery_id"],
                                            "status": "failed"}])
     check("at most once: another connector cannot settle it",
           not sending.done())
-    await box.pull("fw1", wait_s=0, acks=[
+    # The ack rides on the connector's next pull, as the contract says.
+    again = await box.pull("fw1", wait_s=0, acks=[
         {"delivery_id": d["delivery_id"], "status": "sent", "sent_items": 2}])
+    check("at most once: a later pull does not hand it out again",
+          again["deliveries"] == [], repr(again))
     result = await asyncio.wait_for(sending, 2)
     check("ack: sent settles the waiting caller",
           (result.status, result.sent_items) == ("sent", 2), repr(result))
@@ -313,7 +313,6 @@ async def test_a_delivery_lost_with_its_pull_ends_at_the_next_pull(
     sending = asyncio.create_task(
         box.deliver("telegram:c1", HANDLE, ITEMS, reason="proactive"))
     lost = await box.pull("fw1", wait_s=2)
-    await asyncio.sleep(0.05)  # monotonic() is coarse on Windows
     await box.pull("fw1", wait_s=0)
     result = await asyncio.wait_for(sending, 2)
     check("lost pull: the next pull without its ack ends it as not sent",
