@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The AstrBot plugin (0.5.0) is a full connector.** Its events carry a
+  `forwarder_id`, a `reply_handle` and `caps`, and it pulls the agent's outbox
+  and delivers what the persona says unprompted through AstrBot, on every
+  platform that can send first (not QQ official, WeChat official accounts or
+  WeCom smart bots). The allowlists are checked again at send time. It is on
+  by default (`outbox_enabled`); an agent without the outbox answers 404 and
+  nothing else changes.
+
+### Changed
+
+- **The AstrBot plugin reads each platform the way its adapter delivers it.**
+  QQ pokes, recalls and requests no longer reach the persona as empty turns.
+  More messages count as addressing the bot, on purpose: a Discord message
+  starting with `@bot` (which the adapter strips), a ping of the bot's role,
+  and replies to the bot on Telegram (photos and voice too), Discord, Lark,
+  Slack threads, KOOK and Satori. Quotes carry their text and author; sticker
+  and emoji names, voice transcripts and the platform's own send time come
+  through. Telegram images are sent inline, so the bot token in their URLs
+  never reaches the agent. Because the send time is now the platform's, a
+  backlog older than `GATEWAY_SOURCE_MAX_AGE_SECONDS` is refused as stale.
+- **The AstrBot plugin writes each platform's way.** Mentions no longer carry
+  a double space on QQ and Telegram, long replies are split under each
+  platform's limit (on QQ under `forward_threshold`, so none becomes a
+  merged-forward card), Telegram shows `*` and `_` as typed, text cannot ping
+  a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
+  other than JPEG no longer post an error, and QQ official replies are plain
+  text.
+
 ### Deprecated
 
 - **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
