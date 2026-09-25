@@ -3,10 +3,12 @@
 It speaks the connector protocol in docs/connectors.md of the agent repo.
 Each message AstrBot receives becomes the neutral inbound event, POSTed to
 the agent's /webhook/gateway; the reply items that come back are sent as
-AstrBot message chains.
+AstrBot message chains. Messages nobody asked for (openers, follow-ups, the
+excuse after a failed model call) wait in the agent's outbox, which this
+plugin pulls and delivers through context.send_message.
 
-What each adapter can and cannot do is in platforms.py. The signing is the
-connector SDK, vendored as personagent_connector.py.
+What each adapter can and cannot do is in platforms.py. The signing and the
+outbox loop are the connector SDK, vendored as personagent_connector.py.
 
 Reply items: {"type": "text", "text", "at_user_id"?, "reply_to_message_id"?}
 or {"type": "image", "b64", ...}. at_user_id is "<platform>:<raw id>";
@@ -18,9 +20,11 @@ import asyncio
 import base64
 import collections
 import contextlib
+import logging
 import os
 import random
 import re
+import secrets
 import tempfile
 import time
 from urllib.parse import urlsplit
@@ -28,7 +32,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.platform import MessageType
 from astrbot.api.star import Context, Star
 import astrbot.api.message_components as Comp
@@ -58,6 +62,9 @@ DEFAULT_QUOTE_MAX_CHARS = 200
 DEFAULT_MAX_INLINE_IMAGE_BYTES = 4_000_000
 # Base64 an event may carry in total; the agent refuses bodies over 8 MB.
 _EVENT_B64_BUDGET = 6_000_000
+# How long a delivery waits for its platform to come up after a restart:
+# AstrBot loads plugins before platforms.
+_PLATFORM_WAIT_S = 30
 
 # Retry policy for _post_to_agent. Only statuses where resending the exact
 # same bytes is safe get a retry: 500 is the agent failing after accepting
@@ -87,6 +94,15 @@ _SLACK_LINK = re.compile(r"<(https?://[^|>]+)(?:\|([^>]*))?>")
 _VOICE_NOTE = "(sent a voice message)"
 _VIDEO_NOTE = "(sent a video)"
 _IMAGE_NOTE = "(sent an image)"
+
+
+class _Prefixed(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        return f"llm_persona_gateway: outbox: {msg}", kwargs
+
+
+# The SDK's pull loop reports into AstrBot's log, under this plugin's name.
+sdk.logger = _Prefixed(logger, {})
 
 
 def _comp_is(comp, name: str) -> bool:
@@ -231,7 +247,8 @@ class _People:
 
 
 class LLMPersonaGateway(Star):
-    """Forward all eligible messages to the persona agent and relay replies."""
+    """Forward all eligible messages to the persona agent, relay its replies,
+    and deliver what it queues in its outbox."""
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -240,13 +257,56 @@ class LLMPersonaGateway(Star):
         # One shared client, made on first use; the timeout is applied per
         # request so config changes take effect without a reload.
         self._client = None
+        self._forwarder_id = str(config.get("forwarder_id") or "").strip()
         self._people = _People()
+        self._outbox_task = None
+        self._outbox_stop = asyncio.Event()
+        # Until then a delivery waits for its platform: AstrBot loads plugins
+        # before platforms.
+        self._starting_until = None
+
+    async def initialize(self):
+        await self._ensure_forwarder_id()
+        self._starting_until = time.monotonic() + _PLATFORM_WAIT_S
+        if self.config.get("outbox_enabled", True) and self._outbox_task is None:
+            self._outbox_task = asyncio.create_task(self._run_outbox())
 
     async def terminate(self):
+        # A terminate that raises leaves the old poller running next to the
+        # reloaded one (AstrBot only logs it), so nothing here may raise.
+        self._outbox_stop.set()
+        task, self._outbox_task = self._outbox_task, None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
         client, self._client = self._client, None
         if client is not None:
             with contextlib.suppress(Exception):
                 await client.aclose()
+
+    async def _ensure_forwarder_id(self) -> str:
+        """A stable id for this AstrBot, kept across restarts in AstrBot's
+        plugin store: the agent queues outbox deliveries by it."""
+        if self._forwarder_id:
+            return self._forwarder_id
+        stored = None
+        with contextlib.suppress(Exception):
+            stored = await self.get_kv_data("forwarder_id", None)
+        if not stored:
+            stored = "astrbot-" + secrets.token_hex(6)
+            try:
+                await self.put_kv_data("forwarder_id", stored)
+            except Exception as e:
+                logger.warning(
+                    "llm_persona_gateway: could not store forwarder_id; the "
+                    f"agent will see a new connector after a restart: {e}")
+        self._forwarder_id = str(stored)
+        return self._forwarder_id
+
+    def _outbox_running(self) -> bool:
+        task = self._outbox_task
+        return task is not None and not task.done()
 
     # ---------- inbound: AstrBot event -> neutral event ----------
 
@@ -327,6 +387,11 @@ class LLMPersonaGateway(Star):
                 "authoritative source timestamp"
             )
             return
+        caps = []
+        if self._outbox_running() and self._can_speak_first(platform, raw):
+            caps.append("outbox")
+        if any(seg.get("type") == "reply" and seg.get("text") for seg in segments):
+            caps.append("quote_text")
         neutral_event = {
             "platform": platform,
             "message_type": "group" if is_group else "private",
@@ -340,7 +405,12 @@ class LLMPersonaGateway(Star):
             "is_at_me": is_at_me,
             "segments": segments,
             "raw_text": raw_text,
+            "forwarder_id": await self._ensure_forwarder_id(),
+            "reply_handle": self._reply_handle(event),
+            "caps": caps,
         }
+        if not neutral_event["reply_handle"]:
+            del neutral_event["reply_handle"]
 
         rules = rules_for(platform)
         temps: list = []
@@ -352,7 +422,7 @@ class LLMPersonaGateway(Star):
             _replied, owned, replies = await self._post_to_agent(neutral_event)
             chains = self._render(
                 replies, platform, is_group, conversation_id, temps,
-                umo=getattr(event, "unified_msg_origin", None))
+                umo=neutral_event.get("reply_handle"))
             first = True
             for chain, _done in chains:
                 if not first:
@@ -379,7 +449,8 @@ class LLMPersonaGateway(Star):
 
     def _allowed(self, platform: str, is_group: bool, conversation_id: str,
                  sender_id: str) -> bool:
-        """The plugin's own filter: default-deny allowlists."""
+        """The plugin's own filter, for an incoming message and again for an
+        outbox delivery: the lists may have changed since it was queued."""
         if platform in self._excluded():
             return False
         if is_group:
@@ -407,6 +478,36 @@ class LLMPersonaGateway(Star):
             # and 5 a human agent writing from WeCom.
             return raw.get("origin") in (None, 3)
         return True
+
+    def _can_speak_first(self, platform: str, raw=None, inst=None) -> bool:
+        if not rules_for(platform).outbox:
+            return False
+        if platform == "wecom":
+            # Customer-service mode refuses send_by_session.
+            if isinstance(raw, dict) and "_wechat_kf_flag" in raw:
+                return False
+            if inst is not None and hasattr(getattr(inst, "client", None), "kf_message"):
+                return False
+        return True
+
+    def _reply_handle(self, event) -> str:
+        """Where the outbox can reach this conversation later: AstrBot's
+        unified_msg_origin. With unique_session on, AstrBot rewrites a group
+        event's session to one member; DingTalk, QQ official and Misskey then
+        send to that member instead of the group, so the group's own session
+        (kept on message_obj) is used."""
+        umo = str(getattr(event, "unified_msg_origin", "") or "")
+        obj = event.message_obj
+        msg_type = getattr(obj, "type", None)
+        session = str(getattr(obj, "session_id", "") or "")
+        if msg_type == MessageType.GROUP_MESSAGE and session:
+            try:
+                platform_id = str(event.get_platform_id())
+            except Exception:
+                platform_id = umo.partition(":")[0]
+            if platform_id:
+                return f"{platform_id}:{msg_type.value}:{session}"
+        return umo
 
     def _platform_inst_now(self, platform_id: str):
         try:
@@ -1002,6 +1103,90 @@ class LLMPersonaGateway(Star):
         return handled, bool(data.get("owned", handled)), [
             r for r in replies if isinstance(r, dict)
         ]
+
+    # ---------- outbox: messages nobody asked for ----------
+
+    async def _run_outbox(self) -> None:
+        url = self._agent_url()
+        token = str(self.config.get("gateway_token") or "")
+        allowed, reason = self._endpoint_is_allowed(url, token)
+        if not allowed:
+            logger.warning(f"llm_persona_gateway: outbox off: {reason}")
+            return
+        try:
+            wait_s = min(30, max(1, int(self.config.get("outbox_wait_s") or 25)))
+        except (TypeError, ValueError):
+            wait_s = 25
+        connector = sdk.Connector(url, token, forwarder_id=await self._ensure_forwarder_id(),
+                                  timeout_s=self._timeout())
+        try:
+            await connector.run_outbox(self._deliver, wait_s=wait_s, stop=self._outbox_stop)
+        finally:
+            await connector.aclose()
+
+    async def _platform_inst(self, platform_id: str):
+        """The running adapter instance, waiting a little for one that is
+        still starting."""
+        if self._starting_until is not None and time.monotonic() > self._starting_until:
+            return self._platform_inst_now(platform_id)
+        for _ in range(_PLATFORM_WAIT_S):
+            inst = self._platform_inst_now(platform_id)
+            if inst is not None or self._outbox_stop.is_set():
+                return inst
+            await asyncio.sleep(1)
+        return self._platform_inst_now(platform_id)
+
+    async def _deliver(self, delivery: dict) -> tuple[str, int]:
+        """Send one outbox delivery; return (ack status, items sent)."""
+        handle = str(delivery.get("reply_handle") or "")
+        items = [i for i in (delivery.get("items") or []) if isinstance(i, dict)]
+        platform_id = handle.partition(":")[0]
+        if not platform_id or handle.count(":") < 2:
+            return "unsupported", 0
+        inst = await self._platform_inst(platform_id)
+        if inst is None:
+            logger.warning(
+                f"llm_persona_gateway: outbox: no running platform {platform_id!r}")
+            return "failed", 0
+        try:
+            platform = str(inst.meta().name)
+        except Exception:
+            platform = str(delivery.get("platform") or "")
+        wanted = str(delivery.get("platform") or "")
+        is_group = delivery.get("message_type") == "group"
+        conversation_id = str(delivery.get("conversation_id") or "")
+        # QQ's ids may be spelled under "qq" (docs/connectors.md, Addressing).
+        if wanted and wanted != platform and not (wanted == "qq" and platform == "aiocqhttp"):
+            logger.warning(
+                f"llm_persona_gateway: outbox: {platform_id!r} is {platform}, "
+                f"not {wanted}; refused")
+            return "refused", 0
+        if not self._allowed(platform, is_group, conversation_id, conversation_id):
+            return "refused", 0
+        if not self._can_speak_first(platform, inst=inst):
+            return "unsupported", 0
+        if platform == "wecom" and not getattr(inst, "agent_id", None):
+            # Learnt from the first message after a restart; until then the
+            # adapter drops the send and still reports success.
+            return "failed", 0
+        temps: list = []
+        chains = self._render(items, platform, is_group, conversation_id, temps, umo=handle)
+        sent = 0
+        try:
+            for n, (chain, done) in enumerate(chains):
+                if n:
+                    await asyncio.sleep(random.uniform(0.8, 1.8))
+                try:
+                    ok = await self.context.send_message(handle, MessageChain(chain=chain))
+                except Exception as e:
+                    logger.warning(f"llm_persona_gateway: outbox send failed: {e}")
+                    ok = False
+                if not ok:
+                    return ("partial", sent) if sent else ("failed", 0)
+                sent = done
+        finally:
+            _remove_files(temps)
+        return "sent", len(items)
 
     # ---------- outbound: neutral reply items -> AstrBot chains ----------
 

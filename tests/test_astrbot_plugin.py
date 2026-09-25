@@ -820,6 +820,7 @@ def test_a_quote_carries_its_text_and_sender():
     assert reply["message_id"] == "9" and reply["sender_id"] == "555"
     assert reply["sender_name"] == "Bob"
     assert reply["text"].startswith("see you at ") and len(reply["text"]) == 201
+    assert "quote_text" in sent["caps"]
 
     plugin = _plugin_instance(module, {"forward_quoted_text": False})
     event = _Event(module, private=False, platform="aiocqhttp")
@@ -1041,6 +1042,7 @@ def test_a_wecom_smart_bot_group_is_a_group_that_addressed_the_bot():
     assert captured["is_at_me"] is True
     assert captured["message_id"] == "m-7"
     assert captured["segments"] == [{"type": "text", "text": "(sent a voice message)"}]
+    assert "outbox" not in captured["caps"]
 
 
 def test_satori_milliseconds_and_quote_senders():
@@ -1092,6 +1094,7 @@ def test_qq_official_takes_the_platforms_iso_timestamp():
                              [module.Comp.At(qq="bot"), module.Comp.Plain("hi")], raw=raw)
     assert sent["source_timestamp"] == 1_700_000_000
     assert sent["is_at_me"] is True
+    assert "outbox" not in sent["caps"]
 
 
 def test_local_and_private_images_are_inlined_and_oversized_ones_described(tmp):
@@ -1250,6 +1253,229 @@ def test_one_message_platforms_get_the_turn_as_one_and_line_batches():
     many = [{"type": "text", "text": str(n)} for n in range(7)]
     chains = _render(plugin, "line", *many)
     assert [len(c[0]) for c in chains] == [5, 2] and [c[1] for c in chains] == [5, 7]
+
+
+# ---------------------------------------------------------------------------
+# The connector: forwarder id, reply handle, capabilities, and the outbox
+# ---------------------------------------------------------------------------
+
+def _capture_event(plugin, event):
+    captured = {}
+
+    async def capture(neutral_event):
+        captured.update(neutral_event)
+        return False, False, []
+
+    plugin._post_to_agent = capture
+    _run(plugin, event)
+    return captured
+
+
+def test_the_forwarder_id_is_made_once_and_kept():
+    module = _import_plugin()
+    first = _plugin_instance(module, dict(_DM_CONFIG))
+    asyncio.run(first._ensure_forwarder_id())
+    second = _plugin_instance(module, dict(_DM_CONFIG))  # a reload
+    sent = _capture_event(second, _Event(module, private=True))
+    assert sent["forwarder_id"] == first._forwarder_id
+    assert sent["forwarder_id"].startswith("astrbot-")
+    configured = _plugin_instance(module, dict(_DM_CONFIG, forwarder_id="home-bot"))
+    assert _capture_event(configured, _Event(module, private=True))["forwarder_id"] == "home-bot"
+
+
+def test_the_reply_handle_is_the_umo_and_the_group_under_session_isolation():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    event = _Event(module, private=False, platform="dingtalk")
+    assert _capture_event(plugin, event)["reply_handle"] == "my-dingtalk:GroupMessage:group-1"
+    # unique_session points AstrBot's own session at the sender.
+    event = _Event(module, private=False, platform="dingtalk")
+    event.unified_msg_origin = "my-dingtalk:GroupMessage:user-1"
+    assert _capture_event(plugin, event)["reply_handle"] == "my-dingtalk:GroupMessage:group-1"
+    # A Discord DM's session is the DM channel, not the user.
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
+    event = _Event(module, private=True, platform="discord")
+    event.unified_msg_origin = "my-discord:FriendMessage:dm-channel-5"
+    sent = _capture_event(plugin, event)
+    assert sent["reply_handle"] == "my-discord:FriendMessage:dm-channel-5"
+    assert sent["conversation_id"] == "user-1"
+
+
+def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
+    module = _import_plugin()
+
+    async def check():
+        results = {}
+        for platform in ("aiocqhttp", "telegram", "qq_official", "qq_official_webhook",
+                         "weixin_official_account", "wecom_ai_bot", "mystery"):
+            plugin = _plugin_instance(module, dict(_DM_CONFIG))
+            plugin._outbox_task = asyncio.get_running_loop().create_future()  # a live loop
+            captured = {}
+
+            async def capture(neutral_event, captured=captured):
+                captured.update(neutral_event)
+                return False, False, []
+
+            plugin._post_to_agent = capture
+            async for _ in plugin.forward_to_agent(_Event(module, private=True, platform=platform)):
+                pass
+            results[platform] = "outbox" in captured["caps"]
+        return results
+
+    assert asyncio.run(check()) == {
+        "aiocqhttp": True, "telegram": True, "qq_official": False,
+        "qq_official_webhook": False, "weixin_official_account": False,
+        "wecom_ai_bot": False, "mystery": False}
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))  # no loop running
+    assert "outbox" not in _capture_event(plugin, _Event(module, private=True))["caps"]
+
+
+def _delivery(**fields):
+    base = {"delivery_id": "d_1", "reply_handle": "my-telegram:GroupMessage:group-1",
+            "platform": "telegram", "message_type": "group", "conversation_id": "group-1",
+            "reason": "proactive", "expires_in_s": 300,
+            "items": [{"type": "text", "text": "anyone up?"}, {"type": "text", "text": "hello?"}]}
+    base.update(fields)
+    return base
+
+
+def _outbox_rig(monkeypatch, module, *insts, config=None, **context_kwargs):
+    context = _Context(*insts, **context_kwargs)
+    plugin = _plugin_instance(module, config or {"group_whitelist": ["group-1"]}, context)
+    pauses = []
+
+    async def pause(seconds):
+        pauses.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", pause)
+    return plugin, context, pauses
+
+
+def test_a_delivery_goes_out_through_the_reply_handle_in_order(monkeypatch):
+    module = _import_plugin()
+    plugin, context, pauses = _outbox_rig(monkeypatch, module, _Inst("telegram"))
+    assert asyncio.run(plugin._deliver(_delivery())) == ("sent", 2)
+    assert [(s, [c.text for c in chain]) for s, chain in context.sent] == [
+        ("my-telegram:GroupMessage:group-1", ["anyone up?"]),
+        ("my-telegram:GroupMessage:group-1", ["hello?"]),
+    ]
+    assert len(pauses) == 1 and 0.8 <= pauses[0] <= 1.8
+
+
+def test_a_delivery_the_lists_no_longer_allow_is_refused(monkeypatch):
+    module = _import_plugin()
+    for config in ({"group_whitelist": []},
+                   {"group_whitelist": ["group-1"], "excluded_platforms": ["telegram"]}):
+        plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), config=config)
+        assert asyncio.run(plugin._deliver(_delivery())) == ("refused", 0)
+        assert context.sent == []
+    plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"))
+    assert asyncio.run(plugin._deliver(_delivery(platform="discord"))) == ("refused", 0)
+
+
+def test_platforms_that_cannot_speak_first_answer_unsupported(monkeypatch):
+    module = _import_plugin()
+    for inst in (_Inst("qq_official"), _Inst("wecom_ai_bot"), _Inst("weixin_official_account"),
+                 _Inst("wecom", agent_id="1", client=types.SimpleNamespace(kf_message=object()))):
+        name = inst.meta().name
+        plugin, context, _ = _outbox_rig(monkeypatch, module, inst)
+        delivery = _delivery(reply_handle=f"my-{name}:GroupMessage:group-1", platform=name)
+        assert asyncio.run(plugin._deliver(delivery)) == ("unsupported", 0), name
+        assert context.sent == []
+    # A WeCom app that has not heard from anyone since AstrBot started drops
+    # the send and still reports success.
+    plugin, context, _ = _outbox_rig(monkeypatch, module,
+                                     _Inst("wecom", agent_id=None, client=types.SimpleNamespace()))
+    delivery = _delivery(reply_handle="my-wecom:GroupMessage:group-1", platform="wecom")
+    assert asyncio.run(plugin._deliver(delivery)) == ("failed", 0)
+
+
+def test_a_send_that_breaks_midway_is_partial_and_a_refused_one_failed(monkeypatch):
+    module = _import_plugin()
+    plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), fail_at=1)
+    assert asyncio.run(plugin._deliver(_delivery())) == ("partial", 1)
+    plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), refuse=True)
+    assert asyncio.run(plugin._deliver(_delivery())) == ("failed", 0)
+
+
+def test_a_platform_still_starting_is_waited_for_then_failed(monkeypatch):
+    """AstrBot loads plugins before platforms, so a delivery can arrive
+    before its adapter is running."""
+    module = _import_plugin()
+    for starts_after, expected in ((3, ("sent", 1)), (None, ("failed", 0))):
+        plugin, context, pauses = _outbox_rig(monkeypatch, module)
+
+        async def tick(seconds, pauses=pauses, context=context, starts_after=starts_after):
+            pauses.append(seconds)
+            if len(pauses) == starts_after:
+                context.insts["my-telegram"] = _Inst("telegram")
+
+        monkeypatch.setattr(module.asyncio, "sleep", tick)
+        delivery = _delivery(items=[{"type": "text", "text": "hi"}])
+        assert asyncio.run(plugin._deliver(delivery)) == expected
+        assert len(pauses) == (starts_after or module._PLATFORM_WAIT_S)
+    # Once AstrBot is up, a platform that is missing is not coming.
+    plugin, context, pauses = _outbox_rig(monkeypatch, module)
+    plugin._starting_until = module.time.monotonic() - 1
+    assert asyncio.run(plugin._deliver(_delivery())) == ("failed", 0)
+    assert pauses == []
+
+
+async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
+    """initialize starts one poller; it signs its pulls like events, sends
+    each delivery once through context.send_message, acks it on the next
+    pull, and terminate leaves nothing running."""
+    module = _import_plugin()
+    pulls = []
+
+    def agent(request):
+        body = json.loads(request.content)
+        pulls.append((request.url.path, body, request.headers.get("X-Gateway-Signature")))
+        if len(pulls) == 1:
+            return httpx.Response(200, json={"deliveries": [_delivery(), _delivery()],
+                                             "next_wait_s": 1})
+        return httpx.Response(200, json={"deliveries": [], "next_wait_s": 1})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(module.sdk.httpx, "AsyncClient",
+                        lambda *a, **k: real_client(transport=httpx.MockTransport(agent)))
+    context = _Context(_Inst("telegram"))
+    plugin = module.LLMPersonaGateway(context, {
+        "group_whitelist": ["group-1"], "gateway_token": "t",
+        "agent_url": "https://agent.example/webhook/gateway"})
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(module.random, "uniform", lambda a, b: 0)
+    await plugin.initialize()
+    first_task = plugin._outbox_task
+    await plugin.initialize()
+    assert plugin._outbox_task is first_task, "one poller per instance"
+    for _ in range(200):
+        if len(pulls) >= 2:
+            break
+        await real_sleep(0.01)
+    await plugin.terminate()
+    assert first_task.done() and plugin._outbox_task is None
+    await plugin.terminate()  # twice is harmless
+
+    assert pulls[0][0] == "/webhook/gateway/outbox" and pulls[0][2].startswith("sha256=")
+    assert pulls[0][1]["kind"] == "outbox.pull"
+    assert pulls[0][1]["forwarder_id"] == plugin._forwarder_id
+    assert [c.text for _s, chain in context.sent for c in chain] == ["anyone up?", "hello?"], \
+        "the repeated delivery id went out once"
+    assert pulls[1][1]["acks"] == [{"delivery_id": "d_1", "status": "sent", "sent_items": 2}]
+
+
+async def test_the_outbox_stays_off_when_disabled_or_unsafe():
+    module = _import_plugin()
+    off = module.LLMPersonaGateway(_Context(), {"outbox_enabled": False})
+    await off.initialize()
+    assert off._outbox_task is None
+    unsafe = module.LLMPersonaGateway(_Context(), {"agent_url": "http://agent.example/webhook/gateway",
+                                                   "gateway_token": "t"})
+    await unsafe.initialize()
+    await asyncio.wait_for(unsafe._outbox_task, 1)
+    assert not unsafe._outbox_running()
+    await unsafe.terminate()
 
 
 # ---------------------------------------------------------------------------
