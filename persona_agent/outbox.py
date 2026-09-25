@@ -1,9 +1,9 @@
 """Messages nobody asked for, and how to reach the conversations they are for.
 
-A gateway turn answers inside its own HTTP response. A proactive opener, the
+A connector turn answers inside its own HTTP response. A proactive opener, the
 follow-up question after a rejection and the excuse for a failed model call
 have no request to answer in, so a connector that declared the `outbox`
-capability pulls them from ``POST /webhook/gateway/outbox`` instead
+capability pulls them from ``POST /v1/outbox`` instead
 (docs/connectors.md, "Outbox"). Pull, not push: the agent never has to reach
 the connector, so one behind NAT works the same.
 
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .gateway import MAX_FORWARDER_ID_CHARS, opaque_value
+from .gateway import CONVERSATION_TYPES, MAX_CONNECTOR_ID_CHARS, opaque_value
 from .storage import atomic_write_text
 
 logger = logging.getLogger("agent.outbox")
@@ -48,7 +48,7 @@ MAX_QUEUED = 256
 MAX_DELIVERIES_PER_PULL = 50
 MAX_ACKS_PER_PULL = 1000
 MAX_HANDLES = 4096
-MAX_FORWARDERS = 64
+MAX_CONNECTORS = 64
 
 #: The body `kind` of a pull (see gateway.EVENT_KIND).
 PULL_KIND = "outbox.pull"
@@ -57,17 +57,17 @@ PULL_KIND = "outbox.pull"
 ACK_STATUSES = frozenset(
     {"sent", "partial", "failed", "expired", "refused", "unsupported"})
 
-_RECORD_FIELDS = ("reply_handle", "forwarder_id", "caps", "platform",
-                  "native", "message_type", "conversation_id", "prefiltered")
+_RECORD_FIELDS = ("reply_handle", "connector_id", "capabilities", "platform",
+                  "native", "conversation_type", "conversation_id", "prefiltered")
 
 
 def parse_pull(body) -> Optional[dict]:
     """A pull body as `Outbox.pull` keywords, or None when it is not one."""
     if not isinstance(body, dict) or body.get("kind") != PULL_KIND:
         return None
-    forwarder_id = opaque_value(body.get("forwarder_id"),
-                                MAX_FORWARDER_ID_CHARS)
-    if not forwarder_id:
+    connector_id = opaque_value(body.get("connector_id"),
+                                MAX_CONNECTOR_ID_CHARS)
+    if not connector_id:
         return None
     numbers = []
     for name, default in (("wait_s", DEFAULT_WAIT_S), ("max_deliveries", 10)):
@@ -79,7 +79,7 @@ def parse_pull(body) -> Optional[dict]:
     acks = body.get("acks", [])
     if not isinstance(acks, list) or len(acks) > MAX_ACKS_PER_PULL:
         return None
-    return {"forwarder_id": forwarder_id, "wait_s": float(numbers[0]),
+    return {"connector_id": connector_id, "wait_s": float(numbers[0]),
             "max_deliveries": int(numbers[1]), "acks": acks}
 
 
@@ -90,20 +90,20 @@ def _clean_record(raw) -> Optional[dict]:
     try:
         record = {
             "reply_handle": str(raw.get("reply_handle") or ""),
-            "forwarder_id": str(raw.get("forwarder_id") or ""),
-            "caps": sorted(c for c in raw.get("caps")
-                           if isinstance(c, str))
-            if isinstance(raw.get("caps"), list) else [],
+            "connector_id": str(raw.get("connector_id") or ""),
+            "capabilities": sorted(c for c in raw.get("capabilities")
+                                   if isinstance(c, str))
+            if isinstance(raw.get("capabilities"), list) else [],
             "platform": str(raw.get("platform") or ""),
             "native": raw.get("native") is True,
-            "message_type": str(raw.get("message_type") or ""),
+            "conversation_type": str(raw.get("conversation_type") or ""),
             "conversation_id": str(raw.get("conversation_id") or ""),
             "prefiltered": raw.get("prefiltered") is not False,
             "updated_at": float(raw.get("updated_at") or 0.0),
         }
     except (TypeError, ValueError):
         return None
-    if record["message_type"] not in ("group", "private"):
+    if record["conversation_type"] not in CONVERSATION_TYPES:
         return None
     if raw.get("unsupported") is True:
         record["unsupported"] = True
@@ -111,7 +111,7 @@ def _clean_record(raw) -> Optional[dict]:
 
 
 class HandleStore:
-    """How to reach each gateway conversation without an incoming message.
+    """How to reach each connector conversation without an incoming message.
 
     Keyed by the routing key (the group id or ``private:<uid>``), so it names
     conversations the same way every other store does. Bounded: past `cap`
@@ -160,18 +160,19 @@ class HandleStore:
     def keys(self) -> list[str]:
         return list(self._data())
 
-    def record(self, key: str, *, reply_handle: str, forwarder_id: str,
-               caps, platform: str, native: bool, message_type: str,
-               conversation_id: str, prefiltered: bool = True) -> None:
+    def record(self, key: str, *, reply_handle: str, connector_id: str,
+               capabilities, platform: str, native: bool,
+               conversation_type: str, conversation_id: str,
+               prefiltered: bool = True) -> None:
         data = self._data()
         old = data.pop(str(key), None)
         record = {
             "reply_handle": str(reply_handle or ""),
-            "forwarder_id": str(forwarder_id or ""),
-            "caps": sorted(str(c) for c in caps or ()),
+            "connector_id": str(connector_id or ""),
+            "capabilities": sorted(str(c) for c in capabilities or ()),
             "platform": str(platform or ""),
             "native": bool(native),
-            "message_type": str(message_type or ""),
+            "conversation_type": str(conversation_type or ""),
             "conversation_id": str(conversation_id or ""),
             "prefiltered": bool(prefiltered),
             "updated_at": time.time(),
@@ -180,7 +181,7 @@ class HandleStore:
         # otherwise every inbound message would re-arm one wasted opener.
         if (old and old.get("unsupported")
                 and old.get("reply_handle") == record["reply_handle"]
-                and old.get("forwarder_id") == record["forwarder_id"]):
+                and old.get("connector_id") == record["connector_id"]):
             record["unsupported"] = True
         data[str(key)] = record
         while len(data) > self.cap:
@@ -244,8 +245,8 @@ class _Delivery:
     expires_in: int = 0
 
     @property
-    def forwarder_id(self) -> str:
-        return self.handle.get("forwarder_id", "")
+    def connector_id(self) -> str:
+        return self.handle.get("connector_id", "")
 
 
 class Outbox:
@@ -285,25 +286,25 @@ class Outbox:
 
     # ---- liveness ------------------------------------------------------
 
-    def _stamp(self, forwarder_id: str) -> None:
-        self._last_pull.pop(forwarder_id, None)
-        self._last_pull[forwarder_id] = time.monotonic()
-        while len(self._last_pull) > MAX_FORWARDERS:
+    def _stamp(self, connector_id: str) -> None:
+        self._last_pull.pop(connector_id, None)
+        self._last_pull[connector_id] = time.monotonic()
+        while len(self._last_pull) > MAX_CONNECTORS:
             self._last_pull.pop(next(iter(self._last_pull)))
 
-    def live(self, forwarder_id: str) -> bool:
-        last = self._last_pull.get(forwarder_id)
+    def live(self, connector_id: str) -> bool:
+        last = self._last_pull.get(connector_id)
         return last is not None and time.monotonic() - last <= self.liveness_s
 
     def route(self, key: str) -> Optional[dict]:
         """The stored handle for `key` if a live connector can deliver there
         unprompted, else None."""
         record = self.handles.get(key)
-        if (not record or "outbox" not in record["caps"]
+        if (not record or "outbox" not in record["capabilities"]
                 or record.get("unsupported")
-                or not record["reply_handle"] or not record["forwarder_id"]):
+                or not record["reply_handle"] or not record["connector_id"]):
             return None
-        return record if self.live(record["forwarder_id"]) else None
+        return record if self.live(record["connector_id"]) else None
 
     # ---- the sending side ----------------------------------------------
 
@@ -342,7 +343,7 @@ class Outbox:
                 if now >= deadline:
                     self._resolve(d, "expired_unpulled")
                     break
-                if not self.live(d.forwarder_id):
+                if not self.live(d.connector_id):
                     self._resolve(d, "gone")
                     break
             else:
@@ -350,7 +351,7 @@ class Outbox:
                 # The ReadTimeout of this channel: it may have gone out. A
                 # connector that stopped pulling ends the wait early, since
                 # the caller holds the conversation's send lock meanwhile.
-                if now >= deadline or not self.live(d.forwarder_id):
+                if now >= deadline or not self.live(d.connector_id):
                     self._resolve(d, "no_ack")
                     break
             await asyncio.wait(
@@ -381,11 +382,11 @@ class Outbox:
 
     # ---- the connector side --------------------------------------------
 
-    def _ready(self, forwarder_id: str) -> list[_Delivery]:
+    def _ready(self, connector_id: str) -> list[_Delivery]:
         now = time.monotonic()
         return sorted(
             (d for queue in self._queues.values() for d in queue
-             if d.forwarder_id == forwarder_id and not d.future.done()
+             if d.connector_id == connector_id and not d.future.done()
              and now < d.created + d.ttl),
             key=lambda d: d.seq)
 
@@ -405,20 +406,20 @@ class Outbox:
             "conversation_key": d.key,
             "reply_handle": h.get("reply_handle", ""),
             "platform": h.get("platform", ""),
-            "message_type": h.get("message_type", ""),
+            "conversation_type": h.get("conversation_type", ""),
             "conversation_id": h.get("conversation_id", ""),
             "reason": d.reason,
             "expires_in_s": d.expires_in,
             "items": d.items,
         }
 
-    def ack(self, forwarder_id: str, ack) -> None:
+    def ack(self, connector_id: str, ack) -> None:
         """Settle one handed-out delivery. Unknown, repeated or foreign acks
         are ignored: the delivery was handed out once and is settled once."""
         if not isinstance(ack, dict):
             return
         d = self._handed.get(str(ack.get("delivery_id") or ""))
-        if d is None or d.forwarder_id != forwarder_id or d.future.done():
+        if d is None or d.connector_id != connector_id or d.future.done():
             return
         status = ack.get("status")
         total = len(d.items)
@@ -440,7 +441,7 @@ class Outbox:
         self._handed.pop(d.delivery_id, None)
         self._resolve(d, status, sent)
 
-    async def pull(self, forwarder_id: str, *, wait_s: float = DEFAULT_WAIT_S,
+    async def pull(self, connector_id: str, *, wait_s: float = DEFAULT_WAIT_S,
                    max_deliveries: int = 10, acks=(), disconnected=None) -> dict:
         """Settle `acks`, then hand out what is queued for this connector,
         holding the request up to `wait_s` seconds until something is.
@@ -451,34 +452,34 @@ class Outbox:
         # Numbered rather than timed: a clock can give two pulls one tick.
         self._pulls += 1
         pull_no = self._pulls
-        self._stamp(forwarder_id)
+        self._stamp(connector_id)
         for ack in acks or ():
-            self.ack(forwarder_id, ack)
+            self.ack(connector_id, ack)
         # Acks come on the next pull, so what this connector was handed
         # before it and has not acked went to a pull that never got through:
         # a restarted connector's abandoned long-poll, or a lost response.
         # Settling it here frees the conversation's send lock now rather
         # than after expires_in plus the grace.
         for d in list(self._handed.values()):
-            if d.forwarder_id == forwarder_id and d.handed_by < pull_no:
+            if d.connector_id == connector_id and d.handed_by < pull_no:
                 self._handed.pop(d.delivery_id, None)
                 self._resolve(d, "no_ack")
         wait_s = min(max(float(wait_s), 0.0), MAX_WAIT_S)
         limit = min(max(int(max_deliveries), 1), MAX_DELIVERIES_PER_PULL)
         cond = self._condition()
         async with cond:
-            if not self._closed and wait_s > 0 and not self._ready(forwarder_id):
+            if not self._closed and wait_s > 0 and not self._ready(connector_id):
                 try:
                     await asyncio.wait_for(
                         cond.wait_for(lambda: self._closed
-                                      or bool(self._ready(forwarder_id))),
+                                      or bool(self._ready(connector_id))),
                         wait_s)
                 except asyncio.TimeoutError:
                     pass
             gone = disconnected is not None and await disconnected()
             deliveries = [] if gone else [
-                self._hand_out(d, pull_no) for d in self._ready(forwarder_id)[:limit]]
-        self._stamp(forwarder_id)
+                self._hand_out(d, pull_no) for d in self._ready(connector_id)[:limit]]
+        self._stamp(connector_id)
         return {"deliveries": deliveries, "next_wait_s": DEFAULT_WAIT_S}
 
     async def aclose(self) -> None:

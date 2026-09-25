@@ -52,7 +52,7 @@ except ImportError:  # running from a checkout: the SDK sits in integrations/sdk
 logger = logging.getLogger("matrix_connector")
 
 PLATFORM = "matrix"
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
+DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 # `runtime/` is gitignored at any depth, so a checkout never commits keys.
 DEFAULT_STORE = Path(__file__).resolve().parent / "runtime"
@@ -367,7 +367,7 @@ def media_note(msgtype: str, content: Mapping) -> str:
 
 
 def plain_text(event_type: str, content: Mapping) -> str:
-    """What a person would read in a message, for quotes and raw_text."""
+    """What a person would read in a message, for quotes and the event's text."""
     if event_type == "m.sticker":
         return f"(sent a sticker: {str(content.get('body') or '').strip()})"
     msgtype = str(content.get("msgtype") or "")
@@ -469,7 +469,7 @@ class MatrixConnector:
     def me(self) -> str:
         return str(getattr(self.client, "user_id", "") or "")
 
-    def caps(self) -> list[str]:
+    def capabilities(self) -> list[str]:
         return ["outbox", "quote_text"] if self.settings.outbox else ["quote_text"]
 
     # ----- rooms and people -----
@@ -689,14 +689,14 @@ class MatrixConnector:
         body, fallback = str(content.get("body") or ""), ""
         if parent_id:
             body, fallback = strip_reply_fallback(body)
-        is_at_me = etype == "m.room.message" and mentions_user(content, self.me, body)
+        addressed = etype == "m.room.message" and mentions_user(content, self.me, body)
         if parent_id:
             parent = await self._parent(room, parent_id)
             quote = {"type": "reply", "message_id": parent_id}
             if parent:
                 quote.update(sender_id=parent[0], sender_name=self.member_name(room, parent[0]),
                              text=parent[1])
-                is_at_me = is_at_me or parent[0] == self.me
+                addressed = addressed or parent[0] == self.me
             elif fallback:
                 quote["text"] = fallback
             segments.append(quote)
@@ -705,7 +705,7 @@ class MatrixConnector:
             image = await self._image(content, sticker=True)
             segments.append(image or {"type": "emoji",
                                       "name": str(content.get("body") or "sticker")})
-            raw_text = plain_text(etype, content)
+            text = plain_text(etype, content)
         elif msgtype in ("m.text", "m.emote"):
             formatted = str(content.get("formatted_body") or "")
             if content.get("format") == HTML_FORMAT and formatted:
@@ -714,34 +714,34 @@ class MatrixConnector:
                 parts = _trim([{"type": "text", "text": body}])
             if msgtype == "m.emote":
                 parts.insert(0, {"type": "text", "text": f"* {name} "})
-            is_at_me = is_at_me or any(p.get("type") == "mention" for p in parts)
+            addressed = addressed or any(p.get("type") == "mention" for p in parts)
             segments.extend(parts)
-            raw_text = body.strip()
+            text = body.strip()
         elif msgtype == "m.image":
             image = await self._image(content)
             segments.append(image or {"type": "text", "text": media_note(msgtype, content)})
             if _caption(content):
                 segments.append({"type": "text", "text": _caption(content)})
-            raw_text = plain_text(etype, content)
+            text = plain_text(etype, content)
         else:
-            raw_text = plain_text(etype, content)
-            segments.append({"type": "text", "text": raw_text})
+            text = plain_text(etype, content)
+            segments.append({"type": "text", "text": text})
 
         thread_root = str(relates.get("event_id") or "") if relates.get("rel_type") == "m.thread" else ""
         event = {
             "platform": PLATFORM,
-            "message_type": "private" if private else "group",
+            "conversation_type": "dm" if private else "group",
             "conversation_id": sender if private else room_id,
-            "user_id": sender,
+            "sender_id": sender,
             "sender_name": name,
-            "self_id": self.me,
+            "bot_id": self.me,
             "message_id": event_id,
-            "source_timestamp": int(timestamp),
-            "is_at_me": bool(is_at_me),
-            "raw_text": raw_text,
+            "sent_at": int(timestamp),
+            "addressed": bool(addressed),
+            "text": text,
             "segments": segments,
             "reply_handle": room_id,
-            "caps": self.caps(),
+            "capabilities": self.capabilities(),
         }
         if thread_root:
             event["_thread_root"] = thread_root
@@ -802,7 +802,7 @@ class MatrixConnector:
             if answer.get("owned") and self.settings.read_receipts:
                 await self._quietly(self.client.room_read_markers(
                     room_id, event["message_id"], event["message_id"]))
-            target = _Target(room, event["conversation_id"], event["message_type"] == "group",
+            target = _Target(room, event["conversation_id"], event["conversation_type"] == "group",
                              thread_root=thread_root, in_reply_to=event["message_id"])
             await self.send_items(target, answer.get("replies") or [])
         finally:
@@ -810,10 +810,10 @@ class MatrixConnector:
 
     # ----- outbound -----
 
-    def _mention(self, target: _Target, at_user_id: Any) -> Optional[tuple[str, str]]:
+    def _mention(self, target: _Target, mention_user_id: Any) -> Optional[tuple[str, str]]:
         """Only in groups, only Matrix users, never the bot itself."""
         prefix = PLATFORM + ":"
-        raw = str(at_user_id or "")
+        raw = str(mention_user_id or "")
         if not target.is_group or not raw.startswith(prefix):
             return None
         user_id = raw[len(prefix):]
@@ -868,7 +868,7 @@ class MatrixConnector:
         room = target.room
         if getattr(room, "encrypted", False) and not self.settings.e2ee:
             raise SendError("the room is encrypted and MATRIX_E2EE_ENABLED is off")
-        mention = self._mention(target, item.get("at_user_id"))
+        mention = self._mention(target, item.get("mention_user_id"))
         kind = item.get("type")
         if kind == "text":
             text = str(item.get("text") or "")
@@ -922,7 +922,7 @@ class MatrixConnector:
         room = self._room(room_id) if room_id else None
         if room is None:
             return "refused", 0  # the bot left, or never was there
-        private = delivery.get("message_type") == "private"
+        private = delivery.get("conversation_type") == "dm"
         conversation_id = str(delivery.get("conversation_id") or "")
         # Checked against the room the handle names: the agent keeps the
         # handle as an event gave it, so it must be the DM with that very
@@ -1069,7 +1069,7 @@ async def run(settings: Settings, *, nio_module: Any = None,
     try:
         await login(client, settings)
         agent = sdk.Connector(settings.agent_url, settings.gateway_token,
-                              forwarder_id=settings.forwarder_id
+                              connector_id=settings.forwarder_id
                               or default_forwarder_id(client.user_id),
                               timeout_s=settings.timeout_s, client=agent_client)
         connector = MatrixConnector(client, settings, agent)

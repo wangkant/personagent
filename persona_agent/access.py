@@ -42,7 +42,7 @@ LEGACY_SETTINGS: frozenset[str] = frozenset(
 #: Read as one id, not a comma list, exactly as it always was.
 _SINGLE_VALUE = frozenset({"OWNER_QQ"})
 
-#: Why /webhook/qq never admits a namespaced id: NapCat only sends QQ numbers,
+#: Why /v1/onebot never admits a namespaced id: NapCat only sends QQ numbers,
 #: so one arriving there was written by someone else.
 QQ_DOOR_REFUSAL = "the QQ webhook carries bare QQ ids only"
 

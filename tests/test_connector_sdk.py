@@ -21,24 +21,34 @@ def test_the_agent_accepts_what_the_sdk_signs() -> None:
     assert body == '{"a":1,"b":"中文"}'.encode("utf-8")
     headers = {k.lower(): v for k, v in sdk.signed_headers(body, "tok-123").items()}
     guard = main_module.ReplayGuard()
-    assert main_module._verify_gateway_envelope(body, headers, "tok-123", replay_guard=guard)
-    assert not main_module._verify_gateway_envelope(body + b" ", headers, "tok-123",
+    assert set(headers) >= {"x-personagent-token", "x-personagent-timestamp",
+                            "x-personagent-nonce", "x-personagent-signature"}
+    assert main_module._verify_envelope(body, headers, "tok-123", replay_guard=guard)
+    assert not main_module._verify_envelope(body + b" ", headers, "tok-123",
                                                    replay_guard=main_module.ReplayGuard())
-    assert not main_module._verify_gateway_envelope(body, headers, "other",
+    assert not main_module._verify_envelope(body, headers, "other",
                                                    replay_guard=main_module.ReplayGuard())
 
 
 def test_the_endpoint_rule_matches_the_plugin() -> None:
-    assert sdk.endpoint_allowed("http://127.0.0.1:8080/webhook/gateway", "")
-    assert sdk.endpoint_allowed("http://[::1]:8080/webhook/gateway", "")
-    assert sdk.endpoint_allowed("https://agent.example.com/webhook/gateway", "t")
-    assert not sdk.endpoint_allowed("https://agent.example.com/webhook/gateway", "")
-    assert not sdk.endpoint_allowed("http://agent.example.com/webhook/gateway", "t")
-    assert not sdk.endpoint_allowed("localhost:8080/webhook/gateway", "")
+    assert sdk.endpoint_allowed("http://127.0.0.1:8080", "")
+    assert sdk.endpoint_allowed("http://[::1]:8080", "")
+    assert sdk.endpoint_allowed("https://agent.example.com", "t")
+    assert not sdk.endpoint_allowed("https://agent.example.com", "")
+    assert not sdk.endpoint_allowed("http://agent.example.com", "t")
+    assert not sdk.endpoint_allowed("localhost:8080", "")
     with pytest.raises(ValueError):
-        sdk.Connector("http://agent:8080/webhook/gateway", "t", forwarder_id="x")
-    assert sdk.outbox_url_for("http://127.0.0.1:8080/webhook/gateway/") \
-        == "http://127.0.0.1:8080/webhook/gateway/outbox"
+        sdk.Connector("http://agent:8080", "t", connector_id="x")
+
+
+def test_the_endpoints_hang_off_the_base_url() -> None:
+    conn = sdk.Connector("http://127.0.0.1:8080/", connector_id="c1")
+    assert conn.events_url == "http://127.0.0.1:8080/v1/events"
+    assert conn.outbox_url == "http://127.0.0.1:8080/v1/outbox"
+    # A reverse proxy may serve the agent under a path of its own.
+    proxied = sdk.Connector("https://example.com/persona", "t", connector_id="c1")
+    assert proxied.events_url == "https://example.com/persona/v1/events"
+    assert proxied.outbox_url == "https://example.com/persona/v1/outbox"
 
 
 def _agent(pulls: list[dict], seen: list[dict]):
@@ -46,22 +56,22 @@ def _agent(pulls: list[dict], seen: list[dict]):
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         seen.append({"path": request.url.path, **payload})
-        if request.url.path.endswith("/outbox"):
+        if request.url.path == "/v1/outbox":
             return httpx.Response(200, json=pulls.pop(0) if pulls else {"deliveries": []})
         return httpx.Response(200, json={"handled": True, "owned": True, "replies": []})
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-def test_send_event_adds_the_forwarder_id() -> None:
+def test_send_event_adds_the_connector_id() -> None:
     seen: list[dict] = []
 
     async def run() -> dict:
-        conn = sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="c1",
+        conn = sdk.Connector("http://127.0.0.1:8080", connector_id="c1",
                              client=_agent([], seen))
-        return await conn.send_event({"platform": "matrix", "message_type": "private"})
+        return await conn.send_event({"platform": "matrix", "conversation_type": "dm"})
 
     assert asyncio.run(run())["owned"] is True
-    assert seen[0]["forwarder_id"] == "c1" and seen[0]["path"] == "/webhook/gateway"
+    assert seen[0]["connector_id"] == "c1" and seen[0]["path"] == "/v1/events"
 
 
 def test_the_outbox_loop_delivers_once_and_acks() -> None:
@@ -84,7 +94,7 @@ def test_the_outbox_loop_delivers_once_and_acks() -> None:
         return "sent", len(d["items"])
 
     async def run() -> None:
-        conn = sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="c1",
+        conn = sdk.Connector("http://127.0.0.1:8080", connector_id="c1",
                              client=_agent(pulls, seen))
         stop = asyncio.Event()
 
@@ -102,8 +112,8 @@ def test_the_outbox_loop_delivers_once_and_acks() -> None:
     acks = [a for req in seen for a in req.get("acks", [])]
     assert {"delivery_id": "d1", "status": "sent", "sent_items": 1} in acks, acks
     assert any(a["delivery_id"] == "d2" and a["status"] == "expired" for a in acks), acks
-    assert all(req["kind"] == "outbox.pull" and req["forwarder_id"] == "c1"
-               for req in seen if req["path"].endswith("/outbox"))
+    assert all(req["kind"] == "outbox.pull" and req["connector_id"] == "c1"
+               for req in seen if req["path"] == "/v1/outbox")
 
 
 def test_acks_survive_a_failed_pull() -> None:
@@ -114,7 +124,7 @@ def test_acks_survive_a_failed_pull() -> None:
         return httpx.Response(503) if len(attempts) == 1 else httpx.Response(200, json={})
 
     async def run() -> None:
-        conn = sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="c1",
+        conn = sdk.Connector("http://127.0.0.1:8080", connector_id="c1",
                              client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
         conn._pending_acks = [{"delivery_id": "d9", "status": "sent", "sent_items": 1}]
         with pytest.raises(httpx.HTTPStatusError):

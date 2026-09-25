@@ -10,7 +10,7 @@ agent's replies back.
 - Receives group and private messages from every AstrBot platform adapter
   (Telegram, Discord, Slack, QQ, ...), except the ones in `excluded_platforms`.
 - Forwards messages from allowlisted groups and senders to the agent's
-  `POST /webhook/gateway` as a platform-neutral event, reading each platform
+  `POST /v1/events` as a platform-neutral event, reading each platform
   the way its adapter delivers it: who was addressed, what was quoted,
   stickers, images, voice notes and when the message was really sent.
 - Sends the agent's replies (text and images, with a mention in group chats
@@ -100,7 +100,7 @@ and see [Troubleshooting](#troubleshooting).
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | The agent's gateway endpoint. Must be loopback, or HTTPS with `gateway_token` set. |
+| `agent_url` | string | `http://127.0.0.1:8080` | The agent's base URL; the plugin appends `/v1/events` and `/v1/outbox`. Must be loopback, or HTTPS with `gateway_token` set. |
 | `gateway_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `agent_url`. |
 | `timeout_s` | int | `180` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ through this plugin. |
@@ -175,7 +175,7 @@ QQ goes through this plugin like any other platform, using AstrBot's
    question after a rejection and the excuse when the model fails go through
    this plugin's [outbox](#outbox) while it is pulling, and through NapCat
    directly otherwise.
-4. If NapCat also posts to the agent's `/webhook/qq`, turn that off. That
+4. If NapCat also posts to the agent's `/v1/onebot`, turn that off. That
    route is deprecated since 0.3.0, and running both delivers every message
    twice.
 
@@ -255,7 +255,7 @@ On every platform:
 Some messages are not an answer to anything: a scheduled opener, the
 follow-up question after a rejection, the excuse when the model is down.
 The agent queues those, and this plugin pulls them from
-`POST <agent_url>/outbox` (with the same signing as events), so the agent
+`POST <agent_url>/v1/outbox` (with the same signing as events), so the agent
 never has to reach AstrBot. It is on by default (`outbox_enabled`).
 
 - A delivery goes out through the conversation's own AstrBot session,
@@ -278,10 +278,10 @@ once and keeps. Two AstrBot hosts talking to one agent need different ones.
 
 When `gateway_token` is set, every request carries four headers:
 
-- `X-Gateway-Token`: the token.
-- `X-Gateway-Timestamp`: unix seconds.
-- `X-Gateway-Nonce`: a fresh random value.
-- `X-Gateway-Signature`: `sha256=` followed by the hex
+- `X-Personagent-Token`: the token.
+- `X-Personagent-Timestamp`: unix seconds.
+- `X-Personagent-Nonce`: a fresh random value.
+- `X-Personagent-Signature`: `sha256=` followed by the hex
   HMAC-SHA256, keyed with the token, of `timestamp + "." + nonce + "." + body`.
 
 The body is canonical JSON: UTF-8, keys sorted, compact separators, non-ASCII
@@ -290,7 +290,7 @@ not rewrite the body. The agent rejects a bad signature, a reused nonce, or a
 timestamp more than five minutes from its own clock, so keep the two clocks in
 sync.
 
-The body also carries the adapter's own `source_timestamp`. The agent checks
+The body also carries the adapter's own time for the message, `sent_at`. The agent checks
 it separately against `CONNECTOR_MAX_EVENT_AGE_S` (default 24 hours), so
 an old event re-sent with a fresh signature is still rejected. A message whose
 adapter gives no valid timestamp is not forwarded; AstrBot handles it as usual.
@@ -312,22 +312,22 @@ Messages in AstrBot's log start with `llm_persona_gateway:`.
 | Log message | What to do |
 | --- | --- |
 | `refusing unsafe agent_url` | `agent_url` is plain HTTP to another host, or HTTPS without `gateway_token`. See [Where the agent can run](#where-the-agent-can-run). |
-| `agent refused the request (403): invalid, stale, or replayed gateway envelope` | `gateway_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `gateway replay guard full`, wait for it to drain. |
-| `agent refused the request (403): stale gateway source event` | The message is older than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, usually after AstrBot delivered a backlog. |
+| `agent refused the request (403): invalid, stale, or replayed request envelope` | `gateway_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `connector replay guard full`, wait for it to drain. |
+| `agent refused the request (403): stale or invalid sent_at` | The message is older than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, usually after AstrBot delivered a backlog. |
 | `agent refused the request (403): authentication required` or `... only local requests accepted` | The agent has no `CONNECTOR_TOKEN` and the request is not local. Set the same token on both sides. |
 | `agent at capacity (429)` | The agent is already running `CONNECTOR_MAX_INFLIGHT` turns and turned the message away after retries, so AstrBot's own model answers it. Raise `CONNECTOR_MAX_INFLIGHT` if this is frequent. |
 | `agent rejected the body as too large (413)` | Usually a large inline image. Raise the agent's `SERVER_MAX_BODY_BYTES`. |
 | `agent rejected the event schema (400)` | The event had no message id or sender id (some adapters omit them), or this plugin has a bug. Please report it with the log line. |
 | `timed out waiting for the agent` | See [Timeouts](#timeouts). |
-| `dropping event without a valid authoritative source timestamp` | The adapter gave no timestamp. AstrBot handles that message itself. |
-| `agent request failed: ...` or `agent request failed (<status>)` | Usually the agent is not running or `agent_url` is wrong (a 404 means a wrong path). A 500 means the agent failed; check its log. |
+| `dropping event without a valid time the platform sent it` | The adapter gave no timestamp. AstrBot handles that message itself. |
+| `agent request failed: ...` or `agent request failed (<status>)` | Usually the agent is not running or `agent_url` is wrong (a 404 means a wrong path: `agent_url` is the base URL, without `/v1/events`). A 500 means the agent failed; check its log. |
 | `outbox off: ...` | The outbox follows the same `agent_url` rule as events; see the first row. |
-| `outbox: agent has no outbox (older version); retrying in 10 minutes` | Expected with an agent that predates the outbox. Nothing else changes. |
+| `outbox: agent has no outbox (turned off, or an older version); retrying in 10 minutes` | Expected when the agent's `CONNECTOR_OUTBOX_ENABLED` is off. Nothing else changes. |
 | `outbox: outbox pull refused (403)` or `outbox pull failed: ...` | As for events: the token, the clocks, or the agent not running. The plugin backs off up to a minute between tries. |
 | `outbox: no running platform '<id>'` | A delivery for an adapter that is disabled or was renamed in AstrBot. It is reported to the agent as failed. |
 | `could not store forwarder_id` | AstrBot's plugin store failed. Set `forwarder_id` yourself, or the agent sees a new AstrBot after every restart. |
 
-If the agent's own log says the forwarder sends `X-Gateway-Token` but
+If the agent's own log says the connector sends `X-Personagent-Token` but
 `CONNECTOR_TOKEN` is blank, the token is being ignored. Set the same value in
 the agent's `.env`.
 

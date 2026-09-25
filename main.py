@@ -25,7 +25,7 @@ from starlette.requests import ClientDisconnect
 from persona_agent import __version__, preflight
 from persona_agent.agent import Agent
 from persona_agent.config_env import env_bool, env_int, env_str
-from persona_agent.gateway import EVENT_KIND
+from persona_agent.gateway import CONVERSATION_TYPES, EVENT_KIND
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
@@ -83,21 +83,21 @@ def _is_loopback_host(host: str) -> bool:
 
 def _validate_exposure_config(
     host: str,
-    webhook_secret: str,
-    gateway_token: str,
+    onebot_secret: str,
+    connector_token: str,
 ) -> None:
     """Refuse a network bind whose two event endpoints are not authenticated."""
     if _is_loopback_host(host):
         return
     missing = []
-    if not webhook_secret:
+    if not onebot_secret:
         missing.append("QQ_ONEBOT_SECRET")
-    if not gateway_token:
+    if not connector_token:
         missing.append("CONNECTOR_TOKEN")
     if missing:
         raise ValueError(
             f"SERVER_HOST={host!r} is not loopback; set {', '.join(missing)} "
-            "before exposing webhook endpoints"
+            "before exposing the event endpoints"
         )
 
 
@@ -126,7 +126,7 @@ def _credentialless_request_is_local(request) -> tuple[bool, str]:
 
     A loopback peer is not enough. A text/plain POST is a CORS "simple
     request", so any page the operator opens can send one to 127.0.0.1 with
-    no preflight and forge an event as OWNER_QQ; DNS rebinding lets such a
+    no preflight and forge an event as the admin; DNS rebinding lets such a
     page read the replies too; and a tunnel (cloudflared, frp, nginx) on the
     same host forwards the whole internet from 127.0.0.1. Each of those
     leaves a header that NapCat and the AstrBot plugin never send.
@@ -189,27 +189,27 @@ def _ct_equal(supplied: str, expected: str) -> bool:
 # Bind loopback by default: NapCat posts events from localhost
 # (QQ_ONEBOT_URL=http://127.0.0.1:3000), so the webhook never needs to be
 # world-exposed. Set SERVER_HOST=0.0.0.0 only for a split deployment, and then set
-# QQ_ONEBOT_SECRET so forged OneBot payloads (impersonating OWNER_QQ, poisoning
-# memory, burning tokens) can't reach /webhook/qq.
+# QQ_ONEBOT_SECRET so forged OneBot payloads (impersonating the admin, poisoning
+# memory, burning tokens) can't reach /v1/onebot.
 SERVER_HOST = env_str("SERVER_HOST", "127.0.0.1")
 SERVER_PORT = env_int("SERVER_PORT", 8080, minimum=1, maximum=65535)
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
-# /webhook/qq body must carry a matching `x-signature: sha1=<hex>` header.
+# /v1/onebot body must carry a matching `x-signature: sha1=<hex>` header.
 QQ_ONEBOT_SECRET = env_str("QQ_ONEBOT_SECRET")
 SERVER_MAX_BODY_BYTES = env_int(
     "SERVER_MAX_BODY_BYTES", 8_000_000, minimum=1, maximum=64_000_000)
 # uvicorn has no body-read timeout, and a webhook holds an admission slot
 # while it reads. Without a deadline, a peer that sends a Content-Length and
 # then one byte keeps that slot forever, and a few of them 429 every real
-# event. A forwarder on the same host sends its body in milliseconds.
+# event. A connector on the same host sends its body in milliseconds.
 BODY_READ_TIMEOUT_S = 30
 QQ_ONEBOT_MAX_INFLIGHT = env_int(
     "QQ_ONEBOT_MAX_INFLIGHT", 64, minimum=1, maximum=4096)
 # A SEPARATE budget, because the two endpoints hold their slot for wildly
-# different spans. /webhook/qq hands its slot to a background task within
-# milliseconds; /webhook/gateway answers synchronously and holds one for the
+# different spans. /v1/onebot hands its slot to a background task within
+# milliseconds; /v1/events answers synchronously and holds one for the
 # entire turn (~12s, see transport.py). Sharing one counter meant a burst of
-# gateway turns 429'd the cheap, non-blocking QQ webhooks alongside them.
+# connector turns 429'd the cheap, non-blocking OneBot webhooks alongside them.
 # Defaults to QQ_ONEBOT_MAX_INFLIGHT, so an existing deployment keeps its
 # capacity and a blank line in .env means "same as above" — what changes is
 # that the two can no longer starve each other.
@@ -222,8 +222,8 @@ MAX_INFLIGHT_OUTBOX = 16
 # Whether to build the agent at all. Off leaves the HTTP layer answering
 # health checks and accepting (then dropping) events.
 AGENT_ENABLED = env_bool("AGENT_ENABLED", True)
-# Gateway (platform-neutral forwarding): shared secret for /webhook/gateway
-# (blank = no auth), and how old a forwarded event may be before it is refused.
+# Connectors: shared secret for /v1/events and /v1/outbox (blank = no auth),
+# and how old a forwarded event may be before it is refused.
 CONNECTOR_TOKEN = env_str("CONNECTOR_TOKEN")
 CONNECTOR_MAX_EVENT_AGE_S = env_int(
     "CONNECTOR_MAX_EVENT_AGE_S", 86_400, minimum=1, maximum=604_800)
@@ -302,7 +302,7 @@ class AdmissionLimiter:
 
 
 class ReplayGuard:
-    """Bounded timestamped nonce cache for authenticated gateway envelopes."""
+    """Bounded timestamped nonce cache for authenticated connector envelopes."""
 
     def __init__(
         self,
@@ -359,12 +359,12 @@ class ReplayGuard:
             return False
         if len(self._seen) >= self.max_entries:
             # Evicting a still-fresh nonce re-opens its replay window, so the
-            # cap is a hard refusal — which means a busy forwarder can hit a
-            # cliff where EVERY gateway event 403s as "replayed", and that is
-            # indistinguishable from a bad token unless it is said out loud.
+            # cap is a hard refusal — which means a busy connector can hit a
+            # cliff where EVERY connector request 403s as "replayed", and that
+            # is indistinguishable from a bad token unless it is said out loud.
             logger.error(
-                "[main] gateway replay guard full (%d nonces live within %ds) "
-                "— rejecting all gateway events until the window drains; "
+                "[main] connector replay guard full (%d nonces live within %ds) "
+                "— rejecting all connector requests until the window drains; "
                 "raise the cap if this is legitimate traffic",
                 len(self._seen), self.ttl_seconds)
             if changed:
@@ -372,7 +372,7 @@ class ReplayGuard:
             return False
         if len(self._seen) >= self.max_entries * 4 // 5:
             logger.warning(
-                "[main] gateway replay guard at %d/%d nonces",
+                "[main] connector replay guard at %d/%d nonces",
                 len(self._seen), self.max_entries)
         self._seen[nonce] = timestamp
         try:
@@ -388,7 +388,7 @@ class ReplayGuard:
         return True
 
 
-def _verify_gateway_envelope(
+def _verify_envelope(
     body: bytes,
     headers,
     token: str,
@@ -399,10 +399,10 @@ def _verify_gateway_envelope(
     """Verify bearer token plus HMAC-signed timestamp/nonce/body envelope."""
     if not token:
         return True
-    supplied_token = headers.get("x-gateway-token", "")
-    timestamp_raw = headers.get("x-gateway-timestamp", "")
-    nonce = headers.get("x-gateway-nonce", "")
-    supplied_signature = headers.get("x-gateway-signature", "")
+    supplied_token = headers.get("x-personagent-token", "")
+    timestamp_raw = headers.get("x-personagent-timestamp", "")
+    nonce = headers.get("x-personagent-nonce", "")
+    supplied_signature = headers.get("x-personagent-signature", "")
     if (not _ct_equal(supplied_token, token)
             or not timestamp_raw or not nonce or len(nonce) > 128):
         return False
@@ -418,22 +418,24 @@ def _verify_gateway_envelope(
         token.encode("utf-8"), mac_input, hashlib.sha256).hexdigest()
     if not _ct_equal(supplied_signature, expected):
         return False
-    guard = replay_guard or _gateway_replay
+    guard = replay_guard or _connector_replay
     return guard.accept(nonce, timestamp, int(time.time()) if now is None else now)
 
 
-def _validate_event_payload(payload: dict, *, gateway: bool) -> bool:
+def _validate_event_payload(payload: dict, *, connector: bool) -> bool:
     """Validate the stable identity fields required for deduplication."""
     if not isinstance(payload, dict):
         return False
-    if gateway:
+    if connector:
         required = (
-            "platform", "message_type", "user_id", "message_id",
-            "source_timestamp",
+            "platform", "conversation_type", "sender_id", "message_id",
+            "sent_at",
         )
         if any(payload.get(key) in (None, "") for key in required):
             return False
-        if payload.get("message_type") == "group" and payload.get(
+        if payload.get("conversation_type") not in CONVERSATION_TYPES:
+            return False
+        if payload.get("conversation_type") == "group" and payload.get(
                 "conversation_id") in (None, ""):
             return False
         return isinstance(payload.get("segments", []), list)
@@ -463,14 +465,14 @@ def _event_is_fresh(
     return abs(current - event_time) <= max(1, int(max_age_seconds))
 
 
-def _gateway_event_is_fresh(
+def _connector_event_is_fresh(
     payload: dict,
     *,
     now: int | None = None,
     max_age_seconds: int = CONNECTOR_MAX_EVENT_AGE_S,
 ) -> bool:
-    """Validate source-event age independently of forwarding-envelope age."""
-    return _event_is_fresh(payload, "source_timestamp", now=now,
+    """Validate the event's own age independently of the envelope's."""
+    return _event_is_fresh(payload, "sent_at", now=now,
                            max_age_seconds=max_age_seconds)
 
 
@@ -485,10 +487,11 @@ def _onebot_event_is_fresh(
                            max_age_seconds=max_age_seconds)
 
 
-_webhook_admission = AdmissionLimiter(QQ_ONEBOT_MAX_INFLIGHT)
-_gateway_admission = AdmissionLimiter(CONNECTOR_MAX_INFLIGHT)
+_onebot_admission = AdmissionLimiter(QQ_ONEBOT_MAX_INFLIGHT)
+_connector_admission = AdmissionLimiter(CONNECTOR_MAX_INFLIGHT)
 _outbox_admission = AdmissionLimiter(MAX_INFLIGHT_OUTBOX)
-_gateway_replay = ReplayGuard(
+# A file name from a released version: the nonces in it stay valid.
+_connector_replay = ReplayGuard(
     state_file=runtime_dir() / "gateway_nonces.json")
 
 
@@ -502,8 +505,8 @@ def _error(status: int, code: str, message: str, *,
 
     `error` stays exactly what it was — a sentence for a human reading a log.
     `code` is the stable half, and it exists because the prose is not
-    actionable: `/webhook/gateway` alone answers 403 for a peer that is not
-    allowed, an envelope that failed verification, and a source event that is
+    actionable: `/v1/events` alone answers 403 for a peer that is not
+    allowed, an envelope that failed verification, and an event that is
     too old, and the operator's next step differs for each (fix the
     allowlist / rotate the token / fix NTP). A client cannot branch on an
     English sentence, and the sentences are free to be reworded.
@@ -517,7 +520,7 @@ def _error(status: int, code: str, message: str, *,
 
 
 def _mark_deprecated(response: JSONResponse) -> JSONResponse:
-    """Stamp a response from the deprecated `/webhook/qq` ingress.
+    """Stamp a response from the deprecated `/v1/onebot` ingress.
 
     Applied at every return point rather than only the success one, so a
     branch added later cannot silently omit it. No `Sunset`: the CHANGELOG
@@ -686,7 +689,7 @@ async def health_details(request: Request):
     client_host = request.client.host if request.client else ""
     if CONNECTOR_TOKEN:
         authorized = _ct_equal(
-            request.headers.get("X-Gateway-Token", ""), CONNECTOR_TOKEN)
+            request.headers.get("X-Personagent-Token", ""), CONNECTOR_TOKEN)
     else:
         authorized = _is_loopback_host(client_host)
     if not authorized:
@@ -725,20 +728,20 @@ def _warn_direct_route_once() -> None:
     if not _DIRECT_ROUTE_WARNED:
         _DIRECT_ROUTE_WARNED = True
         logger.warning(
-            "[Agent] /webhook/qq (direct OneBot ingress) is deprecated since 0.3.0 and "
+            "[Agent] /v1/onebot (direct OneBot ingress) is deprecated since 0.3.0 and "
             "will be removed in a later release; route QQ through AstrBot with "
             "CONNECTOR_QQ_PLATFORMS=aiocqhttp. Nothing changes for this deployment yet.")
 
 
-@app.post("/webhook/qq")
-async def qq_webhook(request: Request):
+@app.post("/v1/onebot")
+async def onebot_webhook(request: Request):
     """DEPRECATED direct OneBot v11 ingress, fed by the client's own webhook.
 
     Fire-and-forget: the event is validated, then handled on a background task
     so NapCat never waits for the model round-trip. The reply is delivered by
     a separate call to the OneBot HTTP API, so the response here is only
     ``{"ok": true}`` and never carries it. That is the opposite of
-    ``/webhook/gateway``, which answers synchronously.
+    ``/v1/events``, which answers synchronously.
 
     Deprecated since 0.3.0, removed in a later release; every response carries
     ``Deprecation: true``. The supported path is AstrBot with
@@ -756,24 +759,24 @@ async def qq_webhook(request: Request):
     refused = _refuse_non_local(request, QQ_ONEBOT_SECRET)
     if refused is not None:
         return _mark_deprecated(refused)
-    if not await _webhook_admission.try_acquire():
+    if not await _onebot_admission.try_acquire():
         return _mark_deprecated(_error(
             429, "capacity_exceeded", "webhook capacity exceeded",
             retry_after=1))
     request.state.admission_handed_off = False
     try:
-        return _mark_deprecated(await _qq_webhook_admitted(request))
+        return _mark_deprecated(await _onebot_webhook_admitted(request))
     finally:
         if not request.state.admission_handed_off:
-            await _webhook_admission.release()
+            await _onebot_admission.release()
 
 
-async def _qq_webhook_admitted(request: Request):
+async def _onebot_webhook_admitted(request: Request):
     body = await _read_webhook_body(request)
     if isinstance(body, JSONResponse):
         return body
     # OneBot HMAC verification (opt-in via QQ_ONEBOT_SECRET). Without it, anyone
-    # who can reach this port can POST a forged event — impersonate OWNER_QQ,
+    # who can reach this port can POST a forged event — impersonate the admin,
     # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
     # when its httpClient `secret` is set; configure both or leave unset (and
     # keep SERVER_HOST=127.0.0.1).
@@ -790,11 +793,11 @@ async def _qq_webhook_admitted(request: Request):
     # Defense in depth: these keys mark payloads synthesized inside
     # handle_gateway and must never arrive from the network. Security
     # decisions gate on the sink contextvar, but strip them anyway so an
-    # external body can't masquerade as gateway-synthesized.
+    # external body can't masquerade as a connector event.
     if isinstance(payload, dict):
         payload.pop("_gateway", None)
         payload.pop("_platform", None)
-    if not _validate_event_payload(payload, gateway=False):
+    if not _validate_event_payload(payload, connector=False):
         return _error(400, "invalid_schema", "invalid event schema")
     if QQ_ONEBOT_SECRET and not _onebot_event_is_fresh(payload):
         return _error(403, "stale_event", "stale or missing event timestamp")
@@ -810,7 +813,7 @@ async def _qq_webhook_admitted(request: Request):
             except Exception:
                 logger.exception("handle failed")
             finally:
-                await _webhook_admission.release()
+                await _onebot_admission.release()
         request.state.admission_handed_off = True
         _spawn(_safe_handle())
     # A JSONResponse rather than a bare dict so _mark_deprecated has something
@@ -821,39 +824,40 @@ async def _qq_webhook_admitted(request: Request):
 _IGNORED_TOKEN_WARNED = False
 
 
-def _warn_ignored_gateway_token_once(request: Request) -> None:
-    """The forwarder has a token this process was not given: its envelope is
+def _warn_ignored_connector_token_once(request: Request) -> None:
+    """The connector has a token this process was not given: its envelope is
     not being checked at all, which is rarely what the operator meant."""
     global _IGNORED_TOKEN_WARNED
     if (CONNECTOR_TOKEN or _IGNORED_TOKEN_WARNED
-            or "x-gateway-token" not in request.headers):
+            or "x-personagent-token" not in request.headers):
         return
     _IGNORED_TOKEN_WARNED = True
     logger.warning(
-        "[main] the forwarder sends X-Gateway-Token but CONNECTOR_TOKEN is "
+        "[main] the connector sends X-Personagent-Token but CONNECTOR_TOKEN is "
         "blank here, so the token is ignored; set the same CONNECTOR_TOKEN "
-        "in .env to have gateway requests authenticated")
+        "in .env to have connector requests authenticated")
 
 
-@app.post("/webhook/gateway")
-async def gateway_webhook(request: Request):
-    """Platform-neutral inbound endpoint for forwarder plugins.
+@app.post("/v1/events")
+async def connector_events(request: Request):
+    """Platform-neutral inbound endpoint for connectors.
 
-    SYNCHRONOUS round-trip, unlike ``/webhook/qq``: the forwarder needs the
+    SYNCHRONOUS round-trip, unlike ``/v1/onebot``: the connector needs the
     replies in the response body to relay them to the source platform, so the
     whole pipeline, debounce and every model call included, runs before this
-    returns (the typing pauses are skipped behind the sink). Set the plugin's HTTP timeout accordingly; a caller that
-    gives up early does not stop the turn, which still commits its reply and
-    everything it learned from it.
+    returns (the typing pauses are skipped behind the sink). Set the
+    connector's HTTP timeout accordingly; a caller that gives up early does
+    not stop the turn, which still commits its reply and everything it
+    learned from it.
 
     Body schema: see ``persona_agent/gateway.py``. The response is
     ``{"handled": bool, "owned": bool, "replies": [...]}``, where ``owned``
     says the conversation is this persona's whether or not it chose to speak —
-    a forwarder should suppress its own model on ``owned``, never on whether
+    a connector should suppress its own model on ``owned``, never on whether
     ``replies`` is empty, because silence is frequently the answer.
 
     Authentication is a bearer token plus an HMAC envelope over
-    timestamp/nonce/body (``X-Gateway-Token``, ``-Timestamp``, ``-Nonce``,
+    timestamp/nonce/body (``X-Personagent-Token``, ``-Timestamp``, ``-Nonce``,
     ``-Signature``). Errors carry a stable ``code``; branch on it, not on the
     prose in ``error``.
     """
@@ -867,38 +871,38 @@ async def gateway_webhook(request: Request):
     refused = _refuse_non_local(request, CONNECTOR_TOKEN)
     if refused is not None:
         return refused
-    _warn_ignored_gateway_token_once(request)
+    _warn_ignored_connector_token_once(request)
     if CONNECTOR_TOKEN and not _ct_equal(
-            request.headers.get("x-gateway-token", ""), CONNECTOR_TOKEN):
+            request.headers.get("x-personagent-token", ""), CONNECTOR_TOKEN):
         return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed gateway envelope")
-    if not await _gateway_admission.try_acquire():
+                      "invalid, stale, or replayed request envelope")
+    if not await _connector_admission.try_acquire():
         return _error(429, "capacity_exceeded", "webhook capacity exceeded",
                       retry_after=3)
     try:
-        return await _gateway_webhook_admitted(request)
+        return await _connector_events_admitted(request)
     finally:
-        await _gateway_admission.release()
+        await _connector_admission.release()
 
 
-async def _gateway_webhook_admitted(request: Request):
-    """Platform-neutral inbound endpoint for forwarder plugins (schema in
-    gateway.py). Unlike /webhook/qq this is a synchronous round-trip: the
-    forwarder needs the replies in the response body to relay them back, so
+async def _connector_events_admitted(request: Request):
+    """Platform-neutral inbound endpoint for connectors (schema in
+    gateway.py). Unlike /v1/onebot this is a synchronous round-trip: the
+    connector needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
-    before returning — set the plugin's HTTP timeout accordingly."""
+    before returning — set the connector's HTTP timeout accordingly."""
     body = await _read_webhook_body(request)
     if isinstance(body, JSONResponse):
         return body
-    if not _verify_gateway_envelope(body, request.headers, CONNECTOR_TOKEN):
+    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
         # One code for four causes (bad token, bad signature, timestamp
-        # outside the window, replayed nonce): _verify_gateway_envelope folds
+        # outside the window, replayed nonce): _verify_envelope folds
         # them into a bool before this sees them, and splitting that return is
         # a bigger change than this one — its True/False contract is pinned by
         # tests. `invalid_envelope` at least separates these from the other
         # two 403s this route can answer.
         return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed gateway envelope")
+                      "invalid, stale, or replayed request envelope")
     try:
         event = json.loads(body or b"{}")
     except Exception:
@@ -911,18 +915,18 @@ async def _gateway_webhook_admitted(request: Request):
         # The signature does not cover the path: a signed outbox pull posted
         # here must not be read as an event.
         return _error(400, "invalid_schema", "not an event body")
-    if not _validate_event_payload(event, gateway=True):
-        return _error(400, "invalid_schema", "invalid gateway event schema")
-    if not _gateway_event_is_fresh(event):
-        return _error(403, "stale_source_event", "stale gateway source event")
+    if not _validate_event_payload(event, connector=True):
+        return _error(400, "invalid_schema", "invalid event schema")
+    if not _connector_event_is_fresh(event):
+        return _error(403, "stale_event", "stale or invalid sent_at")
     event["message_id"] = str(event["message_id"])
     if agent is None:
         return {"handled": False, "replies": []}
     return await agent.handle_gateway(event)
 
 
-@app.post("/webhook/gateway/outbox")
-async def gateway_outbox(request: Request):
+@app.post("/v1/outbox")
+async def connector_outbox(request: Request):
     """Where a connector pulls messages nobody asked for: proactive openers,
     the follow-up question after a rejection, the excuse for a failed model
     call (docs/connectors.md, "Outbox").
@@ -934,11 +938,11 @@ async def gateway_outbox(request: Request):
     remembered as said. A connector that has not pulled for 90 seconds is
     treated as gone.
 
-    Same authentication, replay guard and error codes as
-    ``/webhook/gateway``. The body must be ``{"kind": "outbox.pull", ...}``,
-    because the signature does not cover the path. ``404`` with code
-    ``outbox_disabled`` means ``CONNECTOR_OUTBOX_ENABLED`` is off (a 404 without a code
-    is an agent older than the outbox).
+    Same authentication, replay guard and error codes as ``/v1/events``.
+    The body must be ``{"kind": "outbox.pull", ...}``, because the signature
+    does not cover the path. ``404`` with code ``outbox_disabled`` means
+    ``CONNECTOR_OUTBOX_ENABLED`` is off (a 404 without a code is an agent
+    without the outbox).
     """
     peer = request.client.host if request.client is not None else ""
     if not _request_peer_is_allowed(peer, CONNECTOR_TOKEN):
@@ -947,25 +951,25 @@ async def gateway_outbox(request: Request):
     if refused is not None:
         return refused
     if CONNECTOR_TOKEN and not _ct_equal(
-            request.headers.get("x-gateway-token", ""), CONNECTOR_TOKEN):
+            request.headers.get("x-personagent-token", ""), CONNECTOR_TOKEN):
         return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed gateway envelope")
+                      "invalid, stale, or replayed request envelope")
     if not await _outbox_admission.try_acquire():
         return _error(429, "capacity_exceeded", "outbox capacity exceeded",
                       retry_after=5)
     try:
-        return await _gateway_outbox_admitted(request)
+        return await _connector_outbox_admitted(request)
     finally:
         await _outbox_admission.release()
 
 
-async def _gateway_outbox_admitted(request: Request):
+async def _connector_outbox_admitted(request: Request):
     body = await _read_webhook_body(request)
     if isinstance(body, JSONResponse):
         return body
-    if not _verify_gateway_envelope(body, request.headers, CONNECTOR_TOKEN):
+    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
         return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed gateway envelope")
+                      "invalid, stale, or replayed request envelope")
     try:
         pull = parse_pull(json.loads(body or b"{}"))
     except Exception:

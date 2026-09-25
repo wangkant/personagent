@@ -47,18 +47,18 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 def test_synthesize_group_self_mention() -> None:
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "-100777",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 555,
-        "is_at_me": True,
+        "addressed": True,
         "segments": [
             {"type": "mention", "user_id": "999000", "name": "TestBot"},
             {"type": "text", "text": " hello there"},
         ],
-        "raw_text": "@TestBot hello there",
+        "text": "@TestBot hello there",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("group: post_type", p["post_type"] == "message", repr(p))
@@ -75,7 +75,7 @@ def test_synthesize_group_self_mention() -> None:
           p["message"][0] == {"type": "at", "data": {"qq": QQ_BOT_ID}}, repr(p["message"]))
     check("group: text segment kept",
           p["message"][1] == {"type": "text", "data": {"text": " hello there"}}, repr(p["message"]))
-    # A real self-mention segment exists, so is_at_me must NOT add a second at.
+    # A real self-mention segment exists, so addressed must NOT add a second at.
     at_count = sum(1 for s in p["message"] if s["type"] == "at")
     check("group: no duplicate at prepend", at_count == 1, repr(p["message"]))
 
@@ -99,15 +99,15 @@ def test_core_update_prompt_contract_is_consistent() -> None:
 def test_synthesize_mention_other_user() -> None:
     event = {
         "platform": "discord",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "c1",
-        "user_id": "u1",
+        "sender_id": "u1",
         "sender_name": "Bob",
-        "self_id": "botid",
+        "bot_id": "botid",
         "message_id": None,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [{"type": "mention", "user_id": "77", "name": "Carl"}],
-        "raw_text": "@Carl",
+        "text": "@Carl",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("other mention: prefixed qq",
@@ -115,39 +115,39 @@ def test_synthesize_mention_other_user() -> None:
     check("other mention: no message_id key", "message_id" not in p, repr(p.keys()))
 
 
-def test_synthesize_is_at_me_prepend() -> None:
+def test_synthesize_addressed_prepend() -> None:
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "g1",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": "m1",
-        "is_at_me": True,  # e.g. a reply-to-bot with no mention segment
+        "addressed": True,  # e.g. a reply-to-bot with no mention segment
         "segments": [{"type": "text", "text": "ping"}],
-        "raw_text": "ping",
+        "text": "ping",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
-    check("is_at_me: synthetic at prepended",
+    check("addressed: synthetic at prepended",
           p["message"][0] == {"type": "at", "data": {"qq": QQ_BOT_ID}}, repr(p["message"]))
-    check("is_at_me: text follows",
+    check("addressed: text follows",
           p["message"][1] == {"type": "text", "data": {"text": "ping"}}, repr(p["message"]))
 
 
 def test_synthesize_private() -> None:
     event = {
         "platform": "telegram",
-        "message_type": "private",
+        "conversation_type": "dm",
         "conversation_id": "42",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 9,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [{"type": "text", "text": "hi"}, {"type": "emoji", "name": "wave"},
                      {"type": "reply"}],
-        "raw_text": "hi",
+        "text": "hi",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("private: message_type", p["message_type"] == "private", repr(p))
@@ -160,16 +160,16 @@ def test_synthesize_private() -> None:
 def test_synthesize_reply_keeps_namespaced_id() -> None:
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "g1",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": "m2",
-        "is_at_me": True,
+        "addressed": True,
         "segments": [{"type": "reply", "message_id": "m1"},
                      {"type": "text", "text": "that one"}],
-        "raw_text": "that one",
+        "text": "that one",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     replies = [seg for seg in p["message"] if seg["type"] == "reply"]
@@ -184,24 +184,24 @@ def test_synthesize_mid_namespacing() -> None:
     across chats and silently swallow the second message."""
     base = {
         "platform": "telegram",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 700,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [{"type": "text", "text": "x"}],
-        "raw_text": "x",
+        "text": "x",
     }
     g1 = synthesize_onebot_payload(
-        dict(base, message_type="group", conversation_id="-100111"), QQ_BOT_ID)
+        dict(base, conversation_type="group", conversation_id="-100111"), QQ_BOT_ID)
     g2 = synthesize_onebot_payload(
-        dict(base, message_type="group", conversation_id="-100222"), QQ_BOT_ID)
+        dict(base, conversation_type="group", conversation_id="-100222"), QQ_BOT_ID)
     check("mid namespace: distinct conversations get distinct keys",
           g1["message_id"] == "telegram:-100111:700"
           and g2["message_id"] == "telegram:-100222:700",
           f"{g1['message_id']!r} vs {g2['message_id']!r}")
-    pv = synthesize_onebot_payload(dict(base, message_type="private"), QQ_BOT_ID)
-    check("mid namespace: private uses user_id as the conversation",
+    pv = synthesize_onebot_payload(dict(base, conversation_type="dm"), QQ_BOT_ID)
+    check("mid namespace: a DM uses sender_id as the conversation",
           pv["message_id"] == "telegram:42:700", repr(pv["message_id"]))
 
 
@@ -221,16 +221,16 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
     been granted it must not reach that spelling by naming itself "qq"."""
     base = {
         "platform": "aiocqhttp",
-        "user_id": "10001",
+        "sender_id": "10001",
         "sender_name": "Alice",
-        "self_id": QQ_BOT_ID,
+        "bot_id": QQ_BOT_ID,
         "message_id": 700,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [{"type": "mention", "user_id": "10002", "name": "Bob"},
                      {"type": "text", "text": "hi"}],
-        "raw_text": "hi",
+        "text": "hi",
     }
-    group = dict(base, message_type="group", conversation_id="220000")
+    group = dict(base, conversation_type="group", conversation_id="220000")
     native = synthesize_onebot_payload(group, QQ_BOT_ID, ("aiocqhttp",))
 
     check("native: the sender id is bare",
@@ -247,7 +247,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
           native["message_id"] == "700", repr(native["message_id"]))
 
     private = synthesize_onebot_payload(
-        dict(base, message_type="private"), QQ_BOT_ID, ("aiocqhttp",))
+        dict(base, conversation_type="dm"), QQ_BOT_ID, ("aiocqhttp",))
     check("native: a DM keeps the bare sender id",
           private["user_id"] == "10001" and private["message_id"] == "700",
           f"{private['user_id']!r} {private['message_id']!r}")
@@ -287,18 +287,18 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
 def test_synthesize_image_segments() -> None:
     event = {
         "platform": "slack",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "c",
-        "user_id": "u",
+        "sender_id": "u",
         "sender_name": "D",
-        "self_id": "s",
+        "bot_id": "s",
         "message_id": 1,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [
             {"type": "image", "url": "https://example.com/a.png"},
             {"type": "image", "b64": "QUJD"},
         ],
-        "raw_text": "",
+        "text": "",
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("image: url form",
@@ -314,9 +314,9 @@ def test_synthesize_carries_quotes_emoji_names_and_stickers() -> None:
     the quoted text with its speaker, an emoji's name and id, and the
     sticker flag. Anything malformed is left out rather than refused."""
     event = {
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "g1", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": "m9", "is_at_me": False,
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "g1", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": "m9", "addressed": False,
         "segments": [
             {"type": "reply", "message_id": "m1", "text": "see you at 8",
              "sender_id": "7", "sender_name": "Bob"},
@@ -330,7 +330,7 @@ def test_synthesize_carries_quotes_emoji_names_and_stickers() -> None:
             {"type": "image", "url": "https://example.com/p.png",
              "sticker": "yes"},
         ],
-        "raw_text": "",
+        "text": "",
     }
     msg = synthesize_onebot_payload(event, QQ_BOT_ID)["message"]
     check("quote: text and speaker ride along with the namespaced id",
@@ -353,24 +353,24 @@ def test_synthesize_carries_quotes_emoji_names_and_stickers() -> None:
           msg[6]["data"] == {"url": "https://example.com/p.png"}, repr(msg[6]))
 
 
-def test_event_forwarder_fields_are_cleaned_not_refused() -> None:
-    from persona_agent.gateway import event_forwarder
+def test_event_connector_fields_are_cleaned_not_refused() -> None:
+    from persona_agent.gateway import event_connector
 
-    good = event_forwarder({"forwarder_id": " astrbot-7f3c ",
+    good = event_connector({"connector_id": " astrbot-7f3c ",
                             "reply_handle": "tg:GroupMessage:-100",
-                            "caps": ["outbox", "Quote_Text", "outbox", 5]})
-    check("forwarder: values are trimmed and caps deduplicated and lowercased",
-          good == {"forwarder_id": "astrbot-7f3c",
+                            "capabilities": ["outbox", "Quote_Text", "outbox", 5]})
+    check("connector: values are trimmed and capabilities deduplicated and lowercased",
+          good == {"connector_id": "astrbot-7f3c",
                    "reply_handle": "tg:GroupMessage:-100",
-                   "caps": ("outbox", "quote_text")}, repr(good))
-    bad = event_forwarder({"forwarder_id": "a\nb", "reply_handle": "x" * 513,
-                           "caps": "outbox"})
-    check("forwarder: control characters, oversize handles and a non-list "
-          "caps read as absent",
-          bad == {"forwarder_id": "", "reply_handle": "", "caps": ()}, repr(bad))
-    check("forwarder: an old event has none of them",
-          event_forwarder({}) == {"forwarder_id": "", "reply_handle": "",
-                                  "caps": ()})
+                   "capabilities": ("outbox", "quote_text")}, repr(good))
+    bad = event_connector({"connector_id": "a\nb", "reply_handle": "x" * 513,
+                           "capabilities": "outbox"})
+    check("connector: control characters, oversize handles and a non-list "
+          "capabilities read as absent",
+          bad == {"connector_id": "", "reply_handle": "", "capabilities": ()}, repr(bad))
+    check("connector: an event without them has none of them",
+          event_connector({}) == {"connector_id": "", "reply_handle": "",
+                                  "capabilities": ()})
 
 
 # ---------------------------------------------------------------------------
@@ -386,19 +386,19 @@ def test_message_to_reply_item() -> None:
         {"type": "text", "data": {"text": "sup"}},
     ])
     check("reply item: at+text",
-          item == {"type": "text", "text": "sup", "at_user_id": "telegram:42"}, repr(item))
+          item == {"type": "text", "text": "sup", "mention_user_id": "telegram:42"}, repr(item))
 
     item = message_to_reply_item([
         {"type": "at", "data": {"qq": "telegram:42"}},
         {"type": "image", "data": {"file": "base64://QUJD"}},
     ])
     check("reply item: at+image",
-          item == {"type": "image", "b64": "QUJD", "at_user_id": "telegram:42"}, repr(item))
+          item == {"type": "image", "b64": "QUJD", "mention_user_id": "telegram:42"}, repr(item))
 
 
 def test_native_mention_is_namespaced_on_the_way_out() -> None:
     """A native platform mints ids BARE inbound, for the ledgers. Outbound,
-    `at_user_id` is read by the FORWARDER, which resolves "<platform>:<raw>"
+    `mention_user_id` is read by the CONNECTOR, which resolves "<platform>:<raw>"
     and drops anything bare — so on the supported QQ path
     (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group @-mention silently
     disappeared. The prefix has to be put back at the sink boundary."""
@@ -407,41 +407,41 @@ def test_native_mention_is_namespaced_on_the_way_out() -> None:
 
     item = message_to_reply_item(at_bare)
     check("native mention: unchanged when no platform is supplied",
-          item.get("at_user_id") == "123456", repr(item))
+          item.get("mention_user_id") == "123456", repr(item))
 
     item = message_to_reply_item(at_bare, platform="aiocqhttp", native=True)
-    check("native mention: bare id is namespaced for the forwarder",
-          item.get("at_user_id") == "aiocqhttp:123456", repr(item))
+    check("native mention: bare id is namespaced for the connector",
+          item.get("mention_user_id") == "aiocqhttp:123456", repr(item))
 
     item = message_to_reply_item(at_bare, platform="aiocqhttp", native=True,
                                  bot_id="123456")
     check("native mention: the bot's own id is never addressed",
-          item.get("at_user_id") == "123456", repr(item))
+          item.get("mention_user_id") == "123456", repr(item))
 
     already = [{"type": "at", "data": {"qq": "telegram:42"}},
                {"type": "text", "data": {"text": "hi"}}]
     item = message_to_reply_item(already, platform="telegram", native=False)
     check("non-native mention: an already-namespaced id is left alone",
-          item.get("at_user_id") == "telegram:42", repr(item))
+          item.get("mention_user_id") == "telegram:42", repr(item))
 
     item = message_to_reply_item(at_bare, platform="telegram", native=False)
     check("non-native mention: a bare id is NOT promoted to namespaced",
-          item.get("at_user_id") == "123456", repr(item))
+          item.get("mention_user_id") == "123456", repr(item))
 
     sink = GatewaySink(platform="aiocqhttp", native=True, bot_id="999")
     sink.add(at_bare)
     check("sink carries the platform into its items",
-          sink.items[0].get("at_user_id") == "aiocqhttp:123456",
+          sink.items[0].get("mention_user_id") == "aiocqhttp:123456",
           repr(sink.items))
 
 
 def test_unknown_segment_types_are_dropped_not_crashed() -> None:
     payload = synthesize_onebot_payload({
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "c1",
-        "user_id": "u1",
-        "self_id": "bot",
+        "sender_id": "u1",
+        "bot_id": "bot",
         "segments": [
             {"type": "text", "text": "before"},
             {"type": "iamge", "url": "http://x/y.png"},
@@ -449,7 +449,7 @@ def test_unknown_segment_types_are_dropped_not_crashed() -> None:
             "not-a-dict",
             {"type": "text", "text": "after"},
         ],
-        "raw_text": "before after",
+        "text": "before after",
     }, "10000")
     kinds = [seg.get("type") for seg in payload["message"]]
     check("unknown segments are dropped, known ones survive",
@@ -560,7 +560,7 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     a._seen_msg_file = tmp / "seen_msg_ids.json"
     a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
-    a.gateway_handles.path = tmp / "gateway_handles.json"
+    a.gateway_handles.path = tmp / "connector_handles.json"
     # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
     # into memory BEFORE we redirected the paths above. Clear them so tests run
     # against clean state (a stray production message_id would flake-dedupe).
@@ -608,18 +608,18 @@ async def test_round_trip(tmp: Path) -> None:
 
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "-100777",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 555,
-        "is_at_me": True,
+        "addressed": True,
         "segments": [
             {"type": "mention", "user_id": "999000", "name": "TestBot"},
             {"type": "text", "text": " are you there today"},
         ],
-        "raw_text": "@TestBot are you there today",
+        "text": "@TestBot are you there today",
     }
     result = await agent.handle_gateway(event)
     check("integration: handled", result["handled"] is True, repr(result))
@@ -627,8 +627,8 @@ async def test_round_trip(tmp: Path) -> None:
     check("integration: got a text reply", len(texts) >= 1, repr(result))
     if texts:
         first = texts[0]
-        check("integration: at_user_id extracted",
-              first.get("at_user_id") == "telegram:42", repr(first))
+        check("integration: mention_user_id extracted",
+              first.get("mention_user_id") == "telegram:42", repr(first))
         check("integration: marker stripped from text",
               "[AT:" not in first.get("text", "") and "hold up" in first.get("text", ""),
               repr(first))
@@ -658,11 +658,11 @@ async def test_the_model_sees_quotes_emoji_names_and_stickers(tmp: Path) -> None
     agent._describe_image = fake_image
 
     def turn(mid, *segments):
-        return {"platform": "telegram", "message_type": "group",
-                "conversation_id": "c1", "user_id": "42", "sender_name": "Alice",
-                "self_id": "999000", "message_id": mid, "is_at_me": True,
-                "segments": list(segments), "raw_text": "",
-                "source_timestamp": int(time.time())}
+        return {"platform": "telegram", "conversation_type": "group",
+                "conversation_id": "c1", "sender_id": "42", "sender_name": "Alice",
+                "bot_id": "999000", "message_id": mid, "addressed": True,
+                "segments": list(segments), "text": "",
+                "sent_at": int(time.time())}
 
     await agent.handle_gateway(turn(
         "q1", {"type": "reply", "message_id": "b1", "text": "i'll bring snacks",
@@ -712,7 +712,7 @@ async def test_the_model_sees_quotes_emoji_names_and_stickers(tmp: Path) -> None
 async def test_a_gateway_mention_reaches_a_bot_without_a_qq_number(
         tmp: Path) -> None:
     """QQ_BOT_ID is the bot's QQ account, and the wizard asks for it only when
-    QQ is in use. The gateway turned a self-mention or an is_at_me reply into
+    QQ is in use. The gateway turned a self-mention or an addressed reply into
     an @ of QQ_BOT_ID, and _is_at_me gave up when QQ_BOT_ID was blank. What still
     answered was an accident: the empty id equalled the empty QQ_BOT_ID, so the
     @ rendered as the bot's name and the name check fired. With PERSONA_NAME
@@ -730,13 +730,13 @@ async def test_a_gateway_mention_reaches_a_bot_without_a_qq_number(
 
     agent._think = fake_think
 
-    def event(mid, segments, is_at_me):
+    def event(mid, segments, addressed):
         return {
-            "platform": "telegram", "message_type": "group",
-            "conversation_id": "-100777", "user_id": "42",
-            "sender_name": "Alice", "self_id": "999000", "message_id": mid,
-            "is_at_me": is_at_me, "segments": segments,
-            "raw_text": "are you around today",
+            "platform": "telegram", "conversation_type": "group",
+            "conversation_id": "-100777", "sender_id": "42",
+            "sender_name": "Alice", "bot_id": "999000", "message_id": mid,
+            "addressed": addressed, "segments": segments,
+            "text": "are you around today",
         }
 
     mention = await agent.handle_gateway(event(970, [
@@ -783,18 +783,18 @@ async def test_second_marker_stripped(tmp: Path) -> None:
     agent._think = fake_think
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "-100777",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 556,
-        "is_at_me": True,
+        "addressed": True,
         "segments": [
             {"type": "mention", "user_id": "999000", "name": "TestBot"},
             {"type": "text", "text": " you coming"},
         ],
-        "raw_text": "@TestBot you coming",
+        "text": "@TestBot you coming",
     }
     result = await agent.handle_gateway(event)
     joined = " ".join(r.get("text", "") for r in result["replies"]
@@ -916,18 +916,18 @@ async def test_same_mid_distinct_conversations(tmp: Path) -> None:
     def event_for(conv: str) -> dict:
         return {
             "platform": "telegram",
-            "message_type": "group",
+            "conversation_type": "group",
             "conversation_id": conv,
-            "user_id": "42",
+            "sender_id": "42",
             "sender_name": "Alice",
-            "self_id": "999000",
+            "bot_id": "999000",
             "message_id": 700,  # same raw mid in both chats
-            "is_at_me": True,
+            "addressed": True,
             "segments": [
                 {"type": "mention", "user_id": "999000", "name": "TestBot"},
                 {"type": "text", "text": " hello"},
             ],
-            "raw_text": "@TestBot hello",
+            "text": "@TestBot hello",
         }
 
     r1 = await agent.handle_gateway(event_for("-100111"))
@@ -938,7 +938,7 @@ async def test_same_mid_distinct_conversations(tmp: Path) -> None:
 
 
 async def test_forged_gateway_flag_rejected(tmp: Path) -> None:
-    """F3 regression: a forged "_gateway": true in a /webhook/qq-style
+    """F3 regression: a forged "_gateway": true in a /v1/onebot-style
     payload (no sink set) must not bypass the private-chat whitelist, while
     the same DM through handle_gateway (sink set) must still pass."""
     agent = make_agent(tmp)
@@ -966,15 +966,15 @@ async def test_forged_gateway_flag_rejected(tmp: Path) -> None:
 
     event = {
         "platform": "telegram",
-        "message_type": "private",
+        "conversation_type": "dm",
         "conversation_id": "999",
-        "user_id": "999",
+        "sender_id": "999",
         "sender_name": "Eve",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 424243,
-        "is_at_me": False,
+        "addressed": False,
         "segments": [{"type": "text", "text": "hi"}],
-        "raw_text": "hi",
+        "text": "hi",
     }
     result = await agent.handle_gateway(event)
     check("genuine gateway DM: passes the gate via the sink",
@@ -1083,11 +1083,11 @@ async def test_one_reply_fans_out_into_at_most_the_cap(
 
     agent._chat_private = fake_chat_private
     result = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "private",
-        "conversation_id": "42", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 960, "is_at_me": False,
+        "platform": "telegram", "conversation_type": "dm",
+        "conversation_id": "42", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 960, "addressed": False,
         "segments": [{"type": "text", "text": "say hi a lot"}],
-        "raw_text": "say hi a lot",
+        "text": "say hi a lot",
     })
     check("gateway: one reply is at most the cap in reply items",
           result["handled"] is True
@@ -1673,18 +1673,18 @@ async def test_group_whitelist_gateway_bypass(tmp: Path) -> None:
     agent._think = fake_think
     event = {
         "platform": "telegram",
-        "message_type": "group",
+        "conversation_type": "group",
         "conversation_id": "-100777",
-        "user_id": "42",
+        "sender_id": "42",
         "sender_name": "Alice",
-        "self_id": "999000",
+        "bot_id": "999000",
         "message_id": 801,
-        "is_at_me": True,
+        "addressed": True,
         "segments": [
             {"type": "mention", "user_id": "999000", "name": "TestBot"},
             {"type": "text", "text": " hello"},
         ],
-        "raw_text": "@TestBot hello",
+        "text": "@TestBot hello",
     }
     result = await agent.handle_gateway(event)
     check("group whitelist: gateway group bypasses QQ_GROUPS",
@@ -1720,7 +1720,7 @@ async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
     back at them, and can be promoted into a memory about them.
 
     The last check is why it is an ARGUMENT and not a field on the payload.
-    `/webhook/qq` accepts arbitrary JSON, so a payload flag would let a forged
+    `/v1/onebot` accepts arbitrary JSON, so a payload flag would let a forged
     request tell the engine "this text is mine, do not write it down"."""
     agent = make_agent(tmp)
     agent.private_allowed_qqs = {"777"}
@@ -1741,10 +1741,10 @@ async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
 
     cue = "they have been quiet for a day"
     result = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "private",
-        "conversation_id": "42", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 940, "is_at_me": False,
-        "segments": [{"type": "text", "text": cue}], "raw_text": cue,
+        "platform": "telegram", "conversation_type": "dm",
+        "conversation_id": "42", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 940, "addressed": False,
+        "segments": [{"type": "text", "text": cue}], "text": cue,
         "proactive": True,
     })
     check("proactive: the persona still gets to answer",
@@ -1797,10 +1797,10 @@ async def test_a_proactive_group_event_is_claimed_and_dropped(
     agent._think = no_think
     cue = "their exam was this morning"
     result = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "c1", "user_id": "u1", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 950, "is_at_me": False,
-        "segments": [{"type": "text", "text": cue}], "raw_text": cue,
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "c1", "sender_id": "u1", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 950, "addressed": False,
+        "segments": [{"type": "text", "text": cue}], "text": cue,
         "proactive": True,
     })
     check("proactive group: the turn is claimed",
@@ -1889,12 +1889,12 @@ async def test_a_collected_turn_does_not_simulate_typing(tmp: Path) -> None:
 
     agent = make(tmp)
     result = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 930, "is_at_me": True,
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "-100777", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 930, "addressed": True,
         "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
                      {"type": "text", "text": " hi"}],
-        "raw_text": "@Bot hi",
+        "text": "@Bot hi",
     })
     check("collected turn: the reply is still produced",
           result["handled"] is True and len(result["replies"]) >= 1,
@@ -1941,12 +1941,12 @@ async def test_silence_still_claims_the_conversation(tmp: Path) -> None:
     agent._think = pass_think
 
     quiet = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 920, "is_at_me": True,
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "-100777", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 920, "addressed": True,
         "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
                      {"type": "text", "text": " hi"}],
-        "raw_text": "@Bot hi",
+        "text": "@Bot hi",
     })
     check("silence: a PASS produces no reply",
           quiet["handled"] is False and not quiet["replies"], repr(quiet))
@@ -1959,12 +1959,12 @@ async def test_silence_still_claims_the_conversation(tmp: Path) -> None:
     agent.gateway_native_platforms = {"aiocqhttp"}
     agent.allowed_groups = {"123456"}
     refused = await agent.handle_gateway({
-        "platform": "aiocqhttp", "message_type": "group",
-        "conversation_id": "999999", "user_id": "777", "sender_name": "Bob",
-        "self_id": QQ_BOT_ID, "message_id": 921, "is_at_me": True,
+        "platform": "aiocqhttp", "conversation_type": "group",
+        "conversation_id": "999999", "sender_id": "777", "sender_name": "Bob",
+        "bot_id": QQ_BOT_ID, "message_id": 921, "addressed": True,
         "segments": [{"type": "mention", "user_id": QQ_BOT_ID, "name": "Bot"},
                      {"type": "text", "text": " hi"}],
-        "raw_text": "@Bot hi",
+        "text": "@Bot hi",
     })
     check("silence: a refused conversation is not claimed",
           refused["owned"] is False and refused["handled"] is False,
@@ -2004,12 +2004,12 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
 
     def native_group(gid):
         return {
-            "platform": "aiocqhttp", "message_type": "group",
-            "conversation_id": gid, "user_id": "777", "sender_name": "Bob",
-            "self_id": QQ_BOT_ID, "message_id": f"90{gid}", "is_at_me": True,
+            "platform": "aiocqhttp", "conversation_type": "group",
+            "conversation_id": gid, "sender_id": "777", "sender_name": "Bob",
+            "bot_id": QQ_BOT_ID, "message_id": f"90{gid}", "addressed": True,
             "segments": [{"type": "mention", "user_id": QQ_BOT_ID, "name": "Bot"},
                          {"type": "text", "text": " hi"}],
-            "raw_text": "@Bot hi",
+            "text": "@Bot hi",
         }
 
     unlisted = await agent.handle_gateway(native_group("999999"))
@@ -2024,10 +2024,10 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
 
     def native_dm(uid, mid):
         return {
-            "platform": "aiocqhttp", "message_type": "private",
-            "conversation_id": uid, "user_id": uid, "sender_name": "Someone",
-            "self_id": QQ_BOT_ID, "message_id": mid, "is_at_me": False,
-            "segments": [{"type": "text", "text": "hi"}], "raw_text": "hi",
+            "platform": "aiocqhttp", "conversation_type": "dm",
+            "conversation_id": uid, "sender_id": uid, "sender_name": "Someone",
+            "bot_id": QQ_BOT_ID, "message_id": mid, "addressed": False,
+            "segments": [{"type": "text", "text": "hi"}], "text": "hi",
         }
 
     # The positive case first: it is what makes the rejection below evidence
@@ -2045,12 +2045,12 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
     # Unchanged for everyone else: a namespaced platform still relies on the
     # forwarder's allowlist, because QQ_GROUPS could never describe it.
     foreign = await agent.handle_gateway({
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "-100777", "user_id": "42", "sender_name": "Alice",
-        "self_id": "999000", "message_id": 911, "is_at_me": True,
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "-100777", "sender_id": "42", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": 911, "addressed": True,
         "segments": [{"type": "mention", "user_id": "999000", "name": "Bot"},
                      {"type": "text", "text": " hi"}],
-        "raw_text": "@Bot hi",
+        "text": "@Bot hi",
     })
     check("namespaced gateway: still bypasses QQ_GROUPS as before",
           foreign["handled"] is True and len(foreign["replies"]) >= 1,
@@ -2067,25 +2067,25 @@ def _gw_group(platform: str, gid: str, uid: str, mid, *,
         segments.insert(0, {"type": "mention", "user_id": "999000",
                             "name": "TestBot"})
     return {
-        "platform": platform, "message_type": "group", "conversation_id": gid,
-        "user_id": uid, "sender_name": "Someone", "self_id": "999000",
-        "message_id": mid, "is_at_me": at_me, "segments": segments,
-        "raw_text": text.strip(), **extra,
+        "platform": platform, "conversation_type": "group", "conversation_id": gid,
+        "sender_id": uid, "sender_name": "Someone", "bot_id": "999000",
+        "message_id": mid, "addressed": at_me, "segments": segments,
+        "text": text.strip(), **extra,
     }
 
 
 def _gw_dm(platform: str, uid: str, mid, **extra) -> dict:
     return {
-        "platform": platform, "message_type": "private",
-        "conversation_id": uid, "user_id": uid, "sender_name": "Someone",
-        "self_id": "999000", "message_id": mid, "is_at_me": False,
-        "segments": [{"type": "text", "text": "hi"}], "raw_text": "hi",
+        "platform": platform, "conversation_type": "dm",
+        "conversation_id": uid, "sender_id": uid, "sender_name": "Someone",
+        "bot_id": "999000", "message_id": mid, "addressed": False,
+        "segments": [{"type": "text", "text": "hi"}], "text": "hi",
         **extra,
     }
 
 
 def _qq_group(gid: str, uid: str, mid) -> dict:
-    """What NapCat posts to /webhook/qq for an @ of the bot in a group."""
+    """What NapCat posts to /v1/onebot for an @ of the bot in a group."""
     return {
         "post_type": "message", "message_type": "group", "group_id": gid,
         "user_id": uid, "sender": {"user_id": uid, "nickname": "Bob"},
@@ -2124,7 +2124,7 @@ def _serving_agent(tmp: Path) -> tuple[Agent, list]:
 
     agent._think = fake_think
     agent._chat_private = fake_chat_private
-    # The /webhook/qq turns deliver through NapCat, which is not running.
+    # The /v1/onebot turns deliver through NapCat, which is not running.
     agent._napcat_send_group = agent._napcat_send_private = fake_napcat
     return agent, served
 
@@ -2215,8 +2215,8 @@ async def test_the_agent_lists_gate_each_platform_separately(
           await agent.handle(_qq_dm("555", 1017)) is True)
 
 
-async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
-    """NapCat only ever sends QQ numbers, so a namespaced id on /webhook/qq
+async def test_the_onebot_webhook_refuses_namespaced_ids(tmp: Path) -> None:
+    """NapCat only ever sends QQ numbers, so a namespaced id on /v1/onebot
     was written by someone else. Before, an owner-listed "telegram:1" there
     passed the DM gate through the owner bypass, and a namespaced group
     skipped QQ_GROUPS; both now stop at the door."""
@@ -2224,10 +2224,10 @@ async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
     agent.admin_ids = {"telegram:1"}
 
     forged_owner = await agent.handle(_qq_dm("telegram:1", 1101))
-    check("forged: an owner's namespaced id is not an owner on /webhook/qq",
+    check("forged: an owner's namespaced id is not an owner on /v1/onebot",
           forged_owner is False and served == [], repr((forged_owner, served)))
     forged_group = await agent.handle(_qq_group("telegram:-100", "777", 1102))
-    check("forged: a namespaced group is refused on /webhook/qq",
+    check("forged: a namespaced group is refused on /v1/onebot",
           forged_group is False and served == [], repr((forged_group, served)))
     spelled_qq = await agent.handle(_qq_group("qq:4242", "777", 1103))
     check("forged: so is a group spelled qq:, which NapCat never sends",
@@ -2258,7 +2258,7 @@ async def test_an_owner_on_any_platform_is_the_owner(tmp: Path) -> None:
           served == [("telegram:-100", "owner"), ("telegram:-100", "called")],
           repr(served))
     await agent.handle(_qq_group("4242", "10000", 1203))
-    check("owner mode: the QQ owner on /webhook/qq is unchanged",
+    check("owner mode: the QQ owner on /v1/onebot is unchanged",
           served[-1] == ("4242", "owner"), repr(served))
 
     # A sticky call from the owner keeps the owner persona.
@@ -2546,11 +2546,11 @@ async def test_gateway_inflight_is_pinned(tmp: Path) -> None:
 
     agent._extract_text = blocked_extract
     event = {
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": "pinned", "user_id": "42",
-        "sender_name": "Alice", "self_id": "bot", "message_id": "m1",
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "pinned", "sender_id": "42",
+        "sender_name": "Alice", "bot_id": "bot", "message_id": "m1",
         "segments": [{"type": "text", "text": "hello"}],
-        "raw_text": "hello",
+        "text": "hello",
     }
     task = asyncio.create_task(agent.handle_gateway(event))
     await started.wait()
@@ -2588,8 +2588,8 @@ async def test_gateway_burst_reclaims_idle_state(tmp: Path) -> None:
 
     agent._extract_text = blocked_extract
     tasks = [asyncio.create_task(agent.handle_gateway({
-        "platform": "telegram", "message_type": "group",
-        "conversation_id": str(i), "user_id": "42", "self_id": "bot",
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": str(i), "sender_id": "42", "bot_id": "bot",
         "segments": [],
     })) for i in range(_MAX_GATEWAY_CONVS + 3)]
     try:
@@ -2610,13 +2610,13 @@ async def test_native_gateway_never_enters_lru(tmp: Path) -> None:
     agent.gateway_native_platforms = ("aiocqhttp",)
     agent.buffers["123"].append({"name": "Alice", "text": "keep", "user_id": "42"})
     await agent.handle_gateway({
-        "platform": "aiocqhttp", "message_type": "group",
-        "conversation_id": "123", "user_id": "42", "self_id": QQ_BOT_ID,
+        "platform": "aiocqhttp", "conversation_type": "group",
+        "conversation_id": "123", "sender_id": "42", "bot_id": QQ_BOT_ID,
         "segments": [],
     })
     await agent.handle_gateway({
-        "platform": "aiocqhttp", "message_type": "private",
-        "conversation_id": "42", "user_id": "42", "self_id": QQ_BOT_ID,
+        "platform": "aiocqhttp", "conversation_type": "dm",
+        "conversation_id": "42", "sender_id": "42", "bot_id": QQ_BOT_ID,
         "segments": [],
     })
     check("native gateway: QQ state never becomes eligible for cache eviction",
@@ -4245,11 +4245,11 @@ _UNRENDERABLE_DRAFT = "\U0001f44d"
 def _private_turn_event(message_id: int) -> dict:
     """One 1:1 gateway turn."""
     return {
-        "platform": "telegram", "message_type": "private",
-        "conversation_id": "777", "user_id": "777", "sender_name": "Alice",
-        "self_id": "999000", "message_id": message_id, "is_at_me": False,
+        "platform": "telegram", "conversation_type": "dm",
+        "conversation_id": "777", "sender_id": "777", "sender_name": "Alice",
+        "bot_id": "999000", "message_id": message_id, "addressed": False,
         "segments": [{"type": "text", "text": "you there?"}],
-        "raw_text": "you there?",
+        "text": "you there?",
     }
 
 

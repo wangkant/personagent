@@ -46,7 +46,7 @@ except ImportError:  # running from a checkout: the SDK sits in integrations/sdk
 logger = logging.getLogger("satori_connector")
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:5140/satori"
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
+DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 
 KNOWN_KEYS = (
@@ -463,7 +463,7 @@ class SatoriBridge:
         if quote:
             segments.insert(0, quote)
         segments = await self._resolve_images(account, segments)
-        is_at_me = walker.at_me or bool(quote and quote.get("sender_id") == self_id)
+        addressed = walker.at_me or bool(quote and quote.get("sender_id") == self_id)
 
         member = getattr(event, "member", None)
         sender_name = str(getattr(member, "nick", "") or getattr(user, "nick", "")
@@ -471,29 +471,29 @@ class SatoriBridge:
         name = self.platform_name(raw_platform)
         neutral = {
             "platform": name,
-            "message_type": "group" if is_group else "private",
+            "conversation_type": "group" if is_group else "dm",
             "conversation_id": channel_id if is_group else user_id,
-            "user_id": user_id,
+            "sender_id": user_id,
             "sender_name": sender_name,
-            "self_id": self_id,
+            "bot_id": self_id,
             "message_id": message_id,
-            "source_timestamp": timestamp,
-            "is_at_me": is_at_me,
-            "raw_text": _text_of([s for s in segments if s["type"] != "reply"]),
+            "sent_at": timestamp,
+            "addressed": addressed,
+            "text": _text_of([s for s in segments if s["type"] != "reply"]),
             "segments": segments,
             "prefiltered": prefiltered,
-            "caps": ["quote_text"],
+            "capabilities": ["quote_text"],
         }
         if self.config.outbox:
             handle = encode_handle(key=self.handle_key,
                                    platform=raw_platform, self_id=self_id,
                                    channel_id=channel_id,
-                                   type="group" if is_group else "private",
+                                   type="group" if is_group else "dm",
                                    guild_id=guild_id if is_group else "",
                                    user_id="" if is_group else user_id)
             if len(handle) <= MAX_HANDLE_LEN:
                 neutral["reply_handle"] = handle
-                neutral["caps"] = ["outbox", "quote_text"]
+                neutral["capabilities"] = ["outbox", "quote_text"]
         return neutral
 
     def _raw_quote(self, message: Any) -> Optional[dict]:
@@ -612,7 +612,7 @@ class SatoriBridge:
         # The referrer lets passive-reply platforms (the official QQ bot API)
         # accept an answer; satori-python's own send() passes it the same way.
         await self.send_items(account, str(channel.id), replies, neutral["platform"],
-                              neutral["message_type"] == "group",
+                              neutral["conversation_type"] == "group",
                               referrer=getattr(event, "referrer", None))
 
     async def _post(self, neutral: dict) -> Optional[dict]:
@@ -648,7 +648,7 @@ class SatoriBridge:
         """One neutral reply item as Satori elements: at, img, text."""
         lib = self.lib
         head = []
-        target = _mention_target(item.get("at_user_id"), platform_name) if is_group else None
+        target = _mention_target(item.get("mention_user_id"), platform_name) if is_group else None
         if target:
             head = [lib.At(id=target)]
         kind = item.get("type")
@@ -741,10 +741,10 @@ def _channel_type(channel: Any) -> Optional[int]:
         return None
 
 
-def _mention_target(at_user_id: Any, platform_name: str) -> Optional[str]:
+def _mention_target(mention_user_id: Any, platform_name: str) -> Optional[str]:
     """The raw id in a "<platform>:<id>" mention; another platform's id cannot
     be mentioned here."""
-    target = str(at_user_id or "")
+    target = str(mention_user_id or "")
     prefix = platform_name + ":"
     if not target.startswith(prefix):
         return None
@@ -782,7 +782,7 @@ async def serve(config: Config) -> None:
     from satori.client.network.websocket import WsNetwork
 
     connector = sdk.Connector(config.agent_url, config.gateway_token,
-                              forwarder_id=config.forwarder_id, timeout_s=config.timeout_s)
+                              connector_id=config.forwarder_id, timeout_s=config.timeout_s)
     info = config.websocket_kwargs()
     if info["token"] and not info["secure"] and not _loopback(config.satori_host):
         logger.warning("SATORI_TOKEN goes to %s in clear text; use https or a tunnel",

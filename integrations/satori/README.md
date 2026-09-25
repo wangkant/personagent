@@ -9,7 +9,7 @@ process puts the persona on Telegram, Discord, KOOK, Lark, DingTalk, LINE, QQ
 (through OneBot) and anything else the server has an adapter for.
 
 The connector forwards each allowed message to the agent's
-`POST /webhook/gateway` as a neutral event ([docs/connectors.md](../../docs/connectors.md))
+`POST /v1/events` as a neutral event ([docs/connectors.md](../../docs/connectors.md))
 and sends the replies back through Satori. It also pulls the agent's outbox, so
 scheduled openers, follow-up questions and excuses reach the chat.
 
@@ -74,7 +74,7 @@ for signing and the outbox loop.
 |---|---|---|
 | `SATORI_URL` | `http://127.0.0.1:5140/satori` | the Satori server; a trailing `/v1` is optional |
 | `SATORI_TOKEN` | | the server's token (Koishi: `server-satori` → `token`) |
-| `PERSONAGENT_URL` | `http://127.0.0.1:8080/webhook/gateway` | the agent's gateway endpoint |
+| `PERSONAGENT_URL` | `http://127.0.0.1:8080` | the agent's base URL; `/v1/events` and `/v1/outbox` are appended |
 | `CONNECTOR_TOKEN` | | the agent's `CONNECTOR_TOKEN` |
 | `SATORI_GROUPS` | | groups to forward: channel or guild ids, optionally `platform:id`; `*` for all |
 | `SATORI_DM_USERS` | | people whose DMs are forwarded: user ids, optionally `platform:id`; `*` for all |
@@ -129,7 +129,7 @@ it). Two cases need a thought:
 | Feature | Status |
 |---|---|
 | Group chats and DMs | Yes. A DM is a `DIRECT` channel, or a message without a guild |
-| Addressed detection (`is_at_me`) | An `<at>` of the bot (by id, or by the bot's name when the server gives no id) and a reply to one of its messages. `@all` is text, not a mention |
+| Addressed detection (`addressed`) | An `<at>` of the bot (by id, or by the bot's name when the server gives no id) and a reply to one of its messages. `@all` is text, not a mention |
 | Quoted messages | The quoted text, sender and id, from a `<quote>` element or from `message.quote` |
 | Images in | `data:` and `internal:` images and images on the Satori server are inlined; public URLs are passed on for the agent to fetch; private-network URLs are described as `(sent an image)`. At most 4 downloads, 4 MB each, per message |
 | Stickers and emoji | `<emoji>` and QQ `<face>` arrive as emoji the persona knows it cannot see |

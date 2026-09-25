@@ -41,7 +41,7 @@ def test_a_leftover_env_tmp_does_not_keep_its_mode() -> None:
 def test_plugin_config_is_merged_not_replaced() -> None:
     cfg = quickstart.astrbot_plugin_config(
         {"timeout_s": 300, "block_default": False, "custom": 1},
-        agent_url="http://127.0.0.1:8080/webhook/gateway", token="t",
+        agent_url="http://127.0.0.1:8080", token="t",
         qq=True, groups=["123", " 456 ", ""], private=[])
     check("config: managed keys written", cfg["gateway_token"] == "t"
           and cfg["group_whitelist"] == ["123", "456"], repr(cfg))
@@ -77,7 +77,7 @@ def test_connect_writes_both_sides() -> None:
               not (data / "plugins" / quickstart.PLUGIN_NAME / "__pycache__").exists())
         check("connect: token generated and shared",
               len(values["CONNECTOR_TOKEN"]) >= 32 and cfg["gateway_token"] == values["CONNECTOR_TOKEN"])
-        check("connect: agent_url follows SERVER_PORT", cfg["agent_url"] == "http://127.0.0.1:9090/webhook/gateway")
+        check("connect: agent_url follows SERVER_PORT", cfg["agent_url"] == "http://127.0.0.1:9090")
         check("connect: existing config merged through the BOM", cfg["timeout_s"] == 240)
         check("connect: qq routed natively", values["CONNECTOR_QQ_PLATFORMS"] == "aiocqhttp")
         text = env.read_text(encoding="utf-8")
@@ -93,11 +93,11 @@ def test_a_rerun_keeps_what_the_operator_set() -> None:
     """`--astrbot` passes no allowlists and no QQ choice. A re-run used to empty
     the allowlists, turn DMs off, reset a proxied agent_url and drop every
     other excluded platform."""
-    existing = {"agent_url": "https://agent.example.com/webhook/gateway",
+    existing = {"agent_url": "https://agent.example.com",
                 "group_whitelist": ["123"], "private_whitelist": ["telegram:9"],
                 "private_enabled": False, "excluded_platforms": ["aiocqhttp", "wecom"],
                 "timeout_s": 300}
-    local = "http://127.0.0.1:9090/webhook/gateway"
+    local = "http://127.0.0.1:9090"
     cfg = quickstart.astrbot_plugin_config(dict(existing), agent_url=local, token="t",
                                            qq=None, groups=None, private=None)
     check("rerun: groups kept", cfg["group_whitelist"] == ["123"], repr(cfg))
@@ -118,13 +118,13 @@ def test_a_rerun_keeps_what_the_operator_set() -> None:
     check("rerun: no-qq adds aiocqhttp and keeps the rest",
           off["excluded_platforms"] == ["wecom", "aiocqhttp"], repr(off))
 
-    tunnel = "http://127.0.0.1:9000/webhook/gateway"     # e.g. ssh -L 9000:agent:8080
+    tunnel = "http://127.0.0.1:9000"     # e.g. ssh -L 9000:agent:8080
     kept = quickstart.astrbot_plugin_config({"agent_url": tunnel}, agent_url=local,
                                             token="t", qq=None, groups=None, private=None)
     check("rerun: a tunnel on another loopback port is kept", kept["agent_url"] == tunnel,
           kept["agent_url"])
-    for refused in ("http://agent:8080/webhook/gateway", "http://0.0.0.0:8080",
-                    "localhost:8080/webhook/gateway", "http://[::1", ""):
+    for refused in ("http://agent:8080", "http://0.0.0.0:8080",
+                    "localhost:8080", "http://[::1", ""):
         fixed = quickstart.astrbot_plugin_config({"agent_url": refused}, agent_url=local,
                                                  token="t", qq=None, groups=None, private=None)
         check(f"rerun: {refused!r}, which the plugin refuses, is replaced",

@@ -124,7 +124,7 @@ def _datetime_seconds(value) -> int | None:
         return None
 
 
-def source_timestamp(platform: str, raw) -> int | None:
+def sent_at(platform: str, raw) -> int | None:
     """When the platform stamped the message, where the adapter left it as
     the time AstrBot received it (aiocqhttp, telegram, discord, kook, QQ
     official, misskey, WeCom customer service)."""

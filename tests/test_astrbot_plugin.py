@@ -389,10 +389,10 @@ def test_reply_component_preserves_quoted_message_id():
     event = _Event(module, private=False, platform="aiocqhttp")
     event.message_obj.message = [module.Comp.Reply(id="quoted-42", sender_id="bot")]
 
-    segments, is_at_me = _map(plugin, event, "")
+    segments, addressed = _map(plugin, event, "")
 
     assert segments == [{"type": "reply", "message_id": "quoted-42", "sender_id": "bot"}]
-    assert is_at_me is True
+    assert addressed is True
 
 
 def test_default_configuration_forwards_neither_groups_nor_private_messages():
@@ -409,7 +409,7 @@ def test_signed_request_uses_canonical_body_and_replay_headers():
     plugin = _plugin_instance(
         module,
         {
-            "agent_url": "https://agent.example/webhook/gateway",
+            "agent_url": "https://agent.example",
             "gateway_token": "shared-secret",
         },
     )
@@ -438,15 +438,15 @@ def test_signed_request_uses_canonical_body_and_replay_headers():
     assert replies == [{"type": "text", "text": "ok"}]
     assert len(plugin._client.calls) == 1
     url, request = plugin._client.calls[0]
-    assert url == "https://agent.example/webhook/gateway"
+    assert url == "https://agent.example/v1/events"
     assert request["content"] == expected_body
     assert "json" not in request
     assert request["headers"] == {
         "Content-Type": "application/json",
-        "X-Gateway-Token": "shared-secret",
-        "X-Gateway-Timestamp": "1725000000",
-        "X-Gateway-Nonce": "00112233445566778899aabbccddeeff",
-        "X-Gateway-Signature": expected_signature,
+        "X-Personagent-Token": "shared-secret",
+        "X-Personagent-Timestamp": "1725000000",
+        "X-Personagent-Nonce": "00112233445566778899aabbccddeeff",
+        "X-Personagent-Signature": expected_signature,
     }
 
 
@@ -456,12 +456,12 @@ def test_off_host_endpoint_requires_https_and_a_token():
     insecure = _plugin_instance(
         module,
         {
-            "agent_url": "http://agent.example/webhook/gateway",
+            "agent_url": "http://agent.example",
             "gateway_token": "shared-secret",
         },
     )
     no_token = _plugin_instance(
-        module, {"agent_url": "https://agent.example/webhook/gateway"}
+        module, {"agent_url": "https://agent.example"}
     )
 
     assert asyncio.run(
@@ -529,7 +529,7 @@ def test_a_silent_but_owned_conversation_blocks_the_fallback():
     assert event.stopped is True
 
 
-def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
+def test_forwarded_event_carries_sent_at_and_success_blocks_fallback():
     module = _import_plugin()
     plugin = _plugin_instance(module, dict(_DM_CONFIG))
     event = _Event(module, private=True)
@@ -542,7 +542,7 @@ def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
     plugin._post_to_agent = succeed
 
     assert _run(plugin, event) == []
-    assert captured["source_timestamp"] == 1_725_000_000
+    assert captured["sent_at"] == 1_725_000_000
     assert event.stopped is True
 
 
@@ -591,11 +591,11 @@ def test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn():
     segments, _ = _map(plugin, event, "slack")
     assert segments == [{"type": "text", "text": "look the site (https://x.io) & https://y.io"}], segments
     [(chain, _)] = plugin._render(
-        [{"type": "text", "text": "hi & bye", "at_user_id": "slack:U1"}], "slack", True, "C1", [])
+        [{"type": "text", "text": "hi & bye", "mention_user_id": "slack:U1"}], "slack", True, "C1", [])
     assert _names(chain) == ["Plain"], chain
     assert chain[0].text == "<@U1> hi &amp; bye", chain[0].__dict__
     [(chain, _)] = plugin._render(
-        [{"type": "text", "text": "hi", "at_user_id": "discord:5"}], "discord", True, "C1", [])
+        [{"type": "text", "text": "hi", "mention_user_id": "discord:5"}], "discord", True, "C1", [])
     assert _names(chain) == ["At", "Plain"], chain
     assert chain[1].text == " hi"
 
@@ -613,7 +613,7 @@ def test_media_components_become_notes_the_agent_can_read():
         "(sent a video)", "(sent a file: deck.pdf)", "(sent a voice message)", "thoughts?"], segments
 
 
-def test_missing_source_timestamp_is_not_forwarded_or_blocked():
+def test_missing_sent_at_is_not_forwarded_or_blocked():
     module = _import_plugin()
     plugin = _plugin_instance(module, dict(_DM_CONFIG))
     event = _Event(module, private=True)
@@ -653,7 +653,7 @@ def test_an_at_all_announcement_does_not_address_the_persona():
         module, "aiocqhttp",
         [module.Comp.AtAll(), module.Comp.Plain(" meeting at 8")],
         wake_flag=True, message_str="meeting at 8")
-    assert sent["is_at_me"] is False, sent
+    assert sent["addressed"] is False, sent
 
 
 def test_a_slash_command_does_not_address_the_persona():
@@ -663,7 +663,7 @@ def test_a_slash_command_does_not_address_the_persona():
     sent = _group_addressing(
         module, "aiocqhttp", [module.Comp.Plain("/help")],
         wake_flag=True, message_str="/help")
-    assert sent["is_at_me"] is False, sent
+    assert sent["addressed"] is False, sent
 
 
 def test_a_telegram_reply_to_the_bot_addresses_it_and_loses_the_artifact():
@@ -674,9 +674,9 @@ def test_a_telegram_reply_to_the_bot_addresses_it_and_loses_the_artifact():
             [module.Comp.Reply(id="77", sender_id="123456"),
              module.Comp.Plain(prefix + "hello")],
             wake_flag=True, message_str=prefix + "hello")
-        assert sent["is_at_me"] is True, (prefix, sent)
+        assert sent["addressed"] is True, (prefix, sent)
         assert sent["segments"][1] == {"type": "text", "text": "hello"}, sent
-        assert sent["raw_text"] == "hello", sent
+        assert sent["text"] == "hello", sent
 
 
 def test_a_real_at_of_the_bot_still_addresses_it():
@@ -685,7 +685,7 @@ def test_a_real_at_of_the_bot_still_addresses_it():
         module, "aiocqhttp",
         [module.Comp.At(qq="bot", name="Bot"), module.Comp.Plain(" hi")],
         wake_flag=True)
-    assert sent["is_at_me"] is True, sent
+    assert sent["addressed"] is True, sent
 
 
 class _StatusResponse:
@@ -818,14 +818,14 @@ def test_qq_faces_stickers_and_time_come_from_the_raw_event():
         {"type": "image", "url": "https://multimedia.nt.qq.com.cn/a", "sticker": True},
         {"type": "emoji", "name": "吃瓜", "id": "e1"},
     ], sent["segments"]
-    assert sent["source_timestamp"] == 1_700_000_123
+    assert sent["sent_at"] == 1_700_000_123
 
 
 def test_a_qq_at_the_adapter_could_not_look_up_still_addresses_the_bot():
     module = _import_plugin()
     raw = _onebot([{"type": "at", "data": {"qq": "bot"}}, {"type": "text", "data": {"text": "hi"}}])
     sent = _group_addressing(module, "aiocqhttp", [module.Comp.Plain("hi")], raw=raw)
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
 
 
 def test_a_quote_carries_its_text_and_sender():
@@ -838,7 +838,7 @@ def test_a_quote_carries_its_text_and_sender():
     assert reply["message_id"] == "9" and reply["sender_id"] == "555"
     assert reply["sender_name"] == "Bob"
     assert reply["text"].startswith("see you at ") and len(reply["text"]) == 201
-    assert "quote_text" in sent["caps"]
+    assert "quote_text" in sent["capabilities"]
 
     plugin = _plugin_instance(module, {"forward_quoted_text": False})
     event = _Event(module, private=False, platform="aiocqhttp")
@@ -880,8 +880,8 @@ def test_a_telegram_photo_reply_to_the_bot_addresses_it_without_the_artifact():
         module.Comp.Reply(id="31", sender_id="1", sender_nickname="bot", message_str="earlier"),
         module.Comp.Image(file=url, url=url),
     ], raw=_tg_update(text=None, reply_from="Bot"), message_str="")
-    assert sent["is_at_me"] is True
-    assert sent["source_timestamp"] == 1_700_000_500
+    assert sent["addressed"] is True
+    assert sent["sent_at"] == 1_700_000_500
     image = sent["segments"][1]
     assert image == {"type": "image", "b64": base64.b64encode(b"\xff\xd8jpeg").decode()}
     assert "api.telegram.org" not in json.dumps(sent), "the bot token left AstrBot"
@@ -922,7 +922,7 @@ def test_a_telegram_sticker_is_an_emoji_and_an_animated_one_has_no_image():
         assert sent["segments"][-1] == {"type": "emoji", "name": "😀"}
         if expect_image:
             assert sent["segments"][0]["sticker"] is True
-        assert sent["raw_text"] == "", "the adapter's 'Sticker:' words are not the person's"
+        assert sent["text"] == "", "the adapter's 'Sticker:' words are not the person's"
 
 
 def test_telegram_mentions_by_username_become_the_senders_numeric_id():
@@ -957,13 +957,13 @@ def test_a_discord_leading_mention_the_adapter_stripped_still_addresses_the_bot(
     bot = types.SimpleNamespace(id="bot", display_name="Nova")
     sent = _group_addressing(module, "discord", [module.Comp.Plain("how was your day")],
                              raw=_discord_message(mentions=[bot]))
-    assert sent["is_at_me"] is True
-    assert sent["source_timestamp"] == 1_700_000_900
+    assert sent["addressed"] is True
+    assert sent["sent_at"] == 1_700_000_900
 
     role = types.SimpleNamespace(id=77, name="bots")
     sent = _group_addressing(module, "discord", [module.Comp.Plain("hey")], raw=_discord_message(
         role_mentions=[role], guild=types.SimpleNamespace(me=types.SimpleNamespace(roles=[role]))))
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
 
 
 def test_a_discord_reply_quotes_the_resolved_message():
@@ -975,7 +975,7 @@ def test_a_discord_reply_quotes_the_resolved_message():
     sent = _group_addressing(module, "discord", [module.Comp.Plain("ok")], raw=raw)
     assert sent["segments"][0] == {"type": "reply", "message_id": "880", "text": "ask @Bob about it",
                                    "sender_id": "bot", "sender_name": "Nova"}, sent["segments"]
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
 
 
 def test_discord_stickers_and_voice_attachments_are_not_lost():
@@ -1003,7 +1003,7 @@ def test_a_lark_reply_to_the_bot_names_the_app_as_sender():
                           message_str="hi"),
         module.Comp.Plain("and you?"),
     ], context=context)
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
     assert "sender_name" not in sent["segments"][0], "id[:8] is not a name"
 
 
@@ -1012,7 +1012,7 @@ def test_slack_threads_subtypes_and_message_ids():
     raw = {"ts": "1700000000.000200", "thread_ts": "1699999999.000100",
            "parent_user_id": "bot", "text": "sure"}
     sent = _group_addressing(module, "slack", [module.Comp.Plain("sure")], raw=raw)
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
     assert sent["message_id"] == "1700000000.000200"
     assert sent["segments"][0] == {"type": "reply", "message_id": "1699999999.000100",
                                    "sender_id": "bot"}
@@ -1028,8 +1028,8 @@ def test_kook_emoji_quotes_and_time():
                                "author": {"id": "bot", "username": "Nova"}}}}
     sent = _group_addressing(
         module, "kook", [module.Comp.Plain("nice (emj)smile(emj)[2/xyz] \\*wow\\*")], raw=raw)
-    assert sent["source_timestamp"] == 1_700_000_700
-    assert sent["is_at_me"] is True
+    assert sent["sent_at"] == 1_700_000_700
+    assert sent["addressed"] is True
     assert sent["segments"] == [
         {"type": "reply", "message_id": "q1", "text": "hello :wave:",
          "sender_id": "bot", "sender_name": "Nova"},
@@ -1056,11 +1056,11 @@ def test_a_wecom_smart_bot_group_is_a_group_that_addressed_the_bot():
 
     plugin._post_to_agent = capture
     _run(plugin, event)
-    assert captured["message_type"] == "group" and captured["conversation_id"] == "chat-9"
-    assert captured["is_at_me"] is True
+    assert captured["conversation_type"] == "group" and captured["conversation_id"] == "chat-9"
+    assert captured["addressed"] is True
     assert captured["message_id"] == "m-7"
     assert captured["segments"] == [{"type": "text", "text": "(sent a voice message)"}]
-    assert "outbox" not in captured["caps"]
+    assert "outbox" not in captured["capabilities"]
 
 
 def test_satori_milliseconds_and_quote_senders():
@@ -1070,7 +1070,7 @@ def test_satori_milliseconds_and_quote_senders():
         module.Comp.Reply(id="q", sender_id="", sender_nickname="内容", message_str="earlier"),
         module.Comp.Plain("ok"),
     ], raw=raw)
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
     assert sent["segments"][0]["sender_name"] == "Nova"
     # Without a quote author the adapter writes placeholders, not a quote.
     sent = _group_addressing(module, "satori", [
@@ -1091,7 +1091,7 @@ def test_satori_milliseconds_and_quote_senders():
 
     plugin._post_to_agent = capture
     _run(plugin, event)
-    assert captured["source_timestamp"] == 1_700_000_800
+    assert captured["sent_at"] == 1_700_000_800
 
 
 def test_line_stickers_and_self_mentions():
@@ -1102,7 +1102,7 @@ def test_line_stickers_and_self_mentions():
     assert sent["segments"] == [{"type": "emoji", "name": "Hi", "id": "52002734"}]
     raw = {"message": {"type": "text", "mention": {"mentionees": [{"isSelf": True}]}}}
     sent = _group_addressing(module, "line", [module.Comp.Plain("@Nova hi")], raw=raw)
-    assert sent["is_at_me"] is True
+    assert sent["addressed"] is True
 
 
 def test_qq_official_takes_the_platforms_iso_timestamp():
@@ -1110,9 +1110,9 @@ def test_qq_official_takes_the_platforms_iso_timestamp():
     raw = types.SimpleNamespace(timestamp="2023-11-14T22:13:20+00:00")
     sent = _group_addressing(module, "qq_official",
                              [module.Comp.At(qq="bot"), module.Comp.Plain("hi")], raw=raw)
-    assert sent["source_timestamp"] == 1_700_000_000
-    assert sent["is_at_me"] is True
-    assert "outbox" not in sent["caps"]
+    assert sent["sent_at"] == 1_700_000_000
+    assert sent["addressed"] is True
+    assert "outbox" not in sent["capabilities"]
 
 
 def test_local_and_private_images_are_inlined_and_oversized_ones_described(tmp):
@@ -1178,7 +1178,7 @@ def test_qq_mentions_carry_one_space_and_long_text_stays_under_the_forward_card(
     context = _Context(config={"platform_settings": {"forward_threshold": 120}})
     plugin = _plugin_instance(module, {}, context)
     [(chain, done)] = _render(plugin, "aiocqhttp",
-                              {"type": "text", "text": "hi", "at_user_id": "aiocqhttp:42"})
+                              {"type": "text", "text": "hi", "mention_user_id": "aiocqhttp:42"})
     assert _names(chain) == ["At", "Plain"] and chain[1].text == "hi" and done == 1
     long = " ".join(["this sentence keeps going."] * 20)
     chains = _render(plugin, "aiocqhttp", {"type": "text", "text": long})
@@ -1196,13 +1196,13 @@ def test_telegram_text_is_shown_as_typed_and_mentions_use_usernames():
     plugin._people.see("telegram", "4242", "alice", "Alice A")
     plugin._people.see("telegram", "77", None, "Bo [x]")
     [(chain, _)] = _render(plugin, "telegram",
-                           {"type": "text", "text": "hi", "at_user_id": "telegram:4242"})
+                           {"type": "text", "text": "hi", "mention_user_id": "telegram:4242"})
     assert _names(chain) == ["At", "Plain"] and chain[0].name == "alice", chain
     [(chain, _)] = _render(plugin, "telegram",
-                           {"type": "text", "text": "hi", "at_user_id": "telegram:77"})
+                           {"type": "text", "text": "hi", "mention_user_id": "telegram:77"})
     assert chain[0].text == "[Bo \\[x\\]](tg://user?id=77) hi", chain[0].text
     [(chain, _)] = _render(plugin, "telegram",
-                           {"type": "text", "text": "hi", "at_user_id": "telegram:99"})
+                           {"type": "text", "text": "hi", "mention_user_id": "telegram:99"})
     assert _names(chain) == ["Plain"] and chain[0].text == "hi", "an unknown id is inert"
 
 
@@ -1210,7 +1210,7 @@ def test_kook_mentions_inline_and_images_go_through_a_file(tmp):
     module = _import_plugin()
     plugin = _plugin_instance(module, {})
     [(chain, _)] = _render(plugin, "kook",
-                           {"type": "text", "text": "hi (met)all(met)", "at_user_id": "kook:9"})
+                           {"type": "text", "text": "hi (met)all(met)", "mention_user_id": "kook:9"})
     assert _names(chain) == ["Plain"]
     assert chain[0].text == "(met)9(met) hi \\(met\\)all\\(met\\)", chain[0].text
     temps = []
@@ -1260,7 +1260,7 @@ def test_split_parts_fit_the_adapter_with_the_mention_and_the_escapes():
               "mattermost": 4000, "kook": 4000, "telegram": 4096}
     for platform, limit in limits.items():
         chains = plugin._render([{"type": "text", "text": text,
-                                  "at_user_id": f"{platform}:123456789012345678"}],
+                                  "mention_user_id": f"{platform}:123456789012345678"}],
                                 platform, True, "group-1", [])
         assert len(chains) > 1, platform
         sent = [_as_sent(module, platform, chain) for chain, _ in chains]
@@ -1275,7 +1275,7 @@ def test_platforms_without_mentions_drop_them_cleanly():
     plugin = _plugin_instance(module, {})
     for platform in ("qq_official", "dingtalk", "line", "wecom_ai_bot"):
         [(chain, _)] = _render(plugin, platform,
-                               {"type": "text", "text": "hi", "at_user_id": f"{platform}:1"})
+                               {"type": "text", "text": "hi", "mention_user_id": f"{platform}:1"})
         assert _names(chain) == ["Plain"] and chain[0].text == "hi", (platform, chain)
 
 
@@ -1335,10 +1335,10 @@ def test_the_forwarder_id_is_made_once_and_kept():
     asyncio.run(first._ensure_forwarder_id())
     second = _plugin_instance(module, dict(_DM_CONFIG))  # a reload
     sent = _capture_event(second, _Event(module, private=True))
-    assert sent["forwarder_id"] == first._forwarder_id
-    assert sent["forwarder_id"].startswith("astrbot-")
+    assert sent["connector_id"] == first._forwarder_id
+    assert sent["connector_id"].startswith("astrbot-")
     configured = _plugin_instance(module, dict(_DM_CONFIG, forwarder_id="home-bot"))
-    assert _capture_event(configured, _Event(module, private=True))["forwarder_id"] == "home-bot"
+    assert _capture_event(configured, _Event(module, private=True))["connector_id"] == "home-bot"
 
 
 def test_the_reply_handle_is_the_umo_and_the_group_under_session_isolation():
@@ -1372,8 +1372,8 @@ def test_quote_text_is_declared_by_the_configuration_not_by_each_message():
             module.Comp.Reply(id="9", sender_id="5", message_str="earlier"),
             module.Comp.Plain("ok")]
         quoted = _capture_event(plugin, quoting)
-        assert ("quote_text" in plain["caps"]) is declared, config
-        assert plain["caps"] == quoted["caps"], config
+        assert ("quote_text" in plain["capabilities"]) is declared, config
+        assert plain["capabilities"] == quoted["capabilities"], config
 
 
 def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
@@ -1394,7 +1394,7 @@ def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
             plugin._post_to_agent = capture
             async for _ in plugin.forward_to_agent(_Event(module, private=True, platform=platform)):
                 pass
-            results[platform] = "outbox" in captured["caps"]
+            results[platform] = "outbox" in captured["capabilities"]
         return results
 
     assert asyncio.run(check()) == {
@@ -1402,12 +1402,12 @@ def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
         "qq_official_webhook": False, "weixin_official_account": False,
         "wecom_ai_bot": False, "mystery": False}
     plugin = _plugin_instance(module, dict(_DM_CONFIG))  # no loop running
-    assert "outbox" not in _capture_event(plugin, _Event(module, private=True))["caps"]
+    assert "outbox" not in _capture_event(plugin, _Event(module, private=True))["capabilities"]
 
 
 def _delivery(**fields):
     base = {"delivery_id": "d_1", "reply_handle": "my-telegram:GroupMessage:group-1",
-            "platform": "telegram", "message_type": "group", "conversation_id": "group-1",
+            "platform": "telegram", "conversation_type": "group", "conversation_id": "group-1",
             "reason": "proactive", "expires_in_s": 300,
             "items": [{"type": "text", "text": "anyone up?"}, {"type": "text", "text": "hello?"}]}
     base.update(fields)
@@ -1421,7 +1421,7 @@ def _outbox_rig(monkeypatch, module, *insts, config=None, minted=(_delivery(),),
     context = _Context(*insts, **context_kwargs)
     plugin = _plugin_instance(module, config or {"group_whitelist": ["group-1"]}, context)
     for d in minted:
-        plugin._handles.mint(d["reply_handle"], d["platform"], d["message_type"],
+        plugin._handles.mint(d["reply_handle"], d["platform"], d["conversation_type"],
                              d["conversation_id"])
     pauses = []
 
@@ -1456,10 +1456,10 @@ def test_a_delivery_the_lists_no_longer_allow_is_refused(monkeypatch):
 
 def _delivery_for(sent, **fields):
     """The delivery the agent hands back for a forwarded event's conversation."""
-    private = sent["message_type"] == "private"
+    dm = sent["conversation_type"] == "dm"
     return _delivery(reply_handle=sent["reply_handle"], platform=sent["platform"],
-                     message_type=sent["message_type"],
-                     conversation_id=sent["user_id" if private else "conversation_id"],
+                     conversation_type=sent["conversation_type"],
+                     conversation_id=sent["sender_id" if dm else "conversation_id"],
                      **fields)
 
 
@@ -1480,16 +1480,16 @@ def test_a_delivery_goes_only_where_the_plugin_took_its_handle_from(monkeypatch)
     groupless.get_group_id = lambda: ""
     groupless.message_obj.session_id = "group-2"
     groupless = _capture_event(plugin, groupless)
-    assert groupless["message_type"] == "private"
+    assert groupless["conversation_type"] == "dm"
     forged = [("my-aiocqhttp:GroupMessage:99999", "group", "group-1"),
-              ("my-aiocqhttp:GroupMessage:88888", "private", "user-1"),
-              ("my-aiocqhttp:FriendMessage:77777", "private", "user-1"),
-              (group["reply_handle"], "private", "user-1"),
+              ("my-aiocqhttp:GroupMessage:88888", "dm", "user-1"),
+              ("my-aiocqhttp:FriendMessage:77777", "dm", "user-1"),
+              (group["reply_handle"], "dm", "user-1"),
               (dm["reply_handle"], "group", "group-1"),
-              (groupless["reply_handle"], "private", "user-1")]
+              (groupless["reply_handle"], "dm", "user-1")]
     for handle, kind, conversation in forged:
         delivery = _delivery(reply_handle=handle, platform="aiocqhttp",
-                             message_type=kind, conversation_id=conversation)
+                             conversation_type=kind, conversation_id=conversation)
         assert asyncio.run(plugin._deliver(delivery)) == ("refused", 0), (handle, kind)
     assert context.sent == []
     for sent in (group, dm):
@@ -1514,7 +1514,7 @@ def test_every_platform_that_speaks_first_still_reaches_its_conversations(monkey
                   _Event(module, private=False, platform=name), isolated]
         for event in events:
             sent = _capture_event(plugin, event)
-            assert "outbox" in sent["caps"], name
+            assert "outbox" in sent["capabilities"], name
             context.sent.clear()
             assert asyncio.run(plugin._deliver(_delivery_for(sent))) == ("sent", 2), (
                 name, sent["reply_handle"])
@@ -1604,7 +1604,7 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
 
     def agent(request):
         body = json.loads(request.content)
-        pulls.append((request.url.path, body, request.headers.get("X-Gateway-Signature")))
+        pulls.append((request.url.path, body, request.headers.get("X-Personagent-Signature")))
         if len(pulls) == 1:
             return httpx.Response(200, json={"deliveries": [_delivery(), _delivery()],
                                              "next_wait_s": 1})
@@ -1616,7 +1616,7 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
     context = _Context(_Inst("telegram"))
     plugin = module.LLMPersonaGateway(context, {
         "group_whitelist": ["group-1"], "gateway_token": "t",
-        "agent_url": "https://agent.example/webhook/gateway"})
+        "agent_url": "https://agent.example"})
     plugin._handles.mint("my-telegram:GroupMessage:group-1", "telegram", "group", "group-1")
     real_sleep = asyncio.sleep
     monkeypatch.setattr(module.random, "uniform", lambda a, b: 0)
@@ -1632,9 +1632,9 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
     assert first_task.done() and plugin._outbox_task is None
     await plugin.terminate()  # twice is harmless
 
-    assert pulls[0][0] == "/webhook/gateway/outbox" and pulls[0][2].startswith("sha256=")
+    assert pulls[0][0] == "/v1/outbox" and pulls[0][2].startswith("sha256=")
     assert pulls[0][1]["kind"] == "outbox.pull"
-    assert pulls[0][1]["forwarder_id"] == plugin._forwarder_id
+    assert pulls[0][1]["connector_id"] == plugin._forwarder_id
     assert [c.text for _s, chain in context.sent for c in chain] == ["anyone up?", "hello?"], \
         "the repeated delivery id went out once"
     assert pulls[1][1]["acks"] == [{"delivery_id": "d_1", "status": "sent", "sent_items": 2}]
@@ -1645,7 +1645,7 @@ async def test_the_outbox_stays_off_when_disabled_or_unsafe():
     off = module.LLMPersonaGateway(_Context(), {"outbox_enabled": False})
     await off.initialize()
     assert off._outbox_task is None
-    unsafe = module.LLMPersonaGateway(_Context(), {"agent_url": "http://agent.example/webhook/gateway",
+    unsafe = module.LLMPersonaGateway(_Context(), {"agent_url": "http://agent.example",
                                                    "gateway_token": "t"})
     await unsafe.initialize()
     await asyncio.wait_for(unsafe._outbox_task, 1)

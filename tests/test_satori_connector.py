@@ -131,8 +131,8 @@ KEY = sc.handle_key(config())
 
 
 def bridge(cfg=None, agent=None, accounts=()) -> sc.SatoriBridge:
-    connector = sc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", "tok",
-                                 forwarder_id="satori-test", client=agent)
+    connector = sc.sdk.Connector("http://127.0.0.1:8080", "tok",
+                                 connector_id="satori-test", client=agent)
 
     async def no_sleep(_s):
         return None
@@ -162,29 +162,29 @@ async def test_a_group_message_becomes_an_event_the_agent_accepts() -> None:
 
     check("mapped", neutral is not None)
     check("platform and ids are raw",
-          (neutral["platform"], neutral["conversation_id"], neutral["user_id"],
-           neutral["self_id"], neutral["message_id"]) == ("telegram", "-100", "42", "7000", "881"),
+          (neutral["platform"], neutral["conversation_id"], neutral["sender_id"],
+           neutral["bot_id"], neutral["message_id"]) == ("telegram", "-100", "42", "7000", "881"),
           str(neutral))
-    check("group", neutral["message_type"] == "group")
+    check("group", neutral["conversation_type"] == "group")
     check("member nick is the sender name", neutral["sender_name"] == "Alex")
-    check("milliseconds become seconds", neutral["source_timestamp"] == NOW_MS // 1000,
-          str(neutral["source_timestamp"]))
+    check("milliseconds become seconds", neutral["sent_at"] == NOW_MS // 1000,
+          str(neutral["sent_at"]))
     check("segments in order", neutral["segments"] == [
         {"type": "reply", "message_id": "870", "sender_id": "7000", "sender_name": "Nova",
          "text": "it rained"},
         {"type": "mention", "user_id": "7000", "name": "Nova"},
         {"type": "text", "text": " how was your day?"},
     ], str(neutral["segments"]))
-    check("an @ of the bot is at_me", neutral["is_at_me"] is True)
-    check("raw text", neutral["raw_text"] == "@Nova how was your day?", neutral["raw_text"])
-    check("caps", neutral["caps"] == ["outbox", "quote_text"])
+    check("an @ of the bot addresses it", neutral["addressed"] is True)
+    check("raw text", neutral["text"] == "@Nova how was your day?", neutral["text"])
+    check("capabilities", neutral["capabilities"] == ["outbox", "quote_text"])
     check("prefiltered by the allowlist", neutral["prefiltered"] is True)
     handle = sc.decode_handle(neutral["reply_handle"])
     check("handle addresses the login and channel",
           handle == {"platform": "telegram", "self_id": "7000", "channel_id": "-100",
                      "guild_id": "-100", "type": "group"}, str(handle))
-    check("schema", main_module._validate_event_payload(neutral, gateway=True))
-    check("fresh", main_module._gateway_event_is_fresh(neutral))
+    check("schema", main_module._validate_event_payload(neutral, connector=True))
+    check("fresh", main_module._connector_event_is_fresh(neutral))
 
 
 async def test_a_reply_to_the_bot_is_read_from_message_quote() -> None:
@@ -195,11 +195,11 @@ async def test_a_reply_to_the_bot_is_read_from_message_quote() -> None:
           neutral["segments"][0] == {"type": "reply", "message_id": "870", "sender_id": "7000",
                                      "sender_name": "Nova", "text": "it rained"},
           str(neutral["segments"]))
-    check("replying to the bot is at_me", neutral["is_at_me"] is True)
+    check("replying to the bot addresses it", neutral["addressed"] is True)
 
     raw["quote"]["user"]["id"] = "55"
     neutral = await bridge().build_event(account(), message_event([T("really?")], raw=raw))
-    check("replying to someone else is not", neutral["is_at_me"] is False)
+    check("replying to someone else is not", neutral["addressed"] is False)
 
 
 async def test_a_reply_as_koishi_encodes_it() -> None:
@@ -214,8 +214,8 @@ async def test_a_reply_as_koishi_encodes_it() -> None:
               {"type": "reply", "message_id": "870", "sender_id": "7000", "sender_name": "Nova",
                "text": "it rained [image]"},
               {"type": "text", "text": "really?"}], str(neutral["segments"]))
-    check("a reply to the bot is at_me", neutral["is_at_me"] is True)
-    check("the quote is not the person's words", neutral["raw_text"] == "really?")
+    check("a reply to the bot addresses it", neutral["addressed"] is True)
+    check("the quote is not the person's words", neutral["text"] == "really?")
 
 
 async def test_mentions_by_name_and_mass_mentions() -> None:
@@ -228,13 +228,13 @@ async def test_mentions_by_name_and_mass_mentions() -> None:
     check("@all is text, not a mention of the bot",
           neutral["segments"][1] == {"type": "text", "text": " hi @all"})
     check("others are mentions", neutral["segments"][2]["user_id"] == "55")
-    check("at_me", neutral["is_at_me"] is True)
+    check("addressed", neutral["addressed"] is True)
 
 
 async def test_direct_messages_and_the_allowlists() -> None:
     dm = message_event([T("hey")], channel="private:42", guild=None, channel_type=1)
     neutral = await bridge().build_event(account(), dm)
-    check("a DIRECT channel is private", neutral["message_type"] == "private")
+    check("a DIRECT channel is a DM", neutral["conversation_type"] == "dm")
     check("a DM's conversation is the person", neutral["conversation_id"] == "42")
     handle = sc.decode_handle(neutral["reply_handle"])
     check("the handle keeps the DM channel",
@@ -252,7 +252,7 @@ async def test_direct_messages_and_the_allowlists() -> None:
     typeless = message_event([T("hey")], guild=None)
     typeless.channel._raw_data = {"id": "-100"}
     neutral = await bridge().build_event(account(), typeless)
-    check("no guild and no channel type is a DM", neutral["message_type"] == "private")
+    check("no guild and no channel type is a DM", neutral["conversation_type"] == "dm")
 
 
 async def test_what_is_not_forwarded() -> None:
@@ -273,12 +273,12 @@ async def test_what_is_not_forwarded() -> None:
     check("no usable timestamp", await b.build_event(account(), stale) is None)
     seconds = message_event([T("x")], created_at=5, timestamp=int(time.time()))
     check("an implausible created_at falls back to the event time",
-          (await b.build_event(account(), seconds))["source_timestamp"] == seconds.timestamp)
+          (await b.build_event(account(), seconds))["sent_at"] == seconds.timestamp)
 
     # satori-python divides by 1000, so an adapter stamping seconds arrives in 1970.
     now_s = int(time.time())
     scaled = message_event([T("x")], created_at=datetime.fromtimestamp(now_s / 1000))
-    got = (await b.build_event(account(), scaled))["source_timestamp"]
+    got = (await b.build_event(account(), scaled))["sent_at"]
     check("seconds read as milliseconds are scaled back", abs(got - now_s) <= 1,
           f"{got} vs {now_s}")
 
@@ -328,7 +328,7 @@ async def test_platform_names_can_be_renamed() -> None:
     check("the handle keeps the Satori name for sending",
           sc.decode_handle(neutral["reply_handle"])["platform"] == "qq")
     check("mentions resolve under the new name",
-          str(b.render({"type": "text", "text": "hi", "at_user_id": "qqbot:9"}, "qqbot",
+          str(b.render({"type": "text", "text": "hi", "mention_user_id": "qqbot:9"}, "qqbot",
                         True)[0]) == '<at id="9"/>')
 
     default = bridge(config(groups=frozenset({"-100"})))
@@ -347,10 +347,10 @@ async def test_replies_go_back_as_satori_elements() -> None:
     gif = b"GIF89a" + b"2" * 8
     seen: list[dict] = []
     replies = [
-        {"type": "text", "text": "not bad", "at_user_id": "telegram:42"},
-        {"type": "text", "text": "rained <all> afternoon", "at_user_id": "discord:42"},
+        {"type": "text", "text": "not bad", "mention_user_id": "telegram:42"},
+        {"type": "text", "text": "rained <all> afternoon", "mention_user_id": "discord:42"},
         {"type": "image", "b64": base64.b64encode(png).decode()},
-        {"type": "image", "b64": base64.b64encode(gif).decode(), "at_user_id": "telegram:42"},
+        {"type": "image", "b64": base64.b64encode(gif).decode(), "mention_user_id": "telegram:42"},
         {"type": "text", "text": ""},
         {"type": "voice"},
     ]
@@ -360,7 +360,7 @@ async def test_replies_go_back_as_satori_elements() -> None:
                                           referrer={"msg_id": "m1"}))
 
     check("one signed event reached the agent", len(seen) == 1
-          and seen[0]["forwarder_id"] == "satori-test", str(seen))
+          and seen[0]["connector_id"] == "satori-test", str(seen))
     check("each reply is its own message, in order", acc.protocol.sent == [
         ("-100", '<at id="42"/> not bad'),
         ("-100", "rained <all> afternoon"),
@@ -386,7 +386,7 @@ async def test_an_agent_error_sends_nothing() -> None:
         if len(calls) == 1:
             return httpx.Response(429, headers={"Retry-After": "0"},
                                   json={"code": "capacity_exceeded"})
-        return httpx.Response(403, json={"code": "stale_source_event",
+        return httpx.Response(403, json={"code": "stale_event",
                                          "error": "stale gateway source event"})
 
     acc = account()
@@ -402,9 +402,9 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
     b = bridge(accounts=[other, acc])
     handle = sc.encode_handle(key=KEY, platform="telegram", self_id="7000",
                               channel_id="-100", guild_id="-100", type="group")
-    delivery = {"delivery_id": "d1", "reply_handle": handle, "message_type": "group",
+    delivery = {"delivery_id": "d1", "reply_handle": handle, "conversation_type": "group",
                 "items": [{"type": "text", "text": "anyone still up?",
-                           "at_user_id": "telegram:42"},
+                           "mention_user_id": "telegram:42"},
                           {"type": "text", "text": "second"}]}
     check("sent", await b.deliver(delivery) == ("sent", 2))
     check("through the login in the handle, to its channel",
@@ -428,7 +428,7 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
     # with a group channel must not reach that channel.
     forged = sc.encode_handle(key=sc.handle_key(config(gateway_token="other")),
                               platform="telegram", self_id="7000", channel_id="-999",
-                              user_id="42", type="private")
+                              user_id="42", type="dm")
     sent_before = list(acc.protocol.sent)
     check("a handle signed with another key is refused",
           await b.deliver(dict(delivery, reply_handle=forged)) == ("refused", 0)
@@ -441,7 +441,7 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
     dm = {"delivery_id": "d2", "items": [{"type": "text", "text": "morning"}],
           "reply_handle": sc.encode_handle(key=KEY, platform="telegram", self_id="7000",
                                            channel_id="private:42", user_id="42",
-                                           type="private")}
+                                           type="dm")}
     dm_acc = account()
     check("a DM delivery", await bridge(accounts=[dm_acc]).deliver(dm) == ("sent", 1))
     check("goes to the DM channel", dm_acc.protocol.sent == [("private:42", "morning")])
@@ -599,7 +599,7 @@ def test_a_config_file_under_the_environment(tmp: Path, monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "satori", None)  # as if not installed
     check("a missing config file is an error", sc.main(["--config", str(tmp / "no.env")]) == 2)
     unsafe = tmp / "unsafe.env"
-    unsafe.write_text("PERSONAGENT_URL=http://agent.example.com/webhook/gateway\n",
+    unsafe.write_text("PERSONAGENT_URL=http://agent.example.com\n",
                       encoding="utf-8")
     check("a cleartext off-host agent is refused", sc.main(["--config", str(unsafe)]) == 2)
     check("missing satori-python is reported, not a traceback",

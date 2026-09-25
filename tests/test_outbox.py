@@ -40,7 +40,7 @@ def make_agent(tmp: Path) -> Agent:
     a._seen_msg_file = tmp / "seen_msg_ids.json"
     a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
-    a.gateway_handles.path = tmp / "gateway_handles.json"
+    a.gateway_handles.path = tmp / "connector_handles.json"
     a.examples_file = tmp / "examples.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
     a._seen_msg_ids.clear()
@@ -59,26 +59,26 @@ def make_agent(tmp: Path) -> Agent:
     return a
 
 
-FORWARDER = {"forwarder_id": "fw1", "reply_handle": "tg-bot:GroupMessage:c1",
-             "caps": ["outbox", "quote_text"]}
+CONNECTOR = {"connector_id": "fw1", "reply_handle": "tg-bot:GroupMessage:c1",
+             "capabilities": ["outbox", "quote_text"]}
 
 
 def group_event(mid, *, platform="telegram", gid="c1", uid="42", **extra) -> dict:
     return {
-        "platform": platform, "message_type": "group", "conversation_id": gid,
-        "user_id": uid, "sender_name": "Alice", "self_id": "999000",
-        "message_id": mid, "source_timestamp": int(time.time()),
-        "is_at_me": True, "raw_text": "you there",
+        "platform": platform, "conversation_type": "group", "conversation_id": gid,
+        "sender_id": uid, "sender_name": "Alice", "bot_id": "999000",
+        "message_id": mid, "sent_at": int(time.time()),
+        "addressed": True, "text": "you there",
         "segments": [{"type": "text", "text": "you there"}], **extra,
     }
 
 
 def dm_event(mid, *, platform="telegram", uid="1", **extra) -> dict:
     return {
-        "platform": platform, "message_type": "private", "user_id": uid,
-        "sender_name": "Kay", "self_id": "999000", "message_id": mid,
-        "source_timestamp": int(time.time()), "is_at_me": False,
-        "raw_text": "hi", "segments": [{"type": "text", "text": "hi"}],
+        "platform": platform, "conversation_type": "dm", "sender_id": uid,
+        "sender_name": "Kay", "bot_id": "999000", "message_id": mid,
+        "sent_at": int(time.time()), "addressed": False,
+        "text": "hi", "segments": [{"type": "text", "text": "hi"}],
         **extra,
     }
 
@@ -91,27 +91,27 @@ async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.gateway_native_platforms = {"aiocqhttp"}
 
-    await agent.handle_gateway(group_event("m1", **FORWARDER))
+    await agent.handle_gateway(group_event("m1", **CONNECTOR))
     room = agent.gateway_handles.get("telegram:c1")
     check("group: the handle is stored under the routing key",
           room is not None and room["reply_handle"] == "tg-bot:GroupMessage:c1"
-          and room["forwarder_id"] == "fw1"
-          and room["caps"] == ["outbox", "quote_text"]
+          and room["connector_id"] == "fw1"
+          and room["capabilities"] == ["outbox", "quote_text"]
           and room["platform"] == "telegram" and room["native"] is False
-          and room["message_type"] == "group"
+          and room["conversation_type"] == "group"
           and room["conversation_id"] == "c1", repr(room))
 
     await agent.handle_gateway(dm_event(
-        "m2", forwarder_id="fw1", reply_handle="tg-bot:FriendMessage:1",
-        caps=["outbox"]))
+        "m2", connector_id="fw1", reply_handle="tg-bot:FriendMessage:1",
+        capabilities=["outbox"]))
     dm = agent.gateway_handles.get("private:telegram:1")
     check("DM: stored under the DM routing key, with the raw user id",
-          dm is not None and dm["message_type"] == "private"
+          dm is not None and dm["conversation_type"] == "dm"
           and dm["conversation_id"] == "1", repr(dm))
 
     await agent.handle_gateway(group_event(
         "m3", platform="aiocqhttp", gid="555", uid="777",
-        forwarder_id="fw1", reply_handle="qq:GroupMessage:555", caps=["outbox"]))
+        connector_id="fw1", reply_handle="qq:GroupMessage:555", capabilities=["outbox"]))
     native = agent.gateway_handles.get("555")
     check("native: stored under the bare key, marked native",
           native is not None and native["native"] is True
@@ -119,34 +119,34 @@ async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
 
     agent.allowed_groups = {"telegram:c1"}
     refused = await agent.handle_gateway(group_event(
-        "m4", gid="c2", forwarder_id="fw1", reply_handle="h", caps=["outbox"]))
+        "m4", gid="c2", connector_id="fw1", reply_handle="h", capabilities=["outbox"]))
     check("refused: a turn the agent refuses stores nothing",
           refused["owned"] is False
           and agent.gateway_handles.get("telegram:c2") is None, repr(refused))
 
-    rebuilt = HandleStore(tmp / "gateway_handles.json")
+    rebuilt = HandleStore(tmp / "connector_handles.json")
     check("persisted: a new store on the same file has the handles",
           rebuilt.get("telegram:c1") == room and rebuilt.get("555") == native)
 
 
-async def test_an_old_forwarder_sees_no_change(tmp: Path) -> None:
-    """An event with none of the new fields is answered exactly as before,
-    and leaves nothing behind."""
+async def test_an_event_without_outbox_fields_leaves_no_address(tmp: Path) -> None:
+    """An event with no connector_id, reply_handle or capabilities is
+    answered in its response and leaves nothing behind."""
     agent = make_agent(tmp)
     result = await agent.handle_gateway(group_event("m1"))
-    check("old event: answered the old way",
+    check("plain event: answered in the response",
           set(result) == {"handled", "owned", "replies"}
           and result["handled"] is True and result["owned"] is True
           and result["replies"][0]["text"] == "on it", repr(result))
-    check("old event: no handle, no file",
+    check("plain event: no handle, no file",
           agent.gateway_handles.keys() == []
-          and not (tmp / "gateway_handles.json").exists())
-    check("old event: no way to reach it unprompted",
+          and not (tmp / "connector_handles.json").exists())
+    check("plain event: no way to reach it unprompted",
           agent.outbox.route("telegram:c1") is None)
 
     await agent.handle_gateway(group_event(
-        "m2", gid="c9", forwarder_id="fw1", reply_handle="bad\x00handle",
-        caps=["outbox"]))
+        "m2", gid="c9", connector_id="fw1", reply_handle="bad\x00handle",
+        capabilities=["outbox"]))
     await agent.outbox.pull("fw1", wait_s=0)
     check("a malformed handle is ignored, so there is no route",
           agent.gateway_handles.get("telegram:c9")["reply_handle"] == ""
@@ -157,8 +157,8 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
     store = HandleStore(tmp / "h.json", cap=2)
 
     def put(key, handle="h"):
-        store.record(key, reply_handle=handle, forwarder_id="fw", caps=["outbox"],
-                     platform="telegram", native=False, message_type="group",
+        store.record(key, reply_handle=handle, connector_id="fw", capabilities=["outbox"],
+                     platform="telegram", native=False, conversation_type="group",
                      conversation_id=key)
 
     put("a")
@@ -187,9 +187,9 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
 # The queue
 # ---------------------------------------------------------------------------
 
-HANDLE = {"reply_handle": "tg-bot:GroupMessage:c1", "forwarder_id": "fw1",
-          "caps": ["outbox"], "platform": "telegram", "native": False,
-          "message_type": "group", "conversation_id": "c1"}
+HANDLE = {"reply_handle": "tg-bot:GroupMessage:c1", "connector_id": "fw1",
+          "capabilities": ["outbox"], "platform": "telegram", "native": False,
+          "conversation_type": "group", "conversation_id": "c1"}
 ITEMS = [{"type": "text", "text": "anyone up?"}, {"type": "text", "text": "hm"}]
 
 
@@ -214,7 +214,7 @@ async def test_a_long_poll_wakes_when_something_is_queued(tmp: Path) -> None:
     check("long-poll: the delivery carries what the connector needs",
           d["reply_handle"] == HANDLE["reply_handle"]
           and d["conversation_key"] == "telegram:c1" and d["platform"] == "telegram"
-          and d["message_type"] == "group" and d["conversation_id"] == "c1"
+          and d["conversation_type"] == "group" and d["conversation_id"] == "c1"
           and d["reason"] == "proactive" and d["items"] == ITEMS
           and 0 < d["expires_in_s"] <= 300 and d["delivery_id"].startswith("d_"),
           repr(d))
@@ -272,8 +272,8 @@ async def test_acks_map_to_what_was_sent(tmp: Path) -> None:
               (result.status, result.sent_items) == expected, repr(result))
 
     box.handles.record("telegram:c1", reply_handle=HANDLE["reply_handle"],
-                       forwarder_id="fw1", caps=["outbox"], platform="telegram",
-                       native=False, message_type="group", conversation_id="c1")
+                       connector_id="fw1", capabilities=["outbox"], platform="telegram",
+                       native=False, conversation_type="group", conversation_id="c1")
     check("route: a live connector with the outbox cap is a route",
           box.route("telegram:c1") is not None)
     result = await _settle(box, {"status": "unsupported"})
@@ -339,9 +339,9 @@ async def test_a_delivery_lost_with_its_pull_ends_at_the_next_pull(
 async def test_a_connector_that_stops_pulling_is_gone(tmp: Path) -> None:
     box = fresh_outbox(tmp)
     box.liveness_s = 0.2
-    box.handles.record("telegram:c1", reply_handle="h", forwarder_id="fw1",
-                       caps=["outbox"], platform="telegram", native=False,
-                       message_type="group", conversation_id="c1")
+    box.handles.record("telegram:c1", reply_handle="h", connector_id="fw1",
+                       capabilities=["outbox"], platform="telegram", native=False,
+                       conversation_type="group", conversation_id="c1")
     check("liveness: never pulled, never live", box.route("telegram:c1") is None)
     await box.pull("fw1", wait_s=0)
     check("liveness: a pull makes it live", box.route("telegram:c1") is not None)
@@ -366,18 +366,18 @@ async def test_a_connector_that_stops_pulling_is_gone(tmp: Path) -> None:
           len(handed["deliveries"]) == 1 and result.status == "no_ack"
           and time.monotonic() - started < 1.5, repr(result))
 
-    box.handles.record("telegram:c2", reply_handle="h", forwarder_id="fw1",
-                       caps=["quote_text"], platform="telegram", native=False,
-                       message_type="group", conversation_id="c2")
+    box.handles.record("telegram:c2", reply_handle="h", connector_id="fw1",
+                       capabilities=["quote_text"], platform="telegram", native=False,
+                       conversation_type="group", conversation_id="c2")
     await box.pull("fw1", wait_s=0)
-    check("caps: no outbox cap, no route", box.route("telegram:c2") is None)
+    check("capabilities: no outbox, no route", box.route("telegram:c2") is None)
 
 
 async def test_order_bounds_and_connectors_are_kept_apart(tmp: Path) -> None:
     box = fresh_outbox(tmp)
     await box.pull("fw1", wait_s=0)
     await box.pull("fw2", wait_s=0)
-    other = dict(HANDLE, forwarder_id="fw2")
+    other = dict(HANDLE, connector_id="fw2")
     tasks = [asyncio.create_task(box.deliver(key, handle, [{"type": "text", "text": t}],
                                              reason="proactive"))
              for key, handle, t in (("telegram:c1", HANDLE, "a1"),
@@ -411,17 +411,17 @@ async def test_order_bounds_and_connectors_are_kept_apart(tmp: Path) -> None:
 
 def test_a_pull_body_is_checked() -> None:
     parse = outbox_mod.parse_pull
-    good = parse({"kind": "outbox.pull", "forwarder_id": "fw1"})
+    good = parse({"kind": "outbox.pull", "connector_id": "fw1"})
     check("pull: defaults fill the optional fields",
-          good == {"forwarder_id": "fw1", "wait_s": 25.0, "max_deliveries": 10,
+          good == {"connector_id": "fw1", "wait_s": 25.0, "max_deliveries": 10,
                    "acks": []}, repr(good))
-    for bad in ({"forwarder_id": "fw1"},
-                {"kind": "event", "forwarder_id": "fw1"},
+    for bad in ({"connector_id": "fw1"},
+                {"kind": "event", "connector_id": "fw1"},
                 {"kind": "outbox.pull"},
-                {"kind": "outbox.pull", "forwarder_id": "fw1", "wait_s": "25"},
-                {"kind": "outbox.pull", "forwarder_id": "fw1", "wait_s": float("nan")},
-                {"kind": "outbox.pull", "forwarder_id": "fw1", "max_deliveries": True},
-                {"kind": "outbox.pull", "forwarder_id": "fw1", "acks": {}},
+                {"kind": "outbox.pull", "connector_id": "fw1", "wait_s": "25"},
+                {"kind": "outbox.pull", "connector_id": "fw1", "wait_s": float("nan")},
+                {"kind": "outbox.pull", "connector_id": "fw1", "max_deliveries": True},
+                {"kind": "outbox.pull", "connector_id": "fw1", "acks": {}},
                 ["outbox.pull"]):
         check(f"pull: refused {bad!r}", parse(bad) is None)
 
@@ -439,9 +439,9 @@ def _signed(body: bytes, *, nonce: str, token: str = TOKEN) -> dict:
     stamp = str(int(time.time()))
     mac = hmac.new(token.encode(), stamp.encode() + b"." + nonce.encode()
                    + b"." + body, hashlib.sha256).hexdigest()
-    return {"content-type": "application/json", "x-gateway-token": token,
-            "x-gateway-timestamp": stamp, "x-gateway-nonce": nonce,
-            "x-gateway-signature": "sha256=" + mac}
+    return {"content-type": "application/json", "x-personagent-token": token,
+            "x-personagent-timestamp": stamp, "x-personagent-nonce": nonce,
+            "x-personagent-signature": "sha256=" + mac}
 
 
 def _client() -> httpx.AsyncClient:
@@ -457,18 +457,18 @@ class _Served:
 
     def __enter__(self):
         self.saved = (main_module.agent, main_module.CONNECTOR_TOKEN,
-                      main_module._gateway_replay)
+                      main_module._connector_replay)
         main_module.agent = self.agent
         main_module.CONNECTOR_TOKEN = self.token
-        main_module._gateway_replay = main_module.ReplayGuard()
+        main_module._connector_replay = main_module.ReplayGuard()
         return self
 
     def __exit__(self, *exc):
         (main_module.agent, main_module.CONNECTOR_TOKEN,
-         main_module._gateway_replay) = self.saved
+         main_module._connector_replay) = self.saved
 
 
-PULL = {"kind": "outbox.pull", "forwarder_id": "fw1", "wait_s": 0,
+PULL = {"kind": "outbox.pull", "connector_id": "fw1", "wait_s": 0,
         "max_deliveries": 10, "acks": []}
 
 
@@ -479,25 +479,25 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
     event = _body(group_event("m1"))
     with _Served(agent):
         async with _client() as client:
-            unsigned = await client.post("/webhook/gateway/outbox", content=body)
+            unsigned = await client.post("/v1/outbox", content=body)
             wrong = await client.post(
-                "/webhook/gateway/outbox", content=body,
+                "/v1/outbox", content=body,
                 headers=_signed(body, nonce="n0", token="nope"))
-            ok = await client.post("/webhook/gateway/outbox", content=body,
+            ok = await client.post("/v1/outbox", content=body,
                                    headers=_signed(body, nonce="n1"))
-            replayed = await client.post("/webhook/gateway/outbox", content=body,
+            replayed = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="n1"))
             event_here = await client.post(
-                "/webhook/gateway/outbox", content=event,
+                "/v1/outbox", content=event,
                 headers=_signed(event, nonce="n2"))
             pull_there = await client.post(
-                "/webhook/gateway", content=body, headers=_signed(body, nonce="n3"))
+                "/v1/events", content=body, headers=_signed(body, nonce="n3"))
             kinded = _body(dict(group_event("m5"), kind="event"))
             event_kinded = await client.post(
-                "/webhook/gateway", content=kinded,
+                "/v1/events", content=kinded,
                 headers=_signed(kinded, nonce="n4"))
             agent.gateway_outbox = False
-            disabled = await client.post("/webhook/gateway/outbox", content=body,
+            disabled = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="n5"))
     check("auth: no envelope is refused",
           unsigned.status_code == 403
@@ -523,7 +523,7 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
 
     with _Served(None):
         async with _client() as client:
-            no_agent = await client.post("/webhook/gateway/outbox", content=body,
+            no_agent = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="n6"))
     check("disabled: no agent, no outbox", no_agent.status_code == 404)
 
@@ -531,9 +531,9 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
     with _Served(agent, token=""):
         async with _client() as client:
             browser = await client.post(
-                "/webhook/gateway/outbox", content=body,
+                "/v1/outbox", content=body,
                 headers={"origin": "https://evil.example"})
-            local = await client.post("/webhook/gateway/outbox", content=body)
+            local = await client.post("/v1/outbox", content=body)
     check("local: without a token a browser-shaped caller is refused",
           browser.status_code == 403
           and browser.json()["code"] == "non_local_request", browser.text)
@@ -546,11 +546,11 @@ async def test_a_pull_over_http_delivers_and_its_ack_commits(tmp: Path) -> None:
     with _Served(agent):
         async with _client() as client:
             first = _body(PULL)
-            await client.post("/webhook/gateway/outbox", content=first,
+            await client.post("/v1/outbox", content=first,
                               headers=_signed(first, nonce="p0"))
             waiting = _body(dict(PULL, wait_s=5))
             pull = asyncio.create_task(client.post(
-                "/webhook/gateway/outbox", content=waiting,
+                "/v1/outbox", content=waiting,
                 headers=_signed(waiting, nonce="p1")))
             await asyncio.sleep(0.1)
             sending = asyncio.create_task(agent.outbox.deliver(
@@ -559,7 +559,7 @@ async def test_a_pull_over_http_delivers_and_its_ack_commits(tmp: Path) -> None:
             delivery_id = answer["deliveries"][0]["delivery_id"]
             ack = _body(dict(PULL, acks=[{"delivery_id": delivery_id,
                                           "status": "partial", "sent_items": 1}]))
-            await client.post("/webhook/gateway/outbox", content=ack,
+            await client.post("/v1/outbox", content=ack,
                               headers=_signed(ack, nonce="p2"))
             result = await asyncio.wait_for(sending, 2)
     check("http: the long-poll hands the delivery over",
@@ -570,7 +570,7 @@ async def test_a_pull_over_http_delivers_and_its_ack_commits(tmp: Path) -> None:
 
 async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
     agent = make_agent(tmp)
-    gate, outbox_gate = main_module._gateway_admission, main_module._outbox_admission
+    gate, outbox_gate = main_module._connector_admission, main_module._outbox_admission
     body = _body(PULL)
     with _Served(agent):
         taken = 0
@@ -578,7 +578,7 @@ async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
             while await gate.try_acquire():
                 taken += 1
             async with _client() as client:
-                pull = await client.post("/webhook/gateway/outbox", content=body,
+                pull = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="s1"))
         finally:
             for _ in range(taken):
@@ -592,9 +592,9 @@ async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
             while await outbox_gate.try_acquire():
                 taken += 1
             async with _client() as client:
-                refused = await client.post("/webhook/gateway/outbox", content=body,
+                refused = await client.post("/v1/outbox", content=body,
                                             headers=_signed(body, nonce="s2"))
-                turn = await client.post("/webhook/gateway", content=event,
+                turn = await client.post("/v1/events", content=event,
                                          headers=_signed(event, nonce="s3"))
         finally:
             for _ in range(taken):
@@ -616,10 +616,10 @@ async def _connected(tmp: Path) -> Agent:
     agent = make_agent(tmp)
     agent.outbox.poll_s = 0.02
     await agent.outbox.pull("fw1", wait_s=0)
-    await agent.handle_gateway(group_event("setup-1", **FORWARDER))
+    await agent.handle_gateway(group_event("setup-1", **CONNECTOR))
     await agent.handle_gateway(dm_event(
-        "setup-2", forwarder_id="fw1", reply_handle="tg-bot:FriendMessage:1",
-        caps=["outbox"]))
+        "setup-2", connector_id="fw1", reply_handle="tg-bot:FriendMessage:1",
+        capabilities=["outbox"]))
     return agent
 
 
@@ -641,7 +641,7 @@ async def test_the_route_table(tmp: Path) -> None:
           agent._background_route("private:777") == "onebot")
     check("route: a room with a live outbox connector goes to it",
           agent._background_route("telegram:c1")["reply_handle"]
-          == FORWARDER["reply_handle"])
+          == CONNECTOR["reply_handle"])
     check("route: a room nobody left an address for has none",
           agent._background_route("telegram:c2") is None)
     agent.gateway_outbox = False
@@ -651,7 +651,7 @@ async def test_the_route_table(tmp: Path) -> None:
     agent.gateway_native_platforms = {"aiocqhttp"}
     await agent.handle_gateway(group_event(
         "setup-3", platform="aiocqhttp", gid="556", uid="43",
-        forwarder_id="fw1", reply_handle="qq:GroupMessage:556", caps=["outbox"]))
+        connector_id="fw1", reply_handle="qq:GroupMessage:556", capabilities=["outbox"]))
     check("route: a QQ group behind a live outbox connector goes to it",
           agent._background_route("556")["reply_handle"] == "qq:GroupMessage:556")
     agent.outbox.liveness_s = -1.0  # not 0: monotonic() can repeat on Windows
@@ -696,14 +696,14 @@ async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
         raise RuntimeError("model down")
 
     agent._think = bad_think
-    result = await agent.handle_gateway(group_event("m1", **FORWARDER))
+    result = await agent.handle_gateway(group_event("m1", **CONNECTOR))
     check("excuse: the turn itself answers with nothing, and owns the room",
           result["owned"] is True and result["replies"] == [], repr(result))
     delivery = await _ack_next(agent)
     item = delivery["items"][0]
     check("excuse: queued for the connector as an excuse, @ing the caller",
           delivery["reason"] == "excuse" and item["type"] == "text"
-          and item.get("at_user_id") == "telegram:42", repr(delivery))
+          and item.get("mention_user_id") == "telegram:42", repr(delivery))
     said: list = []
     for _ in range(100):
         said = [m for m in agent.buffers["telegram:c1"] if m["name"] == "TestBot"]
@@ -715,7 +715,7 @@ async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
 
     # A connector that never said "outbox": nothing is queued, nothing said.
     await agent.handle_gateway(group_event(
-        "m2", gid="c5", forwarder_id="fw1", reply_handle="h5", caps=[]))
+        "m2", gid="c5", connector_id="fw1", reply_handle="h5", capabilities=[]))
     await asyncio.sleep(0.1)
     check("excuse: no outbox, no excuse",
           (await agent.outbox.pull("fw1", wait_s=0))["deliveries"] == []
@@ -822,7 +822,7 @@ async def test_a_proactive_dm_reaches_a_gateway_user(tmp: Path) -> None:
     delivery = answer["deliveries"][0]
     check("DM opener: queued for the DM",
           delivery["conversation_key"] == "private:telegram:1"
-          and delivery["message_type"] == "private"
+          and delivery["conversation_type"] == "dm"
           and delivery["conversation_id"] == "1"
           and delivery["reply_handle"] == "tg-bot:FriendMessage:1", repr(delivery))
     check("DM opener: not in the history before the ack",
@@ -853,7 +853,7 @@ async def test_a_connectors_own_proactive_cue_shares_the_cooldown(
     not activity by the reader."""
     agent = make_agent(tmp)
     result = await agent.handle_gateway(dm_event(
-        "p1", proactive=True, raw_text="they had an exam today",
+        "p1", proactive=True, text="they had an exam today",
         segments=[{"type": "text", "text": "they had an exam today"}]))
     check("cue: still answered in the response",
           result["owned"] is True and result["replies"], repr(result))
@@ -876,7 +876,7 @@ async def test_the_follow_up_question_reaches_a_gateway_conversation(
     await asyncio.wait_for(task, 3)
     check("follow-up: queued as follow_up, @ing who rejected",
           delivery["reason"] == "follow_up"
-          and delivery["items"][0].get("at_user_id") == "telegram:42", repr(delivery))
+          and delivery["items"][0].get("mention_user_id") == "telegram:42", repr(delivery))
     check("follow-up: said, and armed for their answer",
           agent.buffers["telegram:c1"][-1]["text"].endswith("what did you mean?")
           and agent.pending_reactions.match(
@@ -945,10 +945,10 @@ async def test_the_sdk_and_the_agent_speak_the_same_outbox(tmp: Path) -> None:
     with _Served(agent):
         client = httpx.AsyncClient(transport=httpx.ASGITransport(
             app=main_module.app, client=("127.0.0.1", 1234)))
-        conn = sdk.Connector("http://127.0.0.1:8080/webhook/gateway", TOKEN,
-                             forwarder_id="fw1", client=client)
+        conn = sdk.Connector("http://127.0.0.1:8080", TOKEN,
+                             connector_id="fw1", client=client)
         answer = await conn.send_event(group_event(
-            "e1", reply_handle="tg-bot:GroupMessage:c1", caps=["outbox"]))
+            "e1", reply_handle="tg-bot:GroupMessage:c1", capabilities=["outbox"]))
         check("sdk: the event is answered", answer["owned"] is True, repr(answer))
         stop = asyncio.Event()
         loop = asyncio.create_task(conn.run_outbox(deliver, wait_s=1, stop=stop))

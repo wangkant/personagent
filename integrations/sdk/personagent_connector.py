@@ -1,10 +1,11 @@
 """Client side of the personagent connector protocol (docs/connectors.md).
 
-A connector gets a platform message in, posts it with ``send_event``, and
-delivers what comes back. If the platform can send unprompted, it also runs
-``run_outbox`` with a ``deliver`` coroutine. Signing, the loopback/HTTPS rule,
-at-most-once delivery and acks are handled here; everything about the platform
-stays in the connector.
+A connector gets a platform message in, posts it with ``send_event`` (to
+``<base URL>/v1/events``), and delivers what comes back. If the platform can
+send unprompted, it also runs ``run_outbox`` with a ``deliver`` coroutine,
+which pulls ``<base URL>/v1/outbox``. Signing, the loopback/HTTPS rule,
+at-most-once delivery and acks are handled here; everything about the
+platform stays in the connector.
 
 Only depends on httpx, so it can be copied next to a connector as one file.
 """
@@ -31,6 +32,10 @@ DeliveryResult = tuple[str, int]
 Deliver = Callable[[dict], Awaitable[DeliveryResult]]
 
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+#: Paths under the agent's base URL (e.g. http://127.0.0.1:8080).
+EVENTS_PATH = "/v1/events"
+OUTBOX_PATH = "/v1/outbox"
 
 
 def endpoint_allowed(url: str, token: str) -> bool:
@@ -61,31 +66,32 @@ def signed_headers(body: bytes, token: str, *, now: Optional[float] = None) -> d
                    timestamp.encode() + b"." + nonce.encode() + b"." + body,
                    hashlib.sha256).hexdigest()
     headers.update({
-        "X-Gateway-Token": token,
-        "X-Gateway-Timestamp": timestamp,
-        "X-Gateway-Nonce": nonce,
-        "X-Gateway-Signature": f"sha256={mac}",
+        "X-Personagent-Token": token,
+        "X-Personagent-Timestamp": timestamp,
+        "X-Personagent-Nonce": nonce,
+        "X-Personagent-Signature": f"sha256={mac}",
     })
     return headers
 
 
-def outbox_url_for(event_url: str) -> str:
-    return event_url.rstrip("/") + "/outbox"
+def endpoint_url(base_url: str, path: str) -> str:
+    """One endpoint under the agent's base URL."""
+    return base_url.rstrip("/") + path
 
 
 class Connector:
-    """One connector instance talking to one agent."""
+    """One connector instance talking to one agent at ``base_url``."""
 
-    def __init__(self, agent_url: str, token: str = "", *, forwarder_id: str,
+    def __init__(self, base_url: str, token: str = "", *, connector_id: str,
                  timeout_s: float = 420.0, client: Optional[httpx.AsyncClient] = None):
-        if not endpoint_allowed(agent_url, token):
-            raise ValueError("agent_url must be loopback, or HTTPS with a token")
-        if not forwarder_id:
-            raise ValueError("forwarder_id is required")
-        self.event_url = agent_url
-        self.outbox_url = outbox_url_for(agent_url)
+        if not endpoint_allowed(base_url, token):
+            raise ValueError("base_url must be loopback, or HTTPS with a token")
+        if not connector_id:
+            raise ValueError("connector_id is required")
+        self.events_url = endpoint_url(base_url, EVENTS_PATH)
+        self.outbox_url = endpoint_url(base_url, OUTBOX_PATH)
         self.token = token
-        self.forwarder_id = forwarder_id
+        self.connector_id = connector_id
         self.timeout_s = timeout_s
         self._client = client
         self._owns_client = client is None
@@ -112,18 +118,18 @@ class Connector:
     async def send_event(self, event: dict) -> dict:
         """Post one neutral event; returns the agent's JSON response.
 
-        Adds ``forwarder_id`` when the event has none. Raises httpx errors and
+        Adds ``connector_id`` when the event has none. Raises httpx errors and
         ``httpx.HTTPStatusError`` for a non-2xx answer, whose body carries the
         agent's ``code`` and ``error``."""
         event = dict(event)
-        event.setdefault("forwarder_id", self.forwarder_id)
-        response = await self._post(self.event_url, event, self.timeout_s)
+        event.setdefault("connector_id", self.connector_id)
+        response = await self._post(self.events_url, event, self.timeout_s)
         response.raise_for_status()
         return response.json()
 
     async def pull_once(self, *, wait_s: int = 25, max_deliveries: int = 10) -> dict:
         acks, self._pending_acks = self._pending_acks, []
-        payload = {"kind": "outbox.pull", "forwarder_id": self.forwarder_id,
+        payload = {"kind": "outbox.pull", "connector_id": self.connector_id,
                    "wait_s": wait_s, "max_deliveries": max_deliveries, "acks": acks}
         try:
             response = await self._post(self.outbox_url, payload, wait_s + 10)
@@ -167,7 +173,8 @@ class Connector:
             except httpx.HTTPStatusError as exc:
                 pause = 600.0 if exc.response.status_code == 404 else backoff
                 if exc.response.status_code == 404:
-                    logger.info("agent has no outbox (older version); retrying in 10 minutes")
+                    logger.info("agent has no outbox (turned off, or an older "
+                                "version); retrying in 10 minutes")
                 else:
                     logger.warning("outbox pull refused (%s)", exc.response.status_code)
                 backoff = min(backoff * 2, 60.0)

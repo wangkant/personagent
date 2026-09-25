@@ -27,7 +27,7 @@ from . import lineage as lineage_mod
 from . import outbox as outbox_mod
 from . import reactions
 from .gateway import (GATEWAY_SELF_ID, GatewaySink, current_sink,
-                      event_forwarder, event_prefiltered,
+                      event_connector, event_prefiltered,
                       synthesize_onebot_payload)
 from .paths import (
     ROOT,
@@ -481,10 +481,10 @@ class Agent(ContentIngestion, Transport, Learning):
         self._msg_index: dict[str, str] = {}
         self._msg_index_cap = 1000
 
-        # How to reach each gateway conversation unprompted, and the queue
+        # How to reach each connector conversation unprompted, and the queue
         # its connector pulls from (outbox.py). Loaded on first use.
         self.gateway_handles = outbox_mod.HandleStore(
-            resolve_runtime_state_file("gateway_handles.json"))
+            resolve_runtime_state_file("connector_handles.json"))
         self.outbox = outbox_mod.Outbox(self.gateway_handles)
 
     def _load_seen_msg_ids(self) -> None:
@@ -773,7 +773,7 @@ class Agent(ContentIngestion, Transport, Learning):
         )
         tok = current_sink.set(sink)
         # Read off `event` (synthesize drops unknown keys) and passed as an
-        # argument, not a payload flag: /webhook/qq accepts arbitrary JSON.
+        # argument, not a payload flag: /v1/onebot accepts arbitrary JSON.
         proactive = bool(event.get("proactive"))
         try:
             handled = await self.handle(payload, proactive=proactive)
@@ -790,18 +790,18 @@ class Agent(ContentIngestion, Transport, Learning):
                 else:
                     self._gateway_inflight.pop(gateway_key, None)
                 self._trim_gateway_convs()
-        # Only an admitted turn may leave an address behind: a forwarder must
+        # Only an admitted turn may leave an address behind: a connector must
         # not plant handles for conversations the agent refuses.
-        forwarder = event_forwarder(event)
+        connector = event_connector(event)
         if (gateway_key and sink.owned
-                and (forwarder["reply_handle"] or forwarder["forwarder_id"])):
-            private = payload.get("message_type") == "private"
+                and (connector["reply_handle"] or connector["connector_id"])):
+            dm = payload.get("message_type") == "private"
             self.gateway_handles.record(
-                gateway_key, **forwarder, platform=sink.platform,
+                gateway_key, **connector, platform=sink.platform,
                 native=sink.native,
-                message_type="private" if private else "group",
+                conversation_type="dm" if dm else "group",
                 conversation_id=str(event.get(
-                    "user_id" if private else "conversation_id") or ""),
+                    "sender_id" if dm else "conversation_id") or ""),
                 prefiltered=sink.prefiltered)
         # `owned` is not `handled`. See GatewaySink: a forwarder needs to know
         # whether to suppress its own model, and "produced no reply" is the
@@ -868,7 +868,7 @@ class Agent(ContentIngestion, Transport, Learning):
         user_id = str(payload.get("user_id", ""))
 
         # Admission, per platform (access.py). The sink is set only by
-        # handle_gateway, so /webhook/qq cannot claim to be a forwarder: there
+        # handle_gateway, so /v1/onebot cannot claim to be a connector: there
         # a namespaced id is forged, and a bare one is QQ's to gate.
         sink = current_sink.get()
         via_forwarder = sink is not None
@@ -2802,7 +2802,7 @@ class Agent(ContentIngestion, Transport, Learning):
         `handle()` on a closed Agent does not fail — it quietly mints a fresh
         connection pool that nothing will ever close again. Two ways to get
         there: a forced uvicorn shutdown that lands while a synchronous
-        `/webhook/gateway` turn is still running, and any host that embeds
+        `/v1/events` turn is still running, and any host that embeds
         `persona_agent.Agent` directly (it is a public, importable class) and
         reuses the object after closing it. Neither is loud today; the flag
         below makes both say so once.

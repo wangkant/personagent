@@ -6,7 +6,7 @@ Signal, Messenger, Instagram, Google Messages and other networks.
 
 The connector is a small standalone process. It logs in to a homeserver as an
 ordinary Matrix user, forwards every allowed room message to the agent's
-`POST /webhook/gateway` as a platform-neutral event
+`POST /v1/events` as a platform-neutral event
 ([docs/connectors.md](../../docs/connectors.md)), and posts the agent's
 replies back into the room. It also polls the agent's outbox, so scheduled
 openers, follow-up questions and excuses reach Matrix too.
@@ -21,7 +21,7 @@ Inbound, for each message in an allowed room:
   holds exactly one other member besides the bot and the users in
   `MATRIX_IGNORE_USERS`. A direct chat is keyed by the person, a group by the
   room. A room named by id in `MATRIX_GROUPS` is always a group.
-- `is_at_me` is true when the message mentions the bot (`m.mentions`, or a
+- `addressed` is true when the message mentions the bot (`m.mentions`, or a
   pill or the bot's user id from a client too old to send `m.mentions`), or
   replies to one of the bot's messages.
 - A reply carries the quoted message's sender and text, from a cache of recent
@@ -75,7 +75,7 @@ MATRIX_USER_ID=@nova:example.org
 MATRIX_PASSWORD=...
 MATRIX_GROUPS=!AbCdEf:example.org
 MATRIX_DM_USERS=@alex:example.org
-PERSONAGENT_URL=http://127.0.0.1:8080/webhook/gateway
+PERSONAGENT_URL=http://127.0.0.1:8080
 ```
 
 Then run it next to the agent:

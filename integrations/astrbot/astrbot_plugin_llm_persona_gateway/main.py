@@ -2,7 +2,7 @@
 
 It speaks the connector protocol in docs/connectors.md of the agent repo.
 Each message AstrBot receives becomes the neutral inbound event, POSTed to
-the agent's /webhook/gateway; the reply items that come back are sent as
+the agent's /v1/events; the reply items that come back are sent as
 AstrBot message chains. Messages nobody asked for (openers, follow-ups, the
 excuse after a failed model call) wait in the agent's outbox, which this
 plugin pulls and delivers through context.send_message.
@@ -10,9 +10,9 @@ plugin pulls and delivers through context.send_message.
 What each adapter can and cannot do is in platforms.py. The signing and the
 outbox loop are the connector SDK, vendored as personagent_connector.py.
 
-Reply items: {"type": "text", "text", "at_user_id"?, "reply_to_message_id"?}
-or {"type": "image", "b64", ...}. at_user_id is "<platform>:<raw id>";
-reply_to_message_id is "<platform>:<conversation>:<raw mid>", the gateway's
+Reply items: {"type": "text", "text", "mention_user_id"?, "reply_to_message_id"?}
+or {"type": "image", "b64", ...}. mention_user_id is "<platform>:<raw id>";
+reply_to_message_id is "<platform>:<conversation>:<raw mid>", the agent's
 own spelling of inbound message ids.
 """
 
@@ -52,11 +52,11 @@ from .platforms import (
     native_message_id,
     rules_for,
     seconds,
-    source_timestamp,
+    sent_at,
     split_text,
 )
 
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
+DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_TIMEOUT_S = 180
 DEFAULT_FORWARD_THRESHOLD = 1500
 DEFAULT_QUOTE_MAX_CHARS = 200
@@ -71,18 +71,18 @@ _HANDLES_KEY = "reply_handles"
 
 # Retry policy for _post_to_agent. Only statuses where resending the exact
 # same bytes is safe get a retry: 500 is the agent failing after accepting
-# the envelope, and 429 is the gateway's admission gate, which runs before
-# envelope verification (see gateway_webhook in the agent's main.py), so a
+# the envelope, and 429 is the agent's admission gate, which runs before
+# envelope verification (see connector_events in the agent's main.py), so a
 # 429 never burns a nonce and is always safe to resend. 400/403/413 mean the
 # envelope or body itself is the problem -- resending unchanged bytes would
 # just fail the same way again.
 _RETRYABLE_STATUSES = frozenset({429, 500})
 _RETRY_BACKOFFS_S = (0.3, 0.8)
 # The agent rejects a signed envelope once its timestamp is older than this
-# (ReplayGuard / _gateway_event_is_fresh in the agent's main.py). A retry
-# reuses the original signed timestamp rather than re-signing, so each retry
-# must START well inside this window (the age is checked on arrival).
-_GATEWAY_REPLAY_WINDOW_S = 300
+# (ReplayGuard in the agent's main.py). A retry reuses the original signed
+# timestamp rather than re-signing, so each retry must START well inside this
+# window (the age is checked on arrival).
+_REPLAY_WINDOW_S = 300
 _RETRY_WINDOW_SAFETY_MARGIN_S = 20
 
 # Discord leaves mentions, channels and custom emoji as raw markup in the text
@@ -263,17 +263,17 @@ class _Handles:
         while len(self._bound) > self._size:
             self._bound.popitem(last=False)
 
-    def mint(self, handle: str, platform: str, message_type: str,
+    def mint(self, handle: str, platform: str, conversation_type: str,
              conversation_id: str) -> bool:
         """Bind a handle; True when that changed what should be stored."""
-        entry = (str(platform), str(message_type), str(conversation_id))
+        entry = (str(platform), str(conversation_type), str(conversation_id))
         changed = self._bound.pop(handle, None) != entry
         self._bound[handle] = entry
         self._trim()
         return changed
 
     def bound(self, handle: str):
-        """(platform, message_type, conversation_id), or None."""
+        """(platform, conversation_type, conversation_id), or None."""
         return self._bound.get(handle)
 
     def load(self, rows) -> None:
@@ -362,12 +362,12 @@ class LLMPersonaGateway(Star):
             logger.warning(f"llm_persona_gateway: could not read the stored reply handles: {e}")
         self._handles.load(rows)
 
-    async def _mint_handle(self, handle: str, platform: str, message_type: str,
+    async def _mint_handle(self, handle: str, platform: str, conversation_type: str,
                            conversation_id: str) -> None:
         """Bind a handle the outbox may later send to, before the agent can
         hand it back, and keep it across reloads."""
         await self._load_handles()
-        if not self._handles.mint(handle, platform, message_type, conversation_id):
+        if not self._handles.mint(handle, platform, conversation_type, conversation_id):
             return
         try:
             await self.put_kv_data(_HANDLES_KEY, self._handles.rows())
@@ -399,9 +399,9 @@ class LLMPersonaGateway(Star):
         if not self._is_chat_message(platform, raw):
             return
 
-        self_id = str(event.get_self_id())
+        bot_id = str(event.get_self_id())
         sender_id = str(event.get_sender_id())
-        if sender_id and sender_id == self_id:
+        if sender_id and sender_id == bot_id:
             return  # never forward the bot's own messages
 
         group_id = "" if event.is_private_chat() else str(event.get_group_id() or "")
@@ -415,79 +415,79 @@ class LLMPersonaGateway(Star):
             return
 
         self._remember_people(platform, event, raw)
-        segments, is_at_me = await self._map_segments(event, self_id, platform)
-        raw_text = event.message_str or ""
-        if self._plain_note(platform, raw, raw_text.strip()) is not None:
+        segments, addressed = await self._map_segments(event, bot_id, platform)
+        text = event.message_str or ""
+        if self._plain_note(platform, raw, text.strip()) is not None:
             # "Sticker: X", "[voice消息]": the adapter's words, not the person's.
-            raw_text = ""
+            text = ""
         if platform == "telegram":
             # The Telegram adapter encodes "reply to the bot" as a wake-prefix
             # hack prepended to the text ("/@<bot> ", restored to "/ " by its
             # own command handling). AstrBot's wake stage cleans message_str
             # but not the component chain — strip the artifact from both so
             # the agent never sees it as user text.
-            raw_text = self._strip_tg_wake_artifact(raw_text, self_id)
+            text = self._strip_tg_wake_artifact(text, bot_id)
             stripped = False
             for seg in segments:
                 if seg.get("type") == "text":
                     before = seg.get("text") or ""
-                    seg["text"] = self._strip_tg_wake_artifact(before, self_id)
+                    seg["text"] = self._strip_tg_wake_artifact(before, bot_id)
                     stripped = seg["text"] != before
                     break
             # That artifact, next to a quote, is the only sign a Telegram
             # reply-to-bot carries in the component chain: the Reply's
-            # sender_id is numeric while self_id is the username, and no At
+            # sender_id is numeric while bot_id is the username, and no At
             # is emitted. AstrBot's is_at_or_wake_command is NOT used for
             # this — it is also set by any "/" wake-prefix text and by every
             # @all. The raw update below covers photos and voice too.
             if is_group and stripped and any(
                     seg.get("type") == "reply" for seg in segments):
-                is_at_me = True
-        if is_group and not is_at_me:
-            is_at_me = self._addressed(platform, event, raw, self_id, raw_text)
+                addressed = True
+        if is_group and not addressed:
+            addressed = self._addressed(platform, event, raw, bot_id, text)
 
         conversation_id = group_id if is_group else sender_id
-        source_ts = source_timestamp(platform, raw)
-        if source_ts is None:
-            source_ts = (getattr(event.message_obj, "timestamp", None)
-                         or getattr(event.message_obj, "time", None))
+        stamped = sent_at(platform, raw)
+        if stamped is None:
+            stamped = (getattr(event.message_obj, "timestamp", None)
+                       or getattr(event.message_obj, "time", None))
         try:
-            source_ts = seconds(int(source_ts))
+            stamped = seconds(int(stamped))
         except (TypeError, ValueError, OverflowError):
             logger.warning(
                 "llm_persona_gateway: dropping event without a valid "
-                "authoritative source timestamp"
+                "time the platform sent it"
             )
             return
-        caps = []
+        capabilities = []
         if self._outbox_running() and self._can_speak_first(platform, raw):
-            caps.append("outbox")
+            capabilities.append("outbox")
         # By configuration, not by whether this message quoted: the agent
-        # rewrites its handles file whenever a conversation's caps change.
+        # rewrites its handles file whenever a conversation's capabilities change.
         if self._quote_chars():
-            caps.append("quote_text")
+            capabilities.append("quote_text")
         neutral_event = {
             "platform": platform,
-            "message_type": "group" if is_group else "private",
+            "conversation_type": "group" if is_group else "dm",
             "conversation_id": conversation_id,
-            "user_id": sender_id,
+            "sender_id": sender_id,
             "sender_name": event.get_sender_name() or sender_id,
-            "self_id": self_id,
+            "bot_id": bot_id,
             "message_id": (native_message_id(platform, raw)
                            or getattr(event.message_obj, "message_id", None)),
-            "source_timestamp": source_ts,
-            "is_at_me": is_at_me,
+            "sent_at": stamped,
+            "addressed": addressed,
             "segments": segments,
-            "raw_text": raw_text,
-            "forwarder_id": await self._ensure_forwarder_id(),
+            "text": text,
+            "connector_id": await self._ensure_forwarder_id(),
             "reply_handle": self._reply_handle(event),
-            "caps": caps,
+            "capabilities": capabilities,
         }
         if not neutral_event["reply_handle"]:
             del neutral_event["reply_handle"]
-        elif "outbox" in caps:
+        elif "outbox" in capabilities:
             await self._mint_handle(neutral_event["reply_handle"], platform,
-                                    neutral_event["message_type"], conversation_id)
+                                    neutral_event["conversation_type"], conversation_id)
 
         rules = rules_for(platform)
         temps: list = []
@@ -621,29 +621,29 @@ class LLMPersonaGateway(Star):
                                  f"{username}@{host}" if host else username,
                                  _get(user, "name") or username)
 
-    def _addressed(self, platform: str, event, raw, self_id: str,
+    def _addressed(self, platform: str, event, raw, bot_id: str,
                    text: str) -> bool:
         """The platform's own ways of addressing the bot that leave no At or
         Reply in the chain."""
         if platform == "telegram":
             replied = _get(raw, "message", "reply_to_message", "from_user", "username")
-            return bool(replied and self_id and str(replied).lower() == self_id.lower())
+            return bool(replied and bot_id and str(replied).lower() == bot_id.lower())
         if platform == "discord":
-            if any(str(_get(m, "id")) == self_id for m in _get(raw, "mentions") or []):
+            if any(str(_get(m, "id")) == bot_id for m in _get(raw, "mentions") or []):
                 return True  # the adapter strips a leading <@bot> from the text
             bot_roles = {str(_get(r, "id")) for r in _get(raw, "guild", "me", "roles") or []}
             if any(str(_get(r, "id")) in bot_roles for r in _get(raw, "role_mentions") or []):
                 return True
             author = _get(raw, "reference", "resolved", "author", "id")
-            return author is not None and str(author) == self_id
+            return author is not None and str(author) == bot_id
         if platform == "slack":
-            return bool(self_id) and _get(raw, "parent_user_id") == self_id
+            return bool(bot_id) and _get(raw, "parent_user_id") == bot_id
         if platform == "kook":
             author = _get(raw, "extra", "quote", "author", "id")
-            return author is not None and str(author) == self_id
+            return author is not None and str(author) == bot_id
         if platform == "satori":
             quoted = _get(raw, "message", "quote", "user", "id")
-            return quoted is not None and str(quoted) == self_id
+            return quoted is not None and str(quoted) == bot_id
         if platform == "line":
             mentionees = _get(raw, "message", "mention", "mentionees") or []
             return any(isinstance(m, dict) and m.get("isSelf") for m in mentionees)
@@ -695,10 +695,10 @@ class LLMPersonaGateway(Star):
             seg["sender_name"] = name
         return seg
 
-    async def _map_segments(self, event: AstrMessageEvent, self_id: str, platform: str = ""):
+    async def _map_segments(self, event: AstrMessageEvent, bot_id: str, platform: str = ""):
         """Map AstrBot message components to neutral segments."""
         segments = []
-        is_at_me = False
+        addressed = False
         obj = event.message_obj
         raw = getattr(obj, "raw_message", None)
         components = getattr(obj, "message", None) or []
@@ -739,12 +739,12 @@ class LLMPersonaGateway(Star):
                 name = str(getattr(comp, "name", "") or "")
                 # Mentions arrive as typed (e.g. Telegram usernames are
                 # case-insensitive), so compare case-insensitively, and emit
-                # the canonical self_id on a match: the agent-side
-                # synthesize_onebot_payload normalizes self-mentions with an
-                # exact compare against the event's self_id.
-                if self_id and target.lower() == self_id.lower():
-                    is_at_me = True
-                    target = self_id
+                # the canonical bot_id on a match: the agent normalizes
+                # self-mentions with an exact compare against the event's
+                # bot_id.
+                if bot_id and target.lower() == bot_id.lower():
+                    addressed = True
+                    target = bot_id
                 elif platform == "telegram":
                     # Telegram mentions by username but sends by numeric id;
                     # one person should be one id to the agent.
@@ -771,7 +771,7 @@ class LLMPersonaGateway(Star):
             elif isinstance(comp, Comp.Reply):
                 # Quoting one of the bot's own messages addresses the bot,
                 # even on platforms that emit no At component for it. (On
-                # Telegram sender_id is numeric while self_id is the bot
+                # Telegram sender_id is numeric while bot_id is the bot
                 # username, so this match never fires there — forward_to_agent
                 # reads the adapter's reply-to-bot text artifact instead.)
                 sender = str(getattr(comp, "sender_id", "") or "")
@@ -790,17 +790,17 @@ class LLMPersonaGateway(Star):
                         name = ""
                     if text == "[引用消息]":
                         text = _outline(getattr(comp, "chain", None))
-                if sender and (sender == self_id or (appid and sender == appid)):
-                    is_at_me = True
+                if sender and (sender == bot_id or (appid and sender == appid)):
+                    addressed = True
                 segments.append(self._reply_segment(
                     getattr(comp, "id", None), text, sender, name))
             # Any other component type carries nothing the agent understands.
 
         if onebot:
-            if not is_at_me and any(
-                    s.get("type") == "at" and str((s.get("data") or {}).get("qq")) == self_id
+            if not addressed and any(
+                    s.get("type") == "at" and str((s.get("data") or {}).get("qq")) == bot_id
                     for s in onebot):
-                is_at_me = True  # the adapter drops an At it cannot look up
+                addressed = True  # the adapter drops an At it cannot look up
             for s in onebot:
                 if s.get("type") == "mface":
                     data = s.get("data") or {}
@@ -813,7 +813,7 @@ class LLMPersonaGateway(Star):
             reply = self._raw_reply(platform, raw)
             if reply is not None:
                 segments.insert(0, reply)
-        return segments, is_at_me
+        return segments, addressed
 
     def _plain_note(self, platform: str, raw, text: str):
         """Segments for a text the adapter wrote in place of something it
@@ -993,15 +993,15 @@ class LLMPersonaGateway(Star):
         return None
 
     @staticmethod
-    def _strip_tg_wake_artifact(text: str, self_id: str) -> str:
+    def _strip_tg_wake_artifact(text: str, bot_id: str) -> str:
         """Remove the Telegram adapter's reply-to-bot wake hack from the
         start of a text. The adapter prepends "/@<bot username> " (its own
         command restoration turns that into "/ ") purely to trip AstrBot's
         wake stage; neither form is something the user typed."""
         if not text:
             return text
-        if self_id:
-            marker = f"/@{self_id.lower()}"
+        if bot_id:
+            marker = f"/@{bot_id.lower()}"
             low = text.lower()
             if low.startswith(marker + " "):
                 return text[len(marker) + 1:]
@@ -1038,10 +1038,10 @@ class LLMPersonaGateway(Star):
     def _log_http_failure(exc, status: int) -> None:
         """Report one failed agent call at a level that matches its cause.
 
-        403 in particular must carry the agent's own words: the gateway
+        403 in particular must carry the agent's own words: the agent
         answers 403 for a peer that is not on the allowlist, for an envelope
-        that failed HMAC or replayed, and for a source event outside the
-        freshness window. Reporting all three as "bad token" sends the
+        that failed HMAC or replayed, and for an event whose sent_at is
+        outside the freshness window. Reporting all three as "bad token" sends the
         operator to rotate a key when the real fault is a drifting clock.
         """
         detail = ""
@@ -1090,6 +1090,7 @@ class LLMPersonaGateway(Star):
         return _RETRY_BACKOFFS_S[attempt]
 
     def _agent_url(self) -> str:
+        """The agent's base URL; the SDK appends the endpoint paths."""
         return str(self.config.get("agent_url") or DEFAULT_AGENT_URL)
 
     def _timeout(self) -> float:
@@ -1105,17 +1106,18 @@ class LLMPersonaGateway(Star):
         Falling back to `handled` keeps an older agent — one that does not send
         the field — behaving exactly as it does today.
         """
-        url = self._agent_url()
+        base = self._agent_url()
         timeout = self._timeout()
         token = str(self.config.get("gateway_token") or "")
-        allowed, reason = self._endpoint_is_allowed(url, token)
+        allowed, reason = self._endpoint_is_allowed(base, token)
         if not allowed:
             logger.warning(f"llm_persona_gateway: refusing unsafe agent_url: {reason}")
             return False, False, []
+        url = sdk.endpoint_url(base, sdk.EVENTS_PATH)
 
         body = sdk.canonical_body(neutral_event)
         headers = sdk.signed_headers(body, token)
-        signed_ts = int(headers["X-Gateway-Timestamp"]) if token else None
+        signed_ts = int(headers["X-Personagent-Timestamp"]) if token else None
         # The signed timestamp above is minted ONCE and every retry resends it
         # unchanged -- that is deliberate (the agent un-burns a nonce when its
         # own write fails, precisely so a correct client can resend the same
@@ -1141,7 +1143,7 @@ class LLMPersonaGateway(Star):
                 if status in _RETRYABLE_STATUSES and attempt < attempts - 1:
                     wait = self._retry_wait(e.response, status, attempt)
                     if signed_ts is None or time.time() + wait < (
-                            signed_ts + _GATEWAY_REPLAY_WINDOW_S
+                            signed_ts + _REPLAY_WINDOW_S
                             - _RETRY_WINDOW_SAFETY_MARGIN_S):
                         await asyncio.sleep(wait)
                         continue
@@ -1194,7 +1196,7 @@ class LLMPersonaGateway(Star):
             wait_s = min(30, max(1, int(self.config.get("outbox_wait_s") or 25)))
         except (TypeError, ValueError):
             wait_s = 25
-        connector = sdk.Connector(url, token, forwarder_id=await self._ensure_forwarder_id(),
+        connector = sdk.Connector(url, token, connector_id=await self._ensure_forwarder_id(),
                                   timeout_s=self._timeout())
         try:
             await connector.run_outbox(self._deliver, wait_s=wait_s, stop=self._outbox_stop)
@@ -1225,20 +1227,20 @@ class LLMPersonaGateway(Star):
         platform_id = session.platform_id
         if not platform_id:
             return "unsupported", 0
-        message_type = str(delivery.get("message_type") or "")
-        is_group = message_type == "group"
+        conversation_type = str(delivery.get("conversation_type") or "")
+        is_group = conversation_type == "group"
         conversation_id = str(delivery.get("conversation_id") or "")
         await self._load_handles()
         bound = self._handles.bound(handle)
         # The agent hands back whatever handle an admitted event carried, and
         # the lists below name only the conversation: the handle must be one
         # this plugin took from that very conversation.
-        if bound is None or bound[1:] != (message_type, conversation_id) or (
+        if bound is None or bound[1:] != (conversation_type, conversation_id) or (
                 session.message_type != (MessageType.GROUP_MESSAGE if is_group
                                          else MessageType.FRIEND_MESSAGE)):
             logger.warning(
                 f"llm_persona_gateway: outbox: {handle!r} is not an address of "
-                f"{message_type} {conversation_id!r}; refused")
+                f"{conversation_type} {conversation_id!r}; refused")
             return "refused", 0
         inst = await self._platform_inst(platform_id)
         if inst is None:
@@ -1341,7 +1343,7 @@ class LLMPersonaGateway(Star):
     def _item_bubbles(self, item: dict, platform: str, rules: Rules, is_group: bool,
                       conversation_id: str, max_chars: int, temps: list) -> list:
         """One reply item as the messages it takes on this platform."""
-        at = self._resolve_at(item.get("at_user_id"), platform) if is_group else None
+        at = self._resolve_at(item.get("mention_user_id"), platform) if is_group else None
         reply_id = self._resolve_reply_id(
             item.get("reply_to_message_id"), platform, conversation_id
         ) if rules.quote else None
@@ -1437,16 +1439,16 @@ class LLMPersonaGateway(Star):
         return Comp.Image.fromBase64(b64)
 
     @staticmethod
-    def _resolve_at(at_user_id, platform: str):
-        """Recover the raw platform id from a gateway-prefixed mention target.
+    def _resolve_at(mention_user_id, platform: str):
+        """Recover the raw platform id from a platform-prefixed mention target.
 
-        Gateway user ids are "<platform>:<raw id>". A bare value without a
+        The agent spells user ids "<platform>:<raw id>". A bare value without a
         platform prefix is the agent's QQ-side bot id (or a hallucinated
         marker) and is never addressable here, so it is dropped.
         """
-        if not at_user_id:
+        if not mention_user_id:
             return None
-        target = str(at_user_id)
+        target = str(mention_user_id)
         prefix = f"{platform}:"
         if target.startswith(prefix):
             raw = target[len(prefix):]

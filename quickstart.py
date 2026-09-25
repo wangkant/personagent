@@ -359,7 +359,7 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
              or plugin_token or secrets.token_urlsafe(32))
     values["CONNECTOR_TOKEN"] = token
     port = _env_get(env_path, "SERVER_PORT") or "8080"
-    local_url = f"http://127.0.0.1:{port}/webhook/gateway"
+    local_url = f"http://127.0.0.1:{port}"
     install_astrbot_plugin(data_dir)
     cfg = astrbot_plugin_config(existing, agent_url=local_url, token=token,
                                 qq=qq, groups=groups, private=private)

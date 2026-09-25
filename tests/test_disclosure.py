@@ -381,11 +381,11 @@ async def test_the_engine_reports_the_admission_as_a_reply_not_as_silence(
     agent._decide_and_search = no_search
     try:
         result = await agent.handle_gateway({
-            "platform": "telegram", "message_type": "private",
-            "conversation_id": "u1", "user_id": "u1", "sender_name": "Ada",
-            "self_id": "999000", "message_id": "u1:1", "is_at_me": True,
+            "platform": "telegram", "conversation_type": "dm",
+            "conversation_id": "u1", "sender_id": "u1", "sender_name": "Ada",
+            "bot_id": "999000", "message_id": "u1:1", "addressed": True,
             "segments": [{"type": "text", "text": "are you an ai?"}],
-            "raw_text": "are you an ai?",
+            "text": "are you an ai?",
         })
     finally:
         await agent.aclose()

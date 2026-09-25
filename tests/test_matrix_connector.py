@@ -129,7 +129,7 @@ def make(room_list=None, answers=None, seen=None, **overrides):
         Room(DM, {BOT: "Nova", ALEX: "Alex"}),
     ]
     client = Client(room_list)
-    agent = mc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="mx1",
+    agent = mc.sdk.Connector("http://127.0.0.1:8080", connector_id="mx1",
                              client=agent_client(answers if answers is not None else [],
                                                  seen if seen is not None else []))
     conn = mc.MatrixConnector(client, settings(**overrides), agent)
@@ -178,7 +178,7 @@ def test_settings_refuse_what_cannot_work() -> None:
         mc.Settings.from_env({"MATRIX_URL": "https://example.org",
                               "MATRIX_USER_ID": BOT})
     with pytest.raises(ValueError, match="PERSONAGENT_URL"):
-        mc.Settings.from_env({**base, "PERSONAGENT_URL": "http://agent.lan:8080/webhook/gateway",
+        mc.Settings.from_env({**base, "PERSONAGENT_URL": "http://agent.lan:8080",
                               "CONNECTOR_TOKEN": "g"})
     with pytest.raises(ValueError, match="MATRIX_TIMEOUT_S"):
         mc.Settings.from_env({**base, "MATRIX_TIMEOUT_S": "soon"})
@@ -208,15 +208,16 @@ def test_a_group_message_becomes_a_neutral_event() -> None:
     event = build(conn, GROUP, msg("how was your day?"))
     check("event", event is not None)
     expected = {
-        "platform": "matrix", "message_type": "group", "conversation_id": GROUP,
-        "user_id": ALEX, "sender_name": "Alex", "self_id": BOT, "message_id": "$e1",
-        "source_timestamp": NOW, "is_at_me": False, "raw_text": "how was your day?",
+        "platform": "matrix", "conversation_type": "group", "conversation_id": GROUP,
+        "sender_id": ALEX, "sender_name": "Alex", "bot_id": BOT, "message_id": "$e1",
+        "sent_at": NOW, "addressed": False, "text": "how was your day?",
         "segments": [{"type": "text", "text": "how was your day?"}],
-        "reply_handle": GROUP, "caps": ["outbox", "quote_text"],
+        "reply_handle": GROUP, "capabilities": ["outbox", "quote_text"],
     }
     check("fields", event == expected, repr(event))
     conn2, _ = make(outbox=False)
-    check("no outbox, no outbox cap", build(conn2, GROUP, msg())["caps"] == ["quote_text"])
+    check("no outbox, no outbox capability",
+          build(conn2, GROUP, msg())["capabilities"] == ["quote_text"])
 
 
 def test_direct_rooms_are_private_and_gated_by_the_dm_list() -> None:
@@ -228,45 +229,45 @@ def test_direct_rooms_are_private_and_gated_by_the_dm_list() -> None:
                          small_group],
                         dm_users=(ALEX, "@whatsapp_*:example.org"))
     event = build(conn, DM, msg())
-    check("two members is a DM", event["message_type"] == "private", repr(event))
+    check("two members is a DM", event["conversation_type"] == "dm", repr(event))
     check("a DM is keyed by the person", event["conversation_id"] == ALEX)
     check("reply_handle is still the room", event["reply_handle"] == DM)
     wa = build(conn, "!wa:example.org", msg(sender="@whatsapp_1:example.org"))
-    check("a bridge bot is not a member", wa and wa["message_type"] == "private", repr(wa))
+    check("a bridge bot is not a member", wa and wa["conversation_type"] == "dm", repr(wa))
     check("a room named in MATRIX_GROUPS stays a group",
-          build(conn, GROUP, msg())["message_type"] == "group")
+          build(conn, GROUP, msg())["conversation_type"] == "group")
     check("a group room not listed is ignored", build(conn, "!flag:example.org", msg()) is None)
     client.direct = {ALEX: ["!flag:example.org"]}
     asyncio.run(conn.refresh_direct_rooms())
     flagged_event = build(conn, "!flag:example.org", msg())
-    check("m.direct makes it a DM", flagged_event["message_type"] == "private")
+    check("m.direct makes it a DM", flagged_event["conversation_type"] == "dm")
     check("a stranger's DM is ignored",
           build(conn, "!flag:example.org", msg(sender="@bob:example.org")) is None)
 
 
-def test_is_at_me_follows_mentions_and_replies() -> None:
+def test_addressed_follows_mentions_and_replies() -> None:
     conn, client = make()
     at = build(conn, GROUP, msg("Nova: hi", **{"m.mentions": {"user_ids": [BOT]}}))
-    check("m.mentions", at["is_at_me"] is True)
+    check("m.mentions", at["addressed"] is True)
     named = build(conn, GROUP, msg("Nova is here", **{"m.mentions": {}}))
-    check("a name alone is the agent's call, not a mention", named["is_at_me"] is False)
+    check("a name alone is the agent's call, not a mention", named["addressed"] is False)
     malformed = build(conn, GROUP, msg("hi", **{"m.mentions": {"user_ids": f"x{BOT}x"}}))
-    check("user_ids must be a list, not a string to search", malformed["is_at_me"] is False)
+    check("user_ids must be a list, not a string to search", malformed["addressed"] is False)
     pill = build(conn, GROUP, msg(
         "Nova: how was your day?", format="org.matrix.custom.html",
         formatted_body='<a href="https://matrix.to/#/%40nova%3Aexample.org">Nova</a>: '
                        'how was your day?'))
-    check("pill without m.mentions", pill["is_at_me"] is True, repr(pill))
+    check("pill without m.mentions", pill["addressed"] is True, repr(pill))
     check("pill becomes a mention segment", pill["segments"] == [
         {"type": "mention", "user_id": BOT, "name": "Nova"},
         {"type": "text", "text": ": how was your day?"}], repr(pill["segments"]))
     check("bare user id in an old client's text",
-          build(conn, GROUP, msg(f"ping {BOT}"))["is_at_me"] is True)
+          build(conn, GROUP, msg(f"ping {BOT}"))["addressed"] is True)
 
     conn._remember("$mine", BOT, "it rained")
     reply = build(conn, GROUP, msg("really?", event_id="$e2",
                                    **{"m.relates_to": {"m.in_reply_to": {"event_id": "$mine"}}}))
-    check("a reply to the bot", reply["is_at_me"] is True)
+    check("a reply to the bot", reply["addressed"] is True)
     check("the quote carries its text", reply["segments"][0] == {
         "type": "reply", "message_id": "$mine", "sender_id": BOT, "sender_name": "Nova",
         "text": "it rained"}, repr(reply["segments"]))
@@ -274,14 +275,14 @@ def test_is_at_me_follows_mentions_and_replies() -> None:
     client.events["$old"] = msg("from yesterday", sender=BOT, event_id="$old")
     fetched = build(conn, GROUP, msg("still?", event_id="$e3",
                                      **{"m.relates_to": {"m.in_reply_to": {"event_id": "$old"}}}))
-    check("a reply to an event fetched from the server", fetched["is_at_me"] is True
+    check("a reply to an event fetched from the server", fetched["addressed"] is True
           and fetched["segments"][0]["text"] == "from yesterday", repr(fetched["segments"]))
 
     quoted = build(conn, GROUP, msg(
         f"> <{ALEX}> ask {BOT} later\n\nsure", sender="@bob:example.org", event_id="$e4",
         **{"m.relates_to": {"m.in_reply_to": {"event_id": "$gone"}}}))
-    check("a fallback quoting the bot's id is not a mention", quoted["is_at_me"] is False)
-    check("the fallback is not the sender's words", quoted["raw_text"] == "sure"
+    check("a fallback quoting the bot's id is not a mention", quoted["addressed"] is False)
+    check("the fallback is not the sender's words", quoted["text"] == "sure"
           and quoted["segments"][-1] == {"type": "text", "text": "sure"}, repr(quoted))
     check("an unfetchable quote falls back to the fallback text",
           quoted["segments"][0] == {"type": "reply", "message_id": "$gone",
@@ -339,9 +340,9 @@ def test_images_arrive_as_bytes() -> None:
         {"type": "emoji", "name": "wave"}], repr(lost["segments"]))
     voice = build(conn, GROUP, msg("voice.ogg", msgtype="m.audio",
                                    **{"org.matrix.msc3245.voice": {}}))
-    check("voice described", voice["raw_text"] == "(sent a voice message)")
+    check("voice described", voice["text"] == "(sent a voice message)")
     upload = build(conn, GROUP, msg("deck.pdf", msgtype="m.file"))
-    check("file described", upload["raw_text"] == "(sent a file: deck.pdf)")
+    check("file described", upload["text"] == "(sent a file: deck.pdf)")
 
     calls = []
 
@@ -392,7 +393,7 @@ def test_events_reach_the_agent_in_timeline_order_and_turns_overlap() -> None:
             return httpx.Response(200, json={"owned": True, "replies": []})
 
         conn, client = make()
-        conn.agent = mc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="mx1",
+        conn.agent = mc.sdk.Connector("http://127.0.0.1:8080", connector_id="mx1",
                                       client=httpx.AsyncClient(transport=httpx.MockTransport(agent)))
         client.media["mxc://example.org/pic"] = PNG
         fetch = client.download
@@ -448,13 +449,13 @@ def test_a_quote_whose_fetch_hangs_falls_back(monkeypatch) -> None:
 def test_a_turn_sends_the_replies_in_order_with_typing() -> None:
     seen: list = []
     answer = {"handled": True, "owned": True, "replies": [
-        {"type": "text", "text": "not bad, <rained>", "at_user_id": f"matrix:{ALEX}"},
+        {"type": "text", "text": "not bad, <rained>", "mention_user_id": f"matrix:{ALEX}"},
         {"type": "image", "b64": base64.b64encode(PNG).decode()},
-        {"type": "text", "text": "you?", "at_user_id": f"matrix:{BOT}"},
+        {"type": "text", "text": "you?", "mention_user_id": f"matrix:{BOT}"},
     ]}
     conn, client = make(answers=[answer], seen=seen)
     asyncio.run(conn.handle(client.rooms[GROUP], msg("how was your day?")))
-    check("the event reached the agent", seen[0]["forwarder_id"] == "mx1"
+    check("the event reached the agent", seen[0]["connector_id"] == "mx1"
           and seen[0]["message_id"] == "$e1")
     check("three messages", len(client.sent) == 3, repr(client.sent))
     first = client.sent[0][1]
@@ -478,7 +479,7 @@ def test_a_turn_sends_the_replies_in_order_with_typing() -> None:
 
 def test_a_dm_reply_mentions_nobody_and_an_unowned_turn_is_left_unread() -> None:
     conn, client = make(answers=[
-        {"owned": True, "replies": [{"type": "text", "text": "hey", "at_user_id": f"matrix:{ALEX}"}]},
+        {"owned": True, "replies": [{"type": "text", "text": "hey", "mention_user_id": f"matrix:{ALEX}"}]},
         {"owned": False, "replies": []},
     ])
     asyncio.run(conn.handle(client.rooms[DM], msg()))
@@ -501,7 +502,7 @@ def test_encrypted_rooms_need_e2ee() -> None:
           repr(content))
     plain, plain_client = make([secret], rooms=(secret.room_id,))
     status = asyncio.run(plain.deliver({"reply_handle": "!secret:example.org",
-                                        "message_type": "group",
+                                        "conversation_type": "group",
                                         "items": [{"type": "text", "text": "hi"}]}))
     check("never plaintext into an encrypted room", status == ("unsupported", 0)
           and plain_client.sent == [], repr(status))
@@ -510,32 +511,32 @@ def test_encrypted_rooms_need_e2ee() -> None:
 def test_outbox_deliveries_go_to_the_reply_handle() -> None:
     conn, client = make()
     two = [{"type": "text", "text": "anyone up?"}, {"type": "text", "text": "hello?"}]
-    check("sent", asyncio.run(conn.deliver({"reply_handle": GROUP, "message_type": "group",
+    check("sent", asyncio.run(conn.deliver({"reply_handle": GROUP, "conversation_type": "group",
                                             "conversation_id": GROUP, "items": two}))
           == ("sent", 2))
     check("in order", [c["body"] for _, c in client.sent] == ["anyone up?", "hello?"])
-    check("dm", asyncio.run(conn.deliver({"reply_handle": DM, "message_type": "private",
+    check("dm", asyncio.run(conn.deliver({"reply_handle": DM, "conversation_type": "dm",
                                           "conversation_id": ALEX, "items": two[:1]}))
           == ("sent", 1))
     check("unknown room", asyncio.run(conn.deliver({"reply_handle": "!gone:example.org",
                                                     "items": two})) == ("refused", 0))
     check("no longer allowed", asyncio.run(conn.deliver({
-        "reply_handle": DM, "message_type": "private", "conversation_id": "@bob:example.org",
+        "reply_handle": DM, "conversation_type": "dm", "conversation_id": "@bob:example.org",
         "items": two})) == ("refused", 0))
     # The handle is what the agent stored from an event, so it is checked
     # against where it points, not only against the ids beside it.
     check("a DM delivery aimed at a group room is refused", asyncio.run(conn.deliver({
-        "reply_handle": GROUP, "message_type": "private", "conversation_id": ALEX,
+        "reply_handle": GROUP, "conversation_type": "dm", "conversation_id": ALEX,
         "items": two})) == ("refused", 0))
     wide, _ = make(rooms=("*",))
     check("a group delivery aimed at a DM room is refused, even with rooms=*",
-          asyncio.run(wide.deliver({"reply_handle": DM, "message_type": "group",
+          asyncio.run(wide.deliver({"reply_handle": DM, "conversation_type": "group",
                                     "conversation_id": DM, "items": two}))
           == ("refused", 0))
     client.refuse_after = len(client.sent) + 1
-    check("partial", asyncio.run(conn.deliver({"reply_handle": GROUP, "message_type": "group",
+    check("partial", asyncio.run(conn.deliver({"reply_handle": GROUP, "conversation_type": "group",
                                                "items": two})) == ("partial", 1))
-    check("failed", asyncio.run(conn.deliver({"reply_handle": GROUP, "message_type": "group",
+    check("failed", asyncio.run(conn.deliver({"reply_handle": GROUP, "conversation_type": "group",
                                               "items": two})) == ("failed", 0))
 
 
@@ -687,7 +688,7 @@ def test_run_skips_the_backlog_and_serves_events_and_the_outbox() -> None:
     nio.live = [(GROUP, nio.RoomMessage(msg("hi Nova", event_id="$l", ts=fresh)))]
     seen: list = []
     pulls = [{"deliveries": [{"delivery_id": "d1", "reply_handle": GROUP,
-                              "message_type": "group", "conversation_id": GROUP,
+                              "conversation_type": "group", "conversation_id": GROUP,
                               "expires_in_s": 300,
                               "items": [{"type": "text", "text": "good morning"}]}]}]
     answers = [{"owned": True, "replies": [{"type": "text", "text": "hi Alex"}]}]
@@ -711,13 +712,13 @@ def test_run_skips_the_backlog_and_serves_events_and_the_outbox() -> None:
     events = [p for p in seen if p.get("platform") == "matrix"]
     check("the backlog was not forwarded", [e["message_id"] for e in events] == ["$l"],
           repr(events))
-    check("token login learned who it is", events[0]["self_id"] == BOT
+    check("token login learned who it is", events[0]["bot_id"] == BOT
           and client.device_id == "DEV")
-    check("the default forwarder id", events[0]["forwarder_id"] == mc.default_forwarder_id(BOT))
+    check("the default connector id", events[0]["connector_id"] == mc.default_forwarder_id(BOT))
     bodies = sorted(c["body"] for _, c in client.sent)
     check("reply and outbox delivery sent", bodies == ["good morning", "hi Alex"], repr(bodies))
-    check("pulls use the same forwarder id", all(
-        p["forwarder_id"] == mc.default_forwarder_id(BOT) for p in seen
+    check("pulls use the same connector id", all(
+        p["connector_id"] == mc.default_forwarder_id(BOT) for p in seen
         if p.get("kind") == "outbox.pull"))
     check("encryption off unless asked", client.config.kwargs == {
         "encryption_enabled": False, "store_sync_tokens": False})
