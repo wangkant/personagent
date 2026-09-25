@@ -270,8 +270,8 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                     "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
                 # Optional throttle between eval calls: a cross-vendor eval
                 # endpoint may rate-limit far below the tight
-                # benchmark loop. BENCH_EVAL_DELAY seconds keeps it under the cap.
-                _delay = float(os.getenv("BENCH_EVAL_DELAY", "0"))
+                # benchmark loop. BENCH_EVAL_DELAY_S seconds keeps it under the cap.
+                _delay = float(os.getenv("BENCH_EVAL_DELAY_S", "0"))
                 if _delay:
                     await asyncio.sleep(_delay)
             except Exception as e:
@@ -676,7 +676,7 @@ def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
 
 
 async def cmd_run(args) -> int:
-    bot_name = os.getenv("BOT_NAME", "Robin") or "Robin"
+    bot_name = os.getenv("PERSONA_NAME", "Robin") or "Robin"
     # Style ablation: with the full STYLE_GUIDE the base persona already avoids
     # AI-tell, so the loop has no failures to learn from and both arms sit at
     # ceiling. `--style weak` swaps in a neutral style guide (module global,

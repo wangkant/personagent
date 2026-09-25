@@ -57,7 +57,7 @@ python -m pytest tests/test_gateway.py -k throttle
 
 **Tests must never write the repo's real state files.** Everything mutable
 lives under `runtime/`, and a relative state-file setting such as
-`AGENT_MEMORY_FILE=memory.json` resolves there. A test that forgets to
+`MEMORY_FILE=memory.json` resolves there. A test that forgets to
 redirect a path will overwrite a running deployment's learned data. Start
 from the `make_agent()` helper in `tests/test_retrieval.py`, which redirects
 every state file into `tmp`.
@@ -125,7 +125,7 @@ other modules by name. One concern per module:
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
 | `persona_agent/outbox.py` | Messages no request is waiting for: each gateway conversation's reply handle, and the queue a connector pulls from `/webhook/gateway/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
-| `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ALLOWED_GROUPS`, `ALLOWED_DM_USERS` and the old names folded into them (pure logic) |
+| `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ACCESS_GROUPS`, `ACCESS_DM_USERS` and the old names folded into them (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
@@ -141,7 +141,7 @@ so a reply-safety gate can be tested without constructing an `Agent`.
 Reaching for `self` in such a module undoes the split.
 
 To add a setting, add it to `AgentSettings` in `settings.py` and read it with
-the `config_env` helpers (settings of the HTTP layer, such as `HOST`, are read
+the `config_env` helpers (settings of the HTTP layer, such as `SERVER_HOST`, are read
 in `main.py`). Then document it in `.env.example`: preflight reports any
 `.env` key that is not in `.env.example` as a misspelling, and
 `tests/test_http.py` fails if a setting the code reads is missing from

@@ -43,8 +43,8 @@ from persona_agent.paths import resolve_runtime_lang_file
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 # Same caps the agent applies when it rebuilds a view (see
 # candidates.rebuild_views), so both writers converge on one pool size.
-EXAMPLES_MAX_AUTO = int(os.getenv("EXAMPLES_MAX_AUTO", 500) or 0)
-FEEDBACK_MAX_AUTO = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
+PROMOTE_MAX_EXAMPLES = int(os.getenv("PROMOTE_MAX_EXAMPLES", 500) or 0)
+PROMOTE_MAX_FEEDBACK = int(os.getenv("PROMOTE_MAX_FEEDBACK", 500) or 0)
 
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -216,7 +216,7 @@ def cmd_show(args, ledger, log, policy) -> int:
 def _rebuild(paths: dict, ledger) -> None:
     n_ex, n_fb = candidates.rebuild_views(
         ledger, paths["examples_view"], paths["feedback_view"],
-        max_examples=EXAMPLES_MAX_AUTO, max_pairs=FEEDBACK_MAX_AUTO)
+        max_examples=PROMOTE_MAX_EXAMPLES, max_pairs=PROMOTE_MAX_FEEDBACK)
     print(f"views rebuilt: {n_ex} example row(s) -> {paths['examples_view'].name}, "
           f"{n_fb} pair(s) -> {paths['feedback_view'].name}")
 

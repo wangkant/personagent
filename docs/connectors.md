@@ -27,13 +27,13 @@ the connector's name for the platform, lowercase, without `:`.
 QQ is the one exception kept for compatibility: its ids are stored bare
 (`123456`), and `qq:123456` in any setting means the same thing. A connector
 that carries QQ and wants learned state to line up with an existing QQ
-deployment names its platform in `GATEWAY_NATIVE_PLATFORMS` (the AstrBot
+deployment names its platform in `CONNECTOR_QQ_PLATFORMS` (the AstrBot
 plugin's QQ adapter is `aiocqhttp`); ids from those platforms are stored bare
 too.
 
 ## Authentication
 
-Both endpoints below use the same scheme. With `GATEWAY_TOKEN` set on the
+Both endpoints below use the same scheme. With `CONNECTOR_TOKEN` set on the
 agent, every request carries:
 
 - `X-Gateway-Token`: the token.
@@ -122,7 +122,7 @@ The response:
   other bot logic from answering, even with an empty `replies`: the persona
   chose to stay quiet. When it is false, the message is yours to handle.
 - The request lasts as long as the turn: a short debounce plus every model
-  call. Allow at least `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)` seconds.
+  call. Allow at least `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` seconds.
 
 ## Outbox: `POST /webhook/gateway/outbox`
 
@@ -132,7 +132,7 @@ queues those per conversation, and a connector that declared `outbox` pulls
 them. Pull rather than push means the agent never needs to reach the
 connector, so a connector behind NAT or a firewall works the same.
 Conversations stored under bare QQ ids (see Addressing) use the outbox too
-while their connector is pulling, and NapCat's HTTP API (`NAPCAT_API`)
+while their connector is pulling, and NapCat's HTTP API (`QQ_ONEBOT_URL`)
 otherwise, as they always have.
 
 Request:
@@ -212,7 +212,7 @@ Rules:
   `"kind": "event"`; one with any other `kind` is refused.
 
 A 404 without a `code` means the agent is older than the outbox; `404` with
-code `outbox_disabled` means the operator turned it off (`GATEWAY_OUTBOX`).
+code `outbox_disabled` means the operator turned it off (`CONNECTOR_OUTBOX_ENABLED`).
 Either way, pull again after a long pause.
 
 ## Speaking first without the outbox
@@ -229,7 +229,7 @@ agent's own openers, and not as the person's activity.
 
 | Missing | Effect |
 |---|---|
-| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `NAPCAT_API` reaches it) |
+| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `QQ_ONEBOT_URL` reaches it) |
 | `quote_text` | a quoted message is understood only if the agent saw it itself |
 | `reply_handle` | same as no `outbox` |
 | `is_at_me` wrong | the persona treats addressed messages as background chatter |

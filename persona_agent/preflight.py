@@ -33,11 +33,11 @@ REQUIRED = ("LLM_API_KEY",)
 #: Set, but empty, is a different thing from unset for these: the agent runs
 #: and behaves oddly rather than not running.
 WANTED = {
-    "BOT_NAME": "the persona has no name, so it cannot notice being called",
+    "PERSONA_NAME": "the persona has no name, so it cannot notice being called",
     # Emptied rather than unset is the whole point: `os.getenv` only applies
     # its default when the key is ABSENT, so `LLM_MODEL=` in a hand-edited
     # `.env` sends `{"model": ""}` on every completion — a guaranteed 400 that
-    # also arms the fallback cooldown. `PRIVATE_MODEL` was given a runtime
+    # also arms the fallback cooldown. `LLM_DM_MODEL` was given a runtime
     # fallback for exactly this (see settings.py); the primary model has none.
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
@@ -67,7 +67,7 @@ TEMPLATE_EXEMPT = frozenset({
     # (config_env.vision_endpoint_from_env) and not advertised.
     "GLM_API_KEY", "GLM_BASE_URL",
     # The identity settings' QQ-only names, folded into ADMIN_IDS,
-    # ALLOWED_GROUPS and ALLOWED_DM_USERS (access.IDENTITY_SETTINGS).
+    # ACCESS_GROUPS and ACCESS_DM_USERS (access.IDENTITY_SETTINGS).
     *access.LEGACY_SETTINGS,
     # ADMIN_NAME and ADMIN_RELATIONSHIP's names before 0.5 (_RENAMED).
     *(old for old, _new in _RENAMED),
@@ -108,7 +108,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
         bare = [i for i in ids if ":" not in i and not i.isdigit()]
         if bare:
             closes = (", and as a QQ entry it closes every QQ group not listed"
-                      if name in ("ALLOWED_GROUPS", "QQ_GROUPS") else "")
+                      if name in ("ACCESS_GROUPS", "QQ_GROUPS") else "")
             findings.append(Finding(
                 "WARN", name,
                 f"has {_shown(bare)} with no platform prefix, so it is read as "
@@ -126,8 +126,8 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     # The old QQ-only lists are read per platform now. A namespaced entry in
     # one used to close every QQ group (QQ_GROUPS) or do nothing at all
     # (PRIVATE_ALLOWED_QQS); it now restricts its own platform instead.
-    for old, new in (("QQ_GROUPS", "ALLOWED_GROUPS"),
-                     ("PRIVATE_ALLOWED_QQS", "ALLOWED_DM_USERS")):
+    for old, new in (("QQ_GROUPS", "ACCESS_GROUPS"),
+                     ("PRIVATE_ALLOWED_QQS", "ACCESS_DM_USERS")):
         foreign = [i for i in access.canonical_ids(
             identity.written[old], native_platforms=natives) if ":" in i]
         if foreign:
@@ -148,8 +148,8 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
 
     # Listing one entry for a platform takes that platform away from the
     # forwarder's allowlist. Documented, but easy to trip over.
-    for name, what in (("ALLOWED_GROUPS", "groups"),
-                       ("ALLOWED_DM_USERS", "users besides the admin")):
+    for name, what in (("ACCESS_GROUPS", "groups"),
+                       ("ACCESS_DM_USERS", "users besides the admin")):
         platforms = sorted({channels.platform_of(i) for i in identity.ids(name)
                             if channels.platform_of(i).islower()}
                            - {channels.NATIVE_PLATFORM})
@@ -164,7 +164,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     odd = [p for p in natives if p != _QQ_ADAPTER]
     if odd:
         findings.append(Finding(
-            "WARN", "GATEWAY_NATIVE_PLATFORMS",
+            "WARN", "CONNECTOR_QQ_PLATFORMS",
             f"names {_shown(odd)}. A native platform's ids are stored bare, "
             f"which is how QQ numbers are stored, so they are compared against "
             f"the QQ admins and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
@@ -200,9 +200,9 @@ def _base_url_needs_full_path(base: str) -> bool:
 
 
 def private_model_from_env(env=None) -> str:
-    """PRIVATE_MODEL, honouring the pre-0.1.2 ANTHROPIC_PRIVATE_MODEL alias."""
+    """LLM_DM_MODEL, honouring the pre-0.1.2 ANTHROPIC_PRIVATE_MODEL alias."""
     env = os.environ if env is None else env
-    return env.get("PRIVATE_MODEL", "") or env.get("ANTHROPIC_PRIVATE_MODEL", "")
+    return env.get("LLM_DM_MODEL", "") or env.get("ANTHROPIC_PRIVATE_MODEL", "")
 
 
 class Finding:
@@ -345,28 +345,28 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
               if i.isdigit()}
 
-    bot_qq = str(configured.get("BOT_QQ") or "").strip()
+    bot_qq = str(configured.get("QQ_BOT_ID") or "").strip()
     if bot_qq and not any(name in configured
-                          for name in ("ALLOWED_GROUPS", "QQ_GROUPS")):
+                          for name in ("ACCESS_GROUPS", "QQ_GROUPS")):
         findings.append(Finding(
-            "INFO", "ALLOWED_GROUPS",
+            "INFO", "ACCESS_GROUPS",
             "is unset, so the bot listens in every QQ group it is a member of"))
-    # BOT_QQ is silently load-bearing on QQ: a QQ @ carries the account's
+    # QQ_BOT_ID is silently load-bearing on QQ: a QQ @ carries the account's
     # number and `_is_at_me` has nothing else to match it against, so a QQ
     # deployment that is otherwise complete starts cleanly, logs nothing, and
     # never answers a mention. Exactly the failure class this module exists
     # for — and only a warning, because `try_chat.py` supplies its own
     # placeholder and needs none of this.
-    looks_like_qq = (bool(str(configured.get("NAPCAT_API") or "").strip())
+    looks_like_qq = (bool(str(configured.get("QQ_ONEBOT_URL") or "").strip())
                      or bool(qq_ids))
     if looks_like_qq and not bot_qq:
         findings.append(Finding(
-            "WARN", "BOT_QQ",
+            "WARN", "QQ_BOT_ID",
             "is empty while the rest of the QQ configuration is set — the bot "
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
 
-    for key in ("LLM_BASE_URL", "FALLBACK_BASE_URL"):
+    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL"):
         url = str(configured.get(key) or "").strip()
         if _base_url_needs_full_path(url):
             findings.append(Finding(
@@ -380,14 +380,14 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     # so both of its failure modes are silent: configured for a fallback that
     # is the primary's own name, it is never called; pointed at another host
     # without its own key, it is handed the primary's.
-    fallback_url = str(configured.get("FALLBACK_BASE_URL") or "").strip()
-    fallback_key = str(configured.get("FALLBACK_API_KEY") or "").strip()
-    fallback_model = str(configured.get("FALLBACK_MODEL") or "").strip()
+    fallback_url = str(configured.get("LLM_FALLBACK_BASE_URL") or "").strip()
+    fallback_key = str(configured.get("LLM_FALLBACK_API_KEY") or "").strip()
+    fallback_model = str(configured.get("LLM_FALLBACK_MODEL") or "").strip()
     primary_model = str(configured.get("LLM_MODEL") or DEFAULT_LLM_MODEL).strip()
     if (fallback_url or fallback_key) and fallback_model in ("", primary_model):
         findings.append(Finding(
-            "WARN", "FALLBACK_BASE_URL" if fallback_url else "FALLBACK_API_KEY",
-            "is set, but FALLBACK_MODEL is blank or the same as LLM_MODEL — only"
+            "WARN", "LLM_FALLBACK_BASE_URL" if fallback_url else "LLM_FALLBACK_API_KEY",
+            "is set, but LLM_FALLBACK_MODEL is blank or the same as LLM_MODEL — only"
             " a distinct fallback model is sent to the fallback endpoint, so"
             " this has no effect"))
     elif fallback_url and not fallback_key:
@@ -395,8 +395,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         primary_url = str(configured.get("LLM_BASE_URL") or "").strip()
         if fallback_host != urlsplit(primary_url or DEFAULT_LLM_BASE_URL).hostname:
             findings.append(Finding(
-                "WARN", "FALLBACK_API_KEY",
-                f"is blank while FALLBACK_BASE_URL points at another host"
+                "WARN", "LLM_FALLBACK_API_KEY",
+                f"is blank while LLM_FALLBACK_BASE_URL points at another host"
                 f" ({fallback_host}), so LLM_API_KEY is sent there. Give the"
                 " fallback provider its own key"))
 

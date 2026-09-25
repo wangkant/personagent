@@ -847,7 +847,7 @@ class Learning:
     # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:
         """Background loop that turns the agent's own low-score evals into
-        BAD/OK preference *candidates*. Opt-in (EVOLVE_AUTO).
+        BAD/OK preference *candidates*. Opt-in (EVOLVE_AUTO_ENABLED).
 
         A self-diagnosis is one automatic signal that nobody witnessed, so it
         proposes and waits like everything else: promotion needs a real user
@@ -856,7 +856,7 @@ class Learning:
         if not self.enabled or not self.evolve_auto:
             return
         if not self.eval_enable:
-            logger.warning("[Agent] EVOLVE_AUTO=true but EVAL_ENABLE=false — "
+            logger.warning("[Agent] EVOLVE_AUTO_ENABLED=true but EVAL_ENABLED=false — "
                            "no scores are being produced, evolve loop idle")
         logger.info("[Agent] evolve loop ON (every %.1fh, score<=%d, batch=%d, model=%s)",
                     self.evolve_interval / 3600, self.evolve_threshold,

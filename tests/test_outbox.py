@@ -18,7 +18,7 @@ from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.outbox import HandleStore, Outbox
 
-BOT_QQ = "10001"
+QQ_BOT_ID = "10001"
 TOKEN = "outbox-secret"
 
 
@@ -29,7 +29,7 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 def make_agent(tmp: Path) -> Agent:
     """A real agent with every state file it may write redirected to `tmp`."""
     a = Agent(
-        api_key="test-key", bot_qq=BOT_QQ, bot_name="TestBot",
+        api_key="test-key", bot_qq=QQ_BOT_ID, bot_name="TestBot",
         napcat_api="http://127.0.0.1:9",
         memory_file=str(tmp / "memory.json"), persona="test persona",
         eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
@@ -456,15 +456,15 @@ class _Served:
         self.agent, self.token = agent, token
 
     def __enter__(self):
-        self.saved = (main_module.agent, main_module.GATEWAY_TOKEN,
+        self.saved = (main_module.agent, main_module.CONNECTOR_TOKEN,
                       main_module._gateway_replay)
         main_module.agent = self.agent
-        main_module.GATEWAY_TOKEN = self.token
+        main_module.CONNECTOR_TOKEN = self.token
         main_module._gateway_replay = main_module.ReplayGuard()
         return self
 
     def __exit__(self, *exc):
-        (main_module.agent, main_module.GATEWAY_TOKEN,
+        (main_module.agent, main_module.CONNECTOR_TOKEN,
          main_module._gateway_replay) = self.saved
 
 
@@ -517,7 +517,7 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
     check("kind: an event may name its kind",
           event_kinded.status_code == 200
           and event_kinded.json()["owned"] is True, event_kinded.text)
-    check("disabled: GATEWAY_OUTBOX=false answers 404 with a code",
+    check("disabled: CONNECTOR_OUTBOX_ENABLED=false answers 404 with a code",
           disabled.status_code == 404
           and disabled.json()["code"] == "outbox_disabled", disabled.text)
 
@@ -645,7 +645,7 @@ async def test_the_route_table(tmp: Path) -> None:
     check("route: a room nobody left an address for has none",
           agent._background_route("telegram:c2") is None)
     agent.gateway_outbox = False
-    check("route: GATEWAY_OUTBOX=false closes it",
+    check("route: CONNECTOR_OUTBOX_ENABLED=false closes it",
           agent._background_route("telegram:c1") is None)
     agent.gateway_outbox = True
     agent.gateway_native_platforms = {"aiocqhttp"}
@@ -739,11 +739,11 @@ async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
     await agent.handle({
         "post_type": "message", "message_type": "group", "group_id": "556",
         "user_id": "42", "message_id": 92002, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "you free tonight?"}}],
         "raw_message": "you free tonight?"})
     await agent.handle_gateway(group_event(
-        "m3", platform="aiocqhttp", gid="557", uid="43", self_id=BOT_QQ))
+        "m3", platform="aiocqhttp", gid="557", uid="43", self_id=QQ_BOT_ID))
     for _ in range(50):
         if len(posted) == 2:
             break

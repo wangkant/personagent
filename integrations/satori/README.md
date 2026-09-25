@@ -42,7 +42,7 @@ for signing and the outbox loop.
    conversations you forward.
 
 2. **The agent.** Run personagent as its README describes. If the connector
-   and the agent are on different hosts, set `GATEWAY_TOKEN` in the agent's
+   and the agent are on different hosts, set `CONNECTOR_TOKEN` in the agent's
    `.env` and put the agent behind HTTPS.
 
 3. **The connector.** From the personagent checkout:
@@ -53,7 +53,7 @@ for signing and the outbox loop.
    ```
 
    Edit `integrations/satori/.env`: the Satori endpoint and token, the agent's
-   URL and `GATEWAY_TOKEN`, and the conversations to forward (see
+   URL and `CONNECTOR_TOKEN`, and the conversations to forward (see
    [Allowlists](#allowlists)). Then:
 
    ```bash
@@ -72,21 +72,21 @@ for signing and the outbox loop.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `SATORI_ENDPOINT` | `http://127.0.0.1:5140/satori` | the Satori server; a trailing `/v1` is optional |
+| `SATORI_URL` | `http://127.0.0.1:5140/satori` | the Satori server; a trailing `/v1` is optional |
 | `SATORI_TOKEN` | | the server's token (Koishi: `server-satori` → `token`) |
 | `PERSONAGENT_URL` | `http://127.0.0.1:8080/webhook/gateway` | the agent's gateway endpoint |
-| `GATEWAY_TOKEN` | | the agent's `GATEWAY_TOKEN` |
+| `CONNECTOR_TOKEN` | | the agent's `CONNECTOR_TOKEN` |
 | `SATORI_GROUPS` | | groups to forward: channel or guild ids, optionally `platform:id`; `*` for all |
 | `SATORI_DM_USERS` | | people whose DMs are forwarded: user ids, optionally `platform:id`; `*` for all |
 | `SATORI_PLATFORMS` | all | only these Satori platforms |
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | rename platforms as the agent sees them: `satori_name=name, ...` |
-| `SATORI_OUTBOX` | `true` | pull the agent's outbox |
-| `SATORI_FORWARDER_ID` | from the endpoint | this connector's id at the agent; keep it stable |
-| `SATORI_TIMEOUT_S` | `420` | how long one turn may take; keep it above the agent's `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)` |
-| `SATORI_INLINE_IMAGES` | `false` | download public image URLs here instead of passing the URL to the agent |
+| `SATORI_OUTBOX_ENABLED` | `true` | pull the agent's outbox |
+| `SATORI_CONNECTOR_ID` | from the endpoint | this connector's id at the agent; keep it stable |
+| `SATORI_TIMEOUT_S` | `420` | how long one turn may take; keep it above the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` |
+| `SATORI_INLINE_IMAGES_ENABLED` | `false` | download public image URLs here instead of passing the URL to the agent |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 
-The agent URL must be loopback, or HTTPS with `GATEWAY_TOKEN`; the connector
+The agent URL must be loopback, or HTTPS with `CONNECTOR_TOKEN`; the connector
 refuses to start otherwise. A `SATORI_TOKEN` sent over plain `http` to another
 host is logged as a warning.
 
@@ -116,7 +116,7 @@ it). Two cases need a thought:
 - **QQ through OneBot** (Koishi's `adapter-onebot`, with NapCat or LLOneBot
   behind it) has QQ numbers as ids. To keep what the agent learned on an
   existing QQ deployment, add the platform to the agent's
-  `GATEWAY_NATIVE_PLATFORMS` (`GATEWAY_NATIVE_PLATFORMS=onebot`): its ids are
+  `CONNECTOR_QQ_PLATFORMS` (`CONNECTOR_QQ_PLATFORMS=onebot`): its ids are
   then stored bare, like the direct QQ path, and `QQ_GROUPS` and
   `PRIVATE_ALLOWED_QQS` apply to them. Do this only for a platform whose ids
   really are QQ numbers.
@@ -136,7 +136,7 @@ it). Two cases need a thought:
 | Voice, video, files | Described in words: `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)` |
 | Replies | Text, and images as `data:` URIs, each as its own message with a short gap. A mention the agent asks for is an `<at>` in groups |
 | Passive-reply platforms | Replies carry the event's `referrer`, which the official QQ bot API needs to answer a message |
-| Outbox | Scheduled openers, follow-ups and excuses go to the channel through the login that received the conversation. The connector signs each reply handle with a key derived from `SATORI_TOKEN` and `GATEWAY_TOKEN` and sends only to handles it signed, so after changing either token a conversation is reachable again once it has spoken. An agent older than the outbox answers 404; the connector asks again every 10 minutes |
+| Outbox | Scheduled openers, follow-ups and excuses go to the channel through the login that received the conversation. The connector signs each reply handle with a key derived from `SATORI_TOKEN` and `CONNECTOR_TOKEN` and sends only to handles it signed, so after changing either token a conversation is reachable again once it has spoken. An agent older than the outbox answers 404; the connector asks again every 10 minutes |
 | Typing indicator | No: Satori has no typing API |
 | `owned` | Honoured by never sending anything else; other Koishi plugins are not stopped (see step 1) |
 

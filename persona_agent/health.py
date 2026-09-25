@@ -35,22 +35,22 @@ def _get(url, timeout=10):
 
 def _llm_endpoint(model: str) -> tuple[str, str]:
     """(base URL, key) the agent calls `model` on: the fallback model may have
-    its own endpoint (FALLBACK_BASE_URL / FALLBACK_API_KEY), every other name
+    its own endpoint (LLM_FALLBACK_BASE_URL / LLM_FALLBACK_API_KEY), every other name
     is on the primary's."""
     return endpoint_for(
         model,
         primary_model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
-        fallback_model=os.getenv("FALLBACK_MODEL", ""),
+        fallback_model=os.getenv("LLM_FALLBACK_MODEL", ""),
         base_url=(os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL) or "").rstrip("/"),
         api_key=os.getenv("LLM_API_KEY", ""),
-        fallback_base_url=(os.getenv("FALLBACK_BASE_URL", "") or "").rstrip("/"),
-        fallback_api_key=os.getenv("FALLBACK_API_KEY", ""))
+        fallback_base_url=(os.getenv("LLM_FALLBACK_BASE_URL", "") or "").rstrip("/"),
+        fallback_api_key=os.getenv("LLM_FALLBACK_API_KEY", ""))
 
 
 def check_private_chat():
-    """Private-chat model probe. PRIVATE_MODEL is an alternate model name
+    """Private-chat model probe. LLM_DM_MODEL is an alternate model name
     (blank = LLM_MODEL) on the primary's endpoint — unless it is also the
-    FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
+    LLM_FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
     Routed like the agent, or the probe would report on an endpoint DMs do
     not use."""
     # The agent's own default and semantics (settings.py): unset reads as the
@@ -71,7 +71,7 @@ def check_primary_chat_tools():
     function-calling path the web-search decision uses — on the endpoint the
     agent would send that model to, which is the fallback's own when one is
     configured."""
-    model = os.getenv("FALLBACK_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL
+    model = os.getenv("LLM_FALLBACK_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL
     base, key = _llm_endpoint(model)
     if not key:
         return None, "not configured"
@@ -153,7 +153,7 @@ def check_tavily():
 
 def check_onebot():
     """OneBot / NapCat HTTP bridge to the IM client."""
-    base = (os.getenv("NAPCAT_API", "http://127.0.0.1:3000") or "").rstrip("/")
+    base = (os.getenv("QQ_ONEBOT_URL", "http://127.0.0.1:3000") or "").rstrip("/")
     r = _get(f"{base}/get_login_info")
     d = r.get("data", {}) if isinstance(r, dict) else {}
     return True, f"online as {d.get('nickname', '?')} ({d.get('user_id', '?')})"
@@ -214,10 +214,10 @@ def run_checks() -> list:
     {name, ok (True/False/None=skipped), critical, detail, ms}."""
     def _one(item):
         name, fn, critical = item
-        if fn is check_onebot and not os.getenv("BOT_QQ", "").strip():
+        if fn is check_onebot and not os.getenv("QQ_BOT_ID", "").strip():
             return {"name": name, "ok": None, "critical": False,
-                    "detail": "not required (BOT_QQ is unset)", "ms": 0}
-        if fn is check_onebot and os.getenv("GATEWAY_NATIVE_PLATFORMS", "").strip():
+                    "detail": "not required (QQ_BOT_ID is unset)", "ms": 0}
+        if fn is check_onebot and os.getenv("CONNECTOR_QQ_PLATFORMS", "").strip():
             # QQ arrives through a connector, which also sends; NapCat's HTTP
             # server only adds the missed-mention sweep and a fallback.
             critical = False

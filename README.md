@@ -107,9 +107,9 @@ Anything else can connect through the [connector protocol](docs/connectors.md): 
 To connect through AstrBot:
 
 1. Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) and set up your platform in its WebUI.
-2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `GATEWAY_TOKEN` to both sides. Answers you gave before are kept as the defaults.
+2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `CONNECTOR_TOKEN` to both sides. Answers you gave before are kept as the defaults.
 3. Add the groups the bot may join to the plugin's allowlist. It forwards nothing until you do; private chats also need `private_enabled=true` and an allowlisted sender.
-4. In personagent's `.env`, check `BOT_NAME`, the name it answers to. On QQ, also set `BOT_QQ` to the bot account's number.
+4. In personagent's `.env`, check `PERSONA_NAME`, the name it answers to. On QQ, also set `QQ_BOT_ID` to the bot account's number.
 5. Restart AstrBot, then start personagent from the repository root: `.venv/bin/python main.py` (Windows: `.venv\Scripts\python.exe main.py`).
 
 Say its name in an allowed group to check. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin.
@@ -128,8 +128,8 @@ python quickstart.py --astrbot <AstrBot data dir> --platform telegram --token <b
 QQ also needs a OneBot v11 implementation such as NapCat, connected through AstrBot's `aiocqhttp` adapter.
 
 - Remove `aiocqhttp` from the plugin's `excluded_platforms`.
-- Set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
-- NapCat's HTTP server (`NAPCAT_API`) is optional. With it, personagent catches up on mentions it missed while offline, and has a fallback for the messages it starts itself when the plugin is not pulling its outbox. On this path OCR fallback is skipped.
+- Set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
+- NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional. With it, personagent catches up on mentions it missed while offline, and has a fallback for the messages it starts itself when the plugin is not pulling its outbox. On this path OCR fallback is skipped.
 - The direct `/webhook/qq` ingress is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
@@ -139,20 +139,20 @@ QQ also needs a OneBot v11 implementation such as NapCat, connected through Astr
 
 The plugin posts only to a loopback address (the same host, or a container sharing its network namespace or using host networking), or to HTTPS with `gateway_token` set. Plain `http://` to anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe agent_url`, and AstrBot's own model answers instead. Set `agent_url` in the plugin settings; the same-host default is `http://127.0.0.1:8080/webhook/gateway`.
 
-personagent listens on `127.0.0.1:8080`. A non-loopback `HOST` requires both `GATEWAY_TOKEN` and `WEBHOOK_SECRET`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
+personagent listens on `127.0.0.1:8080`. A non-loopback `SERVER_HOST` requires both `CONNECTOR_TOKEN` and `QQ_ONEBOT_SECRET`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
 
 </details>
 
 <details>
 <summary>Speaking first</summary>
 
-Some messages answer nobody: proactive openers (`PROACTIVE_ENABLE`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLE=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a private event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
+Some messages answer nobody: proactive openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLED=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a private event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 
 ## Teach it
 
-Talk to it in the group. The name has to be in the message (replace Nova with your `BOT_NAME`):
+Talk to it in the group. The name has to be in the message (replace Nova with your `PERSONA_NAME`):
 
 | Say | What happens |
 |---|---|
@@ -173,7 +173,7 @@ Nova:  fair. that's a rough end to the day
 Alex:  haha yeah it is, thanks Nova
 ```
 
-A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. The rule behind it: a change needs two agreeing signals from the same chat within 30 days, at least one of them strong (a correction with a better line from the person the reply was for, or a retry they accepted). Laughs and the bot's own scores never count on their own. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT`).
+A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. The rule behind it: a change needs two agreeing signals from the same chat within 30 days, at least one of them strong (a correction with a better line from the person the reply was for, or a retry they accepted). Laughs and the bot's own scores never count on their own. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT_ENABLED`).
 
 To review or overrule the loop, use the ledger tool (on Windows, `.venv\Scripts\python.exe`):
 
@@ -189,18 +189,18 @@ To review or overrule the loop, use the ledger tool (on Windows, `.venv\Scripts\
 
 The defaults, all in `.env`:
 
-- `REACT_LEARN`, `REACT_ELICIT` and `PROMOTE_AUTO` are on. Judging reactions costs extra model calls.
-- `PROMOTE_AUTO=false` leaves every promotion to you.
+- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` and `PROMOTE_AUTO_ENABLED` are on. Judging reactions costs extra model calls.
+- `PROMOTE_AUTO_ENABLED=false` leaves every promotion to you.
 - `PROMOTE_MIN_SPEAKERS=2` stops one member from teaching it alone; the admin is exempt.
-- `EVAL_ENABLE` (the bot scoring its own replies) and `EVOLVE_AUTO` are off.
+- `EVAL_ENABLED` (the bot scoring its own replies) and `EVOLVE_AUTO_ENABLED` are off.
 
-Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
+Changing `PERSONA_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
 
 ## How it works
 
 ![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through the connector; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
 
-Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
+Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `LLM_JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
 
 Learning runs beside that path, never inside it, and keeps its state in plain files under `runtime/`. Reactions go into an evidence log that is never rewritten. Adjudicating them proposes candidates, the promotion policy decides which may change replies, and promoted ones are written to small view files that retrieval reloads without a restart. Because the ledgers are append-only, "why does it talk like this?" always has an answer, and a rollback always has something to undo.
 
@@ -208,17 +208,17 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 Everything personagent stores stays on your machine, in `runtime/`, `.env`, `persona.txt` and `persona.card.json`. None of it is committed to Git, and it can hold credentials and real conversations, so back it up and keep it private.
 
-The model provider does see conversations. Chat context goes to your `LLM_BASE_URL`. If you configure a fallback (`FALLBACK_MODEL`, `FALLBACK_BASE_URL`), it is called on ordinary turns too, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context as well. Images go to the vision endpoint, and when the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
+The model provider does see conversations. Chat context goes to your `LLM_BASE_URL`. If you configure a fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), it is called on ordinary turns too, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context as well. Images go to the vision endpoint, and when the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
 
 Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Third-party QQ clients put the account at risk; read the [disclaimer](DISCLAIMER.md).
 
 ## Troubleshooting
 
-**It runs but never replies.** Start with the connector. In the AstrBot plugin, check the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `BOT_NAME`, `BOT_QQ` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
+**It runs but never replies.** Start with the connector. In the AstrBot plugin, check the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `PERSONA_NAME`, `QQ_BOT_ID` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
 
 **Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Gateway-Token` header once a token is configured.
 
-**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. The wizard rewrites some settings from your answers, so read each prompt when you rerun it. `TZ_OFFSET_HOURS` (default 8, UTC+8) sets the clock for the night window and proactive quiet hours.
+**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. The wizard rewrites some settings from your answers, so read each prompt when you rerun it. `PERSONA_TZ_OFFSET_HOURS` (default 8, UTC+8) sets the clock for the night window and proactive quiet hours.
 
 ## Status
 

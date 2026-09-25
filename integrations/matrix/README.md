@@ -20,7 +20,7 @@ Inbound, for each message in an allowed room:
 - A room is a **direct chat** when the bot's `m.direct` lists it, or when it
   holds exactly one other member besides the bot and the users in
   `MATRIX_IGNORE_USERS`. A direct chat is keyed by the person, a group by the
-  room. A room named by id in `MATRIX_ROOMS` is always a group.
+  room. A room named by id in `MATRIX_GROUPS` is always a group.
 - `is_at_me` is true when the message mentions the bot (`m.mentions`, or a
   pill or the bot's user id from a client too old to send `m.mentions`), or
   replies to one of the bot's messages.
@@ -52,7 +52,7 @@ Outbound:
 - A typing notice runs while the agent works on a turn.
 - A message in a thread is answered in that thread.
 - The bot marks a message read once the agent takes the conversation
-  (`MATRIX_READ_RECEIPTS`). Through a bridge, that is the read tick on the
+  (`MATRIX_READ_RECEIPTS_ENABLED`). Through a bridge, that is the read tick on the
   other network.
 - Outbox deliveries go to the room the conversation last came from (the
   event's `reply_handle` is the room id).
@@ -70,10 +70,10 @@ cp integrations/matrix/.env.example integrations/matrix/.env
 Edit `integrations/matrix/.env`:
 
 ```ini
-MATRIX_HOMESERVER=https://matrix.example.org
+MATRIX_URL=https://matrix.example.org
 MATRIX_USER_ID=@nova:example.org
 MATRIX_PASSWORD=...
-MATRIX_ROOMS=!AbCdEf:example.org
+MATRIX_GROUPS=!AbCdEf:example.org
 MATRIX_DM_USERS=@alex:example.org
 PERSONAGENT_URL=http://127.0.0.1:8080/webhook/gateway
 ```
@@ -85,7 +85,7 @@ python integrations/matrix/matrix_connector.py
 # or: python integrations/matrix/matrix_connector.py --config /path/to/matrix.env
 ```
 
-Invite the bot to a room listed in `MATRIX_ROOMS` and it joins. Room ids are
+Invite the bot to a room listed in `MATRIX_GROUPS` and it joins. Room ids are
 under Room settings, Advanced in Element.
 
 ### Logging in
@@ -107,7 +107,7 @@ sync is retried after a wait that doubles up to a minute.
 ### Where the agent can run
 
 The rule is the protocol's: `PERSONAGENT_URL` must be a loopback address, or
-HTTPS with `GATEWAY_TOKEN` set to the agent's `GATEWAY_TOKEN`. The connector
+HTTPS with `CONNECTOR_TOKEN` set to the agent's `CONNECTOR_TOKEN`. The connector
 refuses to start otherwise.
 
 ## Settings
@@ -117,13 +117,13 @@ and take globs: `*` is everyone, `@*:example.org` a whole server.
 
 | Setting | Meaning |
 |---|---|
-| `MATRIX_ROOMS` | group rooms to answer in, by room id; `*` for every room the bot has joined |
+| `MATRIX_GROUPS` | group rooms to answer in, by room id; `*` for every room the bot has joined |
 | `MATRIX_DM_USERS` | people who may talk to the bot in a direct chat |
-| `MATRIX_INVITE_FROM` | whose invites the bot accepts. Invites to rooms named in `MATRIX_ROOMS`, and direct-chat invites from `MATRIX_DM_USERS`, are always accepted; everything else is left pending |
+| `MATRIX_INVITE_FROM` | whose invites the bot accepts. Invites to rooms named in `MATRIX_GROUPS`, and direct-chat invites from `MATRIX_DM_USERS`, are always accepted; everything else is left pending |
 | `MATRIX_IGNORE_USERS` | never answered, and not counted as members when telling a direct chat from a group |
-| `MATRIX_E2EE` | end-to-end encryption, see below |
-| `MATRIX_TIMEOUT_S` | how long one turn may take; keep it above the agent's `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)` |
-| `MATRIX_OUTBOX` | poll the agent's outbox |
+| `MATRIX_E2EE_ENABLED` | end-to-end encryption, see below |
+| `MATRIX_TIMEOUT_S` | how long one turn may take; keep it above the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` |
+| `MATRIX_OUTBOX_ENABLED` | poll the agent's outbox |
 
 ## Bridges: WhatsApp, Signal, Messenger, Instagram and more
 
@@ -162,14 +162,14 @@ Setting one up:
    MATRIX_INVITE_FROM=@whatsappbot:example.org
    MATRIX_IGNORE_USERS=@whatsappbot:example.org,@whatsapp_4900000000:example.org
    MATRIX_DM_USERS=@whatsapp_*:example.org
-   MATRIX_ROOMS=!groupPortal:example.org
+   MATRIX_GROUPS=!groupPortal:example.org
    ```
 
    The second entry in `MATRIX_IGNORE_USERS` is the bridge's ghost of the
    persona's own number. Without
    [double puppeting](https://docs.mau.fi/bridges/general/double-puppeting.html),
    a message typed on the persona's phone reaches Matrix from that ghost, and
-   the bot would answer itself. `MATRIX_ROOMS=*` answers in every group portal
+   the bot would answer itself. `MATRIX_GROUPS=*` answers in every group portal
    the bot is in; list room ids to choose.
 
 ### Caveats of puppeting
@@ -211,11 +211,11 @@ people know they are talking to a bot, and see [DISCLAIMER.md](../../DISCLAIMER.
 
 ## End-to-end encryption
 
-With `MATRIX_E2EE=false` (the default) the bot reads only unencrypted rooms.
+With `MATRIX_E2EE_ENABLED=false` (the default) the bot reads only unencrypted rooms.
 In an encrypted room it logs that it cannot decrypt, and it never sends a
 plaintext reply there.
 
-With `MATRIX_E2EE=true`:
+With `MATRIX_E2EE_ENABLED=true`:
 
 - `MATRIX_STORE_PATH` (default `runtime/` next to the script, which git
   ignores) holds the device's keys and the sync token. Keep it: a lost store is
@@ -231,7 +231,7 @@ With `MATRIX_E2EE=true`:
   ([end-to-bridge encryption](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html)).
   The bridge holds those keys on your server, so the protection ends there and
   the other network carries the message under its own encryption. If your
-  bridge encrypts portals, turn `MATRIX_E2EE` on.
+  bridge encrypts portals, turn `MATRIX_E2EE_ENABLED` on.
 
 ## Why matrix-nio
 

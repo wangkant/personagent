@@ -516,9 +516,9 @@ SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
 
 
 def _env_tz_offset() -> float:
-    """TZ_OFFSET_HOURS as hours (default UTC+8). Read on every call, never
+    """PERSONA_TZ_OFFSET_HOURS as hours (default UTC+8). Read on every call, never
     cached, so a reload or a test can change it between turns."""
-    return env_float("TZ_OFFSET_HOURS", 8.0)
+    return env_float("PERSONA_TZ_OFFSET_HOURS", 8.0)
 
 
 # ===========================================================================
@@ -2274,7 +2274,7 @@ class TextProcessing:
     @staticmethod
     def _is_sleep_hour() -> bool:
         """True if the current hour falls in the sleep window (default
-        02:00-07:00). Uses the TZ_OFFSET_HOURS timezone — the same clock
+        02:00-07:00). Uses the PERSONA_TZ_OFFSET_HOURS timezone — the same clock
         _current_time_str shows the model — not the server's local time:
         on e.g. a UTC host the bot would otherwise "sleep" through the
         persona's morning and chat freely at persona 3 a.m. Handles
@@ -2313,12 +2313,12 @@ class TextProcessing:
 
         THE USER'S local time, not the server's, when the caller supplies one:
         `current_tz_offset_h` may be set per turn by an embedder that knows
-        the user's timezone. A single deployment-wide TZ_OFFSET_HOURS is
+        the user's timezone. A single deployment-wide PERSONA_TZ_OFFSET_HOURS is
         correct for a QQ bot with one owner and wrong for a multi-user
         deployment — it tells every user what time it is where the server
         happens to be running.
 
-        TZ_OFFSET_HOURS (default UTC+8) remains the fallback for callers with
+        PERSONA_TZ_OFFSET_HOURS (default UTC+8) remains the fallback for callers with
         no per-user notion of "local"."""
         from .gateway import current_tz_offset_h
         tz_hours = current_tz_offset_h.get()

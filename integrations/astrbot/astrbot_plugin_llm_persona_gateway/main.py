@@ -1163,8 +1163,8 @@ class LLMPersonaGateway(Star):
                     "and the learning evidence for a message nobody will see "
                     "-- and AstrBot's own model is about to answer the same "
                     "turn in a different voice. If this recurs, raise "
-                    "timeout_s or lower the agent's LLM_TIMEOUT / "
-                    "LLM_MAX_RETRIES: keep LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) "
+                    "timeout_s or lower the agent's LLM_TIMEOUT_S / "
+                    "LLM_MAX_RETRIES: keep LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) "
                     "under timeout_s."
                 )
                 return False, False, []

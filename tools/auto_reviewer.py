@@ -74,7 +74,7 @@ REVIEWER_MODEL = (
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
 # Keep the newest N machine-generated pairs (0 = no cap) — mirrors the running
 # agent so both writers converge on the same pool size.
-FEEDBACK_MAX_AUTO = int(os.getenv("FEEDBACK_MAX_AUTO", 500) or 0)
+PROMOTE_MAX_FEEDBACK = int(os.getenv("PROMOTE_MAX_FEEDBACK", 500) or 0)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
@@ -197,7 +197,7 @@ def apply_candidates(auto_yes: bool) -> None:
         # travel through evidence -> candidate -> promotion in the in-process
         # evolution loop; it may never write a trusted retrieval pool directly.
         logger.error(
-            "--yes direct apply is disabled; use EVOLVE_AUTO for gated "
+            "--yes direct apply is disabled; use EVOLVE_AUTO_ENABLED for gated "
             "unattended review, or --apply for explicit per-pair approval")
         return
     feedback_seed, feedback = _feedback_files()
@@ -252,11 +252,11 @@ def apply_candidates(auto_yes: bool) -> None:
     # never dropped, and the data/ seed is never touched), so approving a
     # batch here can't push the pool past what retrieval wants to scan.
     trimmed = evolution.trim_pool(
-        feedback, max_auto=FEEDBACK_MAX_AUTO,
+        feedback, max_auto=PROMOTE_MAX_FEEDBACK,
         is_auto=lambda r: bool(r.get("src")))
     if trimmed:
         logger.info("feedback auto-pool trimmed: %d -> %d pairs (cap=%d)",
-                    trimmed[0], trimmed[1], FEEDBACK_MAX_AUTO)
+                    trimmed[0], trimmed[1], PROMOTE_MAX_FEEDBACK)
     n = evolution.append_jsonl(feedback, approved)
     if n < len(approved):
         # append_jsonl writes a prefix and stops at the cap. Marking the dropped

@@ -64,8 +64,8 @@ def test_group_admission_is_partitioned_per_platform() -> None:
     # QQ: empty means every group, entries mean only those.
     check("QQ, no entries: every group", refusal("555", "", fwd=False) == "")
     check("QQ, listed", refusal("123", "123", fwd=False) == "")
-    check("QQ, not listed: refused naming ALLOWED_GROUPS and its old name",
-          "ALLOWED_GROUPS" in refusal("555", "123", fwd=False)
+    check("QQ, not listed: refused naming ACCESS_GROUPS and its old name",
+          "ACCESS_GROUPS" in refusal("555", "123", fwd=False)
           and "QQ_GROUPS" in refusal("555", "123", fwd=False))
     check("QQ entries apply to a native forwarder's bare ids too",
           refusal("555", "123") != "" and refusal("123", "123") == "")
@@ -104,7 +104,7 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
     check("QQ: the owner", refusal("10000", "", fwd=False) == "")
     check("QQ: a listed user", refusal("888", "888", fwd=False) == "")
     check("QQ: an empty list still means owner only",
-          "ALLOWED_DM_USERS" in refusal("555", "", fwd=False)
+          "ACCESS_DM_USERS" in refusal("555", "", fwd=False)
           and "PRIVATE_ALLOWED_QQS" in refusal("555", "", fwd=False))
     check("QQ: same through a native forwarder", refusal("555", "") != "")
 
@@ -130,9 +130,9 @@ def test_the_identity_reader_folds_the_old_names_in_by_union() -> None:
     env = {
         "ADMIN_IDS": "telegram:1, qq:5", "OWNER_QQ": " 10000 ",
         "GATEWAY_OWNER_IDS": "discord:2,aiocqhttp:7",
-        "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
-        "ALLOWED_GROUPS": "telegram:-100", "QQ_GROUPS": "1,2",
-        "ALLOWED_DM_USERS": "slack:U1", "PRIVATE_ALLOWED_QQS": "8",
+        "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
+        "ACCESS_GROUPS": "telegram:-100", "QQ_GROUPS": "1,2",
+        "ACCESS_DM_USERS": "slack:U1", "PRIVATE_ALLOWED_QQS": "8",
     }
     ident = access.identity_from_env(env)
     check("owners: every name, canonical",
@@ -143,7 +143,7 @@ def test_the_identity_reader_folds_the_old_names_in_by_union() -> None:
     check("DM users: new and old together",
           ident.dm_users == {"slack:U1", "8"}, repr(ident.dm_users))
     check("merged keeps the order written, new name first",
-          ident.merged("ALLOWED_GROUPS") == ("telegram:-100", "1", "2"))
+          ident.merged("ACCESS_GROUPS") == ("telegram:-100", "1", "2"))
     check("what was written is kept per name, for preflight",
           ident.written["QQ_GROUPS"] == ("1", "2")
           and ident.written["OWNER_QQ"] == ("10000",))

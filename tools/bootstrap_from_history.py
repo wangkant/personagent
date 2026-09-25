@@ -39,8 +39,8 @@ from persona_agent.stickers import _IMAGE_EXT
 from persona_agent.storage import atomic_write_text
 from persona_agent.textproc import _detect_image_mime
 
-NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000").rstrip("/")
-BOT_QQ = os.getenv("BOT_QQ", "")
+QQ_ONEBOT_URL = os.getenv("QQ_ONEBOT_URL", "http://127.0.0.1:3000").rstrip("/")
+QQ_BOT_ID = os.getenv("QQ_BOT_ID", "")
 # NapCat history is QQ's, so only the QQ entries of the shared settings apply.
 _IDENTITY = access.identity_from_env()
 OWNER_QQS = frozenset(o for o in _IDENTITY.owners if channels.is_native(o))
@@ -70,7 +70,7 @@ async def fetch_page(client: httpx.AsyncClient, group_id: str,
     payload = {"group_id": int(group_id), "count": count}
     if message_seq:
         payload["message_seq"] = message_seq
-    r = await client.post(f"{NAPCAT_API}/get_group_msg_history", json=payload)
+    r = await client.post(f"{QQ_ONEBOT_URL}/get_group_msg_history", json=payload)
     r.raise_for_status()
     data = r.json().get("data") or {}
     return data.get("messages") or []
@@ -251,12 +251,12 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
     for i, c in enumerate(classified):
         if not c["has_image"]:
             continue
-        if c["user_id"] == BOT_QQ:
+        if c["user_id"] == QQ_BOT_ID:
             continue
         ctx_before = [
             format_ctx_line(messages[j])
             for j in range(max(0, i - 6), i)
-            if messages[j].get("user_id") != int(BOT_QQ or 0)
+            if messages[j].get("user_id") != int(QQ_BOT_ID or 0)
         ][-5:]
 
         for seg in c["image_segs"]:
@@ -335,7 +335,7 @@ async def main():
                    help="messages to pull per group (default 2000)")
     p.add_argument("--group", default="",
                    help="only process this group; defaults to the QQ "
-                        "entries of ALLOWED_GROUPS")
+                        "entries of ACCESS_GROUPS")
     p.add_argument("--no-stickers", action="store_true",
                    help="compute owner profile only, skip sticker download")
     p.add_argument("--no-profile", action="store_true",
@@ -347,7 +347,7 @@ async def main():
         return 1
     groups = [args.group] if args.group else QQ_GROUPS
     if not groups:
-        logger.error("no QQ groups: pass --group or set ALLOWED_GROUPS")
+        logger.error("no QQ groups: pass --group or set ACCESS_GROUPS")
         return 1
 
     all_messages: list[dict] = []

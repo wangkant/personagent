@@ -17,7 +17,7 @@ Consumers:
                            pair, which is appended to
                            runtime/feedback.<lang>.jsonl and hot-reloaded into
                            few-shot retrieval; --yes is refused.
-- agent.Agent.loop_evolve  opt-in background loop (EVOLVE_AUTO=true). It
+- agent.Agent.loop_evolve  opt-in background loop (EVOLVE_AUTO_ENABLED=true). It
                            writes nothing to feedback: each pair becomes
                            self-review evidence and a proposed ledger
                            candidate, which applies only through

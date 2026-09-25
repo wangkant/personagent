@@ -2,7 +2,7 @@
 
 Ids here are compared in the spelling the stores use (see channels): a QQ id
 is bare, every other platform's is "<platform>:<id>". A setting may also write
-a QQ id as "qq:<id>", and an id from a GATEWAY_NATIVE_PLATFORMS forwarder as
+a QQ id as "qq:<id>", and an id from a CONNECTOR_QQ_PLATFORMS forwarder as
 "<that platform>:<id>"; both mean the bare key such an event carries.
 
 Three settings, one list each:
@@ -10,7 +10,7 @@ Three settings, one list each:
 * ADMIN_IDS: the admin's accounts. One person on many platforms, sharing
   ADMIN_NAME and ADMIN_RELATIONSHIP. The code calls them the owner, the
   name the settings had until 0.5.
-* ALLOWED_GROUPS / ALLOWED_DM_USERS: who the agent itself admits, partitioned
+* ACCESS_GROUPS / ACCESS_DM_USERS: who the agent itself admits, partitioned
   per platform. A platform with no entries is not restricted by the agent:
   every QQ group is answered, a QQ DM still needs the admin or an entry, and a
   forwarded platform is left to the forwarder's own allowlist unless the event
@@ -31,8 +31,8 @@ from . import channels
 #: OWNER_QQ still set) must keep the QQ admin it already had.
 IDENTITY_SETTINGS: dict[str, tuple[str, ...]] = {
     "ADMIN_IDS": ("OWNER_QQ", "GATEWAY_OWNER_IDS"),
-    "ALLOWED_GROUPS": ("QQ_GROUPS",),
-    "ALLOWED_DM_USERS": ("PRIVATE_ALLOWED_QQS",),
+    "ACCESS_GROUPS": ("QQ_GROUPS",),
+    "ACCESS_DM_USERS": ("PRIVATE_ALLOWED_QQS",),
 }
 
 #: The old names, which still work and are no longer advertised.
@@ -143,11 +143,11 @@ def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
     if listed:
         if gid in listed:
             return ""
-        return (f"not in {_setting('ALLOWED_GROUPS', platform)}, which lists "
+        return (f"not in {_setting('ACCESS_GROUPS', platform)}, which lists "
                 f"{platform} groups")
     if channels.is_native(gid) or prefiltered:
         return ""
-    return (f"ALLOWED_GROUPS has no {platform} entries and the connector "
+    return (f"ACCESS_GROUPS has no {platform} entries and the connector "
             f"did not filter (prefiltered=false)")
 
 
@@ -163,14 +163,14 @@ def dm_refusal(user_id, owners: Iterable[str], allowed: Iterable[str], *,
         return ""
     platform = channels.platform_of(uid)
     if channels.is_native(uid):
-        return (f"not in ADMIN_IDS or {_setting('ALLOWED_DM_USERS', platform)}"
+        return (f"not in ADMIN_IDS or {_setting('ACCESS_DM_USERS', platform)}"
                 f", one of which every QQ DM needs")
     if entries_on(platform, allowed):
-        return (f"not in ADMIN_IDS or ALLOWED_DM_USERS, which lists "
+        return (f"not in ADMIN_IDS or ACCESS_DM_USERS, which lists "
                 f"{platform} users")
     if prefiltered:
         return ""
-    return (f"ALLOWED_DM_USERS has no {platform} entries and the connector "
+    return (f"ACCESS_DM_USERS has no {platform} entries and the connector "
             f"did not filter (prefiltered=false)")
 
 
@@ -203,11 +203,11 @@ class Identity:
 
     @property
     def groups(self) -> frozenset[str]:
-        return self.ids("ALLOWED_GROUPS")
+        return self.ids("ACCESS_GROUPS")
 
     @property
     def dm_users(self) -> frozenset[str]:
-        return self.ids("ALLOWED_DM_USERS")
+        return self.ids("ACCESS_DM_USERS")
 
 
 #: Every identity setting name, new ones first.
@@ -229,4 +229,4 @@ def identity_from_env(env: Mapping[str, str] | None = None) -> Identity:
             written[name] = (text,) if text else ()
         else:
             written[name] = split_ids(raw)
-    return Identity(written, split_ids(source.get("GATEWAY_NATIVE_PLATFORMS")))
+    return Identity(written, split_ids(source.get("CONNECTOR_QQ_PLATFORMS")))

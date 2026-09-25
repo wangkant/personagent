@@ -27,5 +27,5 @@ if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; t
   "$PY" -m pip install -r requirements.txt -q
 fi
 
-# main.py loads .env before resolving HOST / PORT.
+# main.py loads .env before resolving SERVER_HOST / SERVER_PORT.
 exec "$PY" main.py

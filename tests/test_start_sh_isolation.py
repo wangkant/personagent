@@ -48,7 +48,7 @@ elif sys.argv[1:3] == ["-m", "pip"]:
 
     def run_start(self, **options):
         env = {**os.environ, "PATH": str(self.bin), "CALL_LOG": str(self.log),
-               "HOST": "127.0.0.1", "PORT": "8123"}
+               "SERVER_HOST": "127.0.0.1", "SERVER_PORT": "8123"}
         for key in ("BOOTSTRAP_FAIL", "DEPS_PRESENT", "INSTALL_FAIL"):
             env.pop(key, None)
         env.update(options)

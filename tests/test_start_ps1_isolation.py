@@ -2,7 +2,7 @@
 
 `test_start_sh_isolation.py` covers the POSIX launcher's refusal paths, but it
 is skipped on `nt`, and `test_launchers.py` only drives start.ps1's happy path
-(repository root, HOST/PORT). So the Windows launcher's two refusals — it will
+(repository root, SERVER_HOST/SERVER_PORT). So the Windows launcher's two refusals — it will
 not touch an incomplete `.venv`, and it will not start the server after a
 failed dependency install — were guaranteed by reading the script, on the one
 platform where the script is the only one that runs.

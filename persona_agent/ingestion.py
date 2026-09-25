@@ -38,7 +38,7 @@ logger = logging.getLogger("agent")
 
 # Hard ceiling on any image the bot will decode or forward. Bounds both
 # memory and what a hostile URL can push through the vision path.
-MAX_IMAGE_BYTES = env_int("MAX_IMAGE_BYTES", 5_000_000, minimum=1)
+VISION_MAX_IMAGE_BYTES = env_int("VISION_MAX_IMAGE_BYTES", 5_000_000, minimum=1)
 
 MAX_URL_LENGTH = 4096
 MAX_HTML_WIRE_BYTES = 128 * 1024
@@ -408,9 +408,9 @@ def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
     isolating could only be reached by standing up an Agent: the Windows
     drive-letter strip below, UNC paths, and ``..`` segments.
 
-    Returns the resolved path only when NAPCAT_IMAGE_DIR is set, the target
+    Returns the resolved path only when QQ_ONEBOT_IMAGE_DIR is set, the target
     resolves inside it, it is a regular file, and it is within
-    MAX_IMAGE_BYTES. The size check belongs here rather than after the read:
+    VISION_MAX_IMAGE_BYTES. The size check belongs here rather than after the read:
     it is a property of the resolved path, and checking it first avoids
     reading a large file to then discard it.
     """
@@ -429,15 +429,15 @@ def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
     allowed = (allowed_dir or "").strip()
     if not allowed:
         logger.warning(
-            "[Agent] refusing file:// because NAPCAT_IMAGE_DIR is unset")
+            "[Agent] refusing file:// because QQ_ONEBOT_IMAGE_DIR is unset")
         return None
     try:
         allowed_path = Path(allowed).resolve(strict=True)
         if not path.is_relative_to(allowed_path):
             logger.warning(
-                "[Agent] refusing file:// outside NAPCAT_IMAGE_DIR: %s", path)
+                "[Agent] refusing file:// outside QQ_ONEBOT_IMAGE_DIR: %s", path)
             return None
-        if not path.is_file() or path.stat().st_size > MAX_IMAGE_BYTES:
+        if not path.is_file() or path.stat().st_size > VISION_MAX_IMAGE_BYTES:
             return None
     except (OSError, ValueError):
         return None
@@ -565,7 +565,7 @@ class ContentIngestion:
             # synthesize_onebot_payload emits a base64:// file field when the
             # forwarder had no URL — the bytes are inline, nothing to fetch.
             encoded = url[len("base64://"):]
-            max_encoded = ((MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
+            max_encoded = ((VISION_MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
             if len(encoded) > max_encoded:
                 logger.warning("[Agent] base64 image exceeds size limit")
                 return None
@@ -574,22 +574,22 @@ class ContentIngestion:
             except Exception as e:
                 logger.debug("[Agent] base64 image decode failed: %s", e)
                 return None
-            if len(data) > MAX_IMAGE_BYTES or not _detect_image_mime(data):
+            if len(data) > VISION_MAX_IMAGE_BYTES or not _detect_image_mime(data):
                 return None
             return data
         if url.startswith("file://"):
             path = _resolve_jailed_file_url(
-                url, os.getenv("NAPCAT_IMAGE_DIR", ""))
+                url, os.getenv("QQ_ONEBOT_IMAGE_DIR", ""))
             if path is None:
                 return None
             local = str(path)
             try:
                 with path.open("rb") as fh:
-                    data = fh.read(MAX_IMAGE_BYTES + 1)
+                    data = fh.read(VISION_MAX_IMAGE_BYTES + 1)
             except Exception as e:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
-            if len(data) > MAX_IMAGE_BYTES or not _detect_image_mime(data):
+            if len(data) > VISION_MAX_IMAGE_BYTES or not _detect_image_mime(data):
                 return None
             return data
         if len(url) > MAX_URL_LENGTH:
@@ -603,7 +603,7 @@ class ContentIngestion:
         try:
             return await self._safe_get_bytes(
                 url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
-                max_bytes=MAX_IMAGE_BYTES)
+                max_bytes=VISION_MAX_IMAGE_BYTES)
         except Exception as e:
             logger.debug("[Agent] http fetch failed (%s): %s", _url_for_log(url), e)
             return None
@@ -1213,7 +1213,7 @@ class ContentIngestion:
         failure so the caller can fall back to OCR."""
         class _BoundedBuffer(io.BytesIO):
             def write(self, data) -> int:
-                if self.tell() + len(data) > MAX_IMAGE_BYTES:
+                if self.tell() + len(data) > VISION_MAX_IMAGE_BYTES:
                     raise ValueError("converted image exceeds byte limit")
                 return super().write(data)
 
@@ -1397,7 +1397,7 @@ class ContentIngestion:
             if len(img_bytes) < 200:
                 logger.debug("[Agent] vision: image too small (%d bytes), skipping", len(img_bytes))
                 return ""
-            if len(img_bytes) > MAX_IMAGE_BYTES:
+            if len(img_bytes) > VISION_MAX_IMAGE_BYTES:
                 logger.warning("[Agent] vision: image too large (%d bytes), skipping", len(img_bytes))
                 return ""
             mime = _detect_image_mime(img_bytes)
@@ -1545,7 +1545,7 @@ class ContentIngestion:
         refusal was therefore converted into an SSRF *success* by proxy, with
         the fetched text reflected back into the group buffer and the prompt.
         file:// is refused for the same reason the direct image path keeps a
-        NAPCAT_IMAGE_DIR jail: those URLs really do arrive here."""
+        QQ_ONEBOT_IMAGE_DIR jail: those URLs really do arrive here."""
         if not url:
             return ""
         if not url.lower().startswith(("http://", "https://")):

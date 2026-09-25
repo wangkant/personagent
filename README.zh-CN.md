@@ -108,9 +108,9 @@ personagent 从不登录聊天账号。登录由连接器负责：它把每条�
 通过 AstrBot 接入：
 
 1. 安装 [AstrBot](https://github.com/AstrBotDevs/AstrBot)，在它的 WebUI 里配好目标平台。
-2. 再运行一次 `python quickstart.py`，选择连接 AstrBot，填入 AstrBot 的 data 目录。向导会复制插件，并把共享的 `GATEWAY_TOKEN` 写进两边的配置。之前填过的内容会作为默认值保留。
+2. 再运行一次 `python quickstart.py`，选择连接 AstrBot，填入 AstrBot 的 data 目录。向导会复制插件，并把共享的 `CONNECTOR_TOKEN` 写进两边的配置。之前填过的内容会作为默认值保留。
 3. 把允许机器人参与的群加进插件白名单。不填就什么都不转发；私聊还需要 `private_enabled=true`，发送者也要在白名单里。
-4. 检查 personagent `.env` 中的 `BOT_NAME`，也就是它会响应的名字。接 QQ 时还要把 `BOT_QQ` 设为机器人账号的 QQ 号。
+4. 检查 personagent `.env` 中的 `PERSONA_NAME`，也就是它会响应的名字。接 QQ 时还要把 `QQ_BOT_ID` 设为机器人账号的 QQ 号。
 5. 重启 AstrBot，然后在仓库根目录启动 personagent：`.venv/bin/python main.py`（Windows：`.venv\Scripts\python.exe main.py`）。
 
 在白名单里的群叫一声它的名字即可测试。修改 `.env` 后重启 personagent；修改平台或插件配置后重启 AstrBot。
@@ -129,8 +129,8 @@ python quickstart.py --astrbot <AstrBot data 目录> --platform telegram --token
 QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` 适配器连接。
 
 - 从插件的 `excluded_platforms` 中移除 `aiocqhttp`。
-- 在 personagent 的 `.env` 中设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`，让 QQ 会话保持原有的身份和记忆。`--qq` 会同时处理这两项。
-- NapCat 的 HTTP 服务（`NAPCAT_API`）可开可不开。开着的话，personagent 能补回离线期间漏掉的 @；插件没在拉取 outbox 时，它主动发出的消息也会改走这里。这条路径下 OCR 回退会跳过。
+- 在 personagent 的 `.env` 中设置 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`，让 QQ 会话保持原有的身份和记忆。`--qq` 会同时处理这两项。
+- NapCat 的 HTTP 服务（`QQ_ONEBOT_URL`）可开可不开。开着的话，personagent 能补回离线期间漏掉的 @；插件没在拉取 outbox 时，它主动发出的消息也会改走这里。这条路径下 OCR 回退会跳过。
 - `/webhook/qq` 直连入口自 0.3.0 起废弃。不要与 AstrBot 转发同时启用，否则每条消息都会收到两次。
 
 </details>
@@ -140,20 +140,20 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 
 插件只会发往回环地址（同一台机器，或共享网络命名空间、使用 host 网络的容器），或者设置了 `gateway_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe agent_url`，随后由 AstrBot 自己的模型回复。`agent_url` 在插件设置里修改，同机默认值是 `http://127.0.0.1:8080/webhook/gateway`。
 
-personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必须同时配置 `GATEWAY_TOKEN` 和 `WEBHOOK_SECRET`。请在前面放 HTTPS 反向代理或私有隧道，保证请求体原样转发，两端时钟偏差不超过五分钟。
+personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `SERVER_HOST` 时，必须同时配置 `CONNECTOR_TOKEN` 和 `QQ_ONEBOT_SECRET`。请在前面放 HTTPS 反向代理或私有隧道，保证请求体原样转发，两端时钟偏差不超过五分钟。
 
 </details>
 
 <details>
 <summary>主动发言</summary>
 
-有些消息不是在回答谁：主动发言（`PROACTIVE_ENABLE`，默认关）、被否定后的追问、模型出错时的托词。personagent 把它们放进 outbox，上面三个连接器会去拉取并发出，只要平台允许机器人先开口（QQ 官方机器人接口、微信公众号和企业微信智能机器人不允许）。开了 `PROACTIVE_ENABLE` 后，`PROACTIVE_PLATFORMS=qq` 可把主动发言限制在 QQ。不能拉取 outbox 的连接器，也可以发一条带 `proactive: true` 的私聊事件来发起私聊，详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
+有些消息不是在回答谁：主动发言（`PROACTIVE_ENABLED`，默认关）、被否定后的追问、模型出错时的托词。personagent 把它们放进 outbox，上面三个连接器会去拉取并发出，只要平台允许机器人先开口（QQ 官方机器人接口、微信公众号和企业微信智能机器人不允许）。开了 `PROACTIVE_ENABLED` 后，`PROACTIVE_PLATFORMS=qq` 可把主动发言限制在 QQ。不能拉取 outbox 的连接器，也可以发一条带 `proactive: true` 的私聊事件来发起私聊，详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
 
 </details>
 
 ## 教它
 
-在群里直接跟它说。消息里必须带上它的名字（把“小夏”换成你的 `BOT_NAME`）：
+在群里直接跟它说。消息里必须带上它的名字（把“小夏”换成你的 `PERSONA_NAME`）：
 
 | 说 | 效果 |
 |---|---|
@@ -174,7 +174,7 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 小林：哈哈是啊，谢谢小夏
 ```
 
-每条反应都会由一次模型调用对照它所回应的那条回复来判定，玩笑和捣乱会被过滤掉。这里小林先否定了建议，说明有地方不对；随后接受了第二次尝试，这是强证据。两者合起来，让“建议 → 安慰”这组回复在这个会话里生效，下次有人在这里吐槽时，检索就可能把它提供给模型。背后的规则：一项改动需要同一个聊天里 30 天内的两条一致信号，其中至少一条是强信号（原回复对象给出的、带更好说法的纠正，或者 TA 接受了重试）。笑声和机器人给自己打的分，单独都不算数。只有否定、没有下文时，机器人还可能在两分钟后回来问一次怎样说更好（`REACT_ELICIT`）。
+每条反应都会由一次模型调用对照它所回应的那条回复来判定，玩笑和捣乱会被过滤掉。这里小林先否定了建议，说明有地方不对；随后接受了第二次尝试，这是强证据。两者合起来，让“建议 → 安慰”这组回复在这个会话里生效，下次有人在这里吐槽时，检索就可能把它提供给模型。背后的规则：一项改动需要同一个聊天里 30 天内的两条一致信号，其中至少一条是强信号（原回复对象给出的、带更好说法的纠正，或者 TA 接受了重试）。笑声和机器人给自己打的分，单独都不算数。只有否定、没有下文时，机器人还可能在两分钟后回来问一次怎样说更好（`REACT_ELICIT_ENABLED`）。
 
 想检查或推翻学习结果，用账本工具（Windows 用 `.venv\Scripts\python.exe`）：
 
@@ -190,18 +190,18 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 
 默认设置（都在 `.env` 中）：
 
-- `REACT_LEARN`、`REACT_ELICIT` 和 `PROMOTE_AUTO` 默认开启。判定反应会额外调用模型。
-- `PROMOTE_AUTO=false` 表示所有生效都由你手动决定。
+- `REACT_LEARN_ENABLED`、`REACT_ELICIT_ENABLED` 和 `PROMOTE_AUTO_ENABLED` 默认开启。判定反应会额外调用模型。
+- `PROMOTE_AUTO_ENABLED=false` 表示所有生效都由你手动决定。
 - `PROMOTE_MIN_SPEAKERS=2` 让单个成员无法独自教会它；管理员不受此限。
-- `EVAL_ENABLE`（机器人给自己的回复打分）和 `EVOLVE_AUTO` 默认关闭。
+- `EVAL_ENABLED`（机器人给自己的回复打分）和 `EVOLVE_AUTO_ENABLED` 默认关闭。
 
-修改 `BOT_NAME` 或 `PERSONA_VERSION` 等于开始一个新角色，旧角色学到的内容不再适用。
+修改 `PERSONA_NAME` 或 `PERSONA_VERSION` 等于开始一个新角色，旧角色学到的内容不再适用。
 
 ## 工作原理
 
 ![架构：群聊消息依次经过判断、组装提示词、模型和校验，回复经连接器发回；决定不开口时什么都不发。反应经判定写入证据日志，只有通过晋升的内容才会进入提示词读取的示例](docs/persona_llm_agent_architecture.zh-CN.svg)
 
-所有平台都从同一个入口进入。消息经过鉴权、去重和补充（描述图片、展开链接）之后进入决策：被叫到就回复；否则等对话积累到一定量（默认 30 条），再由一次发给 `JUDGE_MODEL` 的轻量判断调用决定真人会不会插话。连续刷屏只回一条，回最新那句；02:00–07:00 除非被叫到，基本不开口。提示词由人设、匹配到的世界书条目、当前会话的记忆和最相关的示例组成。模型以 JSON 回答，包含 `reasoning`、`intent`、`reply` 和 `mem`；回复经过输出过滤器和字符策略后，再拆成适合聊天的几条消息发出。格式不对的输出一律不发送。
+所有平台都从同一个入口进入。消息经过鉴权、去重和补充（描述图片、展开链接）之后进入决策：被叫到就回复；否则等对话积累到一定量（默认 30 条），再由一次发给 `LLM_JUDGE_MODEL` 的轻量判断调用决定真人会不会插话。连续刷屏只回一条，回最新那句；02:00–07:00 除非被叫到，基本不开口。提示词由人设、匹配到的世界书条目、当前会话的记忆和最相关的示例组成。模型以 JSON 回答，包含 `reasoning`、`intent`、`reply` 和 `mem`；回复经过输出过滤器和字符策略后，再拆成适合聊天的几条消息发出。格式不对的输出一律不发送。
 
 学习在这条路径旁边运行，从不插进回复流程，状态以普通文件的形式保存在 `runtime/` 下。反应写入一份只追加、从不改写的证据日志；判定证据会产生候选；晋升策略决定哪些候选可以改变回复；生效的候选被写成小的视图文件，检索无需重启就会重新加载。账本只追加，所以“它为什么这样说话”总有答案，撤销也总有东西可撤。
 
@@ -209,17 +209,17 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 
 personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`persona.txt` 和 `persona.card.json`。这些文件不会提交到 Git，可能包含密钥和真实对话，请备份并妥善保管。
 
-模型供应商会看到对话内容。聊天上下文会发送到你配置的 `LLM_BASE_URL`。如果配置了备用供应商（`FALLBACK_MODEL`、`FALLBACK_BASE_URL`），它在普通回合中也会被调用（回复判断、搜索决策、反应判定、自评和表情包标注），同样会收到聊天上下文。图片会发给视觉接口；模型决定查资料时，搜索词会发给 Tavily（设置了 `TAVILY_API_KEY` 时）或 DuckDuckGo。
+模型供应商会看到对话内容。聊天上下文会发送到你配置的 `LLM_BASE_URL`。如果配置了备用供应商（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`），它在普通回合中也会被调用（回复判断、搜索决策、反应判定、自评和表情包标注），同样会收到聊天上下文。图片会发给视觉接口；模型决定查资料时，搜索词会发给 Tavily（设置了 `TAVILY_API_KEY` 时）或 DuckDuckGo。
 
 接入真实聊天前，请告诉参与者这是机器人，并征得他们同意处理其消息。QQ 第三方协议客户端存在封号风险，详见[免责声明](DISCLAIMER.md)。
 
 ## 常见问题
 
-**服务在跑，但就是不回复。** 先查连接器。AstrBot 插件查白名单、`private_enabled`、`agent_url`，接 QQ 时还有 `excluded_platforms`；Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。再查 `BOT_NAME`、接 QQ 时的 `BOT_QQ`，以及两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
+**服务在跑，但就是不回复。** 先查连接器。AstrBot 插件查白名单、`private_enabled`、`agent_url`，接 QQ 时还有 `excluded_platforms`；Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。再查 `PERSONA_NAME`、接 QQ 时的 `QQ_BOT_ID`，以及两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
 
 **怎么确认服务在线？** `curl http://127.0.0.1:8080/health` 不调用模型。`.venv/bin/python tools/healthcheck.py` 还会检查配置、指出拼错的变量名并探测上游服务，这些探测可能消耗额度。`/health/details` 同样会探测，配置 token 后需要 `X-Gateway-Token` 请求头。
 
-**改了设置没效果。** 确认重启了读取它的进程，检查拼写，并用 UTF-8 无 BOM 保存 `.env`。系统环境变量优先于 `.env`；布尔值写 `true` / `false`。重新运行向导时它会按本次回答重写部分设置，请逐项看清再回答。`TZ_OFFSET_HOURS`（默认 8，即 UTC+8）决定夜间时段和主动发言的安静时段。
+**改了设置没效果。** 确认重启了读取它的进程，检查拼写，并用 UTF-8 无 BOM 保存 `.env`。系统环境变量优先于 `.env`；布尔值写 `true` / `false`。重新运行向导时它会按本次回答重写部分设置，请逐项看清再回答。`PERSONA_TZ_OFFSET_HOURS`（默认 8，即 UTC+8）决定夜间时段和主动发言的安静时段。
 
 ## 项目状态
 

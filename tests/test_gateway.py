@@ -28,7 +28,7 @@ from persona_agent.gateway import (GatewaySink, current_sink,
                                    synthesize_onebot_payload)
 from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
 
-BOT_QQ = "10001"
+QQ_BOT_ID = "10001"
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
@@ -60,7 +60,7 @@ def test_synthesize_group_self_mention() -> None:
         ],
         "raw_text": "@TestBot hello there",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("group: post_type", p["post_type"] == "message", repr(p))
     check("group: message_type", p["message_type"] == "group", repr(p))
     check("group: user_id prefixed", p["user_id"] == "telegram:42", repr(p["user_id"]))
@@ -72,7 +72,7 @@ def test_synthesize_group_self_mention() -> None:
     }, repr(p["sender"]))
     check("group: gateway flags", p["_gateway"] is True and p["_platform"] == "telegram")
     check("group: self mention -> bot_qq",
-          p["message"][0] == {"type": "at", "data": {"qq": BOT_QQ}}, repr(p["message"]))
+          p["message"][0] == {"type": "at", "data": {"qq": QQ_BOT_ID}}, repr(p["message"]))
     check("group: text segment kept",
           p["message"][1] == {"type": "text", "data": {"text": " hello there"}}, repr(p["message"]))
     # A real self-mention segment exists, so is_at_me must NOT add a second at.
@@ -109,7 +109,7 @@ def test_synthesize_mention_other_user() -> None:
         "segments": [{"type": "mention", "user_id": "77", "name": "Carl"}],
         "raw_text": "@Carl",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("other mention: prefixed qq",
           p["message"][0] == {"type": "at", "data": {"qq": "discord:77"}}, repr(p["message"]))
     check("other mention: no message_id key", "message_id" not in p, repr(p.keys()))
@@ -128,9 +128,9 @@ def test_synthesize_is_at_me_prepend() -> None:
         "segments": [{"type": "text", "text": "ping"}],
         "raw_text": "ping",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("is_at_me: synthetic at prepended",
-          p["message"][0] == {"type": "at", "data": {"qq": BOT_QQ}}, repr(p["message"]))
+          p["message"][0] == {"type": "at", "data": {"qq": QQ_BOT_ID}}, repr(p["message"]))
     check("is_at_me: text follows",
           p["message"][1] == {"type": "text", "data": {"text": "ping"}}, repr(p["message"]))
 
@@ -149,7 +149,7 @@ def test_synthesize_private() -> None:
                      {"type": "reply"}],
         "raw_text": "hi",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("private: message_type", p["message_type"] == "private", repr(p))
     check("private: no group_id", "group_id" not in p, repr(p.keys()))
     check("private: user_id prefixed", p["user_id"] == "telegram:42", repr(p["user_id"]))
@@ -171,7 +171,7 @@ def test_synthesize_reply_keeps_namespaced_id() -> None:
                      {"type": "text", "text": "that one"}],
         "raw_text": "that one",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     replies = [seg for seg in p["message"] if seg["type"] == "reply"]
     check("gateway quote: reply id is preserved and namespaced",
           replies == [{"type": "reply", "data": {"id": "telegram:g1:m1"}}],
@@ -193,14 +193,14 @@ def test_synthesize_mid_namespacing() -> None:
         "raw_text": "x",
     }
     g1 = synthesize_onebot_payload(
-        dict(base, message_type="group", conversation_id="-100111"), BOT_QQ)
+        dict(base, message_type="group", conversation_id="-100111"), QQ_BOT_ID)
     g2 = synthesize_onebot_payload(
-        dict(base, message_type="group", conversation_id="-100222"), BOT_QQ)
+        dict(base, message_type="group", conversation_id="-100222"), QQ_BOT_ID)
     check("mid namespace: distinct conversations get distinct keys",
           g1["message_id"] == "telegram:-100111:700"
           and g2["message_id"] == "telegram:-100222:700",
           f"{g1['message_id']!r} vs {g2['message_id']!r}")
-    pv = synthesize_onebot_payload(dict(base, message_type="private"), BOT_QQ)
+    pv = synthesize_onebot_payload(dict(base, message_type="private"), QQ_BOT_ID)
     check("mid namespace: private uses user_id as the conversation",
           pv["message_id"] == "telegram:42:700", repr(pv["message_id"]))
 
@@ -223,7 +223,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
         "platform": "aiocqhttp",
         "user_id": "10001",
         "sender_name": "Alice",
-        "self_id": BOT_QQ,
+        "self_id": QQ_BOT_ID,
         "message_id": 700,
         "is_at_me": False,
         "segments": [{"type": "mention", "user_id": "10002", "name": "Bob"},
@@ -231,7 +231,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
         "raw_text": "hi",
     }
     group = dict(base, message_type="group", conversation_id="220000")
-    native = synthesize_onebot_payload(group, BOT_QQ, ("aiocqhttp",))
+    native = synthesize_onebot_payload(group, QQ_BOT_ID, ("aiocqhttp",))
 
     check("native: the sender id is bare",
           native["user_id"] == "10001", repr(native["user_id"]))
@@ -247,7 +247,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
           native["message_id"] == "700", repr(native["message_id"]))
 
     private = synthesize_onebot_payload(
-        dict(base, message_type="private"), BOT_QQ, ("aiocqhttp",))
+        dict(base, message_type="private"), QQ_BOT_ID, ("aiocqhttp",))
     check("native: a DM keeps the bare sender id",
           private["user_id"] == "10001" and private["message_id"] == "700",
           f"{private['user_id']!r} {private['message_id']!r}")
@@ -261,7 +261,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
 
     # Default: unchanged. Every deployment that names no native platform sees
     # exactly the behaviour it saw before this existed.
-    namespaced = synthesize_onebot_payload(group, BOT_QQ)
+    namespaced = synthesize_onebot_payload(group, QQ_BOT_ID)
     check("default: the same event is still namespaced",
           namespaced["user_id"] == "aiocqhttp:10001"
           and namespaced["group_id"] == "aiocqhttp:220000"
@@ -275,7 +275,7 @@ def test_a_native_platform_mints_the_ids_napcat_would() -> None:
     # must gain nothing by it. "qq:10001" is not bare, but platform_of() reads
     # the segment before the colon, so left alone it would report the NATIVE
     # platform and this event's evidence would compare compatible with real QQ.
-    impostor = synthesize_onebot_payload(dict(group, platform="qq"), BOT_QQ)
+    impostor = synthesize_onebot_payload(dict(group, platform="qq"), QQ_BOT_ID)
     check("impostor: naming yourself qq does not confer native authority",
           not channels.is_native(impostor["user_id"]),
           repr(impostor["user_id"]))
@@ -300,7 +300,7 @@ def test_synthesize_image_segments() -> None:
         ],
         "raw_text": "",
     }
-    p = synthesize_onebot_payload(event, BOT_QQ)
+    p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("image: url form",
           p["message"][0] == {"type": "image", "data": {"url": "https://example.com/a.png"}},
           repr(p["message"]))
@@ -332,7 +332,7 @@ def test_synthesize_carries_quotes_emoji_names_and_stickers() -> None:
         ],
         "raw_text": "",
     }
-    msg = synthesize_onebot_payload(event, BOT_QQ)["message"]
+    msg = synthesize_onebot_payload(event, QQ_BOT_ID)["message"]
     check("quote: text and speaker ride along with the namespaced id",
           msg[0]["data"] == {"id": "telegram:g1:m1", "quote_text": "see you at 8",
                              "quote_name": "Bob"}, repr(msg[0]))
@@ -400,7 +400,7 @@ def test_native_mention_is_namespaced_on_the_way_out() -> None:
     """A native platform mints ids BARE inbound, for the ledgers. Outbound,
     `at_user_id` is read by the FORWARDER, which resolves "<platform>:<raw>"
     and drops anything bare — so on the supported QQ path
-    (GATEWAY_NATIVE_PLATFORMS=aiocqhttp) every group @-mention silently
+    (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group @-mention silently
     disappeared. The prefix has to be put back at the sink boundary."""
     at_bare = [{"type": "at", "data": {"qq": "123456"}},
                {"type": "text", "data": {"text": "oi"}}]
@@ -543,7 +543,7 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     `[style]` declaration and check what the real parse does with it."""
     a = Agent(
         api_key="test-key",  # non-empty so the agent is enabled
-        bot_qq=BOT_QQ,
+        bot_qq=QQ_BOT_ID,
         bot_name="TestBot",
         napcat_api="http://127.0.0.1:9",  # closed port; never reached when the sink is set
         memory_file=str(tmp / "memory.json"),
@@ -711,14 +711,14 @@ async def test_the_model_sees_quotes_emoji_names_and_stickers(tmp: Path) -> None
 
 async def test_a_gateway_mention_reaches_a_bot_without_a_qq_number(
         tmp: Path) -> None:
-    """BOT_QQ is the bot's QQ account, and the wizard asks for it only when
+    """QQ_BOT_ID is the bot's QQ account, and the wizard asks for it only when
     QQ is in use. The gateway turned a self-mention or an is_at_me reply into
-    an @ of BOT_QQ, and _is_at_me gave up when BOT_QQ was blank. What still
-    answered was an accident: the empty id equalled the empty BOT_QQ, so the
-    @ rendered as the bot's name and the name check fired. With BOT_NAME
+    an @ of QQ_BOT_ID, and _is_at_me gave up when QQ_BOT_ID was blank. What still
+    answered was an accident: the empty id equalled the empty QQ_BOT_ID, so the
+    @ rendered as the bot's name and the name check fired. With PERSONA_NAME
     blank too, as `quickstart.py --astrbot` leaves it, a Telegram persona
     never heard a mention at all, and an @ of any empty id read as the bot's
-    name. The self mention now has an id of its own whenever BOT_QQ is
+    name. The self mention now has an id of its own whenever QQ_BOT_ID is
     blank."""
     agent = make_agent(tmp)
     agent.bot_qq = ""
@@ -744,20 +744,20 @@ async def test_a_gateway_mention_reaches_a_bot_without_a_qq_number(
         {"type": "text", "text": " are you around today"}], False))
     reply_to_bot = await agent.handle_gateway(event(971, [
         {"type": "text", "text": "are you around today"}], True))
-    check("no BOT_QQ: both turns were answered",
+    check("no QQ_BOT_ID: both turns were answered",
           mention["handled"] is True and reply_to_bot["handled"] is True,
           repr((mention, reply_to_bot)))
-    check("no BOT_QQ: an @mention and a reply-to-bot both run as called",
+    check("no QQ_BOT_ID: an @mention and a reply-to-bot both run as called",
           [m for m, _ in calls] == ["called", "called"], repr(calls))
-    check("no BOT_QQ: the mention renders as the bot's name",
+    check("no QQ_BOT_ID: the mention renders as the bot's name",
           all(t.startswith("@TestBot") for _, t in calls), repr(calls))
 
     empty_at = {"message": [{"type": "at", "data": {"qq": ""}},
                             {"type": "text", "data": {"text": " hi"}}]}
-    check("no BOT_QQ: an @ of an empty id is not an @ of the bot",
+    check("no QQ_BOT_ID: an @ of an empty id is not an @ of the bot",
           agent._is_at_me(empty_at) is False)
     rendered = await agent._extract_text(empty_at)
-    check("no BOT_QQ: nor is it rendered as the bot's name",
+    check("no QQ_BOT_ID: nor is it rendered as the bot's name",
           "TestBot" not in rendered, repr(rendered))
 
     # The mention itself is what counts, not the name it renders as.
@@ -766,7 +766,7 @@ async def test_a_gateway_mention_reaches_a_bot_without_a_qq_number(
     nameless = await agent.handle_gateway(event(972, [
         {"type": "mention", "user_id": "999000", "name": "Bot"},
         {"type": "text", "text": " are you around today"}], False))
-    check("no BOT_QQ or BOT_NAME: an @mention still runs as called",
+    check("no QQ_BOT_ID or PERSONA_NAME: an @mention still runs as called",
           nameless["handled"] is True
           and [m for m, _ in calls] == ["called"], repr((nameless, calls)))
 
@@ -825,13 +825,13 @@ async def test_bounded_image_inputs(tmp: Path) -> None:
     outside = tmp / "outside.png"
     outside.write_bytes(png)
 
-    old_dir = os.environ.pop("NAPCAT_IMAGE_DIR", None)
+    old_dir = os.environ.pop("QQ_ONEBOT_IMAGE_DIR", None)
     try:
         data = await agent._fetch_image_bytes(outside.as_uri())
         check("file image: unset allowlist rejects",
               data is None, repr(data))
 
-        os.environ["NAPCAT_IMAGE_DIR"] = str(allowed_dir)
+        os.environ["QQ_ONEBOT_IMAGE_DIR"] = str(allowed_dir)
         data = await agent._fetch_image_bytes(inside.as_uri())
         check("file image: configured directory accepted",
               data == png, repr(data))
@@ -850,9 +850,9 @@ async def test_bounded_image_inputs(tmp: Path) -> None:
                   data is None, repr(data))
     finally:
         if old_dir is None:
-            os.environ.pop("NAPCAT_IMAGE_DIR", None)
+            os.environ.pop("QQ_ONEBOT_IMAGE_DIR", None)
         else:
-            os.environ["NAPCAT_IMAGE_DIR"] = old_dir
+            os.environ["QQ_ONEBOT_IMAGE_DIR"] = old_dir
 
     oversized = b"\x89PNG\r\n\x1a\n" + b"x" * 5_000_000
     encoded = base64.b64encode(oversized).decode()
@@ -1106,16 +1106,16 @@ def test_quickstart_set_env_values() -> None:
     from quickstart import set_env_values
     src = ("# ==== section ====\n"
            "LLM_API_KEY=\n"
-           "BOT_NAME=old\n"
-           "# BOT_NAME=commented reference\n")
-    out = set_env_values(src, {"LLM_API_KEY": "sk-1", "BOT_NAME": "New",
+           "PERSONA_NAME=old\n"
+           "# PERSONA_NAME=commented reference\n")
+    out = set_env_values(src, {"LLM_API_KEY": "sk-1", "PERSONA_NAME": "New",
                                "BRAND_NEW": "v"})
     check("env writer: fills blank key in place", "LLM_API_KEY=sk-1" in out, out)
-    check("env writer: replaces existing value", "BOT_NAME=New" in out, out)
+    check("env writer: replaces existing value", "PERSONA_NAME=New" in out, out)
     check("env writer: preserves comments",
-          "# ==== section ====" in out and "# BOT_NAME=commented reference" in out, out)
+          "# ==== section ====" in out and "# PERSONA_NAME=commented reference" in out, out)
     check("env writer: appends missing key", "BRAND_NEW=v" in out, out)
-    check("env writer: no duplicated keys", out.count("\nBOT_NAME=") == 1, out)
+    check("env writer: no duplicated keys", out.count("\nPERSONA_NAME=") == 1, out)
 
 
 def test_sticker_marker_whitespace() -> None:
@@ -1612,7 +1612,7 @@ async def test_the_missed_mention_sweep_ignores_old_mentions(
 
     def at_msg(mid, age):
         return {"message_id": mid, "sender": {"user_id": "5"},
-                "raw_message": f"[CQ:at,qq={BOT_QQ}] hi",
+                "raw_message": f"[CQ:at,qq={QQ_BOT_ID}] hi",
                 "time": int(time.time() - age)}
 
     history[:] = [at_msg(900, 3 * 86400)]
@@ -1649,7 +1649,7 @@ async def test_mem_command_sends_outside_lock(tmp: Path) -> None:
     payload = {
         "post_type": "message", "message_type": "group", "group_id": "123",
         "user_id": "1", "message_id": 91001, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": " remember I like cats"}}],
         "raw_message": "remember I like cats",
     }
@@ -1697,7 +1697,7 @@ async def test_group_whitelist_gateway_bypass(tmp: Path) -> None:
         "user_id": "777",
         "sender": {"user_id": "777", "nickname": "Bob"},
         "raw_message": "@TestBot hi",
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": " hi"}}],
         "message_id": 802,
     }
@@ -1916,7 +1916,7 @@ async def test_a_collected_turn_does_not_simulate_typing(tmp: Path) -> None:
         "group_id": "123456", "user_id": "777",
         "sender": {"user_id": "777", "nickname": "Bob"},
         "raw_message": "@TestBot hi",
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": " hi"}}],
         "message_id": 931,
     })
@@ -1961,8 +1961,8 @@ async def test_silence_still_claims_the_conversation(tmp: Path) -> None:
     refused = await agent.handle_gateway({
         "platform": "aiocqhttp", "message_type": "group",
         "conversation_id": "999999", "user_id": "777", "sender_name": "Bob",
-        "self_id": BOT_QQ, "message_id": 921, "is_at_me": True,
-        "segments": [{"type": "mention", "user_id": BOT_QQ, "name": "Bot"},
+        "self_id": QQ_BOT_ID, "message_id": 921, "is_at_me": True,
+        "segments": [{"type": "mention", "user_id": QQ_BOT_ID, "name": "Bot"},
                      {"type": "text", "text": " hi"}],
         "raw_text": "@Bot hi",
     })
@@ -2006,8 +2006,8 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
         return {
             "platform": "aiocqhttp", "message_type": "group",
             "conversation_id": gid, "user_id": "777", "sender_name": "Bob",
-            "self_id": BOT_QQ, "message_id": f"90{gid}", "is_at_me": True,
-            "segments": [{"type": "mention", "user_id": BOT_QQ, "name": "Bot"},
+            "self_id": QQ_BOT_ID, "message_id": f"90{gid}", "is_at_me": True,
+            "segments": [{"type": "mention", "user_id": QQ_BOT_ID, "name": "Bot"},
                          {"type": "text", "text": " hi"}],
             "raw_text": "@Bot hi",
         }
@@ -2026,7 +2026,7 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
         return {
             "platform": "aiocqhttp", "message_type": "private",
             "conversation_id": uid, "user_id": uid, "sender_name": "Someone",
-            "self_id": BOT_QQ, "message_id": mid, "is_at_me": False,
+            "self_id": QQ_BOT_ID, "message_id": mid, "is_at_me": False,
             "segments": [{"type": "text", "text": "hi"}], "raw_text": "hi",
         }
 
@@ -2090,7 +2090,7 @@ def _qq_group(gid: str, uid: str, mid) -> dict:
         "post_type": "message", "message_type": "group", "group_id": gid,
         "user_id": uid, "sender": {"user_id": uid, "nickname": "Bob"},
         "raw_message": "@TestBot are you around today", "message_id": mid,
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": " are you around today"}}],
     }
 
@@ -2131,7 +2131,7 @@ def _serving_agent(tmp: Path) -> tuple[Agent, list]:
 
 async def test_the_agent_lists_gate_each_platform_separately(
         tmp: Path, caplog) -> None:
-    """ALLOWED_GROUPS and ALLOWED_DM_USERS are partitioned per platform.
+    """ACCESS_GROUPS and ACCESS_DM_USERS are partitioned per platform.
 
     Checked as one list, the first Telegram group an operator listed closed
     every QQ group, which is what QQ_GROUPS=telegram:-100 did. A platform with
@@ -2162,7 +2162,7 @@ async def test_the_agent_lists_gate_each_platform_separately(
     refusals = [r.getMessage() for r in caplog.records
                 if "not answering telegram:-100888" in r.getMessage()]
     check("groups: the refusal is logged at INFO, naming the setting",
-          len(refusals) == 1 and "ALLOWED_GROUPS" in refusals[0]
+          len(refusals) == 1 and "ACCESS_GROUPS" in refusals[0]
           and all(r.levelno == logging.INFO for r in caplog.records
                   if "not answering" in r.getMessage()), repr(refusals))
     await agent.handle_gateway(_gw_group("telegram", "-100888", "43", 1004))
@@ -2378,7 +2378,7 @@ async def test_a_native_owner_keeps_the_qq_keys(tmp: Path) -> None:
 
     settings = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "ADMIN_IDS": "aiocqhttp:10000",
-        "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp"})
+        "CONNECTOR_QQ_PLATFORMS": "aiocqhttp"})
     check("native owner: read as the bare QQ id",
           settings.owners == {"10000"}, repr(settings.owners))
     agent, served = _serving_agent(tmp)
@@ -2611,12 +2611,12 @@ async def test_native_gateway_never_enters_lru(tmp: Path) -> None:
     agent.buffers["123"].append({"name": "Alice", "text": "keep", "user_id": "42"})
     await agent.handle_gateway({
         "platform": "aiocqhttp", "message_type": "group",
-        "conversation_id": "123", "user_id": "42", "self_id": BOT_QQ,
+        "conversation_id": "123", "user_id": "42", "self_id": QQ_BOT_ID,
         "segments": [],
     })
     await agent.handle_gateway({
         "platform": "aiocqhttp", "message_type": "private",
-        "conversation_id": "42", "user_id": "42", "self_id": BOT_QQ,
+        "conversation_id": "42", "user_id": "42", "self_id": QQ_BOT_ID,
         "segments": [],
     })
     check("native gateway: QQ state never becomes eligible for cache eviction",
@@ -2683,7 +2683,7 @@ async def test_group_outbound_orders_buffer(tmp: Path) -> None:
         "post_type": "message", "message_type": "group", "group_id": "g-order",
         "user_id": "1", "message_id": "order-1",
         "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "question one"}}],
         "raw_message": "question one",
     }
@@ -3200,7 +3200,7 @@ async def test_pass_never_commits_model_memory(tmp: Path) -> None:
         "post_type": "message", "message_type": "group", "group_id": "g-pass",
         "user_id": "42", "message_id": "pass-1",
         "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "ping"}}],
         "raw_message": "ping",
     }
@@ -3702,7 +3702,7 @@ async def test_rejected_reply_not_committed(tmp: Path) -> None:
     payload = {
         "post_type": "message", "message_type": "group", "group_id": "555",
         "user_id": "42", "message_id": 92001, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "you free for dinner tonight?"}}],
         "raw_message": "you free for dinner tonight?",
     }
@@ -3745,7 +3745,7 @@ async def test_delivery_failure_not_committed(tmp: Path) -> None:
     group_payload = {
         "post_type": "message", "message_type": "group", "group_id": "558",
         "user_id": "42", "message_id": 92004, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "are you there?"}}],
         "raw_message": "are you there?",
     }
@@ -4531,7 +4531,7 @@ async def test_partial_delivery_is_committed(tmp: Path) -> None:
     handled = await agent.handle({
         "post_type": "message", "message_type": "group", "group_id": "559",
         "user_id": "42", "message_id": 92010, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "you there?"}}],
         "raw_message": "you there?",
     })
@@ -4742,7 +4742,7 @@ async def test_llm_fail_fallback_outside_lock(tmp: Path) -> None:
     payload = {
         "post_type": "message", "message_type": "group", "group_id": "556",
         "user_id": "42", "message_id": 92002, "sender": {"nickname": "Alice"},
-        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+        "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "you free for dinner tonight?"}}],
         "raw_message": "you free for dinner tonight?",
     }
@@ -4841,7 +4841,7 @@ async def test_error_cooldown_cools_only_failed_model(tmp: Path) -> None:
 
 async def test_a_side_model_failure_does_not_cool_the_group_model(tmp: Path) -> None:
     """The defect the per-model clock fixes: one scalar clock meant a failing
-    PRIVATE_MODEL, JUDGE_MODEL or EVAL_MODEL -- any model sent through
+    LLM_DM_MODEL, LLM_JUDGE_MODEL or EVAL_MODEL -- any model sent through
     _call_llm -- armed the cooldown and moved every group reply to the
     fallback, though the primary never failed."""
     agent = _two_model_agent(tmp)
@@ -4945,7 +4945,7 @@ async def test_error_cooldown_both_models_can_cool(tmp: Path) -> None:
 
 
 async def test_error_cooldown_single_model_unchanged(tmp: Path) -> None:
-    """With no distinct fallback (FALLBACK_MODEL blank resolves to the main
+    """With no distinct fallback (LLM_FALLBACK_MODEL blank resolves to the main
     model) there is nowhere to switch: the call retries the one model and
     raises, exactly as before. The dict does gain the model's own entry, but
     it gates to the same name, so routing is unchanged."""
@@ -5006,7 +5006,7 @@ class _EndpointSpy:
 async def test_the_fallback_model_calls_its_own_endpoint(tmp: Path) -> None:
     """The fallback model used to be only a NAME on the primary's endpoint, so
     an outage at the primary's provider took the fallback down with it.
-    FALLBACK_BASE_URL / FALLBACK_API_KEY give it an endpoint of its own, used
+    LLM_FALLBACK_BASE_URL / LLM_FALLBACK_API_KEY give it an endpoint of its own, used
     wherever that model is called: the in-call failover, and the gate,
     search decision and self-eval, whose models default to it."""
     agent = _two_model_agent(tmp)
@@ -5100,7 +5100,7 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
     agent.base_url, agent.api_key = "https://primary.example", "primary-key"
     agent.fallback_base_url = "https://groq.example/openai/v1"
     agent.fallback_api_key = "fallback-key"
-    agent.judge_model = "fallback"  # what a blank JUDGE_MODEL resolves to
+    agent.judge_model = "fallback"  # what a blank LLM_JUDGE_MODEL resolves to
     primary = "https://primary.example/v1/chat/completions"
     fallback = "https://groq.example/openai/v1/chat/completions"
     seen: list = []
@@ -5136,7 +5136,7 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
     seen.clear()
     await thinking_off("fallback")
     await agent._decide_and_search([], hint="what is the price of gold today")
-    check("FALLBACK_THINKING: a fallback vendor that takes it is sent it",
+    check("LLM_FALLBACK_THINKING: a fallback vendor that takes it is sent it",
           seen == [(fallback, "fallback", True)] * 2, repr(seen))
 
     agent.fallback_thinking = False

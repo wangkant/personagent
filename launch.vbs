@@ -13,7 +13,7 @@
 ' Both are minimized without stealing focus (intWindowStyle = 7).
 '
 ' SETUP:
-'   1. Edit the three values below (BOT_QQ, NAPCAT_DIR, AGENT_DIR) to match
+'   1. Edit the three values below (QQ_BOT_ID, NAPCAT_DIR, AGENT_DIR) to match
 '      your local install.
 '   2. Double-click this .vbs (or pin a shortcut to it on the desktop).
 '
@@ -26,7 +26,7 @@
 Option Explicit
 
 ' ---- EDIT THESE ----
-Const BOT_QQ      = "0000000000"
+Const QQ_BOT_ID      = "0000000000"
 Const NAPCAT_DIR  = "C:\path\to\NapCat.Shell"
 Const AGENT_DIR   = "C:\path\to\personagent"
 ' --------------------
@@ -35,7 +35,7 @@ Dim WS
 Set WS = CreateObject("WScript.Shell")
 
 ' Launch NapCat (7 = minimized, no focus)
-WS.Run "cmd /k cd /d """ & NAPCAT_DIR & """ && launcher-user.bat " & BOT_QQ, 7, False
+WS.Run "cmd /k cd /d """ & NAPCAT_DIR & """ && launcher-user.bat " & QQ_BOT_ID, 7, False
 
 ' Give NapCat ~3s to come up before the agent starts hitting its HTTP API
 WScript.Sleep 3000

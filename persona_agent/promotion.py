@@ -114,7 +114,7 @@ class Policy:
 
         def _bool(name: str, default: bool) -> bool:
             """`raw == "true"` read every other spelling as False, so
-            `PROMOTE_AUTO=1` disabled promotion entirely and said nothing.
+            `PROMOTE_AUTO_ENABLED=1` disabled promotion entirely and said nothing.
             An unrecognised value keeps the default rather than silently
             picking the opposite of what was meant."""
             raw = str(env.get(name, "")).strip().lower()
@@ -137,7 +137,7 @@ class Policy:
                 0.0, _float("PROMOTE_EVIDENCE_MAX_AGE_DAYS", MAX_EVIDENCE_AGE_DAYS)),
             require_same_conversation=_bool(
                 "PROMOTE_REQUIRE_SAME_CONVERSATION", REQUIRE_SAME_CONVERSATION),
-            auto_promote=_bool("PROMOTE_AUTO", AUTO_PROMOTE),
+            auto_promote=_bool("PROMOTE_AUTO_ENABLED", AUTO_PROMOTE),
         )
 
 
@@ -368,7 +368,7 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     `owner_id` is the single-account spelling it had before.
     """
     if not policy.auto_promote:
-        return Decision(False, "automatic promotion disabled (PROMOTE_AUTO)")
+        return Decision(False, "automatic promotion disabled (PROMOTE_AUTO_ENABLED)")
     if cand.get("state") != candidates.STATE_PROPOSED:
         return Decision(False, f"state is {cand.get('state')}, not proposed")
 

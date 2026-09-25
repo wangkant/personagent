@@ -50,7 +50,7 @@ a value of the wrong type or shape is ignored, never a 400, so an old
 forwarder that sends none of them behaves exactly as before.
 
 `prefiltered` says whether the forwarder applied its own allowlist. Absent or
-true, a platform with no ALLOWED_GROUPS / ALLOWED_DM_USERS entries is left to
+true, a platform with no ACCESS_GROUPS / ACCESS_DM_USERS entries is left to
 the forwarder, as it always was; false makes the agent's lists the only
 filter, so that platform is refused until it has entries. It can only
 tighten, which is why a forwarder may assert it (access.py).
@@ -58,7 +58,7 @@ tighten, which is why a forwarder may assert it (access.py).
 `source_timestamp` is the moment the SOURCE platform stamped the message, not
 the moment the forwarder sent it on: the two ages are checked separately, so a
 forwarder that retries for a minute is not mistaken for a replayed event. It is
-rejected when it differs from now by more than GATEWAY_SOURCE_MAX_AGE_SECONDS
+rejected when it differs from now by more than CONNECTOR_MAX_EVENT_AGE_S
 (`_gateway_event_is_fresh` in main.py), and it is required — an event without it
 is a 400, which is why it appears in `main._validate_event_payload`'s required
 tuple and in the forwarder plugin's own copy of this schema.
@@ -115,8 +115,8 @@ from . import channels
 
 logger = logging.getLogger("agent.gateway")
 
-#: The id a forwarded mention of the bot itself is rewritten to when BOT_QQ is
-#: blank, which it is on every install without QQ: BOT_QQ is the bot's QQ
+#: The id a forwarded mention of the bot itself is rewritten to when QQ_BOT_ID is
+#: blank, which it is on every install without QQ: QQ_BOT_ID is the bot's QQ
 #: account and nothing else. Without it the self mention became an @ of "" and
 #: _is_at_me could not recognise it. No namespaced id (those always contain
 #: ':') and no QQ number (digits) can equal it.
@@ -156,9 +156,9 @@ def _ns(platform: str, native: bool, raw: object) -> str:
     by rewriting a field — every id derived from it changes too.
 
     `native` is NOT the forwarder's decision. It is the operator's, via
-    GATEWAY_NATIVE_PLATFORMS, because minting a bare id claims QQ authority:
-    bare ids are what the QQ entries of ADMIN_IDS, ALLOWED_GROUPS and
-    ALLOWED_DM_USERS are compared against. A forwarder that could assert it
+    CONNECTOR_QQ_PLATFORMS, because minting a bare id claims QQ authority:
+    bare ids are what the QQ entries of ADMIN_IDS, ACCESS_GROUPS and
+    ACCESS_DM_USERS are compared against. A forwarder that could assert it
     for itself could address any QQ conversation the agent can reach.
     Default empty — every platform is namespaced until an operator says
     otherwise.
@@ -177,7 +177,7 @@ current_sink: contextvars.ContextVar[Optional["GatewaySink"]] = contextvars.Cont
 # `current_sink` is one: per-turn state on an Agent instance shared by every
 # conversation, where asyncio hands each Task its own copy so two turns in
 # flight cannot see each other's value. None means "not supplied" and the
-# TZ_OFFSET_HOURS env default still applies, so a deployment that never sets
+# PERSONA_TZ_OFFSET_HOURS env default still applies, so a deployment that never sets
 # it is behaviorally unchanged. A gateway embedder with a per-user notion of
 # "local time" may set it for the duration of a turn.
 current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
@@ -198,7 +198,7 @@ def message_to_reply_item(
     way — but `at_user_id` is read by the forwarder, not by a store, and the
     forwarder resolves "<platform>:<raw>". So a mention that came in bare goes
     back out bare, and the reference client drops it on the floor: on the
-    supported QQ path (GATEWAY_NATIVE_PLATFORMS=aiocqhttp) every group
+    supported QQ path (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group
     @-mention silently disappeared. Restoring the prefix here keeps the two
     spellings where they each belong — bare for the ledgers, namespaced on the
     wire — and leaves `_ns` and every id in every store untouched.
@@ -336,7 +336,7 @@ def synthesize_onebot_payload(
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
     unchanged. Mentions of the platform self_id are normalized to bot_qq so
     _is_at_me fires exactly like a real QQ @-mention. The agent passes
-    GATEWAY_SELF_ID for it when BOT_QQ is blank (Agent._self_mention_id).
+    GATEWAY_SELF_ID for it when QQ_BOT_ID is blank (Agent._self_mention_id).
 
     `native_platforms` is the operator's list of forwarder platforms whose ids
     are minted bare instead of namespaced — see `_ns`. Empty by default, which

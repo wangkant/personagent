@@ -1465,7 +1465,7 @@ def _delivery_for(sent, **fields):
 
 def test_a_delivery_goes_only_where_the_plugin_took_its_handle_from(monkeypatch):
     """The agent keeps reply_handle as any admitted event spelled it, and a
-    local process can post an event without GATEWAY_TOKEN. The allowlists
+    local process can post an event without CONNECTOR_TOKEN. The allowlists
     name the conversation, but the send goes to the handle."""
     module = _import_plugin()
     config = dict(_DM_CONFIG, group_whitelist=["group-1"])

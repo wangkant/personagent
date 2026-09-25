@@ -151,7 +151,7 @@ async def test_group_prompt_fences_history_as_data(tmp: Path) -> None:
 
 async def test_the_group_prompt_assumes_no_platform(tmp: Path) -> None:
     """The group prompt was written for QQ: speakers labelled qq=, an [AT:qq]
-    marker, a "not your BOT_QQ" that nothing substituted, and a bare-number
+    marker, a "not your QQ_BOT_ID" that nothing substituted, and a bare-number
     example that taught a Telegram model to write [AT:42], which the
     forwarder cannot resolve. Ids are ids, and the example is spelled the
     way this conversation's ids are."""
@@ -175,7 +175,7 @@ async def test_the_group_prompt_assumes_no_platform(tmp: Path) -> None:
 
     everything = prompts["system"] + "".join(prompts["users"])
     check("no QQ spelling is left in the group prompt",
-          "BOT_QQ" not in everything and "qq=" not in everything
+          "QQ_BOT_ID" not in everything and "qq=" not in everything
           and "[AT:qq]" not in everything, repr(everything[-2000:]))
     check("speakers are labelled by id",
           "[Alice|id=telegram:42]" in prompts["users"][0])

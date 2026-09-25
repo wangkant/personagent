@@ -11,7 +11,7 @@ failure mode while the configuration lived in three places:
    configurations, and a leaked deployment setting would silently be in both.
 2. `from_env()` reproduces exactly what `main.py` used to spell by hand,
    bounds included, down to the defaults that differ from the constructor's
-   (`RATE_WINDOW`, `EVAL_ENABLE`) because `.env.example` says so.
+   (`LLM_RATE_WINDOW_S`, `EVAL_ENABLED`) because `.env.example` says so.
 3. The empty-model fallbacks resolve in dependency order. Each of these ships
    blank and has to end up as a name the endpoint actually serves; one of them
    resolving before its source is set means `{"model": ""}` on a live call.
@@ -33,24 +33,24 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 #: A deployment `.env` with every setting set to something distinctive.
 FULL_ENV = {
     "LLM_API_KEY": "sk-live", "LLM_BASE_URL": "https://llm.example/v1/",
-    "LLM_MODEL": "live-model", "BOT_QQ": "900", "BOT_NAME": "Live",
-    "NAPCAT_API": "http://napcat:3000/", "AGENT_TRIGGER_COUNT": "7",
-    "AGENT_CONTEXT_LEN": "40", "AGENT_FOLLOWUP_WINDOW": "11",
-    "AGENT_MEMORY_FILE": "m.json", "AGENT_MEMORY_MAX": "9",
+    "LLM_MODEL": "live-model", "QQ_BOT_ID": "900", "PERSONA_NAME": "Live",
+    "QQ_ONEBOT_URL": "http://napcat:3000/", "CHAT_TRIGGER_COUNT": "7",
+    "CHAT_CONTEXT_MESSAGES": "40", "CHAT_FOLLOWUP_WINDOW_S": "11",
+    "MEMORY_FILE": "m.json", "MEMORY_MAX_PER_CONVERSATION": "9",
     "OWNER_QQ": "42", "OWNER_NAME": "O", "OWNER_RELATIONSHIP": "rel",
-    "PRIVATE_MODEL": "dm-model", "FALLBACK_MODEL": "cheap-model",
-    "FALLBACK_BASE_URL": "https://fb.example/v1/", "FALLBACK_API_KEY": "sk-fb",
-    "FALLBACK_THINKING": "true",
-    "RATE_WINDOW": "13", "RATE_THRESHOLD": "14", "FALLBACK_DURATION": "15",
-    "RATE_LIMIT_COOLDOWN": "16",
-    "EVAL_ENABLE": "true", "EVAL_MODEL": "eval-model", "EVAL_FILE": "e.jsonl",
+    "LLM_DM_MODEL": "dm-model", "LLM_FALLBACK_MODEL": "cheap-model",
+    "LLM_FALLBACK_BASE_URL": "https://fb.example/v1/", "LLM_FALLBACK_API_KEY": "sk-fb",
+    "LLM_FALLBACK_THINKING": "true",
+    "LLM_RATE_WINDOW_S": "13", "LLM_RATE_THRESHOLD": "14", "LLM_FALLBACK_DURATION_S": "15",
+    "LLM_RATE_LIMIT_COOLDOWN_S": "16",
+    "EVAL_ENABLED": "true", "EVAL_MODEL": "eval-model", "EVAL_FILE": "e.jsonl",
     "VISION_MODEL": "v-model", "VISION_API_KEY": "vk", "TAVILY_API_KEY": " tav ",
     "VISION_BASE_URL": "https://vision.example/v4/", "AGENT_LANG": " ZH ",
     "GATEWAY_OWNER_IDS": "telegram:1, discord:2 ,",
-    "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
+    "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
     "QQ_GROUPS": "g1,g2", "PRIVATE_ALLOWED_QQS": "p1",
-    "PROACTIVE_ENABLE": "yes", "EVOLVE_INTERVAL_HOURS": "0.5",
-    "REACT_TTL_SEC": "30", "EXAMPLES_MAX_AUTO": "12",
+    "PROACTIVE_ENABLED": "yes", "EVOLVE_INTERVAL_HOURS": "0.5",
+    "REACT_TTL_S": "30", "PROMOTE_MAX_EXAMPLES": "12",
 }
 
 
@@ -90,14 +90,14 @@ def test_the_vision_endpoint_reads_new_names_and_honours_the_old() -> None:
 
 def test_the_identity_settings_read_new_names_and_honour_the_old(
         monkeypatch) -> None:
-    """ADMIN_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS take "<platform>:<id>"
+    """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS take "<platform>:<id>"
     entries on every platform. The QQ-only names they replace still work and
     are folded in by union, so a half-migrated .env loses nobody."""
     import dataclasses
 
     new = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1, qq:10000,",
-        "ALLOWED_GROUPS": "telegram:-100,123", "ALLOWED_DM_USERS": "slack:U1"})
+        "ACCESS_GROUPS": "telegram:-100,123", "ACCESS_DM_USERS": "slack:U1"})
     check("identity: the new names are read and canonicalised",
           (new.admin_ids, new.allowed_groups, new.allowed_dm_users)
           == (("telegram:1", "10000"), ("telegram:-100", "123"), ("slack:U1",)),
@@ -115,8 +115,8 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
 
     both = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1", "OWNER_QQ": "10000",
-        "GATEWAY_OWNER_IDS": "discord:2", "ALLOWED_GROUPS": "telegram:-100",
-        "QQ_GROUPS": "123", "ALLOWED_DM_USERS": "telegram:42",
+        "GATEWAY_OWNER_IDS": "discord:2", "ACCESS_GROUPS": "telegram:-100",
+        "QQ_GROUPS": "123", "ACCESS_DM_USERS": "telegram:42",
         "PRIVATE_ALLOWED_QQS": "888"})
     check("identity: new and old are a union, not new-wins",
           both.owners == {"telegram:1", "10000", "discord:2"}
@@ -129,9 +129,9 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
           blank_new.owners == {"42"}, repr(blank_new.owners))
 
     native = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
-        "ADMIN_IDS": "aiocqhttp:10000", "ALLOWED_GROUPS": "qq:123,aiocqhttp:456",
-        "ALLOWED_DM_USERS": "telegram:aiocqhttp"})
+        "LLM_API_KEY": "k", "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
+        "ADMIN_IDS": "aiocqhttp:10000", "ACCESS_GROUPS": "qq:123,aiocqhttp:456",
+        "ACCESS_DM_USERS": "telegram:aiocqhttp"})
     check("identity: qq: and native prefixes become the bare keys events carry",
           native.owners == {"10000"} and native.allowed_groups == ("123", "456")
           and native.dm_users == {"telegram:aiocqhttp"},
@@ -148,9 +148,9 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
     check("identity: re-resolving changes nothing",
           dataclasses.replace(both) == both and dataclasses.replace(native) == native)
 
-    monkeypatch.setenv("ALLOWED_GROUPS", "telegram:-100")
+    monkeypatch.setenv("ACCESS_GROUPS", "telegram:-100")
     monkeypatch.setenv("QQ_GROUPS", "123")
-    monkeypatch.setenv("ALLOWED_DM_USERS", "telegram:42")
+    monkeypatch.setenv("ACCESS_DM_USERS", "telegram:42")
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     ambient = AgentSettings(api_key="k")
     check("identity: the admission lists are operational knobs, read in both",
@@ -222,9 +222,9 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
     """A typo in one setting has to behave like a typo in any other: the
     documented default, and the process still starts."""
     s = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "PORT": "nope", "AGENT_CONTEXT_LEN": "1",
-        "AGENT_TRIGGER_COUNT": "0", "REACT_TTL_SEC": "15m",
-        "PROACTIVE_PROB": "2", "LLM_TIMEOUT": "0", "RATE_LIMIT_COOLDOWN": "0",
+        "LLM_API_KEY": "k", "SERVER_PORT": "nope", "CHAT_CONTEXT_MESSAGES": "1",
+        "CHAT_TRIGGER_COUNT": "0", "REACT_TTL_S": "15m",
+        "PROACTIVE_PROB": "2", "LLM_TIMEOUT_S": "0", "LLM_RATE_LIMIT_COOLDOWN_S": "0",
     })
     check("bad values: bounded ints fall back",
           (s.context_len, s.trigger_count) == (120, 30))
@@ -237,15 +237,15 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
 
 
 def test_the_outbox_settings() -> None:
-    """GATEWAY_OUTBOX defaults on; PROACTIVE_PLATFORMS is a lowercase list
+    """CONNECTOR_OUTBOX_ENABLED defaults on; PROACTIVE_PLATFORMS is a lowercase list
     where a native forwarder's name means QQ, whose keys it mints."""
     default = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
     check("outbox: on by default, every platform open",
           default.gateway_outbox is True and default.proactive_platforms == ())
     s = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "GATEWAY_OUTBOX": "false",
+        "LLM_API_KEY": "k", "CONNECTOR_OUTBOX_ENABLED": "false",
         "PROACTIVE_PLATFORMS": " Telegram, aiocqhttp ,qq,",
-        "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp"})
+        "CONNECTOR_QQ_PLATFORMS": "aiocqhttp"})
     check("outbox: false turns it off", s.gateway_outbox is False)
     check("proactive platforms: trimmed, lowercased, native read as qq",
           s.proactive_platforms == ("telegram", "qq"), repr(s.proactive_platforms))

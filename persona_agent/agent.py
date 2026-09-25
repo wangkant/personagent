@@ -241,8 +241,8 @@ class Agent(ContentIngestion, Transport, Learning):
             logger.warning("[Agent] LLM_API_KEY not configured; %s disabled",
                            self.bot_name)
         if self.enabled and not self.bot_name:
-            logger.warning("[Agent] BOT_NAME is empty; the bot will only respond to "
-                           "explicit @-mentions (set BOT_NAME so it answers to its name)")
+            logger.warning("[Agent] PERSONA_NAME is empty; the bot will only respond to "
+                           "explicit @-mentions (set PERSONA_NAME so it answers to its name)")
 
     def _apply_settings(self, s: AgentSettings) -> None:
         """Put the configuration on the agent, one field per attribute.
@@ -829,13 +829,13 @@ class Agent(ContentIngestion, Transport, Learning):
             native_platforms=self.gateway_native_platforms)
 
     def _dm_allowlist(self) -> frozenset[str]:
-        """ALLOWED_DM_USERS and PRIVATE_ALLOWED_QQS, canonical."""
+        """ACCESS_DM_USERS and PRIVATE_ALLOWED_QQS, canonical."""
         return access.parse_ids(
             self.allowed_dm_users, self.private_allowed_qqs,
             native_platforms=self.gateway_native_platforms)
 
     def _group_allowlist(self) -> frozenset[str]:
-        """ALLOWED_GROUPS (QQ_GROUPS folded in), canonical."""
+        """ACCESS_GROUPS (QQ_GROUPS folded in), canonical."""
         return access.parse_ids(
             self.allowed_groups, native_platforms=self.gateway_native_platforms)
 
@@ -955,7 +955,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         is_at = self._is_at_me(payload)
         # Guard the substring test: an empty bot_name (the shipped default
-        # when BOT_NAME is unset) would make `"" in text` always True and the
+        # when PERSONA_NAME is unset) would make `"" in text` always True and the
         # bot would treat every message as a named call, replying to everything.
         # ctrl_text: a linked page's og:title containing the bot name must not
         # force called mode — only the member's own words count.
@@ -1445,7 +1445,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
     async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
-        PRIVATE_MODEL as an optional alternate model name.
+        LLM_DM_MODEL as an optional alternate model name.
 
         is_owner=True  → owner-style override (very close, all defenses off)
         is_owner=False → ordinary-friend override (looser than group chat,
@@ -1856,7 +1856,7 @@ class Agent(ContentIngestion, Transport, Learning):
             buf.append({"name": name, "text": text, "user_id": user_id})
 
     def _self_mention_id(self) -> str:
-        """The id an @ of the bot carries: BOT_QQ, or GATEWAY_SELF_ID on an
+        """The id an @ of the bot carries: QQ_BOT_ID, or GATEWAY_SELF_ID on an
         install without QQ, where the gateway mints it for a self mention.
         Only the mention paths use it; NapCat's own-message filters and the
         missed-mention sweep stay on bot_qq."""
@@ -1932,8 +1932,8 @@ class Agent(ContentIngestion, Transport, Learning):
         """(chat-completions URL, API key) for one model name.
 
         Every raw POST to the chat model goes through here: the fallback
-        model may live on its own endpoint (FALLBACK_BASE_URL /
-        FALLBACK_API_KEY), and a call that took the primary's URL for it
+        model may live on its own endpoint (LLM_FALLBACK_BASE_URL /
+        LLM_FALLBACK_API_KEY), and a call that took the primary's URL for it
         would share the very outage the fallback exists to survive. Read on
         every call, not snapshotted, because the model names and base URLs
         are plain attributes that callers and tests reassign."""
@@ -1951,7 +1951,7 @@ class Agent(ContentIngestion, Transport, Learning):
         `thinking` is DeepSeek's field, and elsewhere it is rejected rather
         than ignored: Groq answers `400 property 'thinking' is unsupported`,
         OpenAI 400s any unknown argument. The primary's host has always been
-        sent it; a fallback on another host only with FALLBACK_THINKING. That
+        sent it; a fallback on another host only with LLM_FALLBACK_THINKING. That
         endpoint is not asked only during an outage — the gate, the search
         decision and the sticker tagger run on the judge model, which
         defaults to the fallback, so a 400 there silenced all three on every
@@ -2831,7 +2831,7 @@ class Agent(ContentIngestion, Transport, Learning):
     async def loop_proactive(self) -> None:
         """Background loop that occasionally initiates a message with no incoming
         trigger, so the bot reads like a person who sometimes breaks the silence.
-        Opt-in (PROACTIVE_ENABLE). Skips sleep hours; per-target silence /
+        Opt-in (PROACTIVE_ENABLED). Skips sleep hours; per-target silence /
         cooldown / probability gating lives in the dispatchers. At most one
         proactive action (group OR dm) per tick."""
         if not self.enabled or not self.proactive_enable:
@@ -3571,7 +3571,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 logger.warning(
                     "[Agent] all %d promoted row(s) refused by scope for "
                     "conv_id=%r — nothing learned can reach a prompt until "
-                    "these agree. Live scope: %r. Usual causes: BOT_NAME changed "
+                    "these agree. Live scope: %r. Usual causes: PERSONA_NAME changed "
                     "(persona), PERSONA_VERSION was bumped, or the rows predate "
                     "the persona lineage — adopt their hash with "
                     "`tools/candidates_admin.py lineage adopt <hash>`.",

@@ -316,7 +316,7 @@ async def test_images_media_and_emoji() -> None:
     inline = await bridge(config(inline_images=True)).build_event(
         account(images={"https://cdn.example.com/a.png": png}),
         message_event([El("img", src="https://cdn.example.com/a.png")]))
-    check("SATORI_INLINE_IMAGES fetches public URLs too",
+    check("SATORI_INLINE_IMAGES_ENABLED fetches public URLs too",
           inline["segments"] == [{"type": "image", "b64": b64}])
 
 
@@ -481,12 +481,12 @@ async def test_the_sdk_outbox_loop_drives_deliver() -> None:
 
 def test_settings_from_the_environment() -> None:
     cfg = sc.Config.from_env({
-        "SATORI_ENDPOINT": "https://koishi.example.com/satori/v1/",
+        "SATORI_URL": "https://koishi.example.com/satori/v1/",
         "SATORI_TOKEN": "s3cret",
         "SATORI_PLATFORMS": "Telegram, discord",
         "SATORI_PLATFORM_NAMES": "qq=QQBot, bad",
         "SATORI_GROUPS": "-100,\n discord:c7",
-        "SATORI_OUTBOX": "off",
+        "SATORI_OUTBOX_ENABLED": "off",
         "SATORI_TIMEOUT_S": "90",
     })
     check("endpoint to WebsocketsInfo", cfg.websocket_kwargs() == {
@@ -560,8 +560,8 @@ def fake_satori(monkeypatch) -> SimpleNamespace:
 
 async def test_the_satori_token_stays_out_of_the_log(monkeypatch) -> None:
     fake = fake_satori(monkeypatch)
-    cfg = sc.Config.from_env({"SATORI_TOKEN": "s3cret", "GATEWAY_TOKEN": "g4te",
-                              "SATORI_OUTBOX": "false"})
+    cfg = sc.Config.from_env({"SATORI_TOKEN": "s3cret", "CONNECTOR_TOKEN": "g4te",
+                              "SATORI_OUTBOX_ENABLED": "false"})
     await sc.serve(cfg)
     app = fake.App.instances[0]
     check("the network still gets the token", app.configs[0].token == "s3cret"
@@ -589,11 +589,11 @@ def test_the_default_timeout_outlasts_the_agents_default_turn() -> None:
 
 def test_a_config_file_under_the_environment(tmp: Path, monkeypatch) -> None:
     file = tmp / "satori.env"
-    file.write_text("SATORI_ENDPOINT=http://127.0.0.1:5500\nGATEWAY_TOKEN=from-file\n",
+    file.write_text("SATORI_URL=http://127.0.0.1:5500\nCONNECTOR_TOKEN=from-file\n",
                     encoding="utf-8")
-    env = sc.load_env(str(file), environ={"GATEWAY_TOKEN": "from-env", "PATH": "x"})
+    env = sc.load_env(str(file), environ={"CONNECTOR_TOKEN": "from-env", "PATH": "x"})
     check("file values, environment wins, unrelated variables ignored",
-          env == {"SATORI_ENDPOINT": "http://127.0.0.1:5500", "GATEWAY_TOKEN": "from-env"},
+          env == {"SATORI_URL": "http://127.0.0.1:5500", "CONNECTOR_TOKEN": "from-env"},
           str(env))
 
     monkeypatch.setitem(sys.modules, "satori", None)  # as if not installed

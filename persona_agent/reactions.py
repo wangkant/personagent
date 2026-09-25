@@ -1,6 +1,6 @@
 """Learn from real user reactions — the primary self-evolution signal.
 
-The LLM self-eval channel (eval.jsonl -> EVOLVE_AUTO) scores generously, so
+The LLM self-eval channel (eval.jsonl -> EVOLVE_AUTO_ENABLED) scores generously, so
 its negative half rarely fires. Real users, by contrast, tell the bot
 directly: "no, I meant X" is a correction with the right answer inside it;
 laughing and riffing is proof a reply landed. Reading a *reaction relative to

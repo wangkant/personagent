@@ -58,16 +58,16 @@ DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 DEFAULT_STORE = Path(__file__).resolve().parent / "runtime"
 
 KNOWN_KEYS = (
-    "MATRIX_HOMESERVER", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN", "MATRIX_PASSWORD",
-    "MATRIX_DEVICE_ID", "MATRIX_DEVICE_NAME", "PERSONAGENT_URL", "GATEWAY_TOKEN",
-    "MATRIX_FORWARDER_ID", "MATRIX_ROOMS", "MATRIX_DM_USERS", "MATRIX_INVITE_FROM",
-    "MATRIX_IGNORE_USERS", "MATRIX_E2EE", "MATRIX_STORE_PATH", "MATRIX_OUTBOX",
-    "MATRIX_READ_RECEIPTS", "MATRIX_TIMEOUT_S", "MATRIX_MAX_EVENT_AGE_S",
+    "MATRIX_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN", "MATRIX_PASSWORD",
+    "MATRIX_DEVICE_ID", "MATRIX_DEVICE_NAME", "PERSONAGENT_URL", "CONNECTOR_TOKEN",
+    "MATRIX_CONNECTOR_ID", "MATRIX_GROUPS", "MATRIX_DM_USERS", "MATRIX_INVITE_FROM",
+    "MATRIX_IGNORE_USERS", "MATRIX_E2EE_ENABLED", "MATRIX_STORE_PATH", "MATRIX_OUTBOX_ENABLED",
+    "MATRIX_READ_RECEIPTS_ENABLED", "MATRIX_TIMEOUT_S", "MATRIX_MAX_EVENT_AGE_S",
     "MATRIX_LOG_LEVEL",
 )
 
 # The agent refuses a request body over 8 MB, and base64 adds a third.
-MAX_IMAGE_BYTES = 4_000_000
+VISION_MAX_IMAGE_BYTES = 4_000_000
 DOWNLOAD_TIMEOUT_S = 30.0
 TYPING_TIMEOUT_MS = 30_000
 TYPING_REFRESH_S = 20.0
@@ -134,7 +134,7 @@ class Settings:
     store_path: Path = DEFAULT_STORE
     outbox: bool = True
     read_receipts: bool = True
-    # The agent's own ceiling is LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) plus a
+    # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
     # debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
     max_event_age_s: float = 300.0
@@ -143,13 +143,13 @@ class Settings:
     @classmethod
     def from_env(cls, values: Mapping[str, str]) -> "Settings":
         get = lambda key, default="": str(values.get(key) or default).strip()  # noqa: E731
-        homeserver = get("MATRIX_HOMESERVER")
+        homeserver = get("MATRIX_URL")
         if not homeserver:
-            raise ValueError("MATRIX_HOMESERVER is required")
+            raise ValueError("MATRIX_URL is required")
         if "://" not in homeserver:
             homeserver = "https://" + homeserver
         if urlsplit(homeserver).scheme not in ("http", "https"):
-            raise ValueError(f"MATRIX_HOMESERVER must be an http(s) URL, got {homeserver!r}")
+            raise ValueError(f"MATRIX_URL must be an http(s) URL, got {homeserver!r}")
         settings = cls(
             homeserver=homeserver.rstrip("/"),
             user_id=get("MATRIX_USER_ID"),
@@ -158,16 +158,16 @@ class Settings:
             device_id=get("MATRIX_DEVICE_ID"),
             device_name=get("MATRIX_DEVICE_NAME", "personagent"),
             agent_url=get("PERSONAGENT_URL", DEFAULT_AGENT_URL),
-            gateway_token=get("GATEWAY_TOKEN"),
-            forwarder_id=get("MATRIX_FORWARDER_ID"),
-            rooms=_csv(values.get("MATRIX_ROOMS")),
+            gateway_token=get("CONNECTOR_TOKEN"),
+            forwarder_id=get("MATRIX_CONNECTOR_ID"),
+            rooms=_csv(values.get("MATRIX_GROUPS")),
             dm_users=_csv(values.get("MATRIX_DM_USERS")),
             invite_from=_csv(values.get("MATRIX_INVITE_FROM")),
             ignore_users=_csv(values.get("MATRIX_IGNORE_USERS")),
-            e2ee=_flag(values.get("MATRIX_E2EE"), False),
+            e2ee=_flag(values.get("MATRIX_E2EE_ENABLED"), False),
             store_path=Path(get("MATRIX_STORE_PATH") or DEFAULT_STORE),
-            outbox=_flag(values.get("MATRIX_OUTBOX"), True),
-            read_receipts=_flag(values.get("MATRIX_READ_RECEIPTS"), True),
+            outbox=_flag(values.get("MATRIX_OUTBOX_ENABLED"), True),
+            read_receipts=_flag(values.get("MATRIX_READ_RECEIPTS_ENABLED"), True),
             timeout_s=_number(values, "MATRIX_TIMEOUT_S", 420.0, 1.0),
             max_event_age_s=_number(values, "MATRIX_MAX_EVENT_AGE_S", 300.0, 1.0),
             log_level=get("MATRIX_LOG_LEVEL", "INFO").upper(),
@@ -175,9 +175,9 @@ class Settings:
         if not settings.access_token and not (settings.user_id and settings.password):
             raise ValueError("set MATRIX_ACCESS_TOKEN, or MATRIX_USER_ID and MATRIX_PASSWORD")
         if not sdk.endpoint_allowed(settings.agent_url, settings.gateway_token):
-            raise ValueError("PERSONAGENT_URL must be loopback, or HTTPS with GATEWAY_TOKEN set")
+            raise ValueError("PERSONAGENT_URL must be loopback, or HTTPS with CONNECTOR_TOKEN set")
         if not settings.rooms and not settings.dm_users:
-            logger.warning("MATRIX_ROOMS and MATRIX_DM_USERS are both empty: "
+            logger.warning("MATRIX_GROUPS and MATRIX_DM_USERS are both empty: "
                            "nothing will be forwarded")
         return settings
 
@@ -532,7 +532,7 @@ class MatrixConnector:
         is_direct = bool(content.get("is_direct"))
         if not self.invite_allowed(room_id, inviter, is_direct):
             logger.info("leaving an invite to %s from %s alone: not allowed by "
-                        "MATRIX_ROOMS, MATRIX_INVITE_FROM or MATRIX_DM_USERS", room_id, inviter)
+                        "MATRIX_GROUPS, MATRIX_INVITE_FROM or MATRIX_DM_USERS", room_id, inviter)
             return
         self._joining.add(room_id)
         try:
@@ -591,7 +591,7 @@ class MatrixConnector:
             if room_id not in self._warned:
                 self._warned.add(room_id)
                 logger.warning("cannot decrypt messages in %s: %s", room_id,
-                               "set MATRIX_E2EE=true" if not self.settings.e2ee
+                               "set MATRIX_E2EE_ENABLED=true" if not self.settings.e2ee
                                else "no room key for this device yet")
             return
         task = asyncio.ensure_future(self.handle(room, source))
@@ -633,7 +633,7 @@ class MatrixConnector:
         mxc = str((encrypted or {}).get("url") or content.get("url") or "")
         info = _mapping(content.get("info"))
         size = info.get("size")
-        if not mxc.startswith("mxc://") or (isinstance(size, int) and size > MAX_IMAGE_BYTES):
+        if not mxc.startswith("mxc://") or (isinstance(size, int) and size > VISION_MAX_IMAGE_BYTES):
             return None
         try:
             # Authenticated media (Matrix 1.11): the bytes need the bot's
@@ -649,7 +649,7 @@ class MatrixConnector:
         except Exception as exc:
             logger.info("image %s not forwarded: %s", mxc, exc)
             return None
-        if len(data) > MAX_IMAGE_BYTES:
+        if len(data) > VISION_MAX_IMAGE_BYTES:
             return None
         return {"type": "image", "b64": base64.b64encode(bytes(data)).decode("ascii"),
                 "sticker": sticker}
@@ -791,7 +791,7 @@ class MatrixConnector:
                 return
             except httpx.TimeoutException:
                 logger.warning("timed out waiting for the agent (MATRIX_TIMEOUT_S=%.0f); "
-                               "it should cover LLM_TIMEOUT x (1 + LLM_MAX_RETRIES)",
+                               "it should cover LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES)",
                                self.settings.timeout_s)
                 return
             except httpx.HTTPError as exc:
@@ -867,7 +867,7 @@ class MatrixConnector:
     async def _send_one(self, target: _Target, item: Mapping) -> None:
         room = target.room
         if getattr(room, "encrypted", False) and not self.settings.e2ee:
-            raise SendError("the room is encrypted and MATRIX_E2EE is off")
+            raise SendError("the room is encrypted and MATRIX_E2EE_ENABLED is off")
         mention = self._mention(target, item.get("at_user_id"))
         kind = item.get("type")
         if kind == "text":

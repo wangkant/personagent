@@ -50,14 +50,14 @@ DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
 DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 
 KNOWN_KEYS = (
-    "SATORI_ENDPOINT", "SATORI_TOKEN", "PERSONAGENT_URL", "GATEWAY_TOKEN",
-    "SATORI_FORWARDER_ID", "SATORI_PLATFORMS", "SATORI_PLATFORM_NAMES",
-    "SATORI_GROUPS", "SATORI_DM_USERS", "SATORI_OUTBOX", "SATORI_TIMEOUT_S",
-    "SATORI_INLINE_IMAGES", "SATORI_LOG_LEVEL",
+    "SATORI_URL", "SATORI_TOKEN", "PERSONAGENT_URL", "CONNECTOR_TOKEN",
+    "SATORI_CONNECTOR_ID", "SATORI_PLATFORMS", "SATORI_PLATFORM_NAMES",
+    "SATORI_GROUPS", "SATORI_DM_USERS", "SATORI_OUTBOX_ENABLED", "SATORI_TIMEOUT_S",
+    "SATORI_INLINE_IMAGES_ENABLED", "SATORI_LOG_LEVEL",
 )
 
 # The agent refuses a request body over 8 MB, and base64 adds a third.
-MAX_IMAGE_BYTES = 4_000_000
+VISION_MAX_IMAGE_BYTES = 4_000_000
 MAX_INLINE_IMAGES = 4
 DOWNLOAD_TIMEOUT_S = 20.0
 MAX_HANDLE_LEN = 512
@@ -99,7 +99,7 @@ class Config:
     groups: frozenset = frozenset()
     dm_users: frozenset = frozenset()
     outbox: bool = True
-    # The agent's own ceiling is LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) plus a
+    # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
     # debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
     inline_images: bool = False
@@ -107,13 +107,13 @@ class Config:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Config":
-        endpoint = (env.get("SATORI_ENDPOINT") or DEFAULT_ENDPOINT).strip()
+        endpoint = (env.get("SATORI_URL") or DEFAULT_ENDPOINT).strip()
         names = dict(DEFAULT_PLATFORM_NAMES)
         for pair in _csv(env.get("SATORI_PLATFORM_NAMES")):
             raw, sep, name = pair.partition("=")
             if sep and raw.strip() and name.strip():
                 names[raw.strip().lower()] = _platform_name(name)
-        forwarder = (env.get("SATORI_FORWARDER_ID") or "").strip() or (
+        forwarder = (env.get("SATORI_CONNECTOR_ID") or "").strip() or (
             "satori-" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:8])
         try:
             timeout = float(env.get("SATORI_TIMEOUT_S") or cls.timeout_s)
@@ -123,22 +123,22 @@ class Config:
             endpoint=endpoint,
             satori_token=(env.get("SATORI_TOKEN") or "").strip(),
             agent_url=(env.get("PERSONAGENT_URL") or DEFAULT_AGENT_URL).strip(),
-            gateway_token=(env.get("GATEWAY_TOKEN") or "").strip(),
+            gateway_token=(env.get("CONNECTOR_TOKEN") or "").strip(),
             forwarder_id=forwarder,
             platforms=frozenset(p.lower() for p in _csv(env.get("SATORI_PLATFORMS"))),
             platform_names=names,
             groups=frozenset(_csv(env.get("SATORI_GROUPS"))),
             dm_users=frozenset(_csv(env.get("SATORI_DM_USERS"))),
-            outbox=_flag(env.get("SATORI_OUTBOX"), True),
+            outbox=_flag(env.get("SATORI_OUTBOX_ENABLED"), True),
             timeout_s=max(timeout, 1.0),
-            inline_images=_flag(env.get("SATORI_INLINE_IMAGES"), False),
+            inline_images=_flag(env.get("SATORI_INLINE_IMAGES_ENABLED"), False),
         )
 
     def websocket_kwargs(self) -> dict:
         """Arguments for satori-python's WebsocketsInfo, from one URL."""
         parts = urlsplit(self.endpoint)
         if parts.scheme not in ("http", "https", "ws", "wss") or not parts.hostname:
-            raise ValueError("SATORI_ENDPOINT must look like http://host:port/path")
+            raise ValueError("SATORI_URL must look like http://host:port/path")
         secure = parts.scheme in ("https", "wss")
         path = parts.path.rstrip("/")
         if path.endswith("/v1"):  # WebsocketsInfo appends /v1 itself
@@ -590,7 +590,7 @@ class SatoriBridge:
         except Exception as exc:
             logger.warning("could not fetch an image from the Satori server: %s", exc)
             return None
-        if not data or len(data) > MAX_IMAGE_BYTES:
+        if not data or len(data) > VISION_MAX_IMAGE_BYTES:
             logger.info("skipping an image of %d bytes", len(data or b""))
             return None
         return base64.b64encode(data).decode("ascii")
@@ -628,13 +628,13 @@ class SatoriBridge:
                 logger.warning("agent refused the event (%s): %s", status,
                                _agent_error(exc.response) or "no detail")
                 if status == 403:
-                    logger.warning("403: check GATEWAY_TOKEN, the agent's peer allowlist "
+                    logger.warning("403: check CONNECTOR_TOKEN, the agent's peer allowlist "
                                    "and this host's clock")
                 return None
             except (httpx.ReadTimeout, httpx.WriteTimeout):
                 logger.error(
                     "timed out waiting for the agent (SATORI_TIMEOUT_S=%.0f). It still "
-                    "finishes the turn, so that reply is lost; keep LLM_TIMEOUT x "
+                    "finishes the turn, so that reply is lost; keep LLM_TIMEOUT_S x "
                     "(1 + LLM_MAX_RETRIES) under SATORI_TIMEOUT_S", self.config.timeout_s)
                 return None
             except Exception as exc:
@@ -847,7 +847,7 @@ def main(argv: Optional[list] = None) -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = Config.from_env(env)
     if not sdk.endpoint_allowed(config.agent_url, config.gateway_token):
-        print("PERSONAGENT_URL must be loopback, or HTTPS with GATEWAY_TOKEN set",
+        print("PERSONAGENT_URL must be loopback, or HTTPS with CONNECTOR_TOKEN set",
               file=sys.stderr)
         return 2
     try:

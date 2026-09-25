@@ -47,7 +47,7 @@ generates a shared token and writes it to both sides, and asks which group and
 sender IDs to allow.
 
 To skip all the wizard's questions, including the API key and bot name (set
-`LLM_API_KEY` and `BOT_NAME` in `.env` yourself):
+`LLM_API_KEY` and `PERSONA_NAME` in `.env` yourself):
 
 ```bash
 python quickstart.py --astrbot <AstrBot data dir>        # add --qq to route QQ as well
@@ -61,7 +61,7 @@ Running it again is safe. The allowlists, `private_enabled`, any `agent_url`
 this plugin accepts (see [Where the agent can run](#where-the-agent-can-run)),
 and other excluded platforms are kept; an `agent_url` it would refuse is
 replaced with the loopback default. QQ routing changes only when you pass
-`--qq` or `--no-qq`, and the agent's `GATEWAY_NATIVE_PLATFORMS` is kept in
+`--qq` or `--no-qq`, and the agent's `CONNECTOR_QQ_PLATFORMS` is kept in
 step with it. The wizard's AstrBot step offers the current allowlists as
 defaults, so Enter keeps them and `-` clears one.
 
@@ -78,10 +78,10 @@ Then restart AstrBot and start the agent (see [Check it works](#check-it-works))
    - Add the group IDs the persona may join to `group_whitelist`.
    - For private chats, turn on `private_enabled` and add sender IDs to
      `private_whitelist`.
-   - If the agent's `.env` sets `GATEWAY_TOKEN`, put the same value in
+   - If the agent's `.env` sets `CONNECTOR_TOKEN`, put the same value in
      `gateway_token`. It is required when the agent is not on the same host.
    - Leave `agent_url` at its default when the agent runs on the same host
-     with the default `PORT=8080`.
+     with the default `SERVER_PORT=8080`.
 
 The plugin is **default-deny**. With empty allowlists it forwards nothing, and
 AstrBot behaves as if the plugin were not installed. Use IDs as AstrBot shows
@@ -91,7 +91,7 @@ them, without a platform prefix.
 
 1. Start the agent from the personagent checkout: `.venv/bin/python main.py`
    (Windows: `.venv\Scripts\python.exe main.py`).
-2. Say the bot's name (the agent's `BOT_NAME`) in an allowed group.
+2. Say the bot's name (the agent's `PERSONA_NAME`) in an allowed group.
 
 If nothing comes back, look for `llm_persona_gateway:` lines in AstrBot's log
 and see [Troubleshooting](#troubleshooting).
@@ -101,7 +101,7 @@ and see [Troubleshooting](#troubleshooting).
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `agent_url` | string | `http://127.0.0.1:8080/webhook/gateway` | The agent's gateway endpoint. Must be loopback, or HTTPS with `gateway_token` set. |
-| `gateway_token` | string | `""` | Shared secret. Must match the agent's `GATEWAY_TOKEN`. Required for any non-loopback `agent_url`. |
+| `gateway_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `agent_url`. |
 | `timeout_s` | int | `180` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ through this plugin. |
 | `group_whitelist` | list | `[]` | Group IDs to forward. Empty forwards no groups. |
@@ -110,7 +110,7 @@ and see [Troubleshooting](#troubleshooting).
 | `block_default` | bool | `true` | Stop AstrBot's pipeline when the agent claims the conversation. |
 | `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. While on (and `quote_max_chars` is above 0), every event declares the `quote_text` capability. |
 | `quote_max_chars` | int | `200` | Longest quoted text sent; longer quotes are cut. |
-| `max_inline_image_bytes` | int | `4000000` | Largest image sent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one arrives as the note `(sent an image)`. Keep it under the agent's `MAX_IMAGE_BYTES`. |
+| `max_inline_image_bytes` | int | `4000000` | Largest image sent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one arrives as the note `(sent an image)`. Keep it under the agent's `VISION_MAX_IMAGE_BYTES`. |
 | `outbox_enabled` | bool | `true` | Pull and deliver the agent's outbox. See [Outbox](#outbox). |
 | `outbox_wait_s` | int | `25` | How long one outbox pull may wait at the agent (at most 30). |
 | `forwarder_id` | string | `""` | This AstrBot's name to the agent. Empty generates one once and keeps it. Give two AstrBot hosts different names, never the same one. |
@@ -120,7 +120,7 @@ and see [Troubleshooting](#troubleshooting).
 - **Same host** (or a container sharing the host's network namespace, or
   using host networking): keep the default loopback `agent_url`.
 - **Another container or host**: use an HTTPS `agent_url` and the same
-  non-empty secret in `gateway_token` and the agent's `GATEWAY_TOKEN`. A
+  non-empty secret in `gateway_token` and the agent's `CONNECTOR_TOKEN`. A
   private tunnel that ends at a loopback URL visible to AstrBot also works;
   still set the same token on both sides, because the agent refuses tokenless
   requests that arrive through a proxy.
@@ -129,9 +129,9 @@ Plain `http://` to anything but loopback, such as
 `http://host.docker.internal:8080`, is refused even with a token. Each message
 then logs `refusing unsafe agent_url` and AstrBot's own model answers instead.
 
-The agent listens on `127.0.0.1:8080` by default. If you set its `HOST` to a
-non-loopback address, it refuses to start unless both `GATEWAY_TOKEN` and
-`WEBHOOK_SECRET` are set.
+The agent listens on `127.0.0.1:8080` by default. If you set its `SERVER_HOST` to a
+non-loopback address, it refuses to start unless both `CONNECTOR_TOKEN` and
+`QQ_ONEBOT_SECRET` are set.
 
 ### Timeouts
 
@@ -141,8 +141,8 @@ out, the agent still finishes the turn and keeps its reply and what it
 learned, but nobody sees that reply, and
 AstrBot's own model answers the same message in a different voice.
 
-Keep the agent's `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)` under `timeout_s`. With
-the agent's defaults (`LLM_TIMEOUT=120`, `LLM_MAX_RETRIES=2`) a turn whose
+Keep the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` under `timeout_s`. With
+the agent's defaults (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`) a turn whose
 model calls keep timing out can take over 360 s, so with a slow model raise
 `timeout_s` or lower those two settings.
 
@@ -168,9 +168,9 @@ QQ goes through this plugin like any other platform, using AstrBot's
 
 1. Remove `aiocqhttp` from `excluded_platforms` and add the QQ groups to
    `group_whitelist`.
-2. In the agent's `.env`, set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` and
-   `BOT_QQ` (the bot account's number).
-3. Keep NapCat's HTTP API reachable at the agent's `NAPCAT_API` for the
+2. In the agent's `.env`, set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` and
+   `QQ_BOT_ID` (the bot account's number).
+3. Keep NapCat's HTTP API reachable at the agent's `QQ_ONEBOT_URL` for the
    catch-up sweep for missed mentions. Proactive messages, the follow-up
    question after a rejection and the excuse when the model fails go through
    this plugin's [outbox](#outbox) while it is pulling, and through NapCat
@@ -180,20 +180,20 @@ QQ goes through this plugin like any other platform, using AstrBot's
    twice.
 
 `quickstart.py --astrbot <data dir> --qq` removes `aiocqhttp` from
-`excluded_platforms` and sets `GATEWAY_NATIVE_PLATFORMS`; the wizard also asks
-for `BOT_QQ`.
+`excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS`; the wizard also asks
+for `QQ_BOT_ID`.
 
-Do not skip `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`. Without it the agent files QQ
+Do not skip `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Without it the agent files QQ
 chats under `aiocqhttp:`-prefixed ids. Its QQ-side actions then target groups
 and people that do not exist, anything learned under the plain QQ ids no longer
 matches, and the ledgers cannot be re-keyed afterwards. With it, a QQ message
 relayed by AstrBot lands on the same ids NapCat would have produced.
 
 Because QQ ids stay plain, the agent's own QQ settings still apply to them:
-the QQ entries of `ALLOWED_GROUPS` (none means every QQ group), and private
-chats only from the admin in `ADMIN_IDS` or from `ALLOWED_DM_USERS`. The wizard
+the QQ entries of `ACCESS_GROUPS` (none means every QQ group), and private
+chats only from the admin in `ADMIN_IDS` or from `ACCESS_DM_USERS`. The wizard
 writes the QQ groups you give it to the agent's `.env`, so to add a QQ group
-later, add it to both `group_whitelist` and `ALLOWED_GROUPS` (or list no QQ
+later, add it to both `group_whitelist` and `ACCESS_GROUPS` (or list no QQ
 groups there). The old names `QQ_GROUPS`, `OWNER_QQ` and `PRIVATE_ALLOWED_QQS`
 still work.
 
@@ -291,7 +291,7 @@ timestamp more than five minutes from its own clock, so keep the two clocks in
 sync.
 
 The body also carries the adapter's own `source_timestamp`. The agent checks
-it separately against `GATEWAY_SOURCE_MAX_AGE_SECONDS` (default 24 hours), so
+it separately against `CONNECTOR_MAX_EVENT_AGE_S` (default 24 hours), so
 an old event re-sent with a fresh signature is still rejected. A message whose
 adapter gives no valid timestamp is not forwarded; AstrBot handles it as usual.
 
@@ -299,10 +299,10 @@ adapter gives no valid timestamp is not forwarded; AstrBot handles it as usual.
 
 The agent prefixes every gateway id with its platform, as `<platform>:<raw id>`
 (for example `telegram:12345`), so ids from different platforms never collide.
-Platforms listed in `GATEWAY_NATIVE_PLATFORMS` keep plain ids. The agent's
-`ADMIN_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS` take ids in the same form:
+Platforms listed in `CONNECTOR_QQ_PLATFORMS` keep plain ids. The agent's
+`ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS` take ids in the same form:
 `ADMIN_IDS=telegram:12345` makes that account the admin on Telegram, in groups
-and DMs. A platform with entries in `ALLOWED_GROUPS` or `ALLOWED_DM_USERS` is
+and DMs. A platform with entries in `ACCESS_GROUPS` or `ACCESS_DM_USERS` is
 gated by the agent as well as by this plugin's allowlists.
 
 ## Troubleshooting
@@ -312,11 +312,11 @@ Messages in AstrBot's log start with `llm_persona_gateway:`.
 | Log message | What to do |
 | --- | --- |
 | `refusing unsafe agent_url` | `agent_url` is plain HTTP to another host, or HTTPS without `gateway_token`. See [Where the agent can run](#where-the-agent-can-run). |
-| `agent refused the request (403): invalid, stale, or replayed gateway envelope` | `gateway_token` is empty or does not match the agent's `GATEWAY_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `gateway replay guard full`, wait for it to drain. |
-| `agent refused the request (403): stale gateway source event` | The message is older than the agent's `GATEWAY_SOURCE_MAX_AGE_SECONDS`, usually after AstrBot delivered a backlog. |
-| `agent refused the request (403): authentication required` or `... only local requests accepted` | The agent has no `GATEWAY_TOKEN` and the request is not local. Set the same token on both sides. |
-| `agent at capacity (429)` | The agent is already running `MAX_INFLIGHT_GATEWAY` turns and turned the message away after retries, so AstrBot's own model answers it. Raise `MAX_INFLIGHT_GATEWAY` if this is frequent. |
-| `agent rejected the body as too large (413)` | Usually a large inline image. Raise the agent's `MAX_WEBHOOK_BODY_BYTES`. |
+| `agent refused the request (403): invalid, stale, or replayed gateway envelope` | `gateway_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `gateway replay guard full`, wait for it to drain. |
+| `agent refused the request (403): stale gateway source event` | The message is older than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, usually after AstrBot delivered a backlog. |
+| `agent refused the request (403): authentication required` or `... only local requests accepted` | The agent has no `CONNECTOR_TOKEN` and the request is not local. Set the same token on both sides. |
+| `agent at capacity (429)` | The agent is already running `CONNECTOR_MAX_INFLIGHT` turns and turned the message away after retries, so AstrBot's own model answers it. Raise `CONNECTOR_MAX_INFLIGHT` if this is frequent. |
+| `agent rejected the body as too large (413)` | Usually a large inline image. Raise the agent's `SERVER_MAX_BODY_BYTES`. |
 | `agent rejected the event schema (400)` | The event had no message id or sender id (some adapters omit them), or this plugin has a bug. Please report it with the log line. |
 | `timed out waiting for the agent` | See [Timeouts](#timeouts). |
 | `dropping event without a valid authoritative source timestamp` | The adapter gave no timestamp. AstrBot handles that message itself. |
@@ -328,13 +328,13 @@ Messages in AstrBot's log start with `llm_persona_gateway:`.
 | `could not store forwarder_id` | AstrBot's plugin store failed. Set `forwarder_id` yourself, or the agent sees a new AstrBot after every restart. |
 
 If the agent's own log says the forwarder sends `X-Gateway-Token` but
-`GATEWAY_TOKEN` is blank, the token is being ignored. Set the same value in
+`CONNECTOR_TOKEN` is blank, the token is being ignored. Set the same value in
 the agent's `.env`.
 
 Since 0.5.0 the message's time is the platform's own on QQ, Telegram,
 Discord, KOOK, QQ official and Misskey, not when AstrBot received it. A
 backlog AstrBot delivers after being down longer than the agent's
-`GATEWAY_SOURCE_MAX_AGE_SECONDS` is therefore refused as stale, as it
+`CONNECTOR_MAX_EVENT_AGE_S` is therefore refused as stale, as it
 should be.
 
 ## Known limitation: Telegram mentions

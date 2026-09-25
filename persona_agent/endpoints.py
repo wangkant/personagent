@@ -9,8 +9,8 @@ def endpoint_for(model: str, *, primary_model: str, fallback_model: str,
 
     The fallback model may have its own endpoint, so an outage of the
     primary's provider is not also the fallback's; a blank fallback URL or
-    key means the primary's. The routing is by name, so a PRIVATE_MODEL,
-    JUDGE_MODEL or EVAL_MODEL that is the fallback's name goes there too.
+    key means the primary's. The routing is by name, so a LLM_DM_MODEL,
+    LLM_JUDGE_MODEL or EVAL_MODEL that is the fallback's name goes there too.
     Every other name — the primary, or one of those three of its own — is
     served by the primary endpoint, and so is a "fallback" that is the
     primary's own name, since nothing ever fails over to it.

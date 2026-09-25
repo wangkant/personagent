@@ -26,7 +26,7 @@ class LauncherTests(unittest.TestCase):
             "import json, os, sys\n"
             "from pathlib import Path\n"
             "Path(os.environ['LAUNCHER_CAPTURE']).write_text(\n"
-            "    json.dumps({'cwd': os.getcwd(), 'host': os.getenv('HOST'), 'port': os.getenv('PORT')}),\n"
+            "    json.dumps({'cwd': os.getcwd(), 'host': os.getenv('SERVER_HOST'), 'port': os.getenv('SERVER_PORT')}),\n"
             "    encoding='utf-8')\n",
             encoding="utf-8",
         )
@@ -51,8 +51,8 @@ class LauncherTests(unittest.TestCase):
         env = os.environ.copy()
         env.update(
             {
-                "HOST": host,
-                "PORT": "8123",
+                "SERVER_HOST": host,
+                "SERVER_PORT": "8123",
                 "PYTHONPATH": str(modules),
                 "LAUNCHER_CAPTURE": str(capture),
             }
@@ -112,8 +112,8 @@ class LauncherTests(unittest.TestCase):
             env = os.environ.copy()
             env.update(
                 {
-                    "HOST": "127.0.0.2",
-                    "PORT": "8123",
+                    "SERVER_HOST": "127.0.0.2",
+                    "SERVER_PORT": "8123",
                     "LAUNCHER_CAPTURE": str(capture),
                 }
             )

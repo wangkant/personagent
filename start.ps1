@@ -53,6 +53,6 @@ if (-not $depsOk) {
 $env:PYTHONIOENCODING = 'utf-8'
 
 Write-Host ""
-# main.py loads .env before resolving HOST / PORT.
+# main.py loads .env before resolving SERVER_HOST / SERVER_PORT.
 & $pySource main.py
 exit $LASTEXITCODE

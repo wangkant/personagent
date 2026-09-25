@@ -116,11 +116,11 @@ def test_numeric_config_parser_is_bounded() -> None:
         return env_int(name, default, env={name: raw}, **kw)
 
     check("numeric config: invalid value uses default",
-          parser("PORT", "not-a-number", 8080, minimum=1, maximum=65535) == 8080)
+          parser("SERVER_PORT", "not-a-number", 8080, minimum=1, maximum=65535) == 8080)
     check("numeric config: out-of-range value uses default",
-          parser("PORT", "70000", 8080, minimum=1, maximum=65535) == 8080)
+          parser("SERVER_PORT", "70000", 8080, minimum=1, maximum=65535) == 8080)
     check("numeric config: valid value accepted",
-          parser("PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
+          parser("SERVER_PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
     check("numeric config: main.py no longer has a second copy",
           not hasattr(main_module, "_parse_int_config"))
 
@@ -247,12 +247,12 @@ def test_a_skipped_critical_probe_is_not_a_pass() -> None:
 
 
 async def test_asgi_webhook_auth_and_schema() -> None:
-    original_secret = main_module.WEBHOOK_SECRET
-    original_token = main_module.GATEWAY_TOKEN
+    original_secret = main_module.QQ_ONEBOT_SECRET
+    original_token = main_module.CONNECTOR_TOKEN
     original_agent = main_module.agent
     original_replay = main_module._gateway_replay
-    main_module.WEBHOOK_SECRET = "qq-secret"
-    main_module.GATEWAY_TOKEN = "gateway-secret"
+    main_module.QQ_ONEBOT_SECRET = "qq-secret"
+    main_module.CONNECTOR_TOKEN = "gateway-secret"
     main_module.agent = None
     main_module._gateway_replay = main_module.ReplayGuard()
     transport = httpx.ASGITransport(app=main_module.app)
@@ -304,8 +304,8 @@ async def test_asgi_webhook_auth_and_schema() -> None:
               gw.status_code == 200 and gw.json() == {
                   "handled": False, "replies": []}, repr(gw.text))
     finally:
-        main_module.WEBHOOK_SECRET = original_secret
-        main_module.GATEWAY_TOKEN = original_token
+        main_module.QQ_ONEBOT_SECRET = original_secret
+        main_module.CONNECTOR_TOKEN = original_token
         main_module.agent = original_agent
         main_module._gateway_replay = original_replay
 
@@ -419,7 +419,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
 
     # `tools/` AND the root entry points, not just the package. Scanning only
     # `main.py` and `persona_agent/` left nine real settings undocumented —
-    # `ANTHROPIC_API_KEY` and `PROMPT_LAB_MODEL` among them, which
+    # `ANTHROPIC_API_KEY` and `LAB_MODEL` among them, which
     # `tools/prompt_lab.py` explicitly tells the operator to put in `.env` —
     # and the preflight then reported every one of them as a misspelling.
     root = Path(__file__).resolve().parents[1]
@@ -500,8 +500,8 @@ def test_preflight_reports_the_right_deployments() -> None:
           not levels(env={"LLM_API_KEY": "sk-x"}))
     check("preflight: settings the offline tools read are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
-                          "PROMPT_LAB_MODEL": "m", "REVIEWER_MODEL": "r",
-                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY": "1",
+                          "LAB_MODEL": "m", "REVIEWER_MODEL": "r",
+                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1",
                           "ANTHROPIC_PRIVATE_MODEL": "p"}))
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
@@ -523,9 +523,9 @@ def test_preflight_reports_the_right_deployments() -> None:
           ("ERROR", "LLM_API_KEY") in levels(env={}))
     check("preflight: a misspelling is named as one",
           ("ERROR", "DEEPSEK_API_KEY") in levels(env={"DEEPSEK_API_KEY": "x"}))
-    check("preflight: an empty BOT_QQ on a QQ config is a warning",
-          ("WARN", "BOT_QQ") in levels(env={
-              "LLM_API_KEY": "x", "NAPCAT_API": "http://127.0.0.1:3000"}))
+    check("preflight: an empty QQ_BOT_ID on a QQ config is a warning",
+          ("WARN", "QQ_BOT_ID") in levels(env={
+              "LLM_API_KEY": "x", "QQ_ONEBOT_URL": "http://127.0.0.1:3000"}))
 
     # --- and it must never raise, which is its own docstring's promise -----
     for hostile in ({"AGENT_HOME": "~nosuchuser/x"}, {"AGENT_HOME": "\x00"},
@@ -539,7 +539,7 @@ def test_preflight_reports_the_right_deployments() -> None:
 
     with tempfile.TemporaryDirectory() as d:
         home = Path(d)
-        (home / ".env").write_text("LLM_API_KEY=x\nBOT_NAME=Mira\n",
+        (home / ".env").write_text("LLM_API_KEY=x\nPERSONA_NAME=Mira\n",
                                    encoding="utf-8")
         # The multi-persona layout `.env.example` itself recommends: a home
         # with its own `.env` and no template. This used to report EVERY
@@ -571,10 +571,10 @@ def test_preflight_reports_the_right_deployments() -> None:
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
-    """ADMIN_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS replaced four QQ-only
+    """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS replaced four QQ-only
     names that still work, and the ways to get the new ones wrong are silent:
     another platform's id pasted without its prefix reads as a QQ id (and in
-    ALLOWED_GROUPS closes every QQ group), a capitalised platform never
+    ACCESS_GROUPS closes every QQ group), a capitalised platform never
     matches, and one entry takes a whole platform away from the forwarder."""
     from persona_agent import preflight
 
@@ -585,57 +585,57 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
         return {(f.level, f.key) for f in findings(**env)}
 
     check("identity: the new names are settings",
-          not levels(ADMIN_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
-                     ALLOWED_DM_USERS="456", BOT_QQ="9"),
-          repr(levels(ADMIN_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
-                      ALLOWED_DM_USERS="456", BOT_QQ="9")))
+          not levels(ADMIN_IDS="telegram:1,10000", ACCESS_GROUPS="123",
+                     ACCESS_DM_USERS="456", QQ_BOT_ID="9"),
+          repr(levels(ADMIN_IDS="telegram:1,10000", ACCESS_GROUPS="123",
+                      ACCESS_DM_USERS="456", QQ_BOT_ID="9")))
     legacy = levels(OWNER_QQ="42", GATEWAY_OWNER_IDS="telegram:1",
-                    QQ_GROUPS="1,2", PRIVATE_ALLOWED_QQS="3", BOT_QQ="9")
+                    QQ_GROUPS="1,2", PRIVATE_ALLOWED_QQS="3", QQ_BOT_ID="9")
     check("identity: the old names are not typos, and say what they became",
           legacy == {("INFO", "OWNER_QQ"), ("INFO", "GATEWAY_OWNER_IDS"),
                      ("INFO", "QQ_GROUPS"), ("INFO", "PRIVATE_ALLOWED_QQS")},
           repr(legacy))
     check("identity: ...including that removing an id means clearing it there",
           any("delete it here" in f.detail
-              for f in findings(QQ_GROUPS="1", BOT_QQ="9")))
+              for f in findings(QQ_GROUPS="1", QQ_BOT_ID="9")))
 
-    pasted = findings(ALLOWED_GROUPS="-1001234,telegram:-100")
+    pasted = findings(ACCESS_GROUPS="-1001234,telegram:-100")
     check("identity: an id pasted without its prefix is a warning",
-          any(f.level == "WARN" and f.key == "ALLOWED_GROUPS"
+          any(f.level == "WARN" and f.key == "ACCESS_GROUPS"
               and "-1001234" in f.detail and "closes every QQ group" in f.detail
               for f in pasted), repr(pasted))
     check("identity: ...in any of the lists, old names included",
           ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="U0ABC")
           and ("WARN", "GATEWAY_OWNER_IDS") in levels(GATEWAY_OWNER_IDS="alice"))
     check("identity: qq: and bare QQ numbers are fine",
-          not levels(ALLOWED_GROUPS="qq:123,456", BOT_QQ="9"))
+          not levels(ACCESS_GROUPS="qq:123,456", QQ_BOT_ID="9"))
     check("identity: an entry naming no platform or no id is a warning",
-          ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS=":42")
-          and ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS="slack:"))
+          ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS=":42")
+          and ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS="slack:"))
     check("identity: a capitalised platform never matches, and says so",
           ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="Telegram:1"))
 
     moved = findings(QQ_GROUPS="telegram:-100")
     check("identity: another platform in a QQ-only name changed meaning",
           any(f.level == "WARN" and f.key == "QQ_GROUPS"
-              and "ALLOWED_GROUPS" in f.detail for f in moved), repr(moved))
-    opted = findings(ALLOWED_GROUPS="telegram:-100", ALLOWED_DM_USERS="slack:U1")
+              and "ACCESS_GROUPS" in f.detail for f in moved), repr(moved))
+    opted = findings(ACCESS_GROUPS="telegram:-100", ACCESS_DM_USERS="slack:U1")
     check("identity: one entry gating a whole platform is pointed out",
           {(f.level, f.key) for f in opted if "only the listed" in f.detail}
-          == {("INFO", "ALLOWED_GROUPS"), ("INFO", "ALLOWED_DM_USERS")},
+          == {("INFO", "ACCESS_GROUPS"), ("INFO", "ACCESS_DM_USERS")},
           repr(opted))
     check("identity: ...and only when a forwarded platform has entries",
-          not levels(ALLOWED_GROUPS="123", BOT_QQ="9"))
+          not levels(ACCESS_GROUPS="123", QQ_BOT_ID="9"))
 
-    check("identity: a bare QQ owner is a QQ config that needs BOT_QQ",
-          ("WARN", "BOT_QQ") in levels(ADMIN_IDS="42"))
+    check("identity: a bare QQ owner is a QQ config that needs QQ_BOT_ID",
+          ("WARN", "QQ_BOT_ID") in levels(ADMIN_IDS="42"))
     check("identity: a Telegram-only owner is not",
           not levels(ADMIN_IDS="telegram:42"))
     check("identity: QQ's own adapter is the native platform to name",
-          not levels(GATEWAY_NATIVE_PLATFORMS="aiocqhttp"))
+          not levels(CONNECTOR_QQ_PLATFORMS="aiocqhttp"))
     check("identity: another native platform would read its ids as QQ ones",
-          ("WARN", "GATEWAY_NATIVE_PLATFORMS") in levels(
-              GATEWAY_NATIVE_PLATFORMS="aiocqhttp,wecom"))
+          ("WARN", "CONNECTOR_QQ_PLATFORMS") in levels(
+              CONNECTOR_QQ_PLATFORMS="aiocqhttp,wecom"))
 
 
 def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None:
@@ -650,26 +650,26 @@ def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None
             env={"LLM_API_KEY": "sk-x", **env})}
 
     check("fallback endpoint: a complete one is silent",
-          not levels(FALLBACK_MODEL="cheap", FALLBACK_API_KEY="sk-o",
-                     FALLBACK_BASE_URL="https://other.example/v1"))
+          not levels(LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="sk-o",
+                     LLM_FALLBACK_BASE_URL="https://other.example/v1"))
     check("fallback endpoint: the primary's host sharing its key is silent",
-          not levels(FALLBACK_MODEL="cheap",
-                     FALLBACK_BASE_URL=DEFAULT_LLM_BASE_URL + "/beta"))
+          not levels(LLM_FALLBACK_MODEL="cheap",
+                     LLM_FALLBACK_BASE_URL=DEFAULT_LLM_BASE_URL + "/beta"))
     check("fallback endpoint: another host handed the primary's key is named",
-          ("WARN", "FALLBACK_API_KEY") in levels(
-              FALLBACK_MODEL="cheap", FALLBACK_BASE_URL="https://other.example/v1"))
-    found = levels(FALLBACK_BASE_URL="https://other.example/v1",
-                   FALLBACK_API_KEY="sk-o")
-    check("fallback endpoint: without a distinct FALLBACK_MODEL it says it does nothing",
-          found == {("WARN", "FALLBACK_BASE_URL")}, repr(found))
+          ("WARN", "LLM_FALLBACK_API_KEY") in levels(
+              LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_BASE_URL="https://other.example/v1"))
+    found = levels(LLM_FALLBACK_BASE_URL="https://other.example/v1",
+                   LLM_FALLBACK_API_KEY="sk-o")
+    check("fallback endpoint: without a distinct LLM_FALLBACK_MODEL it says it does nothing",
+          found == {("WARN", "LLM_FALLBACK_BASE_URL")}, repr(found))
     check("fallback endpoint: a custom version path is named like the primary's",
-          ("WARN", "FALLBACK_BASE_URL") in levels(
-              FALLBACK_MODEL="cheap", FALLBACK_API_KEY="k",
-              FALLBACK_BASE_URL="https://llm.example/api/v4"))
+          ("WARN", "LLM_FALLBACK_BASE_URL") in levels(
+              LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="k",
+              LLM_FALLBACK_BASE_URL="https://llm.example/api/v4"))
 
 
 def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:
-    """The tools probe asks for FALLBACK_MODEL and the eval probe for
+    """The tools probe asks for LLM_FALLBACK_MODEL and the eval probe for
     EVAL_MODEL. With a fallback endpoint configured, the agent sends that
     model there; a probe that still asked the primary for it would report
     an outage that is not happening, and miss the one that is."""
@@ -682,12 +682,12 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
         return {"choices": [{"message": {"content": "ok"}}]}
 
     monkeypatch.setattr(health, "_post_json", fake_post)
-    for name in ("FALLBACK_BASE_URL", "FALLBACK_API_KEY", "VISION_API_KEY",
+    for name in ("LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY", "VISION_API_KEY",
                  "VISION_BASE_URL", "GLM_API_KEY", "GLM_BASE_URL"):
         monkeypatch.delenv(name, raising=False)
     for name, value in (("LLM_API_KEY", "sk-primary"), ("LLM_MODEL", "main"),
                         ("LLM_BASE_URL", "https://primary.example"),
-                        ("FALLBACK_MODEL", "cheap"), ("EVAL_MODEL", "cheap")):
+                        ("LLM_FALLBACK_MODEL", "cheap"), ("EVAL_MODEL", "cheap")):
         monkeypatch.setenv(name, value)
 
     health.check_primary_chat_tools()
@@ -696,8 +696,8 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
     check("health: unset, the fallback is probed on the primary's endpoint",
           posted == [primary, primary], repr(posted))
 
-    monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
-    monkeypatch.setenv("FALLBACK_API_KEY", "sk-fallback")
+    monkeypatch.setenv("LLM_FALLBACK_BASE_URL", "https://fallback.example/v1")
+    monkeypatch.setenv("LLM_FALLBACK_API_KEY", "sk-fallback")
     posted.clear()
     health.check_primary_chat_tools()
     health.check_eval()
@@ -706,15 +706,15 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
     check("health: set, both probes follow the fallback model to its endpoint",
           posted == [fallback, fallback], repr(posted))
 
-    # PRIVATE_MODEL is routed by name like every other: the fallback's name
+    # LLM_DM_MODEL is routed by name like every other: the fallback's name
     # sends DMs to the fallback's endpoint, so that is where it is probed.
     monkeypatch.delenv("ANTHROPIC_PRIVATE_MODEL", raising=False)
-    monkeypatch.setenv("PRIVATE_MODEL", "cheap")
+    monkeypatch.setenv("LLM_DM_MODEL", "cheap")
     posted.clear()
     health.check_private_chat()
     check("health: a private model that is the fallback's is probed where DMs go",
           posted == [fallback], repr(posted))
-    monkeypatch.setenv("PRIVATE_MODEL", "dm-model")
+    monkeypatch.setenv("LLM_DM_MODEL", "dm-model")
     posted.clear()
     health.check_private_chat()
     check("health: any other private model is probed on the primary's endpoint",
@@ -735,8 +735,8 @@ def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> No
         return {"choices": [{"message": {"content": "ok"}}]}
 
     monkeypatch.setattr(health, "_post_json", fake_post)
-    for name in ("LLM_MODEL", "PRIVATE_MODEL", "ANTHROPIC_PRIVATE_MODEL",
-                 "FALLBACK_MODEL", "FALLBACK_BASE_URL", "FALLBACK_API_KEY"):
+    for name in ("LLM_MODEL", "LLM_DM_MODEL", "ANTHROPIC_PRIVATE_MODEL",
+                 "LLM_FALLBACK_MODEL", "LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_API_KEY", "k")
     ok, detail = health.check_private_chat()
@@ -980,8 +980,8 @@ async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> Non
     """The token is checked before a slot is taken, so a peer that has none
     is refused as unauthenticated instead of filling the slots and 429ing
     the real forwarder for as long as it keeps its sockets open."""
-    original_token = main_module.GATEWAY_TOKEN
-    main_module.GATEWAY_TOKEN = "abc"
+    original_token = main_module.CONNECTOR_TOKEN
+    main_module.CONNECTOR_TOKEN = "abc"
     limiter = main_module._gateway_admission
     taken = 0
     try:
@@ -994,14 +994,14 @@ async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> Non
     finally:
         for _ in range(taken):
             await limiter.release()
-        main_module.GATEWAY_TOKEN = original_token
+        main_module.CONNECTOR_TOKEN = original_token
     check("admission: a tokenless caller is refused before admission",
           response.status_code == 403, repr((response.status_code, response.text)))
 
 
 async def test_a_non_ascii_token_header_is_refused_not_a_crash() -> None:
-    original_token = main_module.GATEWAY_TOKEN
-    main_module.GATEWAY_TOKEN = "abc"
+    original_token = main_module.CONNECTOR_TOKEN
+    main_module.CONNECTOR_TOKEN = "abc"
     try:
         async with _loopback_client(raise_app_exceptions=False) as client:
             gateway = await client.post(
@@ -1010,7 +1010,7 @@ async def test_a_non_ascii_token_header_is_refused_not_a_crash() -> None:
             details = await client.get(
                 "/health/details", headers={"x-gateway-token": b"\xff"})
     finally:
-        main_module.GATEWAY_TOKEN = original_token
+        main_module.CONNECTOR_TOKEN = original_token
     check("auth: a non-ASCII token on the gateway is a 403",
           gateway.status_code == 403, repr(gateway.status_code))
     check("auth: a non-ASCII token on health details is a 403",
@@ -1041,12 +1041,12 @@ async def _drive_gateway(receive) -> list[dict]:
         ],
         "client": ("127.0.0.1", 1234), "server": ("127.0.0.1", 8080),
     }
-    original_token = main_module.GATEWAY_TOKEN
-    main_module.GATEWAY_TOKEN = "abc"
+    original_token = main_module.CONNECTOR_TOKEN
+    main_module.CONNECTOR_TOKEN = "abc"
     try:
         await main_module.app(scope, receive, send)
     finally:
-        main_module.GATEWAY_TOKEN = original_token
+        main_module.CONNECTOR_TOKEN = original_token
     return sent
 
 
@@ -1117,11 +1117,11 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
     tab (Origin, Sec-Fetch-Site), a rebound host name (Host) and a tunnel on
     the same machine (X-Forwarded-For) all arrive from 127.0.0.1 too, and
     each would otherwise post events as anyone, the owner included."""
-    saved = (main_module.WEBHOOK_SECRET, main_module.GATEWAY_TOKEN,
+    saved = (main_module.QQ_ONEBOT_SECRET, main_module.CONNECTOR_TOKEN,
              main_module.agent, main_module.run_checks,
              dict(main_module._health_cache))
-    main_module.WEBHOOK_SECRET = ""
-    main_module.GATEWAY_TOKEN = ""
+    main_module.QQ_ONEBOT_SECRET = ""
+    main_module.CONNECTOR_TOKEN = ""
     main_module.agent = None
     main_module.run_checks = lambda: []
     main_module._health_cache.update({"ts": 0.0, "data": None})
@@ -1154,7 +1154,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
                     await client.get("/health/details", headers=extra),
                 )
     finally:
-        (main_module.WEBHOOK_SECRET, main_module.GATEWAY_TOKEN,
+        (main_module.QQ_ONEBOT_SECRET, main_module.CONNECTOR_TOKEN,
          main_module.agent, main_module.run_checks) = saved[:4]
         main_module._health_cache.clear()
         main_module._health_cache.update(saved[4])
@@ -1176,9 +1176,9 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
 async def test_a_signed_request_with_an_origin_is_unaffected() -> None:
     """The locality rule stands in for a credential; with a token set, the
     envelope is the check and a browser-shaped header changes nothing."""
-    saved = (main_module.GATEWAY_TOKEN, main_module.agent,
+    saved = (main_module.CONNECTOR_TOKEN, main_module.agent,
              main_module._gateway_replay)
-    main_module.GATEWAY_TOKEN = "gateway-secret"
+    main_module.CONNECTOR_TOKEN = "gateway-secret"
     main_module.agent = None
     main_module._gateway_replay = main_module.ReplayGuard()
     body = _gateway_event_body("signed-origin")
@@ -1198,7 +1198,7 @@ async def test_a_signed_request_with_an_origin_is_unaffected() -> None:
                     "x-gateway-signature": signature,
                 })
     finally:
-        (main_module.GATEWAY_TOKEN, main_module.agent,
+        (main_module.CONNECTOR_TOKEN, main_module.agent,
          main_module._gateway_replay) = saved
     check("local: a signed gateway request is not judged by its headers",
           response.status_code == 200, repr(response.text))

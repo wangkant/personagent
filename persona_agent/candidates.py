@@ -63,7 +63,7 @@ ROW_EVIDENCE = "evidence_link"
 ROW_SUPERSESSION = "supersession"
 
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
-_WARN_BYTES_ENV = "AGENT_CANDIDATE_LEDGER_WARN_BYTES"
+_WARN_BYTES_ENV = "LEDGER_CANDIDATES_WARN_BYTES"
 
 # Which states a transition may be written from. The ledger replays whatever it
 # contains — this is a write-time guard, so a mistaken admin command is refused
@@ -511,7 +511,7 @@ def rebuild_views(ledger: CandidateLedger, examples_view: Path,
     """Rebuild both retrieval views from the ledger. Returns (examples, pairs).
 
     The caps keep the newest N rows per view (0 = unbounded) — the same
-    EXAMPLES_MAX_AUTO / FEEDBACK_MAX_AUTO limits the learned pools carry, for
+    PROMOTE_MAX_EXAMPLES / PROMOTE_MAX_FEEDBACK limits the learned pools carry, for
     the same reason: only a handful of rows reach a prompt per turn, and
     material promoted under an older persona should not outvote recent material.
 

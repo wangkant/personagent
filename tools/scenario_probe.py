@@ -82,7 +82,7 @@ async def main_async(args) -> int:
     import persona_agent.agent as pa
     pa.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
 
-    bot_name = bench.os.getenv("BOT_NAME", "Robin") or "Robin"
+    bot_name = bench.os.getenv("PERSONA_NAME", "Robin") or "Robin"
     out_dir = Path(args.outdir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

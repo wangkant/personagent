@@ -3,7 +3,7 @@
 Learning scope is keyed on a hash of the persona text, so a one-byte edit used
 to orphan everything the bot had learned. A lineage records every hash seen
 under one PERSONA_VERSION; all of them are one character for scope purposes.
-A new PERSONA_VERSION (or BOT_NAME) starts a new lineage, which is the
+A new PERSONA_VERSION (or PERSONA_NAME) starts a new lineage, which is the
 deliberate way to begin a clean slate."""
 from __future__ import annotations
 

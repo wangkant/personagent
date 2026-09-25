@@ -66,7 +66,7 @@ def test_connect_writes_both_sides() -> None:
         quickstart.astrbot_config_path(data).write_text(
             "\ufeff" + json.dumps({"timeout_s": 240}), encoding="utf-8")
         env = tmp / ".env"
-        env.write_text("PORT=9090\nGATEWAY_TOKEN=\n", encoding="utf-8")
+        env.write_text("SERVER_PORT=9090\nCONNECTOR_TOKEN=\n", encoding="utf-8")
         values: dict = {}
         cfg_path = quickstart.connect_astrbot(env, values, data_dir=data, qq=True,
                                               groups=["1"], private=[])
@@ -76,17 +76,17 @@ def test_connect_writes_both_sides() -> None:
         check("connect: no __pycache__ copied",
               not (data / "plugins" / quickstart.PLUGIN_NAME / "__pycache__").exists())
         check("connect: token generated and shared",
-              len(values["GATEWAY_TOKEN"]) >= 32 and cfg["gateway_token"] == values["GATEWAY_TOKEN"])
-        check("connect: agent_url follows PORT", cfg["agent_url"] == "http://127.0.0.1:9090/webhook/gateway")
+              len(values["CONNECTOR_TOKEN"]) >= 32 and cfg["gateway_token"] == values["CONNECTOR_TOKEN"])
+        check("connect: agent_url follows SERVER_PORT", cfg["agent_url"] == "http://127.0.0.1:9090/webhook/gateway")
         check("connect: existing config merged through the BOM", cfg["timeout_s"] == 240)
-        check("connect: qq routed natively", values["GATEWAY_NATIVE_PLATFORMS"] == "aiocqhttp")
+        check("connect: qq routed natively", values["CONNECTOR_QQ_PLATFORMS"] == "aiocqhttp")
         text = env.read_text(encoding="utf-8")
-        check("connect: .env carries the token", f"GATEWAY_TOKEN={values['GATEWAY_TOKEN']}" in text)
+        check("connect: .env carries the token", f"CONNECTOR_TOKEN={values['CONNECTOR_TOKEN']}" in text)
         # Second run reuses the token instead of rotating it under AstrBot.
         values2: dict = {}
         quickstart.connect_astrbot(env, values2, data_dir=data, qq=False, groups=[], private=[])
-        check("connect: rerun keeps the token", values2["GATEWAY_TOKEN"] == values["GATEWAY_TOKEN"])
-        check("connect: rerun can exclude qq again", values2["GATEWAY_NATIVE_PLATFORMS"] == "")
+        check("connect: rerun keeps the token", values2["CONNECTOR_TOKEN"] == values["CONNECTOR_TOKEN"])
+        check("connect: rerun can exclude qq again", values2["CONNECTOR_QQ_PLATFORMS"] == "")
 
 
 def test_a_rerun_keeps_what_the_operator_set() -> None:
@@ -174,42 +174,42 @@ def test_connect_without_a_qq_choice_keeps_qq_routing(tmp_path) -> None:
         "gateway_token": "plugin-token", "excluded_platforms": [],
         "group_whitelist": ["123"], "private_whitelist": [], "private_enabled": False})
     env = tmp_path / ".env"
-    env.write_text("GATEWAY_TOKEN=\nGATEWAY_NATIVE_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
+    env.write_text("CONNECTOR_TOKEN=\nCONNECTOR_QQ_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
 
     values: dict = {}
     path = quickstart.connect_astrbot(env, values, data_dir=data, qq=None, groups=None, private=None)
     cfg = json.loads(path.read_text(encoding="utf-8"))
-    check("connect: no QQ choice leaves GATEWAY_NATIVE_PLATFORMS alone",
-          "GATEWAY_NATIVE_PLATFORMS" not in values, repr(values))
+    check("connect: no QQ choice leaves CONNECTOR_QQ_PLATFORMS alone",
+          "CONNECTOR_QQ_PLATFORMS" not in values, repr(values))
     check("connect: QQ stays routed", cfg["excluded_platforms"] == [], repr(cfg))
     check("connect: allowlists kept", cfg["group_whitelist"] == ["123"], repr(cfg))
     check("connect: the plugin's token is reused when .env has none",
-          values["GATEWAY_TOKEN"] == "plugin-token" == cfg["gateway_token"], repr(values))
+          values["CONNECTOR_TOKEN"] == "plugin-token" == cfg["gateway_token"], repr(values))
 
     # The plugin forwards QQ but .env lost aiocqhttp (a wizard interrupted
     # between the two writes): a plain rerun puts .env back in step.
-    env.write_text("GATEWAY_TOKEN=plugin-token\nGATEWAY_NATIVE_PLATFORMS=wecom\n", encoding="utf-8")
+    env.write_text("CONNECTOR_TOKEN=plugin-token\nCONNECTOR_QQ_PLATFORMS=wecom\n", encoding="utf-8")
     values_sync: dict = {}
     quickstart.connect_astrbot(env, values_sync, data_dir=data, qq=None, groups=None, private=None)
     check("connect: .env follows the plugin's QQ routing",
-          values_sync.get("GATEWAY_NATIVE_PLATFORMS") == "aiocqhttp,wecom", repr(values_sync))
+          values_sync.get("CONNECTOR_QQ_PLATFORMS") == "aiocqhttp,wecom", repr(values_sync))
     quickstart.write_env(env, values_sync)
 
     # A token that would not survive .env is not reused.
     cfg = quickstart.read_astrbot_config(data)
     cfg["gateway_token"] = "abc #def"
     quickstart.write_astrbot_config(data, cfg)
-    env.write_text("GATEWAY_TOKEN=\nGATEWAY_NATIVE_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
+    env.write_text("CONNECTOR_TOKEN=\nCONNECTOR_QQ_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
     values_tok: dict = {}
     quickstart.connect_astrbot(env, values_tok, data_dir=data, qq=None, groups=None, private=None)
     check("connect: an unsafe plugin token is replaced",
-          values_tok["GATEWAY_TOKEN"] != "abc #def" and len(values_tok["GATEWAY_TOKEN"]) >= 32)
+          values_tok["CONNECTOR_TOKEN"] != "abc #def" and len(values_tok["CONNECTOR_TOKEN"]) >= 32)
     quickstart.write_env(env, values_tok)
 
     values_off: dict = {}
     quickstart.connect_astrbot(env, values_off, data_dir=data, qq=False, groups=None, private=None)
     check("connect: no-qq drops only aiocqhttp from the native list",
-          values_off["GATEWAY_NATIVE_PLATFORMS"] == "wecom", repr(values_off))
+          values_off["CONNECTOR_QQ_PLATFORMS"] == "wecom", repr(values_off))
 
 
 def test_env_values_are_read_the_way_dotenv_reads_them(tmp_path) -> None:
@@ -251,13 +251,13 @@ def test_the_astrbot_flag_can_be_rerun(monkeypatch, tmp_path) -> None:
           and cfg["private_whitelist"] == ["456"] and cfg["private_enabled"] is True, repr(cfg))
     check("flag rerun: QQ still routed", cfg["excluded_platforms"] == [], repr(cfg))
     check("flag rerun: native ids kept",
-          quickstart._env_get(tmp_path / ".env", "GATEWAY_NATIVE_PLATFORMS") == "aiocqhttp")
+          quickstart._env_get(tmp_path / ".env", "CONNECTOR_QQ_PLATFORMS") == "aiocqhttp")
 
     _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data), "--no-qq"])
     cfg = quickstart.read_astrbot_config(data)
     check("flag: --no-qq excludes aiocqhttp", cfg["excluded_platforms"] == ["aiocqhttp"], repr(cfg))
     check("flag: --no-qq clears native ids",
-          quickstart._env_get(tmp_path / ".env", "GATEWAY_NATIVE_PLATFORMS") == "")
+          quickstart._env_get(tmp_path / ".env", "CONNECTOR_QQ_PLATFORMS") == "")
 
     raised = False
     try:
@@ -276,9 +276,9 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
         "private_whitelist": ["789"], "private_enabled": True})
     env = tmp_path / ".env"
     env.write_text("LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/\n"
-                   "LLM_MODEL=gpt-4o-mini\nBOT_NAME=Mika\nAGENT_LANG=en\nBOT_QQ=10001\n"
-                   "GATEWAY_NATIVE_PLATFORMS=aiocqhttp\nOWNER_QQ=42\nOWNER_NAME=Kay\n"
-                   "QQ_GROUPS=123\nALLOWED_GROUPS=telegram:-100,qq:999\n", encoding="utf-8")
+                   "LLM_MODEL=gpt-4o-mini\nPERSONA_NAME=Mika\nAGENT_LANG=en\nQQ_BOT_ID=10001\n"
+                   "CONNECTOR_QQ_PLATFORMS=aiocqhttp\nOWNER_QQ=42\nOWNER_NAME=Kay\n"
+                   "QQ_GROUPS=123\nACCESS_GROUPS=telegram:-100,qq:999\n", encoding="utf-8")
 
     prompts: list[str] = []
 
@@ -309,9 +309,9 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
           and cfg["private_enabled"] is True, repr(cfg))
     check("wizard rerun: QQ kept", cfg["excluded_platforms"] == [], repr(cfg))
     got = {k: quickstart._env_get(env, k) for k in (
-        "ALLOWED_GROUPS", "QQ_GROUPS", "ADMIN_IDS", "ADMIN_NAME", "OWNER_QQ", "OWNER_NAME")}
+        "ACCESS_GROUPS", "QQ_GROUPS", "ADMIN_IDS", "ADMIN_NAME", "OWNER_QQ", "OWNER_NAME")}
     check("wizard rerun: QQ entries follow the kept groups, other platforms' stay",
-          got["ALLOWED_GROUPS"] == "telegram:-100,123,456", repr(got))
+          got["ACCESS_GROUPS"] == "telegram:-100,123,456", repr(got))
     check("wizard rerun: the old owner moves to the admin names",
           got["ADMIN_IDS"] == "42" and got["ADMIN_NAME"] == "Kay", repr(got))
     check("wizard rerun: the old names are emptied, so nothing outlives a removal",
@@ -320,7 +320,7 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
     # With QQ off, Enter on the QQ question keeps it off.
     cfg["excluded_platforms"] = ["aiocqhttp"]
     quickstart.write_astrbot_config(data, cfg)
-    quickstart.write_env(env, {"GATEWAY_NATIVE_PLATFORMS": ""})
+    quickstart.write_env(env, {"CONNECTOR_QQ_PLATFORMS": ""})
     quickstart.run_wizard(tmp_path / ".venv", env)
     cfg = quickstart.read_astrbot_config(data)
     check("wizard rerun: QQ stays off", cfg["excluded_platforms"] == ["aiocqhttp"], repr(cfg))
@@ -403,11 +403,11 @@ def test_agent_home_divergence_warning() -> None:
 
 def test_rerunning_the_wizard_keeps_the_current_setup(monkeypatch, tmp_path, capsys) -> None:
     """Enter-through on a re-run used to fall back to the first-run presets:
-    DeepSeek's URL and model with the OpenAI key, BOT_NAME=Nova, AGENT_LANG=en."""
+    DeepSeek's URL and model with the OpenAI key, PERSONA_NAME=Nova, AGENT_LANG=en."""
     env = tmp_path / ".env"
     env.write_text(
         "LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/\n"
-        "LLM_MODEL=gpt-4o-mini\nBOT_NAME=Mika\nAGENT_LANG=zh\n", encoding="utf-8")
+        "LLM_MODEL=gpt-4o-mini\nPERSONA_NAME=Mika\nAGENT_LANG=zh\n", encoding="utf-8")
     prompts: list[str] = []
 
     def scripted_input(prompt: str = "") -> str:
@@ -429,7 +429,7 @@ def test_rerunning_the_wizard_keeps_the_current_setup(monkeypatch, tmp_path, cap
           get("LLM_BASE_URL"))
     check("rerun: model kept", get("LLM_MODEL") == "gpt-4o-mini", get("LLM_MODEL"))
     check("rerun: key kept", get("LLM_API_KEY") == "sk-test-abcd", get("LLM_API_KEY"))
-    check("rerun: name kept", get("BOT_NAME") == "Mika", get("BOT_NAME"))
+    check("rerun: name kept", get("PERSONA_NAME") == "Mika", get("PERSONA_NAME"))
     check("rerun: language kept", get("AGENT_LANG") == "zh", get("AGENT_LANG"))
     shown = "\n".join(prompts) + capsys.readouterr().out
     check("rerun: the key is never printed", "sk-test-abcd" not in shown, shown)

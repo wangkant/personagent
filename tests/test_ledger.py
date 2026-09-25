@@ -885,7 +885,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_owners(
 
     monkeypatch.setattr(promotion, "decide", spy)
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
-    for name in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "GATEWAY_NATIVE_PLATFORMS"):
+    for name in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "CONNECTOR_QQ_PLATFORMS"):
         monkeypatch.delenv(name, raising=False)
     agent_says = a._decide_promotion(cand["candidate_id"])
     cli_says = candidates_admin._decide(

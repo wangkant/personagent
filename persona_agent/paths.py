@@ -85,7 +85,7 @@ def resolve_runtime_state_file(value: str | Path) -> Path:
     runtime dir, unlike AGENT_RUNTIME_DIR itself: it is the escape hatch for
     pointing one file at another disk. It is still worth saying out loud when
     one lands outside, because the failure it produces otherwise — a stale
-    AGENT_MEMORY_FILE from an old deploy quietly writing somewhere nothing
+    MEMORY_FILE from an old deploy quietly writing somewhere nothing
     else reads — looks like amnesia, not like a path problem.
     """
     path = Path(value)

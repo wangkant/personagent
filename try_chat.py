@@ -42,18 +42,18 @@ def _build_agent(lang: str) -> Agent:
         api_key=os.getenv("LLM_API_KEY", ""),
         base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
-        bot_qq=os.getenv("BOT_QQ", "") or "10000",
-        bot_name=os.getenv("BOT_NAME", "") or "bot",
+        bot_qq=os.getenv("QQ_BOT_ID", "") or "10000",
+        bot_name=os.getenv("PERSONA_NAME", "") or "bot",
         private_model=private_model_from_env(),
         admin_ids=(ADMIN_ID,),
         owner_name=(os.getenv("ADMIN_NAME", "") or os.getenv("OWNER_NAME", "")
                     or "admin"),
         owner_relationship=(os.getenv("ADMIN_RELATIONSHIP", "")
                             or os.getenv("OWNER_RELATIONSHIP", "")),
-        fallback_model=os.getenv("FALLBACK_MODEL", ""),
-        fallback_base_url=os.getenv("FALLBACK_BASE_URL", ""),
-        fallback_api_key=os.getenv("FALLBACK_API_KEY", ""),
-        fallback_thinking=env_bool("FALLBACK_THINKING", False),
+        fallback_model=os.getenv("LLM_FALLBACK_MODEL", ""),
+        fallback_base_url=os.getenv("LLM_FALLBACK_BASE_URL", ""),
+        fallback_api_key=os.getenv("LLM_FALLBACK_API_KEY", ""),
+        fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False),
         # Trial defaults: don't spend tokens self-scoring, and skip vision
         # (the terminal can't send images anyway).
         eval_enable=False,

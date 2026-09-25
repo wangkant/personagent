@@ -153,9 +153,9 @@ def build(conn, room_id: str, source: dict):
 
 def test_settings_come_from_the_file_with_the_environment_on_top(tmp: Path) -> None:
     config = tmp / "matrix.env"
-    config.write_text("MATRIX_HOMESERVER=matrix.example.org\nMATRIX_ACCESS_TOKEN=abc\n"
-                      "MATRIX_ROOMS=!a:example.org, !b:example.org\n"
-                      "MATRIX_DM_USERS=@*:example.org\nMATRIX_E2EE=true\n"
+    config.write_text("MATRIX_URL=matrix.example.org\nMATRIX_ACCESS_TOKEN=abc\n"
+                      "MATRIX_GROUPS=!a:example.org, !b:example.org\n"
+                      "MATRIX_DM_USERS=@*:example.org\nMATRIX_E2EE_ENABLED=true\n"
                       "MATRIX_TIMEOUT_S=90\n", encoding="utf-8")
     values = mc.load_env(str(config), environ={"MATRIX_TIMEOUT_S": "600", "HOME": "/x"})
     s = mc.Settings.from_env(values)
@@ -171,15 +171,15 @@ def test_settings_come_from_the_file_with_the_environment_on_top(tmp: Path) -> N
 
 
 def test_settings_refuse_what_cannot_work() -> None:
-    base = {"MATRIX_HOMESERVER": "https://example.org", "MATRIX_ACCESS_TOKEN": "t"}
-    with pytest.raises(ValueError, match="MATRIX_HOMESERVER"):
+    base = {"MATRIX_URL": "https://example.org", "MATRIX_ACCESS_TOKEN": "t"}
+    with pytest.raises(ValueError, match="MATRIX_URL"):
         mc.Settings.from_env({"MATRIX_ACCESS_TOKEN": "t"})
     with pytest.raises(ValueError, match="MATRIX_ACCESS_TOKEN"):
-        mc.Settings.from_env({"MATRIX_HOMESERVER": "https://example.org",
+        mc.Settings.from_env({"MATRIX_URL": "https://example.org",
                               "MATRIX_USER_ID": BOT})
     with pytest.raises(ValueError, match="PERSONAGENT_URL"):
         mc.Settings.from_env({**base, "PERSONAGENT_URL": "http://agent.lan:8080/webhook/gateway",
-                              "GATEWAY_TOKEN": "g"})
+                              "CONNECTOR_TOKEN": "g"})
     with pytest.raises(ValueError, match="MATRIX_TIMEOUT_S"):
         mc.Settings.from_env({**base, "MATRIX_TIMEOUT_S": "soon"})
     s = mc.Settings.from_env({**base, "MATRIX_USER_ID": BOT, "MATRIX_PASSWORD": "pw"})
@@ -233,7 +233,7 @@ def test_direct_rooms_are_private_and_gated_by_the_dm_list() -> None:
     check("reply_handle is still the room", event["reply_handle"] == DM)
     wa = build(conn, "!wa:example.org", msg(sender="@whatsapp_1:example.org"))
     check("a bridge bot is not a member", wa and wa["message_type"] == "private", repr(wa))
-    check("a room named in MATRIX_ROOMS stays a group",
+    check("a room named in MATRIX_GROUPS stays a group",
           build(conn, GROUP, msg())["message_type"] == "group")
     check("a group room not listed is ignored", build(conn, "!flag:example.org", msg()) is None)
     client.direct = {ALEX: ["!flag:example.org"]}
@@ -325,7 +325,7 @@ def test_images_arrive_as_bytes() -> None:
                                        url="mxc://example.org/pic"))
     check("caption", captioned["segments"][-1] == {"type": "text", "text": "look at this"})
     big = build(conn, GROUP, msg("huge.png", msgtype="m.image", url="mxc://example.org/pic",
-                                 info={"size": mc.MAX_IMAGE_BYTES + 1}))
+                                 info={"size": mc.VISION_MAX_IMAGE_BYTES + 1}))
     check("too big is described", big["segments"] == [
         {"type": "text", "text": "(sent an image)"}], repr(big["segments"]))
     sticker = build(conn, GROUP, {"type": "m.sticker", "sender": ALEX, "event_id": "$s",

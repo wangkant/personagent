@@ -12,7 +12,7 @@ its own:
 - pools      append-aware JSONL loading for the retrieval datasets
 - ingestion  links, share cards, images, OCR, vision — with the SSRF guard
 - transport  throttling, chunking, typing simulation, sends, conversation LRU
-- learning   self-eval, reaction adjudication, the EVOLVE_AUTO loop
+- learning   self-eval, reaction adjudication, the EVOLVE_AUTO_ENABLED loop
 
 The learning path is three layers on purpose, so that recording something and
 being changed by it are separate acts:

@@ -153,7 +153,7 @@ def write_env(env_path: Path, values: dict) -> None:
         # survives os.replace — but NEVER widen. `.env` starts life as a copy
         # of `.env.example`, a repo file at 0644, so carrying that mode across
         # unchanged is how the first wizard run published LLM_API_KEY,
-        # GATEWAY_TOKEN and WEBHOOK_SECRET to every local account.
+        # CONNECTOR_TOKEN and QQ_ONEBOT_SECRET to every local account.
         if env_path.exists():
             os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
     except OSError:
@@ -355,10 +355,10 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
     plugin_token = str(existing.get("gateway_token") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", plugin_token):
         plugin_token = ""     # would not survive a round trip through .env
-    token = (values.get("GATEWAY_TOKEN") or _env_get(env_path, "GATEWAY_TOKEN")
+    token = (values.get("CONNECTOR_TOKEN") or _env_get(env_path, "CONNECTOR_TOKEN")
              or plugin_token or secrets.token_urlsafe(32))
-    values["GATEWAY_TOKEN"] = token
-    port = _env_get(env_path, "PORT") or "8080"
+    values["CONNECTOR_TOKEN"] = token
+    port = _env_get(env_path, "SERVER_PORT") or "8080"
     local_url = f"http://127.0.0.1:{port}/webhook/gateway"
     install_astrbot_plugin(data_dir)
     cfg = astrbot_plugin_config(existing, agent_url=local_url, token=token,
@@ -370,12 +370,12 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
         _info(f"keeping agent_url {cfg['agent_url']} (this agent listens on port {port})")
     # .env follows the plugin: QQ forwarded without native ids would file every
     # QQ conversation under a new name.
-    current = _env_get(env_path, "GATEWAY_NATIVE_PLATFORMS")
+    current = _env_get(env_path, "CONNECTOR_QQ_PLATFORMS")
     native = [p for p in _clean_ids(current.split(",")) if p != "aiocqhttp"]
     if astrbot_qq_routed(cfg):
         native = ["aiocqhttp"] + native
     if ",".join(native) != ",".join(_clean_ids(current.split(","))):
-        values["GATEWAY_NATIVE_PLATFORMS"] = ",".join(native)
+        values["CONNECTOR_QQ_PLATFORMS"] = ",".join(native)
     return write_astrbot_config(data_dir, cfg)
 
 
@@ -529,8 +529,8 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     # rename the bot to Nova and flip every data file to English.
     rerun = bool(_env_current_key(env_path))
     current = {key: _env_get(env_path, key) if rerun else "" for key in (
-        "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "BOT_NAME", "AGENT_LANG",
-        "BOT_QQ", "ADMIN_IDS", "ADMIN_NAME", "ALLOWED_GROUPS",
+        "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "PERSONA_NAME", "AGENT_LANG",
+        "QQ_BOT_ID", "ADMIN_IDS", "ADMIN_NAME", "ACCESS_GROUPS",
         # Names before 0.5, read so a re-run offers what they hold.
         "OWNER_QQ", "GATEWAY_OWNER_IDS", "OWNER_NAME", "QQ_GROUPS")}
     current_base = current["LLM_BASE_URL"].rstrip("/")
@@ -572,9 +572,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
 
     # 3. Bot identity + language
     bot_name = _ask("Bot display name (what group members call it)",
-                    default=current["BOT_NAME"] or "Nova", required=True)
-    if current["BOT_NAME"] and bot_name != current["BOT_NAME"]:
-        print(f"    (renaming {current['BOT_NAME']} to {bot_name} starts a new "
+                    default=current["PERSONA_NAME"] or "Nova", required=True)
+    if current["PERSONA_NAME"] and bot_name != current["PERSONA_NAME"]:
+        print(f"    (renaming {current['PERSONA_NAME']} to {bot_name} starts a new "
               "learning scope: nothing learned under the old name reaches its prompts)")
     lang = ""
     current_lang = current["AGENT_LANG"].lower()
@@ -589,7 +589,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         "LLM_API_KEY": api_key,
         "LLM_BASE_URL": base_url,
         "LLM_MODEL": model,
-        "BOT_NAME": bot_name,
+        "PERSONA_NAME": bot_name,
         "AGENT_LANG": lang,
     }
 
@@ -613,8 +613,8 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?",
                      default_yes=astrbot_qq_routed(existing) if existing else True)
         if qq:
-            values["BOT_QQ"] = _ask("Bot account's QQ number",
-                                    default=current["BOT_QQ"], required=True)
+            values["QQ_BOT_ID"] = _ask("Bot account's QQ number",
+                                    default=current["QQ_BOT_ID"], required=True)
         admins = _ask_ids(
             "Admin accounts - the person who runs the bot; it is closest to them "
             "and they can manage what it remembers. Comma-separated "
@@ -634,10 +634,10 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                            "empty = no DMs", existing.get("private_whitelist"))
         if qq:
             # QQ entries follow the plugin's groups; other platforms' are kept.
-            others = [g for g in _split_ids(",".join((current["ALLOWED_GROUPS"],
+            others = [g for g in _split_ids(",".join((current["ACCESS_GROUPS"],
                                                       current["QQ_GROUPS"])))
                       if ":" in g and not g.startswith("qq:")]
-            values["ALLOWED_GROUPS"] = ",".join(
+            values["ACCESS_GROUPS"] = ",".join(
                 others + [g for g in groups if g.isdigit()])
         # The old names are merged into the new ones, so an id left under them
         # would outlive its removal here.
@@ -711,7 +711,7 @@ written to both sides, allowlists written).
                       the allowlists empty; fill them in the plugin config or
                       the WebUI, and later runs keep them)
   --qq                with --astrbot: route QQ through AstrBot too (adds
-                      aiocqhttp to GATEWAY_NATIVE_PLATFORMS)
+                      aiocqhttp to CONNECTOR_QQ_PLATFORMS)
   --no-qq             with --astrbot: stop routing QQ through AstrBot
                       (without either flag, QQ routing is left as it is)
   --platform KIND     with --astrbot: switch on that adapter in AstrBot's own
@@ -824,7 +824,7 @@ def main() -> None:
         if os.name == "nt"
         else "source .venv/bin/activate"
     )
-    print("  1. edit .env (at minimum: LLM_API_KEY, BOT_NAME)")
+    print("  1. edit .env (at minimum: LLM_API_KEY, PERSONA_NAME)")
     print("  2. edit persona.txt (your bot's personality)")
     print(f"  3. activate venv: {activate}")
     print("  4. try it now, no account needed:  python try_chat.py")
