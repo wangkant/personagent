@@ -186,7 +186,7 @@ Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the ol
 
 ## How it works
 
-![Architecture: platforms enter one pipeline of ingest, decide, assemble, generate, validate and deliver; a separate learning path records evidence, proposes candidates and promotes them into views the prompt reads](docs/persona_llm_agent_architecture.svg)
+![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through AstrBot; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
 
 Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
 

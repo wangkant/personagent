@@ -1,96 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="720" viewBox="0 0 1000 720" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">persona-llm-agent：消息路径与学习闭环</title>
-  <desc id="architecture-desc">聊天平台（含 QQ）统一经 AstrBot 转发插件 POST 到 /webhook/gateway，进入同一个 FastAPI 进程。每条事件依次经过接入、决策、Prompt 组装、生成与校验，最后投递回复或以 PASS 保持沉默。热路径之外，用户反应与评估被追加到证据日志，转化为惰性候选，只有晋升策略批准的部分才会物化并热加载进 Prompt 组装。</desc>
-  <style>
-    svg {
-      --bg: #f8fafc; --surface: #ffffff; --ink: #172033; --muted: #667085;
-      --line: #d9e2ec; --line-strong: #98a2b3;
-      --blue: #1769aa; --blue-soft: #eaf3fb; --mint: #087f5b; --mint-soft: #eaf8f2;
-      --violet: #7047b8; --violet-soft: #f3effb; --coral: #b5472f; --coral-soft: #fdf0ec;
-    }
-    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; dominant-baseline: middle; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .bg { fill: var(--bg); }
-    .surface { fill: var(--surface); stroke: var(--line); }
-    .surface-dashed { fill: var(--surface); stroke: var(--line-strong); stroke-dasharray: 4 3; }
-    .frame { fill: none; stroke: var(--line); }
-    .flow { fill: none; stroke: var(--line-strong); stroke-width: 1.4; }
-    .flow-dashed { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 4 3; }
-    .flow-mint { fill: none; stroke: var(--mint); stroke-width: 1.6; }
-    .flow-coral { fill: none; stroke: var(--coral); stroke-width: 1.4; }
-    .violet-region { fill: var(--violet-soft); stroke: none; }
-    .mint-region { fill: var(--mint-soft); stroke: none; }
-    .stage { fill: var(--surface); stroke: var(--line); }
-    .ink { fill: var(--ink); } .muted { fill: var(--muted); } .blue { fill: var(--blue); }
-    .mint { fill: var(--mint); } .violet { fill: var(--violet); } .coral { fill: var(--coral); }
-    .headline { font-size: 21px; font-weight: 650; letter-spacing: -0.3px; }
-    .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; }
-    .label { font-size: 13px; font-weight: 650; }
-    .small { font-size: 11px; } .tiny { font-size: 10px; }
-    @media (prefers-color-scheme: dark) {
-      svg {
-        --bg: #0d1117; --surface: #111821; --ink: #e6edf3; --muted: #8b949e;
-        --line: #30363d; --line-strong: #59636e;
-        --blue: #58a6ff; --blue-soft: #101f30; --mint: #56d49b; --mint-soft: #10241d;
-        --violet: #bc8cff; --violet-soft: #1c1726; --coral: #ff8b73; --coral-soft: #2a1714;
-      }
-    }
-  </style>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="436" viewBox="0 0 1040 436" role="img" aria-labelledby="arch-title arch-desc">
+  <title id="arch-title">personagent 架构</title>
+  <desc id="arch-desc">群聊消息经 AstrBot 进入。personagent 先判断要不要开口，不开口就什么都不发；开口则用人设、按会话的记忆和示例组装提示词，调用模型，校验后把回复发回。另一边，大家的反应经判定后写入只追加的证据日志；只有通过晋升的候选才会成为提示词可用的示例，你也可以批准、驳回或撤销。</desc>
   <defs>
-    <marker id="arch-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M1 1L7 4L1 7" fill="none" stroke="context-stroke" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C4683F"/></marker>
+    <marker id="al" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#557A59"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8E8378"/></marker>
   </defs>
-  <rect class="bg" width="1000" height="720" rx="12"/>
-  <rect class="frame" x="0.5" y="0.5" width="999" height="719" rx="11.5"/>
-  <text class="eyebrow violet" x="40" y="34">架构</text>
-  <text class="headline ink" x="40" y="62">一条消息边界，一道学习门</text>
-  <text class="small muted" x="40" y="88">所有平台走同一条管线；学到的任何东西在晋升批准前都进不了 Prompt。</text>
-  <line class="frame" x1="40" y1="108" x2="960" y2="108"/>
-  <rect class="surface" x="40" y="128" width="225" height="64" rx="8"/><text class="label ink" x="54" y="146">聊天平台</text><text class="small muted" x="54" y="166">QQ · Telegram · Discord · Slack · 飞书 · KOOK</text><text class="small muted" x="54" y="183"></text>
-  <path class="flow" d="M265 160H292" marker-end="url(#arch-arrow)"/>
-  <rect class="surface" x="292" y="128" width="230" height="64" rx="8"/><text class="label ink" x="306" y="146">AstrBot + 转发插件</text><text class="small muted" x="306" y="166">白名单 · HMAC 信封 · nonce</text><text class="small muted" x="306" y="183"></text>
-  <rect class="violet-region" x="40" y="224" width="560" height="430" rx="12"/>
-  <text class="eyebrow violet" x="60" y="244">personagent · 单个 FastAPI 进程</text>
-  <rect class="mint-region" x="650" y="224" width="310" height="430" rx="12"/>
-  <text class="eyebrow mint" x="670" y="244">学习 · 热路径之外，位于 runtime/</text>
-  <path class="flow" d="M407 192V262" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono ink" x="415" y="214">POST /webhook/gateway</text>
-  <rect class="stage" x="150" y="262" width="430" height="62" rx="8"/><text class="label blue" x="164" y="280">接入</text><text class="small muted" x="164" y="300">token / HMAC · 重放防护 · 并发准入 · 去重</text><text class="small muted" x="164" y="317">归一化 · 补充图片、链接、分享卡片上下文</text>
-  <path class="flow" d="M210 324V342" marker-end="url(#arch-arrow)"/>
-  <text class="tiny muted" x="218" y="333">事件</text>
-  <rect class="stage" x="150" y="342" width="430" height="62" rx="8"/><text class="label blue" x="164" y="360">决策</text><text class="small muted" x="164" y="380">关系与模式：主人 · 被点名 · 追问 · 判定 · 主动</text><text class="small muted" x="164" y="397">合并消息突发 · 回复，或 PASS</text>
-  <path class="flow" d="M210 404V422" marker-end="url(#arch-arrow)"/>
-  <text class="tiny muted" x="218" y="413">回复？</text>
-  <rect class="stage" x="150" y="422" width="430" height="62" rx="8"/><text class="label blue" x="164" y="440">组装 Prompt</text><text class="small muted" x="164" y="460">人设 + [style] · 世界书 · 作用域记忆</text><text class="small muted" x="164" y="477">few-shot：种子 + 已晋升的样例与配对</text>
-  <path class="flow" d="M210 484V502" marker-end="url(#arch-arrow)"/>
-  <text class="tiny muted" x="218" y="493">上下文</text>
-  <rect class="stage" x="150" y="502" width="430" height="62" rx="8"/><text class="label blue" x="164" y="520">生成</text><text class="small muted" x="164" y="540">OpenAI 兼容 /v1 · 结构化 JSON</text><text class="small muted mono" x="164" y="557">{ "reasoning", "intent", "reply", "mem" }</text>
-  <path class="flow" d="M210 564V582" marker-end="url(#arch-arrow)"/>
-  <text class="tiny muted" x="218" y="573">JSON</text>
-  <rect class="stage" x="150" y="582" width="430" height="62" rx="8"/><text class="label blue" x="164" y="600">校验与投递</text><text class="small muted" x="164" y="620">输出过滤 · 字符策略 · 分段 · 表情包</text><text class="small muted" x="164" y="637">格式错误即拒绝 · PASS 不发任何消息</text>
-  <path class="flow-dashed" d="M150 533H120V355H150" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mono muted" x="126" y="444" transform="rotate(-90 126 444)" text-anchor="middle">"mem" → runtime/memory.json</text>
-  <path class="flow-coral" d="M150 615H70V192" marker-end="url(#arch-arrow)"/>
-  <text class="tiny coral" x="60" y="666">回复随 HTTP 响应返回</text>
-  <rect class="stage" x="690" y="262" width="250" height="62" rx="8"/><text class="label mint" x="704" y="280">已晋升视图</text><text class="small muted mono" x="704" y="300">runtime/promoted.*.&lt;lang&gt;.jsonl</text><text class="small muted" x="704" y="317">原子重写 · 可由账本重建</text>
-  <path class="flow-mint" d="M750 342V324" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="758" y="333">物化</text>
-  <rect class="stage" x="690" y="342" width="250" height="62" rx="8"/><text class="label mint" x="704" y="360">晋升</text><text class="small muted" x="704" y="380">≥ 2 条兼容事件，≥ 1 条强信号</text><text class="small muted" x="704" y="397">作用域一致 · 回滚与取代保留历史</text>
-  <path class="flow-mint" d="M750 422V404" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="758" y="413">裁决</text>
-  <rect class="stage" x="690" y="422" width="250" height="62" rx="8"/><text class="label mint" x="704" y="440">候选</text><text class="small muted" x="704" y="460">带版本的提案 · 晋升前保持惰性</text><text class="small muted" x="704" y="477">runtime/candidates.jsonl，只追加</text>
-  <path class="flow-mint" d="M750 502V484" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="758" y="493">提案</text>
-  <rect class="stage" x="690" y="502" width="250" height="62" rx="8"/><text class="label mint" x="704" y="520">证据日志</text><text class="small muted" x="704" y="540">只追加 · 本身不改变行为</text><text class="small muted" x="704" y="557">作用域：人设、版本、语言、会话、模式</text>
-  <path class="flow-mint" d="M750 582V564" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="758" y="573">追加</text>
-  <rect class="stage" x="690" y="582" width="250" height="62" rx="8"/><text class="label mint" x="704" y="600">信号</text><text class="small muted" x="704" y="620">定向反应 · 被接受的重试</text><text class="small muted" x="704" y="637">自评 · 进化诊断（均需手动开启）</text>
-  <path class="flow-mint" d="M580 613H690" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="635" y="600" text-anchor="middle">回复 + 反应</text>
-  <path class="flow-mint" d="M690 293H625V453H580" marker-end="url(#arch-arrow)"/>
-  <text class="tiny mint" x="612" y="373" transform="rotate(-90 612 373)" text-anchor="middle">热加载，无需重启</text>
-  <line class="frame" x1="40" y1="676" x2="960" y2="676"/>
-  <circle class="mint" cx="48" cy="696" r="3"/>
-  <text class="small muted" x="60" y="696">可变状态统一位于 runtime/；只追加的账本是唯一事实来源，因此每次晋升都可审计、可回滚。</text>
+  <style>
+    text { font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, 'Segoe UI', sans-serif; }
+    .t { font-size: 16px; font-weight: 600; fill: #2B2622; }
+    .s { font-size: 13px; fill: #71675E; }
+    .a { font-size: 12.5px; }
+    .band { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; }
+  </style>
+  <rect x="0.75" y="0.75" width="1038.5" height="434.5" rx="16" fill="#FBF8F2" stroke="#E8DFD0" stroke-width="1.5"/>
+  <rect x="12" y="46" width="1016" height="150" rx="14" fill="#F7ECE3"/>
+  <rect x="12" y="296" width="1016" height="124" rx="14" fill="#EAF1E6"/>
+  <text x="1010" y="186" text-anchor="end" class="band" fill="#C4683F">回复 · 每条消息</text>
+  <text x="1010" y="316" text-anchor="end" class="band" fill="#557A59">学习 · 在回复路径之外</text>
+  <rect x="33" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="108.0" y="91.0" text-anchor="middle" class="t">群聊</text><text x="108.0" y="110.0" text-anchor="middle" class="s">经 AstrBot</text>
+  <rect x="239" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="314.0" y="91.0" text-anchor="middle" class="t">判断</text><text x="314.0" y="110.0" text-anchor="middle" class="s">开口还是安静</text>
+  <rect x="445" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="520.0" y="91.0" text-anchor="middle" class="t">组装提示词</text><text x="520.0" y="110.0" text-anchor="middle" class="s">人设 + 上下文</text>
+  <rect x="651" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="726.0" y="91.0" text-anchor="middle" class="t">模型</text><text x="726.0" y="110.0" text-anchor="middle" class="s">OpenAI 兼容接口</text>
+  <rect x="857" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="932.0" y="91.0" text-anchor="middle" class="t">校验</text><text x="932.0" y="110.0" text-anchor="middle" class="s">过滤、字符策略</text>
+  <polyline points="185,94.0 236,94.0" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <text x="211.0" y="86.0" text-anchor="middle" class="a" fill="#C4683F">消息</text>
+  <polyline points="391,94.0 442,94.0" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <text x="417.0" y="86.0" text-anchor="middle" class="a" fill="#C4683F">开口</text>
+  <polyline points="597,94.0 648,94.0" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <text x="623.0" y="86.0" text-anchor="middle" class="a" fill="#C4683F">提示词</text>
+  <polyline points="803,94.0 854,94.0" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <text x="829.0" y="86.0" text-anchor="middle" class="a" fill="#C4683F">回复</text>
+  <polyline points="932,62 932,30 108,30 108,60" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <rect x="402.0" y="18" width="236" height="22" fill="#FBF8F2"/>
+  <text x="520.0" y="34" text-anchor="middle" class="a" fill="#C4683F">回复经 AstrBot 发回群里</text>
+  <polyline points="314,126 314,147" fill="none" stroke="#8E8378" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ag)"/>
+  <rect x="239.0" y="150" width="150" height="28" rx="14" fill="none" stroke="#8E8378" stroke-width="1.3" stroke-dasharray="4 4"/>
+  <text x="314" y="169" text-anchor="middle" class="s">PASS · 什么都不发</text>
+  <rect x="452.0" y="208" width="136" height="54" rx="12" fill="#FFFDF8" stroke="#E2D7C8" stroke-width="1.5"/><text x="520.0" y="232.0" text-anchor="middle" class="t">示例</text><text x="520.0" y="251.0" text-anchor="middle" class="s">内置 + 已晋升</text>
+  <rect x="658.0" y="208" width="136" height="54" rx="12" fill="#FFFDF8" stroke="#E2D7C8" stroke-width="1.5"/><text x="726.0" y="232.0" text-anchor="middle" class="t">记忆</text><text x="726.0" y="251.0" text-anchor="middle" class="s">按会话隔离</text>
+  <polyline points="490,206 490,128" fill="none" stroke="#8E8378" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ag)"/>
+  <text x="482" y="172" text-anchor="end" class="a" fill="#71675E">示例</text>
+  <polyline points="686,206 686,164 560,164 560,128" fill="none" stroke="#8E8378" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ag)"/>
+  <text x="623.0" y="157" text-anchor="middle" class="a" fill="#71675E">笔记</text>
+  <polyline points="766,126 766,204" fill="none" stroke="#8E8378" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ag)"/>
+  <text x="774" y="172" text-anchor="start" class="a" fill="#71675E">写入</text>
+  <rect x="33" y="330" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="108.0" y="357.0" text-anchor="middle" class="t">反应</text><text x="108.0" y="376.0" text-anchor="middle" class="s">引用、@、叫名字</text>
+  <rect x="239" y="330" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="314.0" y="357.0" text-anchor="middle" class="t">证据日志</text><text x="314.0" y="376.0" text-anchor="middle" class="s">只追加，不改写</text>
+  <rect x="445" y="330" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="520.0" y="357.0" text-anchor="middle" class="t">晋升</text><text x="520.0" y="376.0" text-anchor="middle" class="s">2 条证据，1 条强</text>
+  <rect x="857" y="330" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="932.0" y="357.0" text-anchor="middle" class="t">你</text><text x="932.0" y="376.0" text-anchor="middle" class="s">管理工具</text>
+  <polyline points="108,126 108,326" fill="none" stroke="#557A59" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#al)"/>
+  <text x="116" y="246" text-anchor="start" class="a" fill="#557A59">有人回应</text>
+  <polyline points="185,360.0 236,360.0" fill="none" stroke="#557A59" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#al)"/>
+  <text x="211.0" y="352.0" text-anchor="middle" class="a" fill="#557A59">判定</text>
+  <polyline points="391,360.0 442,360.0" fill="none" stroke="#557A59" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#al)"/>
+  <text x="417.0" y="352.0" text-anchor="middle" class="a" fill="#557A59">候选</text>
+  <polyline points="520,328 520,266" fill="none" stroke="#557A59" stroke-width="3" stroke-linejoin="round" marker-end="url(#al)"/>
+  <text x="530" y="290" text-anchor="start" class="a" fill="#557A59" font-weight="600">只有晋升的才进入</text>
+  <polyline points="855,360.0 598,360.0" fill="none" stroke="#557A59" stroke-width="1.6" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#al)"/>
+  <text x="726.0" y="352.0" text-anchor="middle" class="a" fill="#557A59">批准 · 驳回 · 撤销</text>
 </svg>
