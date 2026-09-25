@@ -131,8 +131,9 @@ question after a rejection, the excuse when the model is down. The agent
 queues those per conversation, and a connector that declared `outbox` pulls
 them. Pull rather than push means the agent never needs to reach the
 connector, so a connector behind NAT or a firewall works the same.
-Conversations stored under bare QQ ids (see Addressing) are the exception:
-theirs still go to NapCat's HTTP API (`NAPCAT_API`), as they always have.
+Conversations stored under bare QQ ids (see Addressing) use the outbox too
+while their connector is pulling, and NapCat's HTTP API (`NAPCAT_API`)
+otherwise, as they always have.
 
 Request:
 
@@ -227,7 +228,7 @@ agent's own openers, and not as the person's activity.
 
 | Missing | Effect |
 |---|---|
-| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids from a `GATEWAY_NATIVE_PLATFORMS` connector still get them through NapCat) |
+| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `NAPCAT_API` reaches it) |
 | `quote_text` | a quoted message is understood only if the agent saw it itself |
 | `reply_handle` | same as no `outbox` |
 | `is_at_me` wrong | the persona treats addressed messages as background chatter |

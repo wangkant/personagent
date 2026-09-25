@@ -462,14 +462,15 @@ class Transport:
     def _background_route(self, key: str):
         """How a message no request is waiting for reaches routing key `key`.
 
-        "onebot" for a QQ key, which goes to NapCat as it always has; the
-        stored handle when a live connector pulls the outbox for it; None
+        The stored handle when a live connector pulls the outbox for it; for
+        a QQ key without one, "onebot" (NapCat, as it always has been); None
         when nothing can deliver there unprompted."""
-        if channels.is_native(key):
+        route = self.outbox.route(key) if self.gateway_outbox else None
+        if route is None and channels.is_native(key):
+            # QQ through AstrBot may have no NapCat HTTP server at all, so
+            # its own connector is preferred while it is pulling.
             return "onebot"
-        if not self.gateway_outbox:
-            return None
-        return self.outbox.route(key)
+        return route
 
     async def _send_background(self, key: str, send, *,
                                reason: str) -> SendResult:

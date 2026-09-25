@@ -38,5 +38,35 @@
     "type": "bool",
     "description": "Stop the AstrBot pipeline after forwarding so the built-in LLM never double-replies in conversations owned by the agent.",
     "default": true
+  },
+  "forward_quoted_text": {
+    "type": "bool",
+    "description": "When someone quotes a message, send the agent the quoted text and who wrote it, where the platform provides them. Off sends only the quoted message's id.",
+    "default": true
+  },
+  "quote_max_chars": {
+    "type": "int",
+    "description": "Longest quoted text sent to the agent, in characters; longer quotes are cut.",
+    "default": 200
+  },
+  "max_inline_image_bytes": {
+    "type": "int",
+    "description": "Largest image, in bytes, sent to the agent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one reaches the agent as the note '(sent an image)'. Keep it under the agent's MAX_IMAGE_BYTES.",
+    "default": 4000000
+  },
+  "outbox_enabled": {
+    "type": "bool",
+    "description": "Pull the agent's outbox and deliver what it queues: scheduled openers, the follow-up question, the excuse when the model is down. Only conversations the allowlists above still allow, and only on platforms that can send unprompted. An agent without the outbox answers 404 and is asked again every ten minutes.",
+    "default": true
+  },
+  "outbox_wait_s": {
+    "type": "int",
+    "description": "How long each outbox pull may wait at the agent for something to deliver, in seconds (at most 30).",
+    "default": 25
+  },
+  "forwarder_id": {
+    "type": "string",
+    "description": "This AstrBot's name to the agent, which queues outbox messages by it. Empty generates one once and keeps it. Set it only to give two AstrBot hosts distinct names, never the same one.",
+    "default": ""
   }
 }

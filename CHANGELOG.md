@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the other platforms as soon as their connector pulls the outbox. The
   new `PROACTIVE_PLATFORMS` (for example `qq`) keeps the loop where you want
   it; blank means everywhere it can reach.
+- **The AstrBot plugin (0.5.0) is a full connector.** Its events carry a
+  `forwarder_id`, a `reply_handle` and `caps`, and it pulls the agent's outbox
+  and delivers what the persona says unprompted through AstrBot, on every
+  platform that can send first (not QQ official, WeChat official accounts or
+  WeCom smart bots). The allowlists are checked again at send time. It is on
+  by default (`outbox_enabled`); an agent without the outbox answers 404 and
+  nothing else changes.
 
 ### Deprecated
 
@@ -134,6 +141,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The AstrBot plugin reads each platform the way its adapter delivers it.**
+  QQ pokes, recalls and requests no longer reach the persona as empty turns.
+  More messages count as addressing the bot, on purpose: a Discord message
+  starting with `@bot` (which the adapter strips), a ping of the bot's role,
+  and replies to the bot on Telegram (photos and voice too), Discord, Lark,
+  Slack threads, KOOK and Satori. Quotes carry their text and author; sticker
+  and emoji names, voice transcripts and the platform's own send time come
+  through. Telegram images are sent inline, so the bot token in their URLs
+  never reaches the agent. Because the send time is now the platform's, a
+  backlog older than `GATEWAY_SOURCE_MAX_AGE_SECONDS` is refused as stale.
+- **The AstrBot plugin writes each platform's way.** Mentions no longer carry
+  a double space on QQ and Telegram, long replies are split under each
+  platform's limit (on QQ under `forward_threshold`, so none becomes a
+  merged-forward card), Telegram shows `*` and `_` as typed, text cannot ping
+  a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
+  other than JPEG no longer post an error, and QQ official replies are plain
+  text.
 - **An owner on any platform is the owner, everywhere.** An account in
   `GATEWAY_OWNER_IDS` (now `OWNER_IDS`) used to get only the owner's DM
   persona; in a group it was an ordinary member. It now gets everything
@@ -159,9 +183,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   once after upgrading.
 - **QQ through AstrBot sends the follow-up question and the excuse.**
   With `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` both were dropped once the
-  gateway request returned; they now go to `NAPCAT_API`, as the proactive
-  messages already did and as on the direct route, so they need NapCat's HTTP
-  server like those do.
+  gateway request returned. They now go back through the AstrBot plugin's
+  outbox while it is pulling, and so do proactive messages, so QQ through
+  AstrBot no longer needs NapCat's HTTP server for any of them; without a
+  pulling connector they go to `NAPCAT_API`, as on the direct route.
 - **A connector's own `"proactive": true` DM counts against the DM cooldown.**
   It used to stamp the reader's activity, as if they had written. It now
   stamps `PROACTIVE_DM_COOLDOWN`'s clock, which the agent's own loop reads,

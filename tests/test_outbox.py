@@ -613,9 +613,17 @@ async def test_the_route_table(tmp: Path) -> None:
     check("route: GATEWAY_OUTBOX=false closes it",
           agent._background_route("telegram:c1") is None)
     agent.gateway_outbox = True
+    agent.gateway_native_platforms = {"aiocqhttp"}
+    await agent.handle_gateway(group_event(
+        "setup-3", platform="aiocqhttp", gid="556", uid="43",
+        forwarder_id="fw1", reply_handle="qq:GroupMessage:556", caps=["outbox"]))
+    check("route: a QQ group behind a live outbox connector goes to it",
+          agent._background_route("556")["reply_handle"] == "qq:GroupMessage:556")
     agent.outbox.liveness_s = -1.0  # not 0: monotonic() can repeat on Windows
     check("route: a connector that stopped pulling closes it",
           agent._background_route("telegram:c1") is None)
+    check("route: ...and its QQ group falls back to NapCat",
+          agent._background_route("556") == "onebot")
 
 
 async def test_a_qq_send_from_a_finished_gateway_turn_reaches_napcat(
