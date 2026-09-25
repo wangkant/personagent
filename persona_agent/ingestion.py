@@ -797,6 +797,7 @@ class ContentIngestion:
                 if data.get("code") == 0:
                     d = data.get("data") or {}
                     cid = int(d.get("cid") or 0)
+                    # "owner" is Bilibili's field for the uploader.
                     up_mid = int((d.get("owner") or {}).get("mid") or 0)
                     info = {
                         "title": (d.get("title") or "")[:80],

@@ -505,7 +505,7 @@ _REPLY_MARKER_RE = re.compile(r"\[(?:STICKER:|AT:)[^\[\]]*\]")
 # Layer B/C: natural-rhythm pacing for spontaneous (non-@) reply paths.
 # Sleep window suppresses most spontaneous replies at night so the bot isn't
 # 24/7 online. Sub-trigger pass simulates "saw it, didn't feel like replying".
-# Both only apply to judge/followup; called/owner always go through.
+# Both only apply to judge/followup; called/admin always go through.
 SLEEP_HOUR_START = 2          # 02:00 (inclusive)
 
 SLEEP_HOUR_END = 7            # 07:00 (exclusive)
@@ -2314,7 +2314,7 @@ class TextProcessing:
         THE USER'S local time, not the server's, when the caller supplies one:
         `current_tz_offset_h` may be set per turn by an embedder that knows
         the user's timezone. A single deployment-wide PERSONA_TZ_OFFSET_HOURS is
-        correct for a QQ bot with one owner and wrong for a multi-user
+        correct for a QQ bot with one admin and wrong for a multi-user
         deployment — it tells every user what time it is where the server
         happens to be running.
 
@@ -2576,7 +2576,7 @@ class TextProcessing:
             # residents authored at lang=zh that fired constantly: an English
             # sentence, a name, a line of dialogue the model chose to answer in
             # the reader's language — each one silently became "No reply came
-            # back", which is the intermittent failure the owner was hitting.
+            # back", which is the intermittent failure the admin was hitting.
             # It also mistook a MODEL LIMITATION for a policy: a modern model
             # writes whatever language the conversation is in without being
             # told, so the build's language is not evidence about the reply's.
@@ -2601,7 +2601,7 @@ class TextProcessing:
         actually read (bare image/voice/video/file/forward/unresolved-quote),
         with no readable text and no usable [image: caption] / [sticker: meaning]
         / [reply X: text]. Used to tell the model not to fabricate — the @-forced
-        called/owner paths otherwise answer media they never saw."""
+        called/admin paths otherwise answer media they never saw."""
         if not text:
             return False
         had_blind = bool(re.search(r"\[(image|voice|video|file|face|reply)\]|\[forwarded-chat", text))

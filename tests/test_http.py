@@ -679,9 +679,9 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
     check("identity: ...and only when a forwarded platform has entries",
           not levels(ACCESS_GROUPS="123", QQ_BOT_ID="9"))
 
-    check("identity: a bare QQ owner is a QQ config that needs QQ_BOT_ID",
+    check("identity: a bare QQ admin is a QQ config that needs QQ_BOT_ID",
           ("WARN", "QQ_BOT_ID") in levels(ADMIN_IDS="42"))
-    check("identity: a Telegram-only owner is not",
+    check("identity: a Telegram-only admin is not",
           not levels(ADMIN_IDS="telegram:42"))
     check("identity: QQ's own adapter is the native platform to name",
           not levels(CONNECTOR_QQ_PLATFORMS="aiocqhttp"))
@@ -1174,7 +1174,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
     """With no secret set, a loopback peer alone is not enough: a browser
     tab (Origin, Sec-Fetch-Site), a rebound host name (Host) and a tunnel on
     the same machine (X-Forwarded-For) all arrive from 127.0.0.1 too, and
-    each would otherwise post events as anyone, the owner included."""
+    each would otherwise post events as anyone, the admin included."""
     saved = (main_module.QQ_ONEBOT_SECRET, main_module.CONNECTOR_TOKEN,
              main_module.agent, main_module.run_checks,
              dict(main_module._health_cache))

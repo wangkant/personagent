@@ -195,6 +195,10 @@ _MEMORY_MERGE_WINDOW_S = 6 * 3600.0
 # prompt line (see _at_example).
 _PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
+#: The admin's reply mode, spelled as the eval, evidence and ledger rows store
+#: it, so the rows already written keep matching.
+ADMIN_MODE = "owner"
+
 # Conversations whose refusal has been logged, kept bounded: forwarded ids are
 # chosen by the connector, so an unbounded set would grow with every room.
 _MAX_REFUSALS_LOGGED = 4096
@@ -371,7 +375,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # every group reply to the fallback; with one configured model it is
         # a single entry and behaves like the scalar clock it replaced.
         # _freq_fallback_until = frequency-driven self-throttle, applies only
-        # to self-initiated modes — called/owner are exempt. One per agent:
+        # to self-initiated modes — called/admin are exempt. One per agent:
         # it throttles the persona's own chatter, not a model.
         self._fallback_until: dict[str, float] = {}
         self._freq_fallback_until: float = 0.0
@@ -521,7 +525,7 @@ class Agent(ContentIngestion, Transport, Learning):
             max_conversations=_MAX_CONNECTOR_CONVS,
             state_file=self.memory_file.with_name("pending_reactions.json"),
         )
-        # Per-user teaching reputation (never the owner); consistently bad
+        # Per-user teaching reputation (never the admin); consistently bad
         # teachers are hard-blocked before any adjudicator call.
         self.teacher_stats = reactions.TeacherStats(
             resolve_runtime_state_file("teacher_stats.json"))
@@ -820,8 +824,8 @@ class Agent(ContentIngestion, Transport, Learning):
         if sink is not None:
             sink.owned = True
 
-    def _owners(self) -> frozenset[str]:
-        """Every owner account (ADMIN_IDS), canonical. Re-read on each call
+    def _admins(self) -> frozenset[str]:
+        """Every admin account (ADMIN_IDS), canonical. Re-read on each call
         because it is a live attribute the tests and admin paths edit; the
         set is tiny."""
         return access.parse_ids(
@@ -873,14 +877,14 @@ class Agent(ContentIngestion, Transport, Learning):
         via_connector = sink is not None
         prefiltered = getattr(sink, "prefiltered", True)
         if message_type == "private":
-            owners = self._owners()
+            admins = self._admins()
             refusal = access.dm_refusal(
-                user_id, owners, self._dm_allowlist(),
+                user_id, admins, self._dm_allowlist(),
                 via_connector=via_connector, prefiltered=prefiltered)
             if refusal:
                 self._log_refusal(channels.dm_routing_key(user_id), refusal)
                 return False
-            is_owner = access.is_owner(user_id, owners)
+            is_admin = access.is_admin(user_id, admins)
             self._claim_connector_turn()
             if mid is not None:
                 self._remember_msg_id(mid)
@@ -892,7 +896,7 @@ class Agent(ContentIngestion, Transport, Learning):
             # hand the cue to the model for one call. A group event carrying
             # it is claimed and dropped below.
             return await self._handle_private(user_id, payload,
-                                              is_owner=is_owner,
+                                              is_admin=is_admin,
                                               proactive=proactive)
 
         group_id = str(payload.get("group_id", "")).strip()
@@ -962,7 +966,7 @@ class Agent(ContentIngestion, Transport, Learning):
         addressed = is_at or is_called
         is_noise = len(text.strip()) < 4 and not addressed
 
-        is_owner_msg = access.is_owner(user_id, self._owners())
+        is_admin_msg = access.is_admin(user_id, self._admins())
 
         # Reaction learning: is this message a directed reaction to a recent
         # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
@@ -981,7 +985,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 at_bot=addressed, now=time.time())
             if _r_entry:
                 self._spawn(self._process_reaction(
-                    _r_entry, text, nickname, user_id, is_owner_msg,
+                    _r_entry, text, nickname, user_id, is_admin_msg,
                     conv_id=group_id, is_private=False))
 
         # Memory-command reply text (settled inside the lock, sent outside) — see below.
@@ -1087,17 +1091,17 @@ class Agent(ContentIngestion, Transport, Learning):
 
             caller_override = None
             if addressed:
-                # The owner @/naming the bot still gets the warmer owner
-                # persona; anyone else goes through called. But the owner is no
-                # longer "always replied to" — un-addressed owner chatter takes
+                # The admin @/naming the bot still gets the warmer admin
+                # persona; anyone else goes through called. But the admin is no
+                # longer "always replied to" — un-addressed admin chatter takes
                 # the same gates below as everyone else's.
-                mode = "owner" if is_owner_msg else "called"
+                mode = ADMIN_MODE if is_admin_msg else "called"
             elif sticky_active:
-                # If the sticky caller is the owner (e.g. "BOT" → image, where
+                # If the sticky caller is the admin (e.g. "BOT" → image, where
                 # the image won the seq race without carrying @/name), keep the
-                # owner persona rather than dropping to plain called and losing
+                # admin persona rather than dropping to plain called and losing
                 # the closer register.
-                mode = ("owner" if access.is_owner(sticky["user_id"], self._owners())
+                mode = (ADMIN_MODE if access.is_admin(sticky["user_id"], self._admins())
                         else "called")
                 user_id = sticky["user_id"]
                 nickname = sticky["nickname"]
@@ -1126,7 +1130,7 @@ class Agent(ContentIngestion, Transport, Learning):
             self._sticky_call.pop(group_id, None)
 
             # Layer B/C: natural-rhythm gates for spontaneous reply paths.
-            # called/owner = explicit ask, always reply; followup/judge subject to pacing.
+            # called/admin = explicit ask, always reply; followup/judge subject to pacing.
             # Exception: first appearance in this group bypasses pacing — bot
             # needs to surface at least once to be a real member.
             first_appearance = self.last_reply_at[group_id] == 0.0
@@ -1282,7 +1286,7 @@ class Agent(ContentIngestion, Transport, Learning):
         return send_result.success
 
     async def _handle_private(self, user_id: str, payload: dict,
-                              is_owner: bool = True,
+                              is_admin: bool = True,
                               proactive: bool = False) -> bool:
         """Run one private turn in send/commit order without blocking intake.
 
@@ -1313,8 +1317,10 @@ class Agent(ContentIngestion, Transport, Learning):
                         sender_uid=user_id, is_private=True, now=time.time())
                     if entry:
                         self._spawn(self._process_reaction(
-                            entry, text, "owner" if is_owner else "friend",
-                            user_id, is_owner,
+                            # The reactor's name as the judge reads it and the
+                            # audit row stores it.
+                            entry, text, "owner" if is_admin else "friend",
+                            user_id, is_admin,
                             conv_id=channels.dm_learning_key(user_id),
                             is_private=True))
 
@@ -1348,7 +1354,7 @@ class Agent(ContentIngestion, Transport, Learning):
                        if proactive else {})
                 try:
                     reply, auto_mem = await self._chat_private(
-                        history, is_owner=is_owner, pkey=pkey, **cue)
+                        history, is_admin=is_admin, pkey=pkey, **cue)
                 except Exception as e:
                     logger.warning("[Agent] private-chat LLM failed: %s", e)
                     return False
@@ -1401,7 +1407,7 @@ class Agent(ContentIngestion, Transport, Learning):
                         self.pending_reactions.record(
                             channels.dm_learning_key(user_id), reply=reply,
                             ctx_lines=[f"user: {_truncate_framed(text, 100)}"],
-                            mode="owner" if is_owner else "called",
+                            mode=ADMIN_MODE if is_admin else "called",
                             target_uid=user_id, mids=send_result.message_ids,
                             ts=time.time())
                 logger.info("[Agent] private (%s): %s", user_id, reply[:80])
@@ -1442,12 +1448,12 @@ class Agent(ContentIngestion, Transport, Learning):
         `pkey` (`private:<uid>`); derived, so no call site can desync them."""
         return channels.learning_key(pkey)
 
-    async def _chat_private(self, history: list[dict], is_owner: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
+    async def _chat_private(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
         LLM_DM_MODEL as an optional alternate model name.
 
-        is_owner=True  → owner-style override (very close, all defenses off)
-        is_owner=False → ordinary-friend override (looser than group chat,
+        is_admin=True  → admin-style override (very close, all defenses off)
+        is_admin=False → ordinary-friend override (looser than group chat,
                          but doesn't pretend close acquaintance; some
                          distance preserved since the relationship is unclear).
         pkey = "private:<uid>" memory namespace — without it, private-chat
@@ -1464,11 +1470,11 @@ class Agent(ContentIngestion, Transport, Learning):
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
         )
-        # Gate on `is_owner` alone: ADMIN_NAME is optional and ships empty.
-        if is_owner:
-            owner_ref = self.admin_name or "the owner"
+        # Gate on `is_admin` alone: ADMIN_NAME is optional and ships empty.
+        if is_admin:
+            admin_ref = self.admin_name or "the owner"
             persona_extra = (
-                f"You're now in a one-on-one private chat with {owner_ref}"
+                f"You're now in a one-on-one private chat with {admin_ref}"
                 + (f" ({self.admin_relationship})" if self.admin_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
@@ -1476,7 +1482,7 @@ class Agent(ContentIngestion, Transport, Learning):
             # has to be stated here.
             private_overrides = (
                 f"<private_overrides>\n"
-                f"- {owner_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
+                f"- {admin_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
                 f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
                 # Comes after <rules>, so it has to say which of its options it
                 # takes away, or the model reads both and picks per turn.
@@ -1537,7 +1543,7 @@ class Agent(ContentIngestion, Transport, Learning):
         semi_static_block = self._sticker_guide_for_prompt(private=True)
         proactive_note = ""
         if proactive:
-            who = self.admin_name if (is_owner and self.admin_name) else "them"
+            who = self.admin_name if (is_admin and self.admin_name) else "them"
             proactive_note = (
                 "<proactive>\n"
                 f"Nobody messaged you — this is an INTERNAL cue to OPTIONALLY open the conversation, not a message from {who}. "
@@ -2459,10 +2465,10 @@ class Agent(ContentIngestion, Transport, Learning):
         caller_override: Optional[tuple] = None,
     ) -> tuple[str, str, str]:
         all_history = list(self.buffers[group_id])
-        # called/owner/followup use the last 30 turns; judge/proactive get a
+        # called/admin/followup use the last 30 turns; judge/proactive get a
         # wider window but still capped (the PASS/REPLY judgment rarely needs
         # the full buffer, and the gate call pays input tokens for every line).
-        history = all_history[-30:] if mode in ("followup", "called", "owner") else all_history[-60:]
+        history = all_history[-30:] if mode in ("followup", "called", ADMIN_MODE) else all_history[-60:]
         # A name is as sender-authored as a message; neither may forge a frame.
         def _fmt_line(m: dict) -> str:
             name = _clean_prompt_source(m.get("name", ""))
@@ -2477,7 +2483,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # If the triggering (latest) message is only placeholders the bot can't
         # read (bare image/voice/video/file/forward/unresolved-quote), tell it not
-        # to fabricate. called/owner skip the PASS gate and must reply, so they're
+        # to fabricate. called/admin skip the PASS gate and must reply, so they're
         # the ones that otherwise answer media they never saw.
         blind_note = ""
         if history and TextProcessing._is_blind_content(
@@ -2576,19 +2582,19 @@ class Agent(ContentIngestion, Transport, Learning):
                 f"You were called out, so reply unless it was a purely incidental mention with no actual content directed at you.\n"
                 f"Address {_fence_user_data(latest_nick) if latest_nick else 'the person who called you'} directly, sound like a real person."
             )
-        elif mode == "owner":
-            # ADMIN_NAME is optional and ships empty, while owner mode needs
-            # only an owner id: unguarded, both lines lost their subject
-            # ("latest line is from , the owner").
-            owner_ref = self.admin_name or "the owner"
-            owner_from = f"{owner_ref}, the owner" if self.admin_name else owner_ref
-            owner_is = f"{owner_ref} is" if self.admin_name else "This is"
+        elif mode == ADMIN_MODE:
+            # ADMIN_NAME is optional and ships empty, while admin mode needs
+            # only an admin id: unguarded, both lines lost their subject
+            # ("latest line is from , the admin").
+            admin_ref = self.admin_name or "the owner"
+            admin_from = f"{admin_ref}, the owner" if self.admin_name else admin_ref
+            admin_is = f"{admin_ref} is" if self.admin_name else "This is"
             user_prompt = (
                 f"{time_line}"
                 f"{focus_block}"
-                f"Recent group chat (latest line is from {owner_from}):\n"
+                f"Recent group chat (latest line is from {admin_from}):\n"
                 f"---\n{history_text}\n---\n"
-                f"{owner_is} the owner — **lean towards replying**: casual chat / questions / venting / sharing — engage with all of them.\n"
+                f"{admin_is} the owner — **lean towards replying**: casual chat / questions / venting / sharing — engage with all of them.\n"
                 f"If owner is in a 1-on-1 thread with someone else about work/tech that doesn't involve you → PASS.\n"
                 f"Apply the protocol's PASS signals as usual (even from owner, closing signals / fragment noise still PASS).\n"
             )
@@ -2649,16 +2655,16 @@ class Agent(ContentIngestion, Transport, Learning):
                 f"to say (no quote prefix).\n"
                 f"{at_hint}"
             )
-        if active_text and mode not in ("called", "owner", "followup"):
+        if active_text and mode not in ("called", ADMIN_MODE, "followup"):
             user_prompt += f"\n\nRecently active members: {_fence_user_data(active_text)}"
 
         user_prompt += blind_note
 
-        owner_block = ""
-        if self.admin_name and self._owners():
+        admin_block = ""
+        if self.admin_name and self._admins():
             rel = self.admin_relationship or ""
             rel_clause = f"({rel}, " if rel else "("
-            owner_block = (
+            admin_block = (
                 f"\n\n[Special person]\n"
                 f"{self.admin_name} {rel_clause}one of your closer people).\n"
                 f"**Treat them as a close acquaintance, don't keep calling them by name** — default to 'you' or drop the subject, never repeat the name every line.\n"
@@ -2674,7 +2680,7 @@ class Agent(ContentIngestion, Transport, Learning):
             f"{TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
             f"{HONEST_DISCLOSURE}"
-            f"{owner_block}"
+            f"{admin_block}"
             f"\n\n{REASONING_PROTOCOL}"
         )
         semi_static_block = self._sticker_guide_for_prompt()
@@ -2697,7 +2703,7 @@ class Agent(ContentIngestion, Transport, Learning):
         #      more than one cheap call.
         #   2. REPLY (unified, main model): the line that actually gets sent is
         #      always written by the main model (_pick_group_model — main unless a
-        #      rate spike forces a downgrade). called / owner are addressed
+        #      rate spike forces a downgrade). called / admin are addressed
         #      directly and skip straight to stage 2.
         # Net: cheap, high-frequency gating; every reply the group sees is pro.
         gated = mode in ("judge", "followup", "proactive")
@@ -2721,13 +2727,13 @@ class Agent(ContentIngestion, Transport, Learning):
                 # Stayed quiet — only the cheap gate call was spent.
                 return "", gate_intent or "chat", ""
 
-        # Stage 2 (and the only stage for called / owner): the main model writes
+        # Stage 2 (and the only stage for called / admin): the main model writes
         # the reply that's actually sent. Count it toward the rate window so a
         # genuine burst can still trigger a temporary downgrade (but called/
-        # owner are exempt from the frequency downgrade — see _pick_group_model).
+        # admin are exempt from the frequency downgrade — see _pick_group_model).
         model_to_use = self._pick_group_model(mode)
         self.model_calls.append(time.time())
-        enable_search = mode in ("called", "owner", "followup")
+        enable_search = mode in ("called", ADMIN_MODE, "followup")
         raw = await self._call_llm(
             system=system_content,
             messages=[{"role": "user", "content": user_prompt}],
@@ -2931,15 +2937,15 @@ class Agent(ContentIngestion, Transport, Learning):
 
     async def _maybe_proactive_dms(self) -> bool:
         """At most one proactive DM per tick, to someone who has DMed the bot
-        before this run: an owner or an allowed user on QQ, or anyone the
+        before this run: an admin or an allowed user on QQ, or anyone the
         agent admitted through a connector that pulls the outbox. Returns
         True if sent."""
         now = time.time()
-        owners = self._owners()
+        admins = self._admins()
         allowed = self._dm_allowlist()
         # On QQ the lists name who may be DMed; elsewhere the connector
         # filtered who reached the DM, and admission is checked again below.
-        targets = {uid for uid in allowed | owners if channels.is_native(uid)}
+        targets = {uid for uid in allowed | admins if channels.is_native(uid)}
         targets.update(uid for uid in list(self.last_dm_activity_at)
                        if not channels.is_native(uid))
         targets = [uid for uid in targets if self._proactive_platform_ok(uid)]
@@ -2950,7 +2956,7 @@ class Agent(ContentIngestion, Transport, Learning):
             if route is None:
                 continue
             if route != "onebot" and access.dm_refusal(
-                    uid, owners, allowed, via_connector=True,
+                    uid, admins, allowed, via_connector=True,
                     prefiltered=route.get("prefiltered", True)):
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
@@ -2964,12 +2970,12 @@ class Agent(ContentIngestion, Transport, Learning):
                 continue
             if random.random() > self.proactive_dm_prob:
                 continue
-            is_owner = access.is_owner(uid, owners)
+            is_admin = access.is_admin(uid, admins)
             try:
                 async with self.locks[pkey]:
                     history = list(self.private_history.get(uid, []))[-10:]
                     reply, mem = await self._chat_private(
-                        history, is_owner=is_owner, proactive=True, pkey=pkey)
+                        history, is_admin=is_admin, proactive=True, pkey=pkey)
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
@@ -3052,11 +3058,11 @@ class Agent(ContentIngestion, Transport, Learning):
     def _pick_group_model(self, mode: str = "") -> str:
         """Pick primary or fallback model based on recent call frequency.
 
-        called/owner are explicit "I'm asking you" — precisely when the bot is
+        called/admin are explicit "I'm asking you" — precisely when the bot is
         @-ed the most it should stay on the primary model, otherwise you get
         the "the more you call it, the dumber it gets" inversion. So the
         frequency-driven downgrade only applies to self-initiated modes
-        (followup/judge/proactive); called/owner downgrade only on a **real**
+        (followup/judge/proactive); called/admin downgrade only on a **real**
         provider throttle (error-driven)."""
         now = time.time()
         while self.model_calls and self.model_calls[0] < now - self.llm_rate_window_s:
@@ -3070,8 +3076,8 @@ class Agent(ContentIngestion, Transport, Learning):
         if self._fallback_until.get(self.model, 0.0) > now:
             return self.llm_fallback_model
 
-        # called/owner are exempt from the frequency downgrade.
-        if mode in ("called", "owner"):
+        # called/admin are exempt from the frequency downgrade.
+        if mode in ("called", ADMIN_MODE):
             return self.model
 
         # Self-initiated modes: still inside the frequency-downgrade cooldown
@@ -3693,12 +3699,12 @@ class Agent(ContentIngestion, Transport, Learning):
                 "(Once the library fills up you'll start riffing one onto most replies — but not yet.)\n"
                 "</sticker_guide>"
             )
-        owner_pattern = self._owner_sticker_pattern_block()
+        admin_pattern = self._admin_sticker_pattern_block()
         return (
             "\n\n<sticker_guide>\n"
             f"**Your sticker library** has {stats['tagged']} tagged entries. Write `[STICKER:<tag>]` in your reply and the agent will pick a matching one from the library.\n"
             "\n"
-            f"{owner_pattern}"
+            f"{admin_pattern}"
             "**Frequency target**: roughly **1 sticker every 3-4 replies** — natural human pace; going without makes you feel cold.\n"
             "At least once per burst. If you've sent 4+ pure-text replies in a row, the next one **strongly prefers** a sticker.\n"
             "\n"
@@ -3729,17 +3735,18 @@ class Agent(ContentIngestion, Transport, Learning):
             "</sticker_guide>"
         )
 
-    def _owner_sticker_pattern_block(self) -> str:
-        """If owner_profile.json exists, embed measured frequency as the target.
+    def _admin_sticker_pattern_block(self) -> str:
+        """If owner_profile.json (a stored name) exists, embed measured
+        frequency as the target.
         Otherwise return a placeholder telling model to use moderate frequency."""
         # ADMIN_NAME is optional and ships empty, and this block reaches EVERY
         # group and private prompt: unguarded concatenation put "haven't
         # analyzed 's chat style yet" in front of the model on every turn.
-        owner_ref = self.admin_name or "the owner"
-        profile_file = resolve_runtime_state_file("owner_profile.json")
+        admin_ref = self.admin_name or "the owner"
+        profile_file = resolve_runtime_state_file("owner_profile.json")  # stored name
         if not profile_file.exists():
             return (
-                "**Frequency reference**: haven't analyzed " + owner_ref +
+                "**Frequency reference**: haven't analyzed " + admin_ref +
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
@@ -3761,7 +3768,7 @@ class Agent(ContentIngestion, Transport, Learning):
         ratio = with_sticker / total
         every_n = max(2, round(total / max(with_sticker, 1)))
         return (
-            f"**Frequency reference (learned from {owner_ref}'s actual style)**:\n"
+            f"**Frequency reference (learned from {admin_ref}'s actual style)**:\n"
             f"- On average 1 sticker every {every_n} messages ({int(ratio*100)}%)\n"
             f"- Of those, {int(sticker_only/max(with_sticker,1)*100)}% are sticker-only (no text)\n"
             f"- Match this cadence — neither more frequent nor zero\n"
@@ -3778,7 +3785,7 @@ class Agent(ContentIngestion, Transport, Learning):
             for m in self.buffers.get(group_id, [])
             if m.get("user_id")
         }
-        present_uids |= self._owners()
+        present_uids |= self._admins()
 
         now = time.time()
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
@@ -3929,7 +3936,7 @@ class Agent(ContentIngestion, Transport, Learning):
         user_name: str = "",
     ) -> Optional[str]:
         remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
-        is_owner = access.is_owner(user_id, self._owners())
+        is_admin = access.is_admin(user_id, self._admins())
         if learned_pat.search(text):
             return self._learned_summary(group_id)
         m = remember_pat.search(text)
@@ -3945,7 +3952,7 @@ class Agent(ContentIngestion, Transport, Learning):
             if not content:
                 return "I can remember facts, not instructions"
             item: dict = {"text": content, "time": time.time()}
-            if user_id and not is_owner:
+            if user_id and not is_admin:
                 item["user_id"] = user_id
                 if user_name:
                     item["user_name"] = user_name
@@ -3955,7 +3962,7 @@ class Agent(ContentIngestion, Transport, Learning):
         m = forget_pat.search(text)
         if m:
             query = m.group(1).strip()
-            # A too-short query over-deletes, and the owner's reaches every
+            # A too-short query over-deletes, and the admin's reaches every
             # member's rows. An English query must be 3+ characters and match
             # whole words ("drop it" hit "kitty", "with" and "writes"; "tea"
             # hit "steak"); CJK has no spaces to find words by, so it keeps a
@@ -3969,14 +3976,14 @@ class Agent(ContentIngestion, Transport, Learning):
             before = len(items)
             # One-directional match (query in text): a short memory ("cat")
             # must not collide with a long forget sentence. Authority fails
-            # closed: only the owner (which requires a user_id) may delete
+            # closed: only the admin (which requires a user_id) may delete
             # others' entries; an anonymous caller owns only unattributed ones.
             caller = str(user_id or "")
             kept = [
                 it for it in items
                 if not (word.search(it["text"]) if by_word else query in it["text"])
                 or (
-                    not is_owner
+                    not is_admin
                     and str(it.get("user_id") or "") != caller
                 )
             ]
@@ -3992,7 +3999,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         if recall_pat.search(text):
             items = self.memories.get(group_id, [])
-            if user_id and not is_owner:
+            if user_id and not is_admin:
                 items = [
                     it for it in items
                     if not it.get("user_id") or it.get("user_id") == user_id
@@ -4108,7 +4115,7 @@ class Agent(ContentIngestion, Transport, Learning):
         """Who `text` is about, as (user_id, user_name), or ("", "").
 
         Only names this conversation has actually seen count, so the map is
-        built from the live buffer plus the owner rather than from anything
+        built from the live buffer plus the admin rather than from anything
         the model wrote. Two characters minimum: a one-character name matches
         inside ordinary words."""
         name_to_uid: dict[str, str] = {}
@@ -4117,12 +4124,12 @@ class Agent(ContentIngestion, Transport, Learning):
             uid = m.get("user_id", "")
             if nm and len(nm) >= 2 and uid:
                 name_to_uid.setdefault(nm, uid)
-        # The owner's account on this platform, so a Telegram room does not
+        # The admin's account on this platform, so a Telegram room does not
         # attribute them to their QQ number when it knows their Telegram one.
-        owner_uid = access.owner_on(channels.platform_of(group_id),
-                                    self._owners())
-        if owner_uid and self.admin_name and len(self.admin_name) >= 2:
-            name_to_uid.setdefault(self.admin_name, owner_uid)
+        admin_uid = access.admin_on(channels.platform_of(group_id),
+                                    self._admins())
+        if admin_uid and self.admin_name and len(self.admin_name) >= 2:
+            name_to_uid.setdefault(self.admin_name, admin_uid)
         for nm, uid in name_to_uid.items():
             if nm in text:
                 return uid, nm

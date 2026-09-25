@@ -1,9 +1,10 @@
 """Crash-conscious primitives for small local runtime stores.
 
 The agent intentionally uses ordinary files instead of a database.  These
-helpers centralize the guarantees those files need: one runtime owner, locked
-append-only writes, durable same-directory replacement, private permissions,
-and strict JSONL replay that reports invalid rows without deleting history.
+helpers centralize the guarantees those files need: one process per runtime,
+locked append-only writes, durable same-directory replacement, private
+permissions, and strict JSONL replay that reports invalid rows without
+deleting history.
 """
 from __future__ import annotations
 
@@ -159,7 +160,7 @@ class FileLock:
 
 
 class RuntimeInstanceLock(FileLock):
-    """Non-blocking single-owner lock for one DEPLOYMENT ROOT.
+    """Non-blocking single-holder lock for one DEPLOYMENT ROOT.
 
     The root is AGENT_HOME (`paths.ROOT`), which is what the only caller
     passes — NOT `paths.runtime_dir()`, despite the name this parameter used

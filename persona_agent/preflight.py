@@ -372,7 +372,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
     identity = access.identity_from_env(configured)
     findings.extend(_identity_findings(identity))
-    qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
+    qq_ids = {i for i in identity.admins | identity.groups | identity.dm_users
               if i.isdigit()}
 
     qq_bot_id = str(configured.get("QQ_BOT_ID") or "").strip()

@@ -41,19 +41,19 @@ def test_ids_are_canonicalised_to_the_keys_events_carry() -> None:
           access.parse_ids(("1,2",)) == {"1,2"})
 
 
-def test_owners_are_found_on_their_platform() -> None:
-    owners = access.parse_ids("10000,telegram:1,discord:2")
-    check("is_owner by exact key", access.is_owner("telegram:1", owners))
-    check("an empty id is nobody's owner", not access.is_owner("", {""}))
-    check("the owner's account on the conversation's platform",
-          access.owner_on("telegram", owners) == "telegram:1")
+def test_admins_are_found_on_their_platform() -> None:
+    admins = access.parse_ids("10000,telegram:1,discord:2")
+    check("is_admin by exact key", access.is_admin("telegram:1", admins))
+    check("an empty id is nobody's admin", not access.is_admin("", {""}))
+    check("the admin's account on the conversation's platform",
+          access.admin_on("telegram", admins) == "telegram:1")
     check("else their QQ one, which every room used before",
-          access.owner_on("slack", owners) == "10000")
+          access.admin_on("slack", admins) == "10000")
     check("else no one",
-          access.owner_on("slack", {"telegram:1"}) == "")
+          access.admin_on("slack", {"telegram:1"}) == "")
     check("entries_on partitions by platform",
-          access.entries_on("qq", owners) == {"10000"}
-          and access.entries_on("discord", owners) == {"discord:2"})
+          access.entries_on("qq", admins) == {"10000"}
+          and access.entries_on("discord", admins) == {"discord:2"})
 
 
 def test_group_admission_is_partitioned_per_platform() -> None:
@@ -94,15 +94,15 @@ def test_group_admission_is_partitioned_per_platform() -> None:
 
 
 def test_dm_admission_is_partitioned_per_platform() -> None:
-    owners = access.parse_ids("10000,telegram:1")
+    admins = access.parse_ids("10000,telegram:1")
 
     def refusal(uid, allowed, *, connector=True, pre=True):
-        return access.dm_refusal(uid, owners, access.parse_ids(allowed),
+        return access.dm_refusal(uid, admins, access.parse_ids(allowed),
                                  via_connector=connector, prefiltered=pre)
 
-    check("QQ: the owner", refusal("10000", "", connector=False) == "")
+    check("QQ: the admin", refusal("10000", "", connector=False) == "")
     check("QQ: a listed user", refusal("888", "888", connector=False) == "")
-    check("QQ: an empty list still means owner only",
+    check("QQ: an empty list still means admin only",
           "ACCESS_DM_USERS" in refusal("555", "", connector=False))
     check("QQ: same through a native connector", refusal("555", "") != "")
 
@@ -111,14 +111,14 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
     check("Telegram, listed", refusal("telegram:42", "telegram:42") == "")
     check("Telegram, entries but not this one: refused",
           "telegram" in refusal("telegram:43", "telegram:42"))
-    check("Telegram owner: admitted whatever the list says",
+    check("Telegram admin: admitted whatever the list says",
           refusal("telegram:1", "telegram:42", pre=False) == "")
-    check("an owner on Telegram does not by itself opt Telegram in",
+    check("an admin on Telegram does not by itself opt Telegram in",
           refusal("telegram:43", "888") == "")
     check("prefiltered=false with no entries: refused",
           "prefiltered=false" in refusal("telegram:43", "", pre=False))
 
-    check("the QQ webhook refuses a namespaced owner: it is forged",
+    check("the QQ webhook refuses a namespaced admin: it is forged",
           refusal("telegram:1", "", connector=False) == access.QQ_DOOR_REFUSAL)
 
 
@@ -129,14 +129,14 @@ def test_the_identity_reader_reads_one_list_per_setting() -> None:
         "ACCESS_GROUPS": "telegram:-100,1", "ACCESS_DM_USERS": "slack:U1,8",
     }
     ident = access.identity_from_env(env)
-    check("owners: canonical",
-          ident.owners == {"telegram:1", "5", "7"}, repr(ident.owners))
+    check("admins: canonical",
+          ident.admins == {"telegram:1", "5", "7"}, repr(ident.admins))
     check("groups", ident.groups == {"telegram:-100", "1"}, repr(ident.groups))
     check("DM users", ident.dm_users == {"slack:U1", "8"}, repr(ident.dm_users))
     check("what was written is kept per name, for preflight",
           ident.written["ACCESS_GROUPS"] == ("telegram:-100", "1"))
     check("nothing set is nobody",
-          not access.identity_from_env({}).owners
+          not access.identity_from_env({}).admins
           and not access.identity_from_env({}).groups)
     old = access.identity_from_env({
         "OWNER_QQ": "42", "QQ_GROUPS": "g1", "PRIVATE_ALLOWED_QQS": "p1",

@@ -139,8 +139,8 @@ class AgentSettings:
     access_groups: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "ACCESS_GROUPS"])
-    #: Who else may DM the bot (``ACCESS_DM_USERS``). Owners always may;
-    #: these take the "ordinary friend" branch rather than the owner's.
+    #: Who else may DM the bot (``ACCESS_DM_USERS``). Admins always may;
+    #: these take the "ordinary friend" branch rather than the admin's.
     access_dm_users: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "ACCESS_DM_USERS"])
@@ -175,7 +175,7 @@ class AgentSettings:
     #: one, kept per model (a failed model is skipped in every mode, for
     #: ``llm_fallback_duration_s``, or ``llm_rate_limit_cooldown_s`` after a
     #: 429) and the frequency-driven self-throttle (self-initiated modes only;
-    #: called/owner are exempt).
+    #: called/admin are exempt).
     llm_rate_window_s: int = 60
     llm_rate_threshold: int = 5
     llm_fallback_duration_s: int = 300
@@ -193,7 +193,7 @@ class AgentSettings:
     #: gated: only chats it has already seen activity in, only outside sleep
     #: hours, only after a quiet stretch, with per-target cooldowns and a low
     #: per-tick probability, and the model is told to PASS unless it genuinely
-    #: has something to say. DMs go to the owner + the private whitelist only.
+    #: has something to say. DMs go to the admin + the private whitelist only.
     proactive_enabled: bool = field(
         default_factory=lambda: env_bool("PROACTIVE_ENABLED", False))
     proactive_interval_s: int = field(  # tick: 25 min
@@ -326,14 +326,14 @@ class AgentSettings:
                 self.proactive_platforms))))
 
     @property
-    def owners(self) -> frozenset[str]:
+    def admins(self) -> frozenset[str]:
         """Every admin account, canonical."""
         return access.parse_ids(
             self.admin_ids, native_platforms=self.connector_qq_platforms)
 
     @property
     def dm_users(self) -> frozenset[str]:
-        """Everyone besides the owners who may DM the bot."""
+        """Everyone besides the admins who may DM the bot."""
         return access.parse_ids(
             self.access_dm_users,
             native_platforms=self.connector_qq_platforms)

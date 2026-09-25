@@ -70,6 +70,8 @@ bot 回复: {reply}
 {{"failure_mode":"<2-6 字标签，如：客服腔/分析腔/喊名字/列点/句号多/称呼过频/张冠李戴/抢答/解释腔>","bad_diagnosis":"<一句话讲具体哪儿不像真人>","tag_to_patch":"<style 或 reasoning 或 intent_rules 三选一>","constraint_to_add":"<一行负向约束，写法仿『错『...』 对『...』』给具体反例>","pair_draft":{{"scenario":"<场景短标签>","context":["<上下文 1-2 行>"],"mode":"<owner|called|followup|judge 之一>","reply":"<原 BAD 回复，照抄>","better":"<改写成像真人的版本>"}}}}""",
 }
 
+# The modes as rows store them and the prompt above names them; "owner" is the
+# admin's.
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
 # Stamped onto evidence produced by REVIEWER_PROMPTS; bump on meaning changes

@@ -117,7 +117,7 @@ def classify_strength(event: dict) -> str:
       right looks like.
     - ``NEGATIVE_ONLY`` — a rejection with nothing concrete in it, or a
       correction from a bystander. Real evidence that something was off, but
-      not a mandate to rewrite: **owner status does not make someone the
+      not a mandate to rewrite: **admin status does not make someone the
       affected recipient**, so a third party's correction — however trusted —
       lands here rather than in STRONG.
     - ``WEAK`` — laughter, agreement, banter, the agent's own score. Never

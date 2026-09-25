@@ -43,8 +43,9 @@ PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
 # would forward every message a second time.
 RETIRED_PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
 
-# Owner-only, matching `persona_agent.storage.PRIVATE_FILE_MODE`, which this
-# script cannot import: quickstart runs before the dependencies it installs.
+# Readable by its user only, matching `persona_agent.storage.PRIVATE_FILE_MODE`,
+# which this script cannot import: quickstart runs before the dependencies it
+# installs.
 SECRET_FILE_MODE = 0o600
 
 
@@ -165,7 +166,7 @@ def write_env(env_path: Path, values: dict) -> None:
 
 
 def secure_env_file(env_path: Path) -> None:
-    """Narrow `.env` to owner-only; it holds live API keys.
+    """Narrow `.env` to its user only (0600); it holds live API keys.
 
     `shutil.copy` from `.env.example` brings that repo file's 0644 with it,
     and the non-interactive bootstrap never calls `write_env` at all — the

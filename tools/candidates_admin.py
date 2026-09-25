@@ -87,13 +87,13 @@ def _decide(ledger, log, cand, policy) -> promotion.Decision:
     alone, so `counter_evidence`'s rewrite branch was unreachable from here:
     `list` printed `why not:` and `show` printed `would promote` for a pair
     whose rewrite the user had rejected, next to an unconditional `promote`.
-    The owners come from the agent's own reader, so every account in ADMIN_IDS
+    The admins come from the agent's own reader, so every account in ADMIN_IDS
     is exempt here as it is there."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
         peers=ledger.all(), now=time.time(), policy=policy,
-        owner_ids=access.identity_from_env().owners)
+        admin_ids=access.identity_from_env().admins)
 
 
 def _short(text, width: int = 60) -> str:

@@ -1,7 +1,7 @@
 """tools/bootstrap_from_history.py — one-shot bootstrap from NapCat group history.
 
 Does two things:
-  1) owner_profile.json: owner's sticker-send rate, text-length distribution, top stickers
+  1) owner_profile.json (a stored name): the admin's sticker-send rate, text-length distribution, top stickers
   2) Downloads every sub_type=1 sticker seen in history to stickers/auto/<md5>.<ext>,
      capturing surrounding messages as seen_contexts (StickerLibrary tags them
      asynchronously once it has MIN_CONTEXTS_TO_TAG samples).
@@ -43,14 +43,15 @@ QQ_ONEBOT_URL = os.getenv("QQ_ONEBOT_URL", "http://127.0.0.1:3000").rstrip("/")
 QQ_BOT_ID = os.getenv("QQ_BOT_ID", "")
 # NapCat history is QQ's, so only the QQ entries of the shared settings apply.
 _IDENTITY = access.identity_from_env()
-OWNER_QQS = frozenset(o for o in _IDENTITY.owners if channels.is_native(o))
-QQ_GROUPS = sorted(g for g in _IDENTITY.groups if channels.is_native(g))
+ADMIN_QQ_IDS = frozenset(o for o in _IDENTITY.admins if channels.is_native(o))
+QQ_GROUP_IDS = sorted(g for g in _IDENTITY.groups if channels.is_native(g))
 
 # Sticker binaries remain under stickers/auto so existing libraries and file
 # allowlists keep working. Their PII-bearing text metadata lives in runtime/.
 STICKERS_DIR = ROOT / "stickers" / "auto"
 STICKERS_JSON = resolve_runtime_state_file("stickers.json")
-OWNER_PROFILE = resolve_runtime_state_file("owner_profile.json")
+# A stored name: the agent reads the profile back under it.
+ADMIN_PROFILE = resolve_runtime_state_file("owner_profile.json")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
@@ -154,20 +155,20 @@ def classify_message(msg: dict) -> dict:
         "msg_id": msg.get("message_id", 0),
     }
 
-# ============ Owner profile ============
-def compute_owner_profile(classified: list[dict]) -> dict:
-    owner_msgs = [c for c in classified if c["user_id"] in OWNER_QQS]
-    total = len(owner_msgs)
+# ============ Admin profile ============
+def compute_admin_profile(classified: list[dict]) -> dict:
+    admin_msgs = [c for c in classified if c["user_id"] in ADMIN_QQ_IDS]
+    total = len(admin_msgs)
     if total == 0:
         return {"total_msgs": 0}
 
-    with_image = sum(1 for c in owner_msgs if c["has_image"])
-    sticker_only = sum(1 for c in owner_msgs if c["sticker_only"])
-    text_only = [c["text_len"] for c in owner_msgs if not c["has_image"]]
-    text_w_sticker = [c["text_len"] for c in owner_msgs if c["has_image"] and c["text_len"] > 0]
+    with_image = sum(1 for c in admin_msgs if c["has_image"])
+    sticker_only = sum(1 for c in admin_msgs if c["sticker_only"])
+    text_only = [c["text_len"] for c in admin_msgs if not c["has_image"]]
+    text_w_sticker = [c["text_len"] for c in admin_msgs if c["has_image"] and c["text_len"] > 0]
 
     sticker_md5s: Counter = Counter()
-    for c in owner_msgs:
+    for c in admin_msgs:
         for s in c["image_segs"]:
             m = re.match(r"^([a-fA-F0-9]{32})\.", s.get("file") or "")
             if m:
@@ -337,15 +338,15 @@ async def main():
                    help="only process this group; defaults to the QQ "
                         "entries of ACCESS_GROUPS")
     p.add_argument("--no-stickers", action="store_true",
-                   help="compute owner profile only, skip sticker download")
+                   help="compute admin profile only, skip sticker download")
     p.add_argument("--no-profile", action="store_true",
                    help="download stickers only, skip profile")
     args = p.parse_args()
 
-    if not OWNER_QQS:
+    if not ADMIN_QQ_IDS:
         logger.error("no QQ admin: set ADMIN_IDS=qq:<number>")
         return 1
-    groups = [args.group] if args.group else QQ_GROUPS
+    groups = [args.group] if args.group else QQ_GROUP_IDS
     if not groups:
         logger.error("no QQ groups: pass --group or set ACCESS_GROUPS")
         return 1
@@ -358,14 +359,14 @@ async def main():
         all_messages.extend(msgs)
 
     classified = [classify_message(m) for m in all_messages]
-    owner_count = sum(1 for c in classified if c["user_id"] in OWNER_QQS)
-    logger.info("total %d messages, of which owner (%s) sent %d", len(classified),
-                ",".join(sorted(OWNER_QQS)), owner_count)
+    admin_count = sum(1 for c in classified if c["user_id"] in ADMIN_QQ_IDS)
+    logger.info("total %d messages, of which admin (%s) sent %d", len(classified),
+                ",".join(sorted(ADMIN_QQ_IDS)), admin_count)
 
     if not args.no_profile:
-        profile = compute_owner_profile(classified)
-        _atomic_write_json(OWNER_PROFILE, profile)
-        logger.info("owner profile written to %s", OWNER_PROFILE.name)
+        profile = compute_admin_profile(classified)
+        _atomic_write_json(ADMIN_PROFILE, profile)
+        logger.info("admin profile written to %s", ADMIN_PROFILE.name)
         if profile.get("total_msgs", 0):
             logger.info("  image rate: %.1f%% (1 image per %d msgs)",
                         profile["ratio_image"] * 100,

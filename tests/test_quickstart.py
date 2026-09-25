@@ -35,7 +35,7 @@ def test_a_leftover_env_tmp_does_not_keep_its_mode() -> None:
         check("write_env: nothing from the leftover survives", "STALE" not in text, text)
         if os.name != "nt":   # Windows ACLs do not map onto POSIX mode bits
             mode = env.stat().st_mode & 0o777
-            check("write_env: the result is owner-only", mode == 0o600, oct(mode))
+            check("write_env: the result is 0600", mode == 0o600, oct(mode))
 
 
 def test_plugin_config_is_merged_not_replaced() -> None:

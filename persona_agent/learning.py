@@ -233,7 +233,7 @@ class Learning:
             peers=peers,
             now=time.time(),
             policy=self.promotion_policy,
-            owner_ids=self._owners(),
+            admin_ids=self._admins(),
         )
 
     def _rebuild_promoted_views(
@@ -578,7 +578,7 @@ class Learning:
 
     async def _process_reaction(self, entry: dict, reaction_text: str,
                                 reactor_name: str, reactor_uid: str,
-                                is_owner: bool, conv_id: str = "",
+                                is_admin: bool, conv_id: str = "",
                                 is_private: bool = False) -> None:
         """Adjudicate a directed user reaction and record what it proves.
 
@@ -598,20 +598,21 @@ class Learning:
         try:
             # Hard poison shield: users whose teachings are consistently
             # dismissed stop costing adjudicator calls at all (BB3x lesson).
-            if not is_owner and self.teacher_stats.hard_block(reactor_uid):
+            if not is_admin and self.teacher_stats.hard_block(reactor_uid):
                 self._append_audit_row({
                     "src": "user_reaction",
                     "ts": datetime.now().isoformat(timespec="seconds"),
+                    # "is_owner": the audit rows' stored key.
                     "reactor": reactor_name, "is_owner": False,
                     "reaction_text": (reaction_text or "")[:120],
                     "applied": "blocked", "reason": "hard-blocked teacher",
                 }, f"hard-block {reactor_name}")
                 return
-            history_line = ("" if is_owner else
+            history_line = ("" if is_admin else
                             self.teacher_stats.history_line(reactor_uid,
                                                             self.agent_lang))
             prompt = reactions.build_adjudicator_prompt(
-                entry, reaction_text, reactor_name, is_owner,
+                entry, reaction_text, reactor_name, is_admin,
                 self.persona_name, self.agent_lang, reactor_history=history_line)
             raw = await self._call_llm(
                 "", [{"role": "user", "content": prompt}],
@@ -757,15 +758,15 @@ class Learning:
                             parent_evidence_id=reaction_ev["event_id"]))
 
             # Teaching reputation: count corrective acts only (not positives),
-            # never the owner.
-            if not is_owner and adj["reaction"] in ("correction", "rejection"):
+            # never the admin.
+            if not is_admin and adj["reaction"] in ("correction", "rejection"):
                 self.teacher_stats.update(reactor_uid, reactor_name,
                                           accepted=adj["accept"])
 
             audit = {
                 "src": "user_reaction", "ts": now,
                 "reaction": adj["reaction"], "reactor": reactor_name,
-                "is_owner": bool(is_owner), "reason": adj["reason"],
+                "is_owner": bool(is_admin), "reason": adj["reason"],  # stored key
                 "bot_reply": str(entry.get("reply") or "")[:120],
                 "reaction_text": (reaction_text or "")[:120],
                 "applied": ",".join(outcomes) if outcomes else "rejected",

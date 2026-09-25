@@ -87,9 +87,9 @@ def parse_ids(*lists, native_platforms: Iterable[str] = ()) -> frozenset[str]:
     return frozenset(canonical_ids(*lists, native_platforms=native_platforms))
 
 
-def is_owner(user_id, owners: Iterable[str]) -> bool:
+def is_admin(user_id, admins: Iterable[str]) -> bool:
     uid = str(user_id or "")
-    return bool(uid) and uid in owners
+    return bool(uid) and uid in admins
 
 
 def entries_on(platform: str, ids: Iterable[str]) -> frozenset[str]:
@@ -97,14 +97,14 @@ def entries_on(platform: str, ids: Iterable[str]) -> frozenset[str]:
     return frozenset(i for i in ids if channels.platform_of(i) == platform)
 
 
-def owner_on(platform: str, owners: Iterable[str]) -> str:
-    """The owner's account on `platform`, else their QQ one, else "".
+def admin_on(platform: str, admins: Iterable[str]) -> str:
+    """The admin's account on `platform`, else their QQ one, else "".
 
-    The QQ fallback is what every conversation used before owners had more
+    The QQ fallback is what every conversation used before admins had more
     than one account, so memories keep the attribution they always had."""
-    owners = tuple(owners)
+    admins = tuple(admins)
     for wanted in (platform, channels.NATIVE_PLATFORM):
-        found = sorted(entries_on(wanted, owners))
+        found = sorted(entries_on(wanted, admins))
         if found:
             return found[0]
     return ""
@@ -130,15 +130,15 @@ def group_refusal(group_id, allowed: Iterable[str], *, via_connector: bool,
             f"did not filter (prefiltered=false)")
 
 
-def dm_refusal(user_id, owners: Iterable[str], allowed: Iterable[str], *,
+def dm_refusal(user_id, admins: Iterable[str], allowed: Iterable[str], *,
                via_connector: bool, prefiltered: bool = True) -> str:
     """Why a DM sender is not admitted, naming the setting; "" when they are."""
     uid = str(user_id or "")
     if not via_connector and ":" in uid:
-        # Before the owner check: an owner-listed namespaced id arriving here
+        # Before the admin check: an admin-listed namespaced id arriving here
         # is forged by definition.
         return QQ_DOOR_REFUSAL
-    if is_owner(uid, owners) or uid in allowed:
+    if is_admin(uid, admins) or uid in allowed:
         return ""
     platform = channels.platform_of(uid)
     if channels.is_native(uid):
@@ -169,7 +169,7 @@ class Identity:
                          native_platforms=self.native_platforms)
 
     @property
-    def owners(self) -> frozenset[str]:
+    def admins(self) -> frozenset[str]:
         return self.ids("ADMIN_IDS")
 
     @property

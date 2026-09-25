@@ -111,6 +111,8 @@ def get_client():
 
 async def gen_reply(system: str, fx: dict, client) -> str:
     ctx_text = "\n".join(fx.get("context", []))
+    # Keyed by the stored mode names ("owner" is the admin's); the hints are
+    # prompt text.
     if AGENT_LANG == "zh":
         mode_hint = {
             "called": "(最后一条点名/at 了你)",
@@ -245,6 +247,7 @@ def cmd_add() -> dict | None:
     if not scenario:
         print(red("scenario required"))
         return None
+    # The stored mode names, as the fixtures carry them.
     mode = input("mode [judge/called/owner/followup]: ").strip() or "judge"
     if mode not in ("judge", "called", "owner", "followup"):
         print(red("invalid mode"))

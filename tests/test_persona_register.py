@@ -71,7 +71,7 @@ def _assembled_private_prompt(style: PersonaStyle) -> str:
 
 
 async def _served_private_prompts(tmp: Path) -> dict[str, str]:
-    """The whole system prompt `_chat_private` sends, for the owner and for
+    """The whole system prompt `_chat_private` sends, for the admin and for
     anyone else: the engine-authored rest of it (overrides, `<rules>`, the
     sticker guide) is where a banned phrase would slip back in unnoticed."""
     agent = make_agent(tmp)
@@ -88,9 +88,9 @@ async def _served_private_prompts(tmp: Path) -> dict[str, str]:
     agent._decide_and_search = no_search
     served = {}
     try:
-        for who, is_owner in (("friend", False), ("owner", True)):
+        for who, is_admin in (("friend", False), ("admin", True)):
             await agent._chat_private([{"role": "user", "content": "hey"}],
-                                      is_owner=is_owner, pkey="private:7")
+                                      is_admin=is_admin, pkey="private:7")
             served[who] = captured[-1]
     finally:
         await agent.aclose()
@@ -280,14 +280,14 @@ async def test_a_tool_shaped_request_is_answered_by_the_character(
         check(f"...and the {who}'s count fetched search results as known",
               "[external_web_search_data]" in rules, rules)
 
-    # The owner's overrides come after <rules> and say "engage directly" to
+    # The admin's overrides come after <rules> and say "engage directly" to
     # a lookup. They name the option they retract, and keep the character
     # rather than handing over a deliverable, so the two lines agree.
-    overrides = served_by_who["owner"].split(
+    overrides = served_by_who["admin"].split(
         "<private_overrides>", 1)[1].split("</private_overrides>", 1)[0]
     ask = next(line for line in overrides.splitlines()
                if "look something up" in line)
-    check("the owner's lookup override names the <rules> option it retracts",
+    check("the admin's lookup override names the <rules> option it retracts",
           "<rules>" in ask and "no interest" in ask, ask)
     check("...and still answers in the character's voice",
           "own voice" in ask, ask)

@@ -188,7 +188,7 @@ def test_cli_tools_follow_runtime_dir() -> None:
         "assert a.EVAL_FILE == expected/'eval.jsonl', a.EVAL_FILE\n"
         "assert a.CANDIDATES_FILE == expected/'candidates.jsonl', a.CANDIDATES_FILE\n"
         "assert b.STICKERS_JSON == expected/'stickers.json', b.STICKERS_JSON\n"
-        "assert b.OWNER_PROFILE == expected/'owner_profile.json', b.OWNER_PROFILE\n"
+        "assert b.ADMIN_PROFILE == expected/'owner_profile.json', b.ADMIN_PROFILE\n"
         "assert i.STICKERS_JSON == expected/'stickers.json', i.STICKERS_JSON\n"
         "assert b.STICKERS_DIR == Path(" + repr(str(ROOT / "stickers" / "auto")) + ")\n"
     )
@@ -234,7 +234,7 @@ def test_cli_tools_migrate_legacy_state_when_run_first(tmp: Path) -> None:
         " a.EVAL_FILE: root/'eval.jsonl',\n"
         " a.CANDIDATES_FILE: root/'candidates.jsonl',\n"
         " b.STICKERS_JSON: root/'stickers.json',\n"
-        " b.OWNER_PROFILE: root/'owner_profile.json',\n"
+        " b.ADMIN_PROFILE: root/'owner_profile.json',\n"
         " i.STICKERS_JSON: root/'stickers.json',\n"
         "}\n"
         "assert all(path.parent == expected for path in checks), checks\n"

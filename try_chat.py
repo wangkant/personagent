@@ -26,14 +26,14 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent import access  # noqa: E402
-from persona_agent.agent import Agent  # noqa: E402
+from persona_agent.agent import ADMIN_MODE, Agent  # noqa: E402
 from persona_agent.config_env import (  # noqa: E402
     DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool)
 from persona_agent.textproc import TextProcessing  # noqa: E402
 
 GROUP_ID = "trial"
 #: Who "--admin" speaks as: a configured admin account, if there is one.
-ADMIN_ID = min(access.identity_from_env().owners, default="") or "1969"
+ADMIN_ID = min(access.identity_from_env().admins, default="") or "1969"
 
 
 def _build_agent(lang: str) -> Agent:
@@ -103,7 +103,7 @@ async def main() -> int:
 
         you_uid = ADMIN_ID if args.admin else "2001"
         you_name = (agent.admin_name or "admin") if args.admin else args.name
-        default_mode = "owner" if args.admin else "called"
+        default_mode = ADMIN_MODE if args.admin else "called"
 
         print(f"=== try_chat — lang={agent.agent_lang}, model={agent.model} ===")
         print(f"talking to '{agent.persona_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
@@ -127,7 +127,7 @@ async def main() -> int:
             name, uid, mode, msg = you_name, you_uid, default_mode, line
             command, _, rest = line.partition(" ")
             if command == "/admin":
-                name, uid, mode, msg = (agent.admin_name or "admin"), ADMIN_ID, "owner", rest
+                name, uid, mode, msg = (agent.admin_name or "admin"), ADMIN_ID, ADMIN_MODE, rest
             elif line.startswith("/as "):
                 rest = line[len("/as "):].strip()
                 if " " in rest:

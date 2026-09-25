@@ -116,12 +116,12 @@ def adjudicator(**adj):
 
 async def react(agent: Agent, adj: dict, *, reply: str = "just restart it lol",
                 text: str = "reaction", uid: str = "42", name: str = "alex",
-                is_owner: bool = False, conv_id: str = "g1",
+                is_admin: bool = False, conv_id: str = "g1",
                 pending: dict | None = None) -> None:
     agent._call_llm = adjudicator(**adj)
     await agent._process_reaction(
         pending if pending is not None else entry(reply),
-        text, name, uid, is_owner, conv_id=conv_id)
+        text, name, uid, is_admin, conv_id=conv_id)
 
 
 def view_pairs(agent: Agent) -> list[dict]:
@@ -779,7 +779,7 @@ def test_corroboration_means_people_not_events() -> None:
     Correcting a reply and then accepting the agent's retry clears "two
     distinct compatible events" single-handedly — and delayed elicitation has
     the agent *solicit* that second event from the same person. Promotion
-    therefore counts distinct speakers, with the owner exempt."""
+    therefore counts distinct speakers, with the admin exempt."""
     # Frozen clock: a literal ts judged against a wall-clock now silently
     # expires once it passes MAX_EVIDENCE_AGE_DAYS, turning this green suite red
     # on a calendar date rather than on a code change.
@@ -799,17 +799,17 @@ def test_corroboration_means_people_not_events() -> None:
         payload={"reply": "bad line", "better": "fixed", "mode": "called",
                  "rating": "better"})
 
-    def decide(events, owner_ids=(), policy=promotion.DEFAULT_POLICY):
+    def decide(events, admin_ids=(), policy=promotion.DEFAULT_POLICY):
         return promotion.decide(cand, linked_events=events, related_events=[],
-                                peers=[], now=now, owner_ids=owner_ids,
+                                peers=[], now=now, admin_ids=admin_ids,
                                 policy=policy)
 
     strict = promotion.Policy(min_speakers=2)
     solo = [ev("mallory"),
             ev("mallory", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
     two = [ev("alice"), ev("bob", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
-    owner = [ev("owner1"),
-             ev("owner1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+    admin = [ev("admin1"),
+             ev("admin1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
 
     # Default (1) keeps solo clarification working: the honest path and the
     # attack path are structurally identical, so this is a deployment choice.
@@ -832,55 +832,55 @@ def test_corroboration_means_people_not_events() -> None:
     check("speakers: MIN_SPEAKERS=2 still promotes on two people",
           decide(two, policy=strict).promote is True,
           decide(two, policy=strict).reason)
-    check("speakers: the owner is exempt even at MIN_SPEAKERS=2",
-          decide(owner, owner_ids=("owner1",), policy=strict).promote is True,
-          decide(owner, owner_ids=("owner1",), policy=strict).reason)
-    # Every account in ADMIN_IDS is the owner, not just the QQ one.
-    tg_owner = [ev("telegram:1"),
+    check("speakers: the admin is exempt even at MIN_SPEAKERS=2",
+          decide(admin, admin_ids=("admin1",), policy=strict).promote is True,
+          decide(admin, admin_ids=("admin1",), policy=strict).reason)
+    # Every account in ADMIN_IDS is the admin, not just the QQ one.
+    tg_admin = [ev("telegram:1"),
                 ev("telegram:1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
     by_set = promotion.decide(
-        cand, linked_events=tg_owner, related_events=[], peers=[], now=now,
-        owner_ids={"10000", "telegram:1"}, policy=strict)
-    check("speakers: an owner on any platform is exempt",
+        cand, linked_events=tg_admin, related_events=[], peers=[], now=now,
+        admin_ids={"10000", "telegram:1"}, policy=strict)
+    check("speakers: an admin on any platform is exempt",
           by_set.promote is True, by_set.reason)
-    check("speakers: ...and a stranger is not, whoever the owners are",
+    check("speakers: ...and a stranger is not, whoever the admins are",
           promotion.decide(
               cand, linked_events=solo, related_events=[], peers=[], now=now,
-              owner_ids={"10000", "telegram:1"}, policy=strict).promote is False)
-    # make_event cuts speaker_id at 64 characters; the owner id must be cut
+              admin_ids={"10000", "telegram:1"}, policy=strict).promote is False)
+    # make_event cuts speaker_id at 64 characters; the admin id must be cut
     # the same way or a long one could never match.
     long_id = "matrix:@" + "x" * 80 + ":example.org"
-    long_owner = [ev(long_id),
+    long_admin = [ev(long_id),
                   ev(long_id, evidence.KIND_RETRY_ACCEPTANCE, "positive")]
-    check("speakers: an owner id longer than a stored speaker id still matches",
+    check("speakers: an admin id longer than a stored speaker id still matches",
           promotion.decide(
-              cand, linked_events=long_owner, related_events=[], peers=[],
-              now=now, owner_ids=(long_id,), policy=strict).promote is True)
+              cand, linked_events=long_admin, related_events=[], peers=[],
+              now=now, admin_ids=(long_id,), policy=strict).promote is True)
     check("speakers: floor keeps 0 from disabling the rule",
           promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "0"}).min_speakers == 1)
     check("speakers: env opt-in is read",
           promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "2"}).min_speakers == 2)
 
 
-async def test_the_cli_and_the_agent_exempt_the_same_owners(
+async def test_the_cli_and_the_agent_exempt_the_same_admins(
         tmp: Path, monkeypatch) -> None:
-    """The operator CLI decides with the owners the agent decides with.
+    """The operator CLI decides with the admins the agent decides with.
 
     Both read ADMIN_IDS through access.identity_from_env; the CLI used to
-    read OWNER_QQ alone, so a Telegram owner's candidate showed a speaker
+    read the QQ admin alone, so a Telegram admin's candidate showed a speaker
     shortfall there that the agent itself did not see."""
     import candidates_admin
 
     a = make_agent(tmp)
     a.admin_ids = {"telegram:1"}
     await react(a, CORRECTION, text="no, look at the logs", uid="telegram:1",
-                is_owner=True)
+                is_admin=True)
     cand = a.candidate_ledger.all()[0]
     asked: list = []
     real = promotion.decide
 
     def spy(c, **kw):
-        asked.append(set(kw.get("owner_ids") or ()))
+        asked.append(set(kw.get("admin_ids") or ()))
         return real(c, **kw)
 
     monkeypatch.setattr(promotion, "decide", spy)
@@ -889,10 +889,10 @@ async def test_the_cli_and_the_agent_exempt_the_same_owners(
     agent_says = a._decide_promotion(cand["candidate_id"])
     cli_says = candidates_admin._decide(
         a.candidate_ledger, a.evidence_log, cand, a.promotion_policy)
-    check("owners: both ask with the Telegram owner",
+    check("admins: both ask with the Telegram admin",
           asked == [{"telegram:1"}] * 2,
           repr(asked))
-    check("owners: and reach the same decision",
+    check("admins: and reach the same decision",
           (agent_says.promote, agent_says.reason)
           == (cli_says.promote, cli_says.reason),
           repr((agent_says, cli_says)))
@@ -902,7 +902,7 @@ def test_a_hand_edited_strength_cannot_buy_a_promotion() -> None:
     """`strength` is derived once at write time and left out of `_ID_FIELDS`,
     so it is the one promotion input an edit to evidence.jsonl can change
     without breaking `event_id`. Promotion re-derives it instead of reading it,
-    or the "owner status does not make someone the affected recipient" rule
+    or the "admin status does not make someone the affected recipient" rule
     would be enforced only against people who do not edit the file."""
     now = NOW
     ts = stamp(NOW - 3600)

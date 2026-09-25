@@ -50,7 +50,7 @@ def make_agent(tmp: Path) -> Agent:
     async def fake_think(group_id, mode, text="", caller_override=None):
         return "on it", "called", ""
 
-    async def fake_chat_private(history, is_owner=False, pkey="",
+    async def fake_chat_private(history, is_admin=False, pkey="",
                                 proactive=False, proactive_cue=""):
         return "hi back", ""
 
@@ -812,7 +812,7 @@ async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
     agent.last_dm_activity_at[uid] = time.time() - agent.proactive_dm_min_silence_s - 10
     history_before = list(agent.private_history.get(uid, []))
 
-    async def opener(history, is_owner=False, pkey="", proactive=False,
+    async def opener(history, is_admin=False, pkey="", proactive=False,
                      proactive_cue=""):
         return "how did the exam go", ""
 

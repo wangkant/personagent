@@ -16,7 +16,7 @@ knowing before you reach for them: ``PendingReplies`` persists to
                         replies awaiting a reaction (record / match / expire,
                         one-shot pop so each reply learns at most once)
 - prompt builders       single adjudicator call: classify the reaction,
-                        judge genuineness (owner-weighted), draft the rewrite
+                        judge genuineness (admin-weighted), draft the rewrite
 - ``parse_adjudication``fail-closed JSON parse
 - ``to_feedback_pair`` / ``to_example``  write-shapes for the existing
                         feedback / examples pipelines
@@ -349,7 +349,7 @@ class PendingReplies:
 
 
 def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
-                             is_owner: bool, persona_name: str, lang: str,
+                             is_admin: bool, persona_name: str, lang: str,
                              reactor_history: str = "") -> str:
     """The adjudicator's prompt, every chat-authored span fenced.
 
@@ -360,9 +360,9 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
     module's own words and stay unfenced."""
     tmpl = ADJUDICATOR_PROMPTS.get(lang, ADJUDICATOR_PROMPTS["en"])
     if lang == "zh":
-        role = "owner(bot 最信任的人)" if is_owner else "普通群友"
+        role = "owner(bot 最信任的人)" if is_admin else "普通群友"
     else:
-        role = ("the OWNER (the person the bot trusts most)" if is_owner
+        role = ("the OWNER (the person the bot trusts most)" if is_admin
                 else "a regular group member")
     return tmpl.format(
         bot_name=persona_name or "bot",
@@ -483,7 +483,8 @@ class TeacherStats:
     wild is adversarial). Counts how often a user's corrections/rejections
     were adopted vs dismissed; the adjudicator sees the track record, and
     users with a consistently bad one are hard-blocked without an LLM call.
-    Owner is never tracked (already top priority). Persisted as a small JSON."""
+    The admin is never tracked (already top priority). Persisted as a small
+    JSON."""
 
     def __init__(self, path):
         self.path = path

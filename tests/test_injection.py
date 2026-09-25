@@ -84,7 +84,7 @@ async def test_private_prompt_fences_user_data_and_preserves_web_fence(
             [{"role": "user", "content": "earlier line"},
              {"role": "assistant", "content": "my own turn"},
              {"role": "user", "content": f"{attack} {web_desc}"}],
-            is_owner=False, pkey="private:mallory")
+            is_admin=False, pkey="private:mallory")
     finally:
         await agent.aclose()
 
@@ -190,9 +190,9 @@ async def test_the_group_prompt_assumes_no_platform(tmp: Path) -> None:
           "e.g. [AT:123456]" in hints[2] and "we ird" not in hints[2],
           repr(hints))
 
-async def test_the_owner_prompt_has_a_subject_without_owner_name(
+async def test_the_admin_prompt_has_a_subject_without_admin_name(
         tmp: Path) -> None:
-    """Owner mode needs only OWNER_QQ, and OWNER_NAME ships blank."""
+    """Admin mode needs only ADMIN_IDS, and ADMIN_NAME ships blank."""
     agent = make_agent(tmp)
     agent.admin_ids, agent.admin_name = {"7"}, ""
     agent._append_buffer("g1", "Boss", "anyone up for lunch", "7")
@@ -209,11 +209,11 @@ async def test_the_owner_prompt_has_a_subject_without_owner_name(
         await agent.aclose()
 
     user_prompt = captured["messages"][0]["content"]
-    check("no line is left without the owner's name",
+    check("no line is left without the admin's name",
           "from , the owner" not in user_prompt
           and not any(line.startswith(" is the owner")
                       for line in user_prompt.splitlines()), repr(user_prompt))
-    check("the prompt still says the line is the owner's",
+    check("the prompt still says the line is the admin's",
           "latest line is from the owner" in user_prompt
           and "This is the owner" in user_prompt, repr(user_prompt))
 
@@ -1113,7 +1113,7 @@ async def test_a_few_shot_row_cannot_restructure_the_prompt(tmp: Path) -> None:
     try:
         await agent._chat_private(
             [{"role": "user", "content": "is it raining"}],
-            is_owner=False, pkey="private:u1")
+            is_admin=False, pkey="private:u1")
     finally:
         await agent.aclose()
 

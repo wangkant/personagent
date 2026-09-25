@@ -590,12 +590,12 @@ def test_decorative_symbol_blocks_lose_the_glyph_not_the_message() -> None:
 # ---------------------------------------------------------------------------
 #
 # WHERE THESE CAME FROM, because it decides how they should be maintained.
-# The owner reported an intermittent "no reply came back" and there was no
+# The admin reported an intermittent "no reply came back" and there was no
 # log to look at. What the
 # usage ledger could still prove is that in 71 of 74 recorded empty
 # turns the provider had returned tokens — `tokens_out` between 13 and 1226 —
 # so the model wrote something and this file threw it away. That is not proof
-# that any single row below is THE bug the owner hit; it is proof that the
+# that any single row below is THE bug the admin hit; it is proof that the
 # bug is on this code path, which is what made a systematic sweep of the
 # tiers worth doing.
 #

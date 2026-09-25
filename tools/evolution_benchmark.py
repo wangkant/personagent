@@ -43,6 +43,7 @@ load_dotenv(ROOT / ".env", override=False)
 
 DATA = ROOT / "data" / "benchmark"
 
+# Stored mode names; "owner" is the admin's.
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
 # Ablation: a minimal style guide that keeps the chat framing but STRIPS every

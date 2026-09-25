@@ -124,7 +124,7 @@ def test_pending_replies_survive_restart_bounded() -> None:
 # Unit: parse_adjudication / write shapes
 # ---------------------------------------------------------------------------
 
-GOOD_ADJ = {"reaction": "correction", "accept": True, "reason": "owner corrected",
+GOOD_ADJ = {"reaction": "correction", "accept": True, "reason": "admin corrected",
             "better": "my bad, you meant the deploy env", "scenario": "misread ask"}
 
 

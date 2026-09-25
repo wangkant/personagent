@@ -83,17 +83,17 @@ def test_the_identity_settings_are_read_per_platform(monkeypatch) -> None:
           (new.admin_ids, new.access_groups, new.access_dm_users)
           == (("telegram:1", "10000"), ("telegram:-100", "123"), ("slack:U1",)),
           repr((new.admin_ids, new.access_groups, new.access_dm_users)))
-    check("identity: owners and DM users are the canonical sets",
-          new.owners == {"telegram:1", "10000"} and new.dm_users == {"slack:U1"})
+    check("identity: admins and DM users are the canonical sets",
+          new.admins == {"telegram:1", "10000"} and new.dm_users == {"slack:U1"})
 
     native = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
         "ADMIN_IDS": "aiocqhttp:10000", "ACCESS_GROUPS": "qq:123,aiocqhttp:456",
         "ACCESS_DM_USERS": "telegram:aiocqhttp"})
     check("identity: qq: and native prefixes become the bare keys events carry",
-          native.owners == {"10000"} and native.access_groups == ("123", "456")
+          native.admins == {"10000"} and native.access_groups == ("123", "456")
           and native.dm_users == {"telegram:aiocqhttp"},
-          repr((native.owners, native.access_groups, native.dm_users)))
+          repr((native.admins, native.access_groups, native.dm_users)))
     check("identity: re-resolving changes nothing",
           dataclasses.replace(new) == new and dataclasses.replace(native) == native)
 
@@ -105,8 +105,8 @@ def test_the_identity_settings_are_read_per_platform(monkeypatch) -> None:
           ambient.access_groups == ("telegram:-100", "123")
           and ambient.access_dm_users == ("telegram:42",),
           repr((ambient.access_groups, ambient.access_dm_users)))
-    check("identity: the owners are a deployment setting",
-          not ambient.owners, repr(ambient.owners))
+    check("identity: the admins are a deployment setting",
+          not ambient.admins, repr(ambient.admins))
 
 
 def test_plain_construction_ignores_deployment_settings() -> None:

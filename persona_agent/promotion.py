@@ -52,7 +52,7 @@ from .storage import append_lock, atomic_write_text
 # misreading.
 MIN_EVENTS = 2
 MIN_STRONG = 1
-# ...from at least this many distinct people, owner exempt.
+# ...from at least this many distinct people, admin exempt.
 #
 # MIN_EVENTS counts events, and one determined member can produce two by
 # themselves: correct a reply, then accept the agent's retry. Delayed
@@ -358,13 +358,13 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
 
 def decide(cand: dict, *, linked_events, related_events=(), peers=(),
            now: float = 0.0, policy: Policy = DEFAULT_POLICY,
-           owner_ids=()) -> Decision:
+           admin_ids=()) -> Decision:
     """Should `cand` be promoted automatically, right now.
 
     `linked_events` are the events recorded as supporting it, `related_events`
     every event about the same reply (searched for contradictions), `peers` the
-    other candidates (searched for conflicting proposals). `owner_ids` are the
-    owner's accounts, exempt from the distinct-speaker requirement.
+    other candidates (searched for conflicting proposals). `admin_ids` are the
+    admin's accounts, exempt from the distinct-speaker requirement.
     """
     if not policy.auto_promote:
         return Decision(False, "automatic promotion disabled (PROMOTE_AUTO_ENABLED)")
@@ -429,16 +429,16 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     # Distinct people, not distinct events. One member correcting a reply and
     # then accepting the retry produces two compatible events by themselves —
     # and delayed elicitation has the agent *ask* for that second one. The
-    # owner is exempt: whoever deployed the agent may teach it alone.
+    # admin is exempt: whoever deployed the agent may teach it alone.
     speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
     # Compared as stored: make_event cuts speaker_id at 64 characters.
-    owners = {evidence._text(o, 64) for o in owner_ids} - {""}
-    owner_spoke = bool(owners & speakers)
+    admins = {evidence._text(o, 64) for o in admin_ids} - {""}
+    admin_spoke = bool(admins & speakers)
     # `not speakers` means no event carried attribution at all — an adapter
     # that does not supply speaker ids, or older events from before the field
     # existed. Missing data must not veto: fall back to the event count rather
     # than silently refusing to ever promote on such a deployment.
-    if speakers and not owner_spoke and len(speakers) < policy.min_speakers:
+    if speakers and not admin_spoke and len(speakers) < policy.min_speakers:
         return Decision(
             False,
             f"{len(speakers)}/{policy.min_speakers} distinct speakers "
