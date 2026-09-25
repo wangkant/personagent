@@ -36,6 +36,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.platform import MessageType
 from astrbot.api.star import Context, Star
 import astrbot.api.message_components as Comp
+from astrbot.core.platform.message_session import MessageSession
 
 from . import personagent_connector as sdk
 from .platforms import (
@@ -65,6 +66,8 @@ _EVENT_B64_BUDGET = 6_000_000
 # How long a delivery waits for its platform to come up after a restart:
 # AstrBot loads plugins before platforms.
 _PLATFORM_WAIT_S = 30
+# The plugin store key for the reply handles the plugin minted.
+_HANDLES_KEY = "reply_handles"
 
 # Retry policy for _post_to_agent. Only statuses where resending the exact
 # same bytes is safe get a retry: 500 is the agent failing after accepting
@@ -246,6 +249,50 @@ class _People:
         return self._by_handle.get((platform, str(handle).lstrip("@").lower()))
 
 
+class _Handles:
+    """The reply handles this plugin minted, each bound to the conversation
+    it came from, bounded like the agent's own store. The agent hands back
+    whatever handle an admitted event carried, so only these are sent to."""
+
+    def __init__(self, size: int = 4096):
+        self._size = size
+        self._bound: collections.OrderedDict = collections.OrderedDict()
+        self.loaded = False
+
+    def _trim(self) -> None:
+        while len(self._bound) > self._size:
+            self._bound.popitem(last=False)
+
+    def mint(self, handle: str, platform: str, message_type: str,
+             conversation_id: str) -> bool:
+        """Bind a handle; True when that changed what should be stored."""
+        entry = (str(platform), str(message_type), str(conversation_id))
+        changed = self._bound.pop(handle, None) != entry
+        self._bound[handle] = entry
+        self._trim()
+        return changed
+
+    def bound(self, handle: str):
+        """(platform, message_type, conversation_id), or None."""
+        return self._bound.get(handle)
+
+    def load(self, rows) -> None:
+        """Take what the plugin store kept; handles minted meanwhile win."""
+        kept = collections.OrderedDict()
+        for row in rows if isinstance(rows, list) else []:
+            if isinstance(row, list) and len(row) == 4 and all(isinstance(v, str) for v in row):
+                kept[row[0]] = tuple(row[1:])
+        for handle, entry in self._bound.items():
+            kept.pop(handle, None)
+            kept[handle] = entry
+        self._bound = kept
+        self._trim()
+        self.loaded = True
+
+    def rows(self) -> list:
+        return [[handle, *entry] for handle, entry in self._bound.items()]
+
+
 class LLMPersonaGateway(Star):
     """Forward all eligible messages to the persona agent, relay its replies,
     and deliver what it queues in its outbox."""
@@ -259,6 +306,7 @@ class LLMPersonaGateway(Star):
         self._client = None
         self._forwarder_id = str(config.get("forwarder_id") or "").strip()
         self._people = _People()
+        self._handles = _Handles()
         self._outbox_task = None
         self._outbox_stop = asyncio.Event()
         # Until then a delivery waits for its platform: AstrBot loads plugins
@@ -303,6 +351,30 @@ class LLMPersonaGateway(Star):
                     f"agent will see a new connector after a restart: {e}")
         self._forwarder_id = str(stored)
         return self._forwarder_id
+
+    async def _load_handles(self) -> None:
+        if self._handles.loaded:
+            return
+        rows = None
+        try:
+            rows = await self.get_kv_data(_HANDLES_KEY, None)
+        except Exception as e:
+            logger.warning(f"llm_persona_gateway: could not read the stored reply handles: {e}")
+        self._handles.load(rows)
+
+    async def _mint_handle(self, handle: str, platform: str, message_type: str,
+                           conversation_id: str) -> None:
+        """Bind a handle the outbox may later send to, before the agent can
+        hand it back, and keep it across reloads."""
+        await self._load_handles()
+        if not self._handles.mint(handle, platform, message_type, conversation_id):
+            return
+        try:
+            await self.put_kv_data(_HANDLES_KEY, self._handles.rows())
+        except Exception as e:
+            logger.warning(
+                "llm_persona_gateway: could not store a reply handle; after a "
+                f"reload the outbox waits for that conversation to write again: {e}")
 
     def _outbox_running(self) -> bool:
         task = self._outbox_task
@@ -390,7 +462,9 @@ class LLMPersonaGateway(Star):
         caps = []
         if self._outbox_running() and self._can_speak_first(platform, raw):
             caps.append("outbox")
-        if any(seg.get("type") == "reply" and seg.get("text") for seg in segments):
+        # By configuration, not by whether this message quoted: the agent
+        # rewrites its handles file whenever a conversation's caps change.
+        if self._quote_chars():
             caps.append("quote_text")
         neutral_event = {
             "platform": platform,
@@ -411,6 +485,9 @@ class LLMPersonaGateway(Star):
         }
         if not neutral_event["reply_handle"]:
             del neutral_event["reply_handle"]
+        elif "outbox" in caps:
+            await self._mint_handle(neutral_event["reply_handle"], platform,
+                                    neutral_event["message_type"], conversation_id)
 
         rules = rules_for(platform)
         temps: list = []
@@ -1140,9 +1217,29 @@ class LLMPersonaGateway(Star):
         """Send one outbox delivery; return (ack status, items sent)."""
         handle = str(delivery.get("reply_handle") or "")
         items = [i for i in (delivery.get("items") or []) if isinstance(i, dict)]
-        platform_id = handle.partition(":")[0]
-        if not platform_id or handle.count(":") < 2:
+        try:
+            # AstrBot's own parse, the one context.send_message applies.
+            session = MessageSession.from_str(handle)
+        except ValueError:
             return "unsupported", 0
+        platform_id = session.platform_id
+        if not platform_id:
+            return "unsupported", 0
+        message_type = str(delivery.get("message_type") or "")
+        is_group = message_type == "group"
+        conversation_id = str(delivery.get("conversation_id") or "")
+        await self._load_handles()
+        bound = self._handles.bound(handle)
+        # The agent hands back whatever handle an admitted event carried, and
+        # the lists below name only the conversation: the handle must be one
+        # this plugin took from that very conversation.
+        if bound is None or bound[1:] != (message_type, conversation_id) or (
+                session.message_type != (MessageType.GROUP_MESSAGE if is_group
+                                         else MessageType.FRIEND_MESSAGE)):
+            logger.warning(
+                f"llm_persona_gateway: outbox: {handle!r} is not an address of "
+                f"{message_type} {conversation_id!r}; refused")
+            return "refused", 0
         inst = await self._platform_inst(platform_id)
         if inst is None:
             logger.warning(
@@ -1153,13 +1250,12 @@ class LLMPersonaGateway(Star):
         except Exception:
             platform = str(delivery.get("platform") or "")
         wanted = str(delivery.get("platform") or "")
-        is_group = delivery.get("message_type") == "group"
-        conversation_id = str(delivery.get("conversation_id") or "")
         # QQ's ids may be spelled under "qq" (docs/connectors.md, Addressing).
-        if wanted and wanted != platform and not (wanted == "qq" and platform == "aiocqhttp"):
+        if platform != bound[0] or (wanted and wanted != platform
+                                    and not (wanted == "qq" and platform == "aiocqhttp")):
             logger.warning(
                 f"llm_persona_gateway: outbox: {platform_id!r} is {platform}, "
-                f"not {wanted}; refused")
+                f"not {wanted or bound[0]}; refused")
             return "refused", 0
         if not self._allowed(platform, is_group, conversation_id, conversation_id):
             return "refused", 0
@@ -1222,9 +1318,11 @@ class LLMPersonaGateway(Star):
             max_chars = self._forward_threshold(umo)
         bubbles = []
         for index, item in enumerate(items, 1):
-            for comps in self._item_bubbles(item, platform, rules, is_group,
-                                            conversation_id, max_chars, temps):
-                bubbles.append((comps, index))
+            parts = self._item_bubbles(item, platform, rules, is_group,
+                                       conversation_id, max_chars, temps)
+            for n, comps in enumerate(parts, 1):
+                # A split item is done only once its last part is out.
+                bubbles.append((comps, index if n == len(parts) else index - 1))
         if rules.merge and bubbles:
             texts = [c.text for comps, _ in bubbles for c in comps if isinstance(c, Comp.Plain)]
             rest = [c for comps, _ in bubbles for c in comps if not isinstance(c, Comp.Plain)]
@@ -1251,8 +1349,13 @@ class LLMPersonaGateway(Star):
         rtype = item.get("type")
         if rtype == "text":
             text = item.get("text") or ""
+            # The mention and the escapes count toward the platform's limit.
+            reserve = rules.reserve + self._mention_len(
+                self._with_mention(at, "", platform, rules))
+            kind = rules.escape if rules.escape_counts else ""
             out = []
-            for n, chunk in enumerate(split_text(text, max_chars, rules.max_bytes)):
+            for n, chunk in enumerate(split_text(text, max_chars, rules.max_bytes,
+                                                 kind, reserve)):
                 body = escape(chunk, rules.escape)
                 if n == 0:
                     out.append(prefix + self._with_mention(at, body, platform, rules))
@@ -1270,6 +1373,18 @@ class LLMPersonaGateway(Star):
             return [chain]
         logger.warning(f"llm_persona_gateway: dropping unknown reply type {rtype!r}")
         return []
+
+    @staticmethod
+    def _mention_len(comps) -> int:
+        """Characters a mention adds in front of a text. An At renders as its
+        name or id with at most three more ('<@id>', '@name ')."""
+        n = 0
+        for comp in comps:
+            if isinstance(comp, Comp.Plain):
+                n += len(comp.text or "")
+            elif isinstance(comp, Comp.At):
+                n += len(str(comp.name or comp.qq)) + 3
+        return n
 
     def _with_mention(self, at, body: str, platform: str, rules: Rules) -> list:
         """A text, naming `at` the way this platform renders a mention."""

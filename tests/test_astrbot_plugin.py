@@ -91,6 +91,24 @@ def _import_plugin():
 
     platform_mod.MessageType = MessageType
 
+    register("astrbot.core")
+    register("astrbot.core.platform")
+    session_mod = register("astrbot.core.platform.message_session")
+
+    class MessageSession:
+        def __init__(self, platform_name, message_type, session_id):
+            self.platform_id = platform_name
+            self.message_type = message_type
+            self.session_id = session_id
+
+        @staticmethod
+        def from_str(session_str):
+            # AstrBot's own parse, which context.send_message applies.
+            platform_id, message_type, session_id = session_str.split(":", 2)
+            return MessageSession(platform_id, MessageType(message_type), session_id)
+
+    session_mod.MessageSession = MessageSession
+
     star_mod = register("astrbot.api.star")
 
     class Star:
@@ -1167,7 +1185,7 @@ def test_qq_mentions_carry_one_space_and_long_text_stays_under_the_forward_card(
     assert len(chains) > 1
     assert all(len(c[0][0].text) <= 120 for c in chains)
     assert " ".join(c[0][0].text for c in chains) == long
-    assert {c[1] for c in chains} == {1}
+    assert [c[1] for c in chains] == [0] * (len(chains) - 1) + [1]
 
 
 def test_telegram_text_is_shown_as_typed_and_mentions_use_usernames():
@@ -1210,6 +1228,46 @@ def test_discord_splits_at_2000_and_keeps_everyone_pings_inert():
     chains = _render(plugin, "discord", {"type": "text", "text": "@everyone " + "word " * 600})
     assert len(chains) == 2 and all(len(c[0][0].text) <= 2000 for c in chains)
     assert chains[0][0][0].text.startswith("@​everyone")
+
+
+def _as_sent(module, platform, chain) -> str:
+    """The text an adapter builds from a chain (AstrBot 4.25.5)."""
+    parts = []
+    for comp in chain:
+        if isinstance(comp, module.Comp.Plain):
+            parts.append(comp.text)
+        elif isinstance(comp, module.Comp.At):
+            parts.append(f"<@{comp.qq}>" if platform == "discord"
+                         else f"@{comp.name} " if platform == "telegram"
+                         else f"(met){comp.qq}(met)" if platform == "kook"
+                         else f"@{comp.name or comp.qq}")
+    return "".join(parts)
+
+
+def test_split_parts_fit_the_adapter_with_the_mention_and_the_escapes():
+    """Discord cuts a message at 2000 characters and Misskey at 3000 (after
+    putting '@user' in front of one without a mention); Slack refuses a
+    section over 3000. Measuring the text before the mention and the escapes
+    let them push its end off."""
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    for platform, handle in (("telegram", "a_long_username"), ("mattermost", "some.one"),
+                             ("misskey", "someone@misskey.example")):
+        plugin._people.see(platform, "123456789012345678", handle, "Someone")
+    text = "@everyone @here @all & <b> (met)x(met) *hi* 2. " * 200
+    own_mention = len("@" + "u" * 128 + "\n")
+    limits = {"discord": 2000, "misskey": 3000 - own_mention, "slack": 3000,
+              "mattermost": 4000, "kook": 4000, "telegram": 4096}
+    for platform, limit in limits.items():
+        chains = plugin._render([{"type": "text", "text": text,
+                                  "at_user_id": f"{platform}:123456789012345678"}],
+                                platform, True, "group-1", [])
+        assert len(chains) > 1, platform
+        sent = [_as_sent(module, platform, chain) for chain, _ in chains]
+        assert max(len(s) for s in sent) <= limit, (platform, [len(s) for s in sent])
+    bodies = [c.text for chain, _ in _render(plugin, "discord", {"type": "text", "text": text})
+              for c in chain]
+    assert " ".join(bodies).replace("​", "").split() == text.split()
 
 
 def test_platforms_without_mentions_drop_them_cleanly():
@@ -1301,6 +1359,23 @@ def test_the_reply_handle_is_the_umo_and_the_group_under_session_isolation():
     assert sent["conversation_id"] == "user-1"
 
 
+def test_quote_text_is_declared_by_the_configuration_not_by_each_message():
+    """The agent rewrites its whole handles file when a conversation's caps
+    change, and they changed with every message that quoted or did not."""
+    module = _import_plugin()
+    for config, declared in (({}, True), ({"forward_quoted_text": False}, False),
+                             ({"quote_max_chars": 0}, False)):
+        plugin = _plugin_instance(module, dict(_DM_CONFIG, **config))
+        plain = _capture_event(plugin, _Event(module, private=True))
+        quoting = _Event(module, private=True)
+        quoting.message_obj.message = [
+            module.Comp.Reply(id="9", sender_id="5", message_str="earlier"),
+            module.Comp.Plain("ok")]
+        quoted = _capture_event(plugin, quoting)
+        assert ("quote_text" in plain["caps"]) is declared, config
+        assert plain["caps"] == quoted["caps"], config
+
+
 def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
     module = _import_plugin()
 
@@ -1339,9 +1414,15 @@ def _delivery(**fields):
     return base
 
 
-def _outbox_rig(monkeypatch, module, *insts, config=None, **context_kwargs):
+def _outbox_rig(monkeypatch, module, *insts, config=None, minted=(_delivery(),),
+                **context_kwargs):
+    """A plugin with a context, pauses recorded, and the reply handles of
+    `minted` taken as if their conversations had written."""
     context = _Context(*insts, **context_kwargs)
     plugin = _plugin_instance(module, config or {"group_whitelist": ["group-1"]}, context)
+    for d in minted:
+        plugin._handles.mint(d["reply_handle"], d["platform"], d["message_type"],
+                             d["conversation_id"])
     pauses = []
 
     async def pause(seconds):
@@ -1373,20 +1454,90 @@ def test_a_delivery_the_lists_no_longer_allow_is_refused(monkeypatch):
     assert asyncio.run(plugin._deliver(_delivery(platform="discord"))) == ("refused", 0)
 
 
+def _delivery_for(sent, **fields):
+    """The delivery the agent hands back for a forwarded event's conversation."""
+    private = sent["message_type"] == "private"
+    return _delivery(reply_handle=sent["reply_handle"], platform=sent["platform"],
+                     message_type=sent["message_type"],
+                     conversation_id=sent["user_id" if private else "conversation_id"],
+                     **fields)
+
+
+def test_a_delivery_goes_only_where_the_plugin_took_its_handle_from(monkeypatch):
+    """The agent keeps reply_handle as any admitted event spelled it, and a
+    local process can post an event without GATEWAY_TOKEN. The allowlists
+    name the conversation, but the send goes to the handle."""
+    module = _import_plugin()
+    config = dict(_DM_CONFIG, group_whitelist=["group-1"])
+    plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("aiocqhttp"),
+                                     config=config, minted=())
+    plugin._outbox_running = lambda: True
+    group = _capture_event(plugin, _Event(module, private=False, platform="aiocqhttp"))
+    dm = _capture_event(plugin, _Event(module, private=True, platform="aiocqhttp"))
+    # A group message the adapter gave no group id reads as a DM, but its
+    # session is still the group's.
+    groupless = _Event(module, private=False, platform="aiocqhttp")
+    groupless.get_group_id = lambda: ""
+    groupless.message_obj.session_id = "group-2"
+    groupless = _capture_event(plugin, groupless)
+    assert groupless["message_type"] == "private"
+    forged = [("my-aiocqhttp:GroupMessage:99999", "group", "group-1"),
+              ("my-aiocqhttp:GroupMessage:88888", "private", "user-1"),
+              ("my-aiocqhttp:FriendMessage:77777", "private", "user-1"),
+              (group["reply_handle"], "private", "user-1"),
+              (dm["reply_handle"], "group", "group-1"),
+              (groupless["reply_handle"], "private", "user-1")]
+    for handle, kind, conversation in forged:
+        delivery = _delivery(reply_handle=handle, platform="aiocqhttp",
+                             message_type=kind, conversation_id=conversation)
+        assert asyncio.run(plugin._deliver(delivery)) == ("refused", 0), (handle, kind)
+    assert context.sent == []
+    for sent in (group, dm):
+        assert asyncio.run(plugin._deliver(_delivery_for(sent))) == ("sent", 2)
+    assert [s for s, _ in context.sent] == [group["reply_handle"]] * 2 + [dm["reply_handle"]] * 2
+
+
+def test_every_platform_that_speaks_first_still_reaches_its_conversations(monkeypatch):
+    """Groups, DMs and a group whose session unique_session pointed at one
+    member, on every adapter the plugin sends unprompted on, and after a
+    reload."""
+    module = _import_plugin()
+    platforms = sys.modules[_PACKAGE + ".platforms"]
+    for name in [p for p, rules in platforms.RULES.items() if rules.outbox]:
+        inst = _Inst(name, agent_id="1") if name == "wecom" else _Inst(name)
+        plugin, context, _ = _outbox_rig(monkeypatch, module, inst, minted=(),
+                                         config=dict(_DM_CONFIG, group_whitelist=["group-1"]))
+        plugin._outbox_running = lambda: True
+        isolated = _Event(module, private=False, platform=name)
+        isolated.unified_msg_origin = f"my-{name}:GroupMessage:user-1"
+        events = [_Event(module, private=True, platform=name),
+                  _Event(module, private=False, platform=name), isolated]
+        for event in events:
+            sent = _capture_event(plugin, event)
+            assert "outbox" in sent["caps"], name
+            context.sent.clear()
+            assert asyncio.run(plugin._deliver(_delivery_for(sent))) == ("sent", 2), (
+                name, sent["reply_handle"])
+            assert {s for s, _ in context.sent} == {sent["reply_handle"]}
+        reloaded = _plugin_instance(module, plugin.config, context)
+        assert asyncio.run(reloaded._deliver(_delivery_for(sent))) == ("sent", 2), name
+
+
 def test_platforms_that_cannot_speak_first_answer_unsupported(monkeypatch):
     module = _import_plugin()
     for inst in (_Inst("qq_official"), _Inst("wecom_ai_bot"), _Inst("weixin_official_account"),
                  _Inst("wecom", agent_id="1", client=types.SimpleNamespace(kf_message=object()))):
         name = inst.meta().name
-        plugin, context, _ = _outbox_rig(monkeypatch, module, inst)
         delivery = _delivery(reply_handle=f"my-{name}:GroupMessage:group-1", platform=name)
+        plugin, context, _ = _outbox_rig(monkeypatch, module, inst, minted=(delivery,))
         assert asyncio.run(plugin._deliver(delivery)) == ("unsupported", 0), name
         assert context.sent == []
     # A WeCom app that has not heard from anyone since AstrBot started drops
     # the send and still reports success.
-    plugin, context, _ = _outbox_rig(monkeypatch, module,
-                                     _Inst("wecom", agent_id=None, client=types.SimpleNamespace()))
     delivery = _delivery(reply_handle="my-wecom:GroupMessage:group-1", platform="wecom")
+    plugin, context, _ = _outbox_rig(
+        monkeypatch, module, _Inst("wecom", agent_id=None, client=types.SimpleNamespace()),
+        minted=(delivery,))
     assert asyncio.run(plugin._deliver(delivery)) == ("failed", 0)
 
 
@@ -1396,6 +1547,29 @@ def test_a_send_that_breaks_midway_is_partial_and_a_refused_one_failed(monkeypat
     assert asyncio.run(plugin._deliver(_delivery())) == ("partial", 1)
     plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), refuse=True)
     assert asyncio.run(plugin._deliver(_delivery())) == ("failed", 0)
+
+
+def test_a_split_item_counts_as_sent_only_once_its_last_part_is(monkeypatch):
+    """An item longer than the platform allows goes out in parts. Counting it
+    after its first part told the agent the reader had seen all of it."""
+    module = _import_plugin()
+    long = {"type": "text", "text": "word " * 460}  # two Discord messages
+    for items, fail_at, expected in (([long, {"type": "text", "text": "hello?"}], 1, ("failed", 0)),
+                                     ([{"type": "text", "text": "hi"}, long,
+                                       {"type": "text", "text": "bye"}], 2, ("partial", 1)),
+                                     ([{"type": "text", "text": "hi"}, long], 3, ("sent", 2))):
+        delivery = _delivery(reply_handle="my-discord:GroupMessage:group-1",
+                             platform="discord", items=items)
+        plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("discord"),
+                                         minted=(delivery,), fail_at=fail_at)
+        assert asyncio.run(plugin._deliver(delivery)) == expected, (fail_at, context.sent)
+    # LINE sends five bubbles per call: a call that ends inside an item has
+    # not finished it.
+    plugin = _plugin_instance(module, {})
+    short = [{"type": "text", "text": str(n)} for n in range(4)]
+    chains = _render(plugin, "line", *short, {"type": "text", "text": "word " * 1200},
+                     {"type": "text", "text": "end"})
+    assert [(len(c[0]), c[1]) for c in chains] == [(5, 4), (2, 6)], chains
 
 
 def test_a_platform_still_starting_is_waited_for_then_failed(monkeypatch):
@@ -1443,6 +1617,7 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
     plugin = module.LLMPersonaGateway(context, {
         "group_whitelist": ["group-1"], "gateway_token": "t",
         "agent_url": "https://agent.example/webhook/gateway"})
+    plugin._handles.mint("my-telegram:GroupMessage:group-1", "telegram", "group", "group-1")
     real_sleep = asyncio.sleep
     monkeypatch.setattr(module.random, "uniform", lambda a, b: 0)
     await plugin.initialize()

@@ -108,7 +108,7 @@ and see [Troubleshooting](#troubleshooting).
 | `private_enabled` | bool | `false` | Forward private messages from senders in `private_whitelist`. |
 | `private_whitelist` | list | `[]` | Sender IDs allowed in private chat. Empty allows none. |
 | `block_default` | bool | `true` | Stop AstrBot's pipeline when the agent claims the conversation. |
-| `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. |
+| `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. While on (and `quote_max_chars` is above 0), every event declares the `quote_text` capability. |
 | `quote_max_chars` | int | `200` | Longest quoted text sent; longer quotes are cut. |
 | `max_inline_image_bytes` | int | `4000000` | Largest image sent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one arrives as the note `(sent an image)`. Keep it under the agent's `MAX_IMAGE_BYTES`. |
 | `outbox_enabled` | bool | `true` | Pull and deliver the agent's outbox. See [Outbox](#outbox). |
@@ -224,7 +224,8 @@ On every platform:
   them (`forward_quoted_text`).
 - The message's time is the platform's own, not when AstrBot received it,
   wherever the adapter keeps it.
-- Replies are split below the platform's length limit, never become a
+- Replies are split below the platform's length limit, counted with the
+  mention and the escapes as the platform counts them, never become a
   text-to-image picture, and name people the way the platform does.
 - The outbox is used only where the platform can send unprompted.
 
@@ -259,6 +260,10 @@ never has to reach AstrBot. It is on by default (`outbox_enabled`).
 
 - A delivery goes out through the conversation's own AstrBot session,
   in order, each message at most once.
+- It goes only to a session the plugin itself took from a message in that
+  same conversation (kept in AstrBot's plugin store, so a reload keeps them).
+  Anything else that posts an event to the agent cannot point the outbox at
+  another chat; such a delivery is refused.
 - The allowlists and `excluded_platforms` are checked again at send time;
   a conversation removed since is refused.
 - Platforms that cannot speak first (see the table) never get one: the
