@@ -15,7 +15,6 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, vision_endpoint_from_env
-from .preflight import private_model_from_env
 from .endpoints import chat_completions_url, endpoint_for
 from .textproc import apply_k2_quirks
 
@@ -55,7 +54,7 @@ def check_private_chat():
     not use."""
     # The agent's own default and semantics (settings.py): unset reads as the
     # default model, an explicit blank stays blank for preflight to report.
-    model = private_model_from_env() or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
+    model = os.getenv("LLM_DM_MODEL", "") or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     base, key = _llm_endpoint(model)
     if not (key and model):
         return None, "not configured"

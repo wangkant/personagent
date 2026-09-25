@@ -120,9 +120,6 @@ def env_bool(name: str, default: bool, *, env=None) -> bool:
 #: tools all fall back to the same thing.
 DEFAULT_LLM_MODEL = "deepseek-chat"
 DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
-#: The endpoint the pre-rename GLM_BASE_URL defaulted to. Only the old names
-#: still reach it; VISION_BASE_URL has no default.
-LEGACY_VISION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 
 
 def vision_endpoint_from_env(env=None) -> tuple[str, str]:
@@ -130,22 +127,10 @@ def vision_endpoint_from_env(env=None) -> tuple[str, str]:
 
     ``VISION_API_KEY`` / ``VISION_BASE_URL`` configure whichever
     OpenAI-compatible model ``VISION_MODEL`` names, so the base URL has no
-    default: the model decides the provider. ``GLM_API_KEY`` /
-    ``GLM_BASE_URL``, the names these replaced, still work, and a deployment
-    configured with them behaves exactly as before, old default included. A
-    new name that is set wins over the old one.
+    default: the model decides the provider.
     """
-    source = os.environ if env is None else env
-    new_key = str(source.get("VISION_API_KEY") or "").strip()
-    new_base = str(source.get("VISION_BASE_URL") or "").strip()
-    old_key = str(source.get("GLM_API_KEY") or "").strip()
-    if new_base:
-        base = new_base
-    elif old_key and not new_key:
-        base = env_str("GLM_BASE_URL", LEGACY_VISION_BASE_URL, strip=True, env=source)
-    else:
-        base = str(source.get("GLM_BASE_URL") or "").strip()
-    return new_key or old_key, base.rstrip("/")
+    return (env_str("VISION_API_KEY", strip=True, env=env),
+            env_str("VISION_BASE_URL", strip=True, env=env).rstrip("/"))
 
 
 def env_str(name: str, default: str = "", *, strip: bool = False, env=None) -> str:

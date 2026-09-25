@@ -405,21 +405,6 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
               repr((first_full, second_full)))
 
 
-#: Read by the code on purpose and kept OUT of the template. Every entry
-#: weakens the typo check, so each one states why it is worth that.
-_UNDOCUMENTED_SETTINGS = {
-    # A pre-0.1.2 alias kept working for existing deployments and
-    # deliberately not advertised to new ones.
-    "ANTHROPIC_PRIVATE_MODEL",
-    # The vision endpoint's pre-rename names, for the same reason.
-    "GLM_API_KEY", "GLM_BASE_URL",
-    # The identity settings' QQ-only names (access.IDENTITY_SETTINGS), too.
-    "OWNER_QQ", "GATEWAY_OWNER_IDS", "QQ_GROUPS", "PRIVATE_ALLOWED_QQS",
-    # ADMIN_NAME and ADMIN_RELATIONSHIP's old names.
-    "OWNER_NAME", "OWNER_RELATIONSHIP",
-}
-
-
 def test_every_setting_the_code_reads_is_in_the_template() -> None:
     """`.env.example` is the authority on what a key may be CALLED.
 
@@ -486,7 +471,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     # access.identity_from_env reads its names in a loop, out of reach of the
     # scan; they are settings all the same.
     from persona_agent import access
-    for name in access.ALL_NAMES:
+    for name in access.IDENTITY_SETTINGS:
         read.setdefault(name, "access.py")
 
     template = (root / ".env.example").read_text(encoding="utf-8")
@@ -497,7 +482,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     }
     missing = sorted(
         f"{key} ({where})" for key, where in read.items()
-        if key not in documented and key not in _UNDOCUMENTED_SETTINGS)
+        if key not in documented)
     check("every setting the code reads is documented in .env.example",
           not missing,
           "; ".join(missing))
@@ -523,8 +508,7 @@ def test_preflight_reports_the_right_deployments() -> None:
     check("preflight: settings the offline tools read are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
                           "LAB_MODEL": "m", "REVIEWER_MODEL": "r",
-                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1",
-                          "ANTHROPIC_PRIVATE_MODEL": "p"}))
+                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1"}))
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
                           "HTTPS_PROXY": "p", "NO_PROXY": "localhost"}))
@@ -593,8 +577,8 @@ def test_preflight_reports_the_right_deployments() -> None:
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
-    """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS replaced four QQ-only
-    names that still work, and the ways to get the new ones wrong are silent:
+    """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS take ids on every
+    platform, and the ways to get them wrong are silent:
     another platform's id pasted without its prefix reads as a QQ id (and in
     ACCESS_GROUPS closes every QQ group), a capitalised platform never
     matches, and one entry takes a whole platform away from the forwarder."""
@@ -611,24 +595,14 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
                      ACCESS_DM_USERS="456", QQ_BOT_ID="9"),
           repr(levels(ADMIN_IDS="telegram:1,10000", ACCESS_GROUPS="123",
                       ACCESS_DM_USERS="456", QQ_BOT_ID="9")))
-    legacy = levels(OWNER_QQ="42", GATEWAY_OWNER_IDS="telegram:1",
-                    QQ_GROUPS="1,2", PRIVATE_ALLOWED_QQS="3", QQ_BOT_ID="9")
-    check("identity: the old names are not typos, and say what they became",
-          legacy == {("INFO", "OWNER_QQ"), ("INFO", "GATEWAY_OWNER_IDS"),
-                     ("INFO", "QQ_GROUPS"), ("INFO", "PRIVATE_ALLOWED_QQS")},
-          repr(legacy))
-    check("identity: ...including that removing an id means clearing it there",
-          any("delete it here" in f.detail
-              for f in findings(QQ_GROUPS="1", QQ_BOT_ID="9")))
-
     pasted = findings(ACCESS_GROUPS="-1001234,telegram:-100")
     check("identity: an id pasted without its prefix is a warning",
           any(f.level == "WARN" and f.key == "ACCESS_GROUPS"
               and "-1001234" in f.detail and "closes every QQ group" in f.detail
               for f in pasted), repr(pasted))
-    check("identity: ...in any of the lists, old names included",
+    check("identity: ...in any of the lists",
           ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="U0ABC")
-          and ("WARN", "GATEWAY_OWNER_IDS") in levels(GATEWAY_OWNER_IDS="alice"))
+          and ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS="alice"))
     check("identity: qq: and bare QQ numbers are fine",
           not levels(ACCESS_GROUPS="qq:123,456", QQ_BOT_ID="9"))
     check("identity: an entry naming no platform or no id is a warning",
@@ -637,10 +611,6 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
     check("identity: a capitalised platform never matches, and says so",
           ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="Telegram:1"))
 
-    moved = findings(QQ_GROUPS="telegram:-100")
-    check("identity: another platform in a QQ-only name changed meaning",
-          any(f.level == "WARN" and f.key == "QQ_GROUPS"
-              and "ACCESS_GROUPS" in f.detail for f in moved), repr(moved))
     opted = findings(ACCESS_GROUPS="telegram:-100", ACCESS_DM_USERS="slack:U1")
     check("identity: one entry gating a whole platform is pointed out",
           {(f.level, f.key) for f in opted if "only the listed" in f.detail}
@@ -705,7 +675,7 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
 
     monkeypatch.setattr(health, "_post_json", fake_post)
     for name in ("LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY", "VISION_API_KEY",
-                 "VISION_BASE_URL", "GLM_API_KEY", "GLM_BASE_URL"):
+                 "VISION_BASE_URL"):
         monkeypatch.delenv(name, raising=False)
     for name, value in (("LLM_API_KEY", "sk-primary"), ("LLM_MODEL", "main"),
                         ("LLM_BASE_URL", "https://primary.example"),
@@ -730,7 +700,6 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
 
     # LLM_DM_MODEL is routed by name like every other: the fallback's name
     # sends DMs to the fallback's endpoint, so that is where it is probed.
-    monkeypatch.delenv("ANTHROPIC_PRIVATE_MODEL", raising=False)
     monkeypatch.setenv("LLM_DM_MODEL", "cheap")
     posted.clear()
     health.check_private_chat()
@@ -757,7 +726,7 @@ def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> No
         return {"choices": [{"message": {"content": "ok"}}]}
 
     monkeypatch.setattr(health, "_post_json", fake_post)
-    for name in ("LLM_MODEL", "LLM_DM_MODEL", "ANTHROPIC_PRIVATE_MODEL",
+    for name in ("LLM_MODEL", "LLM_DM_MODEL",
                  "LLM_FALLBACK_MODEL", "LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_API_KEY", "k")

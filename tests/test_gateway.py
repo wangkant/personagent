@@ -554,7 +554,7 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
         stickers_file=str(tmp / "stickers.json"),
         message_debounce_sec=0,
         lang="en",
-        gateway_owner_ids=("telegram:1",),
+        admin_ids=("telegram:1",),
     )
     # Keep runtime state files out of the repo during tests.
     a._seen_msg_file = tmp / "seen_msg_ids.json"
@@ -942,7 +942,7 @@ async def test_forged_gateway_flag_rejected(tmp: Path) -> None:
     payload (no sink set) must not bypass the private-chat whitelist, while
     the same DM through handle_gateway (sink set) must still pass."""
     agent = make_agent(tmp)
-    agent.private_allowed_qqs = set()
+    agent.allowed_dm_users = set()
     reached: list[str] = []
 
     async def fake_private(user_id, payload, is_owner=False, proactive=False):
@@ -1291,7 +1291,7 @@ async def test_memory_commands_need_the_whole_keyword(tmp: Path) -> None:
     """A command keyword is a whole word, and the owner's one short word
     cannot wipe every member's rows that happen to contain it."""
     agent = make_agent(tmp)
-    agent.owner_qq = "owner"
+    agent.admin_ids.add("owner")
     g = "g-words"
     for text in ("TestBot remembered my birthday!",
                  "TestBot remembers everything huh",
@@ -1367,7 +1367,7 @@ async def test_learned_summary_command(tmp: Path) -> None:
 async def test_memory_commands_are_caller_scoped(tmp: Path) -> None:
     agent = make_agent(tmp)
     g = "g-memory"
-    agent.owner_qq = "owner"
+    agent.admin_ids.add("owner")
     agent._handle_memory_command(
         g, "TestBot remember Bob likes chess", user_id="alice",
         user_name="Alice")
@@ -1638,7 +1638,7 @@ async def test_mem_command_sends_outside_lock(tmp: Path) -> None:
     """A memory command ('remember…') must send with the group lock RELEASED
     (so a long memory dump can't block the group), and still return handled=True."""
     agent = make_agent(tmp)
-    agent.owner_qq = "1"
+    agent.admin_ids.add("1")
     lock_held_during_send = []
 
     async def fake_send(group_id, text, at_user_id=""):
@@ -1723,7 +1723,7 @@ async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
     `/v1/onebot` accepts arbitrary JSON, so a payload flag would let a forged
     request tell the engine "this text is mine, do not write it down"."""
     agent = make_agent(tmp)
-    agent.private_allowed_qqs = {"777"}
+    agent.allowed_dm_users = {"777"}
     seen: list = []
 
     async def fake_chat_private(history, is_owner=False, pkey="",
@@ -1985,8 +1985,8 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.gateway_native_platforms = {"aiocqhttp"}
     agent.allowed_groups = {"123456"}
-    agent.private_allowed_qqs = {"888"}
-    agent.owner_qq = "10000"
+    agent.allowed_dm_users = {"888"}
+    agent.admin_ids.add("10000")
 
     async def fake_think(group_id, mode, text="", caller_override=None):
         return "on my way", "called", ""
@@ -2141,10 +2141,9 @@ async def test_the_agent_lists_gate_each_platform_separately(
     import logging
 
     agent, served = _serving_agent(tmp)
-    agent.owner_qq = "10000"
+    agent.admin_ids.add("10000")
     agent.allowed_groups = {"telegram:-100777"}
     agent.allowed_dm_users = {"telegram:42"}
-    agent.private_allowed_qqs = set()
 
     qq = await agent.handle(_qq_group("4242", "777", 1001))
     check("groups: a Telegram entry leaves every QQ group open",
@@ -2248,8 +2247,6 @@ async def test_an_owner_on_any_platform_is_the_owner(tmp: Path) -> None:
     the owner ran as an ordinary caller, could not manage members' memories,
     and was weighed as a stranger when correcting the bot."""
     agent, served = _serving_agent(tmp)
-    agent.owner_qq = ""
-    agent.gateway_owner_ids = set()
     agent.admin_ids = {"telegram:1", "10000"}
 
     await agent.handle_gateway(_gw_group("telegram", "-100", "1", 1201))
@@ -2324,7 +2321,6 @@ async def test_the_owner_block_needs_an_owner_not_a_qq_number(
     """[Special person] was gated on OWNER_QQ, so a deployment whose owner
     was only on Telegram never had it on any platform."""
     agent = make_agent(tmp)
-    agent.owner_qq, agent.gateway_owner_ids = "", set()
     agent.admin_ids, agent.owner_name = {"telegram:1"}, "Kay"
     agent._append_buffer("telegram:-100", "Alice", "anyone around", "telegram:42")
     systems: list = []
@@ -2349,10 +2345,8 @@ async def test_proactive_dms_go_only_where_napcat_can_send(
     QQ has a channel to open a DM unprompted. A namespaced id was once
     POSTed to NapCat's send_private_msg."""
     agent, served = _serving_agent(tmp)
-    agent.owner_qq, agent.gateway_owner_ids = "", set()
     agent.admin_ids = {"10000", "telegram:1"}
-    agent.allowed_dm_users = {"telegram:42"}
-    agent.private_allowed_qqs = {"888"}
+    agent.allowed_dm_users = {"telegram:42", "888"}
     agent.proactive_dm_prob = 1.0
     quiet = time.time() - agent.proactive_dm_min_silence - 100
     for uid in ("10000", "telegram:1", "888", "telegram:42"):
@@ -2382,7 +2376,6 @@ async def test_a_native_owner_keeps_the_qq_keys(tmp: Path) -> None:
     check("native owner: read as the bare QQ id",
           settings.owners == {"10000"}, repr(settings.owners))
     agent, served = _serving_agent(tmp)
-    agent.owner_qq, agent.gateway_owner_ids = "", set()
     agent.admin_ids = set(settings.admin_ids)
     agent.gateway_native_platforms = {"aiocqhttp"}
     result = await agent.handle_gateway(_gw_dm("aiocqhttp", "10000", 1301))
@@ -3110,7 +3103,7 @@ async def test_proactive_group_postprocessing(tmp: Path) -> None:
 async def test_proactive_dm_saves_mem(tmp: Path) -> None:
     """Proactive DMs use the same marker/filter/commit contract as reactive DMs."""
     agent = make_agent(tmp)
-    agent.owner_qq = "55"
+    agent.admin_ids.add("55")
     agent.last_dm_activity_at["55"] = time.time() - agent.proactive_dm_min_silence - 100
     agent.proactive_dm_prob = 1.0
     sent: list[tuple] = []

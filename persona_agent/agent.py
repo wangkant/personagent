@@ -277,7 +277,6 @@ class Agent(ContentIngestion, Transport, Learning):
         self.bot_qq = s.bot_qq
         self.bot_name = s.bot_name
         self.napcat_api = s.napcat_api
-        self.owner_qq = s.owner_qq
         self.owner_name = s.owner_name
         self.owner_relationship = s.owner_relationship
         self.on_reply = s.on_reply
@@ -309,8 +308,6 @@ class Agent(ContentIngestion, Transport, Learning):
         self.admin_ids: set = set(s.admin_ids)
         self.allowed_groups: set = set(s.allowed_groups)
         self.allowed_dm_users: set = set(s.allowed_dm_users)
-        self.private_allowed_qqs: set = set(s.private_allowed_qqs)
-        self.gateway_owner_ids: set = set(s.gateway_owner_ids)
         self.gateway_native_platforms: set = set(s.gateway_native_platforms)
         self.gateway_outbox = s.gateway_outbox
 
@@ -821,21 +818,20 @@ class Agent(ContentIngestion, Transport, Learning):
             sink.owned = True
 
     def _owners(self) -> frozenset[str]:
-        """Every owner account, canonical: ADMIN_IDS and its old names.
-        Re-read on each call because the parts are live attributes the tests
-        and admin paths edit; the sets are tiny."""
+        """Every owner account (ADMIN_IDS), canonical. Re-read on each call
+        because it is a live attribute the tests and admin paths edit; the
+        set is tiny."""
         return access.parse_ids(
-            self.admin_ids, (self.owner_qq,), self.gateway_owner_ids,
-            native_platforms=self.gateway_native_platforms)
+            self.admin_ids, native_platforms=self.gateway_native_platforms)
 
     def _dm_allowlist(self) -> frozenset[str]:
-        """ACCESS_DM_USERS and PRIVATE_ALLOWED_QQS, canonical."""
+        """ACCESS_DM_USERS, canonical."""
         return access.parse_ids(
-            self.allowed_dm_users, self.private_allowed_qqs,
+            self.allowed_dm_users,
             native_platforms=self.gateway_native_platforms)
 
     def _group_allowlist(self) -> frozenset[str]:
-        """ACCESS_GROUPS (QQ_GROUPS folded in), canonical."""
+        """ACCESS_GROUPS, canonical."""
         return access.parse_ids(
             self.allowed_groups, native_platforms=self.gateway_native_platforms)
 
@@ -1465,7 +1461,7 @@ class Agent(ContentIngestion, Transport, Learning):
             (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
             "",
         )
-        # Gate on `is_owner` alone: OWNER_NAME is optional and ships empty.
+        # Gate on `is_owner` alone: ADMIN_NAME is optional and ships empty.
         if is_owner:
             owner_ref = self.owner_name or "the owner"
             persona_extra = (
@@ -2578,7 +2574,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 f"Address {_fence_user_data(latest_nick) if latest_nick else 'the person who called you'} directly, sound like a real person."
             )
         elif mode == "owner":
-            # OWNER_NAME is optional and ships empty, while owner mode needs
+            # ADMIN_NAME is optional and ships empty, while owner mode needs
             # only an owner id: unguarded, both lines lost their subject
             # ("latest line is from , the owner").
             owner_ref = self.owner_name or "the owner"
@@ -3733,7 +3729,7 @@ class Agent(ContentIngestion, Transport, Learning):
     def _owner_sticker_pattern_block(self) -> str:
         """If owner_profile.json exists, embed measured frequency as the target.
         Otherwise return a placeholder telling model to use moderate frequency."""
-        # OWNER_NAME is optional and ships empty, and this block reaches EVERY
+        # ADMIN_NAME is optional and ships empty, and this block reaches EVERY
         # group and private prompt: unguarded concatenation put "haven't
         # analyzed 's chat style yet" in front of the model on every turn.
         owner_ref = self.owner_name or "the owner"

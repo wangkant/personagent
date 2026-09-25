@@ -535,9 +535,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     rerun = bool(_env_current_key(env_path))
     current = {key: _env_get(env_path, key) if rerun else "" for key in (
         "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "PERSONA_NAME", "AGENT_LANG",
-        "QQ_BOT_ID", "ADMIN_IDS", "ADMIN_NAME", "ACCESS_GROUPS",
-        # Names before 0.5, read so a re-run offers what they hold.
-        "OWNER_QQ", "GATEWAY_OWNER_IDS", "OWNER_NAME", "QQ_GROUPS")}
+        "QQ_BOT_ID", "ADMIN_IDS", "ADMIN_NAME", "ACCESS_GROUPS")}
     current_base = current["LLM_BASE_URL"].rstrip("/")
     default_choice = "1"
     if current_base:
@@ -625,13 +623,12 @@ def run_wizard(venv: Path, env_path: Path) -> None:
             "and they can manage what it remembers. Comma-separated "
             "<platform>:<id> such as telegram:12345, a QQ number alone being QQ",
             "empty = no admin",
-            _split_ids(",".join((current["ADMIN_IDS"], current["OWNER_QQ"],
-                                 current["GATEWAY_OWNER_IDS"]))))
+            _split_ids(current["ADMIN_IDS"]))
         values["ADMIN_IDS"] = ",".join(admins)
         if admins:
             values["ADMIN_NAME"] = _ask(
                 "Admin display name",
-                default=current["ADMIN_NAME"] or current["OWNER_NAME"], required=True)
+                default=current["ADMIN_NAME"], required=True)
         groups = _ask_ids("Group / channel IDs the persona should join, comma-separated, "
                           "as AstrBot shows them", "empty = none yet",
                           existing.get("groups"))
@@ -639,16 +636,10 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                             "empty = no DMs", existing.get("dm_users"))
         if qq:
             # QQ entries follow the plugin's groups; other platforms' are kept.
-            others = [g for g in _split_ids(",".join((current["ACCESS_GROUPS"],
-                                                      current["QQ_GROUPS"])))
+            others = [g for g in _split_ids(current["ACCESS_GROUPS"])
                       if ":" in g and not g.startswith("qq:")]
             values["ACCESS_GROUPS"] = ",".join(
                 others + [g for g in groups if g.isdigit()])
-        # The old names are merged into the new ones, so an id left under them
-        # would outlive its removal here.
-        for old in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "OWNER_NAME", "QQ_GROUPS"):
-            if current[old] and (old != "QQ_GROUPS" or qq):
-                values[old] = ""
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
                                    qq=qq, groups=groups, dm_users=dm_users)
         # Written now, not after the platform question: a Ctrl-C there must

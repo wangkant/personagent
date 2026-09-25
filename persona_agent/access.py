@@ -8,8 +8,7 @@ a QQ id as "qq:<id>", and an id from a CONNECTOR_QQ_PLATFORMS forwarder as
 Three settings, one list each:
 
 * ADMIN_IDS: the admin's accounts. One person on many platforms, sharing
-  ADMIN_NAME and ADMIN_RELATIONSHIP. The code calls them the owner, the
-  name the settings had until 0.5.
+  ADMIN_NAME and ADMIN_RELATIONSHIP.
 * ACCESS_GROUPS / ACCESS_DM_USERS: who the agent itself admits, partitioned
   per platform. A platform with no entries is not restricted by the agent:
   every QQ group is answered, a QQ DM still needs the admin or an entry, and a
@@ -26,21 +25,9 @@ from typing import Iterable, Mapping
 
 from . import channels
 
-#: Each identity setting, and the older names folded into it. The old names
-#: are merged by UNION: a half-migrated .env (ADMIN_IDS=telegram:1 with
-#: OWNER_QQ still set) must keep the QQ admin it already had.
-IDENTITY_SETTINGS: dict[str, tuple[str, ...]] = {
-    "ADMIN_IDS": ("OWNER_QQ", "GATEWAY_OWNER_IDS"),
-    "ACCESS_GROUPS": ("QQ_GROUPS",),
-    "ACCESS_DM_USERS": ("PRIVATE_ALLOWED_QQS",),
-}
-
-#: The old names, which still work and are no longer advertised.
-LEGACY_SETTINGS: frozenset[str] = frozenset(
-    old for olds in IDENTITY_SETTINGS.values() for old in olds)
-
-#: Read as one id, not a comma list, exactly as it always was.
-_SINGLE_VALUE = frozenset({"OWNER_QQ"})
+#: The identity settings, each a comma list of ids.
+IDENTITY_SETTINGS: tuple[str, ...] = ("ADMIN_IDS", "ACCESS_GROUPS",
+                                      "ACCESS_DM_USERS")
 
 #: Why /v1/onebot never admits a namespaced id: NapCat only sends QQ numbers,
 #: so one arriving there was written by someone else.
@@ -123,13 +110,6 @@ def owner_on(platform: str, owners: Iterable[str]) -> str:
     return ""
 
 
-def _setting(name: str, platform: str) -> str:
-    """`name` as a refusal names it; QQ entries may still be under the old one."""
-    if platform != channels.NATIVE_PLATFORM:
-        return name
-    return f"{name} (or {', '.join(IDENTITY_SETTINGS[name])})"
-
-
 def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
                   prefiltered: bool = True, user_id="") -> str:
     """Why a group is not admitted, naming the setting; "" when it is."""
@@ -143,8 +123,7 @@ def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
     if listed:
         if gid in listed:
             return ""
-        return (f"not in {_setting('ACCESS_GROUPS', platform)}, which lists "
-                f"{platform} groups")
+        return f"not in ACCESS_GROUPS, which lists {platform} groups"
     if channels.is_native(gid) or prefiltered:
         return ""
     return (f"ACCESS_GROUPS has no {platform} entries and the connector "
@@ -163,8 +142,8 @@ def dm_refusal(user_id, owners: Iterable[str], allowed: Iterable[str], *,
         return ""
     platform = channels.platform_of(uid)
     if channels.is_native(uid):
-        return (f"not in ADMIN_IDS or {_setting('ACCESS_DM_USERS', platform)}"
-                f", one of which every QQ DM needs")
+        return ("not in ADMIN_IDS or ACCESS_DM_USERS, one of which every QQ "
+                "DM needs")
     if entries_on(platform, allowed):
         return (f"not in ADMIN_IDS or ACCESS_DM_USERS, which lists "
                 f"{platform} users")
@@ -179,22 +158,14 @@ class Identity:
 
     def __init__(self, written: Mapping[str, tuple[str, ...]],
                  native_platforms: Iterable[str] = ()) -> None:
-        #: Every name in IDENTITY_SETTINGS, new and old, -> its entries.
+        #: Each name in IDENTITY_SETTINGS -> its entries.
         self.written = {name: tuple(written.get(name, ()))
-                        for name in ALL_NAMES}
+                        for name in IDENTITY_SETTINGS}
         self.native_platforms = split_ids(native_platforms)
 
-    def merged(self, name: str) -> tuple[str, ...]:
-        """`name`'s entries, then its old names', deduplicated, as written."""
-        seen: dict[str, None] = {}
-        for source in (name, *IDENTITY_SETTINGS[name]):
-            for entry in self.written[source]:
-                seen.setdefault(entry, None)
-        return tuple(seen)
-
     def ids(self, name: str) -> frozenset[str]:
-        """The canonical ids `name` means once its old names are folded in."""
-        return parse_ids(self.merged(name),
+        """The canonical ids `name` lists."""
+        return parse_ids(self.written[name],
                          native_platforms=self.native_platforms)
 
     @property
@@ -210,23 +181,11 @@ class Identity:
         return self.ids("ACCESS_DM_USERS")
 
 
-#: Every identity setting name, new ones first.
-ALL_NAMES: tuple[str, ...] = (
-    tuple(IDENTITY_SETTINGS) + tuple(sorted(LEGACY_SETTINGS)))
-
-
 def identity_from_env(env: Mapping[str, str] | None = None) -> Identity:
     """The one reader of the identity settings.
 
     The agent, preflight and the offline tools all read them here, so the
     admin the operator CLI exempts is the admin the agent exempts."""
     source = os.environ if env is None else env
-    written = {}
-    for name in ALL_NAMES:
-        raw = source.get(name)
-        if name in _SINGLE_VALUE:
-            text = str(raw or "").strip()
-            written[name] = (text,) if text else ()
-        else:
-            written[name] = split_ids(raw)
+    written = {name: split_ids(source.get(name)) for name in IDENTITY_SETTINGS}
     return Identity(written, split_ids(source.get("CONNECTOR_QQ_PLATFORMS")))

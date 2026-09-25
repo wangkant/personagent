@@ -194,7 +194,7 @@ async def test_the_owner_prompt_has_a_subject_without_owner_name(
         tmp: Path) -> None:
     """Owner mode needs only OWNER_QQ, and OWNER_NAME ships blank."""
     agent = make_agent(tmp)
-    agent.owner_qq, agent.owner_name = "7", ""
+    agent.admin_ids, agent.owner_name = {"7"}, ""
     agent._append_buffer("g1", "Boss", "anyone up for lunch", "7")
     captured: dict = {}
 

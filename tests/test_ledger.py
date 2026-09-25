@@ -799,9 +799,9 @@ def test_corroboration_means_people_not_events() -> None:
         payload={"reply": "bad line", "better": "fixed", "mode": "called",
                  "rating": "better"})
 
-    def decide(events, owner_id="", policy=promotion.DEFAULT_POLICY):
+    def decide(events, owner_ids=(), policy=promotion.DEFAULT_POLICY):
         return promotion.decide(cand, linked_events=events, related_events=[],
-                                peers=[], now=now, owner_id=owner_id,
+                                peers=[], now=now, owner_ids=owner_ids,
                                 policy=policy)
 
     strict = promotion.Policy(min_speakers=2)
@@ -833,8 +833,8 @@ def test_corroboration_means_people_not_events() -> None:
           decide(two, policy=strict).promote is True,
           decide(two, policy=strict).reason)
     check("speakers: the owner is exempt even at MIN_SPEAKERS=2",
-          decide(owner, owner_id="owner1", policy=strict).promote is True,
-          decide(owner, owner_id="owner1", policy=strict).reason)
+          decide(owner, owner_ids=("owner1",), policy=strict).promote is True,
+          decide(owner, owner_ids=("owner1",), policy=strict).reason)
     # Every account in ADMIN_IDS is the owner, not just the QQ one.
     tg_owner = [ev("telegram:1"),
                 ev("telegram:1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
@@ -880,18 +880,17 @@ async def test_the_cli_and_the_agent_exempt_the_same_owners(
     real = promotion.decide
 
     def spy(c, **kw):
-        asked.append(set(kw.get("owner_ids") or ()) | {kw.get("owner_id") or ""})
+        asked.append(set(kw.get("owner_ids") or ()))
         return real(c, **kw)
 
     monkeypatch.setattr(promotion, "decide", spy)
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
-    for name in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "CONNECTOR_QQ_PLATFORMS"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("CONNECTOR_QQ_PLATFORMS", raising=False)
     agent_says = a._decide_promotion(cand["candidate_id"])
     cli_says = candidates_admin._decide(
         a.candidate_ledger, a.evidence_log, cand, a.promotion_policy)
     check("owners: both ask with the Telegram owner",
-          [owners - {""} for owners in asked] == [{"telegram:1"}] * 2,
+          asked == [{"telegram:1"}] * 2,
           repr(asked))
     check("owners: and reach the same decision",
           (agent_says.promote, agent_says.reason)

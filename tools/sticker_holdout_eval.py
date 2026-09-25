@@ -49,7 +49,6 @@ load_dotenv(ROOT / ".env", override=False)
 from persona_agent.agent import Agent
 from persona_agent.paths import resolve_runtime_state_file
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, vision_endpoint_from_env
-from persona_agent.preflight import private_model_from_env
 
 STICKERS_DIR = ROOT / "stickers" / "auto"
 
@@ -109,7 +108,7 @@ async def main(holdout_path: Path, runs: int) -> None:
         model=os.getenv("LLM_MODEL", ""),
         bot_qq=os.getenv("QQ_BOT_ID", ""),
         bot_name=os.getenv("PERSONA_NAME", ""),
-        private_model=private_model_from_env(),
+        private_model=os.getenv("LLM_DM_MODEL", ""),
         vision_model=vision_model,
         vision_api_key=vision_key,
         vision_base_url=vision_base,

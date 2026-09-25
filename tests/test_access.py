@@ -64,9 +64,8 @@ def test_group_admission_is_partitioned_per_platform() -> None:
     # QQ: empty means every group, entries mean only those.
     check("QQ, no entries: every group", refusal("555", "", fwd=False) == "")
     check("QQ, listed", refusal("123", "123", fwd=False) == "")
-    check("QQ, not listed: refused naming ACCESS_GROUPS and its old name",
-          "ACCESS_GROUPS" in refusal("555", "123", fwd=False)
-          and "QQ_GROUPS" in refusal("555", "123", fwd=False))
+    check("QQ, not listed: refused naming ACCESS_GROUPS",
+          "ACCESS_GROUPS" in refusal("555", "123", fwd=False))
     check("QQ entries apply to a native forwarder's bare ids too",
           refusal("555", "123") != "" and refusal("123", "123") == "")
     check("a Telegram entry does not close QQ",
@@ -104,8 +103,7 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
     check("QQ: the owner", refusal("10000", "", fwd=False) == "")
     check("QQ: a listed user", refusal("888", "888", fwd=False) == "")
     check("QQ: an empty list still means owner only",
-          "ACCESS_DM_USERS" in refusal("555", "", fwd=False)
-          and "PRIVATE_ALLOWED_QQS" in refusal("555", "", fwd=False))
+          "ACCESS_DM_USERS" in refusal("555", "", fwd=False))
     check("QQ: same through a native forwarder", refusal("555", "") != "")
 
     check("Telegram, no entries: left to the forwarder",
@@ -122,43 +120,26 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
 
     check("the QQ webhook refuses a namespaced owner: it is forged",
           refusal("telegram:1", "", fwd=False) == access.QQ_DOOR_REFUSAL)
-    check("a Telegram refusal names only the new setting",
-          "PRIVATE_ALLOWED_QQS" not in refusal("telegram:43", "telegram:42"))
 
 
-def test_the_identity_reader_folds_the_old_names_in_by_union() -> None:
+def test_the_identity_reader_reads_one_list_per_setting() -> None:
     env = {
-        "ADMIN_IDS": "telegram:1, qq:5", "OWNER_QQ": " 10000 ",
-        "GATEWAY_OWNER_IDS": "discord:2,aiocqhttp:7",
+        "ADMIN_IDS": "telegram:1, qq:5,aiocqhttp:7",
         "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
-        "ACCESS_GROUPS": "telegram:-100", "QQ_GROUPS": "1,2",
-        "ACCESS_DM_USERS": "slack:U1", "PRIVATE_ALLOWED_QQS": "8",
+        "ACCESS_GROUPS": "telegram:-100,1", "ACCESS_DM_USERS": "slack:U1,8",
     }
     ident = access.identity_from_env(env)
-    check("owners: every name, canonical",
-          ident.owners == {"telegram:1", "5", "10000", "discord:2", "7"},
-          repr(ident.owners))
-    check("groups: new and old together",
-          ident.groups == {"telegram:-100", "1", "2"}, repr(ident.groups))
-    check("DM users: new and old together",
-          ident.dm_users == {"slack:U1", "8"}, repr(ident.dm_users))
-    check("merged keeps the order written, new name first",
-          ident.merged("ACCESS_GROUPS") == ("telegram:-100", "1", "2"))
+    check("owners: canonical",
+          ident.owners == {"telegram:1", "5", "7"}, repr(ident.owners))
+    check("groups", ident.groups == {"telegram:-100", "1"}, repr(ident.groups))
+    check("DM users", ident.dm_users == {"slack:U1", "8"}, repr(ident.dm_users))
     check("what was written is kept per name, for preflight",
-          ident.written["QQ_GROUPS"] == ("1", "2")
-          and ident.written["OWNER_QQ"] == ("10000",))
-
-    old = access.identity_from_env({"OWNER_QQ": "42", "QQ_GROUPS": "g1",
-                                    "PRIVATE_ALLOWED_QQS": "p1"})
-    check("an .env with only the old names means what it always did",
-          (old.owners, old.groups, old.dm_users)
-          == ({"42"}, {"g1"}, {"p1"}))
-    check("OWNER_QQ is one id, as it always was",
-          access.identity_from_env({"OWNER_QQ": "1,2"}).owners == {"1,2"})
+          ident.written["ACCESS_GROUPS"] == ("telegram:-100", "1"))
     check("nothing set is nobody",
           not access.identity_from_env({}).owners
           and not access.identity_from_env({}).groups)
-    half = access.identity_from_env({"ADMIN_IDS": "telegram:1",
-                                     "OWNER_QQ": "10000"})
-    check("a half-migrated .env keeps its QQ owner",
-          half.owners == {"telegram:1", "10000"}, repr(half.owners))
+    old = access.identity_from_env({
+        "OWNER_QQ": "42", "QQ_GROUPS": "g1", "PRIVATE_ALLOWED_QQS": "p1",
+        "GATEWAY_OWNER_IDS": "telegram:1"})
+    check("the names before 0.5 are not read",
+          not any(old.written.values()), repr(old.written))

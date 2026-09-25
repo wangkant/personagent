@@ -42,10 +42,6 @@ WANTED = {
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
-#: Single-value settings renamed in 0.5, old name -> new; the new one wins.
-_RENAMED = (("OWNER_NAME", "ADMIN_NAME"),
-            ("OWNER_RELATIONSHIP", "ADMIN_RELATIONSHIP"))
-
 #: Names a live `.env` may legitimately carry that the template does not.
 #: Deliberately tiny — every entry is a hole in the typo check.
 TEMPLATE_EXEMPT = frozenset({
@@ -58,19 +54,6 @@ TEMPLATE_EXEMPT = frozenset({
     # operator their working proxy setting was being ignored.
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
-    # A pre-0.1.2 alias kept working for existing deployments and deliberately
-    # not advertised to new ones. `tests/test_http.py` exempts it from the
-    # template scan for the same reason; both lists have to agree or a
-    # deployment that legitimately sets it gets told it is a typo.
-    "ANTHROPIC_PRIVATE_MODEL",
-    # The vision endpoint's pre-rename names, likewise still honoured
-    # (config_env.vision_endpoint_from_env) and not advertised.
-    "GLM_API_KEY", "GLM_BASE_URL",
-    # The identity settings' QQ-only names, folded into ADMIN_IDS,
-    # ACCESS_GROUPS and ACCESS_DM_USERS (access.IDENTITY_SETTINGS).
-    *access.LEGACY_SETTINGS,
-    # ADMIN_NAME and ADMIN_RELATIONSHIP's names before 0.5 (_RENAMED).
-    *(old for old, _new in _RENAMED),
 })
 
 #: The one forwarder platform whose ids are QQ numbers (AstrBot's OneBot
@@ -92,7 +75,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     natives = identity.native_platforms
     findings: list[Finding] = []
 
-    for name in access.ALL_NAMES:
+    for name in access.IDENTITY_SETTINGS:
         written = identity.written[name]
         malformed = [e for e in written if access.is_malformed(e)]
         if malformed:
@@ -108,7 +91,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
         bare = [i for i in ids if ":" not in i and not i.isdigit()]
         if bare:
             closes = (", and as a QQ entry it closes every QQ group not listed"
-                      if name in ("ACCESS_GROUPS", "QQ_GROUPS") else "")
+                      if name == "ACCESS_GROUPS" else "")
             findings.append(Finding(
                 "WARN", name,
                 f"has {_shown(bare)} with no platform prefix, so it is read as "
@@ -122,29 +105,6 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
                 f"names the platform {_shown(cased)}, but platform names are "
                 f"lowercase (telegram, discord, ...), so these entries never "
                 f"match"))
-
-    # The old QQ-only lists are read per platform now. A namespaced entry in
-    # one used to close every QQ group (QQ_GROUPS) or do nothing at all
-    # (PRIVATE_ALLOWED_QQS); it now restricts its own platform instead.
-    for old, new in (("QQ_GROUPS", "ACCESS_GROUPS"),
-                     ("PRIVATE_ALLOWED_QQS", "ACCESS_DM_USERS")):
-        foreign = [i for i in access.canonical_ids(
-            identity.written[old], native_platforms=natives) if ":" in i]
-        if foreign:
-            findings.append(Finding(
-                "WARN", old,
-                f"holds {_shown(foreign)}, which are not QQ ids. They now "
-                f"restrict {_shown(sorted({channels.platform_of(i) for i in foreign}))}"
-                f" to the ids listed and no longer affect QQ; move them to "
-                f"{new}, or remove them if that is not what you want"))
-
-    for new, olds in access.IDENTITY_SETTINGS.items():
-        for old in olds:
-            if identity.written[old]:
-                findings.append(Finding(
-                    "INFO", old,
-                    f"is the old name of {new} and still works. Its ids count "
-                    f"together with {new}'s, so to remove one, delete it here"))
 
     # Listing one entry for a platform takes that platform away from the
     # forwarder's allowlist. Documented, but easy to trip over.
@@ -197,12 +157,6 @@ def _base_url_needs_full_path(base: str) -> bool:
     last = path.rsplit("/", 1)[-1]
     return (len(last) > 1 and last[0] == "v" and last[1:].isdigit()
             and last != "v1")
-
-
-def private_model_from_env(env=None) -> str:
-    """LLM_DM_MODEL, honouring the pre-0.1.2 ANTHROPIC_PRIVATE_MODEL alias."""
-    env = os.environ if env is None else env
-    return env.get("LLM_DM_MODEL", "") or env.get("ANTHROPIC_PRIVATE_MODEL", "")
 
 
 class Finding:
@@ -337,17 +291,11 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
     identity = access.identity_from_env(configured)
     findings.extend(_identity_findings(identity))
-    for old, new in _RENAMED:
-        if str(configured.get(old) or "").strip():
-            findings.append(Finding(
-                "INFO", old, f"is the old name of {new} and still works; "
-                f"{new} wins when both are set"))
     qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
               if i.isdigit()}
 
     bot_qq = str(configured.get("QQ_BOT_ID") or "").strip()
-    if bot_qq and not any(name in configured
-                          for name in ("ACCESS_GROUPS", "QQ_GROUPS")):
+    if bot_qq and "ACCESS_GROUPS" not in configured:
         findings.append(Finding(
             "INFO", "ACCESS_GROUPS",
             "is unset, so the bot listens in every QQ group it is a member of"))

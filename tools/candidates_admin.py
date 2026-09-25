@@ -80,22 +80,20 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
     return None
 
 
-def _decide(ledger, log, cand, policy, owner_id: str = "") -> promotion.Decision:
+def _decide(ledger, log, cand, policy) -> promotion.Decision:
     """What the policy would say, using the SAME inputs the agent uses.
 
     This built its own `related_events` and filtered to the candidate's reply
     alone, so `counter_evidence`'s rewrite branch was unreachable from here:
     `list` printed `why not:` and `show` printed `would promote` for a pair
     whose rewrite the user had rejected, next to an unconditional `promote`.
-    `owner_id` likewise defaulted to empty, so with `PROMOTE_MIN_SPEAKERS>=2`
-    the CLI reported a speaker shortfall for candidates the agent itself would
-    promote under the owner exemption. The owners come from the agent's own
-    reader, so every account in ADMIN_IDS is exempt here as it is there."""
+    The owners come from the agent's own reader, so every account in ADMIN_IDS
+    is exempt here as it is there."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
         peers=ledger.all(), now=time.time(), policy=policy,
-        owner_id=owner_id, owner_ids=access.identity_from_env().owners)
+        owner_ids=access.identity_from_env().owners)
 
 
 def _short(text, width: int = 60) -> str:

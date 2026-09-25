@@ -300,8 +300,8 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
     env = tmp_path / ".env"
     env.write_text("LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/\n"
                    "LLM_MODEL=gpt-4o-mini\nPERSONA_NAME=Mika\nAGENT_LANG=en\nQQ_BOT_ID=10001\n"
-                   "CONNECTOR_QQ_PLATFORMS=aiocqhttp\nOWNER_QQ=42\nOWNER_NAME=Kay\n"
-                   "QQ_GROUPS=123\nACCESS_GROUPS=telegram:-100,qq:999\n", encoding="utf-8")
+                   "CONNECTOR_QQ_PLATFORMS=aiocqhttp\nADMIN_IDS=42\nADMIN_NAME=Kay\n"
+                   "ACCESS_GROUPS=telegram:-100,qq:999\n", encoding="utf-8")
 
     prompts: list[str] = []
 
@@ -331,13 +331,11 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
     check("wizard rerun: DMs kept", cfg["dm_users"] == ["789"], repr(cfg))
     check("wizard rerun: QQ kept", cfg["excluded_platforms"] == [], repr(cfg))
     got = {k: quickstart._env_get(env, k) for k in (
-        "ACCESS_GROUPS", "QQ_GROUPS", "ADMIN_IDS", "ADMIN_NAME", "OWNER_QQ", "OWNER_NAME")}
+        "ACCESS_GROUPS", "ADMIN_IDS", "ADMIN_NAME")}
     check("wizard rerun: QQ entries follow the kept groups, other platforms' stay",
           got["ACCESS_GROUPS"] == "telegram:-100,123,456", repr(got))
-    check("wizard rerun: the old owner moves to the admin names",
+    check("wizard rerun: the admin is kept",
           got["ADMIN_IDS"] == "42" and got["ADMIN_NAME"] == "Kay", repr(got))
-    check("wizard rerun: the old names are emptied, so nothing outlives a removal",
-          got["QQ_GROUPS"] == got["OWNER_QQ"] == got["OWNER_NAME"] == "", repr(got))
 
     # With QQ off, Enter on the QQ question keeps it off.
     cfg["excluded_platforms"] = ["aiocqhttp"]

@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from persona_agent.config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL,
-                                      LEGACY_VISION_BASE_URL, vision_endpoint_from_env)
+                                      vision_endpoint_from_env)
 from persona_agent.settings import AgentSettings
 
 
@@ -37,7 +37,7 @@ FULL_ENV = {
     "QQ_ONEBOT_URL": "http://napcat:3000/", "CHAT_TRIGGER_COUNT": "7",
     "CHAT_CONTEXT_MESSAGES": "40", "CHAT_FOLLOWUP_WINDOW_S": "11",
     "MEMORY_FILE": "m.json", "MEMORY_MAX_PER_CONVERSATION": "9",
-    "OWNER_QQ": "42", "OWNER_NAME": "O", "OWNER_RELATIONSHIP": "rel",
+    "ADMIN_IDS": "42", "ADMIN_NAME": "O", "ADMIN_RELATIONSHIP": "rel",
     "LLM_DM_MODEL": "dm-model", "LLM_FALLBACK_MODEL": "cheap-model",
     "LLM_FALLBACK_BASE_URL": "https://fb.example/v1/", "LLM_FALLBACK_API_KEY": "sk-fb",
     "LLM_FALLBACK_THINKING": "true",
@@ -46,87 +46,45 @@ FULL_ENV = {
     "EVAL_ENABLED": "true", "EVAL_MODEL": "eval-model", "EVAL_FILE": "e.jsonl",
     "VISION_MODEL": "v-model", "VISION_API_KEY": "vk", "TAVILY_API_KEY": " tav ",
     "VISION_BASE_URL": "https://vision.example/v4/", "AGENT_LANG": " ZH ",
-    "GATEWAY_OWNER_IDS": "telegram:1, discord:2 ,",
     "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
-    "QQ_GROUPS": "g1,g2", "PRIVATE_ALLOWED_QQS": "p1",
+    "ACCESS_GROUPS": "g1, g2 ,", "ACCESS_DM_USERS": "p1",
     "PROACTIVE_ENABLED": "yes", "EVOLVE_INTERVAL_HOURS": "0.5",
     "REACT_TTL_S": "30", "PROMOTE_MAX_EXAMPLES": "12",
 }
 
 
-def test_the_vision_endpoint_reads_new_names_and_honours_the_old() -> None:
-    """VISION_API_KEY / VISION_BASE_URL replace GLM_API_KEY / GLM_BASE_URL.
-    A deployment on the old names must behave exactly as before, default
-    included; the new names carry no vendor default."""
+def test_the_vision_endpoint_reads_its_names() -> None:
+    """VISION_API_KEY / VISION_BASE_URL carry no vendor default: the model
+    VISION_MODEL names decides the provider."""
     new = vision_endpoint_from_env({"VISION_API_KEY": "vk",
                                     "VISION_BASE_URL": "https://v.example/v4/"})
-    check("vision: the new names are read, trailing slash trimmed",
+    check("vision: the names are read, trailing slash trimmed",
           new == ("vk", "https://v.example/v4"), repr(new))
-    check("vision: the new names have no default endpoint",
+    check("vision: no default endpoint",
           vision_endpoint_from_env({"VISION_API_KEY": "vk"}) == ("vk", ""))
     check("vision: nothing set is nothing configured",
           vision_endpoint_from_env({}) == ("", ""))
-    old = vision_endpoint_from_env({"GLM_API_KEY": "gk"})
-    check("vision: the old key alone still gets the old default endpoint",
-          old == ("gk", LEGACY_VISION_BASE_URL), repr(old))
-    check("vision: an old base URL set blank still reads blank, as before",
-          vision_endpoint_from_env({"GLM_API_KEY": "gk", "GLM_BASE_URL": ""})
-          == ("gk", ""))
-    both = vision_endpoint_from_env({
-        "VISION_API_KEY": "vk", "VISION_BASE_URL": "https://v.example/v4",
-        "GLM_API_KEY": "gk", "GLM_BASE_URL": "https://g.example/v4"})
-    check("vision: a set new name wins over the old one",
-          both == ("vk", "https://v.example/v4"), repr(both))
-    mixed = vision_endpoint_from_env({"VISION_API_KEY": "vk",
-                                      "GLM_BASE_URL": "https://g.example/v4"})
-    check("vision: a half-migrated .env keeps its old base URL",
-          mixed == ("vk", "https://g.example/v4"), repr(mixed))
-    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "GLM_API_KEY": "gk",
-                                    "GLM_BASE_URL": "https://g.example/v4/"})
-    check("vision: from_env still honours the old names",
-          (s.vision_api_key, s.vision_base_url) == ("gk", "https://g.example/v4"),
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "VISION_API_KEY": "vk",
+                                    "VISION_BASE_URL": "https://v.example/v4/"})
+    check("vision: from_env reads them",
+          (s.vision_api_key, s.vision_base_url) == ("vk", "https://v.example/v4"),
           repr((s.vision_api_key, s.vision_base_url)))
 
 
-def test_the_identity_settings_read_new_names_and_honour_the_old(
-        monkeypatch) -> None:
+def test_the_identity_settings_are_read_per_platform(monkeypatch) -> None:
     """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS take "<platform>:<id>"
-    entries on every platform. The QQ-only names they replace still work and
-    are folded in by union, so a half-migrated .env loses nobody."""
+    entries on every platform."""
     import dataclasses
 
     new = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1, qq:10000,",
         "ACCESS_GROUPS": "telegram:-100,123", "ACCESS_DM_USERS": "slack:U1"})
-    check("identity: the new names are read and canonicalised",
+    check("identity: the names are read and canonicalised",
           (new.admin_ids, new.allowed_groups, new.allowed_dm_users)
           == (("telegram:1", "10000"), ("telegram:-100", "123"), ("slack:U1",)),
           repr((new.admin_ids, new.allowed_groups, new.allowed_dm_users)))
-    check("identity: owners and DM users are the merged views",
+    check("identity: owners and DM users are the canonical sets",
           new.owners == {"telegram:1", "10000"} and new.dm_users == {"slack:U1"})
-
-    old = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "OWNER_QQ": "42", "GATEWAY_OWNER_IDS": "telegram:1",
-        "QQ_GROUPS": "g1,g2", "PRIVATE_ALLOWED_QQS": "p1"})
-    check("identity: the old names alone mean what they always meant",
-          (old.owners, old.allowed_groups, old.dm_users)
-          == ({"42", "telegram:1"}, ("g1", "g2"), {"p1"}),
-          repr((old.owners, old.allowed_groups, old.dm_users)))
-
-    both = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1", "OWNER_QQ": "10000",
-        "GATEWAY_OWNER_IDS": "discord:2", "ACCESS_GROUPS": "telegram:-100",
-        "QQ_GROUPS": "123", "ACCESS_DM_USERS": "telegram:42",
-        "PRIVATE_ALLOWED_QQS": "888"})
-    check("identity: new and old are a union, not new-wins",
-          both.owners == {"telegram:1", "10000", "discord:2"}
-          and set(both.allowed_groups) == {"telegram:-100", "123"}
-          and both.dm_users == {"telegram:42", "888"},
-          repr((both.owners, both.allowed_groups, both.dm_users)))
-    blank_new = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "ADMIN_IDS": "", "OWNER_QQ": "42"})
-    check("identity: a blank new name keeps the old one",
-          blank_new.owners == {"42"}, repr(blank_new.owners))
 
     native = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "CONNECTOR_QQ_PLATFORMS": "aiocqhttp",
@@ -136,20 +94,10 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
           native.owners == {"10000"} and native.allowed_groups == ("123", "456")
           and native.dm_users == {"telegram:aiocqhttp"},
           repr((native.owners, native.allowed_groups, native.dm_users)))
-
-    plain = AgentSettings(api_key="k", owner_qq=10000,
-                          gateway_owner_ids=["telegram:1"],
-                          private_allowed_qqs={"888"}, allowed_groups=("1",))
-    check("identity: the old keywords still work on a plain record",
-          plain.owners == {"10000", "telegram:1"} and plain.dm_users == {"888"}
-          and plain.allowed_groups == ("1",), repr(plain.owners))
-    check("identity: replace() removes an owner given by an old keyword",
-          dataclasses.replace(plain, owner_qq="").owners == {"telegram:1"})
     check("identity: re-resolving changes nothing",
-          dataclasses.replace(both) == both and dataclasses.replace(native) == native)
+          dataclasses.replace(new) == new and dataclasses.replace(native) == native)
 
-    monkeypatch.setenv("ACCESS_GROUPS", "telegram:-100")
-    monkeypatch.setenv("QQ_GROUPS", "123")
+    monkeypatch.setenv("ACCESS_GROUPS", "telegram:-100,123")
     monkeypatch.setenv("ACCESS_DM_USERS", "telegram:42")
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     ambient = AgentSettings(api_key="k")
@@ -157,7 +105,7 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
           ambient.allowed_groups == ("telegram:-100", "123")
           and ambient.allowed_dm_users == ("telegram:42",),
           repr((ambient.allowed_groups, ambient.allowed_dm_users)))
-    check("identity: the owners are a deployment setting, as OWNER_QQ was",
+    check("identity: the owners are a deployment setting",
           not ambient.owners, repr(ambient.owners))
 
 
@@ -173,7 +121,7 @@ def test_plain_construction_ignores_deployment_settings() -> None:
     check("plain: a 429 cools for seconds, not the failure window",
           plain.rate_limit_cooldown == 20, repr(plain.rate_limit_cooldown))
     check("plain: self-eval on by default in-process", plain.eval_enable is True)
-    check("plain: no deployment identity", not plain.bot_qq and not plain.owner_qq)
+    check("plain: no deployment identity", not plain.bot_qq and not plain.admin_ids)
     empty = AgentSettings.from_env(env={}, api_key="k")
     check("an empty environment gives the documented knob defaults",
           (empty.proactive_interval, empty.react_ttl_sec, empty.llm_timeout,
@@ -205,9 +153,10 @@ def test_from_env_reads_the_deployment() -> None:
           and AgentSettings.from_env(env={}).eval_enable is False)
     check("from_env: language normalised", s.agent_lang == "zh", s.agent_lang)
     check("from_env: id lists split, trimmed, emptied entries dropped",
-          s.gateway_owner_ids == ("telegram:1", "discord:2")
-          and s.allowed_groups == ("g1", "g2")
-          and s.private_allowed_qqs == ("p1",))
+          s.admin_ids == ("42",) and s.allowed_groups == ("g1", "g2")
+          and s.allowed_dm_users == ("p1",))
+    check("from_env: the admin's name and relationship",
+          (s.owner_name, s.owner_relationship) == ("O", "rel"))
     check("from_env: an explicit env reaches the operational knobs too",
           s.proactive_enable is True and s.react_ttl_sec == 30.0
           and s.examples_max_auto == 12, repr(s.proactive_enable))
