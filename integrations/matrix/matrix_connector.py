@@ -52,7 +52,7 @@ except ImportError:  # running from a checkout: the SDK sits in integrations/sdk
 logger = logging.getLogger("matrix_connector")
 
 PLATFORM = "matrix"
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
+DEFAULT_PERSONAGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 # `runtime/` is gitignored at any depth, so a checkout never commits keys.
 DEFAULT_STORE = Path(__file__).resolve().parent / "runtime"
@@ -61,13 +61,13 @@ KNOWN_KEYS = (
     "MATRIX_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN", "MATRIX_PASSWORD",
     "MATRIX_DEVICE_ID", "MATRIX_DEVICE_NAME", "PERSONAGENT_URL", "CONNECTOR_TOKEN",
     "MATRIX_CONNECTOR_ID", "MATRIX_GROUPS", "MATRIX_DM_USERS", "MATRIX_INVITE_FROM",
-    "MATRIX_IGNORE_USERS", "MATRIX_E2EE_ENABLED", "MATRIX_STORE_PATH", "MATRIX_OUTBOX_ENABLED",
+    "MATRIX_IGNORE_USERS", "MATRIX_E2EE_ENABLED", "MATRIX_STORE_DIR", "MATRIX_OUTBOX_ENABLED",
     "MATRIX_READ_RECEIPTS_ENABLED", "MATRIX_TIMEOUT_S", "MATRIX_MAX_EVENT_AGE_S",
     "MATRIX_LOG_LEVEL",
 )
 
 # The agent refuses a request body over 8 MB, and base64 adds a third.
-VISION_MAX_IMAGE_BYTES = 4_000_000
+MAX_INLINE_IMAGE_BYTES = 4_000_000
 DOWNLOAD_TIMEOUT_S = 30.0
 TYPING_TIMEOUT_MS = 30_000
 TYPING_REFRESH_S = 20.0
@@ -110,7 +110,13 @@ def matches(patterns: Iterable[str], value: str) -> bool:
     return bool(value) and any(fnmatchcase(value, p) for p in patterns)
 
 
-def default_forwarder_id(user_id: str) -> str:
+def filtered(patterns: Iterable[str]) -> bool:
+    """False for a bare `*`, which forwards everything and leaves the choice
+    to the agent's own lists (the event's `prefiltered`)."""
+    return "*" not in patterns
+
+
+def default_connector_id(user_id: str) -> str:
     # Stable per bot account, so the agent's outbox survives a restart.
     return "matrix-" + hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:12]
 
@@ -123,17 +129,18 @@ class Settings:
     password: str = field(default="", repr=False)
     device_id: str = ""
     device_name: str = "personagent"
-    agent_url: str = DEFAULT_AGENT_URL
-    gateway_token: str = field(default="", repr=False)
-    forwarder_id: str = ""
-    rooms: tuple[str, ...] = ()
+    personagent_url: str = DEFAULT_PERSONAGENT_URL
+    connector_token: str = field(default="", repr=False)
+    connector_id: str = ""
+    #: Empty forwards nothing of that kind; "*" everything, unfiltered.
+    groups: tuple[str, ...] = ()
     dm_users: tuple[str, ...] = ()
     invite_from: tuple[str, ...] = ()
     ignore_users: tuple[str, ...] = ()
-    e2ee: bool = False
-    store_path: Path = DEFAULT_STORE
-    outbox: bool = True
-    read_receipts: bool = True
+    e2ee_enabled: bool = False
+    store_dir: Path = DEFAULT_STORE
+    outbox_enabled: bool = True
+    read_receipts_enabled: bool = True
     # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
     # debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
@@ -157,26 +164,26 @@ class Settings:
             password=str(values.get("MATRIX_PASSWORD") or ""),
             device_id=get("MATRIX_DEVICE_ID"),
             device_name=get("MATRIX_DEVICE_NAME", "personagent"),
-            agent_url=get("PERSONAGENT_URL", DEFAULT_AGENT_URL),
-            gateway_token=get("CONNECTOR_TOKEN"),
-            forwarder_id=get("MATRIX_CONNECTOR_ID"),
-            rooms=_csv(values.get("MATRIX_GROUPS")),
+            personagent_url=get("PERSONAGENT_URL", DEFAULT_PERSONAGENT_URL),
+            connector_token=get("CONNECTOR_TOKEN"),
+            connector_id=get("MATRIX_CONNECTOR_ID"),
+            groups=_csv(values.get("MATRIX_GROUPS")),
             dm_users=_csv(values.get("MATRIX_DM_USERS")),
             invite_from=_csv(values.get("MATRIX_INVITE_FROM")),
             ignore_users=_csv(values.get("MATRIX_IGNORE_USERS")),
-            e2ee=_flag(values.get("MATRIX_E2EE_ENABLED"), False),
-            store_path=Path(get("MATRIX_STORE_PATH") or DEFAULT_STORE),
-            outbox=_flag(values.get("MATRIX_OUTBOX_ENABLED"), True),
-            read_receipts=_flag(values.get("MATRIX_READ_RECEIPTS_ENABLED"), True),
+            e2ee_enabled=_flag(values.get("MATRIX_E2EE_ENABLED"), False),
+            store_dir=Path(get("MATRIX_STORE_DIR") or DEFAULT_STORE),
+            outbox_enabled=_flag(values.get("MATRIX_OUTBOX_ENABLED"), True),
+            read_receipts_enabled=_flag(values.get("MATRIX_READ_RECEIPTS_ENABLED"), True),
             timeout_s=_number(values, "MATRIX_TIMEOUT_S", 420.0, 1.0),
             max_event_age_s=_number(values, "MATRIX_MAX_EVENT_AGE_S", 300.0, 1.0),
             log_level=get("MATRIX_LOG_LEVEL", "INFO").upper(),
         )
         if not settings.access_token and not (settings.user_id and settings.password):
             raise ValueError("set MATRIX_ACCESS_TOKEN, or MATRIX_USER_ID and MATRIX_PASSWORD")
-        if not sdk.endpoint_allowed(settings.agent_url, settings.gateway_token):
+        if not sdk.endpoint_allowed(settings.personagent_url, settings.connector_token):
             raise ValueError("PERSONAGENT_URL must be loopback, or HTTPS with CONNECTOR_TOKEN set")
-        if not settings.rooms and not settings.dm_users:
+        if not settings.groups and not settings.dm_users:
             logger.warning("MATRIX_GROUPS and MATRIX_DM_USERS are both empty: "
                            "nothing will be forwarded")
         return settings
@@ -470,7 +477,7 @@ class MatrixConnector:
         return str(getattr(self.client, "user_id", "") or "")
 
     def capabilities(self) -> list[str]:
-        return ["outbox", "quote_text"] if self.settings.outbox else ["quote_text"]
+        return ["outbox", "quote_text"] if self.settings.outbox_enabled else ["quote_text"]
 
     # ----- rooms and people -----
 
@@ -490,7 +497,7 @@ class MatrixConnector:
 
     def _listed_room(self, room_id: str) -> bool:
         # Named outright (not through `*`): the operator said it is a group.
-        return any(p != "*" and fnmatchcase(room_id, p) for p in self.settings.rooms)
+        return any(p != "*" and fnmatchcase(room_id, p) for p in self.settings.groups)
 
     def is_direct(self, room: Any) -> bool:
         """m.direct first, then a room with one other real member. Bridge bots
@@ -591,7 +598,7 @@ class MatrixConnector:
             if room_id not in self._warned:
                 self._warned.add(room_id)
                 logger.warning("cannot decrypt messages in %s: %s", room_id,
-                               "set MATRIX_E2EE_ENABLED=true" if not self.settings.e2ee
+                               "set MATRIX_E2EE_ENABLED=true" if not self.settings.e2ee_enabled
                                else "no room key for this device yet")
             return
         task = asyncio.ensure_future(self.handle(room, source))
@@ -633,7 +640,7 @@ class MatrixConnector:
         mxc = str((encrypted or {}).get("url") or content.get("url") or "")
         info = _mapping(content.get("info"))
         size = info.get("size")
-        if not mxc.startswith("mxc://") or (isinstance(size, int) and size > VISION_MAX_IMAGE_BYTES):
+        if not mxc.startswith("mxc://") or (isinstance(size, int) and size > MAX_INLINE_IMAGE_BYTES):
             return None
         try:
             # Authenticated media (Matrix 1.11): the bytes need the bot's
@@ -649,7 +656,7 @@ class MatrixConnector:
         except Exception as exc:
             logger.info("image %s not forwarded: %s", mxc, exc)
             return None
-        if len(data) > VISION_MAX_IMAGE_BYTES:
+        if len(data) > MAX_INLINE_IMAGE_BYTES:
             return None
         return {"type": "image", "b64": base64.b64encode(bytes(data)).decode("ascii"),
                 "sticker": sticker}
@@ -674,10 +681,9 @@ class MatrixConnector:
             return None
         if self.now() - timestamp > self.settings.max_event_age_s:
             return None  # backlog, or history a bridge backfilled
-        private = self.is_direct(room)
-        if private and not matches(self.settings.dm_users, sender):
-            return None
-        if not private and not matches(self.settings.rooms, room_id):
+        dm = self.is_direct(room)
+        allow = self.settings.dm_users if dm else self.settings.groups
+        if not matches(allow, sender if dm else room_id):
             return None
 
         name = self.member_name(room, sender)
@@ -730,8 +736,8 @@ class MatrixConnector:
         thread_root = str(relates.get("event_id") or "") if relates.get("rel_type") == "m.thread" else ""
         event = {
             "platform": PLATFORM,
-            "conversation_type": "dm" if private else "group",
-            "conversation_id": sender if private else room_id,
+            "conversation_type": "dm" if dm else "group",
+            "conversation_id": sender if dm else room_id,
             "sender_id": sender,
             "sender_name": name,
             "bot_id": self.me,
@@ -742,6 +748,7 @@ class MatrixConnector:
             "segments": segments,
             "reply_handle": room_id,
             "capabilities": self.capabilities(),
+            "prefiltered": filtered(allow),
         }
         if thread_root:
             event["_thread_root"] = thread_root
@@ -795,11 +802,11 @@ class MatrixConnector:
                                self.settings.timeout_s)
                 return
             except httpx.HTTPError as exc:
-                logger.warning("agent unreachable at %s: %s", self.settings.agent_url, exc)
+                logger.warning("agent unreachable at %s: %s", self.settings.personagent_url, exc)
                 return
             if not isinstance(answer, dict):
                 return
-            if answer.get("owned") and self.settings.read_receipts:
+            if answer.get("owned") and self.settings.read_receipts_enabled:
                 await self._quietly(self.client.room_read_markers(
                     room_id, event["message_id"], event["message_id"]))
             target = _Target(room, event["conversation_id"], event["conversation_type"] == "group",
@@ -866,7 +873,7 @@ class MatrixConnector:
 
     async def _send_one(self, target: _Target, item: Mapping) -> None:
         room = target.room
-        if getattr(room, "encrypted", False) and not self.settings.e2ee:
+        if getattr(room, "encrypted", False) and not self.settings.e2ee_enabled:
             raise SendError("the room is encrypted and MATRIX_E2EE_ENABLED is off")
         mention = self._mention(target, item.get("mention_user_id"))
         kind = item.get("type")
@@ -922,24 +929,24 @@ class MatrixConnector:
         room = self._room(room_id) if room_id else None
         if room is None:
             return "refused", 0  # the bot left, or never was there
-        private = delivery.get("conversation_type") == "dm"
+        dm = delivery.get("conversation_type") == "dm"
         conversation_id = str(delivery.get("conversation_id") or "")
         # Checked against the room the handle names: the agent keeps the
         # handle as an event gave it, so it must be the DM with that very
         # user, or a group room, before the allowlists count.
-        if private:
+        if dm:
             allowed = (self.is_direct(room)
                        and conversation_id in self._joined(room)
                        and matches(self.settings.dm_users, conversation_id))
         else:
             allowed = (not self.is_direct(room)
-                       and matches(self.settings.rooms, room_id))
+                       and matches(self.settings.groups, room_id))
         if not allowed:
             return "refused", 0
-        if getattr(room, "encrypted", False) and not self.settings.e2ee:
+        if getattr(room, "encrypted", False) and not self.settings.e2ee_enabled:
             return "unsupported", 0
         items = [i for i in (delivery.get("items") or []) if isinstance(i, Mapping)]
-        sent = await self.send_items(_Target(room, conversation_id or room_id, not private),
+        sent = await self.send_items(_Target(room, conversation_id or room_id, not dm),
                                      items)
         if sent >= len(items):
             return "sent", sent
@@ -995,7 +1002,7 @@ def _import_nio() -> Any:
 
 
 def _session_file(settings: Settings) -> Path:
-    return settings.store_path / "session.json"
+    return settings.store_dir / "session.json"
 
 
 async def login(client: Any, settings: Settings) -> None:
@@ -1013,7 +1020,7 @@ async def login(client: Any, settings: Settings) -> None:
                 raise SystemExit(f"MATRIX_ACCESS_TOKEN was refused: {who}")
         if device_id:
             client.restore_login(user_id, device_id, settings.access_token)
-        elif settings.e2ee:
+        elif settings.e2ee_enabled:
             raise SystemExit("E2EE needs a device: set MATRIX_DEVICE_ID for this token")
         else:
             # restore_login insists on a device id whenever the E2EE extra is
@@ -1056,25 +1063,25 @@ async def run(settings: Settings, *, nio_module: Any = None,
               agent_client: Optional[httpx.AsyncClient] = None,
               stop: Optional[asyncio.Event] = None) -> None:
     nio = nio_module or _import_nio()
-    if settings.e2ee:
-        settings.store_path.mkdir(parents=True, exist_ok=True)
-    config = nio.AsyncClientConfig(encryption_enabled=settings.e2ee,
-                                   store_sync_tokens=settings.e2ee)
+    if settings.e2ee_enabled:
+        settings.store_dir.mkdir(parents=True, exist_ok=True)
+    config = nio.AsyncClientConfig(encryption_enabled=settings.e2ee_enabled,
+                                   store_sync_tokens=settings.e2ee_enabled)
     client = nio.AsyncClient(settings.homeserver, settings.user_id,
                              device_id=settings.device_id or None,
-                             store_path=str(settings.store_path) if settings.e2ee else "",
+                             store_path=str(settings.store_dir) if settings.e2ee_enabled else "",
                              config=config)
     agent = None
     stop = stop or asyncio.Event()
     try:
         await login(client, settings)
-        agent = sdk.Connector(settings.agent_url, settings.gateway_token,
-                              connector_id=settings.forwarder_id
-                              or default_forwarder_id(client.user_id),
+        agent = sdk.Connector(settings.personagent_url, settings.connector_token,
+                              connector_id=settings.connector_id
+                              or default_connector_id(client.user_id),
                               timeout_s=settings.timeout_s, client=agent_client)
         connector = MatrixConnector(client, settings, agent)
         client.add_event_callback(connector.on_invite, nio.InviteMemberEvent)
-        if settings.e2ee and client.should_upload_keys:
+        if settings.e2ee_enabled and client.should_upload_keys:
             await client.keys_upload()
         # The first sync is the backlog: its messages were sent before this
         # process was listening, so no message callback is registered yet.
@@ -1090,7 +1097,7 @@ async def run(settings: Settings, *, nio_module: Any = None,
 
         jobs = [asyncio.ensure_future(client.sync_forever(timeout=30_000)),
                 asyncio.ensure_future(stop.wait())]
-        if settings.outbox:
+        if settings.outbox_enabled:
             jobs.append(asyncio.ensure_future(agent.run_outbox(connector.deliver, stop=stop)))
         done, _ = await asyncio.wait(jobs, return_when=asyncio.FIRST_COMPLETED)
         stop.set()

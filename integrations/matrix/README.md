@@ -91,7 +91,7 @@ under Room settings, Advanced in Element.
 ### Logging in
 
 A password login is the simplest. The session it gets (user id, device id and
-access token) is saved in `MATRIX_STORE_PATH/session.json` and reused on the
+access token) is saved in `MATRIX_STORE_DIR/session.json` and reused on the
 next start, so a restart is not a new device. Delete that file to log in
 again.
 
@@ -113,12 +113,15 @@ refuses to start otherwise.
 ## Settings
 
 Every setting is in [.env.example](.env.example). Lists are comma separated
-and take globs: `*` is everyone, `@*:example.org` a whole server.
+and take globs: `@*:example.org` is a whole server. An empty list answers no
+one. A bare `*` is everyone, and marks the event `prefiltered: false`: the
+agent's own `ACCESS_GROUPS` / `ACCESS_DM_USERS` then decide alone, and a
+platform with no entries there is refused.
 
 | Setting | Meaning |
 |---|---|
 | `MATRIX_GROUPS` | group rooms to answer in, by room id; `*` for every room the bot has joined |
-| `MATRIX_DM_USERS` | people who may talk to the bot in a direct chat |
+| `MATRIX_DM_USERS` | people who may talk to the bot in a direct chat; `*` for everyone |
 | `MATRIX_INVITE_FROM` | whose invites the bot accepts. Invites to rooms named in `MATRIX_GROUPS`, and direct-chat invites from `MATRIX_DM_USERS`, are always accepted; everything else is left pending |
 | `MATRIX_IGNORE_USERS` | never answered, and not counted as members when telling a direct chat from a group |
 | `MATRIX_E2EE_ENABLED` | end-to-end encryption, see below |
@@ -217,7 +220,7 @@ plaintext reply there.
 
 With `MATRIX_E2EE_ENABLED=true`:
 
-- `MATRIX_STORE_PATH` (default `runtime/` next to the script, which git
+- `MATRIX_STORE_DIR` (default `runtime/` next to the script, which git
   ignores) holds the device's keys and the sync token. Keep it: a lost store is
   a new device that cannot read anything encrypted before it.
 - The device must stay the same across restarts. A password login does that

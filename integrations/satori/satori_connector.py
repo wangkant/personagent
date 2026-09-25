@@ -45,8 +45,8 @@ except ImportError:  # running from a checkout: the SDK sits in integrations/sdk
 
 logger = logging.getLogger("satori_connector")
 
-DEFAULT_ENDPOINT = "http://127.0.0.1:5140/satori"
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
+DEFAULT_SATORI_URL = "http://127.0.0.1:5140/satori"
+DEFAULT_PERSONAGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_CONFIG = Path(__file__).resolve().parent / ".env"
 
 KNOWN_KEYS = (
@@ -57,7 +57,7 @@ KNOWN_KEYS = (
 )
 
 # The agent refuses a request body over 8 MB, and base64 adds a third.
-VISION_MAX_IMAGE_BYTES = 4_000_000
+MAX_INLINE_IMAGE_BYTES = 4_000_000
 MAX_INLINE_IMAGES = 4
 DOWNLOAD_TIMEOUT_S = 20.0
 MAX_HANDLE_LEN = 512
@@ -89,54 +89,55 @@ def _platform_name(raw: str) -> str:
 
 @dataclass
 class Config:
-    endpoint: str = DEFAULT_ENDPOINT
+    satori_url: str = DEFAULT_SATORI_URL
     satori_token: str = field(default="", repr=False)
-    agent_url: str = DEFAULT_AGENT_URL
-    gateway_token: str = field(default="", repr=False)
-    forwarder_id: str = ""
+    personagent_url: str = DEFAULT_PERSONAGENT_URL
+    connector_token: str = field(default="", repr=False)
+    connector_id: str = ""
     platforms: frozenset = frozenset()
     platform_names: dict = field(default_factory=lambda: dict(DEFAULT_PLATFORM_NAMES))
+    #: Empty forwards nothing of that kind; "*" everything, unfiltered.
     groups: frozenset = frozenset()
     dm_users: frozenset = frozenset()
-    outbox: bool = True
+    outbox_enabled: bool = True
     # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
     # debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
-    inline_images: bool = False
+    inline_images_enabled: bool = False
     reply_gap_s: tuple = (0.8, 1.8)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Config":
-        endpoint = (env.get("SATORI_URL") or DEFAULT_ENDPOINT).strip()
+        satori_url = (env.get("SATORI_URL") or DEFAULT_SATORI_URL).strip()
         names = dict(DEFAULT_PLATFORM_NAMES)
         for pair in _csv(env.get("SATORI_PLATFORM_NAMES")):
             raw, sep, name = pair.partition("=")
             if sep and raw.strip() and name.strip():
                 names[raw.strip().lower()] = _platform_name(name)
-        forwarder = (env.get("SATORI_CONNECTOR_ID") or "").strip() or (
-            "satori-" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:8])
+        connector_id = (env.get("SATORI_CONNECTOR_ID") or "").strip() or (
+            "satori-" + hashlib.sha256(satori_url.encode("utf-8")).hexdigest()[:8])
         try:
             timeout = float(env.get("SATORI_TIMEOUT_S") or cls.timeout_s)
         except ValueError:
             timeout = cls.timeout_s
         return cls(
-            endpoint=endpoint,
+            satori_url=satori_url,
             satori_token=(env.get("SATORI_TOKEN") or "").strip(),
-            agent_url=(env.get("PERSONAGENT_URL") or DEFAULT_AGENT_URL).strip(),
-            gateway_token=(env.get("CONNECTOR_TOKEN") or "").strip(),
-            forwarder_id=forwarder,
+            personagent_url=(env.get("PERSONAGENT_URL") or DEFAULT_PERSONAGENT_URL).strip(),
+            connector_token=(env.get("CONNECTOR_TOKEN") or "").strip(),
+            connector_id=connector_id,
             platforms=frozenset(p.lower() for p in _csv(env.get("SATORI_PLATFORMS"))),
             platform_names=names,
             groups=frozenset(_csv(env.get("SATORI_GROUPS"))),
             dm_users=frozenset(_csv(env.get("SATORI_DM_USERS"))),
-            outbox=_flag(env.get("SATORI_OUTBOX_ENABLED"), True),
+            outbox_enabled=_flag(env.get("SATORI_OUTBOX_ENABLED"), True),
             timeout_s=max(timeout, 1.0),
-            inline_images=_flag(env.get("SATORI_INLINE_IMAGES_ENABLED"), False),
+            inline_images_enabled=_flag(env.get("SATORI_INLINE_IMAGES_ENABLED"), False),
         )
 
     def websocket_kwargs(self) -> dict:
         """Arguments for satori-python's WebsocketsInfo, from one URL."""
-        parts = urlsplit(self.endpoint)
+        parts = urlsplit(self.satori_url)
         if parts.scheme not in ("http", "https", "ws", "wss") or not parts.hostname:
             raise ValueError("SATORI_URL must look like http://host:port/path")
         secure = parts.scheme in ("https", "wss")
@@ -151,7 +152,7 @@ class Config:
 
     @property
     def satori_host(self) -> str:
-        return (urlsplit(self.endpoint).hostname or "").lower()
+        return (urlsplit(self.satori_url).hostname or "").lower()
 
 
 def load_env(path: Optional[str] = None, environ: Optional[Mapping[str, str]] = None) -> dict:
@@ -343,7 +344,7 @@ def handle_key(config: "Config") -> bytes:
     event gave it, so forging one must take the secrets that reaching the
     Satori server or the agent directly would."""
     return hashlib.sha256(b"personagent-satori-handle\0" + config.satori_token.encode()
-                          + b"\0" + config.gateway_token.encode()).digest()
+                          + b"\0" + config.connector_token.encode()).digest()
 
 
 def _canonical(parts: dict) -> str:
@@ -484,7 +485,7 @@ class SatoriBridge:
             "prefiltered": prefiltered,
             "capabilities": ["quote_text"],
         }
-        if self.config.outbox:
+        if self.config.outbox_enabled:
             handle = encode_handle(key=self.handle_key,
                                    platform=raw_platform, self_id=self_id,
                                    channel_id=channel_id,
@@ -558,7 +559,7 @@ class SatoriBridge:
         # addresses, and this process must not fetch them for it either.
         if not _public_host(host):
             return ("", "")
-        return ("download", src) if self.config.inline_images else ("url", src)
+        return ("download", src) if self.config.inline_images_enabled else ("url", src)
 
     async def _resolve_images(self, account: Any, segments: list) -> list:
         out, downloads = [], 0
@@ -590,7 +591,7 @@ class SatoriBridge:
         except Exception as exc:
             logger.warning("could not fetch an image from the Satori server: %s", exc)
             return None
-        if not data or len(data) > VISION_MAX_IMAGE_BYTES:
+        if not data or len(data) > MAX_INLINE_IMAGE_BYTES:
             logger.info("skipping an image of %d bytes", len(data or b""))
             return None
         return base64.b64encode(data).decode("ascii")
@@ -781,8 +782,8 @@ async def serve(config: Config) -> None:
     from satori.client import App, WebsocketsInfo
     from satori.client.network.websocket import WsNetwork
 
-    connector = sdk.Connector(config.agent_url, config.gateway_token,
-                              connector_id=config.forwarder_id, timeout_s=config.timeout_s)
+    connector = sdk.Connector(config.personagent_url, config.connector_token,
+                              connector_id=config.connector_id, timeout_s=config.timeout_s)
     info = config.websocket_kwargs()
     if info["token"] and not info["secure"] and not _loopback(config.satori_host):
         logger.warning("SATORI_TOKEN goes to %s in clear text; use https or a tunnel",
@@ -813,9 +814,9 @@ async def serve(config: Config) -> None:
         await online.wait()
         await connector.run_outbox(bridge.deliver, stop=stop)
 
-    outbox = asyncio.create_task(run_outbox()) if config.outbox else None
-    logger.info("forwarding Satori at %s to %s as %s", config.endpoint, config.agent_url,
-                config.forwarder_id)
+    outbox = asyncio.create_task(run_outbox()) if config.outbox_enabled else None
+    logger.info("forwarding Satori at %s to %s as %s", config.satori_url,
+                config.personagent_url, config.connector_id)
     try:
         await app.run_async()
     finally:
@@ -846,7 +847,7 @@ def main(argv: Optional[list] = None) -> int:
     logging.basicConfig(level=level if isinstance(level, int) else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = Config.from_env(env)
-    if not sdk.endpoint_allowed(config.agent_url, config.gateway_token):
+    if not sdk.endpoint_allowed(config.personagent_url, config.connector_token):
         print("PERSONAGENT_URL must be loopback, or HTTPS with CONNECTOR_TOKEN set",
               file=sys.stderr)
         return 2

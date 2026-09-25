@@ -117,8 +117,8 @@ def agent_client(answers: list, seen: list, pulls: list | None = None) -> httpx.
 
 def settings(**overrides) -> mc.Settings:
     values = {"homeserver": "https://example.org", "user_id": BOT, "access_token": "t",
-              "rooms": (GROUP,), "dm_users": (ALEX,), "ignore_users": (BRIDGE,),
-              "store_path": Path("unused")}
+              "groups": (GROUP,), "dm_users": (ALEX,), "ignore_users": (BRIDGE,),
+              "store_dir": Path("unused")}
     values.update(overrides)
     return mc.Settings(**values)
 
@@ -160,10 +160,10 @@ def test_settings_come_from_the_file_with_the_environment_on_top(tmp: Path) -> N
     values = mc.load_env(str(config), environ={"MATRIX_TIMEOUT_S": "600", "HOME": "/x"})
     s = mc.Settings.from_env(values)
     check("scheme added", s.homeserver == "https://matrix.example.org", s.homeserver)
-    check("lists split and trimmed", s.rooms == ("!a:example.org", "!b:example.org"),
-          repr(s.rooms))
+    check("lists split and trimmed", s.groups == ("!a:example.org", "!b:example.org"),
+          repr(s.groups))
     check("environment wins", s.timeout_s == 600.0, str(s.timeout_s))
-    check("flags", s.e2ee and s.outbox and s.read_receipts)
+    check("flags", s.e2ee_enabled and s.outbox_enabled and s.read_receipts_enabled)
     check("unrelated environment ignored", "HOME" not in values)
     check("token kept out of repr", "abc" not in repr(s))
     with pytest.raises(FileNotFoundError):
@@ -183,16 +183,16 @@ def test_settings_refuse_what_cannot_work() -> None:
     with pytest.raises(ValueError, match="MATRIX_TIMEOUT_S"):
         mc.Settings.from_env({**base, "MATRIX_TIMEOUT_S": "soon"})
     s = mc.Settings.from_env({**base, "MATRIX_USER_ID": BOT, "MATRIX_PASSWORD": "pw"})
-    check("password login is enough too", s.password == "pw" and s.agent_url.startswith(
+    check("password login is enough too", s.password == "pw" and s.personagent_url.startswith(
         "http://127.0.0.1"))
-    check("forwarder id is stable per account",
-          mc.default_forwarder_id(BOT) == mc.default_forwarder_id(BOT)
-          and mc.default_forwarder_id(BOT) != mc.default_forwarder_id(ALEX))
+    check("connector id is stable per account",
+          mc.default_connector_id(BOT) == mc.default_connector_id(BOT)
+          and mc.default_connector_id(BOT) != mc.default_connector_id(ALEX))
 
 
 def test_every_setting_is_read_and_documented() -> None:
     source = (ROOT / "integrations" / "matrix" / "matrix_connector.py").read_text(encoding="utf-8")
-    named = set(re.findall(r'"((?:MATRIX|PERSONAGENT|GATEWAY)_[A-Z0-9_]+)"', source))
+    named = set(re.findall(r'"((?:MATRIX|PERSONAGENT|CONNECTOR)_[A-Z0-9_]+)"', source))
     template = (ROOT / "integrations" / "matrix" / ".env.example").read_text(encoding="utf-8")
     documented = set(re.findall(r"^([A-Z][A-Z0-9_]+)=", template, re.MULTILINE))
     check("every name the code uses passes load_env's filter", named <= set(mc.KNOWN_KEYS),
@@ -213,9 +213,10 @@ def test_a_group_message_becomes_a_neutral_event() -> None:
         "sent_at": NOW, "addressed": False, "text": "how was your day?",
         "segments": [{"type": "text", "text": "how was your day?"}],
         "reply_handle": GROUP, "capabilities": ["outbox", "quote_text"],
+        "prefiltered": True,
     }
     check("fields", event == expected, repr(event))
-    conn2, _ = make(outbox=False)
+    conn2, _ = make(outbox_enabled=False)
     check("no outbox, no outbox capability",
           build(conn2, GROUP, msg())["capabilities"] == ["quote_text"])
 
@@ -243,6 +244,24 @@ def test_direct_rooms_are_private_and_gated_by_the_dm_list() -> None:
     check("m.direct makes it a DM", flagged_event["conversation_type"] == "dm")
     check("a stranger's DM is ignored",
           build(conn, "!flag:example.org", msg(sender="@bob:example.org")) is None)
+
+
+def test_a_wildcard_forwards_everything_unfiltered_and_empty_nothing() -> None:
+    """A glob such as @*:example.org is this connector's own filter; a bare
+    "*" leaves the choice to the agent's lists, so the event says so."""
+    other = Room("!other:example.org", {BOT: "Nova", ALEX: "Alex", "@bob:example.org": "Bob"})
+    rooms = [Room(GROUP, {BOT: "Nova", ALEX: "Alex", "@bob:example.org": "Bob"}),
+             Room(DM, {BOT: "Nova", ALEX: "Alex"}), other]
+    conn, _ = make(rooms, groups=("*",), dm_users=("@*:example.org",))
+    group = build(conn, "!other:example.org", msg())
+    check("'*' forwards an unlisted room", group is not None)
+    check("...marked unfiltered", group["prefiltered"] is False, repr(group))
+    dm = build(conn, DM, msg())
+    check("a DM matched by a glob is filtered here", dm["prefiltered"] is True, repr(dm))
+    conn, _ = make(rooms, groups=(), dm_users=("*",))
+    check("an empty MATRIX_GROUPS forwards no room", build(conn, GROUP, msg()) is None)
+    check("'*' in MATRIX_DM_USERS forwards DMs unfiltered",
+          build(conn, DM, msg())["prefiltered"] is False)
 
 
 def test_addressed_follows_mentions_and_replies() -> None:
@@ -326,7 +345,7 @@ def test_images_arrive_as_bytes() -> None:
                                        url="mxc://example.org/pic"))
     check("caption", captioned["segments"][-1] == {"type": "text", "text": "look at this"})
     big = build(conn, GROUP, msg("huge.png", msgtype="m.image", url="mxc://example.org/pic",
-                                 info={"size": mc.VISION_MAX_IMAGE_BYTES + 1}))
+                                 info={"size": mc.MAX_INLINE_IMAGE_BYTES + 1}))
     check("too big is described", big["segments"] == [
         {"type": "text", "text": "(sent an image)"}], repr(big["segments"]))
     sticker = build(conn, GROUP, {"type": "m.sticker", "sender": ALEX, "event_id": "$s",
@@ -493,14 +512,14 @@ def test_encrypted_rooms_need_e2ee() -> None:
     secret = Room("!secret:example.org", {BOT: "Nova", ALEX: "Alex", "@bob:x": "Bob"},
                   encrypted=True)
     reply = {"owned": True, "replies": [{"type": "image", "b64": base64.b64encode(PNG).decode()}]}
-    conn, client = make([secret], answers=[reply], e2ee=True, rooms=(secret.room_id,))
+    conn, client = make([secret], answers=[reply], e2ee_enabled=True, groups=(secret.room_id,))
     asyncio.run(conn.handle(secret, msg()))
     content = client.sent[0][1]
     check("encrypted upload", client.uploads[0]["encrypt"] is True and "url" not in content
           and content["file"] == {"v": "v2", "key": {"k": "KEY"}, "iv": "IV",
                                   "hashes": {"sha256": "SHA"}, "url": "mxc://example.org/up1"},
           repr(content))
-    plain, plain_client = make([secret], rooms=(secret.room_id,))
+    plain, plain_client = make([secret], groups=(secret.room_id,))
     status = asyncio.run(plain.deliver({"reply_handle": "!secret:example.org",
                                         "conversation_type": "group",
                                         "items": [{"type": "text", "text": "hi"}]}))
@@ -528,8 +547,8 @@ def test_outbox_deliveries_go_to_the_reply_handle() -> None:
     check("a DM delivery aimed at a group room is refused", asyncio.run(conn.deliver({
         "reply_handle": GROUP, "conversation_type": "dm", "conversation_id": ALEX,
         "items": two})) == ("refused", 0))
-    wide, _ = make(rooms=("*",))
-    check("a group delivery aimed at a DM room is refused, even with rooms=*",
+    wide, _ = make(groups=("*",))
+    check("a group delivery aimed at a DM room is refused, even with groups=*",
           asyncio.run(wide.deliver({"reply_handle": DM, "conversation_type": "group",
                                     "conversation_id": DM, "items": two}))
           == ("refused", 0))
@@ -714,11 +733,11 @@ def test_run_skips_the_backlog_and_serves_events_and_the_outbox() -> None:
           repr(events))
     check("token login learned who it is", events[0]["bot_id"] == BOT
           and client.device_id == "DEV")
-    check("the default connector id", events[0]["connector_id"] == mc.default_forwarder_id(BOT))
+    check("the default connector id", events[0]["connector_id"] == mc.default_connector_id(BOT))
     bodies = sorted(c["body"] for _, c in client.sent)
     check("reply and outbox delivery sent", bodies == ["good morning", "hi Alex"], repr(bodies))
     check("pulls use the same connector id", all(
-        p["connector_id"] == mc.default_forwarder_id(BOT) for p in seen
+        p["connector_id"] == mc.default_connector_id(BOT) for p in seen
         if p.get("kind") == "outbox.pull"))
     check("encryption off unless asked", client.config.kwargs == {
         "encryption_enabled": False, "store_sync_tokens": False})
@@ -731,7 +750,7 @@ def test_a_revoked_token_stops_the_connector_instead_of_spinning(tmp: Path) -> N
         nio = fake_nio(rooms=[Room(GROUP, {BOT: "Nova", ALEX: "Alex"})])
         nio.failures = [nio.SyncError(message="Invalid access token passed.",
                                       status_code="M_UNKNOWN_TOKEN")] * 50
-        s = settings(outbox=False, access_token=access_token, password="pw", store_path=tmp)
+        s = settings(outbox_enabled=False, access_token=access_token, password="pw", store_dir=tmp)
         with pytest.raises(SystemExit, match=remedy) as stopped:
             asyncio.run(asyncio.wait_for(
                 mc.run(s, nio_module=nio, agent_client=agent_client([], [])), 2))

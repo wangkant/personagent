@@ -122,6 +122,7 @@ def config(**overrides) -> sc.Config:
     base = sc.Config.from_env({"SATORI_GROUPS": "-100", "SATORI_DM_USERS": "42"})
     base.reply_gap_s = (0, 0)
     for key, value in overrides.items():
+        assert hasattr(base, key), f"Config has no {key}"
         setattr(base, key, value)
     return base
 
@@ -262,6 +263,13 @@ async def test_what_is_not_forwarded() -> None:
     check("an unlisted group",
           await b.build_event(account(), message_event([T("x")], channel="-9", guild="-9"))
           is None)
+    check("no group at all while SATORI_GROUPS is empty",
+          await bridge(config(groups=frozenset())).build_event(
+              account(), message_event([T("x")])) is None)
+    anywhere = await bridge(config(groups=frozenset({"*"}))).build_event(
+        account(), message_event([T("x")], channel="-9", guild="-9"))
+    check("'*' forwards every group, unfiltered",
+          anywhere is not None and anywhere["prefiltered"] is False)
     check("a group listed by its guild",
           await bridge(config(groups=frozenset({"discord:g1"}))).build_event(
               account("discord"), message_event([T("x")], channel="c7", guild="g1",
@@ -313,7 +321,7 @@ async def test_images_media_and_emoji() -> None:
                                              {"type": "emoji", "name": "", "id": "14"}],
           str(segs[6:]))
 
-    inline = await bridge(config(inline_images=True)).build_event(
+    inline = await bridge(config(inline_images_enabled=True)).build_event(
         account(images={"https://cdn.example.com/a.png": png}),
         message_event([El("img", src="https://cdn.example.com/a.png")]))
     check("SATORI_INLINE_IMAGES_ENABLED fetches public URLs too",
@@ -426,7 +434,7 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
           ("unsupported", 0))
     # The agent keeps a handle as an event gave it: an allowed DM user paired
     # with a group channel must not reach that channel.
-    forged = sc.encode_handle(key=sc.handle_key(config(gateway_token="other")),
+    forged = sc.encode_handle(key=sc.handle_key(config(connector_token="other")),
                               platform="telegram", self_id="7000", channel_id="-999",
                               user_id="42", type="dm")
     sent_before = list(acc.protocol.sent)
@@ -495,16 +503,17 @@ def test_settings_from_the_environment() -> None:
     check("lists", cfg.platforms == {"telegram", "discord"}
           and cfg.groups == {"-100", "discord:c7"} and cfg.dm_users == frozenset())
     check("names", cfg.platform_names == {"qq": "qqbot"}, str(cfg.platform_names))
-    check("flags", cfg.outbox is False and cfg.timeout_s == 90.0)
+    check("flags", cfg.outbox_enabled is False and cfg.timeout_s == 90.0)
 
     default = sc.Config.from_env({})
     check("defaults", default.websocket_kwargs() == {
         "host": "127.0.0.1", "port": 5140, "path": "/satori", "secure": False, "token": None}
-          and default.agent_url == sc.DEFAULT_AGENT_URL and default.outbox is True)
-    check("the forwarder id is stable per endpoint",
-          default.forwarder_id == sc.Config.from_env({}).forwarder_id
-          and default.forwarder_id != cfg.forwarder_id
-          and default.forwarder_id.startswith("satori-"))
+          and default.personagent_url == sc.DEFAULT_PERSONAGENT_URL
+          and default.outbox_enabled is True)
+    check("the connector id is stable per Satori URL",
+          default.connector_id == sc.Config.from_env({}).connector_id
+          and default.connector_id != cfg.connector_id
+          and default.connector_id.startswith("satori-"))
 
 
 def fake_satori(monkeypatch) -> SimpleNamespace:
