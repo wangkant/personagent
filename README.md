@@ -4,7 +4,7 @@
 
 **A character for your group chats that knows when to stay quiet, and learns from being corrected.**
 
-Describe the character in a text file, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin carries it into QQ, Telegram, Discord, Slack and the other platforms AstrBot supports.
+Describe the character in a text file, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, a connector carries it into your chats: [AstrBot](https://github.com/AstrBotDevs/AstrBot) for QQ, Telegram, Discord, Slack and a dozen more, [Satori](https://satori.chat) for anything Koishi reaches, or [Matrix](https://matrix.org) and its bridges for WhatsApp and Signal.
 
 For an easier way to use personagent for one-on-one chats, try [**Charune**](https://www.charune.com/), which uses personagent as its conversation engine.
 
@@ -90,11 +90,21 @@ To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`
 
 ## Put it in a chat
 
-personagent never logs in to a chat account. AstrBot does, and a small forwarder plugin passes each message to personagent and carries the reply back.
+personagent never logs in to a chat account. A connector does: it passes each message to personagent and carries the reply back.
 
 ```text
-Chat platform  ⇄  AstrBot + forwarder plugin  ⇄  personagent  ⇄  Model API
+Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 ```
+
+| Connector | Reaches |
+|---|---|
+| AstrBot plugin (below) | QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, WeChat official accounts |
+| [Satori](integrations/satori/README.md) | whatever your Koishi or other Satori server is logged in to |
+| [Matrix](integrations/matrix/README.md) | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram and Google Messages |
+
+Anything else can connect through the [connector protocol](docs/connectors.md): one signed HTTP request per message. Several connectors can serve one personagent at once.
+
+To connect through AstrBot:
 
 1. Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) and set up your platform in its WebUI.
 2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `GATEWAY_TOKEN` to both sides. Answers you gave before are kept as the defaults.
@@ -119,7 +129,7 @@ QQ also needs a OneBot v11 implementation such as NapCat, connected through Astr
 
 - Remove `aiocqhttp` from the plugin's `excluded_platforms`.
 - Set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
-- Keep NapCat's HTTP server on, at `NAPCAT_API`. Proactive messages, the follow-up question after a rejection, the excuse when the model fails and catching up on missed mentions go through it directly. On this path OCR fallback is skipped, and quoted messages are looked up in personagent's own recent-message index.
+- NapCat's HTTP server (`NAPCAT_API`) is optional. With it, personagent catches up on mentions it missed while offline, and has a fallback for the messages it starts itself when the plugin is not pulling its outbox. On this path OCR fallback is skipped.
 - The direct `/webhook/qq` ingress is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
@@ -134,9 +144,9 @@ personagent listens on `127.0.0.1:8080`. A non-loopback `HOST` requires both `GA
 </details>
 
 <details>
-<summary>Speaking first on platforms other than QQ</summary>
+<summary>Speaking first</summary>
 
-Outside QQ, personagent speaks first (proactive openers, the follow-up question after a rejection, the excuse when the model fails) through a connector that pulls its outbox; see the [connector protocol](docs/connectors.md). `PROACTIVE_PLATFORMS=qq` keeps the proactive loop on QQ. Without such a connector, a reply can only travel back inside the request that brought the message. For scheduled DMs, have an external job post a private gateway event with `proactive: true`; the text is read as a cue to the persona rather than as the other person's words, and the job relays whatever comes back. A group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md#more-than-one-platform).
+Some messages answer nobody: proactive openers (`PROACTIVE_ENABLE`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLE=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a private event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 
@@ -188,7 +198,7 @@ Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the ol
 
 ## How it works
 
-![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through AstrBot; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
+![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through the connector; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
 
 Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
 
@@ -204,7 +214,7 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Troubleshooting
 
-**It runs but never replies.** Start with the AstrBot plugin: the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`. Then check `BOT_NAME`, `BOT_QQ` and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
+**It runs but never replies.** Start with the connector. In the AstrBot plugin, check the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `BOT_NAME`, `BOT_QQ` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
 
 **Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Gateway-Token` header once a token is configured.
 
@@ -212,10 +222,10 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Status
 
-Beta. QQ is where it has run in earnest; other platforms connect through AstrBot and have not all been validated end to end. CI runs the test suite on Linux with Python 3.10–3.12 and on Windows with Python 3.12. The tuning and evaluation scripts in `tools/` are experiments; they do not establish how well it converses.
+Beta. QQ is where it has run in earnest. Other AstrBot platforms have not all been validated end to end, and the Satori and Matrix connectors are new and so far tested only against stand-ins. CI runs the test suite on Linux with Python 3.10–3.12 and on Windows with Python 3.12. The tuning and evaluation scripts in `tools/` are experiments; they do not establish how well it converses.
 
 - [Deployment guide](docs/deploy.md)
-- [AstrBot forwarder plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)
+- Connectors: [AstrBot plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [the protocol](docs/connectors.md)
 - [All settings](.env.example)
 - [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
@@ -225,7 +235,7 @@ Beta. QQ is where it has run in earnest; other platforms connect through AstrBot
 
 ## Acknowledgements
 
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot) carries personagent onto every chat platform, and [NapCat](https://github.com/NapNeko/NapCatQQ) onto QQ.
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot), [satori-python](https://github.com/RF-Tar-Railt/satori-python) with [Koishi](https://koishi.chat), and [matrix-nio](https://github.com/matrix-nio/matrix-nio) with the [mautrix bridges](https://docs.mau.fi/bridges/) carry personagent onto chat platforms, and [NapCat](https://github.com/NapNeko/NapCatQQ) onto QQ.
 - [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls.
 - Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707).
 - The lorebook and output filters follow [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info and regex extensions.

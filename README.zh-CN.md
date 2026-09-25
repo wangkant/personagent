@@ -4,7 +4,7 @@
 
 **一个知道什么时候该安静、能从别人的纠正里学习的群聊角色。**
 
-用一个文本文件写下角色，接上任意 OpenAI 兼容模型，就能先在终端里和它聊。准备好之后，由 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 插件把它带进 QQ、Telegram、Discord、Slack 以及 AstrBot 支持的其他平台。
+用一个文本文件写下角色，接上任意 OpenAI 兼容模型，就能先在终端里和它聊。准备好之后，由连接器把它带进聊天：[AstrBot](https://github.com/AstrBotDevs/AstrBot) 覆盖 QQ、Telegram、Discord、Slack 等十几个平台，[Satori](https://satori.chat) 覆盖 Koishi 能连的平台，[Matrix](https://matrix.org) 及其桥接可以连 WhatsApp 和 Signal。
 
 如果想更方便地使用 personagent 的一对一聊天功能，可以试试 [**Charune**](https://www.charune.com/)；它以 personagent 作为对话引擎。
 
@@ -91,11 +91,21 @@ python quickstart.py
 
 ## 接入聊天平台
 
-personagent 从不登录聊天账号。登录由 AstrBot 负责，一个小的转发插件把每条消息交给 personagent，再把回复带回去。
+personagent 从不登录聊天账号。登录由连接器负责：它把每条消息交给 personagent，再把回复带回去。
 
 ```text
-聊天平台  ⇄  AstrBot + 转发插件  ⇄  personagent  ⇄  模型接口
+聊天平台  ⇄  连接器  ⇄  personagent  ⇄  模型接口
 ```
+
+| 连接器 | 能接入 |
+|---|---|
+| AstrBot 插件（见下文） | QQ、Telegram、Discord、Slack、KOOK、飞书、钉钉、LINE、企业微信、Mattermost、Misskey、微信公众号 |
+| [Satori](integrations/satori/README.md)（英文） | 你的 Koishi 或其他 Satori 服务端登录了的平台 |
+| [Matrix](integrations/matrix/README.md)（英文） | Matrix 房间，以及经 mautrix 桥接的 WhatsApp、Signal、Messenger、Instagram 和 Google Messages |
+
+其他平台可以按[连接器协议](docs/connectors.md)（英文）接入：每条消息一个签名的 HTTP 请求。一个 personagent 可以同时接多个连接器。
+
+通过 AstrBot 接入：
 
 1. 安装 [AstrBot](https://github.com/AstrBotDevs/AstrBot)，在它的 WebUI 里配好目标平台。
 2. 再运行一次 `python quickstart.py`，选择连接 AstrBot，填入 AstrBot 的 data 目录。向导会复制插件，并把共享的 `GATEWAY_TOKEN` 写进两边的配置。之前填过的内容会作为默认值保留。
@@ -120,7 +130,7 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 
 - 从插件的 `excluded_platforms` 中移除 `aiocqhttp`。
 - 在 personagent 的 `.env` 中设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`，让 QQ 会话保持原有的身份和记忆。`--qq` 会同时处理这两项。
-- 保持 NapCat 的 HTTP 服务开启（`NAPCAT_API`）。主动发言、被否定后的追问、模型出错时的托词，以及补回离线期间漏掉的 @，都直接经由它发送。这条路径下 OCR 回退会跳过，引用消息从 personagent 自己的近期消息索引里查找。
+- NapCat 的 HTTP 服务（`NAPCAT_API`）可开可不开。开着的话，personagent 能补回离线期间漏掉的 @；插件没在拉取 outbox 时，它主动发出的消息也会改走这里。这条路径下 OCR 回退会跳过。
 - `/webhook/qq` 直连入口自 0.3.0 起废弃。不要与 AstrBot 转发同时启用，否则每条消息都会收到两次。
 
 </details>
@@ -135,9 +145,9 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 </details>
 
 <details>
-<summary>在 QQ 以外的平台主动发言</summary>
+<summary>主动发言</summary>
 
-在 QQ 以外的平台上，personagent 主动发出的消息（主动发言、被否定后的追问、模型出错时的托词）要靠一个拉取其 outbox 的连接器送达，见[连接器协议](docs/connectors.md)（英文）。`PROACTIVE_PLATFORMS=qq` 可把主动发言限制在 QQ。没有这样的连接器时，回复只能随带来消息的那次请求返回。若要定时主动私聊，让外部任务发送带 `proactive: true` 的私聊网关事件：其中的文字会被当作给人设的提示，而不是对方说的话，返回的回复由这个任务负责转发。带此标记的群聊事件会被认领后丢弃。详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
+有些消息不是在回答谁：主动发言（`PROACTIVE_ENABLE`，默认关）、被否定后的追问、模型出错时的托词。personagent 把它们放进 outbox，上面三个连接器会去拉取并发出，只要平台允许机器人先开口（QQ 官方机器人接口、微信公众号和企业微信智能机器人不允许）。开了 `PROACTIVE_ENABLE` 后，`PROACTIVE_PLATFORMS=qq` 可把主动发言限制在 QQ。不能拉取 outbox 的连接器，也可以发一条带 `proactive: true` 的私聊事件来发起私聊，详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
 
 </details>
 
@@ -189,7 +199,7 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 
 ## 工作原理
 
-![架构：群聊消息依次经过判断、组装提示词、模型和校验，回复经 AstrBot 发回；决定不开口时什么都不发。反应经判定写入证据日志，只有通过晋升的内容才会进入提示词读取的示例](docs/persona_llm_agent_architecture.zh-CN.svg)
+![架构：群聊消息依次经过判断、组装提示词、模型和校验，回复经连接器发回；决定不开口时什么都不发。反应经判定写入证据日志，只有通过晋升的内容才会进入提示词读取的示例](docs/persona_llm_agent_architecture.zh-CN.svg)
 
 所有平台都从同一个入口进入。消息经过鉴权、去重和补充（描述图片、展开链接）之后进入决策：被叫到就回复；否则等对话积累到一定量（默认 30 条），再由一次发给 `JUDGE_MODEL` 的轻量判断调用决定真人会不会插话。连续刷屏只回一条，回最新那句；02:00–07:00 除非被叫到，基本不开口。提示词由人设、匹配到的世界书条目、当前会话的记忆和最相关的示例组成。模型以 JSON 回答，包含 `reasoning`、`intent`、`reply` 和 `mem`；回复经过输出过滤器和字符策略后，再拆成适合聊天的几条消息发出。格式不对的输出一律不发送。
 
@@ -205,7 +215,7 @@ personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`
 
 ## 常见问题
 
-**服务在跑，但就是不回复。** 先查 AstrBot 插件：白名单、`private_enabled`、`agent_url`，接 QQ 时还有 `excluded_platforms`。再查 `BOT_NAME`、`BOT_QQ` 和两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
+**服务在跑，但就是不回复。** 先查连接器。AstrBot 插件查白名单、`private_enabled`、`agent_url`，接 QQ 时还有 `excluded_platforms`；Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。再查 `BOT_NAME`、接 QQ 时的 `BOT_QQ`，以及两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
 
 **怎么确认服务在线？** `curl http://127.0.0.1:8080/health` 不调用模型。`.venv/bin/python tools/healthcheck.py` 还会检查配置、指出拼错的变量名并探测上游服务，这些探测可能消耗额度。`/health/details` 同样会探测，配置 token 后需要 `X-Gateway-Token` 请求头。
 
@@ -213,10 +223,10 @@ personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`
 
 ## 项目状态
 
-Beta。QQ 是真正长期运行过的场景；其他平台通过 AstrBot 接入，并非都经过完整的端到端验证。CI 在 Linux 上用 Python 3.10–3.12、在 Windows 上用 Python 3.12 运行测试。`tools/` 里的调优与评估脚本属于实验，不能说明它实际聊得有多好。
+Beta。QQ 是真正长期运行过的场景。AstrBot 的其他平台并非都经过完整的端到端验证；Satori 和 Matrix 连接器是新加的，目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.12、在 Windows 上用 Python 3.12 运行测试。`tools/` 里的调优与评估脚本属于实验，不能说明它实际聊得有多好。
 
 - [部署指南](docs/deploy.md)（英文）
-- [AstrBot 转发插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)
+- 连接器：[AstrBot 插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [协议](docs/connectors.md)
 - [全部设置](.env.example)
 - [更新日志](CHANGELOG.md) · [贡献指南](CONTRIBUTING.md)
 
@@ -226,7 +236,7 @@ Beta。QQ 是真正长期运行过的场景；其他平台通过 AstrBot 接入�
 
 ## 致谢
 
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot) 把 personagent 带到各个聊天平台，[NapCat](https://github.com/NapNeko/NapCatQQ) 负责 QQ。
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot)、[satori-python](https://github.com/RF-Tar-Railt/satori-python) 与 [Koishi](https://koishi.chat)、[matrix-nio](https://github.com/matrix-nio/matrix-nio) 与 [mautrix 桥接](https://docs.mau.fi/bridges/) 把 personagent 带到各个聊天平台，[NapCat](https://github.com/NapNeko/NapCatQQ) 负责 QQ。
 - [FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 支撑服务本身和模型调用。
 - 从反应中学习的思路借鉴了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)。
 - 世界书与输出过滤器参考了 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info 与正则扩展。

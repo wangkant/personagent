@@ -52,12 +52,36 @@ upstream service answers. Startup logs the same settings check.
 relative `PERSONA_FILE` or `PERSONA_CARD_FILE` resolves under it too, so a
 persona kept elsewhere needs an absolute path.
 
+## Connectors
+
+personagent never logs in to a chat platform. A connector does: it turns each
+message into a neutral event, posts it to `POST /webhook/gateway`, and sends
+the replies that come back. Three ship in this repository:
+
+| Connector | Reaches | Guide |
+|---|---|---|
+| AstrBot plugin | every AstrBot adapter: QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, WeChat official accounts, ... | [below](#connecting-through-astrbot) |
+| Satori | every Satori server (Koishi and others): Telegram, Discord, KOOK, Lark, DingTalk, LINE, QQ, ... | [integrations/satori](../integrations/satori/README.md) |
+| Matrix | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages, ... | [integrations/matrix](../integrations/matrix/README.md) |
+
+For anything else, the [connector protocol](connectors.md) is one signed HTTP
+request per message plus an optional outbox, and
+`integrations/sdk/personagent_connector.py` is its client side in Python.
+
+Connectors can run side by side against one personagent. Each names its
+platform, so ids never collide (`telegram:-1001234`, `matrix:!room:example.org`).
+Do not bring one chat in through two connectors, or every message arrives
+twice.
+
 ## Connecting through AstrBot
 
-personagent never logs in to a chat platform. AstrBot does, and the plugin in
+AstrBot logs in to the platforms, and the plugin in
 `integrations/astrbot/astrbot_plugin_llm_persona_gateway/` posts each message
-to `POST /webhook/gateway` and relays the replies in the response. This is the
-supported path for every platform, QQ included.
+to `POST /webhook/gateway` and relays the replies in the response. It reaches
+the most platforms, and it is the one the wizard sets up. It also pulls
+personagent's outbox (`outbox_enabled`, on by default), so the persona can
+speak first wherever the platform lets a bot do that; the plugin README has
+the table.
 
 `python quickstart.py` connects the two; `--astrbot <AstrBot data dir>`
 does it without the wizard. It copies the plugin into `<data dir>/plugins/`,
@@ -116,16 +140,16 @@ an `ALLOWED_DM_USERS` entry, and when `ALLOWED_GROUPS` lists QQ groups, a QQ
 group must be in both. Only list a platform in `GATEWAY_NATIVE_PLATFORMS` if
 you trust its forwarder with that authority.
 
-**Keep NapCat's HTTP server on**, at `NAPCAT_API`. AstrBot reaches NapCat over
-a reverse WebSocket for messages and replies, but what personagent starts
-itself goes straight to `NAPCAT_API`: proactive messages (`PROACTIVE_ENABLE`,
-off by default), the question asked two minutes after a rejection
-(`REACT_ELICIT`), the excuse sent when the model call fails, and the sweep for
-@-mentions missed while offline. The sweep runs at startup and then every 30
-minutes, covers the QQ groups in `ALLOWED_GROUPS` plus any group with traffic
-since the last restart, and replays @-mentions under an hour old. Without the
-server the bot keeps answering but loses all of these, and (with `BOT_QQ` set)
-`healthcheck.py` shows the OneBot bridge failing.
+**NapCat's HTTP server** (`NAPCAT_API`) is optional on this path. What
+personagent starts itself (proactive messages, off by default with
+`PROACTIVE_ENABLE`; the question asked two minutes after a rejection,
+`REACT_ELICIT`; the excuse sent when the model call fails) goes back through
+the plugin's outbox while the plugin is pulling it, and to `NAPCAT_API` when
+it is not. Only the sweep for @-mentions missed while offline needs the
+server: it runs at startup and then every 30 minutes, covers the QQ groups in
+`ALLOWED_GROUPS` plus any group with traffic since the last restart, and
+replays @-mentions under an hour old. Without the server, `healthcheck.py`
+lists the OneBot bridge as down, but not as a critical failure.
 
 **Lost on this path**, with no setting to bring it back:
 
@@ -140,13 +164,15 @@ Telegram, Discord, Slack, KOOK, Lark and the other AstrBot platforms connect
 the same way (`quickstart.py --astrbot <dir> --platform <kind> --token <token>` switches one
 of the first five on in AstrBot's config). Their
 ids are namespaced as `<platform>:<id>`, so they never collide with a QQ
-number; the plugin's allowlists are their only filter.
+number. The connector's allowlists are their filter until `ALLOWED_GROUPS` or
+`ALLOWED_DM_USERS` lists an entry for that platform.
 
 Messages nobody asked for (proactive openers, the question asked after a
-rejection, the excuse when the model call fails) reach these platforms only
-through a connector that pulls personagent's outbox: it sends `forwarder_id`,
-`reply_handle` and `"caps": ["outbox"]` with its events and long-polls
-`/webhook/gateway/outbox` (see [the connector protocol](connectors.md)).
+rejection, the excuse when the model call fails) reach a platform through a
+connector that pulls personagent's outbox. All three connectors here do, on
+platforms where a bot may send first; a connector of your own sends
+`forwarder_id`, `reply_handle` and `"caps": ["outbox"]` with its events and
+long-polls `/webhook/gateway/outbox` (see [the connector protocol](connectors.md)).
 Without one, personagent speaks only inside the request that brought a
 message: the proactive loops skip those conversations, and the question and
 the excuse are not sent. `PROACTIVE_PLATFORMS` limits where the proactive loop
@@ -174,16 +200,17 @@ quiet) and dropped unread.
 
 ## Exposing the webhook
 
-Keep `HOST=127.0.0.1` when AstrBot and personagent share a machine (a
+Keep `HOST=127.0.0.1` when the connector and personagent share a machine (a
 container counts only with the host's network namespace or host networking).
 Otherwise:
 
 1. Set `HOST=0.0.0.0` and **both** `GATEWAY_TOKEN` and `WEBHOOK_SECRET`.
    Startup refuses a non-loopback `HOST` without both, since `/webhook/qq` is
    served even if unused.
-2. Put an HTTPS reverse proxy or a private tunnel in front. The plugin posts
-   only to loopback, or to HTTPS with `gateway_token` set, and logs anything
-   else as `refusing unsafe agent_url`.
+2. Put an HTTPS reverse proxy or a private tunnel in front. Every connector
+   here posts only to loopback, or to HTTPS with a token set; the AstrBot
+   plugin logs anything else as `refusing unsafe agent_url`, and the Satori
+   and Matrix connectors refuse to start.
 3. Keep the body byte-for-byte intact (the signature covers it) and the
    clocks within five minutes.
 
@@ -231,8 +258,10 @@ on one host.
 
 Most common first:
 
-1. **The plugin forwards nothing.** Fill in its allowlists (DMs also need
-   `private_enabled`). On QQ, take `aiocqhttp` out of `excluded_platforms`.
+1. **The connector forwards nothing.** In the AstrBot plugin, fill in its
+   allowlists (DMs also need `private_enabled`), and on QQ take `aiocqhttp`
+   out of `excluded_platforms`. The Satori and Matrix connectors have their
+   own allowlists in their `.env`; see their READMEs.
 2. **AstrBot's own model answers instead.** The request failed, or
    personagent turned the message away (item 4), and the plugin fell back.
    AstrBot's log shows `refusing unsafe agent_url`, `agent refused the request

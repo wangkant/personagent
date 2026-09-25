@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1040" height="436" viewBox="0 0 1040 436" role="img" aria-labelledby="arch-title arch-desc">
   <title id="arch-title">personagent architecture</title>
-  <desc id="arch-desc">Messages from group chats arrive through AstrBot. personagent decides whether to speak; if not, nothing is sent. Otherwise it builds a prompt from the persona, per-conversation memory and examples, calls the model, checks the reply and sends it back. Separately, people's reactions are judged into an append-only evidence log; only candidates that promotion approves become examples the prompt can use, and you can approve, reject or roll them back.</desc>
+  <desc id="arch-desc">Messages from group chats arrive through a connector (AstrBot, Satori or Matrix). personagent decides whether to speak; if not, nothing is sent. Otherwise it builds a prompt from the persona, per-conversation memory and examples, calls the model, checks the reply and sends it back. Separately, people's reactions are judged into an append-only evidence log; only candidates that promotion approves become examples the prompt can use, and you can approve, reject or roll them back.</desc>
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C4683F"/></marker>
     <marker id="al" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#557A59"/></marker>
@@ -18,7 +18,7 @@
   <rect x="12" y="296" width="1016" height="124" rx="14" fill="#EAF1E6"/>
   <text x="1010" y="186" text-anchor="end" class="band" fill="#C4683F">REPLY · EVERY MESSAGE</text>
   <text x="1010" y="316" text-anchor="end" class="band" fill="#557A59">LEARNING · BESIDE THE REPLY PATH</text>
-  <rect x="33" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="108.0" y="91.0" text-anchor="middle" class="t">Group chat</text><text x="108.0" y="110.0" text-anchor="middle" class="s">via AstrBot</text>
+  <rect x="33" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="108.0" y="91.0" text-anchor="middle" class="t">Group chat</text><text x="108.0" y="110.0" text-anchor="middle" class="s">via a connector</text>
   <rect x="239" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="314.0" y="91.0" text-anchor="middle" class="t">Decide</text><text x="314.0" y="110.0" text-anchor="middle" class="s">speak or stay quiet</text>
   <rect x="445" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="520.0" y="91.0" text-anchor="middle" class="t">Build prompt</text><text x="520.0" y="110.0" text-anchor="middle" class="s">persona + context</text>
   <rect x="651" y="64" width="150" height="60" rx="12" fill="#FFFFFF" stroke="#E2D7C8" stroke-width="1.5"/><text x="726.0" y="91.0" text-anchor="middle" class="t">Model</text><text x="726.0" y="110.0" text-anchor="middle" class="s">OpenAI-compatible</text>
@@ -33,7 +33,7 @@
   <text x="829.0" y="86.0" text-anchor="middle" class="a" fill="#C4683F">reply</text>
   <polyline points="932,62 932,30 108,30 108,60" fill="none" stroke="#C4683F" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ar)"/>
   <rect x="402.0" y="18" width="236" height="22" fill="#FBF8F2"/>
-  <text x="520.0" y="34" text-anchor="middle" class="a" fill="#C4683F">reply, back through AstrBot</text>
+  <text x="520.0" y="34" text-anchor="middle" class="a" fill="#C4683F">reply, back via the connector</text>
   <polyline points="314,126 314,147" fill="none" stroke="#8E8378" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#ag)"/>
   <rect x="239.0" y="150" width="150" height="28" rx="14" fill="none" stroke="#8E8378" stroke-width="1.3" stroke-dasharray="4 4"/>
   <text x="314" y="169" text-anchor="middle" class="s">PASS · nothing sent</text>
