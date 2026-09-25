@@ -128,7 +128,7 @@ RENAMED = {
     "PRIVATE_ALLOWED_QQS": "ACCESS_DM_USERS",
 }
 
-#: The one forwarder platform whose ids are QQ numbers (AstrBot's OneBot
+#: The one connector platform whose ids are QQ numbers (AstrBot's OneBot
 #: adapter). Any other native platform mints bare ids the agent reads as QQ.
 _QQ_ADAPTER = "aiocqhttp"
 
@@ -179,7 +179,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
                 f"match"))
 
     # Listing one entry for a platform takes that platform away from the
-    # forwarder's allowlist. Documented, but easy to trip over.
+    # connector's allowlist. Documented, but easy to trip over.
     for name, what in (("ACCESS_GROUPS", "groups"),
                        ("ACCESS_DM_USERS", "users besides the admin")):
         platforms = sorted({channels.platform_of(i) for i in identity.ids(name)
@@ -190,7 +190,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
                 "INFO", name,
                 f"lists {_shown(platforms)} entries, so only the listed "
                 f"{what} there are answered and the rest are refused; the "
-                f"forwarder's own model may answer those. Platforms without "
+                f"connector's own model may answer those. Platforms without "
                 f"entries, QQ included, are not affected"))
 
     odd = [p for p in natives if p != _QQ_ADAPTER]
@@ -218,7 +218,7 @@ def _base_url_needs_full_path(base: str) -> bool:
 
     Deliberately narrow: only a trailing `/vN` segment that is not `/v1`. The
     general fallback branch exists to serve multi-segment provider roots
-    behind a reverse proxy (`https://gateway.corp/llm-proxy`), so segment
+    behind a reverse proxy (`https://proxy.corp/llm-proxy`), so segment
     counting would report those as broken when they are fine.
     """
     if not base:

@@ -395,7 +395,7 @@ async def test_an_agent_error_sends_nothing() -> None:
             return httpx.Response(429, headers={"Retry-After": "0"},
                                   json={"code": "capacity_exceeded"})
         return httpx.Response(403, json={"code": "stale_event",
-                                         "error": "stale gateway source event"})
+                                         "error": "stale event"})
 
     acc = account()
     b = bridge(agent=httpx.AsyncClient(transport=httpx.MockTransport(handler)), accounts=[acc])

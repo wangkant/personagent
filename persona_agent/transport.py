@@ -1,6 +1,6 @@
 """Outbound delivery: throttling, chunking, typing simulation, sends.
 
-Also owns the gateway conversation LRU, since that bounds the same
+Also owns the connector conversation LRU, since that bounds the same
 per-conversation state the send path writes."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import httpx
 from dataclasses import dataclass, field
 
 from . import channels
-from .gateway import GatewaySink, current_sink
+from .connector import ConnectorSink, current_sink
 from .outbox import OutboxResult
 from .textproc import MAX_REPLY_MESSAGES, TextProcessing
 
@@ -38,20 +38,20 @@ _SEND_MAX_PER_MIN = 20
 
 _SEND_WINDOW_SEC = 60.0
 
-# Gateway conversation cap: QQ groups/DMs are whitelisted so their key count
-# is naturally bounded, but gateway conversation keys ("<platform>:<id>") are
-# chosen by the forwarder — without a cap a runaway or malicious forwarder can
+# Connector conversation cap: QQ groups/DMs are whitelisted so their key count
+# is naturally bounded, but connector conversation keys ("<platform>:<id>") are
+# chosen by the connector — without a cap a runaway or malicious connector can
 # mint new keys forever and grow the per-conversation dicts (buffers/locks/
 # counters/throttle windows/...) without bound. Past the cap the least-
-# recently-active gateway conversation is evicted (see _touch_gateway_conv).
-_MAX_GATEWAY_CONVS = 256
+# recently-active connector conversation is evicted (see _touch_connector_conv).
+_MAX_CONNECTOR_CONVS = 256
 
 # Warn well before the cap bites: an operator seeing "it forgot our
 # conversation" reports has no error to grep for today (eviction is a normal,
 # silent cache-capacity decision, not a bug) -- this is the one signal that a
 # deployment is approaching the point where _evict_conversation starts
 # dropping `private_history` for its least-recently-active conversations.
-_GATEWAY_CONV_WARN_THRESHOLD = 200
+_CONNECTOR_CONV_WARN_THRESHOLD = 200
 
 @dataclass
 class SendResult:
@@ -59,9 +59,9 @@ class SendResult:
 
     success: bool = False
     partial: bool = False
-    #: Receipt ids for the chunks that went out. ALWAYS EMPTY behind a gateway
+    #: Receipt ids for the chunks that went out. ALWAYS EMPTY behind a connector
     #: sink: `_napcat_send` diverts into the sink and returns before the
-    #: receipt is parsed, and the forwarder only learns the platform's own
+    #: receipt is parsed, and the connector only learns the platform's own
     #: message id after the HTTP response is already on its way back (the
     #: outbound reply item has no id field to carry it). Consequence, and it
     #: is narrower than it looks: `reactions.PendingReplies.match`'s
@@ -102,42 +102,42 @@ class Transport:
     # half-hour between sweeps) is not answered again on every later sweep.
     MISSED_MENTION_MAX_AGE_SEC = 3600
 
-    def _touch_gateway_conv(self, key: str) -> None:
-        """Record a gateway conversation as active; past _MAX_GATEWAY_CONVS,
+    def _touch_connector_conv(self, key: str) -> None:
+        """Record a connector conversation as active; past _MAX_CONNECTOR_CONVS,
         evict the least-recently-active conversation's in-memory state. Only
-        gateway keys are registered — QQ groups/DMs are whitelisted and
+        connector keys are registered — QQ groups/DMs are whitelisted and
         naturally bounded, so they never enter (or get evicted from) the LRU.
         A conversation whose lock is currently held is skipped in favor of the
         next-oldest one."""
-        self._gateway_conv_lru.pop(key, None)
-        self._gateway_conv_lru[key] = time.monotonic()
-        count = len(self._gateway_conv_lru)
+        self._connector_conv_lru.pop(key, None)
+        self._connector_conv_lru[key] = time.monotonic()
+        count = len(self._connector_conv_lru)
         # One-shot flag, not `count == threshold`: re-touching an existing key
         # leaves len() unchanged, so the equality would fire on every message
         # once the count settles at the threshold.
-        if (count >= _GATEWAY_CONV_WARN_THRESHOLD
-                and not getattr(self, "_gateway_conv_warned", False)):
-            self._gateway_conv_warned = True
+        if (count >= _CONNECTOR_CONV_WARN_THRESHOLD
+                and not getattr(self, "_connector_conv_warned", False)):
+            self._connector_conv_warned = True
             logger.warning(
-                "[Agent] gateway conversation count crossed %d (cap %d) for "
+                "[Agent] connector conversation count crossed %d (cap %d) for "
                 "bot=%s; least-recently-active conversations will start "
                 "losing their in-memory private_history once the cap is hit",
-                _GATEWAY_CONV_WARN_THRESHOLD, _MAX_GATEWAY_CONVS,
+                _CONNECTOR_CONV_WARN_THRESHOLD, _MAX_CONNECTOR_CONVS,
                 self.qq_bot_id)
-        self._trim_gateway_convs(keep=key)
+        self._trim_connector_convs(keep=key)
 
-    def _trim_gateway_convs(self, *, keep: str = "") -> None:
-        """Reclaim idle state after admission or completion of a gateway burst."""
-        if len(self._gateway_conv_lru) <= _MAX_GATEWAY_CONVS:
+    def _trim_connector_convs(self, *, keep: str = "") -> None:
+        """Reclaim idle state after admission or completion of a connector burst."""
+        if len(self._connector_conv_lru) <= _MAX_CONNECTOR_CONVS:
             return
         # Touching a key moves it to the end, so insertion order is LRU order.
         # Snapshot because eviction removes entries while we walk the cache.
-        for old in tuple(self._gateway_conv_lru):
-            if len(self._gateway_conv_lru) <= _MAX_GATEWAY_CONVS:
+        for old in tuple(self._connector_conv_lru):
+            if len(self._connector_conv_lru) <= _MAX_CONNECTOR_CONVS:
                 break
             if old == keep:
                 continue
-            if self._gateway_inflight.get(old, 0):
+            if self._connector_inflight.get(old, 0):
                 continue
             lock = self.locks.get(old)
             send_lock = self.send_locks.get(old)
@@ -152,7 +152,7 @@ class Transport:
         Pending reactions expire with the session. Long-term memories remain
         in their authoritative maps and files: a cache capacity decision must
         not erase learned facts or cause the next whole-file save to do so."""
-        self._gateway_conv_lru.pop(key, None)
+        self._connector_conv_lru.pop(key, None)
         for d in (self.locks, self.send_locks, self.buffers, self.counters,
                   self.last_reply_at, self.active_users, self._msg_seq,
                   self._vision_in_flight, self._sticky_call,
@@ -177,8 +177,8 @@ class Transport:
         # sit in was spelling the same mapping twice more.
         self._last_elicit_at.pop(reaction_key, None)
         self.pending_reactions.drop_conversation(reaction_key)
-        logger.info("[Agent] gateway conversation evicted (over the %d cap): %s",
-                    _MAX_GATEWAY_CONVS, key)
+        logger.info("[Agent] connector conversation evicted (over the %d cap): %s",
+                    _MAX_CONNECTOR_CONVS, key)
 
     @staticmethod
     def _typing_delay(chunk: str) -> float:
@@ -193,7 +193,7 @@ class Transport:
         global minimum interval (jittered) stops cross-group simultaneous
         bursts; a per-target sliding window stops flooding one target. Returns
         False = per-target cap exceeded; the caller treats it as a send failure
-        and aborts the remaining chunks. Gateway sink replies don't come
+        and aborts the remaining chunks. Connector sink replies don't come
         through here (the sink branch returns earlier).
 
         Holds only self._send_gate (and only while waiting) — never acquires a
@@ -233,8 +233,8 @@ class Transport:
         (truncated / out-of-order replies, silently dropped DMs)."""
         sink = current_sink.get()
         if sink is not None:
-            # Gateway capture: hand the reply back over HTTP instead of
-            # posting to NapCat (gateway ids aren't ints anyway).
+            # Connector capture: hand the reply back over HTTP instead of
+            # posting to NapCat (connector ids aren't ints anyway).
             return sink.add(message)
         if not await self._throttle_send(throttle_key):
             return False
@@ -416,7 +416,7 @@ class Transport:
         # On the QQ path an at target must be a bare QQ number — a hallucinated
         # non-numeric [AT:] marker would produce a broken NapCat at segment, so
         # drop the mention (the marker text was already stripped upstream).
-        # Gateway sends keep prefixed ids like "telegram:12345" as-is.
+        # Connector sends keep prefixed ids like "telegram:12345" as-is.
         if at_user_id and not at_user_id.isdigit() and current_sink.get() is None:
             logger.warning("[Agent] dropping non-numeric at target %r (group=%s)",
                            at_user_id, group_id)
@@ -477,7 +477,7 @@ class Transport:
         """Run `send()` (a _send_qq or _send_private_qq call) for `key` when
         no inbound request is open to answer in.
 
-        A task spawned by a gateway turn inherits that turn's sink, closed by
+        A task spawned by a connector turn inherits that turn's sink, closed by
         now, so the sink is replaced either way: with none on the QQ route,
         so NapCat is reached, and with a fresh one on the outbox route, whose
         items become one delivery. The result counts only what the connector
@@ -493,7 +493,7 @@ class Transport:
                 return await send()
             finally:
                 current_sink.reset(tok)
-        collector = GatewaySink(platform=route["platform"],
+        collector = ConnectorSink(platform=route["platform"],
                                 native=route["native"],
                                 bot_id=self._self_mention_id())
         tok = current_sink.set(collector)
@@ -538,7 +538,7 @@ class Transport:
         # which is exactly the group that fell out of the poll.
         for group_id in dict.fromkeys(
                 list(self.buffers.keys()) + list(self._group_allowlist())):
-            # Gateway conversations ("<platform>:<id>") are inbound-only; the
+            # Connector conversations ("<platform>:<id>") are inbound-only; the
             # NapCat history API can't poll them (and int() would crash).
             if ":" in group_id:
                 continue
@@ -558,7 +558,7 @@ class Transport:
                         # handle() short-circuits via the seen-id ring.
                         # str(): NapCat's history carries an int here while
                         # the ring is keyed on the webhook path's string —
-                        # see the dedup gate in agent.handle().
+                        # see the dedup gate in agent.handle_onebot().
                         mid = msg.get("message_id")
                         if mid is not None and str(mid) in self._seen_msg_ids:
                             continue
@@ -577,7 +577,7 @@ class Transport:
                                 or f"@{self.qq_bot_id}" in raw
                                 or f"[CQ:at,qq={self.qq_bot_id}]" in raw):
                             logger.info("[Agent] missed offline @-mention detected; replaying (group=%s)", group_id)
-                            await self.handle(msg)
+                            await self.handle_onebot(msg)
                             break
             except Exception as e:
                 logger.warning("[Agent] missed-mention check failed (group=%s): %s", group_id, e)

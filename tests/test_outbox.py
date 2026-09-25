@@ -1,4 +1,4 @@
-"""The outbox: where a gateway conversation's address is kept, how queued
+"""The outbox: where a connector conversation's address is kept, how queued
 messages are handed to a connector exactly once, and the endpoint it pulls
 from (docs/connectors.md, "Outbox")."""
 from __future__ import annotations
@@ -40,7 +40,7 @@ def make_agent(tmp: Path) -> Agent:
     a._seen_msg_file = tmp / "seen_msg_ids.json"
     a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
-    a.gateway_handles.path = tmp / "connector_handles.json"
+    a.connector_handles.path = tmp / "connector_handles.json"
     a.examples_file = tmp / "examples.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
     a._seen_msg_ids.clear()
@@ -91,8 +91,8 @@ async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.connector_qq_platforms = {"aiocqhttp"}
 
-    await agent.handle_gateway(group_event("m1", **CONNECTOR))
-    room = agent.gateway_handles.get("telegram:c1")
+    await agent.handle_event(group_event("m1", **CONNECTOR))
+    room = agent.connector_handles.get("telegram:c1")
     check("group: the handle is stored under the routing key",
           room is not None and room["reply_handle"] == "tg-bot:GroupMessage:c1"
           and room["connector_id"] == "fw1"
@@ -101,28 +101,28 @@ async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
           and room["conversation_type"] == "group"
           and room["conversation_id"] == "c1", repr(room))
 
-    await agent.handle_gateway(dm_event(
+    await agent.handle_event(dm_event(
         "m2", connector_id="fw1", reply_handle="tg-bot:FriendMessage:1",
         capabilities=["outbox"]))
-    dm = agent.gateway_handles.get("private:telegram:1")
+    dm = agent.connector_handles.get("private:telegram:1")
     check("DM: stored under the DM routing key, with the raw user id",
           dm is not None and dm["conversation_type"] == "dm"
           and dm["conversation_id"] == "1", repr(dm))
 
-    await agent.handle_gateway(group_event(
+    await agent.handle_event(group_event(
         "m3", platform="aiocqhttp", gid="555", uid="777",
         connector_id="fw1", reply_handle="qq:GroupMessage:555", capabilities=["outbox"]))
-    native = agent.gateway_handles.get("555")
+    native = agent.connector_handles.get("555")
     check("native: stored under the bare key, marked native",
           native is not None and native["native"] is True
           and native["platform"] == "aiocqhttp", repr(native))
 
     agent.access_groups = {"telegram:c1"}
-    refused = await agent.handle_gateway(group_event(
+    refused = await agent.handle_event(group_event(
         "m4", gid="c2", connector_id="fw1", reply_handle="h", capabilities=["outbox"]))
     check("refused: a turn the agent refuses stores nothing",
           refused["owned"] is False
-          and agent.gateway_handles.get("telegram:c2") is None, repr(refused))
+          and agent.connector_handles.get("telegram:c2") is None, repr(refused))
 
     rebuilt = HandleStore(tmp / "connector_handles.json")
     check("persisted: a new store on the same file has the handles",
@@ -133,23 +133,23 @@ async def test_an_event_without_outbox_fields_leaves_no_address(tmp: Path) -> No
     """An event with no connector_id, reply_handle or capabilities is
     answered in its response and leaves nothing behind."""
     agent = make_agent(tmp)
-    result = await agent.handle_gateway(group_event("m1"))
+    result = await agent.handle_event(group_event("m1"))
     check("plain event: answered in the response",
           set(result) == {"handled", "owned", "replies"}
           and result["handled"] is True and result["owned"] is True
           and result["replies"][0]["text"] == "on it", repr(result))
     check("plain event: no handle, no file",
-          agent.gateway_handles.keys() == []
+          agent.connector_handles.keys() == []
           and not (tmp / "connector_handles.json").exists())
     check("plain event: no way to reach it unprompted",
           agent.outbox.route("telegram:c1") is None)
 
-    await agent.handle_gateway(group_event(
+    await agent.handle_event(group_event(
         "m2", gid="c9", connector_id="fw1", reply_handle="bad\x00handle",
         capabilities=["outbox"]))
     await agent.outbox.pull("fw1", wait_s=0)
     check("a malformed handle is ignored, so there is no route",
-          agent.gateway_handles.get("telegram:c9")["reply_handle"] == ""
+          agent.connector_handles.get("telegram:c9")["reply_handle"] == ""
           and agent.outbox.route("telegram:c9") is None)
 
 
@@ -472,7 +472,7 @@ PULL = {"kind": "outbox.pull", "connector_id": "fw1", "wait_s": 0,
         "max_deliveries": 10, "acks": []}
 
 
-async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
+async def test_the_outbox_endpoint_is_authenticated_like_the_connector(
         tmp: Path) -> None:
     agent = make_agent(tmp)
     body = _body(PULL)
@@ -616,8 +616,8 @@ async def _connected(tmp: Path) -> Agent:
     agent = make_agent(tmp)
     agent.outbox.poll_s = 0.02
     await agent.outbox.pull("fw1", wait_s=0)
-    await agent.handle_gateway(group_event("setup-1", **CONNECTOR))
-    await agent.handle_gateway(dm_event(
+    await agent.handle_event(group_event("setup-1", **CONNECTOR))
+    await agent.handle_event(dm_event(
         "setup-2", connector_id="fw1", reply_handle="tg-bot:FriendMessage:1",
         capabilities=["outbox"]))
     return agent
@@ -649,7 +649,7 @@ async def test_the_route_table(tmp: Path) -> None:
           agent._background_route("telegram:c1") is None)
     agent.connector_outbox_enabled = True
     agent.connector_qq_platforms = {"aiocqhttp"}
-    await agent.handle_gateway(group_event(
+    await agent.handle_event(group_event(
         "setup-3", platform="aiocqhttp", gid="556", uid="43",
         connector_id="fw1", reply_handle="qq:GroupMessage:556", capabilities=["outbox"]))
     check("route: a QQ group behind a live outbox connector goes to it",
@@ -661,12 +661,12 @@ async def test_the_route_table(tmp: Path) -> None:
           agent._background_route("556") == "onebot")
 
 
-async def test_a_qq_send_from_a_finished_gateway_turn_reaches_napcat(
+async def test_a_qq_send_from_a_finished_connector_turn_reaches_napcat(
         tmp: Path) -> None:
-    """A task spawned by a gateway turn inherits its sink, closed by the time
+    """A task spawned by a connector turn inherits its sink, closed by the time
     the task runs: every such send was dropped with "sink already closed".
     On the QQ route the sink is lifted, so NapCat is reached."""
-    from persona_agent.gateway import GatewaySink, current_sink
+    from persona_agent.connector import ConnectorSink, current_sink
 
     agent = make_agent(tmp)
     posted: list = []
@@ -676,7 +676,7 @@ async def test_a_qq_send_from_a_finished_gateway_turn_reaches_napcat(
         return True
 
     agent._napcat_send_group = fake_napcat
-    dead = GatewaySink(platform="aiocqhttp", native=True)
+    dead = ConnectorSink(platform="aiocqhttp", native=True)
     dead.closed = True
     tok = current_sink.set(dead)
     try:
@@ -689,14 +689,14 @@ async def test_a_qq_send_from_a_finished_gateway_turn_reaches_napcat(
           repr((result, posted)))
 
 
-async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
+async def test_the_excuse_reaches_a_connector_conversation(tmp: Path) -> None:
     agent = await _connected(tmp)
 
     async def bad_think(group_id, mode, text="", caller_override=None):
         raise RuntimeError("model down")
 
     agent._think = bad_think
-    result = await agent.handle_gateway(group_event("m1", **CONNECTOR))
+    result = await agent.handle_event(group_event("m1", **CONNECTOR))
     check("excuse: the turn itself answers with nothing, and owns the room",
           result["owned"] is True and result["replies"] == [], repr(result))
     delivery = await _ack_next(agent)
@@ -714,7 +714,7 @@ async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
           any(m["text"] == item["text"] for m in said), repr(said))
 
     # A connector that never said "outbox": nothing is queued, nothing said.
-    await agent.handle_gateway(group_event(
+    await agent.handle_event(group_event(
         "m2", gid="c5", connector_id="fw1", reply_handle="h5", capabilities=[]))
     await asyncio.sleep(0.1)
     check("excuse: no outbox, no excuse",
@@ -736,13 +736,13 @@ async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
 
     agent._napcat_send_group = fake_napcat
     agent._think = bad_think
-    await agent.handle({
+    await agent.handle_onebot({
         "post_type": "message", "message_type": "group", "group_id": "556",
         "user_id": "42", "message_id": 92002, "sender": {"nickname": "Alice"},
         "message": [{"type": "at", "data": {"qq": QQ_BOT_ID}},
                     {"type": "text", "data": {"text": "you free tonight?"}}],
         "raw_message": "you free tonight?"})
-    await agent.handle_gateway(group_event(
+    await agent.handle_event(group_event(
         "m3", platform="aiocqhttp", gid="557", uid="43", self_id=QQ_BOT_ID))
     for _ in range(50):
         if len(posted) == 2:
@@ -752,7 +752,7 @@ async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
           sorted(posted) == ["556", "557"], repr(posted))
 
 
-async def test_a_proactive_opener_reaches_a_gateway_room(tmp: Path) -> None:
+async def test_a_proactive_opener_reaches_a_connector_room(tmp: Path) -> None:
     agent = await _connected(tmp)
     agent.proactive_prob = 1.0
     thought: list = []
@@ -805,7 +805,7 @@ async def test_a_proactive_opener_reaches_a_gateway_room(tmp: Path) -> None:
           and agent.last_proactive_at.get(room, 0) > 0)
 
 
-async def test_a_proactive_dm_reaches_a_gateway_user(tmp: Path) -> None:
+async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
     agent = await _connected(tmp)
     agent.proactive_dm_prob = 1.0
     uid = "telegram:1"
@@ -852,7 +852,7 @@ async def test_a_connectors_own_proactive_cue_shares_the_cooldown(
     speaking first. It stamps the DM cooldown the agent's loop reads, and is
     not activity by the reader."""
     agent = make_agent(tmp)
-    result = await agent.handle_gateway(dm_event(
+    result = await agent.handle_event(dm_event(
         "p1", proactive=True, text="they had an exam today",
         segments=[{"type": "text", "text": "they had an exam today"}]))
     check("cue: still answered in the response",
@@ -863,7 +863,7 @@ async def test_a_connectors_own_proactive_cue_shares_the_cooldown(
           agent.last_dm_activity_at.get("telegram:1", 0) == 0)
 
 
-async def test_the_follow_up_question_reaches_a_gateway_conversation(
+async def test_the_follow_up_question_reaches_a_connector_conversation(
         tmp: Path) -> None:
     agent = await _connected(tmp)
     agent.react_elicit_delay_s = 0.0

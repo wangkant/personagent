@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .gateway import CONVERSATION_TYPES, MAX_CONNECTOR_ID_CHARS, opaque_value
+from .connector import CONVERSATION_TYPES, MAX_CONNECTOR_ID_CHARS, opaque_value
 from .storage import atomic_write_text
 
 logger = logging.getLogger("agent.outbox")
@@ -50,7 +50,7 @@ MAX_ACKS_PER_PULL = 1000
 MAX_HANDLES = 4096
 MAX_CONNECTORS = 64
 
-#: The body `kind` of a pull (see gateway.EVENT_KIND).
+#: The body `kind` of a pull (see connector.EVENT_KIND).
 PULL_KIND = "outbox.pull"
 
 #: Ack statuses a connector may send (docs/connectors.md).

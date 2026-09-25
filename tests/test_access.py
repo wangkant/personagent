@@ -1,7 +1,7 @@
 """Tests for access.py: whose ids mean what, and who is admitted where.
 
 The module is pure, so the admission matrix is tested here without an agent;
-tests/test_gateway.py drives the same rules through the real one."""
+tests/test_connector.py drives the same rules through the real one."""
 from __future__ import annotations
 
 from persona_agent import access
@@ -16,7 +16,7 @@ def test_ids_are_canonicalised_to_the_keys_events_carry() -> None:
     natives = ("aiocqhttp",)
     check("a bare id is QQ and stays bare", access.canonical_id("123") == "123")
     check("qq: is the same QQ id", access.canonical_id("qq:123") == "123")
-    check("a native forwarder's prefix is dropped, as its events are minted",
+    check("a native connector's prefix is dropped, as its events are minted",
           access.canonical_id("aiocqhttp:10000", natives) == "10000")
     check("the same prefix is kept when that platform is not native",
           access.canonical_id("aiocqhttp:10000") == "aiocqhttp:10000")
@@ -57,22 +57,22 @@ def test_owners_are_found_on_their_platform() -> None:
 
 
 def test_group_admission_is_partitioned_per_platform() -> None:
-    def refusal(gid, allowed, *, fwd=True, pre=True):
+    def refusal(gid, allowed, *, connector=True, pre=True):
         return access.group_refusal(gid, access.parse_ids(allowed),
-                                    via_forwarder=fwd, prefiltered=pre)
+                                    via_connector=connector, prefiltered=pre)
 
     # QQ: empty means every group, entries mean only those.
-    check("QQ, no entries: every group", refusal("555", "", fwd=False) == "")
-    check("QQ, listed", refusal("123", "123", fwd=False) == "")
+    check("QQ, no entries: every group", refusal("555", "", connector=False) == "")
+    check("QQ, listed", refusal("123", "123", connector=False) == "")
     check("QQ, not listed: refused naming ACCESS_GROUPS",
-          "ACCESS_GROUPS" in refusal("555", "123", fwd=False))
-    check("QQ entries apply to a native forwarder's bare ids too",
+          "ACCESS_GROUPS" in refusal("555", "123", connector=False))
+    check("QQ entries apply to a native connector's bare ids too",
           refusal("555", "123") != "" and refusal("123", "123") == "")
     check("a Telegram entry does not close QQ",
-          refusal("555", "telegram:-100", fwd=False) == "")
+          refusal("555", "telegram:-100", connector=False) == "")
 
-    # A forwarded platform: the forwarder's list until it has entries.
-    check("Telegram, no entries: left to the forwarder",
+    # A forwarded platform: the connector's list until it has entries.
+    check("Telegram, no entries: left to the connector",
           refusal("telegram:-200", "123") == "")
     check("Telegram, listed", refusal("telegram:-100", "telegram:-100") == "")
     check("Telegram, entries but not this one",
@@ -87,26 +87,26 @@ def test_group_admission_is_partitioned_per_platform() -> None:
           refusal("555", "", pre=False) == "")
 
     check("the QQ webhook refuses a namespaced group outright",
-          refusal("telegram:-100", "telegram:-100", fwd=False)
+          refusal("telegram:-100", "telegram:-100", connector=False)
           == access.QQ_DOOR_REFUSAL)
     check("even one spelled qq:, which NapCat never sends",
-          refusal("qq:123", "", fwd=False) == access.QQ_DOOR_REFUSAL)
+          refusal("qq:123", "", connector=False) == access.QQ_DOOR_REFUSAL)
 
 
 def test_dm_admission_is_partitioned_per_platform() -> None:
     owners = access.parse_ids("10000,telegram:1")
 
-    def refusal(uid, allowed, *, fwd=True, pre=True):
+    def refusal(uid, allowed, *, connector=True, pre=True):
         return access.dm_refusal(uid, owners, access.parse_ids(allowed),
-                                 via_forwarder=fwd, prefiltered=pre)
+                                 via_connector=connector, prefiltered=pre)
 
-    check("QQ: the owner", refusal("10000", "", fwd=False) == "")
-    check("QQ: a listed user", refusal("888", "888", fwd=False) == "")
+    check("QQ: the owner", refusal("10000", "", connector=False) == "")
+    check("QQ: a listed user", refusal("888", "888", connector=False) == "")
     check("QQ: an empty list still means owner only",
-          "ACCESS_DM_USERS" in refusal("555", "", fwd=False))
-    check("QQ: same through a native forwarder", refusal("555", "") != "")
+          "ACCESS_DM_USERS" in refusal("555", "", connector=False))
+    check("QQ: same through a native connector", refusal("555", "") != "")
 
-    check("Telegram, no entries: left to the forwarder",
+    check("Telegram, no entries: left to the connector",
           refusal("telegram:43", "") == "")
     check("Telegram, listed", refusal("telegram:42", "telegram:42") == "")
     check("Telegram, entries but not this one: refused",
@@ -119,7 +119,7 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
           "prefiltered=false" in refusal("telegram:43", "", pre=False))
 
     check("the QQ webhook refuses a namespaced owner: it is forged",
-          refusal("telegram:1", "", fwd=False) == access.QQ_DOOR_REFUSAL)
+          refusal("telegram:1", "", connector=False) == access.QQ_DOOR_REFUSAL)
 
 
 def test_the_identity_reader_reads_one_list_per_setting() -> None:

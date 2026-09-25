@@ -26,7 +26,7 @@ Supporting modules, all pure logic with no agent state:
 - reactions  reaction attribution + adjudicator prompts
 - evolution  eval -> feedback conversion, dedup, pool trimming
 - endpoints  which endpoint serves a model name (the fallback may have its own)
-- gateway    platform-neutral inbound event schema + reply sink
+- connector  platform-neutral inbound event schema + reply sink
 - channels   the one place conversation / memory / learning keys are derived from an event
 - stickers   sticker library: steal -> tag -> persona-fit gates -> feedback
 - lineage    which persona-document hashes count as one character, so an edit doesn't orphan what was learned

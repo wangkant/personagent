@@ -26,7 +26,7 @@ from . import evidence as evidence_mod
 from . import lineage as lineage_mod
 from . import outbox as outbox_mod
 from . import reactions
-from .gateway import (GATEWAY_SELF_ID, GatewaySink, current_sink,
+from .connector import (CONNECTOR_BOT_ID, ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
 from .paths import (
@@ -81,7 +81,7 @@ from .textproc import (
     _truncate_framed,
 )
 from .transport import (
-    _MAX_GATEWAY_CONVS,
+    _MAX_CONNECTOR_CONVS,
     Transport,
     # Re-exports: tests import these from `persona_agent.agent`. Keep the noqa.
     _SEND_MAX_PER_MIN,  # noqa: F401
@@ -173,7 +173,7 @@ _EMPTY_DRAFT_RETRY_NOTE = (
     "and no emoji or markup inside it."
 )
 
-# How much of a gateway caller's proactive cue reaches the model. The cue is
+# How much of a connector caller's proactive cue reaches the model. The cue is
 # a scheduler's briefing ("their exam was today"), not a document, and it is
 # handed over as external material beside the engine's own proactive note.
 _PROACTIVE_CUE_MAX_CHARS = 500
@@ -196,7 +196,7 @@ _MEMORY_MERGE_WINDOW_S = 6 * 3600.0
 _PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
 # Conversations whose refusal has been logged, kept bounded: forwarded ids are
-# chosen by the forwarder, so an unbounded set would grow with every room.
+# chosen by the connector, so an unbounded set would grow with every room.
 _MAX_REFUSALS_LOGGED = 4096
 
 
@@ -392,10 +392,10 @@ class Agent(ContentIngestion, Transport, Learning):
         self._send_gate = asyncio.Lock()
         self._last_send_mono: float = 0.0
         self._send_window: dict = defaultdict(deque)
-        # Gateway conversation LRU (key -> last-touch monotonic). See
-        # _touch_gateway_conv.
-        self._gateway_conv_lru: dict[str, float] = {}
-        self._gateway_inflight: dict[str, int] = defaultdict(int)
+        # Connector conversation LRU (key -> last-touch monotonic). See
+        # _touch_connector_conv.
+        self._connector_conv_lru: dict[str, float] = {}
+        self._connector_inflight: dict[str, int] = defaultdict(int)
         # Admission refusals already logged; see _log_refusal.
         self._refusals_logged: dict[str, None] = {}
         # Conversations already reported as unreachable; see _log_no_route.
@@ -480,9 +480,9 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # How to reach each connector conversation unprompted, and the queue
         # its connector pulls from (outbox.py). Loaded on first use.
-        self.gateway_handles = outbox_mod.HandleStore(
+        self.connector_handles = outbox_mod.HandleStore(
             resolve_runtime_state_file("connector_handles.json"))
-        self.outbox = outbox_mod.Outbox(self.gateway_handles)
+        self.outbox = outbox_mod.Outbox(self.connector_handles)
 
     def _load_seen_msg_ids(self) -> None:
         """Refill the de-dup ring from disk; a missing or broken file is fine."""
@@ -518,7 +518,7 @@ class Agent(ContentIngestion, Transport, Learning):
             max_per_conv=self.settings.react_max_pending,
             ttl_sec=self.settings.react_ttl_s,
             fix_window_sec=self.settings.react_fix_window_s,
-            max_conversations=_MAX_GATEWAY_CONVS,
+            max_conversations=_MAX_CONNECTOR_CONVS,
             state_file=self.memory_file.with_name("pending_reactions.json"),
         )
         # Per-user teaching reputation (never the owner); consistently bad
@@ -698,7 +698,10 @@ class Agent(ContentIngestion, Transport, Learning):
         t.add_done_callback(self._bg_tasks.discard)
         return t
 
-    async def handle(self, payload: dict, *, proactive: bool = False) -> bool:
+    async def handle_onebot(self, payload: dict, *,
+                            proactive: bool = False) -> bool:
+        # One OneBot-shaped payload: from /v1/onebot, the catch-up sweep, or
+        # handle_event after synthesize_onebot_payload.
         # `proactive`: this turn's text is a cue its CALLER wrote, not a
         # message from the person on the other end. See _handle_private.
         # Top-level guard so any failure in the message pipeline is logged
@@ -742,27 +745,27 @@ class Agent(ContentIngestion, Transport, Learning):
         zh rule only where persona and reader language agree."""
         return self.agent_lang
 
-    async def handle_gateway(self, event: dict) -> dict:
-        """Handle one platform-neutral event forwarded by a gateway plugin.
+    async def handle_event(self, event: dict) -> dict:
+        """Handle one platform-neutral event posted by a connector.
 
-        Synchronous round-trip: a GatewaySink is installed as a contextvar so
+        Synchronous round-trip: a ConnectorSink is installed as a contextvar so
         the NapCat send funnels divert their messages into it, then the normal
         pipeline runs to completion and the collected replies go back in the
-        HTTP response (the forwarder relays them to the source platform)."""
+        HTTP response (the connector relays them to the source platform)."""
         payload = synthesize_onebot_payload(
             event, self._self_mention_id(), self.connector_qq_platforms)
         if payload.get("message_type") == "private":
-            gateway_key = channels.dm_routing_key(payload.get("user_id", ""))
+            route_key = channels.dm_routing_key(payload.get("user_id", ""))
         else:
-            gateway_key = str(payload.get("group_id", ""))
-        if gateway_key:
-            self._gateway_inflight[gateway_key] += 1
+            route_key = str(payload.get("group_id", ""))
+        if route_key:
+            self._connector_inflight[route_key] += 1
         # The sink needs to know which platform this turn came from: on a
         # native platform `_ns` mints ids BARE for the ledgers, and an
-        # outbound mention has to be handed back namespaced or the forwarder
+        # outbound mention has to be handed back namespaced or the connector
         # cannot resolve it (see message_to_reply_item).
         sink_platform = str(payload.get("_platform", "") or "")
-        sink = GatewaySink(
+        sink = ConnectorSink(
             platform=sink_platform,
             native=sink_platform in (self.connector_qq_platforms or ()),
             bot_id=self._self_mention_id(),
@@ -773,41 +776,41 @@ class Agent(ContentIngestion, Transport, Learning):
         # argument, not a payload flag: /v1/onebot accepts arbitrary JSON.
         proactive = bool(event.get("proactive"))
         try:
-            handled = await self.handle(payload, proactive=proactive)
+            handled = await self.handle_onebot(payload, proactive=proactive)
         finally:
             # Close before reset: background tasks spawned during handling
             # inherit a context that still references this sink, and a send
             # after the response is gone should be dropped, not collected.
             sink.closed = True
             current_sink.reset(tok)
-            if gateway_key:
-                remaining = self._gateway_inflight.get(gateway_key, 0) - 1
+            if route_key:
+                remaining = self._connector_inflight.get(route_key, 0) - 1
                 if remaining > 0:
-                    self._gateway_inflight[gateway_key] = remaining
+                    self._connector_inflight[route_key] = remaining
                 else:
-                    self._gateway_inflight.pop(gateway_key, None)
-                self._trim_gateway_convs()
+                    self._connector_inflight.pop(route_key, None)
+                self._trim_connector_convs()
         # Only an admitted turn may leave an address behind: a connector must
         # not plant handles for conversations the agent refuses.
         connector = event_connector(event)
-        if (gateway_key and sink.owned
+        if (route_key and sink.owned
                 and (connector["reply_handle"] or connector["connector_id"])):
             dm = payload.get("message_type") == "private"
-            self.gateway_handles.record(
-                gateway_key, **connector, platform=sink.platform,
+            self.connector_handles.record(
+                route_key, **connector, platform=sink.platform,
                 native=sink.native,
                 conversation_type="dm" if dm else "group",
                 conversation_id=str(event.get(
                     "sender_id" if dm else "conversation_id") or ""),
                 prefiltered=sink.prefiltered)
-        # `owned` is not `handled`. See GatewaySink: a forwarder needs to know
+        # `owned` is not `handled`. See ConnectorSink: a connector needs to know
         # whether to suppress its own model, and "produced no reply" is the
         # wrong signal for that — silence is frequently the persona's answer.
         return {"handled": bool(handled), "owned": sink.owned,
                 "replies": sink.items}
 
-    def _claim_gateway_turn(self) -> None:
-        """Mark the current gateway turn as ours, whatever it decides to say.
+    def _claim_connector_turn(self) -> None:
+        """Mark the current connector turn as ours, whatever it decides to say.
 
         Called once the admission gates pass, which is the moment the answer
         to "is this conversation mine" is known — everything after it is about
@@ -864,27 +867,27 @@ class Agent(ContentIngestion, Transport, Learning):
         user_id = str(payload.get("user_id", ""))
 
         # Admission, per platform (access.py). The sink is set only by
-        # handle_gateway, so /v1/onebot cannot claim to be a connector: there
+        # handle_event, so /v1/onebot cannot claim to be a connector: there
         # a namespaced id is forged, and a bare one is QQ's to gate.
         sink = current_sink.get()
-        via_forwarder = sink is not None
+        via_connector = sink is not None
         prefiltered = getattr(sink, "prefiltered", True)
         if message_type == "private":
             owners = self._owners()
             refusal = access.dm_refusal(
                 user_id, owners, self._dm_allowlist(),
-                via_forwarder=via_forwarder, prefiltered=prefiltered)
+                via_connector=via_connector, prefiltered=prefiltered)
             if refusal:
                 self._log_refusal(channels.dm_routing_key(user_id), refusal)
                 return False
             is_owner = access.is_owner(user_id, owners)
-            self._claim_gateway_turn()
+            self._claim_connector_turn()
             if mid is not None:
                 self._remember_msg_id(mid)
-            # Gateway DM keys are forwarder-chosen → register in the LRU so an
+            # Connector DM keys are connector-chosen → register in the LRU so an
             # over-the-cap flood evicts the least-recently-active conversation.
-            if via_forwarder and not channels.is_native(user_id):
-                self._touch_gateway_conv(channels.dm_routing_key(user_id))
+            if via_connector and not channels.is_native(user_id):
+                self._touch_connector_conv(channels.dm_routing_key(user_id))
             # `proactive` is honoured on the private path only, which can
             # hand the cue to the model for one call. A group event carrying
             # it is claimed and dropped below.
@@ -895,30 +898,30 @@ class Agent(ContentIngestion, Transport, Learning):
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
             return False
-        # A bare id is QQ's from either door, a native forwarder's included,
+        # A bare id is QQ's from either door, a native connector's included,
         # so it is measured against the QQ entries like any other.
         refusal = access.group_refusal(
             group_id, self._group_allowlist(),
-            via_forwarder=via_forwarder, prefiltered=prefiltered,
+            via_connector=via_connector, prefiltered=prefiltered,
             user_id=user_id)
         if refusal:
             self._log_refusal(group_id, refusal)
             return False
-        self._claim_gateway_turn()
+        self._claim_connector_turn()
         if mid is not None:
             self._remember_msg_id(mid)
         # A group turn has no transient cue to carry the caller's text as:
         # past this point it is buffered as the sender's line, counted toward
         # the triggers and can be saved as a memory about them. Claimed, so
-        # the forwarder does not answer the cue with its own model either.
+        # the connector does not answer the cue with its own model either.
         # _maybe_proactive_groups composes the QQ groups' own proactive turns.
         if proactive:
             logger.info("[Agent] proactive cue on a group conversation is not "
                         "supported; dropped (group=%s)", group_id)
             return False
-        # Gateway group keys are forwarder-chosen → register in the LRU.
-        if via_forwarder and not channels.is_native(group_id):
-            self._touch_gateway_conv(group_id)
+        # Connector group keys are connector-chosen → register in the LRU.
+        if via_connector and not channels.is_native(group_id):
+            self._touch_connector_conv(group_id)
 
         has_image = any(
             isinstance(seg, dict) and seg.get("type") == "image"
@@ -1158,7 +1161,7 @@ class Agent(ContentIngestion, Transport, Learning):
                         "signal weird rn, gimme a min",
                     ])
 
-                    # The task outlives a gateway turn's response, so it goes
+                    # The task outlives a connector turn's response, so it goes
                     # out the way unprompted messages do (_send_background).
                     async def _send_fallback() -> None:
                         try:
@@ -1426,7 +1429,7 @@ class Agent(ContentIngestion, Transport, Learning):
         reply = TextProcessing._sanitize_reply(
             filtered, self._validator_lang(), self.reply_style)
         reply = TextProcessing._unwrap_reply(reply)
-        # Non-digit targets included: gateway ids look like "telegram:12345".
+        # Non-digit targets included: connector ids look like "telegram:12345".
         at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
         at_uid = at_match.group(1) if at_match else ""
         # Strip every marker (a second, hallucinated one would ship as text).
@@ -1453,7 +1456,7 @@ class Agent(ContentIngestion, Transport, Learning):
         The LEARNING scope is a different key derived from it — see
         `_dm_scope_key`.
 
-        `proactive_cue` is a gateway caller's briefing for a proactive turn.
+        `proactive_cue` is a connector caller's briefing for a proactive turn.
         It joins the internal cue as bounded external material: the engine's
         own `<proactive>` note still says what the turn is and that PASS is
         allowed, because a scheduler's text has no authority to say either."""
@@ -1563,7 +1566,7 @@ class Agent(ContentIngestion, Transport, Learning):
         system = static_block + semi_static_block + dynamic_block
         # Every turn the person wrote goes in as framed data, which the rules
         # above explain. The persona's own turns stay as they are, and so does
-        # the proactive cue below: the application wrote it, and a gateway
+        # the proactive cue below: the application wrote it, and a connector
         # caller's note inside it carries a frame of its own.
         messages = [
             {**m, "content": _fence_user_data(m.get("content", ""))}
@@ -1689,7 +1692,7 @@ class Agent(ContentIngestion, Transport, Learning):
             elif t == "image":
                 url = d.get("url") or d.get("file", "")
                 file_field = d.get("file", "")
-                # A forwarder marks a sticker sent as an image; the focus
+                # A connector marks a sticker sent as an image; the focus
                 # block and the prompt treat [sticker] and [image] alike.
                 kind = "sticker" if d.get("sticker") is True else "image"
                 if not url:
@@ -1704,10 +1707,10 @@ class Agent(ContentIngestion, Transport, Learning):
                     continue
                 desc = await self._describe_image(url)
                 parts.append(_fence(f"[{kind}: {desc}]") if desc else f"[{kind}]")
-                # Sticker stealing is a QQ-path feature: gateway images must
+                # Sticker stealing is a QQ-path feature: connector images must
                 # not get cataloged into the QQ sticker library or burn
-                # tagging calls, so skip the spawn while the gateway sink is
-                # set (the steal decision happens inside handle_gateway).
+                # tagging calls, so skip the spawn while the connector sink is
+                # set (the steal decision happens inside handle_event).
                 if group_id and sender_uid != self.qq_bot_id \
                         and current_sink.get() is None:
                     self._spawn(self._steal_image_async(
@@ -1786,7 +1789,7 @@ class Agent(ContentIngestion, Transport, Learning):
             del self._msg_index[next(iter(self._msg_index))]
 
     def _quote_hint(self, data: dict) -> str:
-        """The forwarder's copy of a quoted message as 'speaker: text', in
+        """The connector's copy of a quoted message as 'speaker: text', in
         the shape _index_msg stores, or ''."""
         text = " ".join(
             _clean_prompt_source(data.get("quote_text")).split())[:60]
@@ -1801,7 +1804,7 @@ class Agent(ContentIngestion, Transport, Learning):
     async def _resolve_quote(self, mid, group_id: str, hint: str = "") -> str:
         """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
         understands the referent. Layer A: local _msg_index (zero cost, hits most
-        recent messages). Then the forwarder's own copy (`hint`), which covers
+        recent messages). Then the connector's own copy (`hint`), which covers
         the bot's replies and anything older than the index. Layer B: NapCat
         get_msg (one call, only on a miss). Any failure returns '' — the caller
         degrades to a bare '[reply]', never blocking or dropping the message."""
@@ -1814,7 +1817,7 @@ class Agent(ContentIngestion, Transport, Learning):
             if key:
                 self._index_msg(key, hint)
             return hint
-        # Gateway path has no NapCat to query; skip the API call.
+        # Connector path has no NapCat to query; skip the API call.
         if not key or current_sink.get() is not None:
             return ""
         try:
@@ -1852,11 +1855,11 @@ class Agent(ContentIngestion, Transport, Learning):
             buf.append({"name": name, "text": text, "user_id": user_id})
 
     def _self_mention_id(self) -> str:
-        """The id an @ of the bot carries: QQ_BOT_ID, or GATEWAY_SELF_ID on an
-        install without QQ, where the gateway mints it for a self mention.
+        """The id an @ of the bot carries: QQ_BOT_ID, or CONNECTOR_BOT_ID on an
+        install without QQ, where the connector mints it for a self mention.
         Only the mention paths use it; NapCat's own-message filters and the
         missed-mention sweep stay on qq_bot_id."""
-        return self.qq_bot_id or GATEWAY_SELF_ID
+        return self.qq_bot_id or CONNECTOR_BOT_ID
 
     def _is_at_me(self, payload: dict) -> bool:
         me = self._self_mention_id()
@@ -2784,7 +2787,7 @@ class Agent(ContentIngestion, Transport, Learning):
         lost across a restart. Called from the lifespan shutdown hook."""
         self._persist_seen(force=True)
         self.pending_reactions.flush()
-        self.gateway_handles.flush(force=True)
+        self.connector_handles.flush(force=True)
         try:
             self.stickers._save(force=True)
         except Exception as e:
@@ -2947,7 +2950,7 @@ class Agent(ContentIngestion, Transport, Learning):
             if route is None:
                 continue
             if route != "onebot" and access.dm_refusal(
-                    uid, owners, allowed, via_forwarder=True,
+                    uid, owners, allowed, via_connector=True,
                     prefiltered=route.get("prefiltered", True)):
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
@@ -3856,7 +3859,7 @@ class Agent(ContentIngestion, Transport, Learning):
         """An [AT:...] example spelled the way this conversation's ids are.
 
         A bare QQ number taught the model on Telegram to write [AT:42], which
-        the forwarder cannot resolve. The platform name is forwarder-supplied,
+        the connector cannot resolve. The platform name is connector-supplied,
         so it reaches this engine-written line only if it looks like one."""
         platform = channels.platform_of(group_id)
         if channels.is_native(group_id) or not _PLATFORM_NAME_RE.fullmatch(platform):

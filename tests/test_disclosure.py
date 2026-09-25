@@ -8,7 +8,7 @@ prompt's `<rules>` block opened with "Don't reveal you're an AI", and the
 output filter carried `reject` rules whose patterns needed an AI-identity
 token, so an admission the model made anyway was dropped whole and the turn
 went silent. Every property below is asserted on behaviour (the prompt the
-model receives, every shipped rule run over a corpus, the reply a gateway
+model receives, every shipped rule run over a corpus, the reply a connector
 turn returns) rather than by grepping for the deleted strings.
 
 WHERE THE LINE IS, for anyone editing the filter files later. A rule is an
@@ -366,7 +366,7 @@ def test_the_shipped_filters_reject_no_truthful_self_description() -> None:
 
 async def test_the_engine_reports_the_admission_as_a_reply_not_as_silence(
         tmp: Path) -> None:
-    """End to end through `handle_gateway` with the shipped filter live: a
+    """End to end through `handle_event` with the shipped filter live: a
     turn in which the model says it is an AI must come back as a reply, not
     as an empty `replies` list."""
     agent = make_agent(tmp)
@@ -380,7 +380,7 @@ async def test_the_engine_reports_the_admission_as_a_reply_not_as_silence(
     agent._call_llm = fake_call
     agent._decide_and_search = no_search
     try:
-        result = await agent.handle_gateway({
+        result = await agent.handle_event({
             "platform": "telegram", "conversation_type": "dm",
             "conversation_id": "u1", "sender_id": "u1", "sender_name": "Ada",
             "bot_id": "999000", "message_id": "u1:1", "addressed": True,
@@ -392,7 +392,7 @@ async def test_the_engine_reports_the_admission_as_a_reply_not_as_silence(
     check("the shipped filter is live for this agent",
           len(agent._filters_cache) > 0, f"{len(agent._filters_cache)} rules")
     replies = list((result or {}).get("replies") or [])
-    check("handle_gateway returns the admission rather than an empty list",
+    check("handle_event returns the admission rather than an empty list",
           replies != [], repr(result))
     joined = json.dumps(replies, ensure_ascii=False)
     check("carrying the admission text", "language model" in joined,

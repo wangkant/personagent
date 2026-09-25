@@ -30,7 +30,7 @@ import httpx
 from httpcore._backends.auto import AutoBackend
 
 from .config_env import env_int
-from .gateway import current_sink
+from .connector import current_sink
 from .textproc import (_detect_image_mime, _truncate_framed, apply_k2_quirks,
                        salvage_json_object, strip_json_fences)
 
@@ -556,14 +556,14 @@ class ContentIngestion:
     )
 
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
-        """Fetch image bytes. Handles base64:// (inline data from a gateway
+        """Fetch image bytes. Handles base64:// (inline data from a connector
         b64-only image segment), file:// (local read for NapCat local-cache
         mode) and http(s) (httpx)."""
         if not url:
             return None
         if url.startswith("base64://"):
             # synthesize_onebot_payload emits a base64:// file field when the
-            # forwarder had no URL — the bytes are inline, nothing to fetch.
+            # connector had no URL — the bytes are inline, nothing to fetch.
             encoded = url[len("base64://"):]
             max_encoded = ((VISION_MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
             if len(encoded) > max_encoded:
@@ -938,7 +938,7 @@ class ContentIngestion:
         It deliberately does NOT resolve hostnames. Doing so cost two things
         and bought nothing. `socket.getaddrinfo` is synchronous, so one posted
         URL whose nameserver blackholes froze the whole event loop — every
-        group, the gateway round-trip, all background loops — for the resolver
+        group, the connector round-trip, all background loops — for the resolver
         timeout. And a name resolved *here* says nothing about the address
         connected to later; that gap is precisely the DNS-rebinding window
         that _resolve_public_target's pinning closes. A public name pointing
@@ -1178,7 +1178,7 @@ class ContentIngestion:
 
     @staticmethod
     def _image_cache_key(url: str) -> str:
-        """Caption-cache key for an image 'url'. Gateway images with only
+        """Caption-cache key for an image 'url'. Connector images with only
         inline bytes arrive as base64://<payload> pseudo-URLs — up to several
         MB each — so keying the cache on the raw string would park megabytes
         of dead base64 per entry. Hash those; real URLs stay as-is."""
@@ -1506,8 +1506,8 @@ class ContentIngestion:
             return caption
 
         # The OCR fallback is a QQ-path facility: NapCat cannot fetch
-        # foreign-platform URLs or base64 pseudo-URLs, so a gateway image
-        # would only burn a doomed NapCat call. Skip it while the gateway
+        # foreign-platform URLs or base64 pseudo-URLs, so a connector image
+        # would only burn a doomed NapCat call. Skip it while the connector
         # sink is set.
         if current_sink.get() is not None:
             return ""
@@ -1523,7 +1523,7 @@ class ContentIngestion:
         # same nothing at the price of the vision retry ladder plus a NapCat
         # round trip. _ocr_image caches only a reply it got, and a vision call
         # that failed is "not now", which cached would blind this image for
-        # good. The gateway-sink return above is not cached either: that one
+        # good. The connector-sink return above is not cached either: that one
         # is "not from here", not "never".
         if not vision_failed and cache_key in self.image_caption_cache:
             self.image_caption_cache[cache_key] = ""

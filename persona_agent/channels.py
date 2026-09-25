@@ -14,8 +14,8 @@ The table, in full:
     ------------------------------------------------------------------------
     QQ group       "123456"              "123456"              "123456"
     QQ DM          "private:777"         "private:777"         "dm:777"
-    gateway room   "telegram:c1"         "telegram:c1"         "telegram:c1"
-    gateway DM     "private:telegram:1"  "private:telegram:1"  "dm:telegram:1"
+    connector room "telegram:c1"         "telegram:c1"         "telegram:c1"
+    connector DM   "private:telegram:1"  "private:telegram:1"  "dm:telegram:1"
 
 WHY THIS MODULE EXISTS. Three call sites derived that mapping independently
 and two of them got it wrong:
@@ -58,7 +58,7 @@ def is_dm(routing_key: str) -> bool:
 def learning_key(routing_key: str) -> str:
     """The LEARNING scope for the conversation a routing key names.
 
-    Gateway DMs map correctly too: `private:telegram:1` -> `dm:telegram:1`,
+    Connector DMs map correctly too: `private:telegram:1` -> `dm:telegram:1`,
     which is what the writers spell. A key that is not a DM is its own
     learning key, so this is safe to apply unconditionally.
     """
@@ -102,7 +102,7 @@ def is_native(key: str) -> bool:
     "dm:telegram:1". The QQ entries of ADMIN_IDS, ACCESS_GROUPS and
     ACCESS_DM_USERS are bare ids, so a key that reads as native is asking to
     be measured against them — whichever door it arrived through. That is the
-    question the whitelist gates have to ask: a forwarder authorized to mint
+    question the whitelist gates have to ask: a connector authorized to mint
     native ids must not thereby escape the whitelists those ids belong to.
     """
     return platform_of(key) == NATIVE_PLATFORM

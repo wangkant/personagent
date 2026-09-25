@@ -169,7 +169,7 @@ def test_webhook_routes_are_documented_for_openapi() -> None:
         doc = (getattr(fn, "__doc__", "") or "").strip()
         check(f"{name} has a docstring for OpenAPI", bool(doc), repr(doc[:40]))
     gw_doc = (getattr(main_module, "connector_events").__doc__ or "").lower()
-    check("the gateway docstring states the synchronous contract",
+    check("the connector docstring states the synchronous contract",
           "synchronous" in gw_doc, repr(gw_doc[:80]))
     qq_doc = (getattr(main_module, "onebot_webhook").__doc__ or "").lower()
     check("the qq docstring states the deprecation",
@@ -252,7 +252,7 @@ async def test_asgi_webhook_auth_and_schema() -> None:
     original_agent = main_module.agent
     original_replay = main_module._connector_replay
     main_module.QQ_ONEBOT_SECRET = "qq-secret"
-    main_module.CONNECTOR_TOKEN = "gateway-secret"
+    main_module.CONNECTOR_TOKEN = "connector-secret"
     main_module.agent = None
     main_module._connector_replay = main_module.ReplayGuard()
     transport = httpx.ASGITransport(app=main_module.app)
@@ -275,44 +275,44 @@ async def test_asgi_webhook_auth_and_schema() -> None:
                 "/v1/onebot", content=qq_body,
                 headers={"x-signature": qq_sig})
 
-            gateway_event = {
+            connector_event = {
                 "platform": "telegram", "conversation_type": "group",
                 "conversation_id": "g", "sender_id": "u",
                 "message_id": "m2", "segments": [],
                 "sent_at": int(time.time()),
             }
-            gateway_body = json.dumps(
-                gateway_event, separators=(",", ":")).encode()
+            connector_body = json.dumps(
+                connector_event, separators=(",", ":")).encode()
             stamp = str(int(time.time()))
             nonce = "asgi-nonce"
-            gateway_sig = "sha256=" + hmac.new(
-                b"gateway-secret",
-                stamp.encode() + b"." + nonce.encode() + b"." + gateway_body,
+            connector_sig = "sha256=" + hmac.new(
+                b"connector-secret",
+                stamp.encode() + b"." + nonce.encode() + b"." + connector_body,
                 hashlib.sha256,
             ).hexdigest()
             gw = await client.post(
-                "/v1/events", content=gateway_body,
+                "/v1/events", content=connector_body,
                 headers={
-                    "x-personagent-token": "gateway-secret",
+                    "x-personagent-token": "connector-secret",
                     "x-personagent-timestamp": stamp,
                     "x-personagent-nonce": nonce,
-                    "x-personagent-signature": gateway_sig,
+                    "x-personagent-signature": connector_sig,
                 })
 
             # A fresh envelope around an event the platform sent long ago.
             old_body = json.dumps(
-                dict(gateway_event, message_id="m3",
+                dict(connector_event, message_id="m3",
                      sent_at=int(time.time()) - 10 * 86_400),
                 separators=(",", ":")).encode()
             old_sig = "sha256=" + hmac.new(
-                b"gateway-secret",
+                b"connector-secret",
                 stamp.encode() + b".old-nonce." + old_body,
                 hashlib.sha256,
             ).hexdigest()
             old = await client.post(
                 "/v1/events", content=old_body,
                 headers={
-                    "x-personagent-token": "gateway-secret",
+                    "x-personagent-token": "connector-secret",
                     "x-personagent-timestamp": stamp,
                     "x-personagent-nonce": "old-nonce",
                     "x-personagent-signature": old_sig,
@@ -332,10 +332,10 @@ async def test_asgi_webhook_auth_and_schema() -> None:
         main_module._connector_replay = original_replay
 
 
-def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
+def test_connector_envelope_rejects_replay_and_stale_requests() -> None:
     verifier = getattr(main_module, "_verify_envelope", None)
     guard_cls = getattr(main_module, "ReplayGuard", None)
-    check("gateway signed-envelope verifier exists",
+    check("connector signed-envelope verifier exists",
           callable(verifier) and guard_cls is not None)
     if not callable(verifier) or guard_cls is None:
         return
@@ -370,9 +370,9 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
     stale_headers["x-personagent-signature"] = "sha256=" + stale_digest
     stale = verifier(
         body, stale_headers, token, now=now, replay_guard=replay)
-    check("gateway signed envelope: first request accepted", first is True, repr(first))
-    check("gateway signed envelope: nonce replay rejected", second is False, repr(second))
-    check("gateway signed envelope: stale request rejected", stale is False, repr(stale))
+    check("connector signed envelope: first request accepted", first is True, repr(first))
+    check("connector signed envelope: nonce replay rejected", second is False, repr(second))
+    check("connector signed envelope: stale request rejected", stale is False, repr(stale))
 
     with tempfile.TemporaryDirectory() as td:
         state_file = Path(td) / "gateway_nonces.json"
@@ -384,7 +384,7 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
             ttl_seconds=300, max_entries=2, state_file=state_file)
         after_restart = verifier(
             body, headers, token, now=now, replay_guard=reloaded)
-        check("gateway replay cache persists across restart",
+        check("connector replay cache persists across restart",
               first_persisted is True and after_restart is False,
               repr((first_persisted, after_restart)))
 
@@ -400,7 +400,7 @@ def test_gateway_envelope_rejects_replay_and_stale_requests() -> None:
         second_headers["x-personagent-signature"] = "sha256=" + second_digest
         second_full = verifier(
             body, second_headers, token, now=now, replay_guard=full)
-        check("gateway replay cache sheds new work instead of evicting fresh nonce",
+        check("connector replay cache sheds new work instead of evicting fresh nonce",
               first_full is True and second_full is False,
               repr((first_full, second_full)))
 
@@ -641,7 +641,7 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
     platform, and the ways to get them wrong are silent:
     another platform's id pasted without its prefix reads as a QQ id (and in
     ACCESS_GROUPS closes every QQ group), a capitalised platform never
-    matches, and one entry takes a whole platform away from the forwarder."""
+    matches, and one entry takes a whole platform away from the connector."""
     from persona_agent import preflight
 
     def findings(**env):
@@ -802,7 +802,7 @@ def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> No
           ok is None and sent == [], f"{ok} {detail} {sent}")
 
 
-def test_gateway_envelope_refuses_a_bad_signature() -> None:
+def test_connector_envelope_refuses_a_bad_signature() -> None:
     """The signature is what binds the BODY to the token. Nothing tested it.
 
     Every other envelope test supplies a correctly computed signature and
@@ -847,7 +847,7 @@ def test_gateway_envelope_refuses_a_bad_signature() -> None:
                         replay_guard=guard_cls(ttl_seconds=300, max_entries=16))
 
     # The control. If this is not True the rest proves nothing.
-    check("gateway signature: a correct envelope is accepted",
+    check("connector signature: a correct envelope is accepted",
           verdict(envelope("ctl")) is True)
 
     cases = {
@@ -861,29 +861,29 @@ def test_gateway_envelope_refuses_a_bad_signature() -> None:
             envelope("n5", sig=sign(body, "n5", str(now), key="not-the-token")),
     }
     for label, headers in cases.items():
-        check(f"gateway signature: {label} is refused",
+        check(f"connector signature: {label} is refused",
               verdict(headers) is False, repr(headers.get("x-personagent-signature")))
 
     # The BINDING, one field at a time: a signature that is valid for some
     # other request must not travel. These are the shapes an attacker who can
     # see one signed request actually has.
-    check("gateway signature: does not travel to a different body",
+    check("connector signature: does not travel to a different body",
           verdict(envelope("n6"), payload=b'{"message_id":"m1","text":"drop table"}')
           is False)
     tampered_nonce = envelope("n7")
     tampered_nonce["x-personagent-nonce"] = "n7-swapped"
-    check("gateway signature: does not survive a swapped nonce",
+    check("connector signature: does not survive a swapped nonce",
           verdict(tampered_nonce) is False)
     tampered_stamp = envelope("n8")
     tampered_stamp["x-personagent-timestamp"] = str(now - 1)
-    check("gateway signature: does not survive a swapped timestamp",
+    check("connector signature: does not survive a swapped timestamp",
           verdict(tampered_stamp) is False)
 
     # And the token check is still its own gate, not a side effect of the
     # signature matching.
     wrong_token = envelope("n9")
     wrong_token["x-personagent-token"] = "wrong"
-    check("gateway signature: the bearer token is checked separately",
+    check("connector signature: the bearer token is checked separately",
           verdict(wrong_token) is False)
 
 
@@ -1037,7 +1037,7 @@ def _loopback_client(**kwargs) -> httpx.AsyncClient:
 async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> None:
     """The token is checked before a slot is taken, so a peer that has none
     is refused as unauthenticated instead of filling the slots and 429ing
-    the real forwarder for as long as it keeps its sockets open."""
+    the real connector for as long as it keeps its sockets open."""
     original_token = main_module.CONNECTOR_TOKEN
     main_module.CONNECTOR_TOKEN = "abc"
     limiter = main_module._connector_admission
@@ -1062,15 +1062,15 @@ async def test_a_non_ascii_token_header_is_refused_not_a_crash() -> None:
     main_module.CONNECTOR_TOKEN = "abc"
     try:
         async with _loopback_client(raise_app_exceptions=False) as client:
-            gateway = await client.post(
+            connector = await client.post(
                 "/v1/events", content=b"{}",
                 headers={"x-personagent-token": b"\xff"})
             details = await client.get(
                 "/health/details", headers={"x-personagent-token": b"\xff"})
     finally:
         main_module.CONNECTOR_TOKEN = original_token
-    check("auth: a non-ASCII token on the gateway is a 403",
-          gateway.status_code == 403, repr(gateway.status_code))
+    check("auth: a non-ASCII token on the connector is a 403",
+          connector.status_code == 403, repr(connector.status_code))
     check("auth: a non-ASCII token on health details is a 403",
           details.status_code == 403, repr(details.status_code))
     check("auth: a non-ASCII configured secret compares instead of raising",
@@ -1078,7 +1078,7 @@ async def test_a_non_ascii_token_header_is_refused_not_a_crash() -> None:
           and not main_module._ct_equal("é", "é"))
 
 
-async def _drive_gateway(receive) -> list[dict]:
+async def _drive_events(receive) -> list[dict]:
     """Run one raw ASGI request against /v1/events and collect what
     the app sends. The token is set and supplied so the request gets past
     every check that runs before the body is read."""
@@ -1123,7 +1123,7 @@ async def test_a_stalled_body_times_out_and_frees_its_slot() -> None:
     original_timeout = getattr(main_module, "BODY_READ_TIMEOUT_S", None)
     main_module.BODY_READ_TIMEOUT_S = 0.1
     try:
-        sent = await asyncio.wait_for(_drive_gateway(receive), 3)
+        sent = await asyncio.wait_for(_drive_events(receive), 3)
     finally:
         main_module.BODY_READ_TIMEOUT_S = original_timeout
     start = next((m for m in sent if m["type"] == "http.response.start"), {})
@@ -1145,7 +1145,7 @@ async def test_a_client_that_hangs_up_mid_body_raises_nothing() -> None:
 
     error = None
     try:
-        await _drive_gateway(receive)
+        await _drive_events(receive)
     except Exception as exc:  # the property is that nothing escapes
         error = exc
     check("body read: a mid-body disconnect is not an app exception",
@@ -1154,7 +1154,7 @@ async def test_a_client_that_hangs_up_mid_body_raises_nothing() -> None:
           main_module._connector_admission.inflight == 0)
 
 
-def _gateway_event_body(message_id: str) -> bytes:
+def _event_body(message_id: str) -> bytes:
     return json.dumps({
         "platform": "telegram", "conversation_type": "group",
         "conversation_id": "g", "sender_id": "u", "message_id": message_id,
@@ -1193,7 +1193,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
     try:
         async with _loopback_client() as client:
             plain_gw = await client.post(
-                "/v1/events", content=_gateway_event_body("ok-1"),
+                "/v1/events", content=_event_body("ok-1"),
                 headers=json_type)
             plain_qq = await client.post(
                 "/v1/onebot", content=_qq_event_body("ok-2"),
@@ -1204,7 +1204,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
                 refused[name] = (
                     await client.post(
                         "/v1/events",
-                        content=_gateway_event_body("x-" + name),
+                        content=_event_body("x-" + name),
                         headers={**json_type, **extra}),
                     await client.post(
                         "/v1/onebot", content=_qq_event_body("x-" + name),
@@ -1216,7 +1216,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
          main_module.agent, main_module.run_checks) = saved[:4]
         main_module._health_cache.clear()
         main_module._health_cache.update(saved[4])
-    check("local: a plain loopback gateway POST is accepted",
+    check("local: a plain loopback connector POST is accepted",
           plain_gw.status_code == 200, repr(plain_gw.text))
     check("local: a plain loopback QQ POST is accepted",
           plain_qq.status_code == 200, repr(plain_qq.text))
@@ -1224,7 +1224,7 @@ async def test_without_a_credential_only_local_programs_are_accepted() -> None:
           plain_details.status_code in (200, 503), repr(plain_details.text))
     for name, responses in refused.items():
         for route, response in zip(
-                ("gateway", "qq", "health/details"), responses):
+                ("connector", "qq", "health/details"), responses):
             check(f"local: {name} is refused on {route}",
                   response.status_code == 403
                   and response.json().get("code") == "non_local_request",
@@ -1236,21 +1236,21 @@ async def test_a_signed_request_with_an_origin_is_unaffected() -> None:
     envelope is the check and a browser-shaped header changes nothing."""
     saved = (main_module.CONNECTOR_TOKEN, main_module.agent,
              main_module._connector_replay)
-    main_module.CONNECTOR_TOKEN = "gateway-secret"
+    main_module.CONNECTOR_TOKEN = "connector-secret"
     main_module.agent = None
     main_module._connector_replay = main_module.ReplayGuard()
-    body = _gateway_event_body("signed-origin")
+    body = _event_body("signed-origin")
     stamp = str(int(time.time()))
     nonce = "origin-nonce"
     signature = "sha256=" + hmac.new(
-        b"gateway-secret", stamp.encode() + b"." + nonce.encode() + b"." + body,
+        b"connector-secret", stamp.encode() + b"." + nonce.encode() + b"." + body,
         hashlib.sha256).hexdigest()
     try:
         async with _loopback_client() as client:
             response = await client.post(
                 "/v1/events", content=body, headers={
                     "origin": "https://evil.example",
-                    "x-personagent-token": "gateway-secret",
+                    "x-personagent-token": "connector-secret",
                     "x-personagent-timestamp": stamp,
                     "x-personagent-nonce": nonce,
                     "x-personagent-signature": signature,
@@ -1258,7 +1258,7 @@ async def test_a_signed_request_with_an_origin_is_unaffected() -> None:
     finally:
         (main_module.CONNECTOR_TOKEN, main_module.agent,
          main_module._connector_replay) = saved
-    check("local: a signed gateway request is not judged by its headers",
+    check("local: a signed connector request is not judged by its headers",
           response.status_code == 200, repr(response.text))
 
 

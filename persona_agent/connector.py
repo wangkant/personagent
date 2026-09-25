@@ -6,7 +6,7 @@ and receive the agent's replies in the same HTTP response. The QQ/NapCat
 direct path is untouched: the connector event is turned into a
 OneBot-v11-shaped payload that the existing pipeline consumes unchanged, and
 a contextvar sink diverts the NapCat send funnels into an in-memory reply
-list for the duration of that one handle() call.
+list for the duration of that one handle_event() call.
 
 Neutral inbound event schema (the body of POST /v1/events):
 
@@ -114,14 +114,19 @@ from typing import Optional
 
 from . import channels
 
-logger = logging.getLogger("agent.gateway")
+logger = logging.getLogger("agent.connector")
 
 #: The id a forwarded mention of the bot itself is rewritten to when QQ_BOT_ID is
 #: blank, which it is on every install without QQ: QQ_BOT_ID is the bot's QQ
 #: account and nothing else. Without it the self mention became an @ of "" and
 #: _is_at_me could not recognise it. No namespaced id (those always contain
 #: ':') and no QQ number (digits) can equal it.
-GATEWAY_SELF_ID = "persona-self"
+CONNECTOR_BOT_ID = "persona-self"
+
+#: The platform an event is filed under when it names none, or names QQ
+#: without being a CONNECTOR_QQ_PLATFORMS one. A stored name: ids minted under
+#: it are already in the memory and ledger rows, so it keeps its spelling.
+FALLBACK_PLATFORM = "gateway"
 
 #: Inbound segment types this version understands. Anything else is dropped
 #: (see synthesize_onebot_payload) — listed here so the drop can say so.
@@ -166,11 +171,11 @@ def _ns(platform: str, native: bool, raw: object) -> str:
     """
     return str(raw) if native else f"{platform}:{raw}"
 
-# Set (to a GatewaySink) only inside Agent.handle_gateway. The NapCat send
+# Set (to a ConnectorSink) only inside Agent.handle_event. The NapCat send
 # funnels check it first and divert into the sink instead of doing HTTP, so
 # every other caller — the entire QQ path — sees the default None and is
 # behaviorally unchanged.
-current_sink: contextvars.ContextVar[Optional["GatewaySink"]] = contextvars.ContextVar(
+current_sink: contextvars.ContextVar[Optional["ConnectorSink"]] = contextvars.ContextVar(
     "current_sink", default=None,
 )
 
@@ -179,7 +184,7 @@ current_sink: contextvars.ContextVar[Optional["GatewaySink"]] = contextvars.Cont
 # conversation, where asyncio hands each Task its own copy so two turns in
 # flight cannot see each other's value. None means "not supplied" and the
 # PERSONA_TZ_OFFSET_HOURS env default still applies, so a deployment that never sets
-# it is behaviorally unchanged. A gateway embedder with a per-user notion of
+# it is behaviorally unchanged. A connector embedder with a per-user notion of
 # "local time" may set it for the duration of a turn.
 current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
     "current_tz_offset_h", default=None,
@@ -236,9 +241,9 @@ def message_to_reply_item(
     return item
 
 
-class GatewaySink:
-    """Ordered collector for the replies produced while handling one gateway
-    event. Closed once handle_gateway returns its HTTP response; a late add
+class ConnectorSink:
+    """Ordered collector for the replies produced while handling one connector
+    event. Closed once handle_event returns its HTTP response; a late add
     (e.g. from a background task that inherited the context) is dropped with
     a warning instead of being silently lost in a dead response."""
 
@@ -248,7 +253,7 @@ class GatewaySink:
         # authorized it to mint bare (native-spelled) ids. Both are needed to
         # put an outbound mention back into the "<platform>:<raw>" form the
         # connector resolves — see message_to_reply_item. The defaults
-        # reproduce the previous behaviour exactly, so a bare GatewaySink()
+        # reproduce the previous behaviour exactly, so a bare ConnectorSink()
         # is unchanged.
         self.platform = str(platform or "")
         self.native = bool(native)
@@ -267,7 +272,7 @@ class GatewaySink:
 
     def add(self, message) -> bool:
         if self.closed:
-            logger.warning("[Gateway] sink already closed; dropping late reply: %r",
+            logger.warning("[Connector] sink already closed; dropping late reply: %r",
                            str(message)[:120])
             return False
         self.items.append(message_to_reply_item(
@@ -335,19 +340,20 @@ def event_prefiltered(event: dict) -> bool:
 
 
 def synthesize_onebot_payload(
-        event: dict, qq_bot_id: str, native_platforms=()) -> dict:
+        event: dict, self_mention_id: str, native_platforms=()) -> dict:
     """Convert a neutral inbound event (schema in the module docstring) into
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
-    unchanged. Mentions of the platform bot_id are normalized to qq_bot_id so
-    _is_at_me fires exactly like a real QQ @-mention. The agent passes
-    GATEWAY_SELF_ID for it when QQ_BOT_ID is blank (Agent._self_mention_id).
+    unchanged. Mentions of the platform bot_id are normalized to
+    `self_mention_id` so _is_at_me fires exactly like a real QQ @-mention. The
+    agent passes QQ_BOT_ID, or CONNECTOR_BOT_ID when that is blank
+    (Agent._self_mention_id).
 
     `native_platforms` is the operator's list of connector platforms whose ids
     are minted bare instead of namespaced — see `_ns`. Empty by default.
 
     The payload keeps OneBot's own vocabulary ("private", user_id, self
     mentions as at segments): it is what the QQ pipeline reads."""
-    platform = str(event.get("platform", "") or "gateway").strip()
+    platform = str(event.get("platform", "") or FALLBACK_PLATFORM).strip()
     native = platform in (native_platforms or ())
     if not native and platform == channels.NATIVE_PLATFORM:
         # An unauthorized connector must not mint "qq:123" either. It looks
@@ -355,7 +361,7 @@ def synthesize_onebot_payload(
         # would report the NATIVE platform — so this event's evidence would
         # compare compatible with real QQ evidence, which is the cross-platform
         # mixing that function exists to prevent. Give it a name that cannot.
-        platform = "gateway"
+        platform = FALLBACK_PLATFORM
     message_type = "private" if event.get("conversation_type") == "dm" else "group"
     conversation_id = (
         event.get("conversation_id")
@@ -370,7 +376,7 @@ def synthesize_onebot_payload(
     has_self_mention = False
     for seg in event.get("segments") or []:
         if not isinstance(seg, dict):
-            logger.debug("[Gateway] %s: dropping non-dict segment %s",
+            logger.debug("[Connector] %s: dropping non-dict segment %s",
                          platform, type(seg).__name__)
             continue
         t = seg.get("type")
@@ -381,7 +387,7 @@ def synthesize_onebot_payload(
             # not silence either, because a typo ("iamge") and a sticker from
             # next year's plugin look identical from here, and today both
             # leave the reader's message quietly truncated.
-            logger.debug("[Gateway] %s: dropping unknown segment type %r",
+            logger.debug("[Connector] %s: dropping unknown segment type %r",
                          platform, t)
             continue
         if t == "text":
@@ -389,7 +395,7 @@ def synthesize_onebot_payload(
         elif t == "mention":
             target = str(seg.get("user_id", ""))
             if bot_id and target == bot_id:
-                message.append({"type": "at", "data": {"qq": qq_bot_id}})
+                message.append({"type": "at", "data": {"qq": self_mention_id}})
                 has_self_mention = True
             else:
                 message.append(
@@ -436,7 +442,7 @@ def synthesize_onebot_payload(
     # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at
     # so _is_at_me fires.
     if event.get("addressed") and not has_self_mention:
-        message.insert(0, {"type": "at", "data": {"qq": qq_bot_id}})
+        message.insert(0, {"type": "at", "data": {"qq": self_mention_id}})
 
     payload: dict = {
         "post_type": "message",
@@ -445,7 +451,7 @@ def synthesize_onebot_payload(
         "sender": {"user_id": user_id, "nickname": sender_name, "card": sender_name},
         "raw_message": str(event.get("text", "") or ""),
         "message": message,
-        "_gateway": True,
+        "_connector": True,
         "_platform": platform,
     }
     if message_type == "group":

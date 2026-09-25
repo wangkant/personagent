@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_DIR = ROOT / "integrations" / "astrbot" / "astrbot_plugin_personagent"
 PLUGIN = PLUGIN_DIR / "main.py"
 SDK = ROOT / "integrations" / "sdk" / "personagent_connector.py"
-_PACKAGE = "astrbot_gateway_tested"
+_PACKAGE = "astrbot_connector_tested"
 
 
 def _load_plugin_package():
@@ -527,7 +527,7 @@ def test_forwarding_failure_does_not_stop_astrbot_fallback():
     assert event.stopped is False
 
 
-def test_unhandled_gateway_response_does_not_stop_astrbot_fallback():
+def test_unhandled_connector_response_does_not_stop_astrbot_fallback():
     module = _import_plugin()
     plugin = _plugin_instance(module, dict(_DM_CONFIG))
     plugin._client = _UnhandledClient()

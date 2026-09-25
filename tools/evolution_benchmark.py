@@ -124,7 +124,7 @@ def seed_buffer(agent, group_id: str, scenario: dict, persona_name: str):
 def strip_pass_sentinel(reply: str) -> str:
     """Collapse the model's PASS sentinel to an empty reply.
 
-    The production gateway swallows ``PASS``-prefixed replies before they are
+    The production pipeline swallows ``PASS``-prefixed replies before they are
     sent or evaluated (agent.py, the ``re.match(r"PASS\\b", ...)`` gate) -- the
     sentinel is the JSON protocol's "I choose not to speak", not an utterance.
     The harness calls _think directly and used to hand the raw string onward,

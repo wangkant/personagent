@@ -187,7 +187,7 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
 
 def test_the_outbox_settings() -> None:
     """CONNECTOR_OUTBOX_ENABLED defaults on; PROACTIVE_PLATFORMS is a lowercase list
-    where a native forwarder's name means QQ, whose keys it mints."""
+    where a native connector's name means QQ, whose keys it mints."""
     default = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
     check("outbox: on by default, every platform open",
           default.connector_outbox_enabled is True and default.proactive_platforms == ())

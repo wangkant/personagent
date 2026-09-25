@@ -25,7 +25,7 @@ from starlette.requests import ClientDisconnect
 from persona_agent import __version__, preflight
 from persona_agent.agent import Agent
 from persona_agent.config_env import env_bool, env_int, env_str
-from persona_agent.gateway import CONVERSATION_TYPES, EVENT_KIND
+from persona_agent.connector import CONVERSATION_TYPES, EVENT_KIND
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
@@ -791,11 +791,11 @@ async def _onebot_webhook_admitted(request: Request):
     except Exception:
         payload = {}
     # Defense in depth: these keys mark payloads synthesized inside
-    # handle_gateway and must never arrive from the network. Security
+    # handle_event and must never arrive from the network. Security
     # decisions gate on the sink contextvar, but strip them anyway so an
     # external body can't masquerade as a connector event.
     if isinstance(payload, dict):
-        payload.pop("_gateway", None)
+        payload.pop("_connector", None)
         payload.pop("_platform", None)
     if not _validate_event_payload(payload, connector=False):
         return _error(400, "invalid_schema", "invalid event schema")
@@ -809,7 +809,7 @@ async def _onebot_webhook_admitted(request: Request):
         # as an unretrieved-task warning.
         async def _safe_handle():
             try:
-                await agent.handle(payload)
+                await agent.handle_onebot(payload)
             except Exception:
                 logger.exception("handle failed")
             finally:
@@ -850,7 +850,7 @@ async def connector_events(request: Request):
     not stop the turn, which still commits its reply and everything it
     learned from it.
 
-    Body schema: see ``persona_agent/gateway.py``. The response is
+    Body schema: see ``persona_agent/connector.py``. The response is
     ``{"handled": bool, "owned": bool, "replies": [...]}``, where ``owned``
     says the conversation is this persona's whether or not it chose to speak —
     a connector should suppress its own model on ``owned``, never on whether
@@ -887,7 +887,7 @@ async def connector_events(request: Request):
 
 async def _connector_events_admitted(request: Request):
     """Platform-neutral inbound endpoint for connectors (schema in
-    gateway.py). Unlike /v1/onebot this is a synchronous round-trip: the
+    connector.py). Unlike /v1/onebot this is a synchronous round-trip: the
     connector needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
     before returning — set the connector's HTTP timeout accordingly."""
@@ -922,7 +922,7 @@ async def _connector_events_admitted(request: Request):
     event["message_id"] = str(event["message_id"])
     if agent is None:
         return {"handled": False, "replies": []}
-    return await agent.handle_gateway(event)
+    return await agent.handle_event(event)
 
 
 @app.post("/v1/outbox")

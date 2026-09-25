@@ -144,10 +144,10 @@ class AgentSettings:
     access_dm_users: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "ACCESS_DM_USERS"])
-    #: Forwarder platforms whose ids are minted BARE instead of namespaced, so
-    #: a QQ message relayed by a gateway lands on the same keys NapCat would
+    #: Connector platforms whose ids are minted BARE instead of namespaced, so
+    #: a QQ message relayed by a connector lands on the same keys NapCat would
     #: have produced. Empty by default, and an operator setting rather than
-    #: something the forwarder asserts: a bare id carries QQ authority — it is
+    #: something the connector asserts: a bare id carries QQ authority — it is
     #: what the QQ entries of the lists above are compared against.
     connector_qq_platforms: tuple[str, ...] = ()
     #: Whether a connector that pulls the outbox may be sent messages nobody
@@ -314,7 +314,7 @@ class AgentSettings:
         self.evolve_model = self.evolve_model or self.eval_model
         self.react_model = self.react_model or self.llm_judge_model
         # Accept any iterable of ids from a caller; store the canonical form,
-        # so "qq:1" and a native forwarder's "aiocqhttp:1" both read as "1".
+        # so "qq:1" and a native connector's "aiocqhttp:1" both read as "1".
         natives = self.connector_qq_platforms = access.split_ids(
             self.connector_qq_platforms)
         for name in ("admin_ids", "access_groups", "access_dm_users"):

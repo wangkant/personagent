@@ -498,7 +498,7 @@ def apply_k2_quirks(payload: dict, model: str, base_url: str) -> dict:
 # Tolerant of stray whitespace inside the marker ("[STICKER: doge]"): a
 # non-match leaves the literal text in place and the validator drops the
 # WHOLE reply, so `_REPLY_MARKER_RE` must keep mirroring this. AT targets
-# are gateway ids like "telegram:12345", hence anything bracket-safe.
+# are connector ids like "telegram:12345", hence anything bracket-safe.
 _STICKER_MARKER_RE = re.compile(r"\[STICKER:\s*([^\]]+?)\s*\]")
 _REPLY_MARKER_RE = re.compile(r"\[(?:STICKER:|AT:)[^\[\]]*\]")
 
@@ -2320,7 +2320,7 @@ class TextProcessing:
 
         PERSONA_TZ_OFFSET_HOURS (default UTC+8) remains the fallback for callers with
         no per-user notion of "local"."""
-        from .gateway import current_tz_offset_h
+        from .connector import current_tz_offset_h
         tz_hours = current_tz_offset_h.get()
         if tz_hours is None:
             tz_hours = _env_tz_offset()

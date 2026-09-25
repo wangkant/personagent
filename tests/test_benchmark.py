@@ -345,7 +345,7 @@ def test_inbox_is_blind_and_ingest() -> None:
 def test_pass_sentinel_is_protocol_not_text() -> None:
     """The PASS sentinel must never reach the evaluator or the judge.
 
-    The production gateway swallows PASS-prefixed replies before anything
+    The production pipeline swallows PASS-prefixed replies before anything
     downstream sees them. The harness calls _think directly, and used to feed
     the raw string onward: the self-eval graded the literal word PASS as a
     reply (observed live: 'too terse and robotic', 2/5), the evolve tick got

@@ -2,7 +2,7 @@
 
 Ids here are compared in the spelling the stores use (see channels): a QQ id
 is bare, every other platform's is "<platform>:<id>". A setting may also write
-a QQ id as "qq:<id>", and an id from a CONNECTOR_QQ_PLATFORMS forwarder as
+a QQ id as "qq:<id>", and an id from a CONNECTOR_QQ_PLATFORMS connector as
 "<that platform>:<id>"; both mean the bare key such an event carries.
 
 Three settings, one list each:
@@ -12,8 +12,8 @@ Three settings, one list each:
 * ACCESS_GROUPS / ACCESS_DM_USERS: who the agent itself admits, partitioned
   per platform. A platform with no entries is not restricted by the agent:
   every QQ group is answered, a QQ DM still needs the admin or an entry, and a
-  forwarded platform is left to the forwarder's own allowlist unless the event
-  says the forwarder did not filter (``prefiltered: false``).
+  forwarded platform is left to the connector's own allowlist unless the event
+  says the connector did not filter (``prefiltered: false``).
 
 Pure on purpose: it imports only channels, so settings, preflight and the
 offline tools can all ask the same questions without an import cycle.
@@ -110,13 +110,13 @@ def owner_on(platform: str, owners: Iterable[str]) -> str:
     return ""
 
 
-def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
+def group_refusal(group_id, allowed: Iterable[str], *, via_connector: bool,
                   prefiltered: bool = True, user_id="") -> str:
     """Why a group is not admitted, naming the setting; "" when it is."""
     gid = str(group_id or "")
     # The sender too: a namespaced sender in a QQ group could match an admin
     # listed on another platform.
-    if not via_forwarder and (":" in gid or ":" in str(user_id or "")):
+    if not via_connector and (":" in gid or ":" in str(user_id or "")):
         return QQ_DOOR_REFUSAL
     platform = channels.platform_of(gid)
     listed = entries_on(platform, allowed)
@@ -131,10 +131,10 @@ def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
 
 
 def dm_refusal(user_id, owners: Iterable[str], allowed: Iterable[str], *,
-               via_forwarder: bool, prefiltered: bool = True) -> str:
+               via_connector: bool, prefiltered: bool = True) -> str:
     """Why a DM sender is not admitted, naming the setting; "" when they are."""
     uid = str(user_id or "")
-    if not via_forwarder and ":" in uid:
+    if not via_connector and ":" in uid:
         # Before the owner check: an owner-listed namespaced id arriving here
         # is forged by definition.
         return QQ_DOOR_REFUSAL
