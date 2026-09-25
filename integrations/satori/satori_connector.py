@@ -21,6 +21,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import hmac
 import ipaddress
 import json
 import logging
@@ -337,22 +338,52 @@ def _public_host(host: str) -> bool:
         return "." in host  # a single-label name only resolves on a private network
 
 
-def encode_handle(**parts: str) -> str:
-    return json.dumps({k: v for k, v in parts.items() if v}, sort_keys=True,
-                      separators=(",", ":"), ensure_ascii=False)
+def handle_key(config: "Config") -> bytes:
+    """What reply handles are signed with. The agent stores a handle as an
+    event gave it, so forging one must take the secrets that reaching the
+    Satori server or the agent directly would."""
+    return hashlib.sha256(b"personagent-satori-handle\0" + config.satori_token.encode()
+                          + b"\0" + config.gateway_token.encode()).digest()
+
+
+def _canonical(parts: dict) -> str:
+    return json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _handle_sig(parts: dict, key: bytes) -> str:
+    return hmac.new(key, _canonical(parts).encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+
+
+def encode_handle(*, key: bytes, **parts: str) -> str:
+    body = {k: v for k, v in parts.items() if v}
+    return _canonical(dict(body, sig=_handle_sig(body, key)))
 
 
 def decode_handle(handle: Any) -> Optional[dict]:
+    """The parts of a handle this connector writes, signature left out and
+    not checked (see handle_signed); None for anything else."""
     try:
         parts = json.loads(handle) if isinstance(handle, str) else None
     except ValueError:
         return None
     if not isinstance(parts, dict):
         return None
+    parts.pop("sig", None)
     if not all(isinstance(parts.get(k), str) and parts.get(k)
                for k in ("platform", "self_id", "channel_id", "type")):
         return None
     return parts
+
+
+def handle_signed(handle: Any, key: bytes) -> bool:
+    try:
+        parts = json.loads(handle) if isinstance(handle, str) else None
+    except ValueError:
+        return False
+    if not isinstance(parts, dict) or not isinstance(parts.get("sig"), str):
+        return False
+    sig = parts.pop("sig")
+    return hmac.compare_digest(sig, _handle_sig(parts, key))
 
 
 class SatoriBridge:
@@ -366,6 +397,7 @@ class SatoriBridge:
                  accounts: Callable[[], Iterable], lib: Any,
                  sleep: Callable[[float], Any] = asyncio.sleep):
         self.config = config
+        self.handle_key = handle_key(config)
         self.connector = connector
         self.accounts = accounts
         self.lib = lib
@@ -453,7 +485,8 @@ class SatoriBridge:
             "caps": ["quote_text"],
         }
         if self.config.outbox:
-            handle = encode_handle(platform=raw_platform, self_id=self_id,
+            handle = encode_handle(key=self.handle_key,
+                                   platform=raw_platform, self_id=self_id,
                                    channel_id=channel_id,
                                    type="group" if is_group else "private",
                                    guild_id=guild_id if is_group else "",
@@ -672,9 +705,14 @@ class SatoriBridge:
 
     async def deliver(self, delivery: dict) -> "sdk.DeliveryResult":
         """The outbox ``deliver``: send one delivery through its reply_handle."""
-        handle = decode_handle(delivery.get("reply_handle"))
+        raw = delivery.get("reply_handle")
+        handle = decode_handle(raw)
         if handle is None:
             return "unsupported", 0
+        if not handle_signed(raw, self.handle_key):
+            logger.warning("refusing delivery %s: its reply_handle was not written "
+                           "by this connector", delivery.get("delivery_id"))
+            return "refused", 0
         is_group = handle["type"] == "group"
         if self.admit(handle["platform"], is_group=is_group, channel_id=handle["channel_id"],
                       guild_id=handle.get("guild_id", ""),

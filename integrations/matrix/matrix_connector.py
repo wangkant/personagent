@@ -924,8 +924,16 @@ class MatrixConnector:
             return "refused", 0  # the bot left, or never was there
         private = delivery.get("message_type") == "private"
         conversation_id = str(delivery.get("conversation_id") or "")
-        allowed = (matches(self.settings.dm_users, conversation_id) if private
-                   else matches(self.settings.rooms, room_id))
+        # Checked against the room the handle names: the agent keeps the
+        # handle as an event gave it, so it must be the DM with that very
+        # user, or a group room, before the allowlists count.
+        if private:
+            allowed = (self.is_direct(room)
+                       and conversation_id in self._joined(room)
+                       and matches(self.settings.dm_users, conversation_id))
+        else:
+            allowed = (not self.is_direct(room)
+                       and matches(self.settings.rooms, room_id))
         if not allowed:
             return "refused", 0
         if getattr(room, "encrypted", False) and not self.settings.e2ee:

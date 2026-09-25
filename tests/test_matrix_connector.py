@@ -522,6 +522,16 @@ def test_outbox_deliveries_go_to_the_reply_handle() -> None:
     check("no longer allowed", asyncio.run(conn.deliver({
         "reply_handle": DM, "message_type": "private", "conversation_id": "@bob:example.org",
         "items": two})) == ("refused", 0))
+    # The handle is what the agent stored from an event, so it is checked
+    # against where it points, not only against the ids beside it.
+    check("a DM delivery aimed at a group room is refused", asyncio.run(conn.deliver({
+        "reply_handle": GROUP, "message_type": "private", "conversation_id": ALEX,
+        "items": two})) == ("refused", 0))
+    wide, _ = make(rooms=("*",))
+    check("a group delivery aimed at a DM room is refused, even with rooms=*",
+          asyncio.run(wide.deliver({"reply_handle": DM, "message_type": "group",
+                                    "conversation_id": DM, "items": two}))
+          == ("refused", 0))
     client.refuse_after = len(client.sent) + 1
     check("partial", asyncio.run(conn.deliver({"reply_handle": GROUP, "message_type": "group",
                                                "items": two})) == ("partial", 1))

@@ -126,6 +126,10 @@ def config(**overrides) -> sc.Config:
     return base
 
 
+#: The key the default test bridge signs its reply handles with.
+KEY = sc.handle_key(config())
+
+
 def bridge(cfg=None, agent=None, accounts=()) -> sc.SatoriBridge:
     connector = sc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", "tok",
                                  forwarder_id="satori-test", client=agent)
@@ -396,8 +400,8 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
     acc = account()
     other = account(self_id="7001")
     b = bridge(accounts=[other, acc])
-    handle = sc.encode_handle(platform="telegram", self_id="7000", channel_id="-100",
-                              guild_id="-100", type="group")
+    handle = sc.encode_handle(key=KEY, platform="telegram", self_id="7000",
+                              channel_id="-100", guild_id="-100", type="group")
     delivery = {"delivery_id": "d1", "reply_handle": handle, "message_type": "group",
                 "items": [{"type": "text", "text": "anyone still up?",
                            "at_user_id": "telegram:42"},
@@ -420,9 +424,22 @@ async def test_outbox_deliveries_follow_the_reply_handle() -> None:
     check("a handle this connector did not write is unsupported",
           await b.deliver(dict(delivery, reply_handle="tg-bot:GroupMessage:-1")) ==
           ("unsupported", 0))
+    # The agent keeps a handle as an event gave it: an allowed DM user paired
+    # with a group channel must not reach that channel.
+    forged = sc.encode_handle(key=sc.handle_key(config(gateway_token="other")),
+                              platform="telegram", self_id="7000", channel_id="-999",
+                              user_id="42", type="private")
+    sent_before = list(acc.protocol.sent)
+    check("a handle signed with another key is refused",
+          await b.deliver(dict(delivery, reply_handle=forged)) == ("refused", 0)
+          and acc.protocol.sent == sent_before, str(acc.protocol.sent))
+    edited = json.loads(handle)
+    edited["channel_id"] = "-999"
+    check("so is a signed handle with a field changed",
+          await b.deliver(dict(delivery, reply_handle=json.dumps(edited))) == ("refused", 0))
 
     dm = {"delivery_id": "d2", "items": [{"type": "text", "text": "morning"}],
-          "reply_handle": sc.encode_handle(platform="telegram", self_id="7000",
+          "reply_handle": sc.encode_handle(key=KEY, platform="telegram", self_id="7000",
                                            channel_id="private:42", user_id="42",
                                            type="private")}
     dm_acc = account()
@@ -434,8 +451,8 @@ async def test_the_sdk_outbox_loop_drives_deliver() -> None:
     import asyncio
 
     acc = account()
-    handle = sc.encode_handle(platform="telegram", self_id="7000", channel_id="-100",
-                              guild_id="-100", type="group")
+    handle = sc.encode_handle(key=KEY, platform="telegram", self_id="7000",
+                              channel_id="-100", guild_id="-100", type="group")
     pulls = [{"deliveries": [{"delivery_id": "d9", "reply_handle": handle, "expires_in_s": 60,
                               "items": [{"type": "text", "text": "hi"}]}]}]
     seen: list[dict] = []

@@ -77,7 +77,7 @@ class Connector:
     """One connector instance talking to one agent."""
 
     def __init__(self, agent_url: str, token: str = "", *, forwarder_id: str,
-                 timeout_s: float = 180.0, client: Optional[httpx.AsyncClient] = None):
+                 timeout_s: float = 420.0, client: Optional[httpx.AsyncClient] = None):
         if not endpoint_allowed(agent_url, token):
             raise ValueError("agent_url must be loopback, or HTTPS with a token")
         if not forwarder_id:

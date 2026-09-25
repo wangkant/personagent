@@ -136,7 +136,7 @@ it). Two cases need a thought:
 | Voice, video, files | Described in words: `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)` |
 | Replies | Text, and images as `data:` URIs, each as its own message with a short gap. A mention the agent asks for is an `<at>` in groups |
 | Passive-reply platforms | Replies carry the event's `referrer`, which the official QQ bot API needs to answer a message |
-| Outbox | Scheduled openers, follow-ups and excuses go to the channel through the login that received the conversation. An agent older than the outbox answers 404; the connector asks again every 10 minutes |
+| Outbox | Scheduled openers, follow-ups and excuses go to the channel through the login that received the conversation. The connector signs each reply handle with a key derived from `SATORI_TOKEN` and `GATEWAY_TOKEN` and sends only to handles it signed, so after changing either token a conversation is reachable again once it has spoken. An agent older than the outbox answers 404; the connector asks again every 10 minutes |
 | Typing indicator | No: Satori has no typing API |
 | `owned` | Honoured by never sending anything else; other Koishi plugins are not stopped (see step 1) |
 
