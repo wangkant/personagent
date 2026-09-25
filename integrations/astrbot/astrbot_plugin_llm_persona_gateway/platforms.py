@@ -26,11 +26,17 @@ class Rules:
     mention: str = "at"
     # A Reply component makes the adapter quote the message.
     quote: bool = False
-    # Longest text one message may carry; 0 is no limit.
+    # Longest text one message may carry, as the platform counts it: the
+    # mention and the escapes included. 0 is no limit.
     max_chars: int = 0
     max_bytes: int = 0
+    # Characters the adapter may put in front of a message on its own.
+    reserve: int = 0
     # Text escaping the adapter's renderer needs to show the text as typed.
     escape: str = ""
+    # The escapes count toward max_chars (not so for markup the platform
+    # parses away).
+    escape_counts: bool = True
     # The adapter delivers one message per turn: send the turn as one.
     merge: bool = False
     # The adapter sends up to this many components as one API call.
@@ -43,15 +49,20 @@ RULES: dict[str, Rules] = {
     # Long texts become a merged-forward card above forward_threshold; main.py
     # reads that limit from AstrBot's config.
     "aiocqhttp": Rules(outbox=True, mention="at_spaced", quote=True),
-    # The adapter splits at 4096, but it counts the escaped text: 2000 keeps
-    # an escaped chunk whole.
+    # Telegram counts the text its markdown shows, so the escapes are free;
+    # the adapter splits at 4096 counting them, and 2000 keeps a chunk whole.
     "telegram": Rules(outbox=True, mention="telegram", quote=True,
-                      max_chars=2000, escape="telegram"),
+                      max_chars=2000, escape="telegram", escape_counts=False),
+    # The adapter cuts at 2000.
     "discord": Rules(outbox=True, mention="at", quote=True,
                      max_chars=2000, escape="discord"),
+    # Slack refuses a section over 3000.
     "slack": Rules(outbox=True, mention="slack", max_chars=3000, escape="slack"),
     "mattermost": Rules(outbox=True, mention="name", max_chars=4000, escape="mattermost"),
-    "misskey": Rules(outbox=True, mention="name", max_chars=3000, escape="misskey"),
+    # The adapter cuts at 3000, after starting a message without a mention
+    # with "@<username>\n" (Misskey usernames run to 128 characters).
+    "misskey": Rules(outbox=True, mention="name", max_chars=3000, reserve=130,
+                     escape="misskey"),
     "kook": Rules(outbox=True, mention="kook", quote=True,
                   max_chars=4000, escape="kook"),
     "lark": Rules(outbox=True, mention="at"),
@@ -251,15 +262,20 @@ _SPLIT_AT = (re.compile(r"\n\s*\n"), re.compile(r"\n"),
              re.compile(r"(?<=[.!?。！？…])\s*"), re.compile(r"\s+"))
 
 
-def split_text(text: str, max_chars: int = 0, max_bytes: int = 0) -> list[str]:
-    """Cut text into pieces that fit one message, preferring paragraph, line,
-    sentence and word boundaries over a hard cut."""
+def split_text(text: str, max_chars: int = 0, max_bytes: int = 0,
+               kind: str = "", reserve: int = 0) -> list[str]:
+    """Cut text into pieces that fit one message once escaped for `kind`,
+    with `reserve` to spare, preferring paragraph, line, sentence and word
+    boundaries over a hard cut. The pieces come back unescaped."""
     def size(s: str) -> int:
+        s = escape(s, kind)
         return len(s.encode("utf-8")) if max_bytes else len(s)
 
     if not text:
         return []
     limit = max_bytes or max_chars
+    if limit:
+        limit = max(1, limit - reserve)
     if not limit or size(text) <= limit:
         return [text]
     out: list[str] = []

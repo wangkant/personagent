@@ -224,7 +224,8 @@ On every platform:
   them (`forward_quoted_text`).
 - The message's time is the platform's own, not when AstrBot received it,
   wherever the adapter keeps it.
-- Replies are split below the platform's length limit, never become a
+- Replies are split below the platform's length limit, counted with the
+  mention and the escapes as the platform counts them, never become a
   text-to-image picture, and name people the way the platform does.
 - The outbox is used only where the platform can send unprompted.
 

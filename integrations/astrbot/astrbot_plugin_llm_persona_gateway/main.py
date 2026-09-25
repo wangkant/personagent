@@ -1347,8 +1347,13 @@ class LLMPersonaGateway(Star):
         rtype = item.get("type")
         if rtype == "text":
             text = item.get("text") or ""
+            # The mention and the escapes count toward the platform's limit.
+            reserve = rules.reserve + self._mention_len(
+                self._with_mention(at, "", platform, rules))
+            kind = rules.escape if rules.escape_counts else ""
             out = []
-            for n, chunk in enumerate(split_text(text, max_chars, rules.max_bytes)):
+            for n, chunk in enumerate(split_text(text, max_chars, rules.max_bytes,
+                                                 kind, reserve)):
                 body = escape(chunk, rules.escape)
                 if n == 0:
                     out.append(prefix + self._with_mention(at, body, platform, rules))
@@ -1366,6 +1371,18 @@ class LLMPersonaGateway(Star):
             return [chain]
         logger.warning(f"llm_persona_gateway: dropping unknown reply type {rtype!r}")
         return []
+
+    @staticmethod
+    def _mention_len(comps) -> int:
+        """Characters a mention adds in front of a text. An At renders as its
+        name or id with at most three more ('<@id>', '@name ')."""
+        n = 0
+        for comp in comps:
+            if isinstance(comp, Comp.Plain):
+                n += len(comp.text or "")
+            elif isinstance(comp, Comp.At):
+                n += len(str(comp.name or comp.qq)) + 3
+        return n
 
     def _with_mention(self, at, body: str, platform: str, rules: Rules) -> list:
         """A text, naming `at` the way this platform renders a mention."""

@@ -1230,6 +1230,46 @@ def test_discord_splits_at_2000_and_keeps_everyone_pings_inert():
     assert chains[0][0][0].text.startswith("@​everyone")
 
 
+def _as_sent(module, platform, chain) -> str:
+    """The text an adapter builds from a chain (AstrBot 4.25.5)."""
+    parts = []
+    for comp in chain:
+        if isinstance(comp, module.Comp.Plain):
+            parts.append(comp.text)
+        elif isinstance(comp, module.Comp.At):
+            parts.append(f"<@{comp.qq}>" if platform == "discord"
+                         else f"@{comp.name} " if platform == "telegram"
+                         else f"(met){comp.qq}(met)" if platform == "kook"
+                         else f"@{comp.name or comp.qq}")
+    return "".join(parts)
+
+
+def test_split_parts_fit_the_adapter_with_the_mention_and_the_escapes():
+    """Discord cuts a message at 2000 characters and Misskey at 3000 (after
+    putting '@user' in front of one without a mention); Slack refuses a
+    section over 3000. Measuring the text before the mention and the escapes
+    let them push its end off."""
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    for platform, handle in (("telegram", "a_long_username"), ("mattermost", "some.one"),
+                             ("misskey", "someone@misskey.example")):
+        plugin._people.see(platform, "123456789012345678", handle, "Someone")
+    text = "@everyone @here @all & <b> (met)x(met) *hi* 2. " * 200
+    own_mention = len("@" + "u" * 128 + "\n")
+    limits = {"discord": 2000, "misskey": 3000 - own_mention, "slack": 3000,
+              "mattermost": 4000, "kook": 4000, "telegram": 4096}
+    for platform, limit in limits.items():
+        chains = plugin._render([{"type": "text", "text": text,
+                                  "at_user_id": f"{platform}:123456789012345678"}],
+                                platform, True, "group-1", [])
+        assert len(chains) > 1, platform
+        sent = [_as_sent(module, platform, chain) for chain, _ in chains]
+        assert max(len(s) for s in sent) <= limit, (platform, [len(s) for s in sent])
+    bodies = [c.text for chain, _ in _render(plugin, "discord", {"type": "text", "text": text})
+              for c in chain]
+    assert " ".join(bodies).replace("​", "").split() == text.split()
+
+
 def test_platforms_without_mentions_drop_them_cleanly():
     module = _import_plugin()
     plugin = _plugin_instance(module, {})

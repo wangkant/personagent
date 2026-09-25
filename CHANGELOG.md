@@ -163,8 +163,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backlog older than `GATEWAY_SOURCE_MAX_AGE_SECONDS` is refused as stale.
 - **The AstrBot plugin writes each platform's way.** Mentions no longer carry
   a double space on QQ and Telegram, long replies are split under each
-  platform's limit (on QQ under `forward_threshold`, so none becomes a
-  merged-forward card), Telegram shows `*` and `_` as typed, text cannot ping
+  platform's limit, counted with the mention and the escapes as the platform
+  counts them, so Discord and Misskey cut nothing off and Slack refuses no
+  part (on QQ under `forward_threshold`, so none becomes a merged-forward
+  card), Telegram shows `*` and `_` as typed, text cannot ping
   a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
   other than JPEG no longer post an error, and QQ official replies are plain
   text.
