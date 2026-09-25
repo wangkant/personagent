@@ -2291,7 +2291,7 @@ async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
     passed the DM gate through the owner bypass, and a namespaced group
     skipped QQ_GROUPS; both now stop at the door."""
     agent, served = _serving_agent(tmp)
-    agent.owner_ids = {"telegram:1"}
+    agent.admin_ids = {"telegram:1"}
 
     forged_owner = await agent.handle(_qq_dm("telegram:1", 1101))
     check("forged: an owner's namespaced id is not an owner on /webhook/qq",
@@ -2309,7 +2309,7 @@ async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
 
 
 async def test_an_owner_on_any_platform_is_the_owner(tmp: Path) -> None:
-    """Every account in OWNER_IDS gets what OWNER_QQ gets.
+    """Every account in ADMIN_IDS gets what OWNER_QQ gets.
 
     GATEWAY_OWNER_IDS used to reach only the DM branch: in a Telegram group
     the owner ran as an ordinary caller, could not manage members' memories,
@@ -2317,7 +2317,7 @@ async def test_an_owner_on_any_platform_is_the_owner(tmp: Path) -> None:
     agent, served = _serving_agent(tmp)
     agent.owner_qq = ""
     agent.gateway_owner_ids = set()
-    agent.owner_ids = {"telegram:1", "10000"}
+    agent.admin_ids = {"telegram:1", "10000"}
 
     await agent.handle_gateway(_gw_group("telegram", "-100", "1", 1201))
     await agent.handle_gateway(_gw_group("telegram", "-100", "42", 1202))
@@ -2392,7 +2392,7 @@ async def test_the_owner_block_needs_an_owner_not_a_qq_number(
     was only on Telegram never had it on any platform."""
     agent = make_agent(tmp)
     agent.owner_qq, agent.gateway_owner_ids = "", set()
-    agent.owner_ids, agent.owner_name = {"telegram:1"}, "Kay"
+    agent.admin_ids, agent.owner_name = {"telegram:1"}, "Kay"
     agent._append_buffer("telegram:-100", "Alice", "anyone around", "telegram:42")
     systems: list = []
 
@@ -2402,7 +2402,7 @@ async def test_the_owner_block_needs_an_owner_not_a_qq_number(
 
     agent._call_llm = fake_call
     await agent._think("telegram:-100", "called", latest_text="anyone around")
-    agent.owner_ids = set()
+    agent.admin_ids = set()
     await agent._think("telegram:-100", "called", latest_text="anyone around")
     check("owner block: present for a Telegram-only owner",
           "[Special person]" in systems[0] and "Kay" in systems[0])
@@ -2417,7 +2417,7 @@ async def test_proactive_dms_go_only_where_napcat_can_send(
     POSTed to NapCat's send_private_msg."""
     agent, served = _serving_agent(tmp)
     agent.owner_qq, agent.gateway_owner_ids = "", set()
-    agent.owner_ids = {"10000", "telegram:1"}
+    agent.admin_ids = {"10000", "telegram:1"}
     agent.allowed_dm_users = {"telegram:42"}
     agent.private_allowed_qqs = {"888"}
     agent.proactive_dm_prob = 1.0
@@ -2438,19 +2438,19 @@ async def test_proactive_dms_go_only_where_napcat_can_send(
 
 
 async def test_a_native_owner_keeps_the_qq_keys(tmp: Path) -> None:
-    """OWNER_IDS=aiocqhttp:10000 with aiocqhttp native is the bare QQ owner,
+    """ADMIN_IDS=aiocqhttp:10000 with aiocqhttp native is the bare QQ owner,
     and the turn lands on the keys NapCat would have used, so what was
     learned about them stays theirs."""
     from persona_agent.settings import AgentSettings
 
     settings = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "OWNER_IDS": "aiocqhttp:10000",
+        "LLM_API_KEY": "k", "ADMIN_IDS": "aiocqhttp:10000",
         "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp"})
     check("native owner: read as the bare QQ id",
           settings.owners == {"10000"}, repr(settings.owners))
     agent, served = _serving_agent(tmp)
     agent.owner_qq, agent.gateway_owner_ids = "", set()
-    agent.owner_ids = set(settings.owner_ids)
+    agent.admin_ids = set(settings.admin_ids)
     agent.gateway_native_platforms = {"aiocqhttp"}
     result = await agent.handle_gateway(_gw_dm("aiocqhttp", "10000", 1301))
     check("native owner: served as the owner under the bare DM key",

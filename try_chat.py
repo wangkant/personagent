@@ -5,12 +5,12 @@ JSON output protocol + the character-whitelist validator), so you can feel out a
 persona and see replies before connecting it to a chat platform.
 
     python try_chat.py
-    python try_chat.py --owner          # speak as the configured owner
+    python try_chat.py --admin          # speak as the configured admin
     python try_chat.py --lang zh         # force the Chinese variant
     python try_chat.py --name Alex       # your display name in the chat
 
 Type a message and press enter. Commands:
-    /owner <msg>   send this one line as the owner
+    /admin <msg>   send this one line as the admin
     /as Name <msg> send as a one-off speaker called Name
     /reset         clear the conversation buffer
     /quit          exit
@@ -33,8 +33,8 @@ from persona_agent.textproc import TextProcessing  # noqa: E402
 from persona_agent.preflight import private_model_from_env  # noqa: E402
 
 GROUP_ID = "trial"
-#: Who "--owner" speaks as: a configured owner account, if there is one.
-OWNER_ID = min(access.identity_from_env().owners, default="") or "1969"
+#: Who "--admin" speaks as: a configured admin account, if there is one.
+ADMIN_ID = min(access.identity_from_env().owners, default="") or "1969"
 
 
 def _build_agent(lang: str) -> Agent:
@@ -45,9 +45,11 @@ def _build_agent(lang: str) -> Agent:
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
         private_model=private_model_from_env(),
-        owner_ids=(OWNER_ID,),
-        owner_name=os.getenv("OWNER_NAME", "") or "owner",
-        owner_relationship=os.getenv("OWNER_RELATIONSHIP", ""),
+        admin_ids=(ADMIN_ID,),
+        owner_name=(os.getenv("ADMIN_NAME", "") or os.getenv("OWNER_NAME", "")
+                    or "admin"),
+        owner_relationship=(os.getenv("ADMIN_RELATIONSHIP", "")
+                            or os.getenv("OWNER_RELATIONSHIP", "")),
         fallback_model=os.getenv("FALLBACK_MODEL", ""),
         fallback_base_url=os.getenv("FALLBACK_BASE_URL", ""),
         fallback_api_key=os.getenv("FALLBACK_API_KEY", ""),
@@ -90,8 +92,9 @@ async def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
                    help="agent language: en (default) or zh")
-    p.add_argument("--owner", action="store_true",
-                   help="speak as the configured owner (closer relationship)")
+    # --owner and /owner are the names before 0.5.
+    p.add_argument("--admin", "--owner", dest="admin", action="store_true",
+                   help="speak as the configured admin (closer relationship)")
     p.add_argument("--name", default="you", help="your display name in the chat")
     args = p.parse_args()
 
@@ -102,9 +105,9 @@ async def main() -> int:
                   "(only the primary model key is required for this trial).")
             return 1
 
-        you_uid = OWNER_ID if args.owner else "2001"
-        you_name = (agent.owner_name or "owner") if args.owner else args.name
-        default_mode = "owner" if args.owner else "called"
+        you_uid = ADMIN_ID if args.admin else "2001"
+        you_name = (agent.owner_name or "admin") if args.admin else args.name
+        default_mode = "owner" if args.admin else "called"
 
         print(f"=== try_chat — lang={agent.agent_lang}, model={agent.model} ===")
         print(f"talking to '{agent.bot_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
@@ -126,8 +129,9 @@ async def main() -> int:
                 continue
 
             name, uid, mode, msg = you_name, you_uid, default_mode, line
-            if line.startswith("/owner "):
-                name, uid, mode, msg = (agent.owner_name or "owner"), OWNER_ID, "owner", line[len("/owner "):]
+            command, _, rest = line.partition(" ")
+            if command in ("/admin", "/owner"):
+                name, uid, mode, msg = (agent.owner_name or "admin"), ADMIN_ID, "owner", rest
             elif line.startswith("/as "):
                 rest = line[len("/as "):].strip()
                 if " " in rest:

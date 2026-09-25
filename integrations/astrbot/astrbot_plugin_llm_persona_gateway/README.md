@@ -191,7 +191,7 @@ relayed by AstrBot lands on the same ids NapCat would have produced.
 
 Because QQ ids stay plain, the agent's own QQ settings still apply to them:
 the QQ entries of `ALLOWED_GROUPS` (none means every QQ group), and private
-chats only from an owner in `OWNER_IDS` or from `ALLOWED_DM_USERS`. The wizard
+chats only from the admin in `ADMIN_IDS` or from `ALLOWED_DM_USERS`. The wizard
 writes the QQ groups you give it to the agent's `.env`, so to add a QQ group
 later, add it to both `group_whitelist` and `ALLOWED_GROUPS` (or list no QQ
 groups there). The old names `QQ_GROUPS`, `OWNER_QQ` and `PRIVATE_ALLOWED_QQS`
@@ -295,8 +295,8 @@ adapter gives no valid timestamp is not forwarded; AstrBot handles it as usual.
 The agent prefixes every gateway id with its platform, as `<platform>:<raw id>`
 (for example `telegram:12345`), so ids from different platforms never collide.
 Platforms listed in `GATEWAY_NATIVE_PLATFORMS` keep plain ids. The agent's
-`OWNER_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS` take ids in the same form:
-`OWNER_IDS=telegram:12345` makes that account the owner on Telegram, in groups
+`ADMIN_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS` take ids in the same form:
+`ADMIN_IDS=telegram:12345` makes that account the admin on Telegram, in groups
 and DMs. A platform with entries in `ALLOWED_GROUPS` or `ALLOWED_DM_USERS` is
 gated by the agent as well as by this plugin's allowlists.
 

@@ -44,11 +44,11 @@ To chat again later, run `.venv/bin/python try_chat.py` (Windows: `.venv\Scripts
 | Type | To |
 |---|---|
 | `/as Alex I could use an early finish today` | speak as someone else |
-| `/owner How was your day?` | speak once as the configured owner |
+| `/admin How was your day?` | speak once as the configured admin |
 | `/reset` | clear the conversation |
 | `/quit` | leave |
 
-`--name Alex` sets your display name, `--owner` makes every message the owner's, and `--lang zh` switches to the Chinese seed data and checks.
+`--name Alex` sets your display name, `--admin` makes every message the admin's, and `--lang zh` switches to the Chinese seed data and checks.
 
 The terminal runs the persona, example retrieval, generation and the character check. It skips the allowlists, the reply triggers, the output filters, self-evaluation and vision, so test the connected bot before you rely on its live behaviour. `(stays quiet)` means the model passed, returned nothing, or wrote a line the character check rejected; a rejection prints the reason.
 
@@ -66,7 +66,7 @@ If you have not seen a film, say so instead of inventing an opinion.
 Do not make jokes about someone's private information or personal difficulties.
 ```
 
-Concrete habits work better than asking the model to "sound natural". The template the wizard copies contains placeholders such as `{bot_name}` and `{owner_name}`, and notes addressed to you at the end. Replace the placeholders and delete the notes: the file goes to the model as written.
+Concrete habits work better than asking the model to "sound natural". The template the wizard copies contains placeholders such as `{bot_name}` and `{admin_name}`, and notes addressed to you at the end. Replace the placeholders and delete the notes: the file goes to the model as written.
 
 Restart the chat or the service after editing. `AGENT_LANG` picks the language of the bundled examples, filters and checks; it does not translate your persona.
 
@@ -157,7 +157,7 @@ Talk to it in the group. The name has to be in the message (replace Nova with yo
 | Say | What happens |
 |---|---|
 | `Nova, remember Sam is vegetarian` | Saves a note for this group |
-| `Nova, forget vegetarian` | Deletes matching notes. Members can delete their own; the owner can delete any |
+| `Nova, forget vegetarian` | Deletes matching notes. Members can delete their own; the admin can delete any |
 | `Nova, what do you remember` | Lists the notes you are allowed to see |
 | `Nova, what have you learned` | Counts notes, learned replies, fixes, and proposals waiting for a second voice, with the latest example |
 
@@ -191,7 +191,7 @@ The defaults, all in `.env`:
 
 - `REACT_LEARN`, `REACT_ELICIT` and `PROMOTE_AUTO` are on. Judging reactions costs extra model calls.
 - `PROMOTE_AUTO=false` leaves every promotion to you.
-- `PROMOTE_MIN_SPEAKERS=2` stops one member from teaching it alone; the owner is exempt.
+- `PROMOTE_MIN_SPEAKERS=2` stops one member from teaching it alone; the admin is exempt.
 - `EVAL_ENABLE` (the bot scoring its own replies) and `EVOLVE_AUTO` are off.
 
 Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.

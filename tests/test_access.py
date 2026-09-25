@@ -128,7 +128,7 @@ def test_dm_admission_is_partitioned_per_platform() -> None:
 
 def test_the_identity_reader_folds_the_old_names_in_by_union() -> None:
     env = {
-        "OWNER_IDS": "telegram:1, qq:5", "OWNER_QQ": " 10000 ",
+        "ADMIN_IDS": "telegram:1, qq:5", "OWNER_QQ": " 10000 ",
         "GATEWAY_OWNER_IDS": "discord:2,aiocqhttp:7",
         "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
         "ALLOWED_GROUPS": "telegram:-100", "QQ_GROUPS": "1,2",
@@ -158,7 +158,7 @@ def test_the_identity_reader_folds_the_old_names_in_by_union() -> None:
     check("nothing set is nobody",
           not access.identity_from_env({}).owners
           and not access.identity_from_env({}).groups)
-    half = access.identity_from_env({"OWNER_IDS": "telegram:1",
+    half = access.identity_from_env({"ADMIN_IDS": "telegram:1",
                                      "OWNER_QQ": "10000"})
     check("a half-migrated .env keeps its QQ owner",
           half.owners == {"telegram:1", "10000"}, repr(half.owners))

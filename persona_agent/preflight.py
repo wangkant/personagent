@@ -42,6 +42,10 @@ WANTED = {
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
+#: Single-value settings renamed in 0.5, old name -> new; the new one wins.
+_RENAMED = (("OWNER_NAME", "ADMIN_NAME"),
+            ("OWNER_RELATIONSHIP", "ADMIN_RELATIONSHIP"))
+
 #: Names a live `.env` may legitimately carry that the template does not.
 #: Deliberately tiny — every entry is a hole in the typo check.
 TEMPLATE_EXEMPT = frozenset({
@@ -62,9 +66,11 @@ TEMPLATE_EXEMPT = frozenset({
     # The vision endpoint's pre-rename names, likewise still honoured
     # (config_env.vision_endpoint_from_env) and not advertised.
     "GLM_API_KEY", "GLM_BASE_URL",
-    # The identity settings' QQ-only names, folded into OWNER_IDS,
+    # The identity settings' QQ-only names, folded into ADMIN_IDS,
     # ALLOWED_GROUPS and ALLOWED_DM_USERS (access.IDENTITY_SETTINGS).
     *access.LEGACY_SETTINGS,
+    # ADMIN_NAME and ADMIN_RELATIONSHIP's names before 0.5 (_RENAMED).
+    *(old for old, _new in _RENAMED),
 })
 
 #: The one forwarder platform whose ids are QQ numbers (AstrBot's OneBot
@@ -79,7 +85,7 @@ def _shown(entries) -> str:
 
 
 def _identity_findings(identity: access.Identity) -> list["Finding"]:
-    """What the owner and allowlist settings will not do as written.
+    """What the admin and allowlist settings will not do as written.
 
     `identity` comes from access.identity_from_env, the reader the agent uses,
     so a finding here describes what the agent actually does with the value."""
@@ -143,7 +149,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     # Listing one entry for a platform takes that platform away from the
     # forwarder's allowlist. Documented, but easy to trip over.
     for name, what in (("ALLOWED_GROUPS", "groups"),
-                       ("ALLOWED_DM_USERS", "users besides the owner")):
+                       ("ALLOWED_DM_USERS", "users besides the admin")):
         platforms = sorted({channels.platform_of(i) for i in identity.ids(name)
                             if channels.platform_of(i).islower()}
                            - {channels.NATIVE_PLATFORM})
@@ -161,7 +167,7 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
             "WARN", "GATEWAY_NATIVE_PLATFORMS",
             f"names {_shown(odd)}. A native platform's ids are stored bare, "
             f"which is how QQ numbers are stored, so they are compared against "
-            f"the QQ owners and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
+            f"the QQ admins and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
     return findings
 
 
@@ -331,6 +337,11 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
     identity = access.identity_from_env(configured)
     findings.extend(_identity_findings(identity))
+    for old, new in _RENAMED:
+        if str(configured.get(old) or "").strip():
+            findings.append(Finding(
+                "INFO", old, f"is the old name of {new} and still works; "
+                f"{new} wins when both are set"))
     qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
               if i.isdigit()}
 

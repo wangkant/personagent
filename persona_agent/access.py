@@ -1,4 +1,4 @@
-"""Who the agent answers, and who its owner is, on every platform.
+"""Who the agent answers, and who its admin is, on every platform.
 
 Ids here are compared in the spelling the stores use (see channels): a QQ id
 is bare, every other platform's is "<platform>:<id>". A setting may also write
@@ -7,11 +7,12 @@ a QQ id as "qq:<id>", and an id from a GATEWAY_NATIVE_PLATFORMS forwarder as
 
 Three settings, one list each:
 
-* OWNER_IDS: the owner's accounts. One person on many platforms, sharing
-  OWNER_NAME and OWNER_RELATIONSHIP.
+* ADMIN_IDS: the admin's accounts. One person on many platforms, sharing
+  ADMIN_NAME and ADMIN_RELATIONSHIP. The code calls them the owner, the
+  name the settings had until 0.5.
 * ALLOWED_GROUPS / ALLOWED_DM_USERS: who the agent itself admits, partitioned
   per platform. A platform with no entries is not restricted by the agent:
-  every QQ group is answered, a QQ DM still needs an owner or an entry, and a
+  every QQ group is answered, a QQ DM still needs the admin or an entry, and a
   forwarded platform is left to the forwarder's own allowlist unless the event
   says the forwarder did not filter (``prefiltered: false``).
 
@@ -26,10 +27,10 @@ from typing import Iterable, Mapping
 from . import channels
 
 #: Each identity setting, and the older names folded into it. The old names
-#: are merged by UNION: a half-migrated .env (OWNER_IDS=telegram:1 with
-#: OWNER_QQ still set) must keep the QQ owner it already had.
+#: are merged by UNION: a half-migrated .env (ADMIN_IDS=telegram:1 with
+#: OWNER_QQ still set) must keep the QQ admin it already had.
 IDENTITY_SETTINGS: dict[str, tuple[str, ...]] = {
-    "OWNER_IDS": ("OWNER_QQ", "GATEWAY_OWNER_IDS"),
+    "ADMIN_IDS": ("OWNER_QQ", "GATEWAY_OWNER_IDS"),
     "ALLOWED_GROUPS": ("QQ_GROUPS",),
     "ALLOWED_DM_USERS": ("PRIVATE_ALLOWED_QQS",),
 }
@@ -160,10 +161,10 @@ def dm_refusal(user_id, owners: Iterable[str], allowed: Iterable[str], *,
         return ""
     platform = channels.platform_of(uid)
     if channels.is_native(uid):
-        return (f"not in OWNER_IDS or {_setting('ALLOWED_DM_USERS', platform)}"
+        return (f"not in ADMIN_IDS or {_setting('ALLOWED_DM_USERS', platform)}"
                 f", one of which every QQ DM needs")
     if entries_on(platform, allowed):
-        return (f"not in OWNER_IDS or ALLOWED_DM_USERS, which lists "
+        return (f"not in ADMIN_IDS or ALLOWED_DM_USERS, which lists "
                 f"{platform} users")
     if prefiltered:
         return ""
@@ -196,7 +197,7 @@ class Identity:
 
     @property
     def owners(self) -> frozenset[str]:
-        return self.ids("OWNER_IDS")
+        return self.ids("ADMIN_IDS")
 
     @property
     def groups(self) -> frozenset[str]:
@@ -216,7 +217,7 @@ def identity_from_env(env: Mapping[str, str] | None = None) -> Identity:
     """The one reader of the identity settings.
 
     The agent, preflight and the offline tools all read them here, so the
-    owner the operator CLI exempts is the owner the agent exempts."""
+    admin the operator CLI exempts is the admin the agent exempts."""
     source = os.environ if env is None else env
     written = {}
     for name in ALL_NAMES:

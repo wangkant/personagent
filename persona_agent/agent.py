@@ -306,7 +306,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # Sets, not the settings' tuples: these are read on every inbound
         # message and edited in place by the tests and the admin paths.
-        self.owner_ids: set = set(s.owner_ids)
+        self.admin_ids: set = set(s.admin_ids)
         self.allowed_groups: set = set(s.allowed_groups)
         self.allowed_dm_users: set = set(s.allowed_dm_users)
         self.private_allowed_qqs: set = set(s.private_allowed_qqs)
@@ -821,11 +821,11 @@ class Agent(ContentIngestion, Transport, Learning):
             sink.owned = True
 
     def _owners(self) -> frozenset[str]:
-        """Every owner account, canonical: OWNER_IDS and its old names.
+        """Every owner account, canonical: ADMIN_IDS and its old names.
         Re-read on each call because the parts are live attributes the tests
         and admin paths edit; the sets are tiny."""
         return access.parse_ids(
-            self.owner_ids, (self.owner_qq,), self.gateway_owner_ids,
+            self.admin_ids, (self.owner_qq,), self.gateway_owner_ids,
             native_platforms=self.gateway_native_platforms)
 
     def _dm_allowlist(self) -> frozenset[str]:

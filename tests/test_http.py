@@ -393,6 +393,8 @@ _UNDOCUMENTED_SETTINGS = {
     "GLM_API_KEY", "GLM_BASE_URL",
     # The identity settings' QQ-only names (access.IDENTITY_SETTINGS), too.
     "OWNER_QQ", "GATEWAY_OWNER_IDS", "QQ_GROUPS", "PRIVATE_ALLOWED_QQS",
+    # ADMIN_NAME and ADMIN_RELATIONSHIP's old names.
+    "OWNER_NAME", "OWNER_RELATIONSHIP",
 }
 
 
@@ -569,7 +571,7 @@ def test_preflight_reports_the_right_deployments() -> None:
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
-    """OWNER_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS replaced four QQ-only
+    """ADMIN_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS replaced four QQ-only
     names that still work, and the ways to get the new ones wrong are silent:
     another platform's id pasted without its prefix reads as a QQ id (and in
     ALLOWED_GROUPS closes every QQ group), a capitalised platform never
@@ -583,9 +585,9 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
         return {(f.level, f.key) for f in findings(**env)}
 
     check("identity: the new names are settings",
-          not levels(OWNER_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
+          not levels(ADMIN_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
                      ALLOWED_DM_USERS="456", BOT_QQ="9"),
-          repr(levels(OWNER_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
+          repr(levels(ADMIN_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
                       ALLOWED_DM_USERS="456", BOT_QQ="9")))
     legacy = levels(OWNER_QQ="42", GATEWAY_OWNER_IDS="telegram:1",
                     QQ_GROUPS="1,2", PRIVATE_ALLOWED_QQS="3", BOT_QQ="9")
@@ -603,7 +605,7 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
               and "-1001234" in f.detail and "closes every QQ group" in f.detail
               for f in pasted), repr(pasted))
     check("identity: ...in any of the lists, old names included",
-          ("WARN", "OWNER_IDS") in levels(OWNER_IDS="U0ABC")
+          ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="U0ABC")
           and ("WARN", "GATEWAY_OWNER_IDS") in levels(GATEWAY_OWNER_IDS="alice"))
     check("identity: qq: and bare QQ numbers are fine",
           not levels(ALLOWED_GROUPS="qq:123,456", BOT_QQ="9"))
@@ -611,7 +613,7 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
           ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS=":42")
           and ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS="slack:"))
     check("identity: a capitalised platform never matches, and says so",
-          ("WARN", "OWNER_IDS") in levels(OWNER_IDS="Telegram:1"))
+          ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="Telegram:1"))
 
     moved = findings(QQ_GROUPS="telegram:-100")
     check("identity: another platform in a QQ-only name changed meaning",
@@ -626,9 +628,9 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
           not levels(ALLOWED_GROUPS="123", BOT_QQ="9"))
 
     check("identity: a bare QQ owner is a QQ config that needs BOT_QQ",
-          ("WARN", "BOT_QQ") in levels(OWNER_IDS="42"))
+          ("WARN", "BOT_QQ") in levels(ADMIN_IDS="42"))
     check("identity: a Telegram-only owner is not",
-          not levels(OWNER_IDS="telegram:42"))
+          not levels(ADMIN_IDS="telegram:42"))
     check("identity: QQ's own adapter is the native platform to name",
           not levels(GATEWAY_NATIVE_PLATFORMS="aiocqhttp"))
     check("identity: another native platform would read its ids as QQ ones",

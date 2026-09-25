@@ -90,18 +90,18 @@ def test_the_vision_endpoint_reads_new_names_and_honours_the_old() -> None:
 
 def test_the_identity_settings_read_new_names_and_honour_the_old(
         monkeypatch) -> None:
-    """OWNER_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS take "<platform>:<id>"
+    """ADMIN_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS take "<platform>:<id>"
     entries on every platform. The QQ-only names they replace still work and
     are folded in by union, so a half-migrated .env loses nobody."""
     import dataclasses
 
     new = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "OWNER_IDS": "telegram:1, qq:10000,",
+        "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1, qq:10000,",
         "ALLOWED_GROUPS": "telegram:-100,123", "ALLOWED_DM_USERS": "slack:U1"})
     check("identity: the new names are read and canonicalised",
-          (new.owner_ids, new.allowed_groups, new.allowed_dm_users)
+          (new.admin_ids, new.allowed_groups, new.allowed_dm_users)
           == (("telegram:1", "10000"), ("telegram:-100", "123"), ("slack:U1",)),
-          repr((new.owner_ids, new.allowed_groups, new.allowed_dm_users)))
+          repr((new.admin_ids, new.allowed_groups, new.allowed_dm_users)))
     check("identity: owners and DM users are the merged views",
           new.owners == {"telegram:1", "10000"} and new.dm_users == {"slack:U1"})
 
@@ -114,7 +114,7 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
           repr((old.owners, old.allowed_groups, old.dm_users)))
 
     both = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "OWNER_IDS": "telegram:1", "OWNER_QQ": "10000",
+        "LLM_API_KEY": "k", "ADMIN_IDS": "telegram:1", "OWNER_QQ": "10000",
         "GATEWAY_OWNER_IDS": "discord:2", "ALLOWED_GROUPS": "telegram:-100",
         "QQ_GROUPS": "123", "ALLOWED_DM_USERS": "telegram:42",
         "PRIVATE_ALLOWED_QQS": "888"})
@@ -124,13 +124,13 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
           and both.dm_users == {"telegram:42", "888"},
           repr((both.owners, both.allowed_groups, both.dm_users)))
     blank_new = AgentSettings.from_env(env={
-        "LLM_API_KEY": "k", "OWNER_IDS": "", "OWNER_QQ": "42"})
+        "LLM_API_KEY": "k", "ADMIN_IDS": "", "OWNER_QQ": "42"})
     check("identity: a blank new name keeps the old one",
           blank_new.owners == {"42"}, repr(blank_new.owners))
 
     native = AgentSettings.from_env(env={
         "LLM_API_KEY": "k", "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp",
-        "OWNER_IDS": "aiocqhttp:10000", "ALLOWED_GROUPS": "qq:123,aiocqhttp:456",
+        "ADMIN_IDS": "aiocqhttp:10000", "ALLOWED_GROUPS": "qq:123,aiocqhttp:456",
         "ALLOWED_DM_USERS": "telegram:aiocqhttp"})
     check("identity: qq: and native prefixes become the bare keys events carry",
           native.owners == {"10000"} and native.allowed_groups == ("123", "456")
@@ -151,7 +151,7 @@ def test_the_identity_settings_read_new_names_and_honour_the_old(
     monkeypatch.setenv("ALLOWED_GROUPS", "telegram:-100")
     monkeypatch.setenv("QQ_GROUPS", "123")
     monkeypatch.setenv("ALLOWED_DM_USERS", "telegram:42")
-    monkeypatch.setenv("OWNER_IDS", "telegram:1")
+    monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     ambient = AgentSettings(api_key="k")
     check("identity: the admission lists are operational knobs, read in both",
           ambient.allowed_groups == ("telegram:-100", "123")

@@ -835,7 +835,7 @@ def test_corroboration_means_people_not_events() -> None:
     check("speakers: the owner is exempt even at MIN_SPEAKERS=2",
           decide(owner, owner_id="owner1", policy=strict).promote is True,
           decide(owner, owner_id="owner1", policy=strict).reason)
-    # Every account in OWNER_IDS is the owner, not just the QQ one.
+    # Every account in ADMIN_IDS is the owner, not just the QQ one.
     tg_owner = [ev("telegram:1"),
                 ev("telegram:1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
     by_set = promotion.decide(
@@ -866,13 +866,13 @@ async def test_the_cli_and_the_agent_exempt_the_same_owners(
         tmp: Path, monkeypatch) -> None:
     """The operator CLI decides with the owners the agent decides with.
 
-    Both read OWNER_IDS through access.identity_from_env; the CLI used to
+    Both read ADMIN_IDS through access.identity_from_env; the CLI used to
     read OWNER_QQ alone, so a Telegram owner's candidate showed a speaker
     shortfall there that the agent itself did not see."""
     import candidates_admin
 
     a = make_agent(tmp)
-    a.owner_ids = {"telegram:1"}
+    a.admin_ids = {"telegram:1"}
     await react(a, CORRECTION, text="no, look at the logs", uid="telegram:1",
                 is_owner=True)
     cand = a.candidate_ledger.all()[0]
@@ -884,7 +884,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_owners(
         return real(c, **kw)
 
     monkeypatch.setattr(promotion, "decide", spy)
-    monkeypatch.setenv("OWNER_IDS", "telegram:1")
+    monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     for name in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "GATEWAY_NATIVE_PLATFORMS"):
         monkeypatch.delenv(name, raising=False)
     agent_says = a._decide_promotion(cand["candidate_id"])

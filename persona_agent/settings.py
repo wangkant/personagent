@@ -24,7 +24,7 @@ Two ways in, and the difference between them is deliberate:
   test suite wants: an agent it configured, not one the surrounding ``.env``
   configured behind its back.
 * ``AgentSettings.from_env()`` — additionally reads the deployment settings
-  (``LLM_API_KEY``, ``BOT_NAME``, ``OWNER_IDS``, …) out of the environment. This
+  (``LLM_API_KEY``, ``BOT_NAME``, ``ADMIN_IDS``, …) out of the environment. This
   is the bot process, and nothing but ``main.py`` should want it.
 
 The operational knobs — the proactive loop, the evolution loop, reaction
@@ -133,10 +133,10 @@ class AgentSettings:
     # ---- who may talk to it -----------------------------------------------
     # Entries are "<platform>:<id>", a bare id being QQ (see access.py). The
     # old QQ-only names still work, folded in by union.
-    #: The owner's accounts (``OWNER_IDS``), one person on every platform.
-    #: ``owner_qq`` and ``gateway_owner_ids`` are its old spellings; the
-    #: ``owners`` property is all three together.
-    owner_ids: tuple[str, ...] = ()
+    #: The admin's accounts (``ADMIN_IDS``), one person on every platform;
+    #: the code calls them the owner. ``owner_qq`` and ``gateway_owner_ids``
+    #: are its old spellings; the ``owners`` property is all three together.
+    admin_ids: tuple[str, ...] = ()
     #: Groups the agent admits (``ALLOWED_GROUPS``, with ``QQ_GROUPS`` folded
     #: in), per platform: a platform with no entries is not restricted here.
     #: Without an in-code gate a bot invited into N groups replies in all of
@@ -154,7 +154,7 @@ class AgentSettings:
     private_allowed_qqs: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "PRIVATE_ALLOWED_QQS"])
-    #: ``GATEWAY_OWNER_IDS``, an old name of ``owner_ids``.
+    #: ``GATEWAY_OWNER_IDS``, an old name of ``admin_ids``.
     gateway_owner_ids: tuple[str, ...] = ()
     #: Forwarder platforms whose ids are minted BARE instead of namespaced, so
     #: a QQ message relayed by a gateway lands on the same keys NapCat would
@@ -331,7 +331,7 @@ class AgentSettings:
             self.gateway_native_platforms)
         self.owner_qq = (access.canonical_id(self.owner_qq, natives)
                          if self.owner_qq else "")
-        for name in ("owner_ids", "gateway_owner_ids", "allowed_groups",
+        for name in ("admin_ids", "gateway_owner_ids", "allowed_groups",
                      "allowed_dm_users", "private_allowed_qqs"):
             setattr(self, name, access.canonical_ids(
                 getattr(self, name), native_platforms=natives))
@@ -342,10 +342,10 @@ class AgentSettings:
 
     @property
     def owners(self) -> frozenset[str]:
-        """Every owner account: ``owner_ids``, ``owner_qq`` and
+        """Every admin account: ``admin_ids``, ``owner_qq`` and
         ``gateway_owner_ids`` together."""
         return access.parse_ids(
-            self.owner_ids, (self.owner_qq,), self.gateway_owner_ids,
+            self.admin_ids, (self.owner_qq,), self.gateway_owner_ids,
             native_platforms=self.gateway_native_platforms)
 
     @property
@@ -394,10 +394,12 @@ class AgentSettings:
             memory_file=_str("AGENT_MEMORY_FILE", "memory.json"),
             memory_max_per_group=env_int(
                 "AGENT_MEMORY_MAX", 50, minimum=1, maximum=10_000, env=env),
-            owner_ids=identity.written["OWNER_IDS"],
+            admin_ids=identity.written["ADMIN_IDS"],
             owner_qq="".join(identity.written["OWNER_QQ"]),
-            owner_name=_str("OWNER_NAME"),
-            owner_relationship=_str("OWNER_RELATIONSHIP"),
+            # The new name wins when set, as with VISION_*.
+            owner_name=_str("ADMIN_NAME") or _str("OWNER_NAME"),
+            owner_relationship=(_str("ADMIN_RELATIONSHIP")
+                                or _str("OWNER_RELATIONSHIP")),
             fallback_model=_str("FALLBACK_MODEL"),
             fallback_base_url=_str("FALLBACK_BASE_URL"),
             fallback_api_key=_str("FALLBACK_API_KEY"),

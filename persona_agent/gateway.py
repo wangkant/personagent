@@ -157,7 +157,7 @@ def _ns(platform: str, native: bool, raw: object) -> str:
 
     `native` is NOT the forwarder's decision. It is the operator's, via
     GATEWAY_NATIVE_PLATFORMS, because minting a bare id claims QQ authority:
-    bare ids are what the QQ entries of OWNER_IDS, ALLOWED_GROUPS and
+    bare ids are what the QQ entries of ADMIN_IDS, ALLOWED_GROUPS and
     ALLOWED_DM_USERS are compared against. A forwarder that could assert it
     for itself could address any QQ conversation the agent can reach.
     Default empty — every platform is namespaced until an operator says

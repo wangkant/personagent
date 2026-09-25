@@ -530,7 +530,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     rerun = bool(_env_current_key(env_path))
     current = {key: _env_get(env_path, key) if rerun else "" for key in (
         "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "BOT_NAME", "AGENT_LANG",
-        "BOT_QQ", "OWNER_QQ", "OWNER_NAME")}
+        "BOT_QQ", "ADMIN_IDS", "ADMIN_NAME", "ALLOWED_GROUPS",
+        # Names before 0.5, read so a re-run offers what they hold.
+        "OWNER_QQ", "GATEWAY_OWNER_IDS", "OWNER_NAME", "QQ_GROUPS")}
     current_base = current["LLM_BASE_URL"].rstrip("/")
     default_choice = "1"
     if current_base:
@@ -613,20 +615,35 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         if qq:
             values["BOT_QQ"] = _ask("Bot account's QQ number",
                                     default=current["BOT_QQ"], required=True)
-            owner_qq = _ask("Owner QQ - a 'favorite person' the bot is closer to "
-                            "(Enter to " + ("keep" if current["OWNER_QQ"] else "skip") + ")",
-                            default=current["OWNER_QQ"])
-            if owner_qq:
-                values["OWNER_QQ"] = owner_qq
-                values["OWNER_NAME"] = _ask("Owner display name",
-                                            default=current["OWNER_NAME"], required=True)
+        admins = _ask_ids(
+            "Admin accounts - the person who runs the bot; it is closest to them "
+            "and they can manage what it remembers. Comma-separated "
+            "<platform>:<id> such as telegram:12345, a QQ number alone being QQ",
+            "empty = no admin",
+            _split_ids(",".join((current["ADMIN_IDS"], current["OWNER_QQ"],
+                                 current["GATEWAY_OWNER_IDS"]))))
+        values["ADMIN_IDS"] = ",".join(admins)
+        if admins:
+            values["ADMIN_NAME"] = _ask(
+                "Admin display name",
+                default=current["ADMIN_NAME"] or current["OWNER_NAME"], required=True)
         groups = _ask_ids("Group / channel IDs the persona should join, comma-separated, "
                           "as AstrBot shows them", "empty = none yet",
                           existing.get("group_whitelist"))
         private = _ask_ids("Sender IDs allowed to DM it, comma-separated",
                            "empty = no DMs", existing.get("private_whitelist"))
         if qq:
-            values["QQ_GROUPS"] = ",".join(g for g in groups if g.isdigit())
+            # QQ entries follow the plugin's groups; other platforms' are kept.
+            others = [g for g in _split_ids(",".join((current["ALLOWED_GROUPS"],
+                                                      current["QQ_GROUPS"])))
+                      if ":" in g and not g.startswith("qq:")]
+            values["ALLOWED_GROUPS"] = ",".join(
+                others + [g for g in groups if g.isdigit()])
+        # The old names are merged into the new ones, so an id left under them
+        # would outlive its removal here.
+        for old in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "OWNER_NAME", "QQ_GROUPS"):
+            if current[old] and (old != "QQ_GROUPS" or qq):
+                values[old] = ""
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
                                    qq=qq, groups=groups, private=private)
         # Written now, not after the platform question: a Ctrl-C there must

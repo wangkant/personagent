@@ -8,14 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Owners and allowlists that work on every platform: `OWNER_IDS`,
+- **An admin and allowlists that work on every platform: `ADMIN_IDS`,
   `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** Entries are `<platform>:<id>`
   (`telegram:-1001234`, `discord:4242`); a bare id, or `qq:<id>`, is QQ, and a
   platform in `GATEWAY_NATIVE_PLATFORMS` may be written with its prefix
   (`aiocqhttp:10000`) and means the bare id its events carry. The lists apply
   per platform: a platform with no entries is not restricted by the agent, so
-  QQ still answers every group when none is listed and QQ DMs still need an
-  owner or an entry, while a forwarded platform stays under the forwarder's own
+  QQ still answers every group when none is listed and QQ DMs still need the
+  admin or an entry, while a forwarded platform stays under the forwarder's own
   allowlist until it has entries. One Telegram entry therefore gates Telegram
   and leaves QQ alone, where `QQ_GROUPS=telegram:-100` used to close every QQ
   group. A connector that did not filter can say so with
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the gateway request had returned. They now go through the outbox, and are
   remembered only once the connector acks them. The DM loop also considers
   anyone who has DMed the bot through such a connector (and is still
-  admitted), not only the QQ ids in `OWNER_IDS` and `ALLOWED_DM_USERS`. A
+  admitted), not only the QQ ids in `ADMIN_IDS` and `ALLOWED_DM_USERS`. A
   conversation no connector can reach is skipped before any model call.
   **Upgrade note:** with `PROACTIVE_ENABLE=true`, openers start on Telegram
   and the other platforms as soon as their connector pulls the outbox. The
@@ -63,10 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 - **`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS`
-  are now `OWNER_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** The old
+  are now `ADMIN_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** The old
   names keep working and leave the template. Unlike the vision rename they
   are merged rather than overridden: `OWNER_QQ` and `GATEWAY_OWNER_IDS` add to
-  `OWNER_IDS`, `QQ_GROUPS` to `ALLOWED_GROUPS` and `PRIVATE_ALLOWED_QQS` to
+  `ADMIN_IDS`, `QQ_GROUPS` to `ALLOWED_GROUPS` and `PRIVATE_ALLOWED_QQS` to
   `ALLOWED_DM_USERS`, so an `.env` half moved to the new names keeps every id
   it had; to remove an id, delete it from the old name too. Preflight names
   each old name in use, and warns about an id pasted without its platform
@@ -74,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-QQ id in a QQ-only name (its meaning changed, see Added), and a
   `GATEWAY_NATIVE_PLATFORMS` entry other than `aiocqhttp` (its ids would be
   read as QQ numbers).
+- **The owner is now called the admin.** `OWNER_NAME` and `OWNER_RELATIONSHIP`
+  are now `ADMIN_NAME` and `ADMIN_RELATIONSHIP`; the old names keep working,
+  and a new name that is set wins. `try_chat.py --owner` and `/owner` are now
+  `--admin` and `/admin`, the old spellings still accepted, and the persona
+  and lorebook templates say `{admin_name}` and `{admin_relationship}`. The
+  wizard asks for the admin on any platform, not only with QQ, writes the new
+  names, and empties the old ones it read, since their ids would otherwise
+  outlive a removal. The persona's own prompts are unchanged.
 - **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
   `VISION_BASE_URL`.** They configure whichever OpenAI-compatible model
   `VISION_MODEL` names, not one vendor's. The old names keep working exactly as
@@ -135,8 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **`/webhook/qq` refuses namespaced ids.** NapCat only sends QQ numbers, but
-  a payload forged with an owner-listed `telegram:` id passed the DM check
-  through the owner bypass, and a namespaced group skipped `QQ_GROUPS`. Any id
+  a payload forged with an admin-listed `telegram:` id passed the DM check
+  through the admin bypass, and a namespaced group skipped `QQ_GROUPS`. Any id
   with a platform prefix, `qq:` included, is now refused on that route.
 
 ### Changed
@@ -158,21 +166,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
   other than JPEG no longer post an error, and QQ official replies are plain
   text.
-- **An owner on any platform is the owner, everywhere.** An account in
-  `GATEWAY_OWNER_IDS` (now `OWNER_IDS`) used to get only the owner's DM
+- **The admin is the admin on every platform.** An account in
+  `GATEWAY_OWNER_IDS` (now `ADMIN_IDS`) used to get only the owner's DM
   persona; in a group it was an ordinary member. It now gets everything
-  `OWNER_QQ` gets: the owner persona in groups (sticky calls included), the
-  owner's authority over group memories ("forget" and "what do you remember"
-  cover every member), owner weighting when it corrects the bot, the exemption
+  `OWNER_QQ` gets: the closer persona in groups (sticky calls included), the
+  authority over group memories ("forget" and "what do you remember" cover
+  every member), the extra weight when it corrects the bot, the exemption
   from `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
-  longer needs `OWNER_QQ`), and memories that name `OWNER_NAME` are attributed
-  to the owner's account on that conversation's platform. Proactive DMs go to
-  QQ ids through NapCat, and elsewhere only through a connector that pulls the
-  outbox (see Added). All the owner entries
-  name one person, `OWNER_NAME`: if `GATEWAY_OWNER_IDS` lists anyone else,
-  remove them before upgrading. `tools/candidates_admin.py`,
-  `tools/bootstrap_from_history.py` and `try_chat.py` read the owners the same
-  way the agent does.
+  longer needs `OWNER_QQ`), and memories that name `ADMIN_NAME` are attributed
+  to the admin's account on that conversation's platform. Proactive DMs reach
+  the admin through a connector that pulls the outbox, and QQ ids without one
+  through NapCat. All the admin entries name one person, `ADMIN_NAME`: if
+  `GATEWAY_OWNER_IDS` lists anyone else, remove them before upgrading.
+  `tools/candidates_admin.py`, `tools/bootstrap_from_history.py` and
+  `try_chat.py` read the admin the same way the agent does.
 - **The group prompt no longer assumes QQ.** Speakers are labelled `id=`
   rather than `qq=`, the mention marker is taught as `[AT:id]`, the bystander
   rule says "not you" instead of naming a `BOT_QQ` placeholder nothing ever
@@ -194,7 +201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A half-delivered proactive opener is kept on record.** When only part of
   it went out, the part people read is now in the room's buffer or the DM
   history, as a half-delivered reply already was.
-- **For code built on the engine:** `AgentSettings` gains `owner_ids` and
+- **For code built on the engine:** `AgentSettings` gains `admin_ids` and
   `allowed_dm_users`, and the `owners` / `dm_users` properties that fold the
   old fields in; `owner_qq`, `gateway_owner_ids` and `private_allowed_qqs`
   still work. `promotion.decide` takes `owner_ids` next to `owner_id`.

@@ -90,7 +90,7 @@ def _decide(ledger, log, cand, policy, owner_id: str = "") -> promotion.Decision
     `owner_id` likewise defaulted to empty, so with `PROMOTE_MIN_SPEAKERS>=2`
     the CLI reported a speaker shortfall for candidates the agent itself would
     promote under the owner exemption. The owners come from the agent's own
-    reader, so every account in OWNER_IDS is exempt here as it is there."""
+    reader, so every account in ADMIN_IDS is exempt here as it is there."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),

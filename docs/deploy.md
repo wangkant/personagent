@@ -22,7 +22,7 @@ To run live behind AstrBot:
 LLM_API_KEY=...
 BOT_NAME=...                         # the name it answers to
 GATEWAY_TOKEN=...                    # shared with the plugin; recommended, required across hosts
-OWNER_IDS=telegram:12345             # optional: the owner's accounts, <platform>:<id>
+ADMIN_IDS=telegram:12345             # optional: the admin's accounts, <platform>:<id>
 # QQ only
 BOT_QQ=...                           # the bot account's number
 GATEWAY_NATIVE_PLATFORMS=aiocqhttp
@@ -104,8 +104,9 @@ On the personagent side:
   replay guard. A captured request cannot be replayed or altered, but the
   token is also the signing key: keep it out of logs and rotate it if it
   leaks. Optional on one host, required across hosts.
-- `OWNER_IDS` lists the owner's accounts as `<platform>:<id>`
-  (`telegram:12345`, `discord:4242`; a bare id or `qq:<id>` is a QQ number).
+- `ADMIN_IDS` lists the admin's accounts as `<platform>:<id>`
+  (`telegram:12345`, `discord:4242`; a bare id or `qq:<id>` is a QQ number),
+  and `ADMIN_NAME` their name.
   One person on every platform listed: they get the closer persona in groups
   and DMs, may manage what the bot remembers about a group, and may teach it
   on their own. The platform is the adapter name AstrBot shows.
@@ -115,7 +116,8 @@ On the personagent side:
   restricts that platform to its entries. A turn personagent refuses goes
   back unclaimed, so AstrBot's own model may answer it. The old names
   (`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS`, `PRIVATE_ALLOWED_QQS`) still
-  work, and their ids are added to the new ones'.
+  work, and their ids are added to the new ones'; so do `OWNER_NAME` and
+  `OWNER_RELATIONSHIP`, which the new names override.
 
 ## QQ through AstrBot
 
@@ -133,9 +135,9 @@ namespaced (`aiocqhttp:123456`) and every conversation looks new. Memory,
 history and learned examples are keyed by the bare id, and the ledgers derive
 row ids from the conversation id, so the split cannot be repaired afterwards.
 
-Bare ids carry QQ authority, so the QQ entries of `OWNER_IDS`,
+Bare ids carry QQ authority, so the QQ entries of `ADMIN_IDS`,
 `ALLOWED_GROUPS` and `ALLOWED_DM_USERS` apply on top of the plugin's
-allowlists: a QQ DM must be in `private_whitelist` *and* come from an owner or
+allowlists: a QQ DM must be in `private_whitelist` *and* come from the admin or
 an `ALLOWED_DM_USERS` entry, and when `ALLOWED_GROUPS` lists QQ groups, a QQ
 group must be in both. Only list a platform in `GATEWAY_NATIVE_PLATFORMS` if
 you trust its forwarder with that authority.
@@ -273,7 +275,7 @@ Most common first:
    @. Otherwise it waits for enough conversation (`AGENT_TRIGGER_COUNT`, 30
    messages by default) and may still pass.
 4. **personagent's allowlists.** `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`
-   (and a QQ DM needs an owner or an entry) apply behind AstrBot too. A
+   (and a QQ DM needs the admin or an entry) apply behind AstrBot too. A
    message they turn away goes back unclaimed, so AstrBot's own model answers
    it; personagent logs each refused conversation once, at INFO, with the
    setting that refused it.

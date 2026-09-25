@@ -343,7 +343,7 @@ async def main():
     args = p.parse_args()
 
     if not OWNER_QQS:
-        logger.error("no QQ owner: set OWNER_IDS=qq:<number>")
+        logger.error("no QQ admin: set ADMIN_IDS=qq:<number>")
         return 1
     groups = [args.group] if args.group else QQ_GROUPS
     if not groups:

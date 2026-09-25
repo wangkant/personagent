@@ -92,7 +92,7 @@ The design enforces two rules:
    them strong. `PROMOTE_MIN_EVENTS` and `PROMOTE_MIN_STRONG` can raise those
    floors but not lower them. A new signal source belongs in
    `evidence.classify_strength`, with a written reason for its class. "The
-   owner said so" is not a substitute for being the person the reply was
+   admin said so" is not a substitute for being the person the reply was
    aimed at.
 
 Both logs are append-only. To correct a mistake, append a lifecycle event;
@@ -125,7 +125,7 @@ other modules by name. One concern per module:
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
 | `persona_agent/outbox.py` | Messages no request is waiting for: each gateway conversation's reply handle, and the queue a connector pulls from `/webhook/gateway/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
-| `persona_agent/access.py` | Who the owner is and who is admitted, per platform: `OWNER_IDS`, `ALLOWED_GROUPS`, `ALLOWED_DM_USERS` and the old names folded into them (pure logic) |
+| `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ALLOWED_GROUPS`, `ALLOWED_DM_USERS` and the old names folded into them (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
