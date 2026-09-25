@@ -89,9 +89,9 @@ def _platform_name(raw: str) -> str:
 @dataclass
 class Config:
     endpoint: str = DEFAULT_ENDPOINT
-    satori_token: str = ""
+    satori_token: str = field(default="", repr=False)
     agent_url: str = DEFAULT_AGENT_URL
-    gateway_token: str = ""
+    gateway_token: str = field(default="", repr=False)
     forwarder_id: str = ""
     platforms: frozenset = frozenset()
     platform_names: dict = field(default_factory=lambda: dict(DEFAULT_PLATFORM_NAMES))
@@ -726,9 +726,20 @@ def _retry_after(response: httpx.Response) -> float:
         return 3.0
 
 
+def redacted_info(base: type) -> type:
+    """satori-python's WebsocketsInfo with a repr that leaves the token out:
+    the library logs the whole config when the server reports no login."""
+    class WebsocketsInfo(base):
+        def __repr__(self) -> str:
+            return (f"WebsocketsInfo(host={self.host!r}, port={self.port!r}, "
+                    f"path={self.path!r}, secure={self.secure!r})")
+    return WebsocketsInfo
+
+
 async def serve(config: Config) -> None:
     import satori
     from satori.client import App, WebsocketsInfo
+    from satori.client.network.websocket import WsNetwork
 
     connector = sdk.Connector(config.agent_url, config.gateway_token,
                               forwarder_id=config.forwarder_id, timeout_s=config.timeout_s)
@@ -736,7 +747,10 @@ async def serve(config: Config) -> None:
     if info["token"] and not info["secure"] and not _loopback(config.satori_host):
         logger.warning("SATORI_TOKEN goes to %s in clear text; use https or a tunnel",
                        config.satori_host)
-    app = App(WebsocketsInfo(**info))
+    safe_info = redacted_info(WebsocketsInfo)
+    # App picks the network by the config's exact class, not a subclass.
+    App.register_config(safe_info, WsNetwork)
+    app = App(safe_info(**info))
     bridge = SatoriBridge(config, connector, accounts=lambda: list(app.accounts.values()),
                           lib=satori)
     app.register_on(satori.EventType.MESSAGE_CREATED)(bridge.on_message)
