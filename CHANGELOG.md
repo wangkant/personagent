@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `ADMIN_`, `ACCESS_`, `CHAT_`, `MEMORY_`, `SERVER_`, `CONNECTOR_`, `QQ_`,
     `PROACTIVE_`, `REACT_`, `PROMOTE_`, `EVOLVE_`, `EVAL_`, `LEDGER_`, ...);
   - a duration ends in its unit (`_S`, `_HOURS`, `_DAYS`), a size in `_BYTES`;
-  - an on/off switch ends in `_ENABLED`;
+  - a switch that turns a feature on or off ends in `_ENABLED`
+    (`LLM_FALLBACK_THINKING`, `PROMOTE_REQUIRE_SAME_CONVERSATION` and the
+    plugin's `block_default` and `forward_quoted_text` say what they do and
+    keep their names);
   - a vendor's credentials keep the vendor's own names (`TAVILY_API_KEY`,
     `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`);
   - the server and its connectors call their shared token the same thing,
@@ -28,7 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.env` together with its new one, and never uses its value. The AstrBot
   plugin is now `astrbot_plugin_personagent`; `quickstart.py --astrbot`
   installs it under that name and deletes the old directory it installed
-  before, which would otherwise forward every message twice. What personagent
+  before, which would otherwise forward every message twice, together with
+  the old settings file. The first run carries across QQ routing and the
+  settings that kept their names; `groups`, `dm_users` and a
+  `personagent_url` other than the local default start empty, so set them
+  again in AstrBot's WebUI. What personagent
   has learned stays valid: memory, the ledgers, the lineage, stickers and eval
   rows keep their keys, and a DM's stored conversation key keeps its
   `private:` prefix. The prompts the model reads are unchanged.
@@ -125,6 +132,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | AstrBot plugin | `private_whitelist` | `dm_users` |
   | AstrBot plugin | `private_enabled` | none: DMs are forwarded when `dm_users` is not empty |
 
+  `*` in the plugin's `groups` or `dm_users`, as in the other connectors'
+  lists, now forwards every conversation of that kind with
+  `"prefiltered": false`, so personagent's `ACCESS_*` lists decide.
+
   Protocol (docs/connectors.md), where the signing scheme, the segments and
   every field not listed are unchanged:
 
@@ -202,7 +213,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   history, as a half-delivered reply already was.
 - **For code built on the engine:** an `AgentSettings` field whose setting
   was renamed takes the new setting's name in lowercase (`llm_timeout_s`,
-  `llm_dm_model`, `connector_token`, `access_groups`, `access_dm_users`,
+  `llm_dm_model`, `qq_onebot_url`, `access_groups`, `access_dm_users`,
   `connector_outbox_enabled`, ...), and so do the `Agent` attributes that
   mirror them. Identifiers say admin where they said owner, connector where
   they said gateway or forwarder, and dm where they said private for a
@@ -353,7 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vision timeout, 429 or network failure was cached as a miss, so the image
   stayed undescribed for as long as the cache kept it. A miss is now cached
   only when vision and OCR both answered.
-- **`/health` probes the DM chat with the agent's default model when
+- **`/health/details` and `tools/healthcheck.py` probe the DM chat with the agent's default model when
   `LLM_MODEL` is unset**, instead of failing the probe as "not configured" on a
   working agent. An explicit blank `LLM_MODEL` still reads as blank, as it does
   for the agent, so preflight keeps reporting it.

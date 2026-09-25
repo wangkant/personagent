@@ -66,7 +66,10 @@ and other excluded platforms are kept; a `personagent_url` it would refuse is
 replaced with the loopback default. QQ routing changes only when you pass
 `--qq` or `--no-qq`, and the agent's `CONNECTOR_QQ_PLATFORMS` is kept in
 step with it. The wizard's AstrBot step offers the current allowlists as
-defaults, so Enter keeps them and `-` clears one.
+defaults, so Enter keeps them and `-` clears one. The first run after this
+plugin was renamed (see the CHANGELOG) carries across QQ routing and the
+settings that kept their names, but starts `groups`, `dm_users` and a
+non-local `personagent_url` empty.
 
 Then restart AstrBot and start the agent (see [Check it works](#check-it-works)).
 

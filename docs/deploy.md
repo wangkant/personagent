@@ -92,7 +92,9 @@ already has one it accepts (a loopback URL, tunnels included, or HTTPS).
 `--qq` takes `aiocqhttp` out of `excluded_platforms`; `--no-qq` puts it back;
 with neither, QQ routing stays as it is, and `CONNECTOR_QQ_PLATFORMS` follows
 whichever the plugin ends up doing. A first run leaves the allowlists empty;
-rerunning keeps them, and any other excluded platforms.
+rerunning keeps them, and any other excluded platforms. The first run after
+the plugin's rename to `astrbot_plugin_personagent` keeps QQ routing but
+starts the allowlists empty again (see the CHANGELOG).
 
 The plugin is default-deny: fill in `groups`, and for DMs `dm_users`, in
 AstrBot's WebUI; DMs are forwarded once `dm_users` is not empty (every key is

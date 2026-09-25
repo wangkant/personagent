@@ -172,8 +172,10 @@ Setting one up:
    persona's own number. Without
    [double puppeting](https://docs.mau.fi/bridges/general/double-puppeting.html),
    a message typed on the persona's phone reaches Matrix from that ghost, and
-   the bot would answer itself. `MATRIX_GROUPS=*` answers in every group portal
-   the bot is in; list room ids to choose.
+   the bot would answer itself. `MATRIX_GROUPS=*` forwards every group portal
+   the bot is in, and personagent then answers only in the rooms its
+   `ACCESS_GROUPS` lists as `matrix:!room:server`; list room ids here to
+   choose.
 
 ### Caveats of puppeting
 
