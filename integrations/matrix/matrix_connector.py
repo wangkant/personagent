@@ -73,6 +73,8 @@ TYPING_TIMEOUT_MS = 30_000
 TYPING_REFRESH_S = 20.0
 MAX_CONCURRENT_TURNS = 16
 RECENT_EVENTS = 1024
+# The wait after a failed sync: doubling from the first, up to the second.
+SYNC_RETRY_S = (1.0, 60.0)
 HTML_FORMAT = "org.matrix.custom.html"
 _BLOCK_TAGS = frozenset({"p", "div", "li", "blockquote", "pre", "tr", "ul", "ol", "table",
                          "h1", "h2", "h3", "h4", "h5", "h6"})
@@ -436,8 +438,8 @@ class MatrixConnector:
 
     `client` is a matrix-nio AsyncClient, or anything with the same few
     methods: room_send, room_typing, upload, download, room_get_event,
-    room_read_markers, join, list_direct_rooms, and the `rooms` and `user_id`
-    attributes."""
+    room_read_markers, join, list_direct_rooms, stop_sync_forever, and the
+    `rooms` and `user_id` attributes."""
 
     def __init__(self, client: Any, settings: Settings, agent: sdk.Connector, *,
                  decrypt: Optional[Callable[[bytes, str, str, str], bytes]] = None):
@@ -448,6 +450,10 @@ class MatrixConnector:
         self.direct_rooms: set[str] = set()
         self.pause_s = (0.8, 1.8)
         self.now: Callable[[], float] = time.time
+        self.sleep: Callable[[float], Any] = asyncio.sleep
+        # Why the homeserver logged the bot out, once it has.
+        self.revoked = ""
+        self._sync_failures = 0
         # event id -> (sender, text), so most replies resolve without a fetch.
         self._recent: collections.OrderedDict[str, tuple[str, str]] = collections.OrderedDict()
         self._typing: dict[str, int] = {}
@@ -538,6 +544,34 @@ class MatrixConnector:
         if is_direct:
             self.direct_rooms.add(room_id)
         logger.info("joined %s on an invite from %s", room_id, inviter)
+
+    # ----- the sync loop -----
+
+    async def on_sync(self, response: Any) -> None:
+        """nio response callback for SyncResponse."""
+        self._sync_failures = 0
+
+    async def on_sync_error(self, response: Any) -> None:
+        """nio response callback for SyncError. sync_forever retries a failed
+        sync at once and forever, but awaits this first: waiting here is the
+        backoff, and a revoked token stops the loop instead."""
+        code = str(getattr(response, "status_code", "") or "")
+        message = str(getattr(response, "message", "") or "")
+        if code == "M_UNKNOWN_TOKEN":
+            remedy = ("set a new MATRIX_ACCESS_TOKEN" if self.settings.access_token
+                      else "restart the connector to log in again with MATRIX_PASSWORD")
+            self.revoked = f"the homeserver logged the bot out ({code}: {message}); {remedy}"
+            logger.error("%s", self.revoked)
+            self.client.stop_sync_forever()
+            return
+        if code == "M_LIMIT_EXCEEDED":
+            return  # nio already waits out a rate limit before it retries
+        low, high = SYNC_RETRY_S
+        delay = min(low * 2 ** self._sync_failures, high)
+        self._sync_failures += 1
+        logger.warning("sync failed (%s: %s); retrying in %.0f s", code or "no errcode",
+                       message, delay)
+        await self.sleep(delay)
 
     # ----- inbound -----
 
@@ -1013,6 +1047,8 @@ async def run(settings: Settings, *, nio_module: Any = None,
         await connector.refresh_direct_rooms()
         client.add_event_callback(connector.on_room_event,
                                   (nio.RoomMessage, nio.StickerEvent, nio.MegolmEvent))
+        client.add_response_callback(connector.on_sync, nio.SyncResponse)
+        client.add_response_callback(connector.on_sync_error, nio.SyncError)
         logger.info("listening as %s on %s", client.user_id, settings.homeserver)
 
         jobs = [asyncio.ensure_future(client.sync_forever(timeout=30_000)),
@@ -1025,6 +1061,8 @@ async def run(settings: Settings, *, nio_module: Any = None,
             job.cancel()
         await asyncio.gather(*jobs, return_exceptions=True)
         await connector.drain()
+        if connector.revoked:
+            raise SystemExit(connector.revoked)
         for job in done:
             if not job.cancelled() and job.exception() is not None:
                 raise job.exception()

@@ -503,6 +503,12 @@ def fake_nio(rooms: list):
     class InviteMemberEvent(Event):
         pass
 
+    class SyncResponse(Obj):
+        pass
+
+    class SyncError(Obj):
+        pass
+
     class AsyncClientConfig:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -515,16 +521,28 @@ def fake_nio(rooms: list):
             self.user_id = user
             self.homeserver, self.config = homeserver, config
             self.callbacks: list = []
+            self.response_callbacks: list = []
             self.should_upload_keys = False
             self.closed = False
+            self.stopping = False
             self.syncs = 0
             AsyncClient.instances.append(self)
 
         def add_event_callback(self, callback, filter):
             self.callbacks.append((callback, filter))
 
+        def add_response_callback(self, callback, filter):
+            self.response_callbacks.append((callback, filter))
+
+        def stop_sync_forever(self):
+            self.stopping = True
+
         async def whoami(self):
             return Obj(user_id=BOT, device_id="DEV")
+
+        async def login(self, password, device_name=None):
+            self.user_id, self.device_id, self.access_token = BOT, "DEV", "from-password"
+            return Obj(user_id=BOT, device_id="DEV", access_token="from-password")
 
         def restore_login(self, user_id, device_id, access_token):
             self.user_id, self.device_id, self.access_token = user_id, device_id, access_token
@@ -544,14 +562,25 @@ def fake_nio(rooms: list):
 
         async def sync_forever(self, timeout=None, **_):
             await self._dispatch(nio.live)
-            await asyncio.Event().wait()
+            # As nio does: a failed sync goes to the response callbacks and is
+            # retried at once, until stop_sync_forever.
+            for response in nio.failures:
+                if self.stopping:
+                    return
+                self.syncs += 1
+                for callback, kinds in self.response_callbacks:
+                    if isinstance(response, kinds):
+                        await callback(response)
+            if not self.stopping:
+                await asyncio.Event().wait()
 
         async def close(self):
             self.closed = True
 
-    for cls in (RoomMessage, StickerEvent, MegolmEvent, InviteMemberEvent, AsyncClientConfig,
-                AsyncClient):
+    for cls in (RoomMessage, StickerEvent, MegolmEvent, InviteMemberEvent, SyncResponse,
+                SyncError, AsyncClientConfig, AsyncClient):
         setattr(nio, cls.__name__, cls)
+    nio.backlog, nio.live, nio.failures = [], [], []
     return nio
 
 
@@ -598,3 +627,41 @@ def test_run_skips_the_backlog_and_serves_events_and_the_outbox() -> None:
     check("encryption off unless asked", client.config.kwargs == {
         "encryption_enabled": False, "store_sync_tokens": False})
     check("closed", client.closed)
+
+
+def test_a_revoked_token_stops_the_connector_instead_of_spinning(tmp: Path) -> None:
+    # A token login needs a new token; a password login only a restart.
+    for access_token, remedy in (("t", "MATRIX_ACCESS_TOKEN"), ("", "restart")):
+        nio = fake_nio(rooms=[Room(GROUP, {BOT: "Nova", ALEX: "Alex"})])
+        nio.failures = [nio.SyncError(message="Invalid access token passed.",
+                                      status_code="M_UNKNOWN_TOKEN")] * 50
+        s = settings(outbox=False, access_token=access_token, password="pw", store_path=tmp)
+        with pytest.raises(SystemExit, match=remedy) as stopped:
+            asyncio.run(asyncio.wait_for(
+                mc.run(s, nio_module=nio, agent_client=agent_client([], [])), 2))
+        client = nio.AsyncClient.instances[0]
+        check("the reason is named", "Invalid access token passed." in str(stopped.value),
+              str(stopped.value))
+        check("no sync after the refusal", client.syncs == 2, str(client.syncs))
+        check("closed", client.closed)
+
+
+def test_a_failing_sync_backs_off_until_one_succeeds() -> None:
+    conn, _ = make()
+    delays: list = []
+
+    async def sleep(seconds: float) -> None:
+        delays.append(seconds)
+
+    async def main() -> None:
+        conn.sleep = sleep
+        for _ in range(8):
+            await conn.on_sync_error(Obj(message="Internal server error", status_code="M_UNKNOWN"))
+        await conn.on_sync_error(Obj(message="Too many requests", status_code="M_LIMIT_EXCEEDED"))
+        await conn.on_sync(Obj(next_batch="s9"))
+        await conn.on_sync_error(Obj(message="unknown error", status_code=None))
+
+    asyncio.run(main())
+    check("doubling up to a minute, nio's own rate-limit wait left alone, reset by a sync",
+          delays == [1, 2, 4, 8, 16, 32, 60, 60, 1], repr(delays))
+    check("a server error does not stop the connector", not conn.revoked)

@@ -96,6 +96,11 @@ To use an existing access token instead, set `MATRIX_ACCESS_TOKEN`; the
 connector asks the homeserver whose it is. Do not take the token of a session
 you use yourself: logging that session out also logs the bot out.
 
+When the homeserver logs the bot out (`M_UNKNOWN_TOKEN`), the connector stops
+with an error saying so. After a password login, starting it again logs in
+again; with `MATRIX_ACCESS_TOKEN`, set a new token first. Any other failed
+sync is retried after a wait that doubles up to a minute.
+
 ### Where the agent can run
 
 The rule is the protocol's: `PERSONAGENT_URL` must be a loopback address, or
