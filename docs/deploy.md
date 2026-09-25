@@ -231,7 +231,8 @@ on one host.
   `GATEWAY_TOKEN` blank it answers local requests only; with a token, **only**
   requests carrying a matching `X-Gateway-Token` header, even from loopback.
   It returns 503 when a critical probe fails or cannot run: the chat models,
-  or the OneBot bridge when `BOT_QQ` is set.
+  or the OneBot bridge when `BOT_QQ` is set and `GATEWAY_NATIVE_PLATFORMS`
+  is not (QQ on the direct ingress).
 - `python tools/healthcheck.py [--json]` runs the same probes plus the
   settings check, and exits non-zero in the same case.
 

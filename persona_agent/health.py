@@ -217,6 +217,10 @@ def run_checks() -> list:
         if fn is check_onebot and not os.getenv("BOT_QQ", "").strip():
             return {"name": name, "ok": None, "critical": False,
                     "detail": "not required (BOT_QQ is unset)", "ms": 0}
+        if fn is check_onebot and os.getenv("GATEWAY_NATIVE_PLATFORMS", "").strip():
+            # QQ arrives through a connector, which also sends; NapCat's HTTP
+            # server only adds the missed-mention sweep and a fallback.
+            critical = False
         t0 = time.time()
         try:
             ok, detail = fn()

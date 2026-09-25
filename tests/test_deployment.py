@@ -24,6 +24,17 @@ class DeploymentTests(unittest.TestCase):
         self.assertIsNone(results[0]['ok'])
         self.assertFalse(results[0]['critical'])
 
+    def test_qq_through_a_connector_does_not_require_onebot(self):
+        from persona_agent import health
+        env = {'BOT_QQ': '10000', 'GATEWAY_NATIVE_PLATFORMS': 'aiocqhttp'}
+        with patch.dict(os.environ, env), \
+                patch.object(health, 'CHECKS', [('OneBot bridge', health.check_onebot, True)]), \
+                patch.object(health, '_get', side_effect=OSError('connection refused')):
+            results = health.run_checks()
+        self.assertFalse(results[0]['ok'])
+        self.assertFalse(results[0]['critical'])
+        self.assertTrue(health.all_critical_ok(results))
+
     def test_endpoint_spellings(self):
         for base in ("https://example.org", "https://example.org/",
                      "https://example.org/v1", "https://example.org/v1/",
