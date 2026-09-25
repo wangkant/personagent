@@ -500,11 +500,17 @@ def _import_plugin_module():
         comp_mod.Image.fromBase64 = staticmethod(lambda b64: b64)
         api.message_components = comp_mod
 
-    plugin_path = (Path(__file__).resolve().parents[1] / "integrations" / "astrbot"
-                   / "astrbot_plugin_llm_persona_gateway" / "main.py")
+    plugin_dir = (Path(__file__).resolve().parents[1] / "integrations" / "astrbot"
+                  / "astrbot_plugin_llm_persona_gateway")
+    # A module of the plugin's package, as AstrBot imports it, so its
+    # relative imports resolve.
+    package = types.ModuleType("llm_persona_gateway_plugin")
+    package.__path__ = [str(plugin_dir)]
+    sys.modules["llm_persona_gateway_plugin"] = package
     spec = importlib.util.spec_from_file_location(
-        "llm_persona_gateway_plugin", str(plugin_path))
+        "llm_persona_gateway_plugin.main", str(plugin_dir / "main.py"))
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

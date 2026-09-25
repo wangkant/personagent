@@ -15,13 +15,27 @@ import httpx
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PLUGIN = (
-    ROOT
-    / "integrations"
-    / "astrbot"
-    / "astrbot_plugin_llm_persona_gateway"
-    / "main.py"
-)
+PLUGIN_DIR = ROOT / "integrations" / "astrbot" / "astrbot_plugin_llm_persona_gateway"
+PLUGIN = PLUGIN_DIR / "main.py"
+SDK = ROOT / "integrations" / "sdk" / "personagent_connector.py"
+_PACKAGE = "astrbot_gateway_tested"
+
+
+def _load_plugin_package():
+    """Import main.py the way AstrBot does, as a module of the plugin's
+    package, so its relative imports resolve."""
+    for name in tuple(sys.modules):
+        if name == _PACKAGE or name.startswith(_PACKAGE + "."):
+            sys.modules.pop(name)
+    package = types.ModuleType(_PACKAGE)
+    package.__path__ = [str(PLUGIN_DIR)]
+    sys.modules[_PACKAGE] = package
+    spec = importlib.util.spec_from_file_location(_PACKAGE + ".main", PLUGIN)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _import_plugin():
@@ -125,10 +139,7 @@ def _import_plugin():
     components.File = File
     components.Record = Record
 
-    spec = importlib.util.spec_from_file_location("astrbot_gateway_tested", PLUGIN)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
+    module = _load_plugin_package()
     module.Comp = components
     return module
 
@@ -226,6 +237,14 @@ def _plugin_instance(module, config):
     return plugin
 
 
+def test_the_vendored_sdk_is_the_sdk():
+    """The plugin ships integrations/sdk/personagent_connector.py as a copy
+    (AstrBot installs one folder); an edit to either must reach both."""
+    vendored = PLUGIN_DIR / "personagent_connector.py"
+    assert vendored.read_bytes() == SDK.read_bytes(), (
+        "copy integrations/sdk/personagent_connector.py into the plugin folder")
+
+
 def test_reply_component_preserves_quoted_message_id():
     module = _import_plugin()
     event = types.SimpleNamespace(
@@ -264,9 +283,9 @@ def test_signed_request_uses_canonical_body_and_replay_headers():
         },
     )
     real_time = module.time.time
-    real_token_hex = module.secrets.token_hex
+    real_token_hex = module.sdk.secrets.token_hex
     module.time.time = lambda: 1_725_000_000
-    module.secrets.token_hex = lambda _n: "00112233445566778899aabbccddeeff"
+    module.sdk.secrets.token_hex = lambda _n: "00112233445566778899aabbccddeeff"
     event = {"z": 1, "message": "你好", "a": [True, None]}
     expected_body = (
         '{"a":[true,null],"message":"你好","z":1}'.encode("utf-8")
@@ -282,7 +301,7 @@ def test_signed_request_uses_canonical_body_and_replay_headers():
         delivered, _owned, replies = asyncio.run(plugin._post_to_agent(event))
     finally:
         module.time.time = real_time
-        module.secrets.token_hex = real_token_hex
+        module.sdk.secrets.token_hex = real_token_hex
 
     assert delivered is True
     assert replies == [{"type": "text", "text": "ok"}]

@@ -45,12 +45,8 @@ plugin maps whichever is present back to the native component.
 """
 
 import asyncio
-import hashlib
-import hmac
-import json
 import random
 import re
-import secrets
 import time
 from urllib.parse import urlsplit
 
@@ -61,6 +57,8 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.platform import MessageType
 from astrbot.api.star import Context, Star
 import astrbot.api.message_components as Comp
+
+from . import personagent_connector as sdk
 
 DEFAULT_AGENT_URL = "http://127.0.0.1:8080/webhook/gateway"
 DEFAULT_TIMEOUT_S = 180
@@ -476,30 +474,9 @@ class LLMPersonaGateway(Star):
             logger.warning(f"llm_persona_gateway: refusing unsafe agent_url: {reason}")
             return False, False, []
 
-        body = json.dumps(
-            neutral_event,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        signed_ts = None
-        if token:
-            headers["X-Gateway-Token"] = token
-            signed_ts = int(time.time())
-            timestamp = str(signed_ts)
-            nonce = secrets.token_hex(16)
-            signed = timestamp.encode() + b"." + nonce.encode() + b"." + body
-            signature = hmac.new(
-                token.encode("utf-8"), signed, hashlib.sha256
-            ).hexdigest()
-            headers.update(
-                {
-                    "X-Gateway-Timestamp": timestamp,
-                    "X-Gateway-Nonce": nonce,
-                    "X-Gateway-Signature": f"sha256={signature}",
-                }
-            )
+        body = sdk.canonical_body(neutral_event)
+        headers = sdk.signed_headers(body, token)
+        signed_ts = int(headers["X-Gateway-Timestamp"]) if token else None
         # The signed timestamp above is minted ONCE and every retry resends it
         # unchanged -- that is deliberate (the agent un-burns a nonce when its
         # own write fails, precisely so a correct client can resend the same
