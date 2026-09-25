@@ -744,6 +744,9 @@ async def serve(config: Config) -> None:
     online = asyncio.Event()
 
     async def on_status(account: Any, status: Any) -> None:
+        # The platform name here is the one the allowlists and settings use.
+        logger.info("Satori login %s:%s is %s", account.platform, account.self_id,
+                    getattr(status, "name", status))
         if int(status) == 1:  # LoginStatus.ONLINE
             online.set()
 
