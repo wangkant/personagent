@@ -126,12 +126,12 @@ async def test_group_prompt_fences_history_as_data(tmp: Path) -> None:
         await agent.aclose()
 
     user_prompt = captured["messages"][0]["content"]
-    fenced = (f"{_USER_DATA_OPEN}[Mallory|qq=42] "
+    fenced = (f"{_USER_DATA_OPEN}[Mallory|id=42] "
               f"{attack} {web_desc}{_USER_DATA_CLOSE}")
     check("the history is one data span, enrichment nested inside",
           fenced in user_prompt, repr(user_prompt))
     check("what the scaffold repeats from the chat is framed too",
-          f"latest line is from {_USER_DATA_OPEN}Mallory (qq=42){_USER_DATA_CLOSE}"
+          f"latest line is from {_USER_DATA_OPEN}Mallory (id=42){_USER_DATA_CLOSE}"
           in user_prompt
           and f"Address {_USER_DATA_OPEN}Mallory{_USER_DATA_CLOSE} directly"
           in user_prompt
@@ -148,6 +148,47 @@ async def test_group_prompt_fences_history_as_data(tmp: Path) -> None:
     check("the system text stays out of the user prompt",
           "GROUP-SYSTEM-SECRET" not in user_prompt)
 
+
+async def test_the_group_prompt_assumes_no_platform(tmp: Path) -> None:
+    """The group prompt was written for QQ: speakers labelled qq=, an [AT:qq]
+    marker, a "not your BOT_QQ" that nothing substituted, and a bare-number
+    example that taught a Telegram model to write [AT:42], which the
+    forwarder cannot resolve. Ids are ids, and the example is spelled the
+    way this conversation's ids are."""
+    agent = make_agent(tmp)
+    prompts: dict = {}
+
+    async def fake_call(system, messages, **kwargs):
+        prompts.setdefault("system", system)
+        prompts.setdefault("users", []).append(messages[0]["content"])
+        return json.dumps({"reply": "PASS", "intent": "chat", "mem": ""})
+
+    agent._call_llm = fake_call
+    try:
+        for room, uid in (("telegram:-100", "telegram:42"), ("4242", "42"),
+                          ("we ird:1", "we ird:2")):
+            agent._append_buffer(room, "Alice", "anyone around tonight", uid)
+            agent.active_users[room].append((uid, "Alice"))
+            await agent._think(room, "judge")
+    finally:
+        await agent.aclose()
+
+    everything = prompts["system"] + "".join(prompts["users"])
+    check("no QQ spelling is left in the group prompt",
+          "BOT_QQ" not in everything and "qq=" not in everything
+          and "[AT:qq]" not in everything, repr(everything[-2000:]))
+    check("speakers are labelled by id",
+          "[Alice|id=telegram:42]" in prompts["users"][0])
+    hints = [next((line for line in user.splitlines()
+                   if "strike up a line" in line), "")
+             for user in prompts["users"]]
+    check("a Telegram room's @ example carries its prefix",
+          "e.g. [AT:telegram:123456]" in hints[0], repr(hints))
+    check("a QQ room's stays a bare number",
+          "e.g. [AT:123456]" in hints[1], repr(hints))
+    check("a platform name that does not look like one is not quoted",
+          "e.g. [AT:123456]" in hints[2] and "we ird" not in hints[2],
+          repr(hints))
 
 async def test_the_owner_prompt_has_a_subject_without_owner_name(
         tmp: Path) -> None:
@@ -430,7 +471,7 @@ async def test_a_long_link_descriptor_does_not_swallow_the_history(
           _balanced(user_prompt), repr(user_prompt))
     check("the trigger line sits outside every external span",
           user_prompt.rfind(_WEB_DESC_CLOSE)
-          < user_prompt.index("[Bob|qq=22] B what time is it"),
+          < user_prompt.index("[Bob|id=22] B what time is it"),
           repr(user_prompt))
     # split("\n"), not splitlines(): that also breaks at U+001E.
     focus = [line for line in user_prompt.split("\n")

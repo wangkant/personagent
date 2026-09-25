@@ -106,6 +106,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remove them before upgrading. `tools/candidates_admin.py`,
   `tools/bootstrap_from_history.py` and `try_chat.py` read the owners the same
   way the agent does.
+- **The group prompt no longer assumes QQ.** Speakers are labelled `id=`
+  rather than `qq=`, the mention marker is taught as `[AT:id]`, the bystander
+  rule says "not you" instead of naming a `BOT_QQ` placeholder nothing ever
+  filled in, and the example mention is spelled the way the conversation's ids
+  are (`[AT:telegram:123456]` in a Telegram room), where a bare number taught a
+  Telegram model to write mentions the forwarder could not resolve. This
+  changes the live QQ prompt text too, so the provider's prompt cache misses
+  once after upgrading.
 - **For code built on the engine:** `AgentSettings` gains `owner_ids` and
   `allowed_dm_users`, and the `owners` / `dm_users` properties that fold the
   old fields in; `owner_qq`, `gateway_owner_ids` and `private_allowed_qqs`

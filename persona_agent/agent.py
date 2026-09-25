@@ -189,6 +189,10 @@ _MEMORY_MERGE_MAX_DROPPED = 0.05
 _MEMORY_MERGE_MIN_SHARED = 4
 _MEMORY_MERGE_WINDOW_S = 6 * 3600.0
 
+# What a platform name has to look like to be quoted in an engine-written
+# prompt line (see _at_example).
+_PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
+
 # Conversations whose refusal has been logged, kept bounded: forwarded ids are
 # chosen by the forwarder, so an unbounded set would grow with every room.
 _MAX_REFUSALS_LOGGED = 4096
@@ -2403,7 +2407,7 @@ class Agent(ContentIngestion, Transport, Learning):
             name = _clean_prompt_source(m.get("name", ""))
             uid = _clean_prompt_source(m.get("user_id", ""))
             if uid:
-                return f"[{name}|qq={uid}] {m['text']}"
+                return f"[{name}|id={uid}] {m['text']}"
             return f"[{name}] {m['text']}"
         # The whole history is one data span inside the application's own
         # scaffold, so the instructions around it stay outside the frame.
@@ -2496,7 +2500,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         speaker_hint = (
             " (latest line is from "
-            f"{_fence_user_data(f'{latest_nick} (qq={latest_uid})')})"
+            f"{_fence_user_data(f'{latest_nick} (id={latest_uid})')})"
             if latest_nick else ""
         )
         # judge / proactive only: lets the model open at a specific member.
@@ -2549,7 +2553,8 @@ class Agent(ContentIngestion, Transport, Learning):
             at_hint = ""
             if active_text:
                 at_hint = (
-                    "- If you open at a specific person, lead with [AT:qq], e.g. [AT:123456] then your message\n"
+                    "- If you open at a specific person, lead with [AT:id], e.g. "
+                    f"{self._at_example(group_id)} then your message\n"
                 )
             user_prompt = (
                 f"{time_line}"
@@ -2569,7 +2574,8 @@ class Agent(ContentIngestion, Transport, Learning):
             at_hint = ""
             if active_text:
                 at_hint = (
-                    "- If you've got nothing specific to add, you can also strike up a line with an active member; to @ someone, lead with [AT:qq], e.g. [AT:123456] then your message\n"
+                    "- If you've got nothing specific to add, you can also strike up a line with an active member; to @ someone, lead with [AT:id], e.g. "
+                    f"{self._at_example(group_id)} then your message\n"
                 )
             user_prompt = (
                 f"{time_line}"
@@ -3748,6 +3754,18 @@ class Agent(ContentIngestion, Transport, Learning):
             + "\n\n".join(parts) +
             "\n</memories>\n"
         )
+
+    @staticmethod
+    def _at_example(group_id: str) -> str:
+        """An [AT:...] example spelled the way this conversation's ids are.
+
+        A bare QQ number taught the model on Telegram to write [AT:42], which
+        the forwarder cannot resolve. The platform name is forwarder-supplied,
+        so it reaches this engine-written line only if it looks like one."""
+        platform = channels.platform_of(group_id)
+        if channels.is_native(group_id) or not _PLATFORM_NAME_RE.fullmatch(platform):
+            return "[AT:123456]"
+        return f"[AT:{platform}:123456]"
 
     def _active_users_for_prompt(self, group_id: str) -> str:
         """Return the list of recently active group members; used in judge-mode prompts."""
