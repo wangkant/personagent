@@ -118,6 +118,47 @@ def test_connect_removes_the_plugin_under_its_retired_name(tmp_path) -> None:
           quickstart.RETIRED_PLUGIN_NAME not in out.getvalue(), out.getvalue())
 
 
+def test_an_upgrade_keeps_qq_routing_from_the_retired_config(tmp_path) -> None:
+    """Without --qq or --no-qq QQ routing stays as it was, including across
+    the plugin's rename; the keys that were renamed are not carried over."""
+    data = tmp_path / "data"
+    (data / "plugins").mkdir(parents=True)
+    retired = quickstart.retired_astrbot_config_path(data)
+    retired.parent.mkdir(parents=True)
+    retired.write_text("﻿" + json.dumps({
+        "excluded_platforms": [], "group_whitelist": ["123"], "timeout_s": 300,
+        "agent_url": "http://127.0.0.1:8080/webhook/gateway"}), encoding="utf-8")
+    env = tmp_path / ".env"
+    env.write_text("CONNECTOR_TOKEN=tok\n", encoding="utf-8")
+    values: dict = {}
+    with redirect_stdout(io.StringIO()):
+        quickstart.connect_astrbot(env, values, data_dir=data, qq=None, groups=None,
+                                   dm_users=None)
+    cfg = quickstart.read_astrbot_config(data)
+    check("upgrade: QQ stays routed", quickstart.astrbot_qq_routed(cfg), repr(cfg))
+    check("upgrade: CONNECTOR_QQ_PLATFORMS follows",
+          values.get("CONNECTOR_QQ_PLATFORMS") == "aiocqhttp", repr(values))
+    check("upgrade: a key that kept its name comes across", cfg["timeout_s"] == 300)
+    check("upgrade: renamed keys do not",
+          cfg["groups"] == [] and "group_whitelist" not in cfg
+          and cfg["personagent_url"] == "http://127.0.0.1:8080", repr(cfg))
+    check("upgrade: the retired config is removed", not retired.exists())
+
+
+def test_a_key_written_twice_is_read_and_written_as_dotenv_reads_it(tmp_path) -> None:
+    """dotenv takes the last line for a key. The wizard read the first and
+    rewrote only the first, so the plugin and the server could end up with
+    different tokens."""
+    env = tmp_path / ".env"
+    env.write_text("CONNECTOR_TOKEN=first\nOTHER=x\nCONNECTOR_TOKEN=last\n", encoding="utf-8")
+    check("dotenv: the last line is the value", quickstart._env_get(env, "CONNECTOR_TOKEN") == "last")
+    quickstart.write_env(env, {"CONNECTOR_TOKEN": "new"})
+    text = env.read_text(encoding="utf-8")
+    check("dotenv: every line for the key is rewritten",
+          text.count("CONNECTOR_TOKEN=new") == 2 and "first" not in text
+          and "last" not in text, text)
+
+
 def test_a_rerun_keeps_what_the_operator_set() -> None:
     """`--astrbot` passes no allowlists and no QQ choice. A re-run used to empty
     the allowlists, reset a proxied personagent_url and drop every other

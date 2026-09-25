@@ -42,6 +42,10 @@ PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
 # What earlier versions installed the plugin as; left beside the new one, it
 # would forward every message a second time.
 RETIRED_PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
+# Its config keys that kept their names; renamed ones are not carried over.
+RETIRED_CONFIG_KEPT = ("excluded_platforms", "timeout_s", "block_default",
+                       "forward_quoted_text", "quote_max_chars",
+                       "max_inline_image_bytes", "outbox_enabled", "outbox_wait_s")
 
 # Readable by its user only, matching `persona_agent.storage.PRIVATE_FILE_MODE`,
 # which this script cannot import: quickstart runs before the dependencies it
@@ -111,19 +115,22 @@ def copy_persona_template(lang: str) -> None:
 def set_env_values(env_text: str, values: dict) -> str:
     """Return env_text with each KEY=... line replaced by KEY=<value>.
 
-    Only the first uncommented occurrence of a key is rewritten; comments and
+    Every uncommented occurrence of a key is rewritten, so a key written twice
+    cannot keep an old value in the line dotenv reads (the last); comments and
     everything else are preserved so .env keeps doubling as the annotated
     reference. Keys that don't exist yet are appended at the end.
     """
     lines = env_text.splitlines()
-    remaining = dict(values)
+    found = set()
     for i, line in enumerate(lines):
         m = re.match(r"^([A-Z][A-Z0-9_]*)=", line)
-        if m and m.group(1) in remaining:
+        if m and m.group(1) in values:
             key = m.group(1)
-            lines[i] = f"{key}={remaining.pop(key)}"
-    for key, value in remaining.items():
-        lines.append(f"{key}={value}")
+            lines[i] = f"{key}={values[key]}"
+            found.add(key)
+    for key, value in values.items():
+        if key not in found:
+            lines.append(f"{key}={value}")
     out = "\n".join(lines)
     if env_text.endswith("\n") and not out.endswith("\n"):
         out += "\n"
@@ -181,14 +188,14 @@ def secure_env_file(env_path: Path) -> None:
 
 def _env_get(env_path: Path, key: str) -> str:
     """The current value of ``key`` in .env ('' if blank/missing), read the
-    way dotenv reads it: one pair of quotes, or an unquoted value up to an
-    inline `` #`` comment."""
+    way dotenv reads it: the last line for the key, one pair of quotes, or an
+    unquoted value up to an inline `` #`` comment."""
     if not env_path.exists():
         return ""
-    m = re.search(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
-    if not m:
+    found = re.findall(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
+    if not found:
         return ""
-    raw = m.group(1).strip()
+    raw = found[-1].strip()
     quoted = re.match(r"""^(["'])(.*?)\1""", raw)
     if quoted:
         return quoted.group(2)
@@ -341,13 +348,27 @@ def write_astrbot_config(data_dir: Path, cfg: dict) -> Path:
     return path
 
 
-def read_astrbot_config(data_dir: Path) -> dict:
-    path = astrbot_config_path(data_dir)
+def _read_json(path: Path) -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))  # AstrBot writes a BOM
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def retired_astrbot_config_path(data_dir: Path) -> Path:
+    return data_dir / "config" / f"{RETIRED_PLUGIN_NAME}_config.json"
+
+
+def read_astrbot_config(data_dir: Path) -> dict:
+    """The plugin's config; before its first run under the new name, the keys
+    of the retired plugin's config that kept their names, so an upgrade does
+    not switch QQ routing off."""
+    path = astrbot_config_path(data_dir)
+    if path.exists():
+        return _read_json(path)
+    retired = _read_json(retired_astrbot_config_path(data_dir))
+    return {k: retired[k] for k in RETIRED_CONFIG_KEPT if k in retired}
 
 
 def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | None,
@@ -382,7 +403,13 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
         native = ["aiocqhttp"] + native
     if ",".join(native) != ",".join(_clean_ids(current.split(","))):
         values["CONNECTOR_QQ_PLATFORMS"] = ",".join(native)
-    return write_astrbot_config(data_dir, cfg)
+    path = write_astrbot_config(data_dir, cfg)
+    retired = retired_astrbot_config_path(data_dir)
+    if retired.exists():
+        retired.unlink()
+        _info(f"removed {retired}, the older plugin's settings. QQ routing came "
+              "across; set groups and dm_users again in AstrBot's WebUI")
+    return path
 
 
 def _split_ids(raw: str) -> list[str]:
