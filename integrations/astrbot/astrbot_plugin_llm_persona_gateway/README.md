@@ -45,15 +45,17 @@ To skip all the wizard's questions, including the API key and bot name (set
 python quickstart.py --astrbot <AstrBot data dir>        # add --qq to route QQ as well
 ```
 
-This installs and configures the plugin but leaves the allowlists **empty**.
-Add them afterwards in the plugin settings. Run `python quickstart.py --help`
-for the flags that also switch on a platform in AstrBot.
+The first run leaves the allowlists **empty**: add them in the plugin
+settings. Run `python quickstart.py --help` for the flags that also switch on
+a platform in AstrBot.
 
-Running it again, or re-running the wizard's AstrBot step, rewrites the plugin
-config from scratch: allowlists empty (or whatever you type), `private_enabled`
-off, `agent_url` back to `http://127.0.0.1:<PORT>/webhook/gateway`, and
-`excluded_platforms` and the agent's `GATEWAY_NATIVE_PLATFORMS` set by whether
-you pass `--qq`. Re-check the plugin settings afterwards.
+Running it again is safe. The allowlists, `private_enabled`, any `agent_url`
+this plugin accepts (see [Where the agent can run](#where-the-agent-can-run)),
+and other excluded platforms are kept; an `agent_url` it would refuse is
+replaced with the loopback default. QQ routing changes only when you pass
+`--qq` or `--no-qq`, and the agent's `GATEWAY_NATIVE_PLATFORMS` is kept in
+step with it. The wizard's AstrBot step offers the current allowlists as
+defaults, so Enter keeps them and `-` clears one.
 
 Then restart AstrBot and start the agent (see [Check it works](#check-it-works)).
 

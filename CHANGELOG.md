@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Re-running `quickstart.py --astrbot` no longer undoes the AstrBot setup.**
+  It passed empty allowlists, so every re-run wiped the groups and DM senders
+  set in AstrBot's WebUI, turned DMs off, reset any `agent_url` (an HTTPS
+  proxy's or a tunnel's) to the default, dropped every other excluded
+  platform, and without `--qq` switched QQ routing off, while `--help`
+  promised re-running was safe. Values not given are now kept, and only an
+  `agent_url` the plugin would refuse is replaced; `--no-qq` is the explicit
+  way to stop routing QQ; `GATEWAY_NATIVE_PLATFORMS` follows whatever the
+  plugin ends up forwarding, keeping its other entries; and the wizard offers
+  the current allowlists and QQ choice as its defaults and writes `.env`
+  before asking about platforms. When `.env` has no `GATEWAY_TOKEN`, the
+  plugin's existing token is reused if it would survive `.env`. `.env` values
+  are now read as dotenv reads them, quotes and inline comments included.
 - **A failed persona-lineage save no longer drops the earlier revisions out of
   scope.** `extend()` rolls the new hash back when the save fails, and the
   agent then registered a lineage without its own hash, so everything learned

@@ -22,6 +22,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -175,11 +176,19 @@ def secure_env_file(env_path: Path) -> None:
 
 
 def _env_get(env_path: Path, key: str) -> str:
-    """The current value of ``key`` in .env ('' if blank/missing)."""
+    """The current value of ``key`` in .env ('' if blank/missing), read the
+    way dotenv reads it: one pair of quotes, or an unquoted value up to an
+    inline `` #`` comment."""
     if not env_path.exists():
         return ""
     m = re.search(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
-    return (m.group(1).strip() if m else "")
+    if not m:
+        return ""
+    raw = m.group(1).strip()
+    quoted = re.match(r"""^(["'])(.*?)\1""", raw)
+    if quoted:
+        return quoted.group(2)
+    return re.split(r"\s+#", raw, maxsplit=1)[0].strip()
 
 
 def _env_current_key(env_path: Path) -> str:
@@ -249,16 +258,67 @@ def install_astrbot_plugin(data_dir: Path) -> Path:
     return dest
 
 
+def agent_url_accepted(url: str, token: str) -> bool:
+    """The forwarder's own rule (``_endpoint_is_allowed`` in the plugin): a
+    loopback URL, tunnels included, or HTTPS elsewhere with a token."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host or parsed.scheme not in ("http", "https"):
+        return False
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    return parsed.scheme == "https" and bool(token)
+
+
+def _clean_ids(ids) -> list[str]:
+    return [str(i).strip() for i in ids if str(i).strip()]
+
+
+def _excluded_as_plugin_reads_it(value) -> list[str]:
+    # The plugin iterates whatever is stored, so a string is a list of letters.
+    return [str(p) for p in (value or [])]
+
+
+def astrbot_qq_routed(cfg: dict) -> bool:
+    """Whether a plugin config forwards QQ (aiocqhttp) to the agent."""
+    return "aiocqhttp" not in _excluded_as_plugin_reads_it(cfg.get("excluded_platforms"))
+
+
 def astrbot_plugin_config(existing: dict | None, *, agent_url: str, token: str,
-                          qq: bool, groups: list[str], private: list[str]) -> dict:
-    """The plugin's config document. Keys we do not manage are kept."""
+                          qq: bool | None, groups: list[str] | None,
+                          private: list[str] | None) -> dict:
+    """The plugin's config document. A value passed as None keeps what the
+    operator set (in AstrBot's WebUI, or on an earlier run), and so do keys we
+    do not manage: re-running must not undo a setup."""
     cfg = dict(existing or {})
-    cfg["agent_url"] = agent_url
+    # Only a URL the forwarder would refuse is replaced; any other was chosen
+    # by the operator, an SSH tunnel on another loopback port included.
+    if not agent_url_accepted(str(cfg.get("agent_url") or "").strip(), token):
+        cfg["agent_url"] = agent_url
     cfg["gateway_token"] = token
-    cfg["excluded_platforms"] = [] if qq else ["aiocqhttp"]
-    cfg["group_whitelist"] = [str(g).strip() for g in groups if str(g).strip()]
-    cfg["private_whitelist"] = [str(u).strip() for u in private if str(u).strip()]
-    cfg["private_enabled"] = bool(cfg["private_whitelist"])
+    if "excluded_platforms" not in cfg:
+        cfg["excluded_platforms"] = [] if qq else ["aiocqhttp"]
+    elif qq is not None:
+        excluded = cfg["excluded_platforms"]
+        excluded = (_clean_ids(excluded) if isinstance(excluded, list)
+                    else _split_ids(str(excluded or "")))
+        excluded = [p for p in excluded if p != "aiocqhttp"]
+        cfg["excluded_platforms"] = excluded if qq else excluded + ["aiocqhttp"]
+    if groups is not None:
+        cfg["group_whitelist"] = _clean_ids(groups)
+    cfg.setdefault("group_whitelist", [])
+    if private is not None:
+        before = cfg.get("private_whitelist")
+        cfg["private_whitelist"] = _clean_ids(private)
+        # The switch follows the list only when the list changed, so an
+        # operator who turned DMs off keeps them off.
+        if cfg["private_whitelist"] != (_clean_ids(before) if isinstance(before, list) else before):
+            cfg["private_enabled"] = bool(cfg["private_whitelist"])
+    cfg.setdefault("private_whitelist", [])
+    cfg.setdefault("private_enabled", False)     # the plugin reads a missing key as off
     cfg.setdefault("timeout_s", 180)
     cfg.setdefault("block_default", True)
     return cfg
@@ -286,25 +346,49 @@ def read_astrbot_config(data_dir: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool,
-                    groups: list[str], private: list[str]) -> Path:
+def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | None,
+                    groups: list[str] | None, private: list[str] | None) -> Path:
     """Install the plugin and write both halves of the handshake: the shared
-    token into .env (via ``values``) and the plugin config into AstrBot."""
-    token = values.get("GATEWAY_TOKEN") or _env_get(env_path, "GATEWAY_TOKEN") \
-        or secrets.token_urlsafe(32)
+    token into .env (via ``values``) and the plugin config into AstrBot.
+    ``qq``, ``groups`` and ``private`` left as None keep their current values."""
+    existing = read_astrbot_config(data_dir)
+    plugin_token = str(existing.get("gateway_token") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", plugin_token):
+        plugin_token = ""     # would not survive a round trip through .env
+    token = (values.get("GATEWAY_TOKEN") or _env_get(env_path, "GATEWAY_TOKEN")
+             or plugin_token or secrets.token_urlsafe(32))
     values["GATEWAY_TOKEN"] = token
-    values["GATEWAY_NATIVE_PLATFORMS"] = "aiocqhttp" if qq else ""
     port = _env_get(env_path, "PORT") or "8080"
+    local_url = f"http://127.0.0.1:{port}/webhook/gateway"
     install_astrbot_plugin(data_dir)
-    cfg = astrbot_plugin_config(
-        read_astrbot_config(data_dir),
-        agent_url=f"http://127.0.0.1:{port}/webhook/gateway", token=token,
-        qq=qq, groups=groups, private=private)
+    cfg = astrbot_plugin_config(existing, agent_url=local_url, token=token,
+                                qq=qq, groups=groups, private=private)
+    old_url = str(existing.get("agent_url") or "").strip()
+    if old_url and old_url != cfg["agent_url"]:
+        _info(f"agent_url {old_url} would be refused by the plugin; now {cfg['agent_url']}")
+    elif cfg["agent_url"] != local_url:
+        _info(f"keeping agent_url {cfg['agent_url']} (this agent listens on port {port})")
+    # .env follows the plugin: QQ forwarded without native ids would file every
+    # QQ conversation under a new name.
+    current = _env_get(env_path, "GATEWAY_NATIVE_PLATFORMS")
+    native = [p for p in _clean_ids(current.split(",")) if p != "aiocqhttp"]
+    if astrbot_qq_routed(cfg):
+        native = ["aiocqhttp"] + native
+    if ",".join(native) != ",".join(_clean_ids(current.split(","))):
+        values["GATEWAY_NATIVE_PLATFORMS"] = ",".join(native)
     return write_astrbot_config(data_dir, cfg)
 
 
 def _split_ids(raw: str) -> list[str]:
     return [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
+
+
+def _ask_ids(label: str, empty_hint: str, current) -> list[str]:
+    """A comma-separated id list; Enter keeps ``current``, "-" empties it."""
+    current = _clean_ids(current) if isinstance(current, list) else []
+    hint = "Enter keeps these, '-' clears" if current else empty_hint
+    raw = _ask(f"{label} ({hint})", default=",".join(current))
+    return [] if raw.strip() == "-" else _split_ids(raw)
 
 
 # AstrBot platform adapters the wizard can switch on. The shapes are AstrBot's
@@ -523,7 +607,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                 break
             print(f"    no plugins/ folder under {astrbot_data}; start AstrBot once, "
                   "or give the path to its data directory")
-        qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?", default_yes=True)
+        existing = read_astrbot_config(astrbot_data)
+        qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?",
+                     default_yes=astrbot_qq_routed(existing) if existing else True)
         if qq:
             values["BOT_QQ"] = _ask("Bot account's QQ number",
                                     default=current["BOT_QQ"], required=True)
@@ -534,15 +620,18 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                 values["OWNER_QQ"] = owner_qq
                 values["OWNER_NAME"] = _ask("Owner display name",
                                             default=current["OWNER_NAME"], required=True)
-        groups = _split_ids(_ask("Group / channel IDs the persona should join, "
-                                 "comma-separated (as AstrBot shows them; "
-                                 "empty = none yet)"))
-        private = _split_ids(_ask("Sender IDs allowed to DM it, comma-separated "
-                                  "(empty = no DMs)"))
+        groups = _ask_ids("Group / channel IDs the persona should join, comma-separated, "
+                          "as AstrBot shows them", "empty = none yet",
+                          existing.get("group_whitelist"))
+        private = _ask_ids("Sender IDs allowed to DM it, comma-separated",
+                           "empty = no DMs", existing.get("private_whitelist"))
         if qq:
             values["QQ_GROUPS"] = ",".join(g for g in groups if g.isdigit())
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
                                    qq=qq, groups=groups, private=private)
+        # Written now, not after the platform question: a Ctrl-C there must
+        # not leave the plugin forwarding QQ to an agent that expects none.
+        write_env(env_path, values)
         _info(f"plugin installed under {astrbot_data / 'plugins' / PLUGIN_NAME}")
         _info(f"plugin config written to {cfg_path}")
         if astrbot_main_config_path(astrbot_data).exists():
@@ -590,7 +679,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
 
 
 USAGE = """\
-usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq] [--platform KIND --token T ...]]
+usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq | --no-qq] [--platform KIND --token T ...]]
 
 Sets the project up: creates .venv, installs requirements.txt, copies
 .env.example to .env and persona.example to persona.txt, then runs a short
@@ -601,10 +690,13 @@ written to both sides, allowlists written).
   --no-input          skip the wizard (classic bootstrap; also implied by a
                       non-interactive stdin, e.g. CI or a pipe)
   --astrbot DATA_DIR  without the wizard: install and configure the AstrBot
-                      plugin against that data directory (allowlists stay
-                      empty; fill them in the plugin config or the WebUI)
-  --qq                with --astrbot: route QQ through AstrBot too
-                      (GATEWAY_NATIVE_PLATFORMS=aiocqhttp)
+                      plugin against that data directory (a first run leaves
+                      the allowlists empty; fill them in the plugin config or
+                      the WebUI, and later runs keep them)
+  --qq                with --astrbot: route QQ through AstrBot too (adds
+                      aiocqhttp to GATEWAY_NATIVE_PLATFORMS)
+  --no-qq             with --astrbot: stop routing QQ through AstrBot
+                      (without either flag, QQ routing is left as it is)
   --platform KIND     with --astrbot: switch on that adapter in AstrBot's own
                       config (telegram, discord, slack, kook, lark), using
                       --token T (and --app-token T for slack, or
@@ -634,7 +726,10 @@ def main() -> None:
             sys.exit("--astrbot needs the AstrBot data directory")
         astrbot_dir = Path(argv[i + 1]).expanduser()
         del argv[i:i + 2]
-    qq_flag = "--qq" in argv
+    if "--qq" in argv and "--no-qq" in argv:
+        print(USAGE)
+        sys.exit("--qq and --no-qq contradict each other")
+    qq_choice = True if "--qq" in argv else False if "--no-qq" in argv else None
 
     def take(flag: str) -> str:
         if flag not in argv:
@@ -650,13 +745,13 @@ def main() -> None:
     platform_kind = take("--platform").lower()
     platform_creds = {"token": take("--token"), "app_token": take("--app-token"),
                       "app_id": take("--app-id"), "app_secret": take("--app-secret")}
-    unknown = [arg for arg in argv if arg not in ("--no-input", "--qq")]
+    unknown = [arg for arg in argv if arg not in ("--no-input", "--qq", "--no-qq")]
     if unknown:
         print(USAGE)
         sys.exit(f"unrecognised argument(s): {' '.join(unknown)}")
-    if (qq_flag or platform_kind) and astrbot_dir is None:
+    if (qq_choice is not None or platform_kind) and astrbot_dir is None:
         print(USAGE)
-        sys.exit("--qq and --platform only make sense with --astrbot")
+        sys.exit("--qq, --no-qq and --platform only make sense with --astrbot")
 
     no_input = "--no-input" in argv or astrbot_dir is not None
     venv = ensure_venv()
@@ -683,11 +778,15 @@ def main() -> None:
             sys.exit(f"no plugins/ folder under {astrbot_dir}; is that AstrBot's data directory?")
         values: dict = {}
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_dir,
-                                   qq=qq_flag, groups=[], private=[])
+                                   qq=qq_choice, groups=None, private=None)
         write_env(env_path, values)
         _info(f"AstrBot plugin installed and configured: {cfg_path}")
-        _info("allowlists are empty: add group_whitelist / private_whitelist there "
-              "or in AstrBot's WebUI, then restart AstrBot")
+        cfg = read_astrbot_config(astrbot_dir)
+        if not cfg.get("group_whitelist") and not cfg.get("private_whitelist"):
+            _info("allowlists are empty: add group_whitelist / private_whitelist there "
+                  "or in AstrBot's WebUI, then restart AstrBot")
+        else:
+            _info("kept the existing allowlists; restart AstrBot to load the plugin")
         if platform_kind:
             token = platform_creds["token"]
             creds = {"telegram": {"telegram_token": token}, "discord": {"discord_token": token},

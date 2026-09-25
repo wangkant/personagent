@@ -58,15 +58,16 @@ personagent never logs in to a chat platform. AstrBot does, and the plugin in
 to `POST /webhook/gateway` and relays the replies in the response. This is the
 supported path for every platform, QQ included.
 
-`python quickstart.py` connects the two; `--astrbot <AstrBot data dir> [--qq]`
+`python quickstart.py` connects the two; `--astrbot <AstrBot data dir>`
 does it without the wizard. It copies the plugin into `<data dir>/plugins/`,
-writes one `GATEWAY_TOKEN` to both `.env` and the plugin config, and points
-`agent_url` at `http://127.0.0.1:<PORT>/webhook/gateway`. With QQ it sets
-`excluded_platforms` to `[]` and `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`; without
-QQ it sets `["aiocqhttp"]` and blanks the setting. Either way it replaces the
-whole list. Rerunning `--astrbot` also empties the allowlists, turns
-`private_enabled` off and resets `agent_url`, so re-check the plugin settings
-afterwards.
+writes one `GATEWAY_TOKEN` to both `.env` and the plugin config, and sets
+`agent_url` to `http://127.0.0.1:<PORT>/webhook/gateway` unless the plugin
+already has one it accepts (a loopback URL, tunnels included, or HTTPS).
+`--qq` takes `aiocqhttp` out of `excluded_platforms`; `--no-qq` puts it back;
+with neither, QQ routing stays as it is, and `GATEWAY_NATIVE_PLATFORMS` follows
+whichever the plugin ends up doing. A first run leaves the allowlists empty;
+rerunning keeps them, and keeps `private_enabled` and any other excluded
+platforms.
 
 The plugin is default-deny: fill in `group_whitelist`, and for DMs
 `private_enabled` and `private_whitelist`, in AstrBot's WebUI (every key is in
