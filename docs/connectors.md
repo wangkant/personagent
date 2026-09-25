@@ -102,7 +102,7 @@ Optional fields that turn on more of the agent:
 | Field | Meaning |
 |---|---|
 | `forwarder_id` | a stable id for this connector instance; required for the outbox |
-| `reply_handle` | whatever the connector needs to address this conversation later without an incoming message: AstrBot's `unified_msg_origin`, a Matrix room id, a Satori channel id. Opaque to the agent, stored per conversation, handed back in outbox deliveries |
+| `reply_handle` | whatever the connector needs to address this conversation later without an incoming message: AstrBot's `unified_msg_origin`, a Matrix room id, a Satori login plus channel id. Opaque to the agent, stored per conversation, handed back in outbox deliveries |
 | `caps` | what the connector can do: `outbox` (it polls the outbox and can send unprompted), `quote_text` (reply segments carry the quoted text) |
 | `prefiltered` | `true` (default) when the connector applied its own allowlist; `false` makes the agent's lists the only filter |
 | `proactive` | this private event is a cue the connector wrote, not the person's words; see "Speaking first without the outbox" |
