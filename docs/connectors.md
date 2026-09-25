@@ -169,7 +169,11 @@ something is queued, then answers:
 ```
 
 `items` uses the same shape as `replies`. `reason` is `proactive`,
-`follow_up` or `excuse`.
+`follow_up` or `excuse`. `conversation_key` is the agent's name for the
+conversation (`private:telegram:42` for a DM); `conversation_id` is the raw
+id the event carried (the user id for a DM). The agent remembers
+`reply_handle`, `forwarder_id` and `caps` from the latest admitted event in
+each conversation, so a conversation becomes reachable once it has sent one.
 
 Report each delivery on the next pull, in `acks`:
 
@@ -190,14 +194,21 @@ Rules:
 - **In order.** Send one conversation's deliveries in the order received;
   different conversations may go in parallel.
 - **Only what is acked counts.** The agent treats an unacked delivery as not
-  sent, and remembers only what was acked as sent.
+  sent, and remembers only what was acked as sent. It waits for the ack until
+  `expires_in_s` plus 60 seconds after handing the delivery out.
 - **Liveness.** A connector that has not pulled for 90 seconds is treated as
-  gone: nothing is queued for its conversations until it pulls again.
+  gone: nothing is queued for its conversations until it pulls again, and
+  what was queued for it ends as not sent.
+- **`unsupported` sticks.** After that ack the agent stops queueing for the
+  conversation until an event brings a different `reply_handle`.
 - **Body kinds.** The signature does not cover the URL path, so the agent
   refuses an event body on the outbox endpoint and an `outbox.pull` body on the
-  event endpoint.
+  event endpoint (`400`, code `invalid_schema`). An event may say
+  `"kind": "event"`; one with any other `kind` is refused.
 
-A 404 means the agent is older than the outbox; pull again after a long pause.
+A 404 without a `code` means the agent is older than the outbox; `404` with
+code `outbox_disabled` means the operator turned it off (`GATEWAY_OUTBOX`).
+Either way, pull again after a long pause.
 
 ## Speaking first without the outbox
 

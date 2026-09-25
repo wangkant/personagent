@@ -24,9 +24,11 @@ from . import candidates as candidate_ledger_mod
 from . import channels
 from . import evidence as evidence_mod
 from . import lineage as lineage_mod
+from . import outbox as outbox_mod
 from . import reactions
 from .gateway import (GATEWAY_SELF_ID, GatewaySink, current_sink,
-                      event_prefiltered, synthesize_onebot_payload)
+                      event_forwarder, event_prefiltered,
+                      synthesize_onebot_payload)
 from .paths import (
     ROOT,
     read_jsonl,
@@ -310,6 +312,7 @@ class Agent(ContentIngestion, Transport, Learning):
         self.private_allowed_qqs: set = set(s.private_allowed_qqs)
         self.gateway_owner_ids: set = set(s.gateway_owner_ids)
         self.gateway_native_platforms: set = set(s.gateway_native_platforms)
+        self.gateway_outbox = s.gateway_outbox
 
         self.memory_file = resolve_runtime_state_file(s.memory_file)
         self.memory_max = s.memory_max_per_group
@@ -474,6 +477,12 @@ class Agent(ContentIngestion, Transport, Learning):
         # is replying to → wrong-person / crossed-thread replies (off-topic).
         self._msg_index: dict[str, str] = {}
         self._msg_index_cap = 1000
+
+        # How to reach each gateway conversation unprompted, and the queue
+        # its connector pulls from (outbox.py). Loaded on first use.
+        self.gateway_handles = outbox_mod.HandleStore(
+            resolve_runtime_state_file("gateway_handles.json"))
+        self.outbox = outbox_mod.Outbox(self.gateway_handles)
 
     def _load_seen_msg_ids(self) -> None:
         """Refill the de-dup ring from disk; a missing or broken file is fine."""
@@ -778,6 +787,19 @@ class Agent(ContentIngestion, Transport, Learning):
                 else:
                     self._gateway_inflight.pop(gateway_key, None)
                 self._trim_gateway_convs()
+        # Only an admitted turn may leave an address behind: a forwarder must
+        # not plant handles for conversations the agent refuses.
+        forwarder = event_forwarder(event)
+        if (gateway_key and sink.owned
+                and (forwarder["reply_handle"] or forwarder["forwarder_id"])):
+            private = payload.get("message_type") == "private"
+            self.gateway_handles.record(
+                gateway_key, **forwarder, platform=sink.platform,
+                native=sink.native,
+                message_type="private" if private else "group",
+                conversation_id=str(event.get(
+                    "user_id" if private else "conversation_id") or ""),
+                prefiltered=sink.prefiltered)
         # `owned` is not `handled`. See GatewaySink: a forwarder needs to know
         # whether to suppress its own model, and "produced no reply" is the
         # wrong signal for that — silence is frequently the persona's answer.
@@ -2751,6 +2773,7 @@ class Agent(ContentIngestion, Transport, Learning):
         lost across a restart. Called from the lifespan shutdown hook."""
         self._persist_seen(force=True)
         self.pending_reactions.flush()
+        self.gateway_handles.flush(force=True)
         try:
             self.stickers._save(force=True)
         except Exception as e:
@@ -2770,6 +2793,8 @@ class Agent(ContentIngestion, Transport, Learning):
         below makes both say so once.
         """
         self._closed = True
+        # Waiting deliveries end as not sent, and open long-polls return.
+        await self.outbox.aclose()
         tasks = [task for task in self._bg_tasks
                  if task is not asyncio.current_task()]
         for task in tasks:

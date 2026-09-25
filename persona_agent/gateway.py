@@ -274,6 +274,10 @@ class GatewaySink:
         return True
 
 
+#: The body `kind` of an inbound event, which may be left out. The signature
+#: does not cover the URL path, so each endpoint checks the body is its own.
+EVENT_KIND = "event"
+
 #: Longest forwarder id and reply handle kept; a longer one is ignored. A
 #: handle is opaque and echoed back verbatim, so it is refused, not cut.
 MAX_FORWARDER_ID_CHARS = 128
@@ -281,7 +285,7 @@ MAX_REPLY_HANDLE_CHARS = 512
 _MAX_CAPS = 16
 
 
-def _opaque(value, limit: int) -> str:
+def opaque_value(value, limit: int) -> str:
     """A string the agent stores and hands back, or "" when it is not one:
     not a string, blank, too long, or carrying control characters."""
     if not isinstance(value, str):
@@ -302,13 +306,13 @@ def event_forwarder(event: dict) -> dict:
     raw_caps = event.get("caps")
     if isinstance(raw_caps, (list, tuple)):
         for cap in raw_caps[:_MAX_CAPS]:
-            name = _opaque(cap, 32).lower()
+            name = opaque_value(cap, 32).lower()
             if name and ":" not in name:
                 caps.add(name)
     return {
-        "forwarder_id": _opaque(event.get("forwarder_id"),
+        "forwarder_id": opaque_value(event.get("forwarder_id"),
                                 MAX_FORWARDER_ID_CHARS),
-        "reply_handle": _opaque(event.get("reply_handle"),
+        "reply_handle": opaque_value(event.get("reply_handle"),
                                 MAX_REPLY_HANDLE_CHARS),
         "caps": tuple(sorted(caps)),
     }

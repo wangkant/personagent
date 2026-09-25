@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   text the sender did not write. An `emoji` segment's `name` reaches the model
   as `[emoji: name]`, and an image with `"sticker": true` reads as a sticker.
   Old forwarders send none of this and see no change.
+- **The outbox: `POST /webhook/gateway/outbox`.** A connector that sends
+  `forwarder_id`, `reply_handle` and `"caps": ["outbox"]` on its events can
+  long-poll this endpoint for messages no request is waiting for
+  (docs/connectors.md). The agent remembers each admitted conversation's
+  handle in `runtime/gateway_handles.json` (bounded, keyed like every other
+  store), hands each delivery out once, and counts as said only what the
+  connector acks as sent. Same token, signature and replay guard as
+  `/webhook/gateway`, with its own concurrency budget so a long-poll never
+  takes a turn's slot. The body names its kind (`outbox.pull`), and each
+  endpoint refuses the other's. `GATEWAY_OUTBOX=false` turns it off.
 
 ### Deprecated
 

@@ -162,6 +162,12 @@ class AgentSettings:
     #: something the forwarder asserts: a bare id carries QQ authority — it is
     #: what the QQ entries of the lists above are compared against.
     gateway_native_platforms: tuple[str, ...] = ()
+    #: Whether a connector that pulls the outbox may be sent messages nobody
+    #: asked for: openers, the follow-up question, the excuse for a failed
+    #: model call (``GATEWAY_OUTBOX``). Off, the outbox endpoint answers 404
+    #: and those stay QQ-only, as they were before the outbox existed.
+    gateway_outbox: bool = field(
+        default_factory=lambda: env_bool("GATEWAY_OUTBOX", True))
 
     # ---- self-evaluation --------------------------------------------------
     eval_enable: bool = True
@@ -448,6 +454,7 @@ class AgentSettings:
                 "PROACTIVE_DM_COOLDOWN", 86400, minimum=0, env=env),
             proactive_dm_prob=env_float(
                 "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0, env=env),
+            gateway_outbox=env_bool("GATEWAY_OUTBOX", True, env=env),
             evolve_auto=env_bool("EVOLVE_AUTO", False, env=env),
             evolve_interval_hours=env_float(
                 "EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0, env=env),

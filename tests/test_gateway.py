@@ -624,6 +624,7 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     a._seen_msg_file = tmp / "seen_msg_ids.json"
     a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
+    a.gateway_handles.path = tmp / "gateway_handles.json"
     # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
     # into memory BEFORE we redirected the paths above. Clear them so tests run
     # against clean state (a stray production message_id would flake-dedupe).

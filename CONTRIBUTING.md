@@ -123,6 +123,7 @@ other modules by name. One concern per module:
 | `persona_agent/evolution.py` | Low-score eval → diagnosis → BAD/OK pair, dedup, pool trimming (pure logic) |
 | `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
+| `persona_agent/outbox.py` | Messages no request is waiting for: each gateway conversation's reply handle, and the queue a connector pulls from `/webhook/gateway/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
 | `persona_agent/access.py` | Who the owner is and who is admitted, per platform: `OWNER_IDS`, `ALLOWED_GROUPS`, `ALLOWED_DM_USERS` and the old names folded into them (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |

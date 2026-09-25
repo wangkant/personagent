@@ -25,7 +25,9 @@ from starlette.requests import ClientDisconnect
 from persona_agent import __version__, preflight
 from persona_agent.agent import Agent
 from persona_agent.config_env import env_bool, env_int, env_str
+from persona_agent.gateway import EVENT_KIND
 from persona_agent.health import run_checks, all_critical_ok
+from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import RuntimeInstanceLock, atomic_write_text
@@ -213,6 +215,10 @@ MAX_INFLIGHT_WEBHOOKS = env_int(
 # that the two can no longer starve each other.
 MAX_INFLIGHT_GATEWAY = env_int(
     "MAX_INFLIGHT_GATEWAY", MAX_INFLIGHT_WEBHOOKS, minimum=1, maximum=4096)
+# The outbox's own budget: a long-poll holds its slot for up to 30 s while
+# costing nothing, so it must never take a slot a turn needs. One pull per
+# connector is the normal load.
+MAX_INFLIGHT_OUTBOX = 16
 # Whether to build the agent at all. Off leaves the HTTP layer answering
 # health checks and accepting (then dropping) events.
 AGENT_ENABLE = env_bool("AGENT_ENABLE", True)
@@ -481,6 +487,7 @@ def _onebot_event_is_fresh(
 
 _webhook_admission = AdmissionLimiter(MAX_INFLIGHT_WEBHOOKS)
 _gateway_admission = AdmissionLimiter(MAX_INFLIGHT_GATEWAY)
+_outbox_admission = AdmissionLimiter(MAX_INFLIGHT_OUTBOX)
 _gateway_replay = ReplayGuard(
     state_file=runtime_dir() / "gateway_nonces.json")
 
@@ -900,6 +907,10 @@ async def _gateway_webhook_admitted(request: Request):
         # A body that parses to JSON null/list/string would otherwise hit
         # event.get(...) in synthesize_onebot_payload and 500.
         event = {}
+    if event.get("kind", EVENT_KIND) != EVENT_KIND:
+        # The signature does not cover the path: a signed outbox pull posted
+        # here must not be read as an event.
+        return _error(400, "invalid_schema", "not an event body")
     if not _validate_event_payload(event, gateway=True):
         return _error(400, "invalid_schema", "invalid gateway event schema")
     if not _gateway_event_is_fresh(event):
@@ -908,6 +919,63 @@ async def _gateway_webhook_admitted(request: Request):
     if agent is None:
         return {"handled": False, "replies": []}
     return await agent.handle_gateway(event)
+
+
+@app.post("/webhook/gateway/outbox")
+async def gateway_outbox(request: Request):
+    """Where a connector pulls messages nobody asked for: proactive openers,
+    the follow-up question after a rejection, the excuse for a failed model
+    call (docs/connectors.md, "Outbox").
+
+    A LONG-POLL: the request is held up to ``wait_s`` seconds (at most 30)
+    until something is queued for this connector's conversations. Each
+    delivery is handed out once and never again; the connector reports what
+    happened in ``acks`` on its next pull, and only what it acks as sent is
+    remembered as said. A connector that has not pulled for 90 seconds is
+    treated as gone.
+
+    Same authentication, replay guard and error codes as
+    ``/webhook/gateway``. The body must be ``{"kind": "outbox.pull", ...}``,
+    because the signature does not cover the path. ``404`` with code
+    ``outbox_disabled`` means ``GATEWAY_OUTBOX`` is off (a 404 without a code
+    is an agent older than the outbox).
+    """
+    peer = request.client.host if request.client is not None else ""
+    if not _request_peer_is_allowed(peer, GATEWAY_TOKEN):
+        return _error(403, "unauthenticated", "authentication required")
+    refused = _refuse_non_local(request, GATEWAY_TOKEN)
+    if refused is not None:
+        return refused
+    if GATEWAY_TOKEN and not _ct_equal(
+            request.headers.get("x-gateway-token", ""), GATEWAY_TOKEN):
+        return _error(403, "invalid_envelope",
+                      "invalid, stale, or replayed gateway envelope")
+    if not await _outbox_admission.try_acquire():
+        return _error(429, "capacity_exceeded", "outbox capacity exceeded",
+                      retry_after=5)
+    try:
+        return await _gateway_outbox_admitted(request)
+    finally:
+        await _outbox_admission.release()
+
+
+async def _gateway_outbox_admitted(request: Request):
+    body = await _read_webhook_body(request)
+    if isinstance(body, JSONResponse):
+        return body
+    if not _verify_gateway_envelope(body, request.headers, GATEWAY_TOKEN):
+        return _error(403, "invalid_envelope",
+                      "invalid, stale, or replayed gateway envelope")
+    try:
+        pull = parse_pull(json.loads(body or b"{}"))
+    except Exception:
+        pull = None
+    if pull is None:
+        return _error(400, "invalid_schema", "not an outbox pull")
+    if agent is None or not agent.gateway_outbox:
+        return _error(404, "outbox_disabled", "the outbox is turned off")
+    return await agent.outbox.pull(**pull)
+
 
 if __name__ == "__main__":
     import uvicorn
