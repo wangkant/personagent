@@ -233,7 +233,7 @@ class Learning:
             peers=peers,
             now=time.time(),
             policy=self.promotion_policy,
-            owner_id=str(getattr(self, "owner_qq", "") or ""),
+            owner_ids=self._owners(),
         )
 
     def _rebuild_promoted_views(

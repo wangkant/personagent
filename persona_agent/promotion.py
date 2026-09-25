@@ -358,13 +358,14 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
 
 def decide(cand: dict, *, linked_events, related_events=(), peers=(),
            now: float = 0.0, policy: Policy = DEFAULT_POLICY,
-           owner_id: str = "") -> Decision:
+           owner_id: str = "", owner_ids=()) -> Decision:
     """Should `cand` be promoted automatically, right now.
 
     `linked_events` are the events recorded as supporting it, `related_events`
     every event about the same reply (searched for contradictions), `peers` the
-    other candidates (searched for conflicting proposals). `owner_id` is the
-    configured owner, who is exempt from the distinct-speaker requirement.
+    other candidates (searched for conflicting proposals). `owner_ids` are the
+    owner's accounts, exempt from the distinct-speaker requirement;
+    `owner_id` is the single-account spelling it had before.
     """
     if not policy.auto_promote:
         return Decision(False, "automatic promotion disabled (PROMOTE_AUTO)")
@@ -431,7 +432,9 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     # and delayed elicitation has the agent *ask* for that second one. The
     # owner is exempt: whoever deployed the agent may teach it alone.
     speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
-    owner_spoke = bool(owner_id) and str(owner_id) in speakers
+    # Compared as stored: make_event cuts speaker_id at 64 characters.
+    owners = {evidence._text(o, 64) for o in (owner_id, *owner_ids)} - {""}
+    owner_spoke = bool(owners & speakers)
     # `not speakers` means no event carried attribution at all — an adapter
     # that does not supply speaker ids, or older events from before the field
     # existed. Missing data must not veto: fall back to the event count rather

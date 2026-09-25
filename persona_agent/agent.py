@@ -19,13 +19,14 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from . import access
 from . import candidates as candidate_ledger_mod
 from . import channels
 from . import evidence as evidence_mod
 from . import lineage as lineage_mod
 from . import reactions
 from .gateway import (GATEWAY_SELF_ID, GatewaySink, current_sink,
-                      synthesize_onebot_payload)
+                      event_prefiltered, synthesize_onebot_payload)
 from .paths import (
     ROOT,
     read_jsonl,
@@ -188,6 +189,10 @@ _MEMORY_MERGE_MAX_DROPPED = 0.05
 _MEMORY_MERGE_MIN_SHARED = 4
 _MEMORY_MERGE_WINDOW_S = 6 * 3600.0
 
+# Conversations whose refusal has been logged, kept bounded: forwarded ids are
+# chosen by the forwarder, so an unbounded set would grow with every room.
+_MAX_REFUSALS_LOGGED = 4096
+
 
 class Agent(ContentIngestion, Transport, Learning):
     def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
@@ -295,7 +300,9 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # Sets, not the settings' tuples: these are read on every inbound
         # message and edited in place by the tests and the admin paths.
+        self.owner_ids: set = set(s.owner_ids)
         self.allowed_groups: set = set(s.allowed_groups)
+        self.allowed_dm_users: set = set(s.allowed_dm_users)
         self.private_allowed_qqs: set = set(s.private_allowed_qqs)
         self.gateway_owner_ids: set = set(s.gateway_owner_ids)
         self.gateway_native_platforms: set = set(s.gateway_native_platforms)
@@ -384,6 +391,8 @@ class Agent(ContentIngestion, Transport, Learning):
         # _touch_gateway_conv.
         self._gateway_conv_lru: dict[str, float] = {}
         self._gateway_inflight: dict[str, int] = defaultdict(int)
+        # Admission refusals already logged; see _log_refusal.
+        self._refusals_logged: dict[str, None] = {}
 
         # Bound at construction, like the rest of the buffer's shape: a later
         # change to self.context_len must not silently give new conversations
@@ -744,6 +753,7 @@ class Agent(ContentIngestion, Transport, Learning):
             platform=sink_platform,
             native=sink_platform in (self.gateway_native_platforms or ()),
             bot_id=self._self_mention_id(),
+            prefiltered=event_prefiltered(event),
         )
         tok = current_sink.set(sink)
         # Read off `event` (synthesize drops unknown keys) and passed as an
@@ -781,6 +791,36 @@ class Agent(ContentIngestion, Transport, Learning):
         if sink is not None:
             sink.owned = True
 
+    def _owners(self) -> frozenset[str]:
+        """Every owner account, canonical: OWNER_IDS and its old names.
+        Re-read on each call because the parts are live attributes the tests
+        and admin paths edit; the sets are tiny."""
+        return access.parse_ids(
+            self.owner_ids, (self.owner_qq,), self.gateway_owner_ids,
+            native_platforms=self.gateway_native_platforms)
+
+    def _dm_allowlist(self) -> frozenset[str]:
+        """ALLOWED_DM_USERS and PRIVATE_ALLOWED_QQS, canonical."""
+        return access.parse_ids(
+            self.allowed_dm_users, self.private_allowed_qqs,
+            native_platforms=self.gateway_native_platforms)
+
+    def _group_allowlist(self) -> frozenset[str]:
+        """ALLOWED_GROUPS (QQ_GROUPS folded in), canonical."""
+        return access.parse_ids(
+            self.allowed_groups, native_platforms=self.gateway_native_platforms)
+
+    def _log_refusal(self, conv_key: str, reason: str) -> None:
+        """Say once per conversation why it is not answered. Silent refusals
+        are one of the reasons deploy.md lists for "it never replies"."""
+        key = f"{conv_key}\x00{reason}"
+        if key in self._refusals_logged:
+            return
+        self._refusals_logged[key] = None
+        if len(self._refusals_logged) > _MAX_REFUSALS_LOGGED:
+            self._refusals_logged.pop(next(iter(self._refusals_logged)))
+        logger.info("[Agent] not answering %s: %s", conv_key, reason)
+
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
         if not self.enabled:
@@ -798,21 +838,27 @@ class Agent(ContentIngestion, Transport, Learning):
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
 
-        # Gateway DMs skip the QQ whitelist only when the sink contextvar is
-        # set (unforgeable from /webhook/qq) AND the id is namespaced: a bare
-        # id carries QQ authority and must be measured against the whitelist.
+        # Admission, per platform (access.py). The sink is set only by
+        # handle_gateway, so /webhook/qq cannot claim to be a forwarder: there
+        # a namespaced id is forged, and a bare one is QQ's to gate.
+        sink = current_sink.get()
+        via_forwarder = sink is not None
+        prefiltered = getattr(sink, "prefiltered", True)
         if message_type == "private":
-            is_owner = (bool(self.owner_qq) and user_id == self.owner_qq) \
-                or user_id in self.gateway_owner_ids
-            if current_sink.get() is None or channels.is_native(user_id):
-                if not is_owner and user_id not in self.private_allowed_qqs:
-                    return False
+            owners = self._owners()
+            refusal = access.dm_refusal(
+                user_id, owners, self._dm_allowlist(),
+                via_forwarder=via_forwarder, prefiltered=prefiltered)
+            if refusal:
+                self._log_refusal(channels.dm_routing_key(user_id), refusal)
+                return False
+            is_owner = access.is_owner(user_id, owners)
             self._claim_gateway_turn()
             if mid is not None:
                 self._remember_msg_id(mid)
             # Gateway DM keys are forwarder-chosen → register in the LRU so an
             # over-the-cap flood evicts the least-recently-active conversation.
-            if current_sink.get() is not None and not channels.is_native(user_id):
+            if via_forwarder and not channels.is_native(user_id):
                 self._touch_gateway_conv(channels.dm_routing_key(user_id))
             # `proactive` is honoured on the private path only, which can
             # hand the cue to the model for one call. A group event carrying
@@ -824,15 +870,13 @@ class Agent(ContentIngestion, Transport, Learning):
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
             return False
-        # QQ group whitelist (QQ_GROUPS) applies to every BARE group id, from
-        # either door. A namespaced gateway group like "telegram:-100..." can
-        # never appear in QQ_GROUPS, so the forwarder plugin's own
-        # group_whitelist is the access filter for those. But a forwarder in
-        # GATEWAY_NATIVE_PLATFORMS mints bare ids, and those are spelled the
-        # way QQ_GROUPS is — so they get measured against it like any other.
-        if self.allowed_groups \
-                and (current_sink.get() is None or channels.is_native(group_id)) \
-                and group_id not in self.allowed_groups:
+        # A bare id is QQ's from either door, a native forwarder's included,
+        # so it is measured against the QQ entries like any other.
+        refusal = access.group_refusal(
+            group_id, self._group_allowlist(),
+            via_forwarder=via_forwarder, prefiltered=prefiltered)
+        if refusal:
+            self._log_refusal(group_id, refusal)
             return False
         self._claim_gateway_turn()
         if mid is not None:
@@ -847,7 +891,7 @@ class Agent(ContentIngestion, Transport, Learning):
                         "supported; dropped (group=%s)", group_id)
             return False
         # Gateway group keys are forwarder-chosen → register in the LRU.
-        if current_sink.get() is not None and not channels.is_native(group_id):
+        if via_forwarder and not channels.is_native(group_id):
             self._touch_gateway_conv(group_id)
 
         has_image = any(
@@ -889,7 +933,7 @@ class Agent(ContentIngestion, Transport, Learning):
         addressed = is_at or is_called
         is_noise = len(text.strip()) < 4 and not addressed
 
-        is_owner_msg = bool(self.owner_qq) and user_id == self.owner_qq
+        is_owner_msg = access.is_owner(user_id, self._owners())
 
         # Reaction learning: is this message a directed reaction to a recent
         # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
@@ -1024,7 +1068,8 @@ class Agent(ContentIngestion, Transport, Learning):
                 # the image won the seq race without carrying @/name), keep the
                 # owner persona rather than dropping to plain called and losing
                 # the closer register.
-                mode = "owner" if (self.owner_qq and sticky["user_id"] == self.owner_qq) else "called"
+                mode = ("owner" if access.is_owner(sticky["user_id"], self._owners())
+                        else "called")
                 user_id = sticky["user_id"]
                 nickname = sticky["nickname"]
                 caller_override = (nickname, user_id)
@@ -2468,7 +2513,7 @@ class Agent(ContentIngestion, Transport, Learning):
             )
         elif mode == "owner":
             # OWNER_NAME is optional and ships empty, while owner mode needs
-            # only OWNER_QQ: unguarded, both lines lost their subject
+            # only an owner id: unguarded, both lines lost their subject
             # ("latest line is from , the owner").
             owner_ref = self.owner_name or "the owner"
             owner_from = f"{owner_ref}, the owner" if self.owner_name else owner_ref
@@ -2543,7 +2588,7 @@ class Agent(ContentIngestion, Transport, Learning):
         user_prompt += blind_note
 
         owner_block = ""
-        if self.owner_qq and self.owner_name:
+        if self.owner_name and self._owners():
             rel = self.owner_relationship or ""
             rel_clause = f"({rel}, " if rel else "("
             owner_block = (
@@ -2741,7 +2786,7 @@ class Agent(ContentIngestion, Transport, Learning):
     async def _maybe_proactive_groups(self) -> bool:
         """At most one proactive group message per tick. Returns True if sent."""
         now = time.time()
-        groups = list(self.buffers.keys()) or list(self.allowed_groups)
+        groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
         for gid in groups:
             # Gateway conversations ("<platform>:<id>") are inbound-only;
@@ -2801,10 +2846,13 @@ class Agent(ContentIngestion, Transport, Learning):
         return False
 
     async def _maybe_proactive_dms(self) -> bool:
-        """At most one proactive DM per tick, to the owner or a whitelisted QQ
-        that has DMed the bot before this run. Returns True if sent."""
+        """At most one proactive DM per tick, to an owner or an allowed DM user
+        on QQ who has DMed the bot before this run. Returns True if sent."""
         now = time.time()
-        targets = list(self.private_allowed_qqs | ({self.owner_qq} if self.owner_qq else set()))
+        owners = self._owners()
+        # QQ only: NapCat is the one channel that can open a DM unprompted.
+        targets = [uid for uid in self._dm_allowlist() | owners
+                   if channels.is_native(uid)]
         random.shuffle(targets)
         for uid in targets:
             last_act = self.last_dm_activity_at.get(uid, 0.0)
@@ -2818,7 +2866,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 continue
             if random.random() > self.proactive_dm_prob:
                 continue
-            is_owner = bool(self.owner_qq) and uid == self.owner_qq
+            is_owner = access.is_owner(uid, owners)
             pkey = channels.dm_routing_key(uid)
             try:
                 async with self.locks[pkey]:
@@ -3625,8 +3673,7 @@ class Agent(ContentIngestion, Transport, Learning):
             for m in self.buffers.get(group_id, [])
             if m.get("user_id")
         }
-        if self.owner_qq:
-            present_uids.add(self.owner_qq)
+        present_uids |= self._owners()
 
         now = time.time()
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
@@ -3765,7 +3812,7 @@ class Agent(ContentIngestion, Transport, Learning):
         user_name: str = "",
     ) -> Optional[str]:
         remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
-        is_owner = bool(user_id) and user_id == self.owner_qq
+        is_owner = access.is_owner(user_id, self._owners())
         if learned_pat.search(text):
             return self._learned_summary(group_id)
         m = remember_pat.search(text)
@@ -3952,8 +3999,12 @@ class Agent(ContentIngestion, Transport, Learning):
             uid = m.get("user_id", "")
             if nm and len(nm) >= 2 and uid:
                 name_to_uid.setdefault(nm, uid)
-        if self.owner_qq and self.owner_name and len(self.owner_name) >= 2:
-            name_to_uid.setdefault(self.owner_name, self.owner_qq)
+        # The owner's account on this platform, so a Telegram room does not
+        # attribute them to their QQ number when it knows their Telegram one.
+        owner_uid = access.owner_on(channels.platform_of(group_id),
+                                    self._owners())
+        if owner_uid and self.owner_name and len(self.owner_name) >= 2:
+            name_to_uid.setdefault(self.owner_name, owner_uid)
         for nm, uid in name_to_uid.items():
             if nm in text:
                 return uid, nm

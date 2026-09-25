@@ -99,9 +99,9 @@ def is_native(key: str) -> bool:
     """Does this key claim NATIVE-platform authority.
 
     True for "123456" and "private:777", false for "telegram:c1" and
-    "dm:telegram:1". OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are all
-    compared against bare ids, so a key that reads as native is asking to be
-    measured against them — whichever door it arrived through. That is the
+    "dm:telegram:1". The QQ entries of OWNER_IDS, ALLOWED_GROUPS and
+    ALLOWED_DM_USERS are bare ids, so a key that reads as native is asking to
+    be measured against them — whichever door it arrived through. That is the
     question the whitelist gates have to ask: a forwarder authorized to mint
     native ids must not thereby escape the whitelists those ids belong to.
     """

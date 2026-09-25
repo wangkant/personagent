@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=False)
 
 import httpx
+from persona_agent import access, channels
 from persona_agent.ingestion import safe_fetch_url
 from persona_agent.paths import resolve_runtime_state_file
 from persona_agent.stickers import _IMAGE_EXT
@@ -39,9 +40,11 @@ from persona_agent.storage import atomic_write_text
 from persona_agent.textproc import _detect_image_mime
 
 NAPCAT_API = os.getenv("NAPCAT_API", "http://127.0.0.1:3000").rstrip("/")
-OWNER_QQ = os.getenv("OWNER_QQ", "")
 BOT_QQ = os.getenv("BOT_QQ", "")
-QQ_GROUPS = [g.strip() for g in os.getenv("QQ_GROUPS", "").split(",") if g.strip()]
+# NapCat history is QQ's, so only the QQ entries of the shared settings apply.
+_IDENTITY = access.identity_from_env()
+OWNER_QQS = frozenset(o for o in _IDENTITY.owners if channels.is_native(o))
+QQ_GROUPS = sorted(g for g in _IDENTITY.groups if channels.is_native(g))
 
 # Sticker binaries remain under stickers/auto so existing libraries and file
 # allowlists keep working. Their PII-bearing text metadata lives in runtime/.
@@ -153,7 +156,7 @@ def classify_message(msg: dict) -> dict:
 
 # ============ Owner profile ============
 def compute_owner_profile(classified: list[dict]) -> dict:
-    owner_msgs = [c for c in classified if c["user_id"] == OWNER_QQ]
+    owner_msgs = [c for c in classified if c["user_id"] in OWNER_QQS]
     total = len(owner_msgs)
     if total == 0:
         return {"total_msgs": 0}
@@ -331,19 +334,20 @@ async def main():
     p.add_argument("--limit", type=int, default=2000,
                    help="messages to pull per group (default 2000)")
     p.add_argument("--group", default="",
-                   help="only process this group; defaults to QQ_GROUPS")
+                   help="only process this group; defaults to the QQ "
+                        "entries of ALLOWED_GROUPS")
     p.add_argument("--no-stickers", action="store_true",
                    help="compute owner profile only, skip sticker download")
     p.add_argument("--no-profile", action="store_true",
                    help="download stickers only, skip profile")
     args = p.parse_args()
 
-    if not OWNER_QQ:
-        logger.error("OWNER_QQ not configured")
+    if not OWNER_QQS:
+        logger.error("no QQ owner: set OWNER_IDS=qq:<number>")
         return 1
     groups = [args.group] if args.group else QQ_GROUPS
     if not groups:
-        logger.error("QQ_GROUPS not configured")
+        logger.error("no QQ groups: pass --group or set ALLOWED_GROUPS")
         return 1
 
     all_messages: list[dict] = []
@@ -354,8 +358,9 @@ async def main():
         all_messages.extend(msgs)
 
     classified = [classify_message(m) for m in all_messages]
-    owner_count = sum(1 for c in classified if c["user_id"] == OWNER_QQ)
-    logger.info("total %d messages, of which owner (%s) sent %d", len(classified), OWNER_QQ, owner_count)
+    owner_count = sum(1 for c in classified if c["user_id"] in OWNER_QQS)
+    logger.info("total %d messages, of which owner (%s) sent %d", len(classified),
+                ",".join(sorted(OWNER_QQS)), owner_count)
 
     if not args.no_profile:
         profile = compute_owner_profile(classified)

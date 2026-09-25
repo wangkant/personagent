@@ -24,7 +24,7 @@ Two ways in, and the difference between them is deliberate:
   test suite wants: an agent it configured, not one the surrounding ``.env``
   configured behind its back.
 * ``AgentSettings.from_env()`` — additionally reads the deployment settings
-  (``LLM_API_KEY``, ``BOT_QQ``, ``OWNER_QQ``, …) out of the environment. This
+  (``LLM_API_KEY``, ``BOT_NAME``, ``OWNER_IDS``, …) out of the environment. This
   is the bot process, and nothing but ``main.py`` should want it.
 
 The operational knobs — the proactive loop, the evolution loop, reaction
@@ -40,8 +40,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
-from . import promotion
-from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool, env_csv,
+from . import access, promotion
+from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool,
                          env_float, env_int, env_str, vision_endpoint_from_env)
 from .preflight import private_model_from_env
 
@@ -131,26 +131,36 @@ class AgentSettings:
     on_reply: Optional[Callable[[str, str], Awaitable[None]]] = None
 
     # ---- who may talk to it -----------------------------------------------
-    #: Group listen whitelist (``QQ_GROUPS``); empty = listen everywhere.
+    # Entries are "<platform>:<id>", a bare id being QQ (see access.py). The
+    # old QQ-only names still work, folded in by union.
+    #: The owner's accounts (``OWNER_IDS``), one person on every platform.
+    #: ``owner_qq`` and ``gateway_owner_ids`` are its old spellings; the
+    #: ``owners`` property is all three together.
+    owner_ids: tuple[str, ...] = ()
+    #: Groups the agent admits (``ALLOWED_GROUPS``, with ``QQ_GROUPS`` folded
+    #: in), per platform: a platform with no entries is not restricted here.
     #: Without an in-code gate a bot invited into N groups replies in all of
     #: them regardless of the setting.
     allowed_groups: tuple[str, ...] = field(
-        default_factory=lambda: env_csv("QQ_GROUPS"))
-    #: Private-chat whitelist. ``owner_qq`` is always allowed; these are the
-    #: additional QQs that may DM the bot, and they take the "ordinary friend"
-    #: branch rather than the closer owner override.
+        default_factory=lambda: access.identity_from_env().merged(
+            "ALLOWED_GROUPS"))
+    #: Who else may DM the bot (``ALLOWED_DM_USERS``). Owners always may;
+    #: these take the "ordinary friend" branch rather than the owner's.
+    allowed_dm_users: tuple[str, ...] = field(
+        default_factory=lambda: access.identity_from_env().written[
+            "ALLOWED_DM_USERS"])
+    #: ``PRIVATE_ALLOWED_QQS``, the old name of ``allowed_dm_users``; the
+    #: ``dm_users`` property is both together.
     private_allowed_qqs: tuple[str, ...] = field(
-        default_factory=lambda: env_csv("PRIVATE_ALLOWED_QQS"))
-    #: Gateway DM owners: platform-prefixed ids (e.g. ``telegram:12345``) that
-    #: get the owner branch. The gateway path itself is open — the forwarding
-    #: plugin's config is the access filter — so this only selects the persona.
+        default_factory=lambda: access.identity_from_env().written[
+            "PRIVATE_ALLOWED_QQS"])
+    #: ``GATEWAY_OWNER_IDS``, an old name of ``owner_ids``.
     gateway_owner_ids: tuple[str, ...] = ()
     #: Forwarder platforms whose ids are minted BARE instead of namespaced, so
     #: a QQ message relayed by a gateway lands on the same keys NapCat would
     #: have produced. Empty by default, and an operator setting rather than
     #: something the forwarder asserts: a bare id carries QQ authority — it is
-    #: what ``owner_qq``, ``allowed_groups`` and ``private_allowed_qqs`` are
-    #: compared against.
+    #: what the QQ entries of the lists above are compared against.
     gateway_native_platforms: tuple[str, ...] = ()
 
     # ---- self-evaluation --------------------------------------------------
@@ -287,7 +297,6 @@ class AgentSettings:
         self.vision_base_url = (
             str(self.vision_base_url).rstrip("/") if self.vision_base_url else "")
         self.bot_qq = str(self.bot_qq)
-        self.owner_qq = str(self.owner_qq) if self.owner_qq else ""
         self.vision_model = (self.vision_model or "").strip()
         self.tavily_key = (self.tavily_key or "").strip()
         self.message_debounce_sec = max(0.0, self.message_debounce_sec)
@@ -304,17 +313,31 @@ class AgentSettings:
         self.eval_model = self.eval_model or self.fallback_model or self.model
         self.evolve_model = self.evolve_model or self.eval_model
         self.react_model = self.react_model or self.judge_model
-        # Accept any iterable of ids from a caller; store the canonical form.
-        self.allowed_groups = self._ids(self.allowed_groups)
-        self.private_allowed_qqs = self._ids(self.private_allowed_qqs)
-        self.gateway_owner_ids = self._ids(self.gateway_owner_ids)
-        self.gateway_native_platforms = self._ids(self.gateway_native_platforms)
+        # Accept any iterable of ids from a caller; store the canonical form,
+        # so "qq:1" and a native forwarder's "aiocqhttp:1" both read as "1".
+        natives = self.gateway_native_platforms = access.split_ids(
+            self.gateway_native_platforms)
+        self.owner_qq = (access.canonical_id(self.owner_qq, natives)
+                         if self.owner_qq else "")
+        for name in ("owner_ids", "gateway_owner_ids", "allowed_groups",
+                     "allowed_dm_users", "private_allowed_qqs"):
+            setattr(self, name, access.canonical_ids(
+                getattr(self, name), native_platforms=natives))
 
-    @staticmethod
-    def _ids(values) -> tuple[str, ...]:
-        """One id list, as trimmed non-empty strings."""
-        return tuple(
-            str(value).strip() for value in (values or ()) if str(value).strip())
+    @property
+    def owners(self) -> frozenset[str]:
+        """Every owner account: ``owner_ids``, ``owner_qq`` and
+        ``gateway_owner_ids`` together."""
+        return access.parse_ids(
+            self.owner_ids, (self.owner_qq,), self.gateway_owner_ids,
+            native_platforms=self.gateway_native_platforms)
+
+    @property
+    def dm_users(self) -> frozenset[str]:
+        """Everyone besides the owners who may DM the bot."""
+        return access.parse_ids(
+            self.allowed_dm_users, self.private_allowed_qqs,
+            native_platforms=self.gateway_native_platforms)
 
     @property
     def evolve_interval(self) -> int:
@@ -337,6 +360,7 @@ class AgentSettings:
             return env_str(name, default, strip=strip, env=env)
 
         vision_key, vision_base = vision_endpoint_from_env(env)
+        identity = access.identity_from_env(env)
         defaults = dict(
             api_key=_str("LLM_API_KEY"),
             base_url=_str("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
@@ -354,7 +378,8 @@ class AgentSettings:
             memory_file=_str("AGENT_MEMORY_FILE", "memory.json"),
             memory_max_per_group=env_int(
                 "AGENT_MEMORY_MAX", 50, minimum=1, maximum=10_000, env=env),
-            owner_qq=_str("OWNER_QQ"),
+            owner_ids=identity.written["OWNER_IDS"],
+            owner_qq="".join(identity.written["OWNER_QQ"]),
             owner_name=_str("OWNER_NAME"),
             owner_relationship=_str("OWNER_RELATIONSHIP"),
             fallback_model=_str("FALLBACK_MODEL"),
@@ -377,9 +402,8 @@ class AgentSettings:
             vision_base_url=vision_base,
             tavily_key=_str("TAVILY_API_KEY"),
             lang=_str("AGENT_LANG", "en", strip=True).lower(),
-            gateway_owner_ids=env_csv("GATEWAY_OWNER_IDS", env=env),
-            gateway_native_platforms=env_csv(
-                "GATEWAY_NATIVE_PLATFORMS", env=env),
+            gateway_owner_ids=identity.written["GATEWAY_OWNER_IDS"],
+            gateway_native_platforms=identity.native_platforms,
         )
         # The operational knobs are read by the field defaults, which go
         # through `os.environ` directly. An explicit `env` mapping has to reach
@@ -388,6 +412,16 @@ class AgentSettings:
             defaults.update(cls._operational_from_env(env))
         defaults.update(overrides)
         return cls(**defaults)
+
+    @staticmethod
+    def _access_from_env(env) -> dict:
+        """The admission lists, which are operational knobs too."""
+        identity = access.identity_from_env(env)
+        return dict(
+            allowed_groups=identity.merged("ALLOWED_GROUPS"),
+            allowed_dm_users=identity.written["ALLOWED_DM_USERS"],
+            private_allowed_qqs=identity.written["PRIVATE_ALLOWED_QQS"],
+        )
 
     @classmethod
     def _operational_from_env(cls, env) -> dict:
@@ -398,8 +432,7 @@ class AgentSettings:
             api_max_retries=env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env),
             llm_timeout=env_float("LLM_TIMEOUT", 120.0, minimum=1.0, env=env),
             persona_version=env_str("PERSONA_VERSION", "", strip=True, env=env),
-            allowed_groups=env_csv("QQ_GROUPS", env=env),
-            private_allowed_qqs=env_csv("PRIVATE_ALLOWED_QQS", env=env),
+            **cls._access_from_env(env),
             proactive_enable=env_bool("PROACTIVE_ENABLE", False, env=env),
             proactive_interval=env_int(
                 "PROACTIVE_INTERVAL", 1500, minimum=1, env=env),

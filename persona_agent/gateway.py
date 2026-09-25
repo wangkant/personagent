@@ -28,8 +28,15 @@ Neutral inbound event schema (the body of POST /webhook/gateway):
         | {"type": "reply"}
       ],
       "raw_text":        str,
-      "proactive":       bool?                   # see below
+      "proactive":       bool?,                  # see below
+      "prefiltered":     bool?                   # default true; see below
     }
+
+`prefiltered` says whether the forwarder applied its own allowlist. Absent or
+true, a platform with no ALLOWED_GROUPS / ALLOWED_DM_USERS entries is left to
+the forwarder, as it always was; false makes the agent's lists the only
+filter, so that platform is refused until it has entries. It can only
+tighten, which is why a forwarder may assert it (access.py).
 
 `source_timestamp` is the moment the SOURCE platform stamped the message, not
 the moment the forwarder sent it on: the two ages are checked separately, so a
@@ -132,10 +139,11 @@ def _ns(platform: str, native: bool, raw: object) -> str:
 
     `native` is NOT the forwarder's decision. It is the operator's, via
     GATEWAY_NATIVE_PLATFORMS, because minting a bare id claims QQ authority:
-    bare ids are what OWNER_QQ, QQ_GROUPS and PRIVATE_ALLOWED_QQS are compared
-    against. A forwarder that could assert it for itself could address any QQ
-    conversation the agent can reach. Default empty — every platform is
-    namespaced until an operator says otherwise.
+    bare ids are what the QQ entries of OWNER_IDS, ALLOWED_GROUPS and
+    ALLOWED_DM_USERS are compared against. A forwarder that could assert it
+    for itself could address any QQ conversation the agent can reach.
+    Default empty — every platform is namespaced until an operator says
+    otherwise.
     """
     return str(raw) if native else f"{platform}:{raw}"
 
@@ -216,7 +224,7 @@ class GatewaySink:
     a warning instead of being silently lost in a dead response."""
 
     def __init__(self, platform: str = "", native: bool = False,
-                 bot_id: str = "") -> None:
+                 bot_id: str = "", prefiltered: bool = True) -> None:
         # Which platform this turn arrived from, and whether the operator
         # authorized it to mint bare (native-spelled) ids. Both are needed to
         # put an outbound mention back into the "<platform>:<raw>" form the
@@ -226,6 +234,8 @@ class GatewaySink:
         self.platform = str(platform or "")
         self.native = bool(native)
         self.bot_id = str(bot_id or "")
+        # Whether the forwarder filtered this turn itself; see the schema.
+        self.prefiltered = bool(prefiltered)
         self.items: list[dict] = []
         self.closed = False
         # Set once this turn clears the admission gates. It answers a
@@ -245,6 +255,17 @@ class GatewaySink:
             message, platform=self.platform, native=self.native,
             bot_id=self.bot_id))
         return True
+
+
+def event_prefiltered(event: dict) -> bool:
+    """The event's `prefiltered` flag; anything but an explicit no is yes.
+
+    Old forwarders never send it and did filter, so absence reads as true.
+    A spelled-out "false" counts as false: the flag only ever tightens."""
+    value = event.get("prefiltered", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "no", "off")
+    return value is not False and value != 0
 
 
 def synthesize_onebot_payload(

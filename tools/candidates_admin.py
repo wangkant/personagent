@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env", override=False)
 
-from persona_agent import candidates, evidence, lineage, promotion
+from persona_agent import access, candidates, evidence, lineage, promotion
 from persona_agent.paths import resolve_runtime_lang_file
 
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
@@ -89,12 +89,13 @@ def _decide(ledger, log, cand, policy, owner_id: str = "") -> promotion.Decision
     whose rewrite the user had rejected, next to an unconditional `promote`.
     `owner_id` likewise defaulted to empty, so with `PROMOTE_MIN_SPEAKERS>=2`
     the CLI reported a speaker shortfall for candidates the agent itself would
-    promote under the owner exemption."""
+    promote under the owner exemption. The owners come from the agent's own
+    reader, so every account in OWNER_IDS is exempt here as it is there."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
-        peers=ledger.all(), now=time.time(),
-        policy=policy, owner_id=owner_id or os.getenv("OWNER_QQ", "").strip())
+        peers=ledger.all(), now=time.time(), policy=policy,
+        owner_id=owner_id, owner_ids=access.identity_from_env().owners)
 
 
 def _short(text, width: int = 60) -> str:

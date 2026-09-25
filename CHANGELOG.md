@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Owners and allowlists that work on every platform: `OWNER_IDS`,
+  `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** Entries are `<platform>:<id>`
+  (`telegram:-1001234`, `discord:4242`); a bare id, or `qq:<id>`, is QQ, and a
+  platform in `GATEWAY_NATIVE_PLATFORMS` may be written with its prefix
+  (`aiocqhttp:10000`) and means the bare id its events carry. The lists apply
+  per platform: a platform with no entries is not restricted by the agent, so
+  QQ still answers every group when none is listed and QQ DMs still need an
+  owner or an entry, while a forwarded platform stays under the forwarder's own
+  allowlist until it has entries. One Telegram entry therefore gates Telegram
+  and leaves QQ alone, where `QQ_GROUPS=telegram:-100` used to close every QQ
+  group. A connector that did not filter can say so with
+  `"prefiltered": false` on the event, which makes a platform without entries
+  default-deny (docs/connectors.md). A refusal is now logged once per
+  conversation at INFO, naming the setting that refused it.
+
 ### Deprecated
 
 - **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
@@ -66,7 +83,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wizard run kept whatever mode it had; it is now removed and created fresh,
   owner-only.
 
+### Security
+
+- **`/webhook/qq` refuses namespaced ids.** NapCat only sends QQ numbers, but
+  a payload forged with an owner-listed `telegram:` id passed the DM check
+  through the owner bypass, and a namespaced group skipped `QQ_GROUPS`. Any id
+  with a platform prefix, `qq:` included, is now refused on that route.
+
 ### Changed
+
+- **An owner on any platform is the owner, everywhere.** An account in
+  `GATEWAY_OWNER_IDS` (now `OWNER_IDS`) used to get only the owner's DM
+  persona; in a group it was an ordinary member. It now gets everything
+  `OWNER_QQ` gets: the owner persona in groups (sticky calls included), the
+  owner's authority over group memories ("forget" and "what do you remember"
+  cover every member), owner weighting when it corrects the bot, the exemption
+  from `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
+  longer needs `OWNER_QQ`), and memories that name `OWNER_NAME` are attributed
+  to the owner's account on that conversation's platform. Proactive DMs still
+  go only to QQ ids, the one channel that can open a DM. All the owner entries
+  name one person, `OWNER_NAME`: if `GATEWAY_OWNER_IDS` lists anyone else,
+  remove them before upgrading. `tools/candidates_admin.py`,
+  `tools/bootstrap_from_history.py` and `try_chat.py` read the owners the same
+  way the agent does.
+- **For code built on the engine:** `AgentSettings` gains `owner_ids` and
+  `allowed_dm_users`, and the `owners` / `dm_users` properties that fold the
+  old fields in; `owner_qq`, `gateway_owner_ids` and `private_allowed_qqs`
+  still work. `promotion.decide` takes `owner_ids` next to `owner_id`.
+  `config_env.env_csv` is gone; `access.split_ids` replaces it.
 
 - **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
   `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /

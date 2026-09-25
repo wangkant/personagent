@@ -459,9 +459,8 @@ class Transport:
         # consulting the whitelist the moment one message arrived anywhere.
         # A missed @ is by definition in a group with no traffic this run,
         # which is exactly the group that fell out of the poll.
-        # allowed_groups is parsed from QQ_GROUPS in __init__.
         for group_id in dict.fromkeys(
-                list(self.buffers.keys()) + list(self.allowed_groups)):
+                list(self.buffers.keys()) + list(self._group_allowlist())):
             # Gateway conversations ("<platform>:<id>") are inbound-only; the
             # NapCat history API can't poll them (and int() would crash).
             if ":" in group_id:

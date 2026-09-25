@@ -835,10 +835,68 @@ def test_corroboration_means_people_not_events() -> None:
     check("speakers: the owner is exempt even at MIN_SPEAKERS=2",
           decide(owner, owner_id="owner1", policy=strict).promote is True,
           decide(owner, owner_id="owner1", policy=strict).reason)
+    # Every account in OWNER_IDS is the owner, not just the QQ one.
+    tg_owner = [ev("telegram:1"),
+                ev("telegram:1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+    by_set = promotion.decide(
+        cand, linked_events=tg_owner, related_events=[], peers=[], now=now,
+        owner_ids={"10000", "telegram:1"}, policy=strict)
+    check("speakers: an owner on any platform is exempt",
+          by_set.promote is True, by_set.reason)
+    check("speakers: ...and a stranger is not, whoever the owners are",
+          promotion.decide(
+              cand, linked_events=solo, related_events=[], peers=[], now=now,
+              owner_ids={"10000", "telegram:1"}, policy=strict).promote is False)
+    # make_event cuts speaker_id at 64 characters; the owner id must be cut
+    # the same way or a long one could never match.
+    long_id = "matrix:@" + "x" * 80 + ":example.org"
+    long_owner = [ev(long_id),
+                  ev(long_id, evidence.KIND_RETRY_ACCEPTANCE, "positive")]
+    check("speakers: an owner id longer than a stored speaker id still matches",
+          promotion.decide(
+              cand, linked_events=long_owner, related_events=[], peers=[],
+              now=now, owner_ids=(long_id,), policy=strict).promote is True)
     check("speakers: floor keeps 0 from disabling the rule",
           promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "0"}).min_speakers == 1)
     check("speakers: env opt-in is read",
           promotion.Policy.from_env({"PROMOTE_MIN_SPEAKERS": "2"}).min_speakers == 2)
+
+
+async def test_the_cli_and_the_agent_exempt_the_same_owners(
+        tmp: Path, monkeypatch) -> None:
+    """The operator CLI decides with the owners the agent decides with.
+
+    Both read OWNER_IDS through access.identity_from_env; the CLI used to
+    read OWNER_QQ alone, so a Telegram owner's candidate showed a speaker
+    shortfall there that the agent itself did not see."""
+    import candidates_admin
+
+    a = make_agent(tmp)
+    a.owner_ids = {"telegram:1"}
+    await react(a, CORRECTION, text="no, look at the logs", uid="telegram:1",
+                is_owner=True)
+    cand = a.candidate_ledger.all()[0]
+    asked: list = []
+    real = promotion.decide
+
+    def spy(c, **kw):
+        asked.append(set(kw.get("owner_ids") or ()) | {kw.get("owner_id") or ""})
+        return real(c, **kw)
+
+    monkeypatch.setattr(promotion, "decide", spy)
+    monkeypatch.setenv("OWNER_IDS", "telegram:1")
+    for name in ("OWNER_QQ", "GATEWAY_OWNER_IDS", "GATEWAY_NATIVE_PLATFORMS"):
+        monkeypatch.delenv(name, raising=False)
+    agent_says = a._decide_promotion(cand["candidate_id"])
+    cli_says = candidates_admin._decide(
+        a.candidate_ledger, a.evidence_log, cand, a.promotion_policy)
+    check("owners: both ask with the Telegram owner",
+          [owners - {""} for owners in asked] == [{"telegram:1"}] * 2,
+          repr(asked))
+    check("owners: and reach the same decision",
+          (agent_says.promote, agent_says.reason)
+          == (cli_says.promote, cli_says.reason),
+          repr((agent_says, cli_says)))
 
 
 def test_a_hand_edited_strength_cannot_buy_a_promotion() -> None:

@@ -109,7 +109,7 @@ other modules by name. One concern per module:
 |---|---|
 | `persona_agent/agent.py` | Orchestration: message intake, modes, debounce, `_think`, prompt assembly |
 | `persona_agent/settings.py` | `AgentSettings`: everything the agent is configured with, built once and passed in |
-| `persona_agent/config_env.py` | The one way to read a setting from the environment (`env_int`, `env_bool`, `env_csv`, ...) |
+| `persona_agent/config_env.py` | The one way to read a setting from the environment (`env_int`, `env_bool`, `env_str`, ...) |
 | `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |
 | `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting, the prompt's data frames |
 | `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
@@ -124,6 +124,7 @@ other modules by name. One concern per module:
 | `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
 | `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
+| `persona_agent/access.py` | Who the owner is and who is admitted, per platform: `OWNER_IDS`, `ALLOWED_GROUPS`, `ALLOWED_DM_USERS` and the old names folded into them (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |

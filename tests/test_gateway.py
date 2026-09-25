@@ -1986,6 +1986,337 @@ async def test_native_gateway_obeys_the_qq_whitelists(tmp: Path) -> None:
           repr(foreign))
 
 
+def _gw_group(platform: str, gid: str, uid: str, mid, *,
+              text: str = " are you around today", at_me: bool = True,
+              **extra) -> dict:
+    """A gateway group event; `at_me` makes it an @ of the bot. Not a bare
+    @: that waits out a five-second debounce."""
+    segments = [{"type": "text", "text": text}]
+    if at_me:
+        segments.insert(0, {"type": "mention", "user_id": "999000",
+                            "name": "TestBot"})
+    return {
+        "platform": platform, "message_type": "group", "conversation_id": gid,
+        "user_id": uid, "sender_name": "Someone", "self_id": "999000",
+        "message_id": mid, "is_at_me": at_me, "segments": segments,
+        "raw_text": text.strip(), **extra,
+    }
+
+
+def _gw_dm(platform: str, uid: str, mid, **extra) -> dict:
+    return {
+        "platform": platform, "message_type": "private",
+        "conversation_id": uid, "user_id": uid, "sender_name": "Someone",
+        "self_id": "999000", "message_id": mid, "is_at_me": False,
+        "segments": [{"type": "text", "text": "hi"}], "raw_text": "hi",
+        **extra,
+    }
+
+
+def _qq_group(gid: str, uid: str, mid) -> dict:
+    """What NapCat posts to /webhook/qq for an @ of the bot in a group."""
+    return {
+        "post_type": "message", "message_type": "group", "group_id": gid,
+        "user_id": uid, "sender": {"user_id": uid, "nickname": "Bob"},
+        "raw_message": "@TestBot are you around today", "message_id": mid,
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": " are you around today"}}],
+    }
+
+
+def _qq_dm(uid: str, mid) -> dict:
+    return {
+        "post_type": "message", "message_type": "private", "user_id": uid,
+        "sender": {"user_id": uid, "nickname": "Bob"}, "raw_message": "hi",
+        "message": [{"type": "text", "data": {"text": "hi"}}],
+        "message_id": mid,
+    }
+
+
+def _serving_agent(tmp: Path) -> tuple[Agent, list]:
+    """An agent whose group and DM paths answer without a model, recording
+    (conversation, mode) for every turn that got past admission."""
+    agent = make_agent(tmp)
+    served: list = []
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        served.append((group_id, mode))
+        return "on my way", "called", ""
+
+    async def fake_chat_private(history, is_owner=False, pkey="",
+                                proactive=False):
+        served.append((pkey, "owner" if is_owner else "friend"))
+        return "hi back", ""
+
+    async def fake_napcat(target, message):
+        return True
+
+    agent._think = fake_think
+    agent._chat_private = fake_chat_private
+    # The /webhook/qq turns deliver through NapCat, which is not running.
+    agent._napcat_send_group = agent._napcat_send_private = fake_napcat
+    return agent, served
+
+
+async def test_the_agent_lists_gate_each_platform_separately(
+        tmp: Path, caplog) -> None:
+    """ALLOWED_GROUPS and ALLOWED_DM_USERS are partitioned per platform.
+
+    Checked as one list, the first Telegram group an operator listed closed
+    every QQ group, which is what QQ_GROUPS=telegram:-100 did. A platform with
+    no entries is not the agent's to restrict: QQ keeps "empty = every group"
+    and owner-or-listed DMs, a forwarded platform keeps the forwarder's own
+    allowlist until it has entries or the event says it did not filter."""
+    import logging
+
+    agent, served = _serving_agent(tmp)
+    agent.owner_qq = "10000"
+    agent.allowed_groups = {"telegram:-100777"}
+    agent.allowed_dm_users = {"telegram:42"}
+    agent.private_allowed_qqs = set()
+
+    qq = await agent.handle(_qq_group("4242", "777", 1001))
+    check("groups: a Telegram entry leaves every QQ group open",
+          qq is True and ("4242", "called") in served, repr((qq, served)))
+    listed = await agent.handle_gateway(
+        _gw_group("telegram", "-100777", "42", 1002))
+    check("groups: the listed Telegram group is served",
+          listed["handled"] and listed["owned"], repr(listed))
+    caplog.set_level(logging.INFO, logger="agent")
+    unlisted = await agent.handle_gateway(
+        _gw_group("telegram", "-100888", "42", 1003))
+    check("groups: another Telegram group is refused and left to AstrBot",
+          unlisted == {"handled": False, "owned": False, "replies": []},
+          repr(unlisted))
+    refusals = [r.getMessage() for r in caplog.records
+                if "not answering telegram:-100888" in r.getMessage()]
+    check("groups: the refusal is logged at INFO, naming the setting",
+          len(refusals) == 1 and "ALLOWED_GROUPS" in refusals[0]
+          and all(r.levelno == logging.INFO for r in caplog.records
+                  if "not answering" in r.getMessage()), repr(refusals))
+    await agent.handle_gateway(_gw_group("telegram", "-100888", "43", 1004))
+    check("groups: ...once per conversation, not once per message",
+          sum("not answering telegram:-100888" in r.getMessage()
+              for r in caplog.records) == 1)
+    discord = await agent.handle_gateway(
+        _gw_group("discord", "c1", "9", 1005))
+    check("groups: a platform with no entries is left to the forwarder",
+          discord["handled"] and discord["owned"], repr(discord))
+    unfiltered = await agent.handle_gateway(
+        _gw_group("discord", "c2", "9", 1006, prefiltered=False))
+    check("groups: prefiltered=false makes an unlisted platform default-deny",
+          unfiltered["owned"] is False and not unfiltered["replies"],
+          repr(unfiltered))
+    listed_unfiltered = await agent.handle_gateway(
+        _gw_group("telegram", "-100777", "42", 1007, prefiltered=False))
+    check("groups: prefiltered=false still serves a listed group",
+          listed_unfiltered["owned"] is True, repr(listed_unfiltered))
+
+    served.clear()
+    friend = await agent.handle_gateway(_gw_dm("telegram", "42", 1010))
+    stranger = await agent.handle_gateway(_gw_dm("telegram", "43", 1011))
+    owner = await agent.handle_gateway(_gw_dm("telegram", "1", 1012))
+    check("DMs: a listed Telegram user is served as a friend",
+          friend["owned"] and ("private:telegram:42", "friend") in served,
+          repr((friend, served)))
+    check("DMs: an unlisted one is refused once Telegram has entries",
+          stranger["owned"] is False and not stranger["replies"],
+          repr(stranger))
+    check("DMs: the owner needs no entry",
+          owner["owned"] and ("private:telegram:1", "owner") in served,
+          repr((owner, served)))
+    slack = await agent.handle_gateway(_gw_dm("slack", "U9", 1013))
+    check("DMs: a platform with no entries is left to the forwarder",
+          slack["owned"] is True, repr(slack))
+    slack_unfiltered = await agent.handle_gateway(
+        _gw_dm("slack", "U9", 1014, prefiltered=False))
+    check("DMs: ...unless the forwarder did not filter",
+          slack_unfiltered["owned"] is False, repr(slack_unfiltered))
+
+    qq_stranger = await agent.handle(_qq_dm("555", 1015))
+    qq_owner = await agent.handle(_qq_dm("10000", 1016))
+    check("DMs: on QQ an empty list still means owner only",
+          qq_stranger is False and qq_owner is True
+          and ("private:10000", "owner") in served,
+          repr((qq_stranger, qq_owner, served)))
+    agent.allowed_dm_users.add("qq:555")
+    check("DMs: a qq: entry admits the bare QQ id",
+          await agent.handle(_qq_dm("555", 1017)) is True)
+
+
+async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
+    """NapCat only ever sends QQ numbers, so a namespaced id on /webhook/qq
+    was written by someone else. Before, an owner-listed "telegram:1" there
+    passed the DM gate through the owner bypass, and a namespaced group
+    skipped QQ_GROUPS; both now stop at the door."""
+    agent, served = _serving_agent(tmp)
+    agent.owner_ids = {"telegram:1"}
+
+    forged_owner = await agent.handle(_qq_dm("telegram:1", 1101))
+    check("forged: an owner's namespaced id is not an owner on /webhook/qq",
+          forged_owner is False and served == [], repr((forged_owner, served)))
+    forged_group = await agent.handle(_qq_group("telegram:-100", "777", 1102))
+    check("forged: a namespaced group is refused on /webhook/qq",
+          forged_group is False and served == [], repr((forged_group, served)))
+    spelled_qq = await agent.handle(_qq_group("qq:4242", "777", 1103))
+    check("forged: so is a group spelled qq:, which NapCat never sends",
+          spelled_qq is False and served == [], repr(served))
+    genuine = await agent.handle_gateway(_gw_dm("telegram", "1", 1104))
+    check("forged: the same owner through the gateway is the owner",
+          genuine["owned"] and served == [("private:telegram:1", "owner")],
+          repr((genuine, served)))
+
+
+async def test_an_owner_on_any_platform_is_the_owner(tmp: Path) -> None:
+    """Every account in OWNER_IDS gets what OWNER_QQ gets.
+
+    GATEWAY_OWNER_IDS used to reach only the DM branch: in a Telegram group
+    the owner ran as an ordinary caller, could not manage members' memories,
+    and was weighed as a stranger when correcting the bot."""
+    agent, served = _serving_agent(tmp)
+    agent.owner_qq = ""
+    agent.gateway_owner_ids = set()
+    agent.owner_ids = {"telegram:1", "10000"}
+
+    await agent.handle_gateway(_gw_group("telegram", "-100", "1", 1201))
+    await agent.handle_gateway(_gw_group("telegram", "-100", "42", 1202))
+    check("owner mode: the Telegram owner @-ing the bot in a Telegram group",
+          served == [("telegram:-100", "owner"), ("telegram:-100", "called")],
+          repr(served))
+    await agent.handle(_qq_group("4242", "10000", 1203))
+    check("owner mode: the QQ owner on /webhook/qq is unchanged",
+          served[-1] == ("4242", "owner"), repr(served))
+
+    # A sticky call from the owner keeps the owner persona.
+    served.clear()
+    agent._sticky_call["telegram:-100"] = {
+        "user_id": "telegram:1", "nickname": "Kay", "ts": time.time()}
+    await agent.handle_gateway(_gw_group(
+        "telegram", "-100", "42", 1204, text="look at this", at_me=False))
+    check("owner mode: a sticky call from the Telegram owner stays owner",
+          served == [("telegram:-100", "owner")], repr(served))
+
+    # Group reactions weigh the owner as the owner on every platform.
+    seen: list = []
+
+    async def fake_reaction(entry, text, nickname, user_id, is_owner, **kw):
+        seen.append((user_id, is_owner))
+
+    agent.react_learn = True
+    agent.pending_reactions.match = lambda *a, **k: {"reply": "x"}
+    agent._process_reaction = fake_reaction
+    await agent.handle_gateway(_gw_group("telegram", "-100", "1", 1205))
+    await agent.handle_gateway(_gw_group("telegram", "-100", "42", 1206))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    check("reactions: the Telegram owner's reaction is the owner's",
+          seen == [("telegram:1", True), ("telegram:42", False)], repr(seen))
+
+    # Memory commands: the owner manages the room's memories.
+    room = "telegram:-100"
+    agent.memories[room] = [{"text": "Bob private detail", "time": time.time(),
+                             "user_id": "telegram:9", "user_name": "Bob"}]
+    agent._handle_memory_command(room, "TestBot forget Bob private",
+                                 user_id="telegram:42", user_name="Alice")
+    check("memory: a Telegram non-owner cannot forget another's row",
+          len(agent.memories[room]) == 1, repr(agent.memories[room]))
+    agent._handle_memory_command(room, "TestBot forget Bob private",
+                                 user_id="telegram:1", user_name="Kay")
+    check("memory: the Telegram owner can", agent.memories[room] == [],
+          repr(agent.memories[room]))
+    agent._handle_memory_command(room, "TestBot remember the room likes jazz",
+                                 user_id="telegram:1", user_name="Kay")
+    check("memory: the owner's 'remember' is the room's, not theirs",
+          agent.memories[room] and not agent.memories[room][-1].get("user_id"),
+          repr(agent.memories[room]))
+
+    # Auto memories about OWNER_NAME name the owner's account on this platform.
+    agent.owner_name = "Kay"
+    check("memory: the owner's Telegram account in a Telegram room",
+          agent._memory_subject(room, "Kay got a new job")
+          == ("telegram:1", "Kay"))
+    check("memory: their QQ one in a platform they have no account on",
+          agent._memory_subject("discord:c1", "Kay got a new job")
+          == ("10000", "Kay"))
+    agent.memories[room].append({"text": "Kay hates mornings",
+                                 "time": time.time(), "user_id": "10000",
+                                 "user_name": "Kay"})
+    check("memory: a row attributed to the QQ account still surfaces",
+          "Kay hates mornings" in agent._memories_for_prompt(room))
+
+
+async def test_the_owner_block_needs_an_owner_not_a_qq_number(
+        tmp: Path) -> None:
+    """[Special person] was gated on OWNER_QQ, so a deployment whose owner
+    was only on Telegram never had it on any platform."""
+    agent = make_agent(tmp)
+    agent.owner_qq, agent.gateway_owner_ids = "", set()
+    agent.owner_ids, agent.owner_name = {"telegram:1"}, "Kay"
+    agent._append_buffer("telegram:-100", "Alice", "anyone around", "telegram:42")
+    systems: list = []
+
+    async def fake_call(system, messages, **kwargs):
+        systems.append(system)
+        return json.dumps({"reply": "ok", "intent": "chat", "mem": ""})
+
+    agent._call_llm = fake_call
+    await agent._think("telegram:-100", "called", latest_text="anyone around")
+    agent.owner_ids = set()
+    await agent._think("telegram:-100", "called", latest_text="anyone around")
+    check("owner block: present for a Telegram-only owner",
+          "[Special person]" in systems[0] and "Kay" in systems[0])
+    check("owner block: absent with no owner at all",
+          "[Special person]" not in systems[1])
+
+
+async def test_proactive_dms_go_only_where_napcat_can_send(
+        tmp: Path) -> None:
+    """Owners and allowed users on every platform are candidates, but only
+    QQ has a channel to open a DM unprompted. A namespaced id was once
+    POSTed to NapCat's send_private_msg."""
+    agent, served = _serving_agent(tmp)
+    agent.owner_qq, agent.gateway_owner_ids = "", set()
+    agent.owner_ids = {"10000", "telegram:1"}
+    agent.allowed_dm_users = {"telegram:42"}
+    agent.private_allowed_qqs = {"888"}
+    agent.proactive_dm_prob = 1.0
+    quiet = time.time() - agent.proactive_dm_min_silence - 100
+    for uid in ("10000", "telegram:1", "888", "telegram:42"):
+        agent.last_dm_activity_at[uid] = quiet
+
+    async def fake_chat_private(history, is_owner=False, pkey="",
+                                proactive=False):
+        served.append((pkey, is_owner))
+        return "PASS", ""
+
+    agent._chat_private = fake_chat_private
+    await agent._maybe_proactive_dms()
+    check("proactive DMs: only the QQ ids are considered, the owner as owner",
+          sorted(served) == [("private:10000", True), ("private:888", False)],
+          repr(served))
+
+
+async def test_a_native_owner_keeps_the_qq_keys(tmp: Path) -> None:
+    """OWNER_IDS=aiocqhttp:10000 with aiocqhttp native is the bare QQ owner,
+    and the turn lands on the keys NapCat would have used, so what was
+    learned about them stays theirs."""
+    from persona_agent.settings import AgentSettings
+
+    settings = AgentSettings.from_env(env={
+        "LLM_API_KEY": "k", "OWNER_IDS": "aiocqhttp:10000",
+        "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp"})
+    check("native owner: read as the bare QQ id",
+          settings.owners == {"10000"}, repr(settings.owners))
+    agent, served = _serving_agent(tmp)
+    agent.owner_qq, agent.gateway_owner_ids = "", set()
+    agent.owner_ids = set(settings.owner_ids)
+    agent.gateway_native_platforms = {"aiocqhttp"}
+    result = await agent.handle_gateway(_gw_dm("aiocqhttp", "10000", 1301))
+    check("native owner: served as the owner under the bare DM key",
+          result["owned"] and served == [("private:10000", "owner")]
+          and "10000" in agent.private_history, repr((result, served)))
+
+
 async def test_think_full_path_search_hint(tmp: Path) -> None:
     """_think's full prompt-build path must run end to end (a search_hint
     referencing an undefined name once broke every group reply with a

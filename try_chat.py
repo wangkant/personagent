@@ -1,8 +1,8 @@
-"""Try the agent in your terminal — no QQ, no NapCat, just an API key.
+"""Try the agent in your terminal — no chat platform, just an API key.
 
 This drives the SAME reasoning path the live bot uses (persona + style guide +
 JSON output protocol + the character-whitelist validator), so you can feel out a
-persona and see replies before standing up a OneBot client.
+persona and see replies before connecting it to a chat platform.
 
     python try_chat.py
     python try_chat.py --owner          # speak as the configured owner
@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=False)
 
+from persona_agent import access  # noqa: E402
 from persona_agent.agent import Agent  # noqa: E402
 from persona_agent.config_env import (  # noqa: E402
     DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool)
@@ -32,6 +33,8 @@ from persona_agent.textproc import TextProcessing  # noqa: E402
 from persona_agent.preflight import private_model_from_env  # noqa: E402
 
 GROUP_ID = "trial"
+#: Who "--owner" speaks as: a configured owner account, if there is one.
+OWNER_ID = min(access.identity_from_env().owners, default="") or "1969"
 
 
 def _build_agent(lang: str) -> Agent:
@@ -42,7 +45,7 @@ def _build_agent(lang: str) -> Agent:
         bot_qq=os.getenv("BOT_QQ", "") or "10000",
         bot_name=os.getenv("BOT_NAME", "") or "bot",
         private_model=private_model_from_env(),
-        owner_qq=os.getenv("OWNER_QQ", "") or "1969",
+        owner_ids=(OWNER_ID,),
         owner_name=os.getenv("OWNER_NAME", "") or "owner",
         owner_relationship=os.getenv("OWNER_RELATIONSHIP", ""),
         fallback_model=os.getenv("FALLBACK_MODEL", ""),
@@ -99,7 +102,7 @@ async def main() -> int:
                   "(only the primary model key is required for this trial).")
             return 1
 
-        you_uid = agent.owner_qq if args.owner else "2001"
+        you_uid = OWNER_ID if args.owner else "2001"
         you_name = (agent.owner_name or "owner") if args.owner else args.name
         default_mode = "owner" if args.owner else "called"
 
@@ -124,7 +127,7 @@ async def main() -> int:
 
             name, uid, mode, msg = you_name, you_uid, default_mode, line
             if line.startswith("/owner "):
-                name, uid, mode, msg = (agent.owner_name or "owner"), agent.owner_qq, "owner", line[len("/owner "):]
+                name, uid, mode, msg = (agent.owner_name or "owner"), OWNER_ID, "owner", line[len("/owner "):]
             elif line.startswith("/as "):
                 rest = line[len("/as "):].strip()
                 if " " in rest:
