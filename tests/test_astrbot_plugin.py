@@ -1185,7 +1185,7 @@ def test_qq_mentions_carry_one_space_and_long_text_stays_under_the_forward_card(
     assert len(chains) > 1
     assert all(len(c[0][0].text) <= 120 for c in chains)
     assert " ".join(c[0][0].text for c in chains) == long
-    assert {c[1] for c in chains} == {1}
+    assert [c[1] for c in chains] == [0] * (len(chains) - 1) + [1]
 
 
 def test_telegram_text_is_shown_as_typed_and_mentions_use_usernames():
@@ -1490,6 +1490,29 @@ def test_a_send_that_breaks_midway_is_partial_and_a_refused_one_failed(monkeypat
     assert asyncio.run(plugin._deliver(_delivery())) == ("partial", 1)
     plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), refuse=True)
     assert asyncio.run(plugin._deliver(_delivery())) == ("failed", 0)
+
+
+def test_a_split_item_counts_as_sent_only_once_its_last_part_is(monkeypatch):
+    """An item longer than the platform allows goes out in parts. Counting it
+    after its first part told the agent the reader had seen all of it."""
+    module = _import_plugin()
+    long = {"type": "text", "text": "word " * 460}  # two Discord messages
+    for items, fail_at, expected in (([long, {"type": "text", "text": "hello?"}], 1, ("failed", 0)),
+                                     ([{"type": "text", "text": "hi"}, long,
+                                       {"type": "text", "text": "bye"}], 2, ("partial", 1)),
+                                     ([{"type": "text", "text": "hi"}, long], 3, ("sent", 2))):
+        delivery = _delivery(reply_handle="my-discord:GroupMessage:group-1",
+                             platform="discord", items=items)
+        plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("discord"),
+                                         minted=(delivery,), fail_at=fail_at)
+        assert asyncio.run(plugin._deliver(delivery)) == expected, (fail_at, context.sent)
+    # LINE sends five bubbles per call: a call that ends inside an item has
+    # not finished it.
+    plugin = _plugin_instance(module, {})
+    short = [{"type": "text", "text": str(n)} for n in range(4)]
+    chains = _render(plugin, "line", *short, {"type": "text", "text": "word " * 1200},
+                     {"type": "text", "text": "end"})
+    assert [(len(c[0]), c[1]) for c in chains] == [(5, 4), (2, 6)], chains
 
 
 def test_a_platform_still_starting_is_waited_for_then_failed(monkeypatch):

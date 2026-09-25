@@ -1316,9 +1316,11 @@ class LLMPersonaGateway(Star):
             max_chars = self._forward_threshold(umo)
         bubbles = []
         for index, item in enumerate(items, 1):
-            for comps in self._item_bubbles(item, platform, rules, is_group,
-                                            conversation_id, max_chars, temps):
-                bubbles.append((comps, index))
+            parts = self._item_bubbles(item, platform, rules, is_group,
+                                       conversation_id, max_chars, temps)
+            for n, comps in enumerate(parts, 1):
+                # A split item is done only once its last part is out.
+                bubbles.append((comps, index if n == len(parts) else index - 1))
         if rules.merge and bubbles:
             texts = [c.text for comps, _ in bubbles for c in comps if isinstance(c, Comp.Plain)]
             rest = [c for comps, _ in bubbles for c in comps if not isinstance(c, Comp.Plain)]
