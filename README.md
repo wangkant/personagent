@@ -108,7 +108,7 @@ To connect through AstrBot:
 
 1. Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) and set up your platform in its WebUI.
 2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `CONNECTOR_TOKEN` to both sides. Answers you gave before are kept as the defaults.
-3. Add the groups the bot may join to the plugin's allowlist. It forwards nothing until you do; private chats also need `private_enabled=true` and an allowlisted sender.
+3. List the groups the bot may join in the plugin's `groups` setting. It forwards nothing until you do; DMs are forwarded only from the senders in `dm_users`.
 4. In personagent's `.env`, check `PERSONA_NAME`, the name it answers to. On QQ, also set `QQ_BOT_ID` to the bot account's number.
 5. Restart AstrBot, then start personagent from the repository root: `.venv/bin/python main.py` (Windows: `.venv\Scripts\python.exe main.py`).
 
@@ -130,14 +130,14 @@ QQ also needs a OneBot v11 implementation such as NapCat, connected through Astr
 - Remove `aiocqhttp` from the plugin's `excluded_platforms`.
 - Set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
 - NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional. With it, personagent catches up on mentions it missed while offline, and has a fallback for the messages it starts itself when the plugin is not pulling its outbox. On this path OCR fallback is skipped.
-- The direct `/webhook/qq` ingress is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
+- The direct OneBot ingress (`/v1/onebot`) is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
 
 <details>
 <summary>AstrBot in Docker, or on another host</summary>
 
-The plugin posts only to a loopback address (the same host, or a container sharing its network namespace or using host networking), or to HTTPS with `gateway_token` set. Plain `http://` to anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe agent_url`, and AstrBot's own model answers instead. Set `agent_url` in the plugin settings; the same-host default is `http://127.0.0.1:8080/webhook/gateway`.
+The plugin posts only to a loopback address (the same host, or a container sharing its network namespace or using host networking), or to HTTPS with `connector_token` set. Plain `http://` to anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead. Set `personagent_url` in the plugin settings; the same-host default is `http://127.0.0.1:8080`.
 
 personagent listens on `127.0.0.1:8080`. A non-loopback `SERVER_HOST` requires both `CONNECTOR_TOKEN` and `QQ_ONEBOT_SECRET`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
 
@@ -146,7 +146,7 @@ personagent listens on `127.0.0.1:8080`. A non-loopback `SERVER_HOST` requires b
 <details>
 <summary>Speaking first</summary>
 
-Some messages answer nobody: proactive openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLED=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a private event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
+Some messages answer nobody: proactive openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLED=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a DM event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 
@@ -214,9 +214,9 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Troubleshooting
 
-**It runs but never replies.** Start with the connector. In the AstrBot plugin, check the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `PERSONA_NAME`, `QQ_BOT_ID` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
+**It runs but never replies.** Start with the connector. In the AstrBot plugin, check `groups`, `dm_users`, `personagent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `PERSONA_NAME`, `QQ_BOT_ID` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
 
-**Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Gateway-Token` header once a token is configured.
+**Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Personagent-Token` header once a token is configured.
 
 **A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. The wizard rewrites some settings from your answers, so read each prompt when you rerun it. `PERSONA_TZ_OFFSET_HOURS` (default 8, UTC+8) sets the clock for the night window and proactive quiet hours.
 
@@ -225,7 +225,7 @@ Before you connect it to real people, tell them it is a bot and get their consen
 Beta. QQ is where it has run in earnest. Other AstrBot platforms have not all been validated end to end, and the Satori and Matrix connectors are new and so far tested only against stand-ins. CI runs the test suite on Linux with Python 3.10–3.12 and on Windows with Python 3.12. The tuning and evaluation scripts in `tools/` are experiments; they do not establish how well it converses.
 
 - [Deployment guide](docs/deploy.md)
-- Connectors: [AstrBot plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [the protocol](docs/connectors.md)
+- Connectors: [AstrBot plugin](integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [the protocol](docs/connectors.md)
 - [All settings](.env.example)
 - [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
