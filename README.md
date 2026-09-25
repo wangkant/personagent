@@ -119,7 +119,7 @@ QQ also needs a OneBot v11 implementation such as NapCat, connected through Astr
 
 - Remove `aiocqhttp` from the plugin's `excluded_platforms`.
 - Set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
-- Keep NapCat's HTTP server on, at `NAPCAT_API`. Proactive messages and catching up on missed mentions go through it directly. On this path OCR fallback is skipped, and quoted messages are looked up in personagent's own recent-message index.
+- Keep NapCat's HTTP server on, at `NAPCAT_API`. Proactive messages, the follow-up question after a rejection, the excuse when the model fails and catching up on missed mentions go through it directly. On this path OCR fallback is skipped, and quoted messages are looked up in personagent's own recent-message index.
 - The direct `/webhook/qq` ingress is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
@@ -136,7 +136,7 @@ personagent listens on `127.0.0.1:8080`. A non-loopback `HOST` requires both `GA
 <details>
 <summary>Speaking first on platforms other than QQ</summary>
 
-Outside QQ, a reply can only travel back inside the request that brought the message, so personagent has no channel of its own for speaking first. For scheduled DMs, have an external job post a private gateway event with `proactive: true`; the text is read as a cue to the persona rather than as the other person's words, and the job relays whatever comes back. A group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md#more-than-one-platform).
+Outside QQ, personagent speaks first (proactive openers, the follow-up question after a rejection, the excuse when the model fails) through a connector that pulls its outbox; see the [connector protocol](docs/connectors.md). `PROACTIVE_PLATFORMS=qq` keeps the proactive loop on QQ. Without such a connector, a reply can only travel back inside the request that brought the message. For scheduled DMs, have an external job post a private gateway event with `proactive: true`; the text is read as a cue to the persona rather than as the other person's words, and the job relays whatever comes back. A group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 

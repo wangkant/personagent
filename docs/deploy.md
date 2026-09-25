@@ -119,21 +119,20 @@ you trust its forwarder with that authority.
 **Keep NapCat's HTTP server on**, at `NAPCAT_API`. AstrBot reaches NapCat over
 a reverse WebSocket for messages and replies, but what personagent starts
 itself goes straight to `NAPCAT_API`: proactive messages (`PROACTIVE_ENABLE`,
-off by default), and the sweep for @-mentions missed while offline. The sweep
-runs at startup and then every 30 minutes, covers the QQ groups in
-`ALLOWED_GROUPS` plus any group with traffic since the last restart, and replays @-mentions
-under an hour old. Without the server the bot keeps answering but loses both,
-and (with `BOT_QQ` set) `healthcheck.py` shows the OneBot bridge failing.
+off by default), the question asked two minutes after a rejection
+(`REACT_ELICIT`), the excuse sent when the model call fails, and the sweep for
+@-mentions missed while offline. The sweep runs at startup and then every 30
+minutes, covers the QQ groups in `ALLOWED_GROUPS` plus any group with traffic
+since the last restart, and replays @-mentions under an hour old. Without the
+server the bot keeps answering but loses all of these, and (with `BOT_QQ` set)
+`healthcheck.py` shows the OneBot bridge failing.
 
 **Lost on this path**, with no setting to bring it back:
 
 - the OCR fallback for images that no vision model described;
-- quote lookup through NapCat. Quotes resolve only from personagent's own
-  index of recent messages.
-- collecting new stickers from images posted in groups;
-- anything sent after the request returns: the question asked two minutes
-  after a rejection (`REACT_ELICIT`), and the excuse sent when the model call
-  fails.
+- quote lookup through NapCat. Quotes resolve from personagent's own index of
+  recent messages, and from the quoted text a connector sends with the quote;
+- collecting new stickers from images posted in groups.
 
 ## More than one platform
 
@@ -143,12 +142,18 @@ of the first five on in AstrBot's config). Their
 ids are namespaced as `<platform>:<id>`, so they never collide with a QQ
 number; the plugin's allowlists are their only filter.
 
-With no side channel like NapCat's HTTP API, personagent speaks only inside
-the request that brought a message. The proactive loops skip these
-conversations, and the delayed question and failure excuse are dropped, as on
-QQ.
+Messages nobody asked for (proactive openers, the question asked after a
+rejection, the excuse when the model call fails) reach these platforms only
+through a connector that pulls personagent's outbox: it sends `forwarder_id`,
+`reply_handle` and `"caps": ["outbox"]` with its events and long-polls
+`/webhook/gateway/outbox` (see [the connector protocol](connectors.md)).
+Without one, personagent speaks only inside the request that brought a
+message: the proactive loops skip those conversations, and the question and
+the excuse are not sent. `PROACTIVE_PLATFORMS` limits where the proactive loop
+may speak first (`PROACTIVE_PLATFORMS=qq` keeps it on QQ), and
+`GATEWAY_OUTBOX=false` turns the outbox off altogether.
 
-**To speak first in a DM**, have your own scheduler (an AstrBot plugin task,
+**To speak first in a DM without the outbox**, have your own scheduler (an AstrBot plugin task,
 a cron entry) post an ordinary private gateway event with `"proactive": true`
 (schema at the top of `persona_agent/gateway.py`). Its text is a cue to the
 persona ("they have been quiet a day; their exam was this morning"), not the
@@ -158,7 +163,8 @@ speaks, the reply comes back in the response for the scheduler to relay.
 The request needs what the plugin's requests carry: the signed headers, every
 required field, the same platform name and raw user id the plugin sends,
 non-empty text, and a fresh `message_id` each time (a repeated one is dropped
-without a word).
+without a word). It counts against the same DM cooldown
+(`PROACTIVE_DM_COOLDOWN`) as the agent's own openers.
 
 Always set the flag. Without it, the cue is stored as the other person's
 words: it stays in the DM history for the next 40 messages, can be quoted back

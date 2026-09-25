@@ -18,7 +18,8 @@ import httpx
 from dataclasses import dataclass, field
 
 from . import channels
-from .gateway import current_sink
+from .gateway import GatewaySink, current_sink
+from .outbox import OutboxResult
 from .textproc import MAX_REPLY_MESSAGES, TextProcessing
 
 logger = logging.getLogger("agent")
@@ -74,6 +75,22 @@ class SendResult:
     # that posted before the failure — the caller has to commit it, because
     # from every reader's point of view the bot said it.
     delivered: str = ""
+
+
+def _acked_result(items: list, outcome: OutboxResult,
+                  collected: SendResult) -> SendResult:
+    """What an outbox delivery put in front of people, as a SendResult: the
+    first `sent_items` items and nothing past them. No message ids: an ack
+    carries none."""
+    sent = outcome.sent_items if outcome.status in ("sent", "partial") else 0
+    sent = min(max(sent, 0), len(items))
+    texts = [item.get("text", "") for item in items[:sent]
+             if item.get("type") == "text"]
+    complete = sent == len(items)
+    return SendResult(
+        success=complete, partial=0 < sent < len(items),
+        delivered="\n".join(texts),
+        sticker_files=list(collected.sticker_files) if complete else [])
 
 
 class Transport:
@@ -441,6 +458,65 @@ class Transport:
             partial(self._napcat_send_private, user_id),
             target_key=target_key, label=" (private)",
             throttle_key=target_key)
+
+    def _background_route(self, key: str):
+        """How a message no request is waiting for reaches routing key `key`.
+
+        "onebot" for a QQ key, which goes to NapCat as it always has; the
+        stored handle when a live connector pulls the outbox for it; None
+        when nothing can deliver there unprompted."""
+        if channels.is_native(key):
+            return "onebot"
+        if not self.gateway_outbox:
+            return None
+        return self.outbox.route(key)
+
+    async def _send_background(self, key: str, send, *,
+                               reason: str) -> SendResult:
+        """Run `send()` (a _send_qq or _send_private_qq call) for `key` when
+        no inbound request is open to answer in.
+
+        A task spawned by a gateway turn inherits that turn's sink, closed by
+        now, so the sink is replaced either way: with none on the QQ route,
+        so NapCat is reached, and with a fresh one on the outbox route, whose
+        items become one delivery. The result counts only what the connector
+        acked as sent. `reason` is the outbox's: proactive, follow_up or
+        excuse."""
+        route = self._background_route(key)
+        if route is None:
+            self._log_no_route(key, reason)
+            return SendResult()
+        if route == "onebot":
+            tok = current_sink.set(None)
+            try:
+                return await send()
+            finally:
+                current_sink.reset(tok)
+        collector = GatewaySink(platform=route["platform"],
+                                native=route["native"],
+                                bot_id=self._self_mention_id())
+        tok = current_sink.set(collector)
+        try:
+            collected = await send()
+        finally:
+            collector.closed = True
+            current_sink.reset(tok)
+        if not collector.items:
+            return collected
+        outcome = await self.outbox.deliver(
+            key, route, collector.items, reason=reason)
+        return _acked_result(collector.items, outcome, collected)
+
+    def _log_no_route(self, key: str, reason: str) -> None:
+        marker = f"{key}\x00{reason}"
+        if marker in self._no_route_logged:
+            return
+        self._no_route_logged[marker] = None
+        if len(self._no_route_logged) > 1024:
+            self._no_route_logged.pop(next(iter(self._no_route_logged)))
+        logger.info("[Agent] no way to send the %s to %s unprompted: its "
+                    "connector does not pull the outbox, or has stopped",
+                    reason.replace("_", "-"), key)
 
     async def check_missed_mentions(self) -> None:
         """On startup, pull the most recent ~10 group messages; if any of them

@@ -334,6 +334,7 @@ class Agent(ContentIngestion, Transport, Learning):
         self.proactive_dm_min_silence = s.proactive_dm_min_silence
         self.proactive_dm_cooldown = s.proactive_dm_cooldown
         self.proactive_dm_prob = s.proactive_dm_prob
+        self.proactive_platforms: set = set(s.proactive_platforms)
 
         self.evolve_auto = s.evolve_auto
         self.evolve_interval = s.evolve_interval
@@ -400,6 +401,8 @@ class Agent(ContentIngestion, Transport, Learning):
         self._gateway_inflight: dict[str, int] = defaultdict(int)
         # Admission refusals already logged; see _log_refusal.
         self._refusals_logged: dict[str, None] = {}
+        # Conversations already reported as unreachable; see _log_no_route.
+        self._no_route_logged: dict[str, None] = {}
 
         # Bound at construction, like the rest of the buffer's shape: a later
         # change to self.context_len must not silently give new conversations
@@ -1158,11 +1161,16 @@ class Agent(ContentIngestion, Transport, Learning):
                         "signal weird rn, gimme a min",
                     ])
 
+                    # The task outlives a gateway turn's response, so it goes
+                    # out the way unprompted messages do (_send_background).
                     async def _send_fallback() -> None:
                         try:
                             async with self.send_locks[group_id]:
-                                result = await self._send_qq(
-                                    group_id, fallback, user_id)
+                                result = await self._send_background(
+                                    group_id,
+                                    lambda: self._send_qq(
+                                        group_id, fallback, user_id),
+                                    reason="excuse")
                             if result.success:
                                 async with self.locks[group_id]:
                                     self.last_reply_at[group_id] = time.time()
@@ -1311,7 +1319,13 @@ class Agent(ContentIngestion, Transport, Learning):
                             is_private=True))
 
                 async with self.locks[pkey]:
-                    self.last_dm_activity_at[user_id] = time.time()
+                    if proactive:
+                        # The reader said nothing. The connector's scheduler
+                        # and the agent's own loop share one DM cooldown.
+                        self.last_proactive_at[
+                            channels.dm_learning_key(user_id)] = time.time()
+                    else:
+                        self.last_dm_activity_at[user_id] = time.time()
                     history = list(self.private_history.get(user_id, []))
                     # The one line this flag is about. Appended, the cue stays
                     # for 40 turns as something the reader supposedly said.
@@ -2839,15 +2853,23 @@ class Agent(ContentIngestion, Transport, Learning):
             except Exception as e:
                 logger.warning("[Agent] proactive loop iteration failed: %s", e)
 
+    def _proactive_platform_ok(self, key: str) -> bool:
+        """Whether PROACTIVE_PLATFORMS lets the loop speak first on the
+        platform of `key` (a routing key or a user id); empty allows all."""
+        return (not self.proactive_platforms
+                or channels.platform_of(key) in self.proactive_platforms)
+
     async def _maybe_proactive_groups(self) -> bool:
         """At most one proactive group message per tick. Returns True if sent."""
         now = time.time()
         groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
         for gid in groups:
-            # Gateway conversations ("<platform>:<id>") are inbound-only;
-            # there is no NapCat send channel to cold-open them through.
-            if ":" in gid:
+            # A DM key is the DM pass's. A room nothing can deliver to
+            # unprompted (a connector that does not pull the outbox) is
+            # skipped before a model call is spent on it.
+            if (channels.is_dm(gid) or not self._proactive_platform_ok(gid)
+                    or self._background_route(gid) is None):
                 continue
             last_act = self.last_activity_at.get(gid, 0.0)
             # Never cold-open a group we've observed no activity in this run, and
@@ -2884,12 +2906,18 @@ class Agent(ContentIngestion, Transport, Learning):
             # NapCat doesn't webhook the bot's own messages, so without this a
             # followup to the opener has no record and reads as off-topic.
             async with self.send_locks[gid]:
-                result = await self._send_qq(gid, reply, at_uid)
+                result = await self._send_background(
+                    gid, lambda: self._send_qq(gid, reply, at_uid),
+                    reason="proactive")
             if not result.success:
                 logger.warning(
                     "[Agent] proactive group delivery failed (%s, partial=%s)",
                     gid, result.partial)
                 if result.partial:
+                    # The room read the delivered part, so it is on record.
+                    if result.delivered:
+                        self.last_reply_at[gid] = now
+                        self._append_buffer(gid, self.bot_name, result.delivered)
                     return True
                 continue
             self.last_reply_at[gid] = now
@@ -2902,15 +2930,29 @@ class Agent(ContentIngestion, Transport, Learning):
         return False
 
     async def _maybe_proactive_dms(self) -> bool:
-        """At most one proactive DM per tick, to an owner or an allowed DM user
-        on QQ who has DMed the bot before this run. Returns True if sent."""
+        """At most one proactive DM per tick, to someone who has DMed the bot
+        before this run: an owner or an allowed user on QQ, or anyone the
+        agent admitted through a connector that pulls the outbox. Returns
+        True if sent."""
         now = time.time()
         owners = self._owners()
-        # QQ only: NapCat is the one channel that can open a DM unprompted.
-        targets = [uid for uid in self._dm_allowlist() | owners
-                   if channels.is_native(uid)]
+        allowed = self._dm_allowlist()
+        # On QQ the lists name who may be DMed; elsewhere the connector
+        # filtered who reached the DM, and admission is checked again below.
+        targets = {uid for uid in allowed | owners if channels.is_native(uid)}
+        targets.update(uid for uid in list(self.last_dm_activity_at)
+                       if not channels.is_native(uid))
+        targets = [uid for uid in targets if self._proactive_platform_ok(uid)]
         random.shuffle(targets)
         for uid in targets:
+            pkey = channels.dm_routing_key(uid)
+            route = self._background_route(pkey)
+            if route is None:
+                continue
+            if route != "onebot" and access.dm_refusal(
+                    uid, owners, allowed, via_forwarder=True,
+                    prefiltered=route.get("prefiltered", True)):
+                continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
             # Don't cold-DM someone who never messaged the bot.
             if not last_act or now - last_act < self.proactive_dm_min_silence:
@@ -2923,7 +2965,6 @@ class Agent(ContentIngestion, Transport, Learning):
             if random.random() > self.proactive_dm_prob:
                 continue
             is_owner = access.is_owner(uid, owners)
-            pkey = channels.dm_routing_key(uid)
             try:
                 async with self.locks[pkey]:
                     history = list(self.private_history.get(uid, []))[-10:]
@@ -2946,11 +2987,19 @@ class Agent(ContentIngestion, Transport, Learning):
             async with self.send_locks[pkey]:
                 self._private_send_owners[pkey] = asyncio.current_task()
                 try:
-                    result = await self._send_private_qq(uid, reply)
+                    result = await self._send_background(
+                        pkey, lambda: self._send_private_qq(uid, reply),
+                        reason="proactive")
                     if not result.success:
                         logger.warning("[Agent] proactive DM delivery failed (%s, partial=%s)",
                                        uid, result.partial)
                         if result.partial:
+                            # They read the delivered part; keep it on record.
+                            if result.delivered:
+                                async with self.locks[pkey]:
+                                    self.private_history.setdefault(uid, []).append(
+                                        {"role": "assistant",
+                                         "content": result.delivered})
                             return True
                         continue
                     async with self.locks[pkey]:

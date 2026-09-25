@@ -131,6 +131,8 @@ question after a rejection, the excuse when the model is down. The agent
 queues those per conversation, and a connector that declared `outbox` pulls
 them. Pull rather than push means the agent never needs to reach the
 connector, so a connector behind NAT or a firewall works the same.
+Conversations stored under bare QQ ids (see Addressing) are the exception:
+theirs still go to NapCat's HTTP API (`NAPCAT_API`), as they always have.
 
 Request:
 
@@ -217,13 +219,14 @@ event with `"proactive": true`. Its text is read as a cue to the persona
 ("they have been quiet a day; their exam was this morning"), cut at 500
 characters, and never stored as the person's words. If the persona decides to
 speak, the reply comes back in the response. A group event with the flag is
-claimed and dropped.
+claimed and dropped. The cue counts against the same DM cooldown as the
+agent's own openers, and not as the person's activity.
 
 ## Capabilities and what degrades
 
 | Missing | Effect |
 |---|---|
-| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation |
+| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids from a `GATEWAY_NATIVE_PLATFORMS` connector still get them through NapCat) |
 | `quote_text` | a quoted message is understood only if the agent saw it itself |
 | `reply_handle` | same as no `outbox` |
 | `is_at_me` wrong | the persona treats addressed messages as background chatter |

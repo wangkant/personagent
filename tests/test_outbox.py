@@ -555,3 +555,307 @@ async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
           and refused.json()["code"] == "capacity_exceeded", refused.text)
     check("slots: ...and turns are still served",
           turn.status_code == 200 and turn.json()["owned"] is True, turn.text)
+
+
+# ---------------------------------------------------------------------------
+# What goes through it: openers, the follow-up question, the excuse
+# ---------------------------------------------------------------------------
+
+async def _connected(tmp: Path) -> Agent:
+    """An agent whose connector fw1 is polling and whose Telegram room c1
+    and DM with telegram:1 have both been admitted with an outbox handle."""
+    agent = make_agent(tmp)
+    agent.outbox.poll_s = 0.02
+    await agent.outbox.pull("fw1", wait_s=0)
+    await agent.handle_gateway(group_event("setup-1", **FORWARDER))
+    await agent.handle_gateway(dm_event(
+        "setup-2", forwarder_id="fw1", reply_handle="tg-bot:FriendMessage:1",
+        caps=["outbox"]))
+    return agent
+
+
+async def _ack_next(agent: Agent, status: str = "sent", **extra) -> dict:
+    """Pull like a connector, then ack what came back; returns the delivery."""
+    answer = await agent.outbox.pull("fw1", wait_s=3)
+    check("a delivery was queued", len(answer["deliveries"]) == 1, repr(answer))
+    delivery = answer["deliveries"][0]
+    ack = {"delivery_id": delivery["delivery_id"], "status": status,
+           "sent_items": len(delivery["items"]), **extra}
+    await agent.outbox.pull("fw1", wait_s=0, acks=[ack])
+    return delivery
+
+
+async def test_the_route_table(tmp: Path) -> None:
+    agent = await _connected(tmp)
+    check("route: a QQ group goes to NapCat", agent._background_route("555") == "onebot")
+    check("route: a QQ DM goes to NapCat",
+          agent._background_route("private:777") == "onebot")
+    check("route: a room with a live outbox connector goes to it",
+          agent._background_route("telegram:c1")["reply_handle"]
+          == FORWARDER["reply_handle"])
+    check("route: a room nobody left an address for has none",
+          agent._background_route("telegram:c2") is None)
+    agent.gateway_outbox = False
+    check("route: GATEWAY_OUTBOX=false closes it",
+          agent._background_route("telegram:c1") is None)
+    agent.gateway_outbox = True
+    agent.outbox.liveness_s = -1.0  # not 0: monotonic() can repeat on Windows
+    check("route: a connector that stopped pulling closes it",
+          agent._background_route("telegram:c1") is None)
+
+
+async def test_a_qq_send_from_a_finished_gateway_turn_reaches_napcat(
+        tmp: Path) -> None:
+    """A task spawned by a gateway turn inherits its sink, closed by the time
+    the task runs: every such send was dropped with "sink already closed".
+    On the QQ route the sink is lifted, so NapCat is reached."""
+    from persona_agent.gateway import GatewaySink, current_sink
+
+    agent = make_agent(tmp)
+    posted: list = []
+
+    async def fake_napcat(group_id, message):
+        posted.append((group_id, message))
+        return True
+
+    agent._napcat_send_group = fake_napcat
+    dead = GatewaySink(platform="aiocqhttp", native=True)
+    dead.closed = True
+    tok = current_sink.set(dead)
+    try:
+        result = await agent._send_background(
+            "555", lambda: agent._send_qq("555", "back in a sec"), reason="excuse")
+    finally:
+        current_sink.reset(tok)
+    check("onebot: sent through NapCat, not the dead sink",
+          result.success and posted == [("555", "back in a sec")] and not dead.items,
+          repr((result, posted)))
+
+
+async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
+    agent = await _connected(tmp)
+
+    async def bad_think(group_id, mode, text="", caller_override=None):
+        raise RuntimeError("model down")
+
+    agent._think = bad_think
+    result = await agent.handle_gateway(group_event("m1", **FORWARDER))
+    check("excuse: the turn itself answers with nothing, and owns the room",
+          result["owned"] is True and result["replies"] == [], repr(result))
+    delivery = await _ack_next(agent)
+    item = delivery["items"][0]
+    check("excuse: queued for the connector as an excuse, @ing the caller",
+          delivery["reason"] == "excuse" and item["type"] == "text"
+          and item.get("at_user_id") == "telegram:42", repr(delivery))
+    said: list = []
+    for _ in range(100):
+        said = [m for m in agent.buffers["telegram:c1"] if m["name"] == "TestBot"]
+        if any(m["text"] == item["text"] for m in said):
+            break
+        await asyncio.sleep(0.02)
+    check("excuse: committed once the connector acked it",
+          any(m["text"] == item["text"] for m in said), repr(said))
+
+    # A connector that never said "outbox": nothing is queued, nothing said.
+    await agent.handle_gateway(group_event(
+        "m2", gid="c5", forwarder_id="fw1", reply_handle="h5", caps=[]))
+    await asyncio.sleep(0.1)
+    check("excuse: no outbox, no excuse",
+          (await agent.outbox.pull("fw1", wait_s=0))["deliveries"] == []
+          and not [m for m in agent.buffers["telegram:c5"] if m["name"] == "TestBot"])
+
+
+async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent.gateway_native_platforms = {"aiocqhttp"}
+    posted: list = []
+
+    async def fake_napcat(group_id, message):
+        posted.append(group_id)
+        return True
+
+    async def bad_think(group_id, mode, text="", caller_override=None):
+        raise RuntimeError("model down")
+
+    agent._napcat_send_group = fake_napcat
+    agent._think = bad_think
+    await agent.handle({
+        "post_type": "message", "message_type": "group", "group_id": "556",
+        "user_id": "42", "message_id": 92002, "sender": {"nickname": "Alice"},
+        "message": [{"type": "at", "data": {"qq": BOT_QQ}},
+                    {"type": "text", "data": {"text": "you free tonight?"}}],
+        "raw_message": "you free tonight?"})
+    await agent.handle_gateway(group_event(
+        "m3", platform="aiocqhttp", gid="557", uid="43", self_id=BOT_QQ))
+    for _ in range(50):
+        if len(posted) == 2:
+            break
+        await asyncio.sleep(0.02)
+    check("excuse: direct QQ and QQ through a connector both reach NapCat",
+          sorted(posted) == ["556", "557"], repr(posted))
+
+
+async def test_a_proactive_opener_reaches_a_gateway_room(tmp: Path) -> None:
+    agent = await _connected(tmp)
+    agent.proactive_prob = 1.0
+    thought: list = []
+
+    async def opener(group_id, mode, text="", caller_override=None):
+        thought.append(group_id)
+        return "anyone around tonight", "chat", ""
+
+    agent._think = opener
+    room = "telegram:c1"
+    quiet = time.time() - agent.proactive_min_silence - 10
+
+    def make_quiet() -> None:
+        agent.last_activity_at[room] = quiet
+        agent.last_reply_at[room] = 0.0
+        agent.last_proactive_at.pop(room, None)
+
+    make_quiet()
+    task = asyncio.create_task(agent._maybe_proactive_groups())
+    delivery = await _ack_next(agent)
+    acted = await asyncio.wait_for(task, 3)
+    check("opener: queued as proactive for the room",
+          delivery["reason"] == "proactive" and delivery["conversation_key"] == room
+          and delivery["items"][0]["text"] == "anyone around tonight",
+          repr(delivery))
+    check("opener: committed after the ack",
+          acted is True
+          and agent.buffers[room][-1]["text"].endswith("anyone around tonight"),
+          repr(list(agent.buffers[room])[-1:]))
+
+    make_quiet()
+    thought.clear()
+    agent.proactive_platforms = {"qq"}
+    check("PROACTIVE_PLATFORMS=qq: a Telegram room is not considered",
+          await agent._maybe_proactive_groups() is False and thought == [])
+
+    agent.proactive_platforms = set()
+    agent.outbox.liveness_s = -1.0
+    check("no live connector: no model call is spent",
+          await agent._maybe_proactive_groups() is False and thought == [])
+
+    agent.outbox.liveness_s = 90.0
+    await agent.outbox.pull("fw1", wait_s=0)
+    before = list(agent.buffers[room])
+    task = asyncio.create_task(agent._maybe_proactive_groups())
+    await _ack_next(agent, status="failed")
+    acted = await asyncio.wait_for(task, 3)
+    check("failed ack: nothing committed, the attempt still stamped",
+          acted is False and list(agent.buffers[room]) == before
+          and agent.last_proactive_at.get(room, 0) > 0)
+
+
+async def test_a_proactive_dm_reaches_a_gateway_user(tmp: Path) -> None:
+    agent = await _connected(tmp)
+    agent.proactive_dm_prob = 1.0
+    uid = "telegram:1"
+    agent.last_dm_activity_at[uid] = time.time() - agent.proactive_dm_min_silence - 10
+    history_before = list(agent.private_history.get(uid, []))
+
+    async def opener(history, is_owner=False, pkey="", proactive=False,
+                     proactive_cue=""):
+        return "how did the exam go", ""
+
+    agent._chat_private = opener
+    task = asyncio.create_task(agent._maybe_proactive_dms())
+    answer = await agent.outbox.pull("fw1", wait_s=3)
+    delivery = answer["deliveries"][0]
+    check("DM opener: queued for the DM",
+          delivery["conversation_key"] == "private:telegram:1"
+          and delivery["message_type"] == "private"
+          and delivery["conversation_id"] == "1"
+          and delivery["reply_handle"] == "tg-bot:FriendMessage:1", repr(delivery))
+    check("DM opener: not in the history before the ack",
+          agent.private_history.get(uid, []) == history_before)
+    await agent.outbox.pull("fw1", wait_s=0, acks=[
+        {"delivery_id": delivery["delivery_id"], "status": "sent", "sent_items": 1}])
+    check("DM opener: in the history after it", await asyncio.wait_for(task, 3)
+          and agent.private_history[uid][-1]
+          == {"role": "assistant", "content": "how did the exam go"})
+
+    agent.last_proactive_at.clear()
+    agent.allowed_dm_users = {"telegram:99"}
+    called: list = []
+
+    async def spy(history, **kw):
+        called.append(kw)
+        return "x", ""
+
+    agent._chat_private = spy
+    check("DM opener: someone the lists now refuse is not DMed",
+          await agent._maybe_proactive_dms() is False and called == [])
+
+
+async def test_a_connectors_own_proactive_cue_shares_the_cooldown(
+        tmp: Path) -> None:
+    """The inverted "proactive": true event is the connector's scheduler
+    speaking first. It stamps the DM cooldown the agent's loop reads, and is
+    not activity by the reader."""
+    agent = make_agent(tmp)
+    result = await agent.handle_gateway(dm_event(
+        "p1", proactive=True, raw_text="they had an exam today",
+        segments=[{"type": "text", "text": "they had an exam today"}]))
+    check("cue: still answered in the response",
+          result["owned"] is True and result["replies"], repr(result))
+    check("cue: counts against the DM cooldown",
+          agent.last_proactive_at.get("dm:telegram:1", 0) > 0)
+    check("cue: is not the reader's activity",
+          agent.last_dm_activity_at.get("telegram:1", 0) == 0)
+
+
+async def test_the_follow_up_question_reaches_a_gateway_conversation(
+        tmp: Path) -> None:
+    agent = await _connected(tmp)
+    agent.react_elicit_delay = 0.0
+    entry = {"reply": "just restart it", "ctx_lines": ["alex: server down"],
+             "mode": "called", "intent": "chat"}
+
+    task = asyncio.create_task(agent._maybe_elicit(
+        "telegram:c1", entry, "wait, what did you mean?", "telegram:42", False))
+    delivery = await _ack_next(agent)
+    await asyncio.wait_for(task, 3)
+    check("follow-up: queued as follow_up, @ing who rejected",
+          delivery["reason"] == "follow_up"
+          and delivery["items"][0].get("at_user_id") == "telegram:42", repr(delivery))
+    check("follow-up: said, and armed for their answer",
+          agent.buffers["telegram:c1"][-1]["text"].endswith("what did you mean?")
+          and agent.pending_reactions.match(
+              "telegram:c1", sender_uid="telegram:42", at_bot=False,
+              now=time.time()) is not None)
+
+    task = asyncio.create_task(agent._maybe_elicit(
+        "dm:telegram:1", entry, "which part was wrong?", "telegram:1", True))
+    delivery = await _ack_next(agent)
+    await asyncio.wait_for(task, 3)
+    check("follow-up: a DM gets it too, and keeps it in the history",
+          delivery["conversation_key"] == "private:telegram:1"
+          and agent.private_history["telegram:1"][-1]["content"]
+          == "which part was wrong?", repr(delivery))
+
+    agent.outbox.liveness_s = -1.0
+    await agent._maybe_elicit("telegram:c2", entry, "hm?", "telegram:42", False)
+    check("follow-up: unreachable, so nothing is sent and the cooldown is unspent",
+          agent._last_elicit_at.get("telegram:c2", 0) == 0
+          and "telegram:c2" not in agent.buffers)
+
+
+def test_an_outbox_result_carries_no_message_ids() -> None:
+    """Acks carry no platform message ids; nothing may start relying on them."""
+    from persona_agent.transport import SendResult, _acked_result
+
+    items = [{"type": "text", "text": "a"}, {"type": "image", "b64": "x"},
+             {"type": "text", "text": "b"}]
+    collected = SendResult(success=True, sticker_files=["s.png"])
+    full = _acked_result(items, outbox_mod.OutboxResult("sent", 3), collected)
+    part = _acked_result(items, outbox_mod.OutboxResult("partial", 2), collected)
+    none = _acked_result(items, outbox_mod.OutboxResult("no_ack", 0), collected)
+    check("acked: all sent", full.success and full.delivered == "a\nb"
+          and full.sticker_files == ["s.png"] and full.message_ids == [])
+    check("acked: a partial commits only the acked prefix",
+          not part.success and part.partial and part.delivered == "a"
+          and part.sticker_files == [] and part.message_ids == [])
+    check("acked: no ack is nothing", not none.success and not none.partial
+          and none.delivered == "")

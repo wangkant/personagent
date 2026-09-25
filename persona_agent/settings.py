@@ -40,7 +40,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
-from . import access, promotion
+from . import access, channels, promotion
 from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool,
                          env_float, env_int, env_str, vision_endpoint_from_env)
 from .preflight import private_model_from_env
@@ -226,6 +226,12 @@ class AgentSettings:
     proactive_dm_prob: float = field(
         default_factory=lambda: env_float(
             "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0))
+    #: Which platforms the loop may speak first on (``PROACTIVE_PLATFORMS``,
+    #: e.g. "qq,telegram"); empty is every platform it can reach. A
+    #: GATEWAY_NATIVE_PLATFORMS name means QQ, whose keys it mints.
+    proactive_platforms: tuple[str, ...] = field(
+        default_factory=lambda: access.split_ids(
+            env_str("PROACTIVE_PLATFORMS", "", strip=True)))
 
     # ---- the self-evolution loop ------------------------------------------
     #: Opt-in background task that closes the negative half of the learning
@@ -329,6 +335,10 @@ class AgentSettings:
                      "allowed_dm_users", "private_allowed_qqs"):
             setattr(self, name, access.canonical_ids(
                 getattr(self, name), native_platforms=natives))
+        self.proactive_platforms = tuple(dict.fromkeys(
+            channels.NATIVE_PLATFORM if name in natives else name
+            for name in (p.lower() for p in access.split_ids(
+                self.proactive_platforms))))
 
     @property
     def owners(self) -> frozenset[str]:
@@ -454,6 +464,8 @@ class AgentSettings:
                 "PROACTIVE_DM_COOLDOWN", 86400, minimum=0, env=env),
             proactive_dm_prob=env_float(
                 "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0, env=env),
+            proactive_platforms=access.split_ids(
+                env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)),
             gateway_outbox=env_bool("GATEWAY_OUTBOX", True, env=env),
             evolve_auto=env_bool("EVOLVE_AUTO", False, env=env),
             evolve_interval_hours=env_float(

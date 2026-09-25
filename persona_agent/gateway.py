@@ -72,12 +72,13 @@ allow the persona to stay silent), fenced as external material and cut at
 500 characters. Left out, which is every ordinary forwarded turn, nothing
 changes.
 
-It is what gives a platform reached only through a forwarder its proactive
-turns. The agent cannot open a conversation on such a platform: the reply
-sink closes when the request returns, so there is no channel to speak into
+It is how a forwarder that cannot poll the outbox gets proactive turns. The
+agent cannot open a conversation through such a forwarder: the reply sink
+closes when the request returns, so there is no channel to speak into
 between requests. Inverting it removes the problem instead of solving it —
 the forwarder issues the request on a schedule of its own, and if the persona
 has something to say the reply comes back in the response like any other.
+It stamps the same DM cooldown the agent's own proactive loop reads.
 
 The flag is load-bearing, not decorative. Without it the caller's own
 directive is indistinguishable from the reader's words: it lands in

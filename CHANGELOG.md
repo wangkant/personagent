@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/webhook/gateway`, with its own concurrency budget so a long-poll never
   takes a turn's slot. The body names its kind (`outbox.pull`), and each
   endpoint refuses the other's. `GATEWAY_OUTBOX=false` turns it off.
+- **Proactive openers, the follow-up question and the excuse reach every
+  platform with such a connector.** Until now they existed only on QQ: the
+  proactive loops skipped every other conversation, and the question asked
+  after a rejection and the excuse for a failed model call were dropped once
+  the gateway request had returned. They now go through the outbox, and are
+  remembered only once the connector acks them. The DM loop also considers
+  anyone who has DMed the bot through such a connector (and is still
+  admitted), not only the QQ ids in `OWNER_IDS` and `ALLOWED_DM_USERS`. A
+  conversation no connector can reach is skipped before any model call.
+  **Upgrade note:** with `PROACTIVE_ENABLE=true`, openers start on Telegram
+  and the other platforms as soon as their connector pulls the outbox. The
+  new `PROACTIVE_PLATFORMS` (for example `qq`) keeps the loop where you want
+  it; blank means everywhere it can reach.
 
 ### Deprecated
 
@@ -129,8 +142,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cover every member), owner weighting when it corrects the bot, the exemption
   from `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
   longer needs `OWNER_QQ`), and memories that name `OWNER_NAME` are attributed
-  to the owner's account on that conversation's platform. Proactive DMs still
-  go only to QQ ids, the one channel that can open a DM. All the owner entries
+  to the owner's account on that conversation's platform. Proactive DMs go to
+  QQ ids through NapCat, and elsewhere only through a connector that pulls the
+  outbox (see Added). All the owner entries
   name one person, `OWNER_NAME`: if `GATEWAY_OWNER_IDS` lists anyone else,
   remove them before upgrading. `tools/candidates_admin.py`,
   `tools/bootstrap_from_history.py` and `try_chat.py` read the owners the same
@@ -143,11 +157,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Telegram model to write mentions the forwarder could not resolve. This
   changes the live QQ prompt text too, so the provider's prompt cache misses
   once after upgrading.
+- **QQ through AstrBot sends the follow-up question and the excuse.**
+  With `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` both were dropped once the
+  gateway request returned; they now go to `NAPCAT_API`, as the proactive
+  messages already did and as on the direct route, so they need NapCat's HTTP
+  server like those do.
+- **A connector's own `"proactive": true` DM counts against the DM cooldown.**
+  It used to stamp the reader's activity, as if they had written. It now
+  stamps `PROACTIVE_DM_COOLDOWN`'s clock, which the agent's own loop reads,
+  so the two schedulers cannot both open the same DM.
+- **A half-delivered proactive opener is kept on record.** When only part of
+  it went out, the part people read is now in the room's buffer or the DM
+  history, as a half-delivered reply already was.
 - **For code built on the engine:** `AgentSettings` gains `owner_ids` and
   `allowed_dm_users`, and the `owners` / `dm_users` properties that fold the
   old fields in; `owner_qq`, `gateway_owner_ids` and `private_allowed_qqs`
   still work. `promotion.decide` takes `owner_ids` next to `owner_id`.
   `config_env.env_csv` is gone; `access.split_ids` replaces it.
+  `AgentSettings` also gains `gateway_outbox` and `proactive_platforms`, and
+  `Agent` an `outbox` and a `gateway_handles` store.
 
 - **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
   `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /

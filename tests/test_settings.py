@@ -236,6 +236,21 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
           s.rate_limit_cooldown == 20, repr(s.rate_limit_cooldown))
 
 
+def test_the_outbox_settings() -> None:
+    """GATEWAY_OUTBOX defaults on; PROACTIVE_PLATFORMS is a lowercase list
+    where a native forwarder's name means QQ, whose keys it mints."""
+    default = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
+    check("outbox: on by default, every platform open",
+          default.gateway_outbox is True and default.proactive_platforms == ())
+    s = AgentSettings.from_env(env={
+        "LLM_API_KEY": "k", "GATEWAY_OUTBOX": "false",
+        "PROACTIVE_PLATFORMS": " Telegram, aiocqhttp ,qq,",
+        "GATEWAY_NATIVE_PLATFORMS": "aiocqhttp"})
+    check("outbox: false turns it off", s.gateway_outbox is False)
+    check("proactive platforms: trimmed, lowercased, native read as qq",
+          s.proactive_platforms == ("telegram", "qq"), repr(s.proactive_platforms))
+
+
 def test_the_empty_model_fallbacks_resolve_in_order() -> None:
     bare = AgentSettings(api_key="k", model="main")
     check("blank fallback model becomes the main model",

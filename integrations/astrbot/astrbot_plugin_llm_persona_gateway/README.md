@@ -157,7 +157,9 @@ QQ goes through this plugin like any other platform, using AstrBot's
 2. In the agent's `.env`, set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` and
    `BOT_QQ` (the bot account's number).
 3. Keep NapCat's HTTP API reachable at the agent's `NAPCAT_API`. Proactive
-   messages and the catch-up sweep for missed mentions go through it directly.
+   messages, the follow-up question after a rejection, the excuse when the
+   model fails and the catch-up sweep for missed mentions go through it
+   directly.
 4. If NapCat also posts to the agent's `/webhook/qq`, turn that off. That
    route is deprecated since 0.3.0, and running both delivers every message
    twice.

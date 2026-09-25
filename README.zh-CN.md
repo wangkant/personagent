@@ -120,7 +120,7 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 
 - 从插件的 `excluded_platforms` 中移除 `aiocqhttp`。
 - 在 personagent 的 `.env` 中设置 `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`，让 QQ 会话保持原有的身份和记忆。`--qq` 会同时处理这两项。
-- 保持 NapCat 的 HTTP 服务开启（`NAPCAT_API`）。主动发言和补回离线期间漏掉的 @ 都直接经由它发送。这条路径下 OCR 回退会跳过，引用消息从 personagent 自己的近期消息索引里查找。
+- 保持 NapCat 的 HTTP 服务开启（`NAPCAT_API`）。主动发言、被否定后的追问、模型出错时的托词，以及补回离线期间漏掉的 @，都直接经由它发送。这条路径下 OCR 回退会跳过，引用消息从 personagent 自己的近期消息索引里查找。
 - `/webhook/qq` 直连入口自 0.3.0 起废弃。不要与 AstrBot 转发同时启用，否则每条消息都会收到两次。
 
 </details>
@@ -137,7 +137,7 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `HOST` 时，必�
 <details>
 <summary>在 QQ 以外的平台主动发言</summary>
 
-在 QQ 以外的平台上，回复只能随带来消息的那次请求返回，所以 personagent 没有自己主动发言的通道。若要定时主动私聊，让外部任务发送带 `proactive: true` 的私聊网关事件：其中的文字会被当作给人设的提示，而不是对方说的话，返回的回复由这个任务负责转发。带此标记的群聊事件会被认领后丢弃。详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
+在 QQ 以外的平台上，personagent 主动发出的消息（主动发言、被否定后的追问、模型出错时的托词）要靠一个拉取其 outbox 的连接器送达，见[连接器协议](docs/connectors.md)（英文）。`PROACTIVE_PLATFORMS=qq` 可把主动发言限制在 QQ。没有这样的连接器时，回复只能随带来消息的那次请求返回。若要定时主动私聊，让外部任务发送带 `proactive: true` 的私聊网关事件：其中的文字会被当作给人设的提示，而不是对方说的话，返回的回复由这个任务负责转发。带此标记的群聊事件会被认领后丢弃。详见[部署指南](docs/deploy.md#more-than-one-platform)（英文）。
 
 </details>
 

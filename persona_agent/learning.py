@@ -795,16 +795,36 @@ class Learning:
             now_mono = time.time()
             if now_mono - self._last_elicit_at[conv_id] < self.react_elicit_cooldown:
                 return
-            self._last_elicit_at[conv_id] = now_mono
+            uid = ""
+            route_key = conv_id
             if is_private:
                 uid = conv_id.split(":", 1)[1] if ":" in conv_id else reactor_uid
-                result = await self._send_private_qq(uid, ask)
+                route_key = channels.dm_routing_key(uid)
+            # Unreachable now: leave the cooldown unspent for a later one.
+            if self._background_route(route_key) is None:
+                self._log_no_route(route_key, "follow_up")
+                return
+            self._last_elicit_at[conv_id] = now_mono
+            if is_private:
+                async with self.send_locks[route_key]:
+                    self._private_send_owners[route_key] = asyncio.current_task()
+                    try:
+                        result = await self._send_background(
+                            route_key, lambda: self._send_private_qq(uid, ask),
+                            reason="follow_up")
+                    finally:
+                        if (self._private_send_owners.get(route_key)
+                                is asyncio.current_task()):
+                            self._private_send_owners.pop(route_key, None)
                 if result.success:
                     self.private_history.setdefault(uid, []).append(
                         {"role": "assistant", "content": ask})
             else:
                 async with self.send_locks[conv_id]:
-                    result = await self._send_qq(conv_id, ask, reactor_uid)
+                    result = await self._send_background(
+                        conv_id,
+                        lambda: self._send_qq(conv_id, ask, reactor_uid),
+                        reason="follow_up")
                 if result.success:
                     self._append_buffer(conv_id, self.bot_name, ask)
             if not result.success:
