@@ -1,4 +1,4 @@
-"""Focused contract tests for the bundled AstrBot forwarder plugin."""
+"""Focused contract tests for the bundled AstrBot connector plugin."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +19,7 @@ import httpx
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PLUGIN_DIR = ROOT / "integrations" / "astrbot" / "astrbot_plugin_llm_persona_gateway"
+PLUGIN_DIR = ROOT / "integrations" / "astrbot" / "astrbot_plugin_personagent"
 PLUGIN = PLUGIN_DIR / "main.py"
 SDK = ROOT / "integrations" / "sdk" / "personagent_connector.py"
 _PACKAGE = "astrbot_gateway_tested"
@@ -348,7 +348,7 @@ class _Context:
 
 
 def _plugin_instance(module, config, context=None):
-    plugin = module.LLMPersonaGateway(context, config)
+    plugin = module.PersonagentConnector(context, config)
     plugin._client = _RecordingClient()
     return plugin
 
@@ -404,13 +404,36 @@ def test_default_configuration_forwards_neither_groups_nor_private_messages():
     assert plugin._client.calls == []
 
 
+def test_listed_ids_are_prefiltered_and_a_wildcard_is_not():
+    """A listed conversation was filtered here; "*" forwards everything of its
+    kind and says so, so the agent's own lists decide alone."""
+    module = _import_plugin()
+    listed = _plugin_instance(module, {"groups": ["group-1"], "dm_users": ["user-1"]})
+    assert _capture_event(listed, _Event(module, private=False))["prefiltered"] is True
+    assert _capture_event(listed, _Event(module, private=True))["prefiltered"] is True
+    other = _Event(module, private=True)
+    other.get_sender_id = lambda: "user-2"
+    assert _capture_event(listed, other) == {}, "an unlisted sender is not forwarded"
+
+    groups = _plugin_instance(module, {"groups": ["*"]})
+    assert _capture_event(groups, _Event(module, private=False))["prefiltered"] is False
+    assert _capture_event(groups, _Event(module, private=True)) == {}, "DMs need dm_users"
+
+    dms = _plugin_instance(module, {"dm_users": ["*"]})
+    assert _capture_event(dms, other)["prefiltered"] is False
+    assert _capture_event(dms, _Event(module, private=False)) == {}, "groups need groups"
+
+    excluded = _plugin_instance(module, {"groups": ["*"], "excluded_platforms": ["telegram"]})
+    assert _capture_event(excluded, _Event(module, private=False)) == {}
+
+
 def test_signed_request_uses_canonical_body_and_replay_headers():
     module = _import_plugin()
     plugin = _plugin_instance(
         module,
         {
-            "agent_url": "https://agent.example",
-            "gateway_token": "shared-secret",
+            "personagent_url": "https://agent.example",
+            "connector_token": "shared-secret",
         },
     )
     real_time = module.time.time
@@ -456,12 +479,12 @@ def test_off_host_endpoint_requires_https_and_a_token():
     insecure = _plugin_instance(
         module,
         {
-            "agent_url": "http://agent.example",
-            "gateway_token": "shared-secret",
+            "personagent_url": "http://agent.example",
+            "connector_token": "shared-secret",
         },
     )
     no_token = _plugin_instance(
-        module, {"agent_url": "https://agent.example"}
+        module, {"personagent_url": "https://agent.example"}
     )
 
     assert asyncio.run(
@@ -477,8 +500,8 @@ def test_malformed_endpoint_is_rejected_without_a_request():
     plugin = _plugin_instance(
         module,
         {
-            "agent_url": "http://[broken",
-            "gateway_token": "shared-secret",
+            "personagent_url": "http://[broken",
+            "connector_token": "shared-secret",
         },
     )
 
@@ -487,7 +510,7 @@ def test_malformed_endpoint_is_rejected_without_a_request():
     assert plugin._client.calls == []
 
 
-_DM_CONFIG = {"private_enabled": True, "private_whitelist": ["user-1"], "block_default": True}
+_DM_CONFIG = {"dm_users": ["user-1"], "block_default": True}
 
 
 def test_forwarding_failure_does_not_stop_astrbot_fallback():
@@ -548,7 +571,7 @@ def test_forwarded_event_carries_sent_at_and_success_blocks_fallback():
 
 def test_typing_indicator_brackets_the_round_trip(monkeypatch):
     module = _import_plugin()
-    plugin = _plugin_instance(module, {"private_enabled": True, "private_whitelist": ["user-1"]})
+    plugin = _plugin_instance(module, {"dm_users": ["user-1"]})
     event = _Event(module, private=True)
 
     async def two_bubbles(_neutral):
@@ -626,8 +649,8 @@ def test_missing_sent_at_is_not_forwarded_or_blocked():
 
 def _group_addressing(module, platform, components, *, wake_flag=False,
                       message_str="hello", raw=None, context=None):
-    """Forward one whitelisted group event; return what the agent was sent."""
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]}, context)
+    """Forward one allowlisted group event; return what the agent was sent."""
+    plugin = _plugin_instance(module, {"groups": ["group-1"]}, context)
     event = _Event(module, private=False, platform=platform)
     event.message_obj.message = components
     event.message_obj.raw_message = raw
@@ -735,7 +758,7 @@ def test_each_attempt_gets_the_full_timeout(monkeypatch):
     to split timeout_s across attempts — doing so capped every signed request
     at 93 s whatever the operator set."""
     module = _import_plugin()
-    for config in ({"gateway_token": "t", "timeout_s": 180}, {"timeout_s": 180}):
+    for config in ({"connector_token": "t", "timeout_s": 180}, {"timeout_s": 180}):
         plugin, _sleeps, _clock = _retry_rig(
             monkeypatch, module, config, [_StatusResponse(200)])
         delivered, _owned, _replies = asyncio.run(
@@ -746,7 +769,7 @@ def test_each_attempt_gets_the_full_timeout(monkeypatch):
 
 def test_a_429_is_retried_after_its_retry_after(monkeypatch):
     module = _import_plugin()
-    for config in ({"gateway_token": "t"}, {}):
+    for config in ({"connector_token": "t"}, {}):
         plugin, sleeps, _clock = _retry_rig(
             monkeypatch, module, config,
             [_StatusResponse(429, {"Retry-After": "3"}), _StatusResponse(200)])
@@ -761,7 +784,7 @@ def test_a_429_is_retried_after_its_retry_after(monkeypatch):
 def test_no_retry_once_the_signed_envelope_would_arrive_stale(monkeypatch):
     module = _import_plugin()
     plugin, sleeps, clock = _retry_rig(
-        monkeypatch, module, {"gateway_token": "t"},
+        monkeypatch, module, {"connector_token": "t"},
         [_StatusResponse(500), _StatusResponse(200)])
     real_post = plugin._client.post
 
@@ -927,7 +950,7 @@ def test_a_telegram_sticker_is_an_emoji_and_an_animated_one_has_no_image():
 
 def test_telegram_mentions_by_username_become_the_senders_numeric_id():
     module = _import_plugin()
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    plugin = _plugin_instance(module, {"groups": ["group-1"]})
     first = _Event(module, private=False, platform="telegram")
     first.message_obj.raw_message = _tg_update()  # alice (4242) talks once
     captured = {}
@@ -1041,7 +1064,7 @@ def test_kook_emoji_quotes_and_time():
 
 def test_a_wecom_smart_bot_group_is_a_group_that_addressed_the_bot():
     module = _import_plugin()
-    plugin = _plugin_instance(module, {"group_whitelist": ["chat-9"]})
+    plugin = _plugin_instance(module, {"groups": ["chat-9"]})
     event = _Event(module, private=False, platform="wecom_ai_bot")
     event.get_group_id = lambda: ""  # the adapter never sets it
     event.message_obj.raw_message = {"message_data": {"chatid": "chat-9", "msgid": "m-7",
@@ -1080,7 +1103,7 @@ def test_satori_milliseconds_and_quote_senders():
     ], raw={"message": {"quote": {"id": "q"}}})
     assert sent["segments"][0] == {"type": "reply", "message_id": "q"}, sent["segments"]
 
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    plugin = _plugin_instance(module, {"groups": ["group-1"]})
     event = _Event(module, private=False, platform="satori")
     event.message_obj.timestamp = 1_700_000_800_456
     captured = {}
@@ -1281,7 +1304,7 @@ def test_platforms_without_mentions_drop_them_cleanly():
 
 def test_qq_official_replies_ask_for_plain_text_and_every_reply_skips_t2i():
     module = _import_plugin()
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    plugin = _plugin_instance(module, {"groups": ["group-1"]})
     event = _Event(module, private=False, platform="qq_official")
     event.chain_result = _Result
 
@@ -1314,7 +1337,7 @@ def test_one_message_platforms_get_the_turn_as_one_and_line_batches():
 
 
 # ---------------------------------------------------------------------------
-# The connector: forwarder id, reply handle, capabilities, and the outbox
+# The connector: connector id, reply handle, capabilities, and the outbox
 # ---------------------------------------------------------------------------
 
 def _capture_event(plugin, event):
@@ -1329,21 +1352,22 @@ def _capture_event(plugin, event):
     return captured
 
 
-def test_the_forwarder_id_is_made_once_and_kept():
+def test_the_connector_id_is_made_once_and_kept():
     module = _import_plugin()
     first = _plugin_instance(module, dict(_DM_CONFIG))
-    asyncio.run(first._ensure_forwarder_id())
+    asyncio.run(first._ensure_connector_id())
     second = _plugin_instance(module, dict(_DM_CONFIG))  # a reload
     sent = _capture_event(second, _Event(module, private=True))
-    assert sent["connector_id"] == first._forwarder_id
+    assert sent["connector_id"] == first._connector_id
     assert sent["connector_id"].startswith("astrbot-")
-    configured = _plugin_instance(module, dict(_DM_CONFIG, forwarder_id="home-bot"))
+    assert module.Star.kv["connector_id"] == first._connector_id
+    configured = _plugin_instance(module, dict(_DM_CONFIG, connector_id="home-bot"))
     assert _capture_event(configured, _Event(module, private=True))["connector_id"] == "home-bot"
 
 
 def test_the_reply_handle_is_the_umo_and_the_group_under_session_isolation():
     module = _import_plugin()
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    plugin = _plugin_instance(module, {"groups": ["group-1"]})
     event = _Event(module, private=False, platform="dingtalk")
     assert _capture_event(plugin, event)["reply_handle"] == "my-dingtalk:GroupMessage:group-1"
     # unique_session points AstrBot's own session at the sender.
@@ -1419,7 +1443,7 @@ def _outbox_rig(monkeypatch, module, *insts, config=None, minted=(_delivery(),),
     """A plugin with a context, pauses recorded, and the reply handles of
     `minted` taken as if their conversations had written."""
     context = _Context(*insts, **context_kwargs)
-    plugin = _plugin_instance(module, config or {"group_whitelist": ["group-1"]}, context)
+    plugin = _plugin_instance(module, config or {"groups": ["group-1"]}, context)
     for d in minted:
         plugin._handles.mint(d["reply_handle"], d["platform"], d["conversation_type"],
                              d["conversation_id"])
@@ -1445,8 +1469,8 @@ def test_a_delivery_goes_out_through_the_reply_handle_in_order(monkeypatch):
 
 def test_a_delivery_the_lists_no_longer_allow_is_refused(monkeypatch):
     module = _import_plugin()
-    for config in ({"group_whitelist": []},
-                   {"group_whitelist": ["group-1"], "excluded_platforms": ["telegram"]}):
+    for config in ({"groups": []},
+                   {"groups": ["group-1"], "excluded_platforms": ["telegram"]}):
         plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("telegram"), config=config)
         assert asyncio.run(plugin._deliver(_delivery())) == ("refused", 0)
         assert context.sent == []
@@ -1468,7 +1492,7 @@ def test_a_delivery_goes_only_where_the_plugin_took_its_handle_from(monkeypatch)
     local process can post an event without CONNECTOR_TOKEN. The allowlists
     name the conversation, but the send goes to the handle."""
     module = _import_plugin()
-    config = dict(_DM_CONFIG, group_whitelist=["group-1"])
+    config = dict(_DM_CONFIG, groups=["group-1"])
     plugin, context, _ = _outbox_rig(monkeypatch, module, _Inst("aiocqhttp"),
                                      config=config, minted=())
     plugin._outbox_running = lambda: True
@@ -1506,7 +1530,7 @@ def test_every_platform_that_speaks_first_still_reaches_its_conversations(monkey
     for name in [p for p, rules in platforms.RULES.items() if rules.outbox]:
         inst = _Inst(name, agent_id="1") if name == "wecom" else _Inst(name)
         plugin, context, _ = _outbox_rig(monkeypatch, module, inst, minted=(),
-                                         config=dict(_DM_CONFIG, group_whitelist=["group-1"]))
+                                         config=dict(_DM_CONFIG, groups=["group-1"]))
         plugin._outbox_running = lambda: True
         isolated = _Event(module, private=False, platform=name)
         isolated.unified_msg_origin = f"my-{name}:GroupMessage:user-1"
@@ -1614,9 +1638,9 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
     monkeypatch.setattr(module.sdk.httpx, "AsyncClient",
                         lambda *a, **k: real_client(transport=httpx.MockTransport(agent)))
     context = _Context(_Inst("telegram"))
-    plugin = module.LLMPersonaGateway(context, {
-        "group_whitelist": ["group-1"], "gateway_token": "t",
-        "agent_url": "https://agent.example"})
+    plugin = module.PersonagentConnector(context, {
+        "groups": ["group-1"], "connector_token": "t",
+        "personagent_url": "https://agent.example"})
     plugin._handles.mint("my-telegram:GroupMessage:group-1", "telegram", "group", "group-1")
     real_sleep = asyncio.sleep
     monkeypatch.setattr(module.random, "uniform", lambda a, b: 0)
@@ -1634,7 +1658,7 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
 
     assert pulls[0][0] == "/v1/outbox" and pulls[0][2].startswith("sha256=")
     assert pulls[0][1]["kind"] == "outbox.pull"
-    assert pulls[0][1]["connector_id"] == plugin._forwarder_id
+    assert pulls[0][1]["connector_id"] == plugin._connector_id
     assert [c.text for _s, chain in context.sent for c in chain] == ["anyone up?", "hello?"], \
         "the repeated delivery id went out once"
     assert pulls[1][1]["acks"] == [{"delivery_id": "d_1", "status": "sent", "sent_items": 2}]
@@ -1642,11 +1666,11 @@ async def test_the_outbox_loop_pulls_delivers_acks_and_stops(monkeypatch):
 
 async def test_the_outbox_stays_off_when_disabled_or_unsafe():
     module = _import_plugin()
-    off = module.LLMPersonaGateway(_Context(), {"outbox_enabled": False})
+    off = module.PersonagentConnector(_Context(), {"outbox_enabled": False})
     await off.initialize()
     assert off._outbox_task is None
-    unsafe = module.LLMPersonaGateway(_Context(), {"agent_url": "http://agent.example",
-                                                   "gateway_token": "t"})
+    unsafe = module.PersonagentConnector(_Context(), {"personagent_url": "http://agent.example",
+                                                   "connector_token": "t"})
     await unsafe.initialize()
     await asyncio.wait_for(unsafe._outbox_task, 1)
     assert not unsafe._outbox_running()

@@ -493,7 +493,7 @@ def test_validator_accepts_prefixed_at_marker() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit: AstrBot forwarder plugin helpers (imported with stubbed astrbot)
+# Unit: AstrBot connector plugin helpers (imported with stubbed astrbot)
 # ---------------------------------------------------------------------------
 
 def _import_plugin_module():
@@ -512,7 +512,7 @@ def _import_plugin_module():
 def test_plugin_reply_id_strip() -> None:
     """The plugin's quote-id strip must match the conversation-namespaced
     inbound id format ("<platform>:<conversation>:<raw mid>")."""
-    cls = _import_plugin_module().LLMPersonaGateway
+    cls = _import_plugin_module().PersonagentConnector
     check("plugin strip: same-conversation id recovered",
           cls._resolve_reply_id("telegram:-100777:555", "telegram", "-100777") == "555")
     check("plugin strip: other-conversation id dropped",

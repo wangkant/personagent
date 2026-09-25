@@ -1,12 +1,12 @@
 {
-  "agent_url": {
+  "personagent_url": {
     "type": "string",
-    "description": "Base URL of the persona agent, such as http://127.0.0.1:8080; the plugin posts to /v1/events and pulls /v1/outbox under it. Must be loopback, or HTTPS with gateway_token set; plain HTTP to any other host (e.g. another container) is refused and logged as 'refusing unsafe agent_url'.",
+    "description": "Base URL of the persona agent, such as http://127.0.0.1:8080; the plugin posts to /v1/events and pulls /v1/outbox under it. Must be loopback, or HTTPS with connector_token set; plain HTTP to any other host (e.g. another container) is refused and logged as 'refusing unsafe personagent_url'.",
     "default": "http://127.0.0.1:8080"
   },
-  "gateway_token": {
+  "connector_token": {
     "type": "string",
-    "description": "Shared secret used for the gateway bearer header and replay-resistant HMAC envelope. It must match the agent's CONNECTOR_TOKEN. A non-empty value is required for every off-host endpoint.",
+    "description": "Shared secret used for the bearer header and replay-resistant HMAC envelope. It must match the agent's CONNECTOR_TOKEN. A non-empty value is required for every off-host endpoint.",
     "default": ""
   },
   "timeout_s": {
@@ -19,19 +19,14 @@
     "description": "Platform adapter names that must NOT be forwarded. To carry QQ (the supported path), remove aiocqhttp from this list and set CONNECTOR_QQ_PLATFORMS=aiocqhttp on the agent so QQ ids stay spelled the way every store on disk already spells them. Keep aiocqhttp here only while NapCat still feeds the agent directly through the deprecated /v1/onebot, otherwise QQ messages would be handled twice.",
     "default": ["aiocqhttp"]
   },
-  "group_whitelist": {
+  "groups": {
     "type": "list",
-    "description": "Group IDs to forward. Default-deny: an empty list forwards no groups.",
+    "description": "Group IDs to forward. Default-deny: an empty list forwards no groups. \"*\" forwards every group, and the agent's ACCESS_GROUPS decides alone (a platform other than QQ with no entries there is refused).",
     "default": []
   },
-  "private_enabled": {
-    "type": "bool",
-    "description": "Enable forwarding for explicitly allowlisted private (direct) senders.",
-    "default": false
-  },
-  "private_whitelist": {
+  "dm_users": {
     "type": "list",
-    "description": "Sender IDs allowed in private chat. Default-deny: an empty list allows no senders.",
+    "description": "Sender IDs whose direct messages are forwarded. Default-deny: an empty list forwards no DMs. \"*\" forwards every DM, and the agent's ACCESS_DM_USERS decides alone (a platform with no entries there is refused).",
     "default": []
   },
   "block_default": {
@@ -64,7 +59,7 @@
     "description": "How long each outbox pull may wait at the agent for something to deliver, in seconds (at most 30).",
     "default": 25
   },
-  "forwarder_id": {
+  "connector_id": {
     "type": "string",
     "description": "This AstrBot's name to the agent, which queues outbox messages by it. Empty generates one once and keeps it. Set it only to give two AstrBot hosts distinct names, never the same one.",
     "default": ""

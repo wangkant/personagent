@@ -56,7 +56,7 @@ from .platforms import (
     split_text,
 )
 
-DEFAULT_AGENT_URL = "http://127.0.0.1:8080"
+DEFAULT_PERSONAGENT_URL = "http://127.0.0.1:8080"
 DEFAULT_TIMEOUT_S = 180
 DEFAULT_FORWARD_THRESHOLD = 1500
 DEFAULT_QUOTE_MAX_CHARS = 200
@@ -101,7 +101,7 @@ _IMAGE_NOTE = "(sent an image)"
 
 class _Prefixed(logging.LoggerAdapter):
     def process(self, msg, kwargs):
-        return f"llm_persona_gateway: outbox: {msg}", kwargs
+        return f"personagent: outbox: {msg}", kwargs
 
 
 # The SDK's pull loop reports into AstrBot's log, under this plugin's name.
@@ -293,7 +293,7 @@ class _Handles:
         return [[handle, *entry] for handle, entry in self._bound.items()]
 
 
-class LLMPersonaGateway(Star):
+class PersonagentConnector(Star):
     """Forward all eligible messages to the persona agent, relay its replies,
     and deliver what it queues in its outbox."""
 
@@ -304,7 +304,7 @@ class LLMPersonaGateway(Star):
         # One shared client, made on first use; the timeout is applied per
         # request so config changes take effect without a reload.
         self._client = None
-        self._forwarder_id = str(config.get("forwarder_id") or "").strip()
+        self._connector_id = str(config.get("connector_id") or "").strip()
         self._people = _People()
         self._handles = _Handles()
         self._outbox_task = None
@@ -314,7 +314,7 @@ class LLMPersonaGateway(Star):
         self._starting_until = None
 
     async def initialize(self):
-        await self._ensure_forwarder_id()
+        await self._ensure_connector_id()
         self._starting_until = time.monotonic() + _PLATFORM_WAIT_S
         if self.config.get("outbox_enabled", True) and self._outbox_task is None:
             self._outbox_task = asyncio.create_task(self._run_outbox())
@@ -333,24 +333,24 @@ class LLMPersonaGateway(Star):
             with contextlib.suppress(Exception):
                 await client.aclose()
 
-    async def _ensure_forwarder_id(self) -> str:
+    async def _ensure_connector_id(self) -> str:
         """A stable id for this AstrBot, kept across restarts in AstrBot's
         plugin store: the agent queues outbox deliveries by it."""
-        if self._forwarder_id:
-            return self._forwarder_id
+        if self._connector_id:
+            return self._connector_id
         stored = None
         with contextlib.suppress(Exception):
-            stored = await self.get_kv_data("forwarder_id", None)
+            stored = await self.get_kv_data("connector_id", None)
         if not stored:
             stored = "astrbot-" + secrets.token_hex(6)
             try:
-                await self.put_kv_data("forwarder_id", stored)
+                await self.put_kv_data("connector_id", stored)
             except Exception as e:
                 logger.warning(
-                    "llm_persona_gateway: could not store forwarder_id; the "
+                    "personagent: could not store connector_id; the "
                     f"agent will see a new connector after a restart: {e}")
-        self._forwarder_id = str(stored)
-        return self._forwarder_id
+        self._connector_id = str(stored)
+        return self._connector_id
 
     async def _load_handles(self) -> None:
         if self._handles.loaded:
@@ -359,7 +359,7 @@ class LLMPersonaGateway(Star):
         try:
             rows = await self.get_kv_data(_HANDLES_KEY, None)
         except Exception as e:
-            logger.warning(f"llm_persona_gateway: could not read the stored reply handles: {e}")
+            logger.warning(f"personagent: could not read the stored reply handles: {e}")
         self._handles.load(rows)
 
     async def _mint_handle(self, handle: str, platform: str, conversation_type: str,
@@ -373,7 +373,7 @@ class LLMPersonaGateway(Star):
             await self.put_kv_data(_HANDLES_KEY, self._handles.rows())
         except Exception as e:
             logger.warning(
-                "llm_persona_gateway: could not store a reply handle; after a "
+                "personagent: could not store a reply handle; after a "
                 f"reload the outbox waits for that conversation to write again: {e}")
 
     def _outbox_running(self) -> bool:
@@ -386,7 +386,7 @@ class LLMPersonaGateway(Star):
     async def forward_to_agent(self, event: AstrMessageEvent):
         # EventMessageType.ALL also matches OTHER_MESSAGE (system/channel
         # events). Those report is_private_chat() False with an empty group
-        # id, so the group/private split below would misclassify them as
+        # id, so the group/DM split below would misclassify them as
         # DMs and run the agent's DM persona on them — skip them outright.
         msg_type = getattr(event.message_obj, "type", None)
         if msg_type not in (MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE):
@@ -413,6 +413,8 @@ class LLMPersonaGateway(Star):
         is_group = bool(group_id)
         if not self._allowed(platform, is_group, group_id, sender_id):
             return
+        # "*" forwards everything of that kind, so the agent's lists decide.
+        prefiltered = "*" not in self._listed("groups" if is_group else "dm_users")
 
         self._remember_people(platform, event, raw)
         segments, addressed = await self._map_segments(event, bot_id, platform)
@@ -455,7 +457,7 @@ class LLMPersonaGateway(Star):
             stamped = seconds(int(stamped))
         except (TypeError, ValueError, OverflowError):
             logger.warning(
-                "llm_persona_gateway: dropping event without a valid "
+                "personagent: dropping event without a valid "
                 "time the platform sent it"
             )
             return
@@ -479,7 +481,8 @@ class LLMPersonaGateway(Star):
             "addressed": addressed,
             "segments": segments,
             "text": text,
-            "connector_id": await self._ensure_forwarder_id(),
+            "prefiltered": prefiltered,
+            "connector_id": await self._ensure_connector_id(),
             "reply_handle": self._reply_handle(event),
             "capabilities": capabilities,
         }
@@ -521,22 +524,21 @@ class LLMPersonaGateway(Star):
             # answers as someone else in a room this persona chose to sit out.
             event.stop_event()
 
+    def _listed(self, key: str) -> list:
+        return [str(v) for v in (self.config.get(key) or [])]
+
     def _excluded(self) -> list:
-        return [str(p) for p in (self.config.get("excluded_platforms") or [])]
+        return self._listed("excluded_platforms")
 
     def _allowed(self, platform: str, is_group: bool, conversation_id: str,
                  sender_id: str) -> bool:
         """The plugin's own filter, for an incoming message and again for an
-        outbox delivery: the lists may have changed since it was queued."""
+        outbox delivery: the lists may have changed since it was queued.
+        An empty list forwards nothing of its kind; "*" forwards all of it."""
         if platform in self._excluded():
             return False
-        if is_group:
-            whitelist = [str(g) for g in (self.config.get("group_whitelist") or [])]
-            return conversation_id in whitelist
-        if not self.config.get("private_enabled", False):
-            return False
-        whitelist = [str(u) for u in (self.config.get("private_whitelist") or [])]
-        return sender_id in whitelist
+        allow = self._listed("groups" if is_group else "dm_users")
+        return "*" in allow or (conversation_id if is_group else sender_id) in allow
 
     @staticmethod
     def _is_chat_message(platform: str, raw) -> bool:
@@ -666,7 +668,7 @@ class LLMPersonaGateway(Star):
         try:
             await fn()
         except Exception as e:  # an indicator must never cost a reply
-            logger.debug(f"llm_persona_gateway: typing indicator failed: {e}")
+            logger.debug(f"personagent: typing indicator failed: {e}")
 
     def _quote_chars(self) -> int:
         if not self.config.get("forward_quoted_text", True):
@@ -894,7 +896,7 @@ class LLMPersonaGateway(Star):
                     try:
                         b64 = await comp.convert_to_base64()
                     except Exception as e:
-                        logger.debug(f"llm_persona_gateway: could not read an image: {e}")
+                        logger.debug(f"personagent: could not read an image: {e}")
         if not b64:
             return {"type": "text", "text": _IMAGE_NOTE}
         try:
@@ -915,7 +917,7 @@ class LLMPersonaGateway(Star):
             data = await bot.request.retrieve(url)
             return base64.b64encode(bytes(data)).decode()
         except Exception as e:
-            logger.debug(f"llm_persona_gateway: telegram download failed: {e}")
+            logger.debug(f"personagent: telegram download failed: {e}")
             return None
 
     @staticmethod
@@ -1019,19 +1021,19 @@ class LLMPersonaGateway(Star):
         try:
             parsed = urlsplit(url)
         except ValueError:
-            return False, "agent_url must be an absolute HTTP(S) URL"
+            return False, "personagent_url must be an absolute HTTP(S) URL"
         host = (parsed.hostname or "").lower()
         if not host or parsed.scheme not in ("http", "https"):
-            return False, "agent_url must be an absolute HTTP(S) URL"
+            return False, "personagent_url must be an absolute HTTP(S) URL"
         if host in ("localhost", "127.0.0.1", "::1"):
             return True, ""
         if parsed.scheme != "https":
             return False, (
-                "off-host agent_url must use HTTPS (or a private tunnel "
+                "off-host personagent_url must use HTTPS (or a private tunnel "
                 "terminating at a loopback URL)"
             )
         if not token:
-            return False, "off-host agent_url requires a non-empty gateway_token"
+            return False, "off-host personagent_url requires a non-empty connector_token"
         return True, ""
 
     @staticmethod
@@ -1053,26 +1055,26 @@ class LLMPersonaGateway(Star):
             detail = ""
         if status == 403:
             logger.error(
-                "llm_persona_gateway: agent refused the request (403): "
-                + (detail or "check gateway_token, the peer allowlist, and "
+                "personagent: agent refused the request (403): "
+                + (detail or "check connector_token, the peer allowlist, and "
                              "this host's clock"))
         elif status == 413:
             logger.warning(
-                "llm_persona_gateway: agent rejected the body as too large "
+                "personagent: agent rejected the body as too large "
                 f"(413){': ' + detail if detail else ''} -- usually an "
                 "oversized inline image")
         elif status == 429:
             logger.info(
-                "llm_persona_gateway: agent at capacity (429); this turn was "
+                "personagent: agent at capacity (429); this turn was "
                 "dropped. Expected backpressure, not a fault.")
         elif status == 400:
             logger.warning(
-                "llm_persona_gateway: agent rejected the event schema (400)"
+                "personagent: agent rejected the event schema (400)"
                 f"{': ' + detail if detail else ''} -- this is a bug in this "
                 "plugin, not a configuration problem")
         else:
             logger.warning(
-                f"llm_persona_gateway: agent request failed ({status})"
+                f"personagent: agent request failed ({status})"
                 f"{': ' + detail if detail else ''}")
 
     @staticmethod
@@ -1089,9 +1091,9 @@ class LLMPersonaGateway(Star):
                 return wait
         return _RETRY_BACKOFFS_S[attempt]
 
-    def _agent_url(self) -> str:
-        """The agent's base URL; the SDK appends the endpoint paths."""
-        return str(self.config.get("agent_url") or DEFAULT_AGENT_URL)
+    def _base_url(self) -> str:
+        """The agent's base URL; the endpoint paths are appended to it."""
+        return str(self.config.get("personagent_url") or DEFAULT_PERSONAGENT_URL)
 
     def _timeout(self) -> float:
         return float(self.config.get("timeout_s") or DEFAULT_TIMEOUT_S)
@@ -1106,12 +1108,12 @@ class LLMPersonaGateway(Star):
         Falling back to `handled` keeps an older agent — one that does not send
         the field — behaving exactly as it does today.
         """
-        base = self._agent_url()
+        base = self._base_url()
         timeout = self._timeout()
-        token = str(self.config.get("gateway_token") or "")
+        token = str(self.config.get("connector_token") or "")
         allowed, reason = self._endpoint_is_allowed(base, token)
         if not allowed:
-            logger.warning(f"llm_persona_gateway: refusing unsafe agent_url: {reason}")
+            logger.warning(f"personagent: refusing unsafe personagent_url: {reason}")
             return False, False, []
         url = sdk.endpoint_url(base, sdk.EVENTS_PATH)
 
@@ -1148,7 +1150,7 @@ class LLMPersonaGateway(Star):
                         await asyncio.sleep(wait)
                         continue
                     logger.warning(
-                        f"llm_persona_gateway: not retrying ({status}): the "
+                        f"personagent: not retrying ({status}): the "
                         "signed envelope would be too old for the agent by "
                         "the time the retry arrived")
                 self._log_http_failure(e, status)
@@ -1158,7 +1160,7 @@ class LLMPersonaGateway(Star):
                 # and PoolTimeout, which happen before the request reaches the
                 # agent, where the warning below would simply be false.
                 logger.error(
-                    "llm_persona_gateway: timed out waiting for the agent "
+                    "personagent: timed out waiting for the agent "
                     f"(timeout_s={timeout:.0f}). The agent does not check "
                     "whether the caller is still connected, so it is finishing "
                     "this turn and committing the reply, the debounce state "
@@ -1171,7 +1173,7 @@ class LLMPersonaGateway(Star):
                 )
                 return False, False, []
             except Exception as e:
-                logger.warning(f"llm_persona_gateway: agent request failed: {e}")
+                logger.warning(f"personagent: agent request failed: {e}")
                 return False, False, []
         if data is None:
             return False, False, []
@@ -1186,17 +1188,17 @@ class LLMPersonaGateway(Star):
     # ---------- outbox: messages nobody asked for ----------
 
     async def _run_outbox(self) -> None:
-        url = self._agent_url()
-        token = str(self.config.get("gateway_token") or "")
+        url = self._base_url()
+        token = str(self.config.get("connector_token") or "")
         allowed, reason = self._endpoint_is_allowed(url, token)
         if not allowed:
-            logger.warning(f"llm_persona_gateway: outbox off: {reason}")
+            logger.warning(f"personagent: outbox off: {reason}")
             return
         try:
             wait_s = min(30, max(1, int(self.config.get("outbox_wait_s") or 25)))
         except (TypeError, ValueError):
             wait_s = 25
-        connector = sdk.Connector(url, token, connector_id=await self._ensure_forwarder_id(),
+        connector = sdk.Connector(url, token, connector_id=await self._ensure_connector_id(),
                                   timeout_s=self._timeout())
         try:
             await connector.run_outbox(self._deliver, wait_s=wait_s, stop=self._outbox_stop)
@@ -1239,13 +1241,13 @@ class LLMPersonaGateway(Star):
                 session.message_type != (MessageType.GROUP_MESSAGE if is_group
                                          else MessageType.FRIEND_MESSAGE)):
             logger.warning(
-                f"llm_persona_gateway: outbox: {handle!r} is not an address of "
+                f"personagent: outbox: {handle!r} is not an address of "
                 f"{conversation_type} {conversation_id!r}; refused")
             return "refused", 0
         inst = await self._platform_inst(platform_id)
         if inst is None:
             logger.warning(
-                f"llm_persona_gateway: outbox: no running platform {platform_id!r}")
+                f"personagent: outbox: no running platform {platform_id!r}")
             return "failed", 0
         try:
             platform = str(inst.meta().name)
@@ -1256,7 +1258,7 @@ class LLMPersonaGateway(Star):
         if platform != bound[0] or (wanted and wanted != platform
                                     and not (wanted == "qq" and platform == "aiocqhttp")):
             logger.warning(
-                f"llm_persona_gateway: outbox: {platform_id!r} is {platform}, "
+                f"personagent: outbox: {platform_id!r} is {platform}, "
                 f"not {wanted or bound[0]}; refused")
             return "refused", 0
         if not self._allowed(platform, is_group, conversation_id, conversation_id):
@@ -1277,7 +1279,7 @@ class LLMPersonaGateway(Star):
                 try:
                     ok = await self.context.send_message(handle, MessageChain(chain=chain))
                 except Exception as e:
-                    logger.warning(f"llm_persona_gateway: outbox send failed: {e}")
+                    logger.warning(f"personagent: outbox send failed: {e}")
                     ok = False
                 if not ok:
                     return ("partial", sent) if sent else ("failed", 0)
@@ -1373,7 +1375,7 @@ class LLMPersonaGateway(Star):
                 chain.append(Comp.At(qq=at, name=at))
             chain.append(self._outbound_image(b64, platform, temps))
             return [chain]
-        logger.warning(f"llm_persona_gateway: dropping unknown reply type {rtype!r}")
+        logger.warning(f"personagent: dropping unknown reply type {rtype!r}")
         return []
 
     @staticmethod
@@ -1435,7 +1437,7 @@ class LLMPersonaGateway(Star):
                 temps.append(path)
                 return Comp.Image.fromFileSystem(path)
             except Exception as e:
-                logger.warning(f"llm_persona_gateway: could not stage an image for KOOK: {e}")
+                logger.warning(f"personagent: could not stage an image for KOOK: {e}")
         return Comp.Image.fromBase64(b64)
 
     @staticmethod
@@ -1455,7 +1457,7 @@ class LLMPersonaGateway(Star):
             return raw or None
         if ":" in target:
             logger.warning(
-                f"llm_persona_gateway: mention target {target!r} is not on "
+                f"personagent: mention target {target!r} is not on "
                 f"platform {platform!r}, sending without at"
             )
         return None

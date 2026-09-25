@@ -5,7 +5,7 @@
 After installing the environment it walks you through first-time
 configuration interactively (API provider, key, bot name, language), writes
 the answers into `.env`, can connect the agent to an AstrBot install (copies
-the forwarder plugin, generates the shared token, writes the allowlists), and
+the connector plugin, generates the shared token, writes the allowlists), and
 can drop you straight into a terminal chat. No manual editing needed.
 
 Idempotent - re-running reports what's already in place and only offers the
@@ -37,8 +37,11 @@ PROVIDERS = [
     ("Other OpenAI-compatible", "", ""),
 ]
 
-PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
+PLUGIN_NAME = "astrbot_plugin_personagent"
 PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
+# What earlier versions installed the plugin as; left beside the new one, it
+# would forward every message a second time.
+RETIRED_PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
 
 # Owner-only, matching `persona_agent.storage.PRIVATE_FILE_MODE`, which this
 # script cannot import: quickstart runs before the dependencies it installs.
@@ -251,15 +254,21 @@ def find_astrbot_data() -> Path | None:
 
 
 def install_astrbot_plugin(data_dir: Path) -> Path:
-    """Copy the forwarder into ``<data>/plugins/``; safe to repeat."""
+    """Copy the plugin into ``<data>/plugins/``; safe to repeat. The plugin
+    under its retired name is removed."""
     dest = data_dir / "plugins" / PLUGIN_NAME
     shutil.copytree(PLUGIN_SRC, dest, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    retired = data_dir / "plugins" / RETIRED_PLUGIN_NAME
+    if retired.is_dir():
+        shutil.rmtree(retired)
+        _info(f"removed {retired}: it is this plugin under an older name, "
+              "and both would forward every message")
     return dest
 
 
-def agent_url_accepted(url: str, token: str) -> bool:
-    """The forwarder's own rule (``_endpoint_is_allowed`` in the plugin): a
+def personagent_url_accepted(url: str, token: str) -> bool:
+    """The plugin's own rule (``_endpoint_is_allowed`` in the plugin): a
     loopback URL, tunnels included, or HTTPS elsewhere with a token."""
     try:
         parsed = urllib.parse.urlsplit(url)
@@ -287,18 +296,18 @@ def astrbot_qq_routed(cfg: dict) -> bool:
     return "aiocqhttp" not in _excluded_as_plugin_reads_it(cfg.get("excluded_platforms"))
 
 
-def astrbot_plugin_config(existing: dict | None, *, agent_url: str, token: str,
+def astrbot_plugin_config(existing: dict | None, *, personagent_url: str, token: str,
                           qq: bool | None, groups: list[str] | None,
-                          private: list[str] | None) -> dict:
+                          dm_users: list[str] | None) -> dict:
     """The plugin's config document. A value passed as None keeps what the
     operator set (in AstrBot's WebUI, or on an earlier run), and so do keys we
     do not manage: re-running must not undo a setup."""
     cfg = dict(existing or {})
-    # Only a URL the forwarder would refuse is replaced; any other was chosen
+    # Only a URL the plugin would refuse is replaced; any other was chosen
     # by the operator, an SSH tunnel on another loopback port included.
-    if not agent_url_accepted(str(cfg.get("agent_url") or "").strip(), token):
-        cfg["agent_url"] = agent_url
-    cfg["gateway_token"] = token
+    if not personagent_url_accepted(str(cfg.get("personagent_url") or "").strip(), token):
+        cfg["personagent_url"] = personagent_url
+    cfg["connector_token"] = token
     if "excluded_platforms" not in cfg:
         cfg["excluded_platforms"] = [] if qq else ["aiocqhttp"]
     elif qq is not None:
@@ -308,17 +317,11 @@ def astrbot_plugin_config(existing: dict | None, *, agent_url: str, token: str,
         excluded = [p for p in excluded if p != "aiocqhttp"]
         cfg["excluded_platforms"] = excluded if qq else excluded + ["aiocqhttp"]
     if groups is not None:
-        cfg["group_whitelist"] = _clean_ids(groups)
-    cfg.setdefault("group_whitelist", [])
-    if private is not None:
-        before = cfg.get("private_whitelist")
-        cfg["private_whitelist"] = _clean_ids(private)
-        # The switch follows the list only when the list changed, so an
-        # operator who turned DMs off keeps them off.
-        if cfg["private_whitelist"] != (_clean_ids(before) if isinstance(before, list) else before):
-            cfg["private_enabled"] = bool(cfg["private_whitelist"])
-    cfg.setdefault("private_whitelist", [])
-    cfg.setdefault("private_enabled", False)     # the plugin reads a missing key as off
+        cfg["groups"] = _clean_ids(groups)
+    cfg.setdefault("groups", [])
+    if dm_users is not None:
+        cfg["dm_users"] = _clean_ids(dm_users)
+    cfg.setdefault("dm_users", [])
     cfg.setdefault("timeout_s", 180)
     cfg.setdefault("block_default", True)
     return cfg
@@ -347,12 +350,12 @@ def read_astrbot_config(data_dir: Path) -> dict:
 
 
 def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | None,
-                    groups: list[str] | None, private: list[str] | None) -> Path:
+                    groups: list[str] | None, dm_users: list[str] | None) -> Path:
     """Install the plugin and write both halves of the handshake: the shared
     token into .env (via ``values``) and the plugin config into AstrBot.
-    ``qq``, ``groups`` and ``private`` left as None keep their current values."""
+    ``qq``, ``groups`` and ``dm_users`` left as None keep their current values."""
     existing = read_astrbot_config(data_dir)
-    plugin_token = str(existing.get("gateway_token") or "").strip()
+    plugin_token = str(existing.get("connector_token") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", plugin_token):
         plugin_token = ""     # would not survive a round trip through .env
     token = (values.get("CONNECTOR_TOKEN") or _env_get(env_path, "CONNECTOR_TOKEN")
@@ -361,13 +364,15 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
     port = _env_get(env_path, "SERVER_PORT") or "8080"
     local_url = f"http://127.0.0.1:{port}"
     install_astrbot_plugin(data_dir)
-    cfg = astrbot_plugin_config(existing, agent_url=local_url, token=token,
-                                qq=qq, groups=groups, private=private)
-    old_url = str(existing.get("agent_url") or "").strip()
-    if old_url and old_url != cfg["agent_url"]:
-        _info(f"agent_url {old_url} would be refused by the plugin; now {cfg['agent_url']}")
-    elif cfg["agent_url"] != local_url:
-        _info(f"keeping agent_url {cfg['agent_url']} (this agent listens on port {port})")
+    cfg = astrbot_plugin_config(existing, personagent_url=local_url, token=token,
+                                qq=qq, groups=groups, dm_users=dm_users)
+    old_url = str(existing.get("personagent_url") or "").strip()
+    if old_url and old_url != cfg["personagent_url"]:
+        _info(f"personagent_url {old_url} would be refused by the plugin; "
+              f"now {cfg['personagent_url']}")
+    elif cfg["personagent_url"] != local_url:
+        _info(f"keeping personagent_url {cfg['personagent_url']} "
+              f"(this agent listens on port {port})")
     # .env follows the plugin: QQ forwarded without native ids would file every
     # QQ conversation under a new name.
     current = _env_get(env_path, "CONNECTOR_QQ_PLATFORMS")
@@ -629,9 +634,9 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                 default=current["ADMIN_NAME"] or current["OWNER_NAME"], required=True)
         groups = _ask_ids("Group / channel IDs the persona should join, comma-separated, "
                           "as AstrBot shows them", "empty = none yet",
-                          existing.get("group_whitelist"))
-        private = _ask_ids("Sender IDs allowed to DM it, comma-separated",
-                           "empty = no DMs", existing.get("private_whitelist"))
+                          existing.get("groups"))
+        dm_users = _ask_ids("Sender IDs allowed to DM it, comma-separated",
+                            "empty = no DMs", existing.get("dm_users"))
         if qq:
             # QQ entries follow the plugin's groups; other platforms' are kept.
             others = [g for g in _split_ids(",".join((current["ACCESS_GROUPS"],
@@ -645,7 +650,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
             if current[old] and (old != "QQ_GROUPS" or qq):
                 values[old] = ""
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
-                                   qq=qq, groups=groups, private=private)
+                                   qq=qq, groups=groups, dm_users=dm_users)
         # Written now, not after the platform question: a Ctrl-C there must
         # not leave the plugin forwarding QQ to an agent that expects none.
         write_env(env_path, values)
@@ -680,7 +685,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     if live:
         print()
         print("  AstrBot: restart it (or reload plugins in its WebUI) so it picks")
-        print("  up the forwarder; the shared token is already in both places.")
+        print("  up the plugin; the shared token is already in both places.")
         print("  Platforms (QQ, Telegram, ...) are configured in AstrBot itself.")
         print("  then start the agent with:")
         print(f"    {_venv_python(venv)} main.py")
@@ -795,12 +800,12 @@ def main() -> None:
             sys.exit(f"no plugins/ folder under {astrbot_dir}; is that AstrBot's data directory?")
         values: dict = {}
         cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_dir,
-                                   qq=qq_choice, groups=None, private=None)
+                                   qq=qq_choice, groups=None, dm_users=None)
         write_env(env_path, values)
         _info(f"AstrBot plugin installed and configured: {cfg_path}")
         cfg = read_astrbot_config(astrbot_dir)
-        if not cfg.get("group_whitelist") and not cfg.get("private_whitelist"):
-            _info("allowlists are empty: add group_whitelist / private_whitelist there "
+        if not cfg.get("groups") and not cfg.get("dm_users"):
+            _info("allowlists are empty: add groups / dm_users there "
                   "or in AstrBot's WebUI, then restart AstrBot")
         else:
             _info("kept the existing allowlists; restart AstrBot to load the plugin")

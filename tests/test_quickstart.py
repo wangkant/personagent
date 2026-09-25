@@ -41,18 +41,18 @@ def test_a_leftover_env_tmp_does_not_keep_its_mode() -> None:
 def test_plugin_config_is_merged_not_replaced() -> None:
     cfg = quickstart.astrbot_plugin_config(
         {"timeout_s": 300, "block_default": False, "custom": 1},
-        agent_url="http://127.0.0.1:8080", token="t",
-        qq=True, groups=["123", " 456 ", ""], private=[])
-    check("config: managed keys written", cfg["gateway_token"] == "t"
-          and cfg["group_whitelist"] == ["123", "456"], repr(cfg))
+        personagent_url="http://127.0.0.1:8080", token="t",
+        qq=True, groups=["123", " 456 ", ""], dm_users=[])
+    check("config: managed keys written", cfg["connector_token"] == "t"
+          and cfg["groups"] == ["123", "456"] and cfg["dm_users"] == [], repr(cfg))
     check("config: qq clears the aiocqhttp exclusion", cfg["excluded_platforms"] == [])
-    check("config: private stays off without senders", cfg["private_enabled"] is False)
     check("config: unmanaged keys survive", cfg["timeout_s"] == 300
           and cfg["block_default"] is False and cfg["custom"] == 1, repr(cfg))
-    cfg2 = quickstart.astrbot_plugin_config(None, agent_url="u", token="t", qq=False,
-                                            groups=[], private=["telegram:9"])
+    cfg2 = quickstart.astrbot_plugin_config(None, personagent_url="u", token="t", qq=False,
+                                            groups=["*"], dm_users=["telegram:9"])
     check("config: no qq keeps aiocqhttp excluded", cfg2["excluded_platforms"] == ["aiocqhttp"])
-    check("config: a private sender enables DMs", cfg2["private_enabled"] is True)
+    check("config: DM senders and a wildcard written as given",
+          cfg2["dm_users"] == ["telegram:9"] and cfg2["groups"] == ["*"], repr(cfg2))
     check("config: defaults filled", cfg2["timeout_s"] == 180 and cfg2["block_default"] is True)
 
 
@@ -69,145 +69,168 @@ def test_connect_writes_both_sides() -> None:
         env.write_text("SERVER_PORT=9090\nCONNECTOR_TOKEN=\n", encoding="utf-8")
         values: dict = {}
         cfg_path = quickstart.connect_astrbot(env, values, data_dir=data, qq=True,
-                                              groups=["1"], private=[])
+                                              groups=["1"], dm_users=[])
         quickstart.write_env(env, values)
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
         check("connect: plugin copied", (data / "plugins" / quickstart.PLUGIN_NAME / "main.py").is_file())
         check("connect: no __pycache__ copied",
               not (data / "plugins" / quickstart.PLUGIN_NAME / "__pycache__").exists())
         check("connect: token generated and shared",
-              len(values["CONNECTOR_TOKEN"]) >= 32 and cfg["gateway_token"] == values["CONNECTOR_TOKEN"])
-        check("connect: agent_url follows SERVER_PORT", cfg["agent_url"] == "http://127.0.0.1:9090")
+              len(values["CONNECTOR_TOKEN"]) >= 32 and cfg["connector_token"] == values["CONNECTOR_TOKEN"])
+        check("connect: personagent_url follows SERVER_PORT",
+              cfg["personagent_url"] == "http://127.0.0.1:9090")
         check("connect: existing config merged through the BOM", cfg["timeout_s"] == 240)
         check("connect: qq routed natively", values["CONNECTOR_QQ_PLATFORMS"] == "aiocqhttp")
         text = env.read_text(encoding="utf-8")
         check("connect: .env carries the token", f"CONNECTOR_TOKEN={values['CONNECTOR_TOKEN']}" in text)
         # Second run reuses the token instead of rotating it under AstrBot.
         values2: dict = {}
-        quickstart.connect_astrbot(env, values2, data_dir=data, qq=False, groups=[], private=[])
+        quickstart.connect_astrbot(env, values2, data_dir=data, qq=False, groups=[], dm_users=[])
         check("connect: rerun keeps the token", values2["CONNECTOR_TOKEN"] == values["CONNECTOR_TOKEN"])
         check("connect: rerun can exclude qq again", values2["CONNECTOR_QQ_PLATFORMS"] == "")
 
 
+def test_connect_removes_the_plugin_under_its_retired_name(tmp_path) -> None:
+    """Both copies would forward every message, so the agent would answer
+    each one twice."""
+    data = tmp_path / "data"
+    retired = data / "plugins" / quickstart.RETIRED_PLUGIN_NAME
+    (retired / "__pycache__").mkdir(parents=True)
+    (retired / "main.py").write_text("# old\n", encoding="utf-8")
+    env = tmp_path / ".env"
+    env.write_text("CONNECTOR_TOKEN=\n", encoding="utf-8")
+    out = io.StringIO()
+    with redirect_stdout(out):
+        quickstart.connect_astrbot(env, {}, data_dir=data, qq=None, groups=None,
+                                   dm_users=None)
+    check("retired: the old directory is gone", not retired.exists())
+    check("retired: the new one is installed",
+          (data / "plugins" / quickstart.PLUGIN_NAME / "main.py").is_file())
+    lines = [line for line in out.getvalue().splitlines()
+             if quickstart.RETIRED_PLUGIN_NAME in line]
+    check("retired: one line says so", len(lines) == 1, out.getvalue())
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        quickstart.connect_astrbot(env, {}, data_dir=data, qq=None, groups=None,
+                                   dm_users=None)
+    check("retired: nothing to say on a rerun",
+          quickstart.RETIRED_PLUGIN_NAME not in out.getvalue(), out.getvalue())
+
+
 def test_a_rerun_keeps_what_the_operator_set() -> None:
     """`--astrbot` passes no allowlists and no QQ choice. A re-run used to empty
-    the allowlists, turn DMs off, reset a proxied agent_url and drop every
-    other excluded platform."""
-    existing = {"agent_url": "https://agent.example.com",
-                "group_whitelist": ["123"], "private_whitelist": ["telegram:9"],
-                "private_enabled": False, "excluded_platforms": ["aiocqhttp", "wecom"],
-                "timeout_s": 300}
+    the allowlists, reset a proxied personagent_url and drop every other
+    excluded platform."""
+    existing = {"personagent_url": "https://agent.example.com",
+                "groups": ["123"], "dm_users": ["telegram:9"],
+                "excluded_platforms": ["aiocqhttp", "wecom"], "timeout_s": 300}
     local = "http://127.0.0.1:9090"
-    cfg = quickstart.astrbot_plugin_config(dict(existing), agent_url=local, token="t",
-                                           qq=None, groups=None, private=None)
-    check("rerun: groups kept", cfg["group_whitelist"] == ["123"], repr(cfg))
-    check("rerun: DM senders kept", cfg["private_whitelist"] == ["telegram:9"], repr(cfg))
-    check("rerun: DMs stay off when the operator turned them off",
-          cfg["private_enabled"] is False, repr(cfg))
-    check("rerun: a proxied agent_url is kept",
-          cfg["agent_url"] == existing["agent_url"], cfg["agent_url"])
+    cfg = quickstart.astrbot_plugin_config(dict(existing), personagent_url=local, token="t",
+                                           qq=None, groups=None, dm_users=None)
+    check("rerun: groups kept", cfg["groups"] == ["123"], repr(cfg))
+    check("rerun: DM senders kept", cfg["dm_users"] == ["telegram:9"], repr(cfg))
+    check("rerun: a proxied personagent_url is kept",
+          cfg["personagent_url"] == existing["personagent_url"], cfg["personagent_url"])
     check("rerun: exclusions untouched without a QQ choice",
           cfg["excluded_platforms"] == ["aiocqhttp", "wecom"], repr(cfg))
-    check("rerun: token still written", cfg["gateway_token"] == "t")
+    check("rerun: token still written", cfg["connector_token"] == "t")
 
-    on = quickstart.astrbot_plugin_config(dict(existing), agent_url=local, token="t",
-                                          qq=True, groups=None, private=None)
+    on = quickstart.astrbot_plugin_config(dict(existing), personagent_url=local, token="t",
+                                          qq=True, groups=None, dm_users=None)
     check("rerun: qq removes only aiocqhttp", on["excluded_platforms"] == ["wecom"], repr(on))
-    off = quickstart.astrbot_plugin_config({"excluded_platforms": ["wecom"]}, agent_url=local,
-                                           token="t", qq=False, groups=None, private=None)
+    off = quickstart.astrbot_plugin_config({"excluded_platforms": ["wecom"]},
+                                           personagent_url=local, token="t", qq=False,
+                                           groups=None, dm_users=None)
     check("rerun: no-qq adds aiocqhttp and keeps the rest",
           off["excluded_platforms"] == ["wecom", "aiocqhttp"], repr(off))
 
     tunnel = "http://127.0.0.1:9000"     # e.g. ssh -L 9000:agent:8080
-    kept = quickstart.astrbot_plugin_config({"agent_url": tunnel}, agent_url=local,
-                                            token="t", qq=None, groups=None, private=None)
-    check("rerun: a tunnel on another loopback port is kept", kept["agent_url"] == tunnel,
-          kept["agent_url"])
+    kept = quickstart.astrbot_plugin_config({"personagent_url": tunnel}, personagent_url=local,
+                                            token="t", qq=None, groups=None, dm_users=None)
+    check("rerun: a tunnel on another loopback port is kept",
+          kept["personagent_url"] == tunnel, kept["personagent_url"])
     for refused in ("http://agent:8080", "http://0.0.0.0:8080",
                     "localhost:8080", "http://[::1", ""):
-        fixed = quickstart.astrbot_plugin_config({"agent_url": refused}, agent_url=local,
-                                                 token="t", qq=None, groups=None, private=None)
+        fixed = quickstart.astrbot_plugin_config({"personagent_url": refused},
+                                                 personagent_url=local, token="t", qq=None,
+                                                 groups=None, dm_users=None)
         check(f"rerun: {refused!r}, which the plugin refuses, is replaced",
-              fixed["agent_url"] == local, fixed["agent_url"])
+              fixed["personagent_url"] == local, fixed["personagent_url"])
 
-    same = quickstart.astrbot_plugin_config(dict(existing), agent_url=local, token="t",
-                                            qq=None, groups=["123"], private=["telegram:9"])
-    check("rerun: the same DM list keeps the operator's switch", same["private_enabled"] is False)
     numeric = quickstart.astrbot_plugin_config(
-        {"private_whitelist": [789, " 790"], "private_enabled": False}, agent_url=local,
-        token="t", qq=None, groups=None, private=["789", "790"])
-    check("rerun: ids stored as numbers still count as the same list",
-          numeric["private_enabled"] is False, repr(numeric))
-    unset = quickstart.astrbot_plugin_config({"private_whitelist": ["789"]}, agent_url=local,
-                                             token="t", qq=None, groups=None, private=None)
-    check("rerun: a missing private_enabled stays off, as the plugin reads it",
-          unset["private_enabled"] is False, repr(unset))
+        {"dm_users": [789]}, personagent_url=local, token="t", qq=None, groups=None,
+        dm_users=["789", " 790"])
+    check("rerun: a DM list given is written as trimmed strings",
+          numeric["dm_users"] == ["789", "790"], repr(numeric))
     odd = quickstart.astrbot_plugin_config({"excluded_platforms": "aiocqhttp,wecom"},
-                                           agent_url=local, token="t", qq=None,
-                                           groups=None, private=None)
+                                           personagent_url=local, token="t", qq=None,
+                                           groups=None, dm_users=None)
     check("rerun: a hand-written exclusion string is left alone without a QQ choice",
           odd["excluded_platforms"] == "aiocqhttp,wecom", repr(odd))
     odd_off = quickstart.astrbot_plugin_config({"excluded_platforms": "wecom"},
-                                               agent_url=local, token="t", qq=False,
-                                               groups=None, private=None)
+                                               personagent_url=local, token="t", qq=False,
+                                               groups=None, dm_users=None)
     check("rerun: an exclusion string becomes a list when QQ is chosen",
           odd_off["excluded_platforms"] == ["wecom", "aiocqhttp"], repr(odd_off))
     check("routed: read the way the plugin reads it",
           quickstart.astrbot_qq_routed({"excluded_platforms": "aiocqhttp"})
           and quickstart.astrbot_qq_routed({"excluded_platforms": ["aiocqhttp "]})
           and not quickstart.astrbot_qq_routed({"excluded_platforms": ["aiocqhttp"]}))
-    grown = quickstart.astrbot_plugin_config(dict(existing), agent_url=local, token="t",
-                                             qq=None, groups=["123"], private=["telegram:9", "telegram:7"])
-    check("rerun: a changed DM list turns DMs on", grown["private_enabled"] is True)
+    grown = quickstart.astrbot_plugin_config(dict(existing), personagent_url=local, token="t",
+                                             qq=None, groups=["123"],
+                                             dm_users=["telegram:9", "telegram:7"])
+    check("rerun: a changed DM list is written",
+          grown["dm_users"] == ["telegram:9", "telegram:7"], repr(grown))
 
-    fresh = quickstart.astrbot_plugin_config(None, agent_url=local, token="t",
-                                             qq=None, groups=None, private=None)
+    fresh = quickstart.astrbot_plugin_config(None, personagent_url=local, token="t",
+                                             qq=None, groups=None, dm_users=None)
     check("fresh: aiocqhttp excluded by default", fresh["excluded_platforms"] == ["aiocqhttp"])
-    check("fresh: empty allowlists, DMs off", fresh["group_whitelist"] == []
-          and fresh["private_whitelist"] == [] and fresh["private_enabled"] is False, repr(fresh))
+    check("fresh: empty allowlists forward nothing",
+          fresh["groups"] == [] and fresh["dm_users"] == [], repr(fresh))
 
 
 def test_connect_without_a_qq_choice_keeps_qq_routing(tmp_path) -> None:
     data = tmp_path / "data"
     (data / "plugins").mkdir(parents=True)
     quickstart.write_astrbot_config(data, {
-        "gateway_token": "plugin-token", "excluded_platforms": [],
-        "group_whitelist": ["123"], "private_whitelist": [], "private_enabled": False})
+        "connector_token": "plugin-token", "excluded_platforms": [],
+        "groups": ["123"], "dm_users": []})
     env = tmp_path / ".env"
     env.write_text("CONNECTOR_TOKEN=\nCONNECTOR_QQ_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
 
     values: dict = {}
-    path = quickstart.connect_astrbot(env, values, data_dir=data, qq=None, groups=None, private=None)
+    path = quickstart.connect_astrbot(env, values, data_dir=data, qq=None, groups=None, dm_users=None)
     cfg = json.loads(path.read_text(encoding="utf-8"))
     check("connect: no QQ choice leaves CONNECTOR_QQ_PLATFORMS alone",
           "CONNECTOR_QQ_PLATFORMS" not in values, repr(values))
     check("connect: QQ stays routed", cfg["excluded_platforms"] == [], repr(cfg))
-    check("connect: allowlists kept", cfg["group_whitelist"] == ["123"], repr(cfg))
+    check("connect: allowlists kept", cfg["groups"] == ["123"], repr(cfg))
     check("connect: the plugin's token is reused when .env has none",
-          values["CONNECTOR_TOKEN"] == "plugin-token" == cfg["gateway_token"], repr(values))
+          values["CONNECTOR_TOKEN"] == "plugin-token" == cfg["connector_token"], repr(values))
 
     # The plugin forwards QQ but .env lost aiocqhttp (a wizard interrupted
     # between the two writes): a plain rerun puts .env back in step.
     env.write_text("CONNECTOR_TOKEN=plugin-token\nCONNECTOR_QQ_PLATFORMS=wecom\n", encoding="utf-8")
     values_sync: dict = {}
-    quickstart.connect_astrbot(env, values_sync, data_dir=data, qq=None, groups=None, private=None)
+    quickstart.connect_astrbot(env, values_sync, data_dir=data, qq=None, groups=None, dm_users=None)
     check("connect: .env follows the plugin's QQ routing",
           values_sync.get("CONNECTOR_QQ_PLATFORMS") == "aiocqhttp,wecom", repr(values_sync))
     quickstart.write_env(env, values_sync)
 
     # A token that would not survive .env is not reused.
     cfg = quickstart.read_astrbot_config(data)
-    cfg["gateway_token"] = "abc #def"
+    cfg["connector_token"] = "abc #def"
     quickstart.write_astrbot_config(data, cfg)
     env.write_text("CONNECTOR_TOKEN=\nCONNECTOR_QQ_PLATFORMS=aiocqhttp,wecom\n", encoding="utf-8")
     values_tok: dict = {}
-    quickstart.connect_astrbot(env, values_tok, data_dir=data, qq=None, groups=None, private=None)
+    quickstart.connect_astrbot(env, values_tok, data_dir=data, qq=None, groups=None, dm_users=None)
     check("connect: an unsafe plugin token is replaced",
           values_tok["CONNECTOR_TOKEN"] != "abc #def" and len(values_tok["CONNECTOR_TOKEN"]) >= 32)
     quickstart.write_env(env, values_tok)
 
     values_off: dict = {}
-    quickstart.connect_astrbot(env, values_off, data_dir=data, qq=False, groups=None, private=None)
+    quickstart.connect_astrbot(env, values_off, data_dir=data, qq=False, groups=None, dm_users=None)
     check("connect: no-qq drops only aiocqhttp from the native list",
           values_off["CONNECTOR_QQ_PLATFORMS"] == "wecom", repr(values_off))
 
@@ -242,13 +265,13 @@ def test_the_astrbot_flag_can_be_rerun(monkeypatch, tmp_path) -> None:
 
     _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data), "--qq"])
     cfg = quickstart.read_astrbot_config(data)
-    cfg.update(group_whitelist=["123"], private_whitelist=["456"], private_enabled=True)
+    cfg.update(groups=["123"], dm_users=["456"])
     quickstart.write_astrbot_config(data, cfg)
 
     _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data)])
     cfg = quickstart.read_astrbot_config(data)
-    check("flag rerun: allowlists kept", cfg["group_whitelist"] == ["123"]
-          and cfg["private_whitelist"] == ["456"] and cfg["private_enabled"] is True, repr(cfg))
+    check("flag rerun: allowlists kept", cfg["groups"] == ["123"]
+          and cfg["dm_users"] == ["456"], repr(cfg))
     check("flag rerun: QQ still routed", cfg["excluded_platforms"] == [], repr(cfg))
     check("flag rerun: native ids kept",
           quickstart._env_get(tmp_path / ".env", "CONNECTOR_QQ_PLATFORMS") == "aiocqhttp")
@@ -272,8 +295,8 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
     data = tmp_path / "data"
     (data / "plugins").mkdir(parents=True)
     quickstart.write_astrbot_config(data, {
-        "excluded_platforms": [], "group_whitelist": ["123", "456"],
-        "private_whitelist": ["789"], "private_enabled": True})
+        "excluded_platforms": [], "groups": ["123", "456"],
+        "dm_users": ["789"]})
     env = tmp_path / ".env"
     env.write_text("LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/\n"
                    "LLM_MODEL=gpt-4o-mini\nPERSONA_NAME=Mika\nAGENT_LANG=en\nQQ_BOT_ID=10001\n"
@@ -304,9 +327,8 @@ def test_the_wizard_rerun_keeps_the_astrbot_setup(monkeypatch, tmp_path) -> None
     quickstart.run_wizard(tmp_path / ".venv", env)
 
     cfg = quickstart.read_astrbot_config(data)
-    check("wizard rerun: groups kept", cfg["group_whitelist"] == ["123", "456"], repr(cfg))
-    check("wizard rerun: DMs kept", cfg["private_whitelist"] == ["789"]
-          and cfg["private_enabled"] is True, repr(cfg))
+    check("wizard rerun: groups kept", cfg["groups"] == ["123", "456"], repr(cfg))
+    check("wizard rerun: DMs kept", cfg["dm_users"] == ["789"], repr(cfg))
     check("wizard rerun: QQ kept", cfg["excluded_platforms"] == [], repr(cfg))
     got = {k: quickstart._env_get(env, k) for k in (
         "ACCESS_GROUPS", "QQ_GROUPS", "ADMIN_IDS", "ADMIN_NAME", "OWNER_QQ", "OWNER_NAME")}

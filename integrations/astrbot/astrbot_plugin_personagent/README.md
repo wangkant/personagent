@@ -1,4 +1,4 @@
-# astrbot_plugin_llm_persona_gateway
+# astrbot_plugin_personagent
 
 An [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin that puts
 [personagent](https://github.com/wangkant/personagent) on every platform
@@ -7,7 +7,7 @@ agent's replies back.
 
 ## What it does
 
-- Receives group and private messages from every AstrBot platform adapter
+- Receives group messages and DMs from every AstrBot platform adapter
   (Telegram, Discord, Slack, QQ, ...), except the ones in `excluded_platforms`.
 - Forwards messages from allowlisted groups and senders to the agent's
   `POST /v1/events` as a platform-neutral event, reading each platform
@@ -44,7 +44,10 @@ python quickstart.py
 Answer yes to connecting AstrBot and give it AstrBot's data directory (the
 folder holding `plugins/` and `config/`). The wizard copies this plugin,
 generates a shared token and writes it to both sides, and asks which group and
-sender IDs to allow.
+sender IDs to allow. If AstrBot still has this plugin under the name an
+earlier version installed it as (see the CHANGELOG), the wizard removes that
+copy and says so: both would forward every message. Its settings are not
+carried over; set the allowlists again.
 
 To skip all the wizard's questions, including the API key and bot name (set
 `LLM_API_KEY` and `PERSONA_NAME` in `.env` yourself):
@@ -57,9 +60,9 @@ The first run leaves the allowlists **empty**: add them in the plugin
 settings. Run `python quickstart.py --help` for the flags that also switch on
 a platform in AstrBot.
 
-Running it again is safe. The allowlists, `private_enabled`, any `agent_url`
+Running it again is safe. The allowlists, any `personagent_url`
 this plugin accepts (see [Where the agent can run](#where-the-agent-can-run)),
-and other excluded platforms are kept; an `agent_url` it would refuse is
+and other excluded platforms are kept; a `personagent_url` it would refuse is
 replaced with the loopback default. QQ routing changes only when you pass
 `--qq` or `--no-qq`, and the agent's `CONNECTOR_QQ_PLATFORMS` is kept in
 step with it. The wizard's AstrBot step offers the current allowlists as
@@ -70,22 +73,27 @@ Then restart AstrBot and start the agent (see [Check it works](#check-it-works))
 ### By hand
 
 1. Copy this folder to
-   `<AstrBot data dir>/plugins/astrbot_plugin_llm_persona_gateway/`.
+   `<AstrBot data dir>/plugins/astrbot_plugin_personagent/`. Remove any copy
+   of this plugin under an earlier name (see the CHANGELOG): both would
+   forward every message.
 2. Restart AstrBot, or reload plugins in its WebUI. AstrBot installs
    `requirements.txt` (only `httpx`).
 3. Open the plugin's settings in the WebUI. They are saved to
-   `<AstrBot data dir>/config/astrbot_plugin_llm_persona_gateway_config.json`.
-   - Add the group IDs the persona may join to `group_whitelist`.
-   - For private chats, turn on `private_enabled` and add sender IDs to
-     `private_whitelist`.
+   `<AstrBot data dir>/config/astrbot_plugin_personagent_config.json`.
+   - Add the group IDs the persona may join to `groups`.
+   - Add the sender IDs whose DMs it may answer to `dm_users`.
    - If the agent's `.env` sets `CONNECTOR_TOKEN`, put the same value in
-     `gateway_token`. It is required when the agent is not on the same host.
-   - Leave `agent_url` at its default when the agent runs on the same host
-     with the default `SERVER_PORT=8080`.
+     `connector_token`. It is required when the agent is not on the same host.
+   - Leave `personagent_url` at its default when the agent runs on the same
+     host with the default `SERVER_PORT=8080`.
 
 The plugin is **default-deny**. With empty allowlists it forwards nothing, and
 AstrBot behaves as if the plugin were not installed. Use IDs as AstrBot shows
-them, without a platform prefix.
+them, without a platform prefix. `*` in `groups` or `dm_users` forwards every
+conversation of that kind and marks it `prefiltered: false`, so the agent's
+own `ACCESS_GROUPS` / `ACCESS_DM_USERS` decide alone: a platform with no
+entries there is refused (QQ groups excepted, which the agent answers
+unless `ACCESS_GROUPS` lists some).
 
 ### Check it works
 
@@ -93,41 +101,40 @@ them, without a platform prefix.
    (Windows: `.venv\Scripts\python.exe main.py`).
 2. Say the bot's name (the agent's `PERSONA_NAME`) in an allowed group.
 
-If nothing comes back, look for `llm_persona_gateway:` lines in AstrBot's log
+If nothing comes back, look for `personagent:` lines in AstrBot's log
 and see [Troubleshooting](#troubleshooting).
 
 ## Configuration
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `agent_url` | string | `http://127.0.0.1:8080` | The agent's base URL; the plugin appends `/v1/events` and `/v1/outbox`. Must be loopback, or HTTPS with `gateway_token` set. |
-| `gateway_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `agent_url`. |
+| `personagent_url` | string | `http://127.0.0.1:8080` | The agent's base URL; the plugin appends `/v1/events` and `/v1/outbox`. Must be loopback, or HTTPS with `connector_token` set. |
+| `connector_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `personagent_url`. |
 | `timeout_s` | int | `180` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ through this plugin. |
-| `group_whitelist` | list | `[]` | Group IDs to forward. Empty forwards no groups. |
-| `private_enabled` | bool | `false` | Forward private messages from senders in `private_whitelist`. |
-| `private_whitelist` | list | `[]` | Sender IDs allowed in private chat. Empty allows none. |
+| `groups` | list | `[]` | Group IDs to forward. Empty forwards no groups; `*` forwards all of them unfiltered. |
+| `dm_users` | list | `[]` | Sender IDs whose DMs are forwarded. Empty forwards no DMs; `*` forwards all of them unfiltered. |
 | `block_default` | bool | `true` | Stop AstrBot's pipeline when the agent claims the conversation. |
 | `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. While on (and `quote_max_chars` is above 0), every event declares the `quote_text` capability. |
 | `quote_max_chars` | int | `200` | Longest quoted text sent; longer quotes are cut. |
 | `max_inline_image_bytes` | int | `4000000` | Largest image sent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one arrives as the note `(sent an image)`. Keep it under the agent's `VISION_MAX_IMAGE_BYTES`. |
 | `outbox_enabled` | bool | `true` | Pull and deliver the agent's outbox. See [Outbox](#outbox). |
 | `outbox_wait_s` | int | `25` | How long one outbox pull may wait at the agent (at most 30). |
-| `forwarder_id` | string | `""` | This AstrBot's name to the agent. Empty generates one once and keeps it. Give two AstrBot hosts different names, never the same one. |
+| `connector_id` | string | `""` | This AstrBot's name to the agent. Empty generates one once and keeps it. Give two AstrBot hosts different names, never the same one. |
 
 ### Where the agent can run
 
 - **Same host** (or a container sharing the host's network namespace, or
-  using host networking): keep the default loopback `agent_url`.
-- **Another container or host**: use an HTTPS `agent_url` and the same
-  non-empty secret in `gateway_token` and the agent's `CONNECTOR_TOKEN`. A
+  using host networking): keep the default loopback `personagent_url`.
+- **Another container or host**: use an HTTPS `personagent_url` and the same
+  non-empty secret in `connector_token` and the agent's `CONNECTOR_TOKEN`. A
   private tunnel that ends at a loopback URL visible to AstrBot also works;
   still set the same token on both sides, because the agent refuses tokenless
   requests that arrive through a proxy.
 
 Plain `http://` to anything but loopback, such as
 `http://host.docker.internal:8080`, is refused even with a token. Each message
-then logs `refusing unsafe agent_url` and AstrBot's own model answers instead.
+then logs `refusing unsafe personagent_url` and AstrBot's own model answers instead.
 
 The agent listens on `127.0.0.1:8080` by default. If you set its `SERVER_HOST` to a
 non-loopback address, it refuses to start unless both `CONNECTOR_TOKEN` and
@@ -167,7 +174,7 @@ QQ goes through this plugin like any other platform, using AstrBot's
 `aiocqhttp` adapter and a OneBot v11 implementation such as NapCat.
 
 1. Remove `aiocqhttp` from `excluded_platforms` and add the QQ groups to
-   `group_whitelist`.
+   `groups`.
 2. In the agent's `.env`, set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` and
    `QQ_BOT_ID` (the bot account's number).
 3. Keep NapCat's HTTP API reachable at the agent's `QQ_ONEBOT_URL` for the
@@ -190,12 +197,10 @@ matches, and the ledgers cannot be re-keyed afterwards. With it, a QQ message
 relayed by AstrBot lands on the same ids NapCat would have produced.
 
 Because QQ ids stay plain, the agent's own QQ settings still apply to them:
-the QQ entries of `ACCESS_GROUPS` (none means every QQ group), and private
-chats only from the admin in `ADMIN_IDS` or from `ACCESS_DM_USERS`. The wizard
-writes the QQ groups you give it to the agent's `.env`, so to add a QQ group
-later, add it to both `group_whitelist` and `ACCESS_GROUPS` (or list no QQ
-groups there). The old names `QQ_GROUPS`, `OWNER_QQ` and `PRIVATE_ALLOWED_QQS`
-still work.
+the QQ entries of `ACCESS_GROUPS` (none means every QQ group), and DMs only
+from the admin in `ADMIN_IDS` or from `ACCESS_DM_USERS`. The wizard writes the
+QQ groups you give it to the agent's `.env`, so to add a QQ group later, add
+it to both `groups` and `ACCESS_GROUPS` (or list no QQ groups there).
 
 Before AstrBot carries a busy QQ group, change two AstrBot settings. Both run
 before plugin handlers:
@@ -255,7 +260,7 @@ On every platform:
 Some messages are not an answer to anything: a scheduled opener, the
 follow-up question after a rejection, the excuse when the model is down.
 The agent queues those, and this plugin pulls them from
-`POST <agent_url>/v1/outbox` (with the same signing as events), so the agent
+`POST <personagent_url>/v1/outbox` (with the same signing as events), so the agent
 never has to reach AstrBot. It is on by default (`outbox_enabled`).
 
 - A delivery goes out through the conversation's own AstrBot session,
@@ -271,12 +276,12 @@ never has to reach AstrBot. It is on by default (`outbox_enabled`).
 - An agent without the outbox answers 404; the plugin asks again every ten
   minutes and otherwise behaves exactly as before.
 
-The agent knows this AstrBot by `forwarder_id`, which the plugin generates
+The agent knows this AstrBot by `connector_id`, which the plugin generates
 once and keeps. Two AstrBot hosts talking to one agent need different ones.
 
 ## Request authentication
 
-When `gateway_token` is set, every request carries four headers:
+When `connector_token` is set, every request carries four headers:
 
 - `X-Personagent-Token`: the token.
 - `X-Personagent-Timestamp`: unix seconds.
@@ -297,7 +302,7 @@ adapter gives no valid timestamp is not forwarded; AstrBot handles it as usual.
 
 ## Identities on the agent side
 
-The agent prefixes every gateway id with its platform, as `<platform>:<raw id>`
+The agent prefixes every forwarded id with its platform, as `<platform>:<raw id>`
 (for example `telegram:12345`), so ids from different platforms never collide.
 Platforms listed in `CONNECTOR_QQ_PLATFORMS` keep plain ids. The agent's
 `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS` take ids in the same form:
@@ -307,12 +312,12 @@ gated by the agent as well as by this plugin's allowlists.
 
 ## Troubleshooting
 
-Messages in AstrBot's log start with `llm_persona_gateway:`.
+Messages in AstrBot's log start with `personagent:`.
 
 | Log message | What to do |
 | --- | --- |
-| `refusing unsafe agent_url` | `agent_url` is plain HTTP to another host, or HTTPS without `gateway_token`. See [Where the agent can run](#where-the-agent-can-run). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `gateway_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `connector replay guard full`, wait for it to drain. |
+| `refusing unsafe personagent_url` | `personagent_url` is plain HTTP to another host, or HTTPS without `connector_token`. See [Where the agent can run](#where-the-agent-can-run). |
+| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `connector replay guard full`, wait for it to drain. |
 | `agent refused the request (403): stale or invalid sent_at` | The message is older than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, usually after AstrBot delivered a backlog. |
 | `agent refused the request (403): authentication required` or `... only local requests accepted` | The agent has no `CONNECTOR_TOKEN` and the request is not local. Set the same token on both sides. |
 | `agent at capacity (429)` | The agent is already running `CONNECTOR_MAX_INFLIGHT` turns and turned the message away after retries, so AstrBot's own model answers it. Raise `CONNECTOR_MAX_INFLIGHT` if this is frequent. |
@@ -320,12 +325,12 @@ Messages in AstrBot's log start with `llm_persona_gateway:`.
 | `agent rejected the event schema (400)` | The event had no message id or sender id (some adapters omit them), or this plugin has a bug. Please report it with the log line. |
 | `timed out waiting for the agent` | See [Timeouts](#timeouts). |
 | `dropping event without a valid time the platform sent it` | The adapter gave no timestamp. AstrBot handles that message itself. |
-| `agent request failed: ...` or `agent request failed (<status>)` | Usually the agent is not running or `agent_url` is wrong (a 404 means a wrong path: `agent_url` is the base URL, without `/v1/events`). A 500 means the agent failed; check its log. |
-| `outbox off: ...` | The outbox follows the same `agent_url` rule as events; see the first row. |
+| `agent request failed: ...` or `agent request failed (<status>)` | Usually the agent is not running or `personagent_url` is wrong (a 404 means a wrong path: `personagent_url` is the base URL, without `/v1/events`). A 500 means the agent failed; check its log. |
+| `outbox off: ...` | The outbox follows the same `personagent_url` rule as events; see the first row. |
 | `outbox: agent has no outbox (turned off, or an older version); retrying in 10 minutes` | Expected when the agent's `CONNECTOR_OUTBOX_ENABLED` is off. Nothing else changes. |
 | `outbox: outbox pull refused (403)` or `outbox pull failed: ...` | As for events: the token, the clocks, or the agent not running. The plugin backs off up to a minute between tries. |
 | `outbox: no running platform '<id>'` | A delivery for an adapter that is disabled or was renamed in AstrBot. It is reported to the agent as failed. |
-| `could not store forwarder_id` | AstrBot's plugin store failed. Set `forwarder_id` yourself, or the agent sees a new AstrBot after every restart. |
+| `could not store connector_id` | AstrBot's plugin store failed. Set `connector_id` yourself, or the agent sees a new AstrBot after every restart. |
 
 If the agent's own log says the connector sends `X-Personagent-Token` but
 `CONNECTOR_TOKEN` is blank, the token is being ignored. Set the same value in

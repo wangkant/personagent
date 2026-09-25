@@ -1,0 +1,5 @@
+name: astrbot_plugin_personagent
+desc: The personagent connector for AstrBot - brings a personagent persona to every AstrBot platform, relaying its replies and what it says unprompted.
+version: 0.5.0
+author: Qiankang Wang
+repo: https://github.com/wangkant/personagent
