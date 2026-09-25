@@ -2,9 +2,9 @@
 
 ![personagent — illustrated conversations](assets/personagent-cover.png)
 
-A self-hosted chatbot with a custom persona, conversation memory, and feedback-based reply examples.
+**A character for your group chats that knows when to stay quiet, and learns from being corrected.**
 
-Describe a character in a text file, connect a model API, and try a conversation locally. For group chats and DMs, an AstrBot plugin forwards messages to personagent and sends its replies back to the platform.
+Describe the character in a text file, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin carries it into QQ, Telegram, Discord, Slack and the other platforms AstrBot supports.
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -12,29 +12,27 @@ Describe a character in a text file, connect a model API, and try a conversation
 [![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
 
-[Try locally](#try-locally) · [Write a persona](#write-a-persona) · [Connect a platform](#connect-a-platform) · [Memory and learning](#memory-and-learning) · [Troubleshooting](#troubleshooting)
+[Why personagent](#why-personagent) · [Quick start](#quick-start) · [Write a persona](#write-a-persona) · [Put it in a chat](#put-it-in-a-chat) · [Teach it](#teach-it) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
 
-## What it does
+## Why personagent
 
-personagent is built for character conversations. Replies depend on the persona, the model, and the conversation. In group chats, it may choose to stay quiet.
+A system prompt wired to a chat account answers every message and never gets better. personagent is built around four different habits.
 
-- **Custom personas.** Write the character in `persona.txt`, with optional dialogue examples, background notes, and output filters.
-- **Conversation memory.** Save notes within each conversation for later replies.
-- **Corrections.** Record feedback as candidate examples and use accepted examples in future prompts. This does not train or fine-tune the model.
-- **Images and links.** A configured vision model can describe images; supported links can be expanded into titles and summaries. Unparsed media, such as voice and video, appears as placeholder context.
-- **Platform forwarding.** QQ, Telegram, Discord, and other AstrBot platforms share the reply pipeline. Available features vary by platform.
+**It picks its moments.** Say its name or @ it and it answers. Otherwise it listens. Once enough of the conversation has gone by (30 messages by default, 10 before it has ever spoken), a quick gate call (to `JUDGE_MODEL`, ideally your cheapest model) asks whether a real person would chime in here. If the answer is no, that one call is all it costs. A burst of messages gets a single reply, to the latest line, and between 02:00 and 07:00 in the persona's timezone it mostly sleeps unless someone calls it.
 
-This is a Python application deployed from a repository checkout. personagent generates replies, AstrBot connects to the chat platform, and your configured OpenAI-compatible API provides the model. With a cloud model, relevant chat context is sent to that provider. A configured fallback provider (`FALLBACK_MODEL`, `FALLBACK_BASE_URL`) is also called on ordinary turns, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context too.
+**It learns from the people it talks to.** For 15 minutes after each reply it watches for reactions aimed at that reply: a quote, an @, its name. A reaction is evidence, not an instruction. A change reaches future replies only when two compatible events from the same conversation back it, and at least one of them is strong: a correction from the person the reply was meant for, with a better line in it, or a second attempt that person accepted. Laughter and the bot's own scores never promote anything, however many pile up. Every promotion is logged and can be rolled back.
+
+**Memory belongs to one conversation.** What a group tells it stays in that group, and you can ask what it holds. `Nova, what do you remember?` and `Nova, what have you learned?` are answered from local files, without a model call.
+
+**Editing the character does not reset it.** Every revision of `persona.txt` under one `PERSONA_VERSION` keeps what was learned. Bump the version when you want a clean slate.
+
+No model is trained or fine-tuned. Learning means better examples in the prompt: replies that worked, and before/after pairs, retrieved by how closely they match the conversation at hand.
 
 ![Illustrative chat between Alex and Nova about finishing work and dinner](assets/personagent-chat.en.png)
 
-*Illustrative dialogue, not an actual conversation log.*
+## Quick start
 
-## Try locally
-
-![Getting started: write a persona, try it locally, connect a group chat](assets/personagent-quickstart.en.png)
-
-You need Git, Python 3.10–3.12, and an OpenAI-compatible model endpoint. No AstrBot installation or chat account is needed for the terminal trial.
+You need Git, Python 3.10–3.12, and an API key for an OpenAI-compatible endpoint, or a local Ollama. No chat account is needed to try it.
 
 ```bash
 git clone https://github.com/wangkant/personagent.git
@@ -42,42 +40,24 @@ cd personagent
 python quickstart.py
 ```
 
-The wizard creates a virtual environment, installs dependencies, and asks for the endpoint, model, API key, character name, and language. You can skip AstrBot setup on the first run and try the character in the terminal. The optional connection check and the conversation call your configured model.
+The wizard creates `.venv`, installs the dependencies, and asks for the endpoint, model, key, the character's name and a language (English or Chinese). Skip the AstrBot step the first time; at the end it offers to open a chat in your terminal. For Ollama, choose `Ollama (local)`, enter a model you have already pulled, and keep the placeholder key.
 
-For local Ollama, start the server and download a model first. Choose `Ollama (local)` in the wizard, enter your local model name, and keep the placeholder API key.
+To chat again later, run `.venv/bin/python try_chat.py` (Windows: `.venv\Scripts\python.exe try_chat.py`).
 
-To open the trial again:
-
-**Windows (PowerShell)**
-
-```powershell
-.venv\Scripts\python.exe try_chat.py
-```
-
-**macOS / Linux**
-
-```bash
-.venv/bin/python try_chat.py
-```
-
-Type a message and press Enter. Trial commands:
-
-| Command | Purpose |
+| Type | To |
 |---|---|
-| `/as Alex I could use an early finish today` | Send a message under another display name |
-| `/owner How was your day?` | Send one message as the configured owner |
-| `/reset` | Clear the current conversation buffer |
-| `/quit` | Exit |
+| `/as Alex I could use an early finish today` | speak as someone else |
+| `/owner How was your day?` | speak once as the configured owner |
+| `/reset` | clear the conversation |
+| `/quit` | leave |
 
-Use `--name Alex` for your default display name, `--owner` for owner mode throughout, or `--lang zh` for Chinese seed data and validation. `/as` helps test dialogue; it is not a full multi-account simulation.
+`--name Alex` sets your display name, `--owner` makes every message the owner's, and `--lang zh` switches to the Chinese seed data and checks.
 
-`(stays quiet)` can mean that the model chose not to reply, returned no text, or produced text rejected by character validation. A validation rejection also prints a diagnostic.
-
-The trial uses the persona, example retrieval, generation, and character validator. It skips platform allowlists, reply-trigger checks, and output filters, and disables self-evaluation and vision. Test the connected bot separately before relying on its live behaviour.
+The terminal runs the persona, example retrieval, generation and the character check. It skips the allowlists, the reply triggers, the output filters, self-evaluation and vision, so test the connected bot before you rely on its live behaviour. `(stays quiet)` means the model passed, returned nothing, or wrote a line the character check rejected; a rejection prints the reason.
 
 ## Write a persona
 
-Edit `persona.txt` in the repository root. Describe the character, their usual speaking style, and how they respond in specific situations. For example:
+`persona.txt` in the repository root is the character. Say who they are, how they usually talk, and what they do in the situations you care about:
 
 ```text
 Your name is Nova. You chat with friends about films and cooking.
@@ -89,135 +69,158 @@ If you have not seen a film, say so instead of inventing an opinion.
 Do not make jokes about someone's private information or personal difficulties.
 ```
 
-Adapt this to your character. Concrete habits are easier to test than repeatedly asking the model to sound natural.
+Concrete habits work better than asking the model to "sound natural". The template the wizard copies contains placeholders such as `{bot_name}` and `{owner_name}`, and notes addressed to you at the end. Replace the placeholders and delete the notes: the file goes to the model as written.
 
-The copied template includes placeholders such as `{bot_name}` and `{owner_name}`. Replace them yourself and remove the instructions intended for the person editing the file. These values are not substituted automatically.
+Restart the chat or the service after editing. `AGENT_LANG` picks the language of the bundled examples, filters and checks; it does not translate your persona.
 
-Restart the trial or running service after editing the persona. `AGENT_LANG` selects language-specific examples, filters, and validation; it does not translate your persona text.
+To go further:
 
-For further adjustments:
-
-| File | Purpose |
+| File | Holds |
 |---|---|
-| `data/examples.<lang>.jsonl` | Example conversations retrieved for the model |
-| `data/feedback.<lang>.jsonl` | Original replies paired with corrected versions |
-| `data/lorebook.<lang>.json` | Background notes included when keywords match |
+| `data/examples.<lang>.jsonl` | Example exchanges the model can imitate |
+| `data/feedback.<lang>.jsonl` | Replies paired with better versions |
+| `data/lorebook.<lang>.json` | Background notes added when a keyword comes up |
 | `data/output_filter.<lang>.json` | Replacement and rejection rules for live replies |
-| `persona.card.json` | Optional emoji, character-set, and length settings |
+| `persona.card.json` | Optional emoji, character-set and length settings |
 
-For example, to allow emoji and set a reply length limit:
+For example, to allow emoji and cap reply length:
 
 ```json
 { "reply_style": { "emoji": true, "max_chars": 320 } }
 ```
 
-Image understanding uses the separately configured `VISION_MODEL`, `VISION_API_KEY`, and `VISION_BASE_URL`. See [.env.example](.env.example) for the full settings. Editing the persona text preserves learned material. Changing `BOT_NAME` or `PERSONA_VERSION` changes the learning scope, so the old character's material no longer applies directly.
+To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`. Every setting is documented in [.env.example](.env.example).
 
-## Connect a platform
+## Put it in a chat
 
-Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) separately and configure your platform in its WebUI. personagent does not log in to chat accounts.
+personagent never logs in to a chat account. AstrBot does, and a small forwarder plugin passes each message to personagent and carries the reply back.
 
 ```text
-Chat platform → AstrBot + forwarder → personagent → Model API
-               Relays the reply   ← Returns reply
+Chat platform  ⇄  AstrBot + forwarder plugin  ⇄  personagent  ⇄  Model API
 ```
 
-1. Run `python quickstart.py` from the personagent repository root. Choose AstrBot setup and provide its data directory. The wizard copies the forwarder plugin and writes a shared `GATEWAY_TOKEN` to both configurations. Re-running the wizard keeps your current provider, model, key, name and language as the defaults. An existing setup can also connect AstrBot without the wizard: `python quickstart.py --astrbot <AstrBot data dir> [--qq]`.
-2. Check `agent_url` in the plugin settings. The same-host default is `http://127.0.0.1:8080/webhook/gateway`. The plugin only sends to a loopback address (same host, or containers sharing a network namespace or host networking) or to HTTPS with `gateway_token` set. Plain `http://` to another container or host, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe agent_url`, and AstrBot's own model answers instead.
-3. Add the intended groups or private conversations to the plugin's allowlists. The default forwards nothing; private chats also need `private_enabled=true`.
-4. Check `BOT_NAME` and `BOT_QQ` in personagent's `.env`. `BOT_QQ` is the bot's QQ account number and is needed only for QQ; leave it blank on other platforms.
-5. Restart AstrBot, then start personagent:
+1. Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) and set up your platform in its WebUI.
+2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `GATEWAY_TOKEN` to both sides. Answers you gave before are kept as the defaults.
+3. Add the groups the bot may join to the plugin's allowlist. It forwards nothing until you do; private chats also need `private_enabled=true` and an allowlisted sender.
+4. In personagent's `.env`, check `BOT_NAME`, the name it answers to. On QQ, also set `BOT_QQ` to the bot account's number.
+5. Restart AstrBot, then start personagent from the repository root: `.venv/bin/python main.py` (Windows: `.venv\Scripts\python.exe main.py`).
 
-**Windows (PowerShell)**
+Say its name in an allowed group to check. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin.
 
-```powershell
-.venv\Scripts\python.exe main.py
-```
-
-**macOS / Linux**
+Already set up? The same connection works without the wizard, and can switch a platform on in AstrBot's config from its token:
 
 ```bash
-.venv/bin/python main.py
+python quickstart.py --astrbot <AstrBot data dir> --platform telegram --token <bot token>
 ```
 
-Run these commands from the repository root. Restart personagent after editing `.env`; restart AstrBot after changing platform or plugin settings. Test by naming or mentioning the character in an allowed conversation.
+`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark`; add `--qq` to route QQ through AstrBot as well. Run `python quickstart.py --help` for the rest.
 
 <details>
-<summary>QQ setup notes</summary>
+<summary>QQ</summary>
 
 QQ also needs a OneBot v11 implementation such as NapCat, connected through AstrBot's `aiocqhttp` adapter.
 
 - Remove `aiocqhttp` from the plugin's `excluded_platforms`.
-- Set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` in personagent's `.env` to preserve existing QQ identity and memory scopes. The wizard's `--qq` option handles these two settings.
-- Proactive messages and missed-mention recovery still require the OneBot HTTP API at `NAPCAT_API`. With AstrBot forwarding, OCR fallback is skipped and quoted messages are resolved through the Agent's recent-message index.
-- Direct `/webhook/qq` ingress has been deprecated since 0.3.0. Do not enable it alongside AstrBot forwarding, or messages will arrive twice.
+- Set `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
+- Keep NapCat's HTTP server on, at `NAPCAT_API`. Proactive messages and catching up on missed mentions go through it directly. On this path OCR fallback is skipped, and quoted messages are looked up in personagent's own recent-message index.
+- The direct `/webhook/qq` ingress is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
 
 <details>
-<summary>Separate hosts and other platform limits</summary>
+<summary>AstrBot in Docker, or on another host</summary>
 
-The default bind address is `127.0.0.1:8080`. For separate hosts, configure a reachable address; a non-loopback `HOST` requires both `GATEWAY_TOKEN` and `WEBHOOK_SECRET`. Use an HTTPS reverse proxy or a private tunnel, preserve the exact request body, and keep the two clocks within five minutes of each other.
+The plugin posts only to a loopback address (the same host, or a container sharing its network namespace or using host networking), or to HTTPS with `gateway_token` set. Plain `http://` to anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe agent_url`, and AstrBot's own model answers instead. Set `agent_url` in the plugin settings; the same-host default is `http://127.0.0.1:8080/webhook/gateway`.
 
-Non-QQ platforms return replies within the incoming gateway request and have no built-in independent proactive delivery channel. Scheduled proactive DMs require an external caller to send private gateway events with `proactive: true` and relay the results; a group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md).
+personagent listens on `127.0.0.1:8080`. A non-loopback `HOST` requires both `GATEWAY_TOKEN` and `WEBHOOK_SECRET`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
 
 </details>
 
-## Memory and learning
+<details>
+<summary>Speaking first on platforms other than QQ</summary>
 
-Memory stores facts about a conversation. Learning accumulates reply examples. Both are kept locally under `runtime/`.
+Outside QQ, a reply can only travel back inside the request that brought the message, so personagent has no channel of its own for speaking first. For scheduled DMs, have an external job post a private gateway event with `proactive: true`; the text is read as a cue to the persona rather than as the other person's words, and the job relays whatever comes back. A group event with the flag is claimed and dropped. See the [deployment guide](docs/deploy.md#more-than-one-platform).
 
-To correct a reply, quote it, mention the bot, or use its name, then explain what you wanted instead. For example: “Nova, I was just venting. Next time, hold off on the advice.” This illustrates how to give feedback; it does not promise an immediate change.
+</details>
 
-Feedback first becomes a candidate. Automatic promotion requires compatible evidence from the same conversation, including at least one qualifying strong signal, such as an explicit correction and replacement from the original reply recipient. A single compliment does not automatically promote a good reply. Inspect or manage candidates with:
+## Teach it
+
+Talk to it in the group. The name has to be in the message (replace Nova with your `BOT_NAME`):
+
+| Say | What happens |
+|---|---|
+| `Nova, remember Sam is vegetarian` | Saves a note for this group |
+| `Nova, forget vegetarian` | Deletes matching notes. Members can delete their own; the owner can delete any |
+| `Nova, what do you remember` | Lists the notes you are allowed to see |
+| `Nova, what have you learned` | Counts notes, learned replies, fixes, and proposals waiting for a second voice, with the latest example |
+
+None of these call the model. Notes are for facts: `Nova, remember: always reply in English` is turned down.
+
+Corrections need no command. Quote the reply or use the name, and say what you wanted instead:
+
+```text
+Alex:  Nova, the deploy failed again
+Nova:  did you check the logs? roll back first, then diff the configs
+Alex:  Nova, I was just venting
+Nova:  fair. that's a rough end to the day
+Alex:  haha yeah it is, thanks Nova
+```
+
+A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT`).
+
+To review or overrule the loop, use the ledger tool (on Windows, `.venv\Scripts\python.exe`):
 
 ```bash
-# macOS / Linux paths; on Windows use .venv\Scripts\python.exe
-.venv/bin/python tools/candidates_admin.py list
-.venv/bin/python tools/candidates_admin.py list --state promoted
-.venv/bin/python tools/candidates_admin.py show <id>
+.venv/bin/python tools/candidates_admin.py list                    # proposals waiting
+.venv/bin/python tools/candidates_admin.py list --state promoted   # what is in use
+.venv/bin/python tools/candidates_admin.py show <id>               # one proposal and its evidence
 .venv/bin/python tools/candidates_admin.py promote <id>
 .venv/bin/python tools/candidates_admin.py reject <id>
-.venv/bin/python tools/candidates_admin.py rollback <id>
+.venv/bin/python tools/candidates_admin.py rollback <id>           # stop using it; the record stays
 .venv/bin/python tools/candidates_admin.py supersede <old_id> <new_id>
 ```
 
-`REACT_LEARN`, `REACT_ELICIT`, and `PROMOTE_AUTO` are enabled by default. Feedback classification makes additional model calls; disable these settings in `.env` if you do not need them. `EVAL_ENABLE` and `EVOLVE_AUTO` are off by default. Rolling back a candidate stops its use but does not erase the underlying records.
+The defaults, all in `.env`:
 
-In a group, send `Nova what have you learned` or `Nova what do you remember` to inspect that conversation's learning and memory. Replace Nova with `BOT_NAME` and include the name in the message text. These queries do not call a model.
+- `REACT_LEARN`, `REACT_ELICIT` and `PROMOTE_AUTO` are on. Judging reactions costs extra model calls.
+- `PROMOTE_AUTO=false` leaves every promotion to you.
+- `PROMOTE_MIN_SPEAKERS=2` stops one member from teaching it alone; the owner is exempt.
+- `EVAL_ENABLE` (the bot scoring its own replies) and `EVOLVE_AUTO` are off.
+
+Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
+
+## How it works
+
+![Architecture: platforms enter one pipeline of ingest, decide, assemble, generate, validate and deliver; a separate learning path records evidence, proposes candidates and promotes them into views the prompt reads](docs/persona_llm_agent_architecture.svg)
+
+Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). The decision step picks a mode, or stays silent. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
+
+Learning runs beside that path, never inside it, and keeps its state in plain files under `runtime/`. Reactions go into an evidence log that is never rewritten. Adjudicating them proposes candidates, the promotion policy decides which may change replies, and promoted ones are written to small view files that retrieval reloads without a restart. Because the ledgers are append-only, "why does it talk like this?" always has an answer, and a rollback always has something to undo.
+
+## Privacy and consent
+
+Everything personagent stores stays on your machine, in `runtime/`, `.env`, `persona.txt` and `persona.card.json`. None of it is committed to Git, and it can hold credentials and real conversations, so back it up and keep it private.
+
+The model provider does see conversations. Chat context goes to your `LLM_BASE_URL`. If you configure a fallback (`FALLBACK_MODEL`, `FALLBACK_BASE_URL`), it is called on ordinary turns too, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context as well. Images go to the vision endpoint, and when the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
+
+Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Third-party QQ clients put the account at risk; read the [disclaimer](DISCLAIMER.md).
 
 ## Troubleshooting
 
-**The service starts, but the bot does not reply.**
+**It runs but never replies.** Start with the AstrBot plugin: the allowlists, `private_enabled`, `agent_url`, and on QQ `excluded_platforms`. Then check `BOT_NAME`, `BOT_QQ` and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
 
-Check the AstrBot plugin's allowlists, private-chat switch, and `agent_url` first. Confirm that messages reach personagent. For QQ, also check `excluded_platforms`. Then verify `BOT_NAME`, `BOT_QQ`, and the shared token. Group messages do not always trigger replies; start by addressing the character by name.
+**Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Gateway-Token` header once a token is configured.
 
-**How do I check whether the service is running?**
+**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. The wizard rewrites some settings from your answers, so read each prompt when you rerun it. `TZ_OFFSET_HOURS` (default 8, UTC+8) sets the clock for the night window and proactive quiet hours.
 
-```bash
-curl http://127.0.0.1:8080/health
-```
+## Status
 
-This liveness endpoint does not call a model. `tools/healthcheck.py` checks configuration and upstream services, including model probes that may cost credits. `/health/details` also probes dependencies and requires an `X-Gateway-Token` header when a token is configured.
-
-**Configuration changes have no effect.**
-
-Restart the relevant process, check for misspelled variable names, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Use `true` / `false` for booleans. When rerunning the wizard, review each answer: it rewrites some settings from the new inputs. `TZ_OFFSET_HOURS` defaults to UTC+8 and affects proactive quiet hours.
-
-**What should I back up?**
-
-Back up `runtime/`, `.env`, `persona.txt`, and the optional `persona.card.json`. They are not committed to Git and may contain credentials and real conversation text.
-
-## Status and documentation
-
-The project is in beta. QQ is the primary deployed use case; other platforms connect through AstrBot and should not be assumed to have complete end-to-end validation. CI covers Python 3.10–3.12 on Linux and Python 3.12 on Windows. Experimental tuning and evaluation scripts do not establish real-world conversation quality.
+Beta. QQ is where it has run in earnest; other platforms connect through AstrBot and have not all been validated end to end. CI runs the test suite on Linux with Python 3.10–3.12 and on Windows with Python 3.12. The tuning and evaluation scripts in `tools/` are experiments; they do not establish how well it converses.
 
 - [Deployment guide](docs/deploy.md)
 - [AstrBot forwarder plugin](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)
-- [Full configuration](.env.example)
+- [All settings](.env.example)
 - [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
-
-Before connecting to real conversations, tell participants that it is a bot and obtain consent to process their messages. Third-party QQ clients carry account risks; see the [disclaimer](DISCLAIMER.md).
 
 ## License
 
@@ -225,4 +228,4 @@ Before connecting to real conversations, tell participants that it is a bot and 
 
 ## Acknowledgements
 
-Built on the [OneBot v11](https://github.com/botuniverse/onebot-11) event model, [NapCat](https://github.com/NapNeko/NapCatQQ), [AstrBot](https://github.com/AstrBotDevs/AstrBot), [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx), with ideas from [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707). The lorebook and output-filter model follows SillyTavern's World Info and regex extensions.
+Built on the [OneBot v11](https://github.com/botuniverse/onebot-11) event model, [NapCat](https://github.com/NapNeko/NapCatQQ), [AstrBot](https://github.com/AstrBotDevs/AstrBot), [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx). The learning loop borrows from the [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707); the lorebook and output filters follow SillyTavern's World Info and regex extensions.
