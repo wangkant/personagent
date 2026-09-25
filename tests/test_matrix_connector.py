@@ -250,6 +250,8 @@ def test_is_at_me_follows_mentions_and_replies() -> None:
     check("m.mentions", at["is_at_me"] is True)
     named = build(conn, GROUP, msg("Nova is here", **{"m.mentions": {}}))
     check("a name alone is the agent's call, not a mention", named["is_at_me"] is False)
+    malformed = build(conn, GROUP, msg("hi", **{"m.mentions": {"user_ids": f"x{BOT}x"}}))
+    check("user_ids must be a list, not a string to search", malformed["is_at_me"] is False)
     pill = build(conn, GROUP, msg(
         "Nova: how was your day?", format="org.matrix.custom.html",
         formatted_body='<a href="https://matrix.to/#/%40nova%3Aexample.org">Nova</a>: '

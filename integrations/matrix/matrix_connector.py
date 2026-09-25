@@ -327,7 +327,8 @@ def mentions_user(content: Mapping, user_id: str, body: str) -> bool:
     are found by formatted_segments."""
     mentions = content.get("m.mentions")
     if isinstance(mentions, Mapping):
-        return user_id in (mentions.get("user_ids") or [])
+        user_ids = mentions.get("user_ids")
+        return isinstance(user_ids, list) and user_id in user_ids
     return bool(user_id) and user_id in body
 
 
