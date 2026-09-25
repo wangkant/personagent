@@ -462,7 +462,9 @@ class LLMPersonaGateway(Star):
         caps = []
         if self._outbox_running() and self._can_speak_first(platform, raw):
             caps.append("outbox")
-        if any(seg.get("type") == "reply" and seg.get("text") for seg in segments):
+        # By configuration, not by whether this message quoted: the agent
+        # rewrites its handles file whenever a conversation's caps change.
+        if self._quote_chars():
             caps.append("quote_text")
         neutral_event = {
             "platform": platform,

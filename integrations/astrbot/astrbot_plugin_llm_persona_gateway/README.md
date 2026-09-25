@@ -108,7 +108,7 @@ and see [Troubleshooting](#troubleshooting).
 | `private_enabled` | bool | `false` | Forward private messages from senders in `private_whitelist`. |
 | `private_whitelist` | list | `[]` | Sender IDs allowed in private chat. Empty allows none. |
 | `block_default` | bool | `true` | Stop AstrBot's pipeline when the agent claims the conversation. |
-| `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. |
+| `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. While on (and `quote_max_chars` is above 0), every event declares the `quote_text` capability. |
 | `quote_max_chars` | int | `200` | Longest quoted text sent; longer quotes are cut. |
 | `max_inline_image_bytes` | int | `4000000` | Largest image sent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one arrives as the note `(sent an image)`. Keep it under the agent's `MAX_IMAGE_BYTES`. |
 | `outbox_enabled` | bool | `true` | Pull and deliver the agent's outbox. See [Outbox](#outbox). |

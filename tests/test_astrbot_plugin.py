@@ -1359,6 +1359,23 @@ def test_the_reply_handle_is_the_umo_and_the_group_under_session_isolation():
     assert sent["conversation_id"] == "user-1"
 
 
+def test_quote_text_is_declared_by_the_configuration_not_by_each_message():
+    """The agent rewrites its whole handles file when a conversation's caps
+    change, and they changed with every message that quoted or did not."""
+    module = _import_plugin()
+    for config, declared in (({}, True), ({"forward_quoted_text": False}, False),
+                             ({"quote_max_chars": 0}, False)):
+        plugin = _plugin_instance(module, dict(_DM_CONFIG, **config))
+        plain = _capture_event(plugin, _Event(module, private=True))
+        quoting = _Event(module, private=True)
+        quoting.message_obj.message = [
+            module.Comp.Reply(id="9", sender_id="5", message_str="earlier"),
+            module.Comp.Plain("ok")]
+        quoted = _capture_event(plugin, quoting)
+        assert ("quote_text" in plain["caps"]) is declared, config
+        assert plain["caps"] == quoted["caps"], config
+
+
 def test_outbox_is_claimed_only_where_the_platform_can_speak_first():
     module = _import_plugin()
 
