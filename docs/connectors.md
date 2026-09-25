@@ -200,7 +200,8 @@ Rules:
   `expires_in_s` plus 60 seconds after handing the delivery out.
 - **Liveness.** A connector that has not pulled for 90 seconds is treated as
   gone: nothing is queued for its conversations until it pulls again, and
-  what was queued for it ends as not sent.
+  what was queued for it or handed to it without an ack yet ends as not sent.
+  Pull again as soon as a batch is delivered, which is also when its acks go.
 - **`unsupported` sticks.** After that ack the agent stops queueing for the
   conversation until an event brings a different `reply_handle`.
 - **Body kinds.** The signature does not cover the URL path, so the agent

@@ -34,7 +34,8 @@ logger = logging.getLogger("agent.outbox")
 #: excuse is useless a minute later; an opener can wait a few.
 REASON_TTL_S = {"proactive": 300.0, "follow_up": 120.0, "excuse": 60.0}
 #: A connector that has not pulled for this long is gone: nothing is queued
-#: for its conversations until it pulls again.
+#: for its conversations until it pulls again, and what it holds unacked
+#: counts as not sent.
 LIVENESS_S = 90.0
 #: Longest long-poll the agent holds, and what it tells the connector to use.
 MAX_WAIT_S = 30
@@ -64,7 +65,8 @@ def parse_pull(body) -> Optional[dict]:
     """A pull body as `Outbox.pull` keywords, or None when it is not one."""
     if not isinstance(body, dict) or body.get("kind") != PULL_KIND:
         return None
-    forwarder_id = opaque_value(body.get("forwarder_id"), MAX_FORWARDER_ID_CHARS)
+    forwarder_id = opaque_value(body.get("forwarder_id"),
+                                MAX_FORWARDER_ID_CHARS)
     if not forwarder_id:
         return None
     numbers = []
@@ -89,8 +91,9 @@ def _clean_record(raw) -> Optional[dict]:
         record = {
             "reply_handle": str(raw.get("reply_handle") or ""),
             "forwarder_id": str(raw.get("forwarder_id") or ""),
-            "caps": sorted(str(c) for c in raw.get("caps") or ()
-                           if isinstance(c, str)),
+            "caps": sorted(c for c in raw.get("caps")
+                           if isinstance(c, str))
+            if isinstance(raw.get("caps"), list) else [],
             "platform": str(raw.get("platform") or ""),
             "native": raw.get("native") is True,
             "message_type": str(raw.get("message_type") or ""),
@@ -289,10 +292,6 @@ class Outbox:
         last = self._last_pull.get(forwarder_id)
         return last is not None and time.monotonic() - last <= self.liveness_s
 
-    def last_pull_ages(self) -> dict[str, float]:
-        now = time.monotonic()
-        return {fid: round(now - t, 1) for fid, t in self._last_pull.items()}
-
     def route(self, key: str) -> Optional[dict]:
         """The stored handle for `key` if a live connector can deliver there
         unprompted, else None."""
@@ -345,8 +344,10 @@ class Outbox:
                     break
             else:
                 deadline = d.handed_out + d.expires_in + self.ack_grace_s
-                if now >= deadline:
-                    # The ReadTimeout of this channel: it may have gone out.
+                # The ReadTimeout of this channel: it may have gone out. A
+                # connector that stopped pulling ends the wait early, since
+                # the caller holds the conversation's send lock meanwhile.
+                if now >= deadline or not self.live(d.forwarder_id):
                     self._resolve(d, "no_ack")
                     break
             await asyncio.wait(

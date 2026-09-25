@@ -317,6 +317,20 @@ async def test_a_connector_that_stops_pulling_is_gone(tmp: Path) -> None:
           result.status == "gone", repr(result))
     check("liveness: after the window, no route",
           box.route("telegram:c1") is None)
+
+    # Handed out, then the connector died mid-send: the caller, which holds
+    # the conversation's send lock, is released after the liveness window,
+    # not after the full ack grace.
+    await box.pull("fw1", wait_s=0)
+    started = time.monotonic()
+    sending = asyncio.create_task(
+        box.deliver("telegram:c1", HANDLE, ITEMS, reason="proactive"))
+    handed = await box.pull("fw1", wait_s=1)
+    result = await asyncio.wait_for(sending, 2)
+    check("liveness: a handed-out delivery ends unacked when its connector dies",
+          len(handed["deliveries"]) == 1 and result.status == "no_ack"
+          and time.monotonic() - started < 1.5, repr(result))
+
     box.handles.record("telegram:c2", reply_handle="h", forwarder_id="fw1",
                        caps=["quote_text"], platform="telegram", native=False,
                        message_type="group", conversation_id="c2")
@@ -859,3 +873,56 @@ def test_an_outbox_result_carries_no_message_ids() -> None:
           and part.sticker_files == [] and part.message_ids == [])
     check("acked: no ack is nothing", not none.success and not none.partial
           and none.delivered == "")
+
+
+async def test_the_sdk_and_the_agent_speak_the_same_outbox(tmp: Path) -> None:
+    """End to end: the connector SDK signs an event with the new fields and
+    runs its pull loop against the real app; an opener the agent queues is
+    delivered once and committed on the SDK's ack."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                           / "integrations" / "sdk"))
+    import personagent_connector as sdk
+
+    agent = make_agent(tmp)
+    agent.outbox.poll_s = 0.02
+    agent.proactive_prob = 1.0
+    delivered: list = []
+
+    async def deliver(delivery: dict) -> tuple[str, int]:
+        delivered.append(delivery)
+        return "sent", len(delivery["items"])
+
+    async def opener(group_id, mode, text="", caller_override=None):
+        return ("anyone around tonight", "chat", "") if mode == "proactive" \
+            else ("on it", "called", "")
+
+    agent._think = opener
+    with _Served(agent):
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(
+            app=main_module.app, client=("127.0.0.1", 1234)))
+        conn = sdk.Connector("http://127.0.0.1:8080/webhook/gateway", TOKEN,
+                             forwarder_id="fw1", client=client)
+        answer = await conn.send_event(group_event(
+            "e1", reply_handle="tg-bot:GroupMessage:c1", caps=["outbox"]))
+        check("sdk: the event is answered", answer["owned"] is True, repr(answer))
+        stop = asyncio.Event()
+        loop = asyncio.create_task(conn.run_outbox(deliver, wait_s=1, stop=stop))
+        for _ in range(100):
+            if agent.outbox.route("telegram:c1"):
+                break
+            await asyncio.sleep(0.02)
+        agent.last_activity_at["telegram:c1"] = (
+            time.time() - agent.proactive_min_silence - 10)
+        agent.last_reply_at["telegram:c1"] = 0.0
+        acted = await asyncio.wait_for(agent._maybe_proactive_groups(), 5)
+        stop.set()
+        await asyncio.wait_for(loop, 5)
+        await client.aclose()
+    check("sdk: delivered once, with the handle it sent",
+          len(delivered) == 1
+          and delivered[0]["reply_handle"] == "tg-bot:GroupMessage:c1", repr(delivered))
+    check("sdk: its ack commits the opener",
+          acted is True
+          and agent.buffers["telegram:c1"][-1]["text"].endswith("anyone around tonight"))
