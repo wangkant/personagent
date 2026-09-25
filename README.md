@@ -221,7 +221,7 @@ Beta. QQ is where it has run in earnest; other platforms connect through AstrBot
 
 ## License
 
-[MIT](LICENSE) © 2026 Qiankang Wang.
+[MIT](LICENSE) © 2026 Qiankang (Kant) Wang.
 
 ## Acknowledgements
 

@@ -222,7 +222,7 @@ Beta。QQ 是真正长期运行过的场景；其他平台通过 AstrBot 接入�
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 Qiankang Wang。
+[MIT](LICENSE) © 2026 Qiankang (Kant) Wang。
 
 ## 致谢
 
