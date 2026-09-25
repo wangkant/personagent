@@ -1,6 +1,6 @@
 # personagent
 
-![personagent：戴着耳机的角色倾听涌来的聊天气泡，自己的回复只停在三个点](assets/personagent-cover.png)
+![personagent — illustrated conversations](assets/personagent-cover.png)
 
 **一个知道什么时候该安静、能从别人的纠正里学习的群聊角色。**
 
@@ -23,7 +23,9 @@
 
 它不会微调模型，学习靠的是让提示词里的示例越来越好。
 
-![三个习惯：群里热闹时安静旁听；有人 @ 它就回应；被纠正时把更好的说法记下来](assets/personagent-habits.png)
+![群聊示意：小林与小夏聊下班和晚饭](assets/personagent-chat.zh-CN.png)
+
+*示意对话，非实际运行记录。*
 
 ## 快速开始
 
@@ -222,4 +224,7 @@ Beta。QQ 是真正长期运行过的场景；其他平台通过 AstrBot 接入�
 
 ## 致谢
 
-基于 [OneBot v11](https://github.com/botuniverse/onebot-11) 事件模型、[NapCat](https://github.com/NapNeko/NapCatQQ)、[AstrBot](https://github.com/AstrBotDevs/AstrBot)、[FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 构建。学习回路借鉴了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)；世界书与输出过滤器参考了 SillyTavern 的 World Info 与正则扩展。
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) 把 personagent 带到各个聊天平台，[NapCat](https://github.com/NapNeko/NapCatQQ) 负责 QQ。
+- [FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 支撑服务本身和模型调用。
+- 从反应中学习的思路借鉴了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)。
+- 世界书与输出过滤器参考了 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info 与正则扩展。

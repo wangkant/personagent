@@ -1,6 +1,6 @@
 # personagent
 
-![personagent: a persona with headphones listens to a stream of chat bubbles, holding its own reply to three dots](assets/personagent-cover.png)
+![personagent — illustrated conversations](assets/personagent-cover.png)
 
 **A character for your group chats that knows when to stay quiet, and learns from being corrected.**
 
@@ -23,7 +23,7 @@ Describe the character in a text file, point it at any OpenAI-compatible model, 
 
 No model is fine-tuned. It learns by improving the examples in its prompt.
 
-![Three habits: it listens quietly while the group chats, answers when someone @s it, and writes down a correction](assets/personagent-habits.png)
+![Illustrative chat between Alex and Nova about finishing work and dinner](assets/personagent-chat.en.png)
 
 ## Quick start
 
@@ -223,4 +223,7 @@ Beta. QQ is where it has run in earnest; other platforms connect through AstrBot
 
 ## Acknowledgements
 
-Built on the [OneBot v11](https://github.com/botuniverse/onebot-11) event model, [NapCat](https://github.com/NapNeko/NapCatQQ), [AstrBot](https://github.com/AstrBotDevs/AstrBot), [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx). The learning loop borrows from the [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707); the lorebook and output filters follow SillyTavern's World Info and regex extensions.
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) carries personagent onto every chat platform, and [NapCat](https://github.com/NapNeko/NapCatQQ) onto QQ.
+- [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls.
+- Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707).
+- The lorebook and output filters follow [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info and regex extensions.
