@@ -537,8 +537,11 @@ class MatrixConnector:
             response = await self.client.join(room_id)
         except Exception as exc:
             response = exc
-        if not getattr(response, "room_id", None):
+        finally:
+            # Only while the join is in flight: the bot may be invited back
+            # after a kick or a leave.
             self._joining.discard(room_id)
+        if not getattr(response, "room_id", None):
             logger.warning("could not join %s: %s", room_id, response)
             return
         if is_direct:

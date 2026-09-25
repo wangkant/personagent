@@ -482,6 +482,23 @@ def test_invites_are_accepted_only_when_allowed() -> None:
     check("a direct invite marks a DM", conn.direct_rooms == {"!chat:example.org"})
 
 
+def test_a_room_left_and_invited_to_again_is_joined_again() -> None:
+    conn, client = make()
+    event = Obj(state_key=BOT, membership="invite", sender=ALEX,
+                content={"membership": "invite"})
+    asyncio.run(conn.on_invite(Obj(room_id=GROUP), event))
+    # Kicked, or left; then invited back.
+    asyncio.run(conn.on_invite(Obj(room_id=GROUP), event))
+    check("joined both times", client.joined == [GROUP, GROUP], repr(client.joined))
+
+    async def refused(room_id):
+        raise RuntimeError("M_FORBIDDEN")
+
+    client.join = refused
+    asyncio.run(conn.on_invite(Obj(room_id="!other:example.org"), event))
+    check("nothing is left marked as joining", not conn._joining, repr(conn._joining))
+
+
 # ---------- the matrix-nio wiring ----------
 
 def fake_nio(rooms: list):
