@@ -6,6 +6,8 @@
 
 Describe the character in a text file, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin carries it into QQ, Telegram, Discord, Slack and the other platforms AstrBot supports.
 
+For an easier way to use personagent for one-on-one chats, try [**Charune**](https://www.charune.com/), which uses personagent as its conversation engine.
+
 **English** · [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)

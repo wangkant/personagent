@@ -6,6 +6,8 @@
 
 用一个文本文件写下角色，接上任意 OpenAI 兼容模型，就能先在终端里和它聊。准备好之后，由 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 插件把它带进 QQ、Telegram、Discord、Slack 以及 AstrBot 支持的其他平台。
 
+如果想更方便地使用 personagent 的一对一聊天功能，可以试试 [**Charune**](https://www.charune.com/)；它以 personagent 作为对话引擎。
+
 [English](README.md) · **简体中文**
 
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
