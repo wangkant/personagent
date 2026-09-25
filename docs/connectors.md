@@ -198,7 +198,8 @@ Rules:
   different conversations may go in parallel.
 - **Only what is acked counts.** The agent treats an unacked delivery as not
   sent, and remembers only what was acked as sent. It waits for the ack until
-  `expires_in_s` plus 60 seconds after handing the delivery out.
+  your next pull, and at most `expires_in_s` plus 60 seconds after handing
+  the delivery out, so finish sending a batch before you pull again.
 - **Liveness.** A connector that has not pulled for 90 seconds is treated as
   gone: nothing is queued for its conversations until it pulls again, and
   what was queued for it or handed to it without an ack yet ends as not sent.

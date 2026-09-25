@@ -38,7 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connector acks as sent. Same token, signature and replay guard as
   `/webhook/gateway`, with its own concurrency budget so a long-poll never
   takes a turn's slot. The body names its kind (`outbox.pull`), and each
-  endpoint refuses the other's. `GATEWAY_OUTBOX=false` turns it off.
+  endpoint refuses the other's. A delivery not acked by the connector's next
+  pull counts as not sent, so a restarted connector cannot hold a
+  conversation for minutes, and stopping personagent releases open
+  long-polls at once. `GATEWAY_OUTBOX=false` turns it off.
 - **Proactive openers, the follow-up question and the excuse reach every
   platform with such a connector.** Until now they existed only on QQ: the
   proactive loops skipped every other conversation, and the question asked

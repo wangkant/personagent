@@ -423,7 +423,7 @@ class Outbox:
         elif status == "partial":
             try:
                 sent = min(max(int(ack.get("sent_items") or 0), 0), total)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):  # Infinity parses
                 sent = 0
             status = ("sent" if sent >= total
                       else "partial" if sent else "failed")
@@ -437,12 +437,26 @@ class Outbox:
         self._resolve(d, status, sent)
 
     async def pull(self, forwarder_id: str, *, wait_s: float = DEFAULT_WAIT_S,
-                   max_deliveries: int = 10, acks=()) -> dict:
+                   max_deliveries: int = 10, acks=(), disconnected=None) -> dict:
         """Settle `acks`, then hand out what is queued for this connector,
-        holding the request up to `wait_s` seconds until something is."""
+        holding the request up to `wait_s` seconds until something is.
+
+        `disconnected`, when given, is awaited before handing anything out:
+        a caller that has hung up gets nothing, and its deliveries wait for
+        the next pull instead of being lost with the socket."""
+        started = time.monotonic()
         self._stamp(forwarder_id)
         for ack in acks or ():
             self.ack(forwarder_id, ack)
+        # Acks come on the next pull, so what this connector was handed
+        # before it and has not acked went to a pull that never got through:
+        # a restarted connector's abandoned long-poll, or a lost response.
+        # Settling it here frees the conversation's send lock now rather
+        # than after expires_in plus the grace.
+        for d in list(self._handed.values()):
+            if d.forwarder_id == forwarder_id and d.handed_out < started:
+                self._handed.pop(d.delivery_id, None)
+                self._resolve(d, "no_ack")
         wait_s = min(max(float(wait_s), 0.0), MAX_WAIT_S)
         limit = min(max(int(max_deliveries), 1), MAX_DELIVERIES_PER_PULL)
         cond = self._condition()
@@ -455,8 +469,9 @@ class Outbox:
                         wait_s)
                 except asyncio.TimeoutError:
                     pass
-            deliveries = [self._hand_out(d)
-                          for d in self._ready(forwarder_id)[:limit]]
+            gone = disconnected is not None and await disconnected()
+            deliveries = [] if gone else [
+                self._hand_out(d) for d in self._ready(forwarder_id)[:limit]]
         self._stamp(forwarder_id)
         return {"deliveries": deliveries, "next_wait_s": DEFAULT_WAIT_S}
 

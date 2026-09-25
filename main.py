@@ -974,9 +974,19 @@ async def _gateway_outbox_admitted(request: Request):
         return _error(400, "invalid_schema", "not an outbox pull")
     if agent is None or not agent.gateway_outbox:
         return _error(404, "outbox_disabled", "the outbox is turned off")
-    return await agent.outbox.pull(**pull)
+    return await agent.outbox.pull(**pull, disconnected=request.is_disconnected)
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=False)
+
+    class _Server(uvicorn.Server):
+        # uvicorn lets open requests finish before the lifespan shutdown, so
+        # without this every restart waits out the connectors' long-polls.
+        async def shutdown(self, sockets=None):
+            import main as served  # the module uvicorn serves, not __main__
+            if served.agent is not None:
+                await served.agent.outbox.aclose()
+            await super().shutdown(sockets=sockets)
+
+    _Server(uvicorn.Config("main:app", host=HOST, port=PORT, reload=False)).run()

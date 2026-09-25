@@ -40,7 +40,8 @@ class DeploymentTests(unittest.TestCase):
             shutil.copyfile(ROOT / 'main.py', root / 'main.py')
             (root / '.env').write_text('HOST=127.0.0.2\nPORT=8129\n', encoding='utf-8')
             code = ("import runpy, uvicorn, json; "
-                    "uvicorn.run=lambda *a, **k: print(json.dumps(k)); "
+                    "uvicorn.Server.run=lambda self, *a, **k: print(json.dumps("
+                    "{'host': self.config.host, 'port': self.config.port})); "
                     "runpy.run_path('main.py', run_name='__main__')")
             env = {**os.environ, 'PYTHONPATH': str(ROOT), 'AGENT_HOME': temp}
             for key in ('HOST', 'PORT', 'PYTHON_DOTENV_DISABLED'):

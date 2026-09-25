@@ -259,6 +259,8 @@ async def test_acks_map_to_what_was_sent(tmp: Path) -> None:
         ({"status": "partial", "sent_items": 1}, ("partial", 1)),
         ({"status": "partial", "sent_items": 2}, ("sent", 2)),
         ({"status": "partial", "sent_items": "x"}, ("failed", 0)),
+        # json.loads accepts Infinity, and int() of it overflows.
+        ({"status": "partial", "sent_items": float("inf")}, ("failed", 0)),
         ({"status": "failed"}, ("failed", 0)),
         ({"status": "expired"}, ("expired", 0)),
         ({"status": "refused"}, ("refused", 0)),
@@ -299,6 +301,40 @@ async def test_what_is_never_pulled_or_never_acked_is_not_sent(tmp: Path) -> Non
     check("no ack: handed out but never acked counts as not sent",
           len(handed["deliveries"]) == 1 and result.status == "no_ack"
           and result.sent_items == 0, repr(result))
+
+
+async def test_a_delivery_lost_with_its_pull_ends_at_the_next_pull(
+        tmp: Path) -> None:
+    """A restarted connector leaves its old long-poll behind, and what that
+    poll is handed never arrives. The next pull settles it, instead of the
+    conversation's send lock waiting out expires_in plus the grace."""
+    box = fresh_outbox(tmp)
+    await box.pull("fw1", wait_s=0)
+    sending = asyncio.create_task(
+        box.deliver("telegram:c1", HANDLE, ITEMS, reason="proactive"))
+    lost = await box.pull("fw1", wait_s=2)
+    await asyncio.sleep(0.05)  # monotonic() is coarse on Windows
+    await box.pull("fw1", wait_s=0)
+    result = await asyncio.wait_for(sending, 2)
+    check("lost pull: the next pull without its ack ends it as not sent",
+          len(lost["deliveries"]) == 1 and result.status == "no_ack", repr(result))
+
+    async def hung_up() -> bool:
+        return True
+
+    sending = asyncio.create_task(
+        box.deliver("telegram:c1", HANDLE, ITEMS, reason="proactive"))
+    gone = await box.pull("fw1", wait_s=2, disconnected=hung_up)
+    kept = await box.pull("fw1", wait_s=2)
+    check("hung up: a caller that has gone is handed nothing",
+          gone["deliveries"] == [], repr(gone))
+    check("hung up: the delivery waits for the next pull",
+          len(kept["deliveries"]) == 1, repr(kept))
+    await box.pull("fw1", wait_s=0, acks=[
+        {"delivery_id": kept["deliveries"][0]["delivery_id"], "status": "sent"}])
+    result = await asyncio.wait_for(sending, 2)
+    check("hung up: acked on the live pull, it counts as sent",
+          result.status == "sent", repr(result))
 
 
 async def test_a_connector_that_stops_pulling_is_gone(tmp: Path) -> None:
