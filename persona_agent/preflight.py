@@ -56,6 +56,78 @@ TEMPLATE_EXEMPT = frozenset({
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 })
 
+#: Every setting name retired in 0.5 -> the name that replaced it. A hint and
+#: nothing more: none of these is read, so a value under one is ignored.
+RENAMED = {
+    "LLM_TIMEOUT": "LLM_TIMEOUT_S",
+    "PRIVATE_MODEL": "LLM_DM_MODEL",
+    "JUDGE_MODEL": "LLM_JUDGE_MODEL",
+    "FALLBACK_MODEL": "LLM_FALLBACK_MODEL",
+    "FALLBACK_BASE_URL": "LLM_FALLBACK_BASE_URL",
+    "FALLBACK_API_KEY": "LLM_FALLBACK_API_KEY",
+    "FALLBACK_THINKING": "LLM_FALLBACK_THINKING",
+    "FALLBACK_DURATION": "LLM_FALLBACK_DURATION_S",
+    "RATE_WINDOW": "LLM_RATE_WINDOW_S",
+    "RATE_THRESHOLD": "LLM_RATE_THRESHOLD",
+    "RATE_LIMIT_COOLDOWN": "LLM_RATE_LIMIT_COOLDOWN_S",
+    "MAX_IMAGE_BYTES": "VISION_MAX_IMAGE_BYTES",
+    "BOT_NAME": "PERSONA_NAME",
+    "TZ_OFFSET_HOURS": "PERSONA_TZ_OFFSET_HOURS",
+    "ALLOWED_GROUPS": "ACCESS_GROUPS",
+    "ALLOWED_DM_USERS": "ACCESS_DM_USERS",
+    "AGENT_TRIGGER_COUNT": "CHAT_TRIGGER_COUNT",
+    "AGENT_CONTEXT_LEN": "CHAT_CONTEXT_MESSAGES",
+    "AGENT_FOLLOWUP_WINDOW": "CHAT_FOLLOWUP_WINDOW_S",
+    "AGENT_MEMORY_FILE": "MEMORY_FILE",
+    "AGENT_MEMORY_MAX": "MEMORY_MAX_PER_CONVERSATION",
+    "AGENT_ENABLE": "AGENT_ENABLED",
+    "HOST": "SERVER_HOST",
+    "PORT": "SERVER_PORT",
+    "MAX_WEBHOOK_BODY_BYTES": "SERVER_MAX_BODY_BYTES",
+    "LOG_FILE": "SERVER_LOG_FILE",
+    "GATEWAY_TOKEN": "CONNECTOR_TOKEN",
+    "GATEWAY_SOURCE_MAX_AGE_SECONDS": "CONNECTOR_MAX_EVENT_AGE_S",
+    "GATEWAY_NATIVE_PLATFORMS": "CONNECTOR_QQ_PLATFORMS",
+    "GATEWAY_OUTBOX": "CONNECTOR_OUTBOX_ENABLED",
+    "MAX_INFLIGHT_GATEWAY": "CONNECTOR_MAX_INFLIGHT",
+    "BOT_QQ": "QQ_BOT_ID",
+    "NAPCAT_API": "QQ_ONEBOT_URL",
+    "NAPCAT_IMAGE_DIR": "QQ_ONEBOT_IMAGE_DIR",
+    "WEBHOOK_SECRET": "QQ_ONEBOT_SECRET",
+    "MAX_INFLIGHT_WEBHOOKS": "QQ_ONEBOT_MAX_INFLIGHT",
+    "PROACTIVE_ENABLE": "PROACTIVE_ENABLED",
+    "PROACTIVE_INTERVAL": "PROACTIVE_INTERVAL_S",
+    "PROACTIVE_MIN_SILENCE": "PROACTIVE_MIN_SILENCE_S",
+    "PROACTIVE_COOLDOWN": "PROACTIVE_COOLDOWN_S",
+    "PROACTIVE_DM_MIN_SILENCE": "PROACTIVE_DM_MIN_SILENCE_S",
+    "PROACTIVE_DM_COOLDOWN": "PROACTIVE_DM_COOLDOWN_S",
+    "REACT_LEARN": "REACT_LEARN_ENABLED",
+    "REACT_TTL_SEC": "REACT_TTL_S",
+    "REACT_FIX_WINDOW": "REACT_FIX_WINDOW_S",
+    "REACT_ELICIT": "REACT_ELICIT_ENABLED",
+    "REACT_ELICIT_DELAY": "REACT_ELICIT_DELAY_S",
+    "REACT_ELICIT_COOLDOWN": "REACT_ELICIT_COOLDOWN_S",
+    "PROMOTE_AUTO": "PROMOTE_AUTO_ENABLED",
+    "EXAMPLES_MAX_AUTO": "PROMOTE_MAX_EXAMPLES",
+    "FEEDBACK_MAX_AUTO": "PROMOTE_MAX_FEEDBACK",
+    "EVOLVE_AUTO": "EVOLVE_AUTO_ENABLED",
+    "EVAL_ENABLE": "EVAL_ENABLED",
+    "AGENT_EVIDENCE_WARN_BYTES": "LEDGER_EVIDENCE_WARN_BYTES",
+    "AGENT_CANDIDATE_LEDGER_WARN_BYTES": "LEDGER_CANDIDATES_WARN_BYTES",
+    "PROMPT_LAB_MODEL": "LAB_MODEL",
+    "BENCH_EVAL_DELAY": "BENCH_EVAL_DELAY_S",
+    # Aliases that kept even older names working until 0.5.
+    "GLM_API_KEY": "VISION_API_KEY",
+    "GLM_BASE_URL": "VISION_BASE_URL",
+    "ANTHROPIC_PRIVATE_MODEL": "LLM_DM_MODEL",
+    "OWNER_QQ": "ADMIN_IDS",
+    "GATEWAY_OWNER_IDS": "ADMIN_IDS",
+    "OWNER_NAME": "ADMIN_NAME",
+    "OWNER_RELATIONSHIP": "ADMIN_RELATIONSHIP",
+    "QQ_GROUPS": "ACCESS_GROUPS",
+    "PRIVATE_ALLOWED_QQS": "ACCESS_DM_USERS",
+}
+
 #: The one forwarder platform whose ids are QQ numbers (AstrBot's OneBot
 #: adapter). Any other native platform mints bare ids the agent reads as QQ.
 _QQ_ADAPTER = "aiocqhttp"
@@ -214,7 +286,9 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
     `env` defaults to the parsed `.env`, not to `os.environ`, because the
     question is "what did the operator write down" — a value exported in the
-    shell is not a typo anyone is hunting for."""
+    shell is not a typo anyone is hunting for. A retired name is the
+    exception: a container passes its settings in the environment, so without
+    an explicit `env` that is searched for them too."""
     base = Path(root) if root is not None else ROOT
     template = _parse(base / ".env.example", strip_bom=True)
     configured = _parse(base / ".env") if env is None else dict(env)
@@ -255,13 +329,20 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     else:
         unknown = sorted(
             key for key in configured
-            if key not in template and key not in TEMPLATE_EXEMPT)
+            if key not in template and key not in TEMPLATE_EXEMPT
+            and key not in RENAMED)
         for key in unknown:
             findings.append(Finding(
                 "ERROR", key,
                 "is not a setting this project reads. A misspelled key is "
                 "silent: the value is ignored and the default is used "
                 "instead. Check it against .env.example"))
+
+    retired = set(configured) | (set(os.environ) if env is None else set())
+    for old in sorted(retired & RENAMED.keys()):
+        findings.append(Finding(
+            "WARN", old,
+            f"was renamed to {RENAMED[old]} in 0.5 and is no longer read"))
 
     for key, why in WANTED.items():
         if key in configured and not str(configured.get(key) or "").strip():

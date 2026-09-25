@@ -488,7 +488,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
           "; ".join(missing))
 
 
-def test_preflight_reports_the_right_deployments() -> None:
+def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
     """134 lines wired into `lifespan` had no behavioural test at all.
 
     The thing it has to get right is not the true positives — those are easy —
@@ -498,6 +498,11 @@ def test_preflight_reports_the_right_deployments() -> None:
     passing config in the environment, a persona home with no template, and a
     BOM on the template."""
     from persona_agent import preflight
+
+    # Without an explicit env the check reads the process environment for
+    # retired names; a PORT in the runner's shell is not what this tests.
+    for old in preflight.RENAMED:
+        monkeypatch.delenv(old, raising=False)
 
     def levels(**kwargs):
         return {(f.level, f.key) for f in preflight.check_config(**kwargs)}
@@ -574,6 +579,61 @@ def test_preflight_reports_the_right_deployments() -> None:
         (home / ".env").write_text("LLM_API_KEY=x\n", encoding="utf-8")
         check("preflight: a BOM on the template accuses nobody",
               not levels(root=home), repr(levels(root=home)))
+
+
+def test_preflight_names_what_a_retired_setting_became(
+        monkeypatch, tmp_path) -> None:
+    """0.5 renamed most settings and reads none of the old names. One left in
+    `.env` or the environment would otherwise be silently ignored, or called a
+    typo when it is a setting that moved: it is a WARN naming its new name."""
+    from persona_agent import preflight
+    from persona_agent.settings import AgentSettings
+
+    for old in preflight.RENAMED:
+        monkeypatch.delenv(old, raising=False)
+
+    found = preflight.check_config(
+        env={"LLM_API_KEY": "x", "PORT": "9000", "OWNER_QQ": "42"})
+    check("retired: a WARN naming the new name, and nothing else",
+          {(f.level, f.key, f.detail) for f in found}
+          == {("WARN", "PORT",
+               "was renamed to SERVER_PORT in 0.5 and is no longer read"),
+              ("WARN", "OWNER_QQ",
+               "was renamed to ADMIN_IDS in 0.5 and is no longer read")},
+          repr(found))
+    every = preflight.check_config(
+        env={"LLM_API_KEY": "x", **{old: "1" for old in preflight.RENAMED}})
+    check("retired: every name in the table, each once, never as a typo",
+          sorted((f.level, f.key) for f in every)
+          == sorted(("WARN", old) for old in preflight.RENAMED), repr(every))
+
+    template = (Path(__file__).resolve().parents[1] / ".env.example").read_text(
+        encoding="utf-8")
+    keys = {line.split("=", 1)[0].strip() for line in template.splitlines()
+            if "=" in line and not line.lstrip().startswith("#")}
+    check("retired: every new name is a setting the template lists",
+          set(preflight.RENAMED.values()) <= keys,
+          repr(set(preflight.RENAMED.values()) - keys))
+    check("retired: no old name is still in the template",
+          not keys & preflight.RENAMED.keys(), repr(keys & preflight.RENAMED.keys()))
+
+    (tmp_path / ".env.example").write_text(template, encoding="utf-8")
+    (tmp_path / ".env").write_text("LLM_API_KEY=x\nBOT_NAME=Mira\n",
+                                   encoding="utf-8")
+    monkeypatch.setenv("REACT_TTL_SEC", "60")
+    found = {(f.level, f.key) for f in preflight.check_config(root=tmp_path)}
+    check("retired: found in .env and in the process environment",
+          found == {("WARN", "BOT_NAME"), ("WARN", "REACT_TTL_SEC")}, repr(found))
+    found = {(f.level, f.key) for f in preflight.check_config(
+        root=tmp_path, env={"LLM_API_KEY": "x"})}
+    check("retired: an explicit env is the only place looked", not found,
+          repr(found))
+
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "BOT_NAME": "Mira",
+                                    "OWNER_QQ": "42", "REACT_TTL_SEC": "60"})
+    check("retired: the value under an old name is not used",
+          (s.bot_name, s.admin_ids, s.react_ttl_sec) == ("", (), 900.0),
+          repr((s.bot_name, s.admin_ids, s.react_ttl_sec)))
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
