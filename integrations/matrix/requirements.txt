@@ -1,0 +1,6 @@
+# The Matrix connector's own dependencies; the agent does not need them.
+# matrix-nio 0.26 moved end-to-end encryption onto vodozemac, which ships
+# wheels for Linux, macOS and Windows, so the e2e extra needs no libolm.
+matrix-nio[e2e]>=0.26,<0.27
+httpx>=0.27,<1
+python-dotenv>=1.0,<2
