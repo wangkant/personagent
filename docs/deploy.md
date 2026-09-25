@@ -22,6 +22,7 @@ To run live behind AstrBot:
 LLM_API_KEY=...
 BOT_NAME=...                         # the name it answers to
 GATEWAY_TOKEN=...                    # shared with the plugin; recommended, required across hosts
+OWNER_IDS=telegram:12345             # optional: the owner's accounts, <platform>:<id>
 # QQ only
 BOT_QQ=...                           # the bot account's number
 GATEWAY_NATIVE_PLATFORMS=aiocqhttp
@@ -29,7 +30,7 @@ GATEWAY_NATIVE_PLATFORMS=aiocqhttp
 
 Everything else in `.env.example` has a working default: `HOST`/`PORT` are
 `127.0.0.1:8080`, `NAPCAT_API` is `http://127.0.0.1:3000`, and an empty
-`QQ_GROUPS` allows every group.
+`ALLOWED_GROUPS` leaves every group to the plugin's allowlist.
 
 Then run `python tools/healthcheck.py`. It reports missing and **misspelled**
 settings (a typo is otherwise silent: the default is used) and whether each
@@ -79,8 +80,18 @@ On the personagent side:
   replay guard. A captured request cannot be replayed or altered, but the
   token is also the signing key: keep it out of logs and rotate it if it
   leaks. Optional on one host, required across hosts.
-- `GATEWAY_OWNER_IDS` lists platform-prefixed ids (`telegram:12345`) that get
-  the owner branch in DMs, as `OWNER_QQ` does on QQ.
+- `OWNER_IDS` lists the owner's accounts as `<platform>:<id>`
+  (`telegram:12345`, `discord:4242`; a bare id or `qq:<id>` is a QQ number).
+  One person on every platform listed: they get the closer persona in groups
+  and DMs, may manage what the bot remembers about a group, and may teach it
+  on their own. The platform is the adapter name AstrBot shows.
+- `ALLOWED_GROUPS` and `ALLOWED_DM_USERS` let personagent gate a platform
+  itself, in the same `<platform>:<id>` form. Each platform is gated on its
+  own: one with no entries is left to the plugin's allowlists, and one entry
+  restricts that platform to its entries. A turn personagent refuses goes
+  back unclaimed, so AstrBot's own model may answer it. The old names
+  (`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS`, `PRIVATE_ALLOWED_QQS`) still
+  work, and their ids are added to the new ones'.
 
 ## QQ through AstrBot
 
@@ -98,18 +109,19 @@ namespaced (`aiocqhttp:123456`) and every conversation looks new. Memory,
 history and learned examples are keyed by the bare id, and the ledgers derive
 row ids from the conversation id, so the split cannot be repaired afterwards.
 
-Bare ids carry QQ authority, so `OWNER_QQ`, `QQ_GROUPS` and
-`PRIVATE_ALLOWED_QQS` apply on top of the plugin's allowlists: a QQ DM must be
-in `private_whitelist` *and* come from `OWNER_QQ` or `PRIVATE_ALLOWED_QQS`.
-Only list a platform in `GATEWAY_NATIVE_PLATFORMS` if you trust its forwarder
-with that authority.
+Bare ids carry QQ authority, so the QQ entries of `OWNER_IDS`,
+`ALLOWED_GROUPS` and `ALLOWED_DM_USERS` apply on top of the plugin's
+allowlists: a QQ DM must be in `private_whitelist` *and* come from an owner or
+an `ALLOWED_DM_USERS` entry, and when `ALLOWED_GROUPS` lists QQ groups, a QQ
+group must be in both. Only list a platform in `GATEWAY_NATIVE_PLATFORMS` if
+you trust its forwarder with that authority.
 
 **Keep NapCat's HTTP server on**, at `NAPCAT_API`. AstrBot reaches NapCat over
 a reverse WebSocket for messages and replies, but what personagent starts
 itself goes straight to `NAPCAT_API`: proactive messages (`PROACTIVE_ENABLE`,
 off by default), and the sweep for @-mentions missed while offline. The sweep
-runs at startup and then every 30 minutes, covers the groups in `QQ_GROUPS`
-plus any group with traffic since the last restart, and replays @-mentions
+runs at startup and then every 30 minutes, covers the QQ groups in
+`ALLOWED_GROUPS` plus any group with traffic since the last restart, and replays @-mentions
 under an hour old. Without the server the bot keeps answering but loses both,
 and (with `BOT_QQ` set) `healthcheck.py` shows the OneBot bridge failing.
 
@@ -225,9 +237,11 @@ Most common first:
 3. **It was not called.** In a group it answers its name (`BOT_NAME`) or an
    @. Otherwise it waits for enough conversation (`AGENT_TRIGGER_COUNT`, 30
    messages by default) and may still pass.
-4. **personagent's QQ allowlists.** `QQ_GROUPS`, `OWNER_QQ` and
-   `PRIVATE_ALLOWED_QQS` apply to QQ through AstrBot too. A message they turn
-   away goes back unclaimed, so AstrBot's own model answers it.
+4. **personagent's allowlists.** `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`
+   (and a QQ DM needs an owner or an entry) apply behind AstrBot too. A
+   message they turn away goes back unclaimed, so AstrBot's own model answers
+   it; personagent logs each refused conversation once, at INFO, with the
+   setting that refused it.
 5. **A misspelled setting.** Silent by construction. The startup log and
    `healthcheck.py` list every key `.env.example` does not know.
 6. **A BOM on `.env`.** The first setting's name carries it and never reaches

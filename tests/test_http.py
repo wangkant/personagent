@@ -391,6 +391,8 @@ _UNDOCUMENTED_SETTINGS = {
     "ANTHROPIC_PRIVATE_MODEL",
     # The vision endpoint's pre-rename names, for the same reason.
     "GLM_API_KEY", "GLM_BASE_URL",
+    # The identity settings' QQ-only names (access.IDENTITY_SETTINGS), too.
+    "OWNER_QQ", "GATEWAY_OWNER_IDS", "QQ_GROUPS", "PRIVATE_ALLOWED_QQS",
 }
 
 
@@ -457,6 +459,11 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
                 read.setdefault(key, f"{path.name}:{node.lineno}")
 
     check("template scan found the settings at all", len(read) > 20, str(len(read)))
+    # access.identity_from_env reads its names in a loop, out of reach of the
+    # scan; they are settings all the same.
+    from persona_agent import access
+    for name in access.ALL_NAMES:
+        read.setdefault(name, "access.py")
 
     template = (root / ".env.example").read_text(encoding="utf-8")
     documented = {
@@ -559,6 +566,74 @@ def test_preflight_reports_the_right_deployments() -> None:
         (home / ".env").write_text("LLM_API_KEY=x\n", encoding="utf-8")
         check("preflight: a BOM on the template accuses nobody",
               not levels(root=home), repr(levels(root=home)))
+
+
+def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
+    """OWNER_IDS, ALLOWED_GROUPS and ALLOWED_DM_USERS replaced four QQ-only
+    names that still work, and the ways to get the new ones wrong are silent:
+    another platform's id pasted without its prefix reads as a QQ id (and in
+    ALLOWED_GROUPS closes every QQ group), a capitalised platform never
+    matches, and one entry takes a whole platform away from the forwarder."""
+    from persona_agent import preflight
+
+    def findings(**env):
+        return preflight.check_config(env={"LLM_API_KEY": "sk-x", **env})
+
+    def levels(**env):
+        return {(f.level, f.key) for f in findings(**env)}
+
+    check("identity: the new names are settings",
+          not levels(OWNER_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
+                     ALLOWED_DM_USERS="456", BOT_QQ="9"),
+          repr(levels(OWNER_IDS="telegram:1,10000", ALLOWED_GROUPS="123",
+                      ALLOWED_DM_USERS="456", BOT_QQ="9")))
+    legacy = levels(OWNER_QQ="42", GATEWAY_OWNER_IDS="telegram:1",
+                    QQ_GROUPS="1,2", PRIVATE_ALLOWED_QQS="3", BOT_QQ="9")
+    check("identity: the old names are not typos, and say what they became",
+          legacy == {("INFO", "OWNER_QQ"), ("INFO", "GATEWAY_OWNER_IDS"),
+                     ("INFO", "QQ_GROUPS"), ("INFO", "PRIVATE_ALLOWED_QQS")},
+          repr(legacy))
+    check("identity: ...including that removing an id means clearing it there",
+          any("delete it here" in f.detail
+              for f in findings(QQ_GROUPS="1", BOT_QQ="9")))
+
+    pasted = findings(ALLOWED_GROUPS="-1001234,telegram:-100")
+    check("identity: an id pasted without its prefix is a warning",
+          any(f.level == "WARN" and f.key == "ALLOWED_GROUPS"
+              and "-1001234" in f.detail and "closes every QQ group" in f.detail
+              for f in pasted), repr(pasted))
+    check("identity: ...in any of the lists, old names included",
+          ("WARN", "OWNER_IDS") in levels(OWNER_IDS="U0ABC")
+          and ("WARN", "GATEWAY_OWNER_IDS") in levels(GATEWAY_OWNER_IDS="alice"))
+    check("identity: qq: and bare QQ numbers are fine",
+          not levels(ALLOWED_GROUPS="qq:123,456", BOT_QQ="9"))
+    check("identity: an entry naming no platform or no id is a warning",
+          ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS=":42")
+          and ("WARN", "ALLOWED_DM_USERS") in levels(ALLOWED_DM_USERS="slack:"))
+    check("identity: a capitalised platform never matches, and says so",
+          ("WARN", "OWNER_IDS") in levels(OWNER_IDS="Telegram:1"))
+
+    moved = findings(QQ_GROUPS="telegram:-100")
+    check("identity: another platform in a QQ-only name changed meaning",
+          any(f.level == "WARN" and f.key == "QQ_GROUPS"
+              and "ALLOWED_GROUPS" in f.detail for f in moved), repr(moved))
+    opted = findings(ALLOWED_GROUPS="telegram:-100", ALLOWED_DM_USERS="slack:U1")
+    check("identity: one entry gating a whole platform is pointed out",
+          {(f.level, f.key) for f in opted if "only the listed" in f.detail}
+          == {("INFO", "ALLOWED_GROUPS"), ("INFO", "ALLOWED_DM_USERS")},
+          repr(opted))
+    check("identity: ...and only when a forwarded platform has entries",
+          not levels(ALLOWED_GROUPS="123", BOT_QQ="9"))
+
+    check("identity: a bare QQ owner is a QQ config that needs BOT_QQ",
+          ("WARN", "BOT_QQ") in levels(OWNER_IDS="42"))
+    check("identity: a Telegram-only owner is not",
+          not levels(OWNER_IDS="telegram:42"))
+    check("identity: QQ's own adapter is the native platform to name",
+          not levels(GATEWAY_NATIVE_PLATFORMS="aiocqhttp"))
+    check("identity: another native platform would read its ids as QQ ones",
+          ("WARN", "GATEWAY_NATIVE_PLATFORMS") in levels(
+              GATEWAY_NATIVE_PLATFORMS="aiocqhttp,wecom"))
 
 
 def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None:

@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
+- **`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS`
+  are now `OWNER_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** The old
+  names keep working and leave the template. Unlike the vision rename they
+  are merged rather than overridden: `OWNER_QQ` and `GATEWAY_OWNER_IDS` add to
+  `OWNER_IDS`, `QQ_GROUPS` to `ALLOWED_GROUPS` and `PRIVATE_ALLOWED_QQS` to
+  `ALLOWED_DM_USERS`, so an `.env` half moved to the new names keeps every id
+  it had; to remove an id, delete it from the old name too. Preflight names
+  each old name in use, and warns about an id pasted without its platform
+  prefix (it reads as a QQ id), a capitalised platform (it never matches), a
+  non-QQ id in a QQ-only name (its meaning changed, see Added), and a
+  `GATEWAY_NATIVE_PLATFORMS` entry other than `aiocqhttp` (its ids would be
+  read as QQ numbers).
 - **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
   `VISION_BASE_URL`.** They configure whichever OpenAI-compatible model
   `VISION_MODEL` names, not one vendor's. The old names keep working exactly as

@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import access, channels
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from .paths import ROOT
 
@@ -61,7 +62,107 @@ TEMPLATE_EXEMPT = frozenset({
     # The vision endpoint's pre-rename names, likewise still honoured
     # (config_env.vision_endpoint_from_env) and not advertised.
     "GLM_API_KEY", "GLM_BASE_URL",
+    # The identity settings' QQ-only names, folded into OWNER_IDS,
+    # ALLOWED_GROUPS and ALLOWED_DM_USERS (access.IDENTITY_SETTINGS).
+    *access.LEGACY_SETTINGS,
 })
+
+#: The one forwarder platform whose ids are QQ numbers (AstrBot's OneBot
+#: adapter). Any other native platform mints bare ids the agent reads as QQ.
+_QQ_ADAPTER = "aiocqhttp"
+
+
+def _shown(entries) -> str:
+    entries = list(entries)
+    head = ", ".join(entries[:3])
+    return head + (f" and {len(entries) - 3} more" if len(entries) > 3 else "")
+
+
+def _identity_findings(identity: access.Identity) -> list["Finding"]:
+    """What the owner and allowlist settings will not do as written.
+
+    `identity` comes from access.identity_from_env, the reader the agent uses,
+    so a finding here describes what the agent actually does with the value."""
+    natives = identity.native_platforms
+    findings: list[Finding] = []
+
+    for name in access.ALL_NAMES:
+        written = identity.written[name]
+        malformed = [e for e in written if access.is_malformed(e)]
+        if malformed:
+            findings.append(Finding(
+                "WARN", name,
+                f"has {_shown(malformed)}, which names no platform or no id, "
+                f"so it is ignored. Write entries as <platform>:<id>"))
+        ids = [access.canonical_id(e, natives) for e in written
+               if not access.is_malformed(e)]
+        # A bare id is QQ's, and QQ numbers are digits. Anything else is almost
+        # always another platform's id pasted without its prefix, and in a
+        # group list it restricts QQ to groups that cannot exist.
+        bare = [i for i in ids if ":" not in i and not i.isdigit()]
+        if bare:
+            closes = (", and as a QQ entry it closes every QQ group not listed"
+                      if name in ("ALLOWED_GROUPS", "QQ_GROUPS") else "")
+            findings.append(Finding(
+                "WARN", name,
+                f"has {_shown(bare)} with no platform prefix, so it is read as "
+                f"a QQ id and matches no one{closes}. Prefix it with its "
+                f"platform, e.g. telegram:{bare[0]}"))
+        prefixes = {i.split(":", 1)[0] for i in ids if ":" in i}
+        cased = sorted(p for p in prefixes if p != p.lower())
+        if cased:
+            findings.append(Finding(
+                "WARN", name,
+                f"names the platform {_shown(cased)}, but platform names are "
+                f"lowercase (telegram, discord, ...), so these entries never "
+                f"match"))
+
+    # The old QQ-only lists are read per platform now. A namespaced entry in
+    # one used to close every QQ group (QQ_GROUPS) or do nothing at all
+    # (PRIVATE_ALLOWED_QQS); it now restricts its own platform instead.
+    for old, new in (("QQ_GROUPS", "ALLOWED_GROUPS"),
+                     ("PRIVATE_ALLOWED_QQS", "ALLOWED_DM_USERS")):
+        foreign = [i for i in access.canonical_ids(
+            identity.written[old], native_platforms=natives) if ":" in i]
+        if foreign:
+            findings.append(Finding(
+                "WARN", old,
+                f"holds {_shown(foreign)}, which are not QQ ids. They now "
+                f"restrict {_shown(sorted({channels.platform_of(i) for i in foreign}))}"
+                f" to the ids listed and no longer affect QQ; move them to "
+                f"{new}, or remove them if that is not what you want"))
+
+    for new, olds in access.IDENTITY_SETTINGS.items():
+        for old in olds:
+            if identity.written[old]:
+                findings.append(Finding(
+                    "INFO", old,
+                    f"is the old name of {new} and still works. Its ids count "
+                    f"together with {new}'s, so to remove one, delete it here"))
+
+    # Listing one entry for a platform takes that platform away from the
+    # forwarder's allowlist. Documented, but easy to trip over.
+    for name, what in (("ALLOWED_GROUPS", "groups"),
+                       ("ALLOWED_DM_USERS", "users besides the owner")):
+        platforms = sorted({channels.platform_of(i) for i in identity.ids(name)
+                            if channels.platform_of(i).islower()}
+                           - {channels.NATIVE_PLATFORM})
+        if platforms:
+            findings.append(Finding(
+                "INFO", name,
+                f"lists {_shown(platforms)} entries, so only the listed "
+                f"{what} there are answered and the rest are refused; the "
+                f"forwarder's own model may answer those. Platforms without "
+                f"entries, QQ included, are not affected"))
+
+    odd = [p for p in natives if p != _QQ_ADAPTER]
+    if odd:
+        findings.append(Finding(
+            "WARN", "GATEWAY_NATIVE_PLATFORMS",
+            f"names {_shown(odd)}. A native platform's ids are stored bare, "
+            f"which is how QQ numbers are stored, so they are compared against "
+            f"the QQ owners and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
+    return findings
 
 
 def _base_url_needs_full_path(base: str) -> bool:
@@ -228,20 +329,25 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                     f"points at {resolved}, which is not a directory — every "
                     f"runtime path is resolved under it"))
 
+    identity = access.identity_from_env(configured)
+    findings.extend(_identity_findings(identity))
+    qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
+              if i.isdigit()}
+
     bot_qq = str(configured.get("BOT_QQ") or "").strip()
-    if bot_qq and "QQ_GROUPS" not in configured:
+    if bot_qq and not any(name in configured
+                          for name in ("ALLOWED_GROUPS", "QQ_GROUPS")):
         findings.append(Finding(
-            "INFO", "QQ_GROUPS",
-            "is unset, so the bot listens in every group it is a member of"))
+            "INFO", "ALLOWED_GROUPS",
+            "is unset, so the bot listens in every QQ group it is a member of"))
     # BOT_QQ is silently load-bearing on QQ: a QQ @ carries the account's
     # number and `_is_at_me` has nothing else to match it against, so a QQ
     # deployment that is otherwise complete starts cleanly, logs nothing, and
     # never answers a mention. Exactly the failure class this module exists
     # for — and only a warning, because `try_chat.py` supplies its own
     # placeholder and needs none of this.
-    looks_like_qq = any(str(configured.get(key) or "").strip()
-                        for key in ("NAPCAT_API", "QQ_GROUPS", "OWNER_QQ",
-                                    "PRIVATE_ALLOWED_QQS"))
+    looks_like_qq = (bool(str(configured.get("NAPCAT_API") or "").strip())
+                     or bool(qq_ids))
     if looks_like_qq and not bot_qq:
         findings.append(Finding(
             "WARN", "BOT_QQ",
