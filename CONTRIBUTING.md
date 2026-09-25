@@ -38,8 +38,8 @@ name the directories so compileall skips `.venv`.
 One file, or one test, for a fast loop:
 
 ```bash
-python -m pytest tests/test_gateway.py
-python -m pytest tests/test_gateway.py -k throttle
+python -m pytest tests/test_outbox.py
+python -m pytest tests/test_outbox.py -k long_poll
 ```
 
 ### Writing a test
@@ -114,7 +114,7 @@ other modules by name. One concern per module:
 | `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting, the prompt's data frames |
 | `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
-| `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, gateway conversation LRU |
+| `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, connector conversation LRU |
 | `persona_agent/learning.py` | Self-eval, reaction adjudication, the evolution loop: the glue that records evidence and proposes candidates |
 | `persona_agent/evidence.py` | The append-only evidence log: schema, strength classification, idempotent appends (pure logic) |
 | `persona_agent/candidates.py` | Versioned candidates, the append-only lifecycle ledger, the materialized retrieval views (pure logic) |
@@ -122,10 +122,10 @@ other modules by name. One concern per module:
 | `persona_agent/reactions.py` | Reaction attribution and adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | Low-score eval → diagnosis → BAD/OK pair, dedup, pool trimming (pure logic) |
 | `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
-| `persona_agent/gateway.py` | The platform-neutral `/webhook/gateway` event schema and reply sink |
-| `persona_agent/outbox.py` | Messages no request is waiting for: each gateway conversation's reply handle, and the queue a connector pulls from `/webhook/gateway/outbox` |
+| `persona_agent/connector.py` | The platform-neutral `/v1/events` event schema and reply sink |
+| `persona_agent/outbox.py` | Messages no request is waiting for: each connector conversation's reply handle, and the queue a connector pulls from `/v1/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
-| `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ACCESS_GROUPS`, `ACCESS_DM_USERS` and the old names folded into them (pure logic) |
+| `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS` (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
