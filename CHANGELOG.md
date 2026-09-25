@@ -56,9 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `forwarder_id`, a `reply_handle` and `caps`, and it pulls the agent's outbox
   and delivers what the persona says unprompted through AstrBot, on every
   platform that can send first (not QQ official, WeChat official accounts or
-  WeCom smart bots). The allowlists are checked again at send time. It is on
-  by default (`outbox_enabled`); an agent without the outbox answers 404 and
-  nothing else changes.
+  WeCom smart bots). A delivery goes only to a session the plugin itself took
+  from a message in that conversation, so an event posted to the agent by
+  anything else cannot aim it at another chat, and the allowlists are checked
+  again at send time. It is on by default (`outbox_enabled`); an agent
+  without the outbox answers 404 and nothing else changes.
 
 ### Deprecated
 

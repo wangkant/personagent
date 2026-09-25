@@ -259,6 +259,10 @@ never has to reach AstrBot. It is on by default (`outbox_enabled`).
 
 - A delivery goes out through the conversation's own AstrBot session,
   in order, each message at most once.
+- It goes only to a session the plugin itself took from a message in that
+  same conversation (kept in AstrBot's plugin store, so a reload keeps them).
+  Anything else that posts an event to the agent cannot point the outbox at
+  another chat; such a delivery is refused.
 - The allowlists and `excluded_platforms` are checked again at send time;
   a conversation removed since is refused.
 - Platforms that cannot speak first (see the table) never get one: the
