@@ -232,7 +232,7 @@ Beta。QQ 是真正长期运行过的场景。AstrBot 的其他平台并非都�
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 Qiankang Wang。
+[MIT](LICENSE) © 2026 Qiankang (Kant) Wang。
 
 ## 致谢
 

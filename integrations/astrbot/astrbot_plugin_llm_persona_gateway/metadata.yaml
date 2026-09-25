@@ -1,5 +1,5 @@
 name: astrbot_plugin_llm_persona_gateway
 desc: Connects every AstrBot platform adapter to a personagent persona agent - forwards messages, relays its replies, and delivers what it says unprompted.
 version: 0.5.0
-author: wangkant
+author: Qiankang Wang
 repo: https://github.com/wangkant/personagent
