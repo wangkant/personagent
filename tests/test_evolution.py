@@ -295,12 +295,12 @@ def test_a_capped_feedback_write_leaves_the_rest_pending(tmp: Path) -> None:
 def _make_agent(tmp: Path) -> Agent:
     a = Agent(
         api_key="test-key",
-        bot_qq="10001",
-        bot_name="TestBot",
-        napcat_api="http://127.0.0.1:9",
+        qq_bot_id="10001",
+        persona_name="TestBot",
+        qq_onebot_url="http://127.0.0.1:9",
         memory_file=str(tmp / "memory.json"),
         persona="test persona",
-        eval_enable=False,
+        eval_enabled=False,
         eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"),
         stickers_file=str(tmp / "stickers.json"),

@@ -585,7 +585,7 @@ def test_the_default_timeout_outlasts_the_agents_default_turn() -> None:
     from persona_agent.settings import AgentSettings
 
     agent = AgentSettings.from_env(env={})
-    turn = agent.llm_timeout * (1 + agent.api_max_retries) + agent.message_debounce_sec
+    turn = agent.llm_timeout_s * (1 + agent.api_max_retries) + agent.message_debounce_sec
     default = sc.Config.from_env({}).timeout_s
     check("longer than a turn with the agent's defaults", default > turn, f"{default} vs {turn}")
     check("the field agrees", sc.Config().timeout_s == default)

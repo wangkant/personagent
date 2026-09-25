@@ -632,8 +632,8 @@ def test_preflight_names_what_a_retired_setting_became(
     s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "BOT_NAME": "Mira",
                                     "OWNER_QQ": "42", "REACT_TTL_SEC": "60"})
     check("retired: the value under an old name is not used",
-          (s.bot_name, s.admin_ids, s.react_ttl_sec) == ("", (), 900.0),
-          repr((s.bot_name, s.admin_ids, s.react_ttl_sec)))
+          (s.persona_name, s.admin_ids, s.react_ttl_s) == ("", (), 900.0),
+          repr((s.persona_name, s.admin_ids, s.react_ttl_s)))
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
@@ -952,8 +952,8 @@ def test_startup_view_rebuild_can_fail_closed() -> None:
         candidate_ledger=object(),
         promoted_examples_file=Path("unused-examples"),
         promoted_feedback_file=Path("unused-feedback"),
-        examples_max_auto=10,
-        feedback_max_auto=10,
+        promote_max_examples=10,
+        promote_max_feedback=10,
     )
     original = learning_module.candidates.rebuild_views
 

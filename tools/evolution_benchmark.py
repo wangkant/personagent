@@ -95,8 +95,8 @@ class _NameQQ(dict):
 NAME_QQ = _NameQQ()
 
 
-def _parse_line(line: str, bot_name: str) -> dict:
-    line = line.replace("<bot-name>", bot_name)
+def _parse_line(line: str, persona_name: str) -> dict:
+    line = line.replace("<bot-name>", persona_name)
     if ": " in line:
         name, text = line.split(": ", 1)
     else:
@@ -105,17 +105,17 @@ def _parse_line(line: str, bot_name: str) -> dict:
     return {"name": name, "text": text, "user_id": NAME_QQ[name]}
 
 
-def seed_buffer(agent, group_id: str, scenario: dict, bot_name: str):
+def seed_buffer(agent, group_id: str, scenario: dict, persona_name: str):
     """Clear the group buffer and fill it with the scenario's context lines.
     Returns (latest_text, caller_override) for the _think call."""
     agent.buffers[group_id].clear()
-    msgs = [_parse_line(ln, bot_name) for ln in scenario["context"]]
+    msgs = [_parse_line(ln, persona_name) for ln in scenario["context"]]
     for m in msgs:
         agent.buffers[group_id].append(m)
     latest_text = msgs[-1]["text"] if msgs else ""
     caller = None
     for m in reversed(msgs):
-        if m["name"].lower() != bot_name.lower():
+        if m["name"].lower() != persona_name.lower():
             caller = (m["name"], m["user_id"])
             break
     return latest_text, caller
@@ -137,14 +137,14 @@ def strip_pass_sentinel(reply: str) -> str:
     return reply
 
 
-async def drive_scenario(agent, scenario: dict, bot_name: str, group_id: str = "g1") -> str:
-    latest, caller = seed_buffer(agent, group_id, scenario, bot_name)
+async def drive_scenario(agent, scenario: dict, persona_name: str, group_id: str = "g1") -> str:
+    latest, caller = seed_buffer(agent, group_id, scenario, persona_name)
     reply, _intent, _mem = await agent._think(
         group_id, scenario["mode"], latest, caller_override=caller)
     return strip_pass_sentinel(reply)
 
 
-def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable: bool):
+def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_enabled: bool):
     """An Agent whose EVERY writable state path lives under state_dir, so a
     benchmark run cannot touch the repo's real memory/eval/feedback files.
 
@@ -167,10 +167,10 @@ def build_isolated_agent(state_dir: Path, bot_name: str, lang: str, eval_enable:
         api_key=os.getenv("LLM_API_KEY", "") or "benchmark-key",
         base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
-        bot_qq="10001", bot_name=bot_name,
-        napcat_api="http://127.0.0.1:9",
+        qq_bot_id="10001", persona_name=persona_name,
+        qq_onebot_url="http://127.0.0.1:9",
         memory_file=str(state_dir / "memory.json"), persona="benchmark persona",
-        eval_enable=eval_enable, eval_file=str(state_dir / "eval.jsonl"),
+        eval_enabled=eval_enabled, eval_file=str(state_dir / "eval.jsonl"),
         eval_model=os.getenv("EVAL_MODEL", ""),
         vision_model="",  # scenarios use [image: ...] markers, never real pixels
         # The self-eval may route a Moonshot/Kimi model through the vision
@@ -245,11 +245,11 @@ def _promote_pending(agent) -> int:
     return n
 
 
-async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_model: str):
+async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_model: str):
     if evolve_on:
         for scn in train:
             try:
-                latest, _caller = seed_buffer(agent, "g1", scn, bot_name)
+                latest, _caller = seed_buffer(agent, "g1", scn, persona_name)
                 reply, intent, _mem = await agent._think(
                     "g1", scn["mode"], latest, caller_override=_caller)
                 reply = strip_pass_sentinel(reply)
@@ -265,7 +265,7 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
                 # _evolve_tick consumes it. ctx_msgs are the scenario context
                 # lines with <bot-name> substituted (the same "name: text" shape
                 # _evaluate_reply expects).
-                ctx = [ln.replace("<bot-name>", bot_name) for ln in scn["context"]]
+                ctx = [ln.replace("<bot-name>", persona_name) for ln in scn["context"]]
                 await agent._evaluate_reply(
                     "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
                 # Optional throttle between eval calls: a cross-vendor eval
@@ -287,7 +287,7 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
     out = []
     for scn in holdout:
         try:
-            reply = await drive_scenario(agent, scn, bot_name)
+            reply = await drive_scenario(agent, scn, persona_name)
         except Exception as e:
             print(f"  [holdout {scn['id']}] error: {type(e).__name__}: {e}")
             reply = ""
@@ -298,7 +298,7 @@ async def run_round(agent, train, holdout, bot_name, evolve_on: bool, judge_mode
         # tutorial where a quip was expected. Measured on a 30-scenario probe:
         # a reply-only judge rated a "Here you go: [drafted apology]" reply
         # 5/5 ("like a friend offering a script").
-        ctx = [ln.replace("<bot-name>", bot_name) for ln in scn["context"]]
+        ctx = [ln.replace("<bot-name>", persona_name) for ln in scn["context"]]
         out.append({"scenario_id": scn["id"], "family": scn["family"],
                     "reply": reply, "context": ctx})
     return out
@@ -329,10 +329,10 @@ def _reset_state_dir(state_dir: Path) -> None:
         encoding="utf-8")
 
 
-async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir,
+async def run_arm(train, holdout, persona_name, lang, rounds, evolve_on, state_dir,
                   judge_model, seed_state="empty"):
     _reset_state_dir(state_dir)
-    agent = build_isolated_agent(state_dir, bot_name, lang, eval_enable=evolve_on)
+    agent = build_isolated_agent(state_dir, persona_name, lang, eval_enabled=evolve_on)
     # Seed both arms identically (or start empty) AFTER build so the files
     # survive the rmtree above; the agent's retrieval caches reload lazily by
     # mtime, so files dropped in now are picked up on the first round.
@@ -342,10 +342,10 @@ async def run_arm(train, holdout, bot_name, lang, rounds, evolve_on, state_dir,
     arm = "evolve-on" if evolve_on else "evolve-off"
     results = []
     # Round 0: baseline, no learning even on the on-arm.
-    base = await run_round(agent, train, holdout, bot_name, evolve_on=False, judge_model=judge_model)
+    base = await run_round(agent, train, holdout, persona_name, evolve_on=False, judge_model=judge_model)
     results.append({"round": 0, "feedback_pairs": _count_feedback(agent), "holdout": base})
     for k in range(1, rounds + 1):
-        rd = await run_round(agent, train, holdout, bot_name, evolve_on=evolve_on, judge_model=judge_model)
+        rd = await run_round(agent, train, holdout, persona_name, evolve_on=evolve_on, judge_model=judge_model)
         results.append({"round": k, "feedback_pairs": _count_feedback(agent), "holdout": rd})
         print(f"[{arm}] round {k}/{rounds}: feedback_pairs={_count_feedback(agent)}")
     return {"arm": arm, "rounds": results}
@@ -676,7 +676,7 @@ def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
 
 
 async def cmd_run(args) -> int:
-    bot_name = os.getenv("PERSONA_NAME", "Robin") or "Robin"
+    persona_name = os.getenv("PERSONA_NAME", "Robin") or "Robin"
     # Style ablation: with the full STYLE_GUIDE the base persona already avoids
     # AI-tell, so the loop has no failures to learn from and both arms sit at
     # ceiling. `--style weak` swaps in a neutral style guide (module global,
@@ -720,7 +720,7 @@ async def cmd_run(args) -> int:
     arms = []
     for evolve_on in (True, False):
         sd = out / ("state-on" if evolve_on else "state-off")
-        arm = await run_arm(train, holdout, bot_name, args.lang, args.rounds,
+        arm = await run_arm(train, holdout, persona_name, args.lang, args.rounds,
                             evolve_on, sd, judge_model=args.judge_model,
                             seed_state=args.seed_state)
         arms.append(arm)

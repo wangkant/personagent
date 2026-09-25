@@ -335,10 +335,10 @@ def event_prefiltered(event: dict) -> bool:
 
 
 def synthesize_onebot_payload(
-        event: dict, bot_qq: str, native_platforms=()) -> dict:
+        event: dict, qq_bot_id: str, native_platforms=()) -> dict:
     """Convert a neutral inbound event (schema in the module docstring) into
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
-    unchanged. Mentions of the platform bot_id are normalized to bot_qq so
+    unchanged. Mentions of the platform bot_id are normalized to qq_bot_id so
     _is_at_me fires exactly like a real QQ @-mention. The agent passes
     GATEWAY_SELF_ID for it when QQ_BOT_ID is blank (Agent._self_mention_id).
 
@@ -389,7 +389,7 @@ def synthesize_onebot_payload(
         elif t == "mention":
             target = str(seg.get("user_id", ""))
             if bot_id and target == bot_id:
-                message.append({"type": "at", "data": {"qq": bot_qq}})
+                message.append({"type": "at", "data": {"qq": qq_bot_id}})
                 has_self_mention = True
             else:
                 message.append(
@@ -436,7 +436,7 @@ def synthesize_onebot_payload(
     # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at
     # so _is_at_me fires.
     if event.get("addressed") and not has_self_mention:
-        message.insert(0, {"type": "at", "data": {"qq": bot_qq}})
+        message.insert(0, {"type": "at", "data": {"qq": qq_bot_id}})
 
     payload: dict = {
         "post_type": "message",

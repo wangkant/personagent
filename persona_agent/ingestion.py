@@ -1562,7 +1562,7 @@ class ContentIngestion:
         try:
             async with self._local_http(timeout=15) as client:
                 r = await client.post(
-                    f"{self.napcat_api}/ocr_image",
+                    f"{self.qq_onebot_url}/ocr_image",
                     json={"image": url},
                 )
                 r.raise_for_status()

@@ -64,45 +64,45 @@ class AgentSettings:
     model: str = DEFAULT_LLM_MODEL
     #: Alternate model name for private chats, served by the same
     #: OpenAI-compatible primary endpoint — not a second provider, unless it
-    #: is also ``fallback_model``'s name, which is served on the fallback's
+    #: is also ``llm_fallback_model``'s name, which is served on the fallback's
     #: endpoint (``endpoints.endpoint_for`` routes by name). A blank
     #: ``LLM_DM_MODEL`` in ``.env`` would otherwise send ``{"model": ""}`` on
     #: every DM: a guaranteed 400 per DM. Resolved to ``model`` when empty.
-    private_model: str = ""
-    fallback_model: str = ""
+    llm_dm_model: str = ""
+    llm_fallback_model: str = ""
     #: The fallback model's own endpoint, so the primary provider's outage is
     #: not also the fallback's. Blank = the primary's ``base_url`` /
-    #: ``api_key``, read at call time. Only a ``fallback_model`` distinct from
-    #: ``model`` is sent there (see ``endpoints.endpoint_for``).
-    fallback_base_url: str = ""
-    fallback_api_key: str = ""
-    #: Whether a ``fallback_base_url`` on another host than ``base_url``
+    #: ``api_key``, read at call time. Only a ``llm_fallback_model``
+    #: distinct from ``model`` is sent there (see ``endpoints.endpoint_for``).
+    llm_fallback_base_url: str = ""
+    llm_fallback_api_key: str = ""
+    #: Whether a ``llm_fallback_base_url`` on another host than ``base_url``
     #: accepts DeepSeek's ``thinking`` field. Off by default because the
     #: field is not ignored elsewhere — Groq answers ``400 property
     #: 'thinking' is unsupported``, OpenAI rejects unknown arguments — and the
     #: gate, search decision and sticker tagger run on the judge model, which
     #: defaults to the fallback, so a 400 there silences them on every turn.
-    fallback_thinking: bool = False
+    llm_fallback_thinking: bool = False
     #: The "judgment" model: cheapest available, used only to gate
     #: self-initiated modes (judge / followup / proactive) — decide PASS vs
     #: reply. The reply that actually gets sent is always written by the main
     #: model. Defaults to the fallback (cheap) model; set ``LLM_JUDGE_MODEL`` to
     #: point at an even cheaper one.
-    judge_model: str = field(
+    llm_judge_model: str = field(
         default_factory=lambda: env_str("LLM_JUDGE_MODEL", "", strip=True))
     #: LLM transient-error retry count (jittered backoff; 0 disables).
     api_max_retries: int = field(
         default_factory=lambda: env_int("LLM_MAX_RETRIES", 2, minimum=0))
     #: Main LLM call timeout (seconds); reasoning models can be slow.
-    llm_timeout: float = field(
+    llm_timeout_s: float = field(
         default_factory=lambda: env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0))
 
     # ---- identity ---------------------------------------------------------
-    bot_qq: str = ""
-    bot_name: str = ""
-    napcat_api: str = "http://127.0.0.1:3000"
-    owner_name: str = ""
-    owner_relationship: str = ""
+    qq_bot_id: str = ""
+    persona_name: str = ""
+    qq_onebot_url: str = "http://127.0.0.1:3000"
+    admin_name: str = ""
+    admin_relationship: str = ""
     #: Process-wide language. 'en' (default) is the primary build; 'zh' selects
     #: the Chinese variant. Blank means "whatever ``AGENT_LANG`` says".
     lang: str = ""
@@ -112,11 +112,11 @@ class AgentSettings:
     agent_lang: str = ""
 
     # ---- conversation -----------------------------------------------------
-    trigger_count: int = 30
-    context_len: int = 120
-    followup_window: int = 120
+    chat_trigger_count: int = 30
+    chat_context_messages: int = 120
+    chat_followup_window_s: int = 120
     memory_file: str = "memory.json"
-    memory_max_per_group: int = 50
+    memory_max_per_conversation: int = 50
     message_debounce_sec: float = 2.5
     #: Persona document. ``None`` means "load it from ``PERSONA_FILE``", which
     #: the agent does at construction — file reads stay out of this record.
@@ -136,12 +136,12 @@ class AgentSettings:
     #: with no entries is not restricted here.
     #: Without an in-code gate a bot invited into N groups replies in all of
     #: them regardless of the setting.
-    allowed_groups: tuple[str, ...] = field(
+    access_groups: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "ACCESS_GROUPS"])
     #: Who else may DM the bot (``ACCESS_DM_USERS``). Owners always may;
     #: these take the "ordinary friend" branch rather than the owner's.
-    allowed_dm_users: tuple[str, ...] = field(
+    access_dm_users: tuple[str, ...] = field(
         default_factory=lambda: access.identity_from_env().written[
             "ACCESS_DM_USERS"])
     #: Forwarder platforms whose ids are minted BARE instead of namespaced, so
@@ -149,16 +149,16 @@ class AgentSettings:
     #: have produced. Empty by default, and an operator setting rather than
     #: something the forwarder asserts: a bare id carries QQ authority — it is
     #: what the QQ entries of the lists above are compared against.
-    gateway_native_platforms: tuple[str, ...] = ()
+    connector_qq_platforms: tuple[str, ...] = ()
     #: Whether a connector that pulls the outbox may be sent messages nobody
     #: asked for: openers, the follow-up question, the excuse for a failed
     #: model call (``CONNECTOR_OUTBOX_ENABLED``). Off, the outbox endpoint answers 404
     #: and those stay QQ-only, as they were before the outbox existed.
-    gateway_outbox: bool = field(
+    connector_outbox_enabled: bool = field(
         default_factory=lambda: env_bool("CONNECTOR_OUTBOX_ENABLED", True))
 
     # ---- self-evaluation --------------------------------------------------
-    eval_enable: bool = True
+    eval_enabled: bool = True
     eval_model: str = ""
     eval_file: str = "eval.jsonl"
 
@@ -173,18 +173,18 @@ class AgentSettings:
     # ---- model-error fallback ---------------------------------------------
     #: Two independent fallback clocks share these numbers: the error-driven
     #: one, kept per model (a failed model is skipped in every mode, for
-    #: ``fallback_duration``, or ``rate_limit_cooldown`` after a 429) and the
-    #: frequency-driven self-throttle (self-initiated modes only; called/owner
-    #: are exempt).
-    rate_window: int = 60
-    rate_threshold: int = 5
-    fallback_duration: int = 300
+    #: ``llm_fallback_duration_s``, or ``llm_rate_limit_cooldown_s`` after a
+    #: 429) and the frequency-driven self-throttle (self-initiated modes only;
+    #: called/owner are exempt).
+    llm_rate_window_s: int = 60
+    llm_rate_threshold: int = 5
+    llm_fallback_duration_s: int = 300
     #: How long a model that answered 429 is skipped. Its own clock because a
     #: throttled model is metered, not broken: one 429 under the 300s window
     #: routed every turn for five minutes to the fallback, though the primary
     #: answered most calls. The call that hit the 429 has already failed over;
     #: this only has to keep the next few turns off the same wall.
-    rate_limit_cooldown: int = 20
+    llm_rate_limit_cooldown_s: int = 20
 
     # ---- the proactive loop -----------------------------------------------
     #: A background loop that occasionally self-initiates a message (no
@@ -194,21 +194,21 @@ class AgentSettings:
     #: hours, only after a quiet stretch, with per-target cooldowns and a low
     #: per-tick probability, and the model is told to PASS unless it genuinely
     #: has something to say. DMs go to the owner + the private whitelist only.
-    proactive_enable: bool = field(
+    proactive_enabled: bool = field(
         default_factory=lambda: env_bool("PROACTIVE_ENABLED", False))
-    proactive_interval: int = field(  # tick: 25 min
+    proactive_interval_s: int = field(  # tick: 25 min
         default_factory=lambda: env_int("PROACTIVE_INTERVAL_S", 1500, minimum=1))
-    proactive_min_silence: int = field(  # group quiet >= 45 min
+    proactive_min_silence_s: int = field(  # group quiet >= 45 min
         default_factory=lambda: env_int("PROACTIVE_MIN_SILENCE_S", 2700, minimum=0))
-    proactive_cooldown: int = field(  # >= 3h between group initiations
+    proactive_cooldown_s: int = field(  # >= 3h between group initiations
         default_factory=lambda: env_int("PROACTIVE_COOLDOWN_S", 10800, minimum=0))
     proactive_prob: float = field(  # per eligible tick
         default_factory=lambda: env_float(
             "PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0))
-    proactive_dm_min_silence: int = field(  # DM quiet >= 4h
+    proactive_dm_min_silence_s: int = field(  # DM quiet >= 4h
         default_factory=lambda: env_int(
             "PROACTIVE_DM_MIN_SILENCE_S", 14400, minimum=0))
-    proactive_dm_cooldown: int = field(  # >= 24h between DMs
+    proactive_dm_cooldown_s: int = field(  # >= 24h between DMs
         default_factory=lambda: env_int(
             "PROACTIVE_DM_COOLDOWN_S", 86400, minimum=0))
     proactive_dm_prob: float = field(
@@ -226,7 +226,7 @@ class AgentSettings:
     #: loop unattended. Low-score eval entries become BAD/OK candidates, but
     #: never enter retrieval without compatible corroborating evidence or an
     #: explicit human promotion.
-    evolve_auto: bool = field(
+    evolve_auto_enabled: bool = field(
         default_factory=lambda: env_bool("EVOLVE_AUTO_ENABLED", False))
     evolve_interval_hours: float = field(
         default_factory=lambda: env_float(
@@ -252,25 +252,25 @@ class AgentSettings:
     #: recorded as evidence and may propose a candidate; it does not write a
     #: retrieval pool. LLM self-eval remains the fallback channel for replies
     #: that never get a directed reaction.
-    react_learn: bool = field(
+    react_learn_enabled: bool = field(
         default_factory=lambda: env_bool("REACT_LEARN_ENABLED", True))
     react_model: str = field(
         default_factory=lambda: env_str("REACT_MODEL", "", strip=True))
     react_max_pending: int = field(
         default_factory=lambda: env_int("REACT_MAX_PENDING", 4, minimum=1))
-    react_ttl_sec: float = field(
+    react_ttl_s: float = field(
         default_factory=lambda: env_float("REACT_TTL_S", 900.0, minimum=0.0))
-    react_fix_window: float = field(
+    react_fix_window_s: float = field(
         default_factory=lambda: env_float("REACT_FIX_WINDOW_S", 600.0, minimum=0.0))
     #: Elicitation: after an accepted rejection with no correction content, the
     #: bot may ask what the user actually meant — delayed, so it never talks
     #: over its own normal reply, and cooldown-limited, so it never begs.
-    react_elicit: bool = field(
+    react_elicit_enabled: bool = field(
         default_factory=lambda: env_bool("REACT_ELICIT_ENABLED", True))
-    react_elicit_delay: float = field(
+    react_elicit_delay_s: float = field(
         default_factory=lambda: env_float(
             "REACT_ELICIT_DELAY_S", 120.0, minimum=0.0))
-    react_elicit_cooldown: float = field(
+    react_elicit_cooldown_s: float = field(
         default_factory=lambda: env_float(
             "REACT_ELICIT_COOLDOWN_S", 3600.0, minimum=0.0))
 
@@ -281,9 +281,9 @@ class AgentSettings:
     #: prompt. These bound the materialized views of promoted candidates — the
     #: only rows the automatic path can add. The ``data/`` seeds and the
     #: pre-ledger learned pools are left exactly as they are. 0 = no cap.
-    examples_max_auto: int = field(
+    promote_max_examples: int = field(
         default_factory=lambda: env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0))
-    feedback_max_auto: int = field(
+    promote_max_feedback: int = field(
         default_factory=lambda: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0))
     #: When evidence may grant a candidate authority. Its own record, read the
     #: same way this one is.
@@ -292,11 +292,11 @@ class AgentSettings:
 
     def __post_init__(self) -> None:
         self.base_url = str(self.base_url or "").rstrip("/")
-        self.fallback_base_url = str(self.fallback_base_url or "").rstrip("/")
-        self.napcat_api = str(self.napcat_api or "").rstrip("/")
+        self.llm_fallback_base_url = str(self.llm_fallback_base_url or "").rstrip("/")
+        self.qq_onebot_url = str(self.qq_onebot_url or "").rstrip("/")
         self.vision_base_url = (
             str(self.vision_base_url).rstrip("/") if self.vision_base_url else "")
-        self.bot_qq = str(self.bot_qq)
+        self.qq_bot_id = str(self.qq_bot_id)
         self.vision_model = (self.vision_model or "").strip()
         self.tavily_key = (self.tavily_key or "").strip()
         self.message_debounce_sec = max(0.0, self.message_debounce_sec)
@@ -306,18 +306,18 @@ class AgentSettings:
         # Empty-model fallbacks, in dependency order: each of these is a model
         # name that ships blank and has to resolve to something the endpoint
         # actually serves, or the call it gates 400s.
-        self.fallback_model = self.fallback_model or self.model
-        self.judge_model = (
-            self.judge_model or self.fallback_model or self.model)
-        self.private_model = self.private_model or self.model
-        self.eval_model = self.eval_model or self.fallback_model or self.model
+        self.llm_fallback_model = self.llm_fallback_model or self.model
+        self.llm_judge_model = (
+            self.llm_judge_model or self.llm_fallback_model or self.model)
+        self.llm_dm_model = self.llm_dm_model or self.model
+        self.eval_model = self.eval_model or self.llm_fallback_model or self.model
         self.evolve_model = self.evolve_model or self.eval_model
-        self.react_model = self.react_model or self.judge_model
+        self.react_model = self.react_model or self.llm_judge_model
         # Accept any iterable of ids from a caller; store the canonical form,
         # so "qq:1" and a native forwarder's "aiocqhttp:1" both read as "1".
-        natives = self.gateway_native_platforms = access.split_ids(
-            self.gateway_native_platforms)
-        for name in ("admin_ids", "allowed_groups", "allowed_dm_users"):
+        natives = self.connector_qq_platforms = access.split_ids(
+            self.connector_qq_platforms)
+        for name in ("admin_ids", "access_groups", "access_dm_users"):
             setattr(self, name, access.canonical_ids(
                 getattr(self, name), native_platforms=natives))
         self.proactive_platforms = tuple(dict.fromkeys(
@@ -329,14 +329,14 @@ class AgentSettings:
     def owners(self) -> frozenset[str]:
         """Every admin account, canonical."""
         return access.parse_ids(
-            self.admin_ids, native_platforms=self.gateway_native_platforms)
+            self.admin_ids, native_platforms=self.connector_qq_platforms)
 
     @property
     def dm_users(self) -> frozenset[str]:
         """Everyone besides the owners who may DM the bot."""
         return access.parse_ids(
-            self.allowed_dm_users,
-            native_platforms=self.gateway_native_platforms)
+            self.access_dm_users,
+            native_platforms=self.connector_qq_platforms)
 
     @property
     def evolve_interval(self) -> int:
@@ -364,35 +364,35 @@ class AgentSettings:
             api_key=_str("LLM_API_KEY"),
             base_url=_str("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
             model=_str("LLM_MODEL", DEFAULT_LLM_MODEL),
-            bot_qq=_str("QQ_BOT_ID"),
-            bot_name=_str("PERSONA_NAME"),
-            private_model=_str("LLM_DM_MODEL"),
-            napcat_api=_str("QQ_ONEBOT_URL", "http://127.0.0.1:3000"),
-            trigger_count=env_int(
+            qq_bot_id=_str("QQ_BOT_ID"),
+            persona_name=_str("PERSONA_NAME"),
+            llm_dm_model=_str("LLM_DM_MODEL"),
+            qq_onebot_url=_str("QQ_ONEBOT_URL", "http://127.0.0.1:3000"),
+            chat_trigger_count=env_int(
                 "CHAT_TRIGGER_COUNT", 30, minimum=1, maximum=10_000, env=env),
-            context_len=env_int(
+            chat_context_messages=env_int(
                 "CHAT_CONTEXT_MESSAGES", 120, minimum=10, maximum=10_000, env=env),
-            followup_window=env_int(
+            chat_followup_window_s=env_int(
                 "CHAT_FOLLOWUP_WINDOW_S", 120, minimum=0, maximum=86_400, env=env),
             memory_file=_str("MEMORY_FILE", "memory.json"),
-            memory_max_per_group=env_int(
+            memory_max_per_conversation=env_int(
                 "MEMORY_MAX_PER_CONVERSATION", 50, minimum=1, maximum=10_000, env=env),
             admin_ids=identity.written["ADMIN_IDS"],
-            owner_name=_str("ADMIN_NAME"),
-            owner_relationship=_str("ADMIN_RELATIONSHIP"),
-            fallback_model=_str("LLM_FALLBACK_MODEL"),
-            fallback_base_url=_str("LLM_FALLBACK_BASE_URL"),
-            fallback_api_key=_str("LLM_FALLBACK_API_KEY"),
-            fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False, env=env),
-            rate_window=env_int(
+            admin_name=_str("ADMIN_NAME"),
+            admin_relationship=_str("ADMIN_RELATIONSHIP"),
+            llm_fallback_model=_str("LLM_FALLBACK_MODEL"),
+            llm_fallback_base_url=_str("LLM_FALLBACK_BASE_URL"),
+            llm_fallback_api_key=_str("LLM_FALLBACK_API_KEY"),
+            llm_fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False, env=env),
+            llm_rate_window_s=env_int(
                 "LLM_RATE_WINDOW_S", 120, minimum=1, maximum=86_400, env=env),
-            rate_threshold=env_int(
+            llm_rate_threshold=env_int(
                 "LLM_RATE_THRESHOLD", 30, minimum=1, maximum=100_000, env=env),
-            fallback_duration=env_int(
+            llm_fallback_duration_s=env_int(
                 "LLM_FALLBACK_DURATION_S", 180, minimum=1, maximum=86_400, env=env),
-            rate_limit_cooldown=env_int(
+            llm_rate_limit_cooldown_s=env_int(
                 "LLM_RATE_LIMIT_COOLDOWN_S", 20, minimum=1, maximum=86_400, env=env),
-            eval_enable=env_bool("EVAL_ENABLED", False, env=env),
+            eval_enabled=env_bool("EVAL_ENABLED", False, env=env),
             eval_model=_str("EVAL_MODEL"),
             eval_file=_str("EVAL_FILE", "eval.jsonl"),
             vision_model=_str("VISION_MODEL"),
@@ -400,7 +400,7 @@ class AgentSettings:
             vision_base_url=vision_base,
             tavily_key=_str("TAVILY_API_KEY"),
             lang=_str("AGENT_LANG", "en", strip=True).lower(),
-            gateway_native_platforms=identity.native_platforms,
+            connector_qq_platforms=identity.native_platforms,
         )
         # The operational knobs are read by the field defaults, which go
         # through `os.environ` directly. An explicit `env` mapping has to reach
@@ -415,8 +415,8 @@ class AgentSettings:
         """The admission lists, which are operational knobs too."""
         identity = access.identity_from_env(env)
         return dict(
-            allowed_groups=identity.written["ACCESS_GROUPS"],
-            allowed_dm_users=identity.written["ACCESS_DM_USERS"],
+            access_groups=identity.written["ACCESS_GROUPS"],
+            access_dm_users=identity.written["ACCESS_DM_USERS"],
         )
 
     @classmethod
@@ -424,49 +424,50 @@ class AgentSettings:
         """The knobs whose defaults come from the environment, read from
         ``env`` instead of ``os.environ``."""
         return dict(
-            judge_model=env_str("LLM_JUDGE_MODEL", "", strip=True, env=env),
+            llm_judge_model=env_str("LLM_JUDGE_MODEL", "", strip=True, env=env),
             api_max_retries=env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env),
-            llm_timeout=env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env),
+            llm_timeout_s=env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env),
             persona_version=env_str("PERSONA_VERSION", "", strip=True, env=env),
             **cls._access_from_env(env),
-            proactive_enable=env_bool("PROACTIVE_ENABLED", False, env=env),
-            proactive_interval=env_int(
+            proactive_enabled=env_bool("PROACTIVE_ENABLED", False, env=env),
+            proactive_interval_s=env_int(
                 "PROACTIVE_INTERVAL_S", 1500, minimum=1, env=env),
-            proactive_min_silence=env_int(
+            proactive_min_silence_s=env_int(
                 "PROACTIVE_MIN_SILENCE_S", 2700, minimum=0, env=env),
-            proactive_cooldown=env_int(
+            proactive_cooldown_s=env_int(
                 "PROACTIVE_COOLDOWN_S", 10800, minimum=0, env=env),
             proactive_prob=env_float(
                 "PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0, env=env),
-            proactive_dm_min_silence=env_int(
+            proactive_dm_min_silence_s=env_int(
                 "PROACTIVE_DM_MIN_SILENCE_S", 14400, minimum=0, env=env),
-            proactive_dm_cooldown=env_int(
+            proactive_dm_cooldown_s=env_int(
                 "PROACTIVE_DM_COOLDOWN_S", 86400, minimum=0, env=env),
             proactive_dm_prob=env_float(
                 "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0, env=env),
             proactive_platforms=access.split_ids(
                 env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)),
-            gateway_outbox=env_bool("CONNECTOR_OUTBOX_ENABLED", True, env=env),
-            evolve_auto=env_bool("EVOLVE_AUTO_ENABLED", False, env=env),
+            connector_outbox_enabled=env_bool(
+                "CONNECTOR_OUTBOX_ENABLED", True, env=env),
+            evolve_auto_enabled=env_bool("EVOLVE_AUTO_ENABLED", False, env=env),
             evolve_interval_hours=env_float(
                 "EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0, env=env),
             evolve_threshold=env_int("EVOLVE_THRESHOLD", 3, env=env),
             evolve_batch=env_int("EVOLVE_BATCH", 5, minimum=1, env=env),
             evolve_model=env_str("EVOLVE_MODEL", "", strip=True, env=env),
-            react_learn=env_bool("REACT_LEARN_ENABLED", True, env=env),
+            react_learn_enabled=env_bool("REACT_LEARN_ENABLED", True, env=env),
             react_model=env_str("REACT_MODEL", "", strip=True, env=env),
             react_max_pending=env_int("REACT_MAX_PENDING", 4, minimum=1, env=env),
-            react_ttl_sec=env_float("REACT_TTL_S", 900.0, minimum=0.0, env=env),
-            react_fix_window=env_float(
+            react_ttl_s=env_float("REACT_TTL_S", 900.0, minimum=0.0, env=env),
+            react_fix_window_s=env_float(
                 "REACT_FIX_WINDOW_S", 600.0, minimum=0.0, env=env),
-            react_elicit=env_bool("REACT_ELICIT_ENABLED", True, env=env),
-            react_elicit_delay=env_float(
+            react_elicit_enabled=env_bool("REACT_ELICIT_ENABLED", True, env=env),
+            react_elicit_delay_s=env_float(
                 "REACT_ELICIT_DELAY_S", 120.0, minimum=0.0, env=env),
-            react_elicit_cooldown=env_float(
+            react_elicit_cooldown_s=env_float(
                 "REACT_ELICIT_COOLDOWN_S", 3600.0, minimum=0.0, env=env),
-            examples_max_auto=env_int(
+            promote_max_examples=env_int(
                 "PROMOTE_MAX_EXAMPLES", 500, minimum=0, env=env),
-            feedback_max_auto=env_int(
+            promote_max_feedback=env_int(
                 "PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env),
             promotion_policy=promotion.Policy.from_env(env),
         )

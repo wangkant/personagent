@@ -41,19 +41,19 @@ def _build_agent(lang: str) -> Agent:
         api_key=os.getenv("LLM_API_KEY", ""),
         base_url=os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
-        bot_qq=os.getenv("QQ_BOT_ID", "") or "10000",
-        bot_name=os.getenv("PERSONA_NAME", "") or "bot",
-        private_model=os.getenv("LLM_DM_MODEL", ""),
+        qq_bot_id=os.getenv("QQ_BOT_ID", "") or "10000",
+        persona_name=os.getenv("PERSONA_NAME", "") or "bot",
+        llm_dm_model=os.getenv("LLM_DM_MODEL", ""),
         admin_ids=(ADMIN_ID,),
-        owner_name=os.getenv("ADMIN_NAME", "") or "admin",
-        owner_relationship=os.getenv("ADMIN_RELATIONSHIP", ""),
-        fallback_model=os.getenv("LLM_FALLBACK_MODEL", ""),
-        fallback_base_url=os.getenv("LLM_FALLBACK_BASE_URL", ""),
-        fallback_api_key=os.getenv("LLM_FALLBACK_API_KEY", ""),
-        fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False),
+        admin_name=os.getenv("ADMIN_NAME", "") or "admin",
+        admin_relationship=os.getenv("ADMIN_RELATIONSHIP", ""),
+        llm_fallback_model=os.getenv("LLM_FALLBACK_MODEL", ""),
+        llm_fallback_base_url=os.getenv("LLM_FALLBACK_BASE_URL", ""),
+        llm_fallback_api_key=os.getenv("LLM_FALLBACK_API_KEY", ""),
+        llm_fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False),
         # Trial defaults: don't spend tokens self-scoring, and skip vision
         # (the terminal can't send images anyway).
-        eval_enable=False,
+        eval_enabled=False,
         vision_model="",
         tavily_key=os.getenv("TAVILY_API_KEY", ""),
         lang=lang,
@@ -69,11 +69,11 @@ async def _turn(agent: Agent, name: str, uid: str, text: str, mode: str) -> None
             reply, agent.agent_lang, agent.reply_style)
             if reply else "")
     if not safe or safe.strip().upper() == "PASS":
-        print(f"  {agent.bot_name} > (stays quiet)")
+        print(f"  {agent.persona_name} > (stays quiet)")
         if reply and not safe:
             print(f"  [validator dropped raw reply: {reply[:60]!r}]")
         return
-    print(f"  {agent.bot_name} > {safe}")
+    print(f"  {agent.persona_name} > {safe}")
     meta = []
     if intent:
         meta.append(f"intent={intent}")
@@ -82,7 +82,7 @@ async def _turn(agent: Agent, name: str, uid: str, text: str, mode: str) -> None
     if meta:
         print(f"  [{'  '.join(meta)}]")
     # Append the bot's own line so multi-turn context builds up.
-    agent._append_buffer(GROUP_ID, agent.bot_name, safe, agent.bot_qq)
+    agent._append_buffer(GROUP_ID, agent.persona_name, safe, agent.qq_bot_id)
 
 
 async def main() -> int:
@@ -102,11 +102,11 @@ async def main() -> int:
             return 1
 
         you_uid = ADMIN_ID if args.admin else "2001"
-        you_name = (agent.owner_name or "admin") if args.admin else args.name
+        you_name = (agent.admin_name or "admin") if args.admin else args.name
         default_mode = "owner" if args.admin else "called"
 
         print(f"=== try_chat — lang={agent.agent_lang}, model={agent.model} ===")
-        print(f"talking to '{agent.bot_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
+        print(f"talking to '{agent.persona_name}' as '{you_name}'. /quit to exit, /reset to clear.\n")
 
         while True:
             try:
@@ -127,7 +127,7 @@ async def main() -> int:
             name, uid, mode, msg = you_name, you_uid, default_mode, line
             command, _, rest = line.partition(" ")
             if command == "/admin":
-                name, uid, mode, msg = (agent.owner_name or "admin"), ADMIN_ID, "owner", rest
+                name, uid, mode, msg = (agent.admin_name or "admin"), ADMIN_ID, "owner", rest
             elif line.startswith("/as "):
                 rest = line[len("/as "):].strip()
                 if " " in rest:

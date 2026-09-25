@@ -39,9 +39,9 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     """Agent with every state file redirected into `tmp`."""
     tmp.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="k", bot_qq="1", bot_name="B", lang="en", persona=persona,
+        api_key="k", qq_bot_id="1", persona_name="B", lang="en", persona=persona,
         memory_file=str(tmp / "memory.json"),
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
     )
     a._seen_msg_file = tmp / "seen_msg_ids.json"
@@ -194,7 +194,7 @@ async def test_the_owner_prompt_has_a_subject_without_owner_name(
         tmp: Path) -> None:
     """Owner mode needs only OWNER_QQ, and OWNER_NAME ships blank."""
     agent = make_agent(tmp)
-    agent.admin_ids, agent.owner_name = {"7"}, ""
+    agent.admin_ids, agent.admin_name = {"7"}, ""
     agent._append_buffer("g1", "Boss", "anyone up for lunch", "7")
     captured: dict = {}
 
@@ -274,7 +274,7 @@ async def test_search_results_are_sanitized_and_nested_in_the_user_frame(
     original_user = f"{_USER_DATA_OPEN}What happened today?{_USER_DATA_CLOSE}"
     await agent._call_llm(
         system="sys", messages=[{"role": "user", "content": original_user}],
-        model=agent.private_model, enable_search=True,
+        model=agent.llm_dm_model, enable_search=True,
         search_hint="today's news")
 
     final_user = posts[-1]["messages"][-1]["content"]

@@ -43,10 +43,10 @@ def test_scenario_sets() -> None:
 
 def _make_agent(tmp: Path) -> Agent:
     a = Agent(
-        api_key="test-key", bot_qq="10001", bot_name="Robin",
-        napcat_api="http://127.0.0.1:9",
+        api_key="test-key", qq_bot_id="10001", persona_name="Robin",
+        qq_onebot_url="http://127.0.0.1:9",
         memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
         message_debounce_sec=0, lang="en",
     )
@@ -99,7 +99,7 @@ def test_isolated_agent_state_stays_in_one_tree() -> None:
         os.chdir(td)
         try:
             a = bench.build_isolated_agent(Path("rel-out") / "state-on",
-                                           "Robin", "en", eval_enable=True)
+                                           "Robin", "en", eval_enabled=True)
             base = (Path(td) / "rel-out" / "state-on").resolve()
             for name in ("eval_file", "candidates_file", "feedback_file",
                          "examples_file", "memory_file", "core_memory_file"):
@@ -122,8 +122,8 @@ def test_run_arm_isolation_and_growth() -> None:
         # Patch the Agent factory to stub the model + self-eval so no network.
         orig = bench.build_isolated_agent
 
-        def patched(state_dir, bot_name, lang, eval_enable):
-            a = orig(state_dir, bot_name, lang, eval_enable)
+        def patched(state_dir, persona_name, lang, eval_enabled):
+            a = orig(state_dir, persona_name, lang, eval_enabled)
 
             async def fake_call(system, messages, model, **kw):
                 return json.dumps({"reasoning": "x", "intent": "chat",
@@ -227,7 +227,7 @@ def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         agent = bench.build_isolated_agent(
-            tmp / "state", "Robin", "en", eval_enable=True)
+            tmp / "state", "Robin", "en", eval_enabled=True)
         _install_external_llm_fakes(agent)
         train = [{
             "id": "tr-real",

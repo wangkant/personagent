@@ -375,8 +375,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     qq_ids = {i for i in identity.owners | identity.groups | identity.dm_users
               if i.isdigit()}
 
-    bot_qq = str(configured.get("QQ_BOT_ID") or "").strip()
-    if bot_qq and "ACCESS_GROUPS" not in configured:
+    qq_bot_id = str(configured.get("QQ_BOT_ID") or "").strip()
+    if qq_bot_id and "ACCESS_GROUPS" not in configured:
         findings.append(Finding(
             "INFO", "ACCESS_GROUPS",
             "is unset, so the bot listens in every QQ group it is a member of"))
@@ -388,7 +388,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     # placeholder and needs none of this.
     looks_like_qq = (bool(str(configured.get("QQ_ONEBOT_URL") or "").strip())
                      or bool(qq_ids))
-    if looks_like_qq and not bot_qq:
+    if looks_like_qq and not qq_bot_id:
         findings.append(Finding(
             "WARN", "QQ_BOT_ID",
             "is empty while the rest of the QQ configuration is set — the bot "

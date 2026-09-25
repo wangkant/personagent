@@ -49,9 +49,9 @@ def make_agent(tmp: Path) -> Agent:
     one, so row counts reflect only what the test put there."""
     tmp.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="k", bot_qq="1", bot_name="B", lang="en",
+        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
         memory_file=str(tmp / "memory.json"),
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
     )
     a._seen_msg_file = tmp / "seen_msg_ids.json"
@@ -100,14 +100,14 @@ def bank_example(a: Agent, rec: dict) -> None:
     still write here, and this is their pattern: trim_pool + append. The cap and
     the append-aware reload have to keep agreeing about the result, which is
     what the tests below check."""
-    evolution.trim_pool(a.examples_file, max_auto=a.examples_max_auto,
+    evolution.trim_pool(a.examples_file, max_auto=a.promote_max_examples,
                         is_auto=lambda r: "score" in r)
     evolution.append_jsonl(a.examples_file, [rec])
 
 
 def bank_pair(a: Agent, rec: dict) -> int:
     """The feedback-side equivalent of bank_example (see auto_reviewer.py)."""
-    evolution.trim_pool(a.feedback_file, max_auto=a.feedback_max_auto,
+    evolution.trim_pool(a.feedback_file, max_auto=a.promote_max_feedback,
                         is_auto=lambda r: bool(r.get("src")))
     return evolution.append_jsonl(a.feedback_file, [rec])
 
@@ -469,7 +469,7 @@ def test_examples_auto_pool_capped_curated_kept() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.examples_max_auto = 20
+        a.promote_max_examples = 20
         curated = [ex(f"curated{i}") for i in range(3)]
         write_jsonl(a.examples_file, curated + [auto_ex(f"a{i}") for i in range(20)])
 
@@ -505,7 +505,7 @@ def test_examples_cap_disabled_keeps_everything() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.examples_max_auto = 0  # opt out -> pre-cap behaviour
+        a.promote_max_examples = 0  # opt out -> pre-cap behaviour
         write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(30)])
         for i in range(30, 60):
             bank_example(a, auto_ex(f"a{i}"))
@@ -520,7 +520,7 @@ def test_seed_pool_never_trimmed_and_always_retrieved() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.examples_max_auto = 5
+        a.promote_max_examples = 5
         write_jsonl(a.examples_seed_file, [ex(f"seed{i}") for i in range(3)])
         seed_bytes = a.examples_seed_file.read_bytes()
         write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(40)])
@@ -542,7 +542,7 @@ def test_all_curated_pool_never_trimmed() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.examples_max_auto = 5
+        a.promote_max_examples = 5
         write_jsonl(a.examples_file, [ex(f"curated{i}") for i in range(40)])
         bank_example(a, auto_ex("fresh"))
         a._examples_mtime = 0.0
@@ -560,7 +560,7 @@ def test_feedback_auto_pool_capped() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.feedback_max_auto = 10
+        a.promote_max_feedback = 10
         write_jsonl(a.feedback_file,
                     [pair("hand1"), pair("hand2")]
                     + [pair(f"m{i}", "user_reaction") for i in range(10)])
@@ -583,7 +583,7 @@ def test_feedback_write_survives_a_full_pool() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.feedback_max_auto = 5
+        a.promote_max_feedback = 5
         filler = "x" * 400
         rows = [dict(ex(f"m{i}"), rating="better", better=filler,
                      src="user_reaction") for i in range(60)]
@@ -615,7 +615,7 @@ def test_promoted_views_are_a_third_retrieval_source() -> None:
         a = make_agent(tmp)
         scope = {
             "lang": a.agent_lang, "platform": "qq", "conv_id": "g1",
-            "persona": a.bot_name, "persona_hash": a.persona_hash,
+            "persona": a.persona_name, "persona_hash": a.persona_hash,
             "persona_version": a.persona_version,
         }
         write_jsonl(a.examples_file, [ex("learned reply")])
@@ -663,7 +663,7 @@ def test_persona_edit_keeps_promoted_rows_in_scope() -> None:
         a.persona_lineage  # record the first revision
         scope = {
             "lang": a.agent_lang, "platform": "qq", "conv_id": "g1",
-            "persona": a.bot_name, "persona_hash": a.persona_hash,
+            "persona": a.persona_name, "persona_hash": a.persona_hash,
             "persona_version": a.persona_version,
         }
         write_jsonl(a.promoted_examples_file,
@@ -781,7 +781,7 @@ def test_promoted_views_enforce_full_scope() -> None:
         base_scope = {
             "lang": a.agent_lang,
             "platform": "qq",
-            "persona": a.bot_name,
+            "persona": a.persona_name,
             "persona_hash": a.persona_hash,
             "persona_version": a.persona_version,
         }

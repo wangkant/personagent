@@ -976,7 +976,7 @@ async def _connector_outbox_admitted(request: Request):
         pull = None
     if pull is None:
         return _error(400, "invalid_schema", "not an outbox pull")
-    if agent is None or not agent.gateway_outbox:
+    if agent is None or not agent.connector_outbox_enabled:
         return _error(404, "outbox_disabled", "the outbox is turned off")
     return await agent.outbox.pull(**pull, disconnected=request.is_disconnected)
 

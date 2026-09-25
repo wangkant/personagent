@@ -349,7 +349,7 @@ class PendingReplies:
 
 
 def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
-                             is_owner: bool, bot_name: str, lang: str,
+                             is_owner: bool, persona_name: str, lang: str,
                              reactor_history: str = "") -> str:
     """The adjudicator's prompt, every chat-authored span fenced.
 
@@ -365,7 +365,7 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
         role = ("the OWNER (the person the bot trusts most)" if is_owner
                 else "a regular group member")
     return tmpl.format(
-        bot_name=bot_name or "bot",
+        bot_name=persona_name or "bot",
         context=_fence_user_data(
             "\n".join(entry.get("ctx_lines") or []) or "(none)"),
         reply=_fence_user_data(entry.get("reply", "")),

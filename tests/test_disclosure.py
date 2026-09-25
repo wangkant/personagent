@@ -42,9 +42,9 @@ def make_agent(tmp: Path, persona: str = "PERSONA-DOCUMENT-MARKER",
     output filter and lorebook for `lang` live, read in place."""
     tmp.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="k", bot_qq="1", bot_name="B", lang=lang, persona=persona,
+        api_key="k", qq_bot_id="1", persona_name="B", lang=lang, persona=persona,
         memory_file=str(tmp / "memory.json"),
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
         message_debounce_sec=0,
     )

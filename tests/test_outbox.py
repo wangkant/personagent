@@ -29,10 +29,10 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 def make_agent(tmp: Path) -> Agent:
     """A real agent with every state file it may write redirected to `tmp`."""
     a = Agent(
-        api_key="test-key", bot_qq=QQ_BOT_ID, bot_name="TestBot",
-        napcat_api="http://127.0.0.1:9",
+        api_key="test-key", qq_bot_id=QQ_BOT_ID, persona_name="TestBot",
+        qq_onebot_url="http://127.0.0.1:9",
         memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"),
         stickers_file=str(tmp / "stickers.json"),
         message_debounce_sec=0, lang="en",
@@ -89,7 +89,7 @@ def dm_event(mid, *, platform="telegram", uid="1", **extra) -> dict:
 
 async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
     agent = make_agent(tmp)
-    agent.gateway_native_platforms = {"aiocqhttp"}
+    agent.connector_qq_platforms = {"aiocqhttp"}
 
     await agent.handle_gateway(group_event("m1", **CONNECTOR))
     room = agent.gateway_handles.get("telegram:c1")
@@ -117,7 +117,7 @@ async def test_an_admitted_turn_leaves_an_address(tmp: Path) -> None:
           native is not None and native["native"] is True
           and native["platform"] == "aiocqhttp", repr(native))
 
-    agent.allowed_groups = {"telegram:c1"}
+    agent.access_groups = {"telegram:c1"}
     refused = await agent.handle_gateway(group_event(
         "m4", gid="c2", connector_id="fw1", reply_handle="h", capabilities=["outbox"]))
     check("refused: a turn the agent refuses stores nothing",
@@ -496,7 +496,7 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
             event_kinded = await client.post(
                 "/v1/events", content=kinded,
                 headers=_signed(kinded, nonce="n4"))
-            agent.gateway_outbox = False
+            agent.connector_outbox_enabled = False
             disabled = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="n5"))
     check("auth: no envelope is refused",
@@ -527,7 +527,7 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_gateway(
                                          headers=_signed(body, nonce="n6"))
     check("disabled: no agent, no outbox", no_agent.status_code == 404)
 
-    agent.gateway_outbox = True
+    agent.connector_outbox_enabled = True
     with _Served(agent, token=""):
         async with _client() as client:
             browser = await client.post(
@@ -644,11 +644,11 @@ async def test_the_route_table(tmp: Path) -> None:
           == CONNECTOR["reply_handle"])
     check("route: a room nobody left an address for has none",
           agent._background_route("telegram:c2") is None)
-    agent.gateway_outbox = False
+    agent.connector_outbox_enabled = False
     check("route: CONNECTOR_OUTBOX_ENABLED=false closes it",
           agent._background_route("telegram:c1") is None)
-    agent.gateway_outbox = True
-    agent.gateway_native_platforms = {"aiocqhttp"}
+    agent.connector_outbox_enabled = True
+    agent.connector_qq_platforms = {"aiocqhttp"}
     await agent.handle_gateway(group_event(
         "setup-3", platform="aiocqhttp", gid="556", uid="43",
         connector_id="fw1", reply_handle="qq:GroupMessage:556", capabilities=["outbox"]))
@@ -724,7 +724,7 @@ async def test_the_excuse_reaches_a_gateway_conversation(tmp: Path) -> None:
 
 async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
     agent = make_agent(tmp)
-    agent.gateway_native_platforms = {"aiocqhttp"}
+    agent.connector_qq_platforms = {"aiocqhttp"}
     posted: list = []
 
     async def fake_napcat(group_id, message):
@@ -763,7 +763,7 @@ async def test_a_proactive_opener_reaches_a_gateway_room(tmp: Path) -> None:
 
     agent._think = opener
     room = "telegram:c1"
-    quiet = time.time() - agent.proactive_min_silence - 10
+    quiet = time.time() - agent.proactive_min_silence_s - 10
 
     def make_quiet() -> None:
         agent.last_activity_at[room] = quiet
@@ -809,7 +809,7 @@ async def test_a_proactive_dm_reaches_a_gateway_user(tmp: Path) -> None:
     agent = await _connected(tmp)
     agent.proactive_dm_prob = 1.0
     uid = "telegram:1"
-    agent.last_dm_activity_at[uid] = time.time() - agent.proactive_dm_min_silence - 10
+    agent.last_dm_activity_at[uid] = time.time() - agent.proactive_dm_min_silence_s - 10
     history_before = list(agent.private_history.get(uid, []))
 
     async def opener(history, is_owner=False, pkey="", proactive=False,
@@ -834,7 +834,7 @@ async def test_a_proactive_dm_reaches_a_gateway_user(tmp: Path) -> None:
           == {"role": "assistant", "content": "how did the exam go"})
 
     agent.last_proactive_at.clear()
-    agent.allowed_dm_users = {"telegram:99"}
+    agent.access_dm_users = {"telegram:99"}
     called: list = []
 
     async def spy(history, **kw):
@@ -866,7 +866,7 @@ async def test_a_connectors_own_proactive_cue_shares_the_cooldown(
 async def test_the_follow_up_question_reaches_a_gateway_conversation(
         tmp: Path) -> None:
     agent = await _connected(tmp)
-    agent.react_elicit_delay = 0.0
+    agent.react_elicit_delay_s = 0.0
     entry = {"reply": "just restart it", "ctx_lines": ["alex: server down"],
              "mode": "called", "intent": "chat"}
 
@@ -957,7 +957,7 @@ async def test_the_sdk_and_the_agent_speak_the_same_outbox(tmp: Path) -> None:
                 break
             await asyncio.sleep(0.02)
         agent.last_activity_at["telegram:c1"] = (
-            time.time() - agent.proactive_min_silence - 10)
+            time.time() - agent.proactive_min_silence_s - 10)
         agent.last_reply_at["telegram:c1"] = 0.0
         acted = await asyncio.wait_for(agent._maybe_proactive_groups(), 5)
         stop.set()

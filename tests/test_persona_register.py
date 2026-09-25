@@ -38,9 +38,9 @@ def make_agent(tmp: Path) -> Agent:
     own is the text the engine writes around it."""
     tmp.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="k", bot_qq="1", bot_name="B", lang="en", persona="test persona",
+        api_key="k", qq_bot_id="1", persona_name="B", lang="en", persona="test persona",
         memory_file=str(tmp / "memory.json"),
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
     )
     a._seen_msg_file = tmp / "seen_msg_ids.json"

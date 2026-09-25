@@ -574,10 +574,10 @@ def run_wizard(venv: Path, env_path: Path) -> None:
                        required=True)
 
     # 3. Bot identity + language
-    bot_name = _ask("Bot display name (what group members call it)",
+    persona_name = _ask("Bot display name (what group members call it)",
                     default=current["PERSONA_NAME"] or "Nova", required=True)
-    if current["PERSONA_NAME"] and bot_name != current["PERSONA_NAME"]:
-        print(f"    (renaming {current['PERSONA_NAME']} to {bot_name} starts a new "
+    if current["PERSONA_NAME"] and persona_name != current["PERSONA_NAME"]:
+        print(f"    (renaming {current['PERSONA_NAME']} to {persona_name} starts a new "
               "learning scope: nothing learned under the old name reaches its prompts)")
     lang = ""
     current_lang = current["AGENT_LANG"].lower()
@@ -592,7 +592,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
         "LLM_API_KEY": api_key,
         "LLM_BASE_URL": base_url,
         "LLM_MODEL": model,
-        "PERSONA_NAME": bot_name,
+        "PERSONA_NAME": persona_name,
         "AGENT_LANG": lang,
     }
 
@@ -672,7 +672,7 @@ def run_wizard(venv: Path, env_path: Path) -> None:
     # 6. Next steps / hand-off
     print()
     print("-- Setup complete --------------------------------------------")
-    print(f"  persona:  edit persona.txt to shape who {bot_name} is")
+    print(f"  persona:  edit persona.txt to shape who {persona_name} is")
     if live:
         print()
         print("  AstrBot: restart it (or reload plugins in its WebUI) so it picks")

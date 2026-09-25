@@ -73,10 +73,10 @@ def make_agent(tmp: Path) -> Agent:
     layer with them — see test_paths_never_touch_real_runtime_state."""
     tmp.mkdir(parents=True, exist_ok=True)
     a = Agent(
-        api_key="k", bot_qq="1", bot_name="B", lang="en",
-        napcat_api="http://127.0.0.1:9",
+        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
+        qq_onebot_url="http://127.0.0.1:9",
         memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enable=False, eval_file=str(tmp / "eval.jsonl"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
         stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
         message_debounce_sec=0,
     )
@@ -90,7 +90,7 @@ def make_agent(tmp: Path) -> Agent:
     a.feedback_seed_file = tmp / "seed_feedback.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
     a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
-    a.react_elicit = False          # no elicitation sends in these tests
+    a.react_elicit_enabled = False          # no elicitation sends in these tests
     return a
 
 

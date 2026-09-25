@@ -123,7 +123,7 @@ class Transport:
                 "bot=%s; least-recently-active conversations will start "
                 "losing their in-memory private_history once the cap is hit",
                 _GATEWAY_CONV_WARN_THRESHOLD, _MAX_GATEWAY_CONVS,
-                self.bot_qq)
+                self.qq_bot_id)
         self._trim_gateway_convs(keep=key)
 
     def _trim_gateway_convs(self, *, keep: str = "") -> None:
@@ -243,7 +243,7 @@ class Transport:
             try:
                 async with self._local_http(timeout=10) as client:
                     r = await client.post(
-                        f"{self.napcat_api}/{endpoint}",
+                        f"{self.qq_onebot_url}/{endpoint}",
                         json={id_field: int(target_id), "message": message},
                     )
                 if r.status_code == 200:
@@ -465,7 +465,7 @@ class Transport:
         The stored handle when a live connector pulls the outbox for it; for
         a QQ key without one, "onebot" (NapCat, as it always has been); None
         when nothing can deliver there unprompted."""
-        route = self.outbox.route(key) if self.gateway_outbox else None
+        route = self.outbox.route(key) if self.connector_outbox_enabled else None
         if route is None and channels.is_native(key):
             # QQ through AstrBot may have no NapCat HTTP server at all, so
             # its own connector is preferred while it is pulling.
@@ -531,7 +531,7 @@ class Transport:
         timestamp is replayed as before."""
         if not self.enabled:
             return
-        # Both, not `buffers or allowed_groups`: buffers gains a key for ANY
+        # Both, not `buffers or access_groups`: buffers gains a key for ANY
         # conversation with traffic — a DM included — so the `or` stopped
         # consulting the whitelist the moment one message arrived anywhere.
         # A missed @ is by definition in a group with no traffic this run,
@@ -545,7 +545,7 @@ class Transport:
             try:
                 async with self._local_http(timeout=15) as client:
                     r = await client.post(
-                        f"{self.napcat_api}/get_group_msg_history",
+                        f"{self.qq_onebot_url}/get_group_msg_history",
                         json={"group_id": int(group_id), "count": 10},
                     )
                     r.raise_for_status()
@@ -563,7 +563,7 @@ class Transport:
                         if mid is not None and str(mid) in self._seen_msg_ids:
                             continue
                         sender_id = str((msg.get("sender") or {}).get("user_id", ""))
-                        if sender_id == self.bot_qq:
+                        if sender_id == self.qq_bot_id:
                             continue
                         ts = msg.get("time")
                         if (isinstance(ts, (int, float))
@@ -573,9 +573,9 @@ class Transport:
                         raw = msg.get("raw_message", "")
                         # @s arrive in raw_message as CQ codes ([CQ:at,qq=...]);
                         # matching only "@<qq>" never hits, so match both forms.
-                        if ((self.bot_name and self.bot_name in raw)
-                                or f"@{self.bot_qq}" in raw
-                                or f"[CQ:at,qq={self.bot_qq}]" in raw):
+                        if ((self.persona_name and self.persona_name in raw)
+                                or f"@{self.qq_bot_id}" in raw
+                                or f"[CQ:at,qq={self.qq_bot_id}]" in raw):
                             logger.info("[Agent] missed offline @-mention detected; replaying (group=%s)", group_id)
                             await self.handle(msg)
                             break

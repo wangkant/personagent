@@ -43,11 +43,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 import evolution_benchmark as bench  # noqa: E402
 
 
-async def probe_one(scn: dict, bot_name: str, lang: str, state_root: Path) -> dict:
+async def probe_one(scn: dict, persona_name: str, lang: str, state_root: Path) -> dict:
     """Drive one scenario with the weak style guide and self-eval the reply."""
     state_dir = state_root / scn["id"]
-    agent = bench.build_isolated_agent(state_dir, bot_name, lang, eval_enable=False)
-    reply = await bench.drive_scenario(agent, scn, bot_name)
+    agent = bench.build_isolated_agent(state_dir, persona_name, lang, eval_enabled=False)
+    reply = await bench.drive_scenario(agent, scn, persona_name)
     row = {"id": scn["id"], "family": scn["family"], "mode": scn["mode"],
            "scenario": scn.get("scenario", ""), "reply": reply,
            "self_eval": None, "self_eval_reason": ""}
@@ -82,14 +82,14 @@ async def main_async(args) -> int:
     import persona_agent.agent as pa
     pa.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
 
-    bot_name = bench.os.getenv("PERSONA_NAME", "Robin") or "Robin"
+    persona_name = bench.os.getenv("PERSONA_NAME", "Robin") or "Robin"
     out_dir = Path(args.outdir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
     with tempfile.TemporaryDirectory() as td:
         for scn in scns:  # sequential on purpose: stay inside the rate window
-            row = await probe_one(scn, bot_name, args.lang, Path(td))
+            row = await probe_one(scn, persona_name, args.lang, Path(td))
             rows.append(row)
             print(f"  {row['id']} [{row['family']}] self_eval="
                   f"{row['self_eval']} reply={row['reply'][:70]!r}")
@@ -97,7 +97,7 @@ async def main_async(args) -> int:
     if args.judge_model:
         by_id = {s["id"]: s for s in scns}
         inbox = [{"item_id": r["id"], "reply": r["reply"],
-                  "context": [ln.replace("<bot-name>", bot_name)
+                  "context": [ln.replace("<bot-name>", persona_name)
                               for ln in by_id[r["id"]]["context"]]}
                  for r in rows if r["reply"]]
         scores = await bench.judge_openai_compatible(inbox, args.judge_model)

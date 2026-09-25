@@ -205,7 +205,7 @@ class Agent(ContentIngestion, Transport, Learning):
         """Wire one agent from one settings record.
 
         ``Agent(settings)`` is how the bot process builds it — see
-        ``AgentSettings.from_env``. ``Agent(api_key=..., bot_qq=...)`` is the
+        ``AgentSettings.from_env``. ``Agent(api_key=..., qq_bot_id=...)`` is the
         same act spelled shorter, for embedders, tools and the test suites:
         those keywords ARE the settings fields, and they build the record here.
 
@@ -239,8 +239,8 @@ class Agent(ContentIngestion, Transport, Learning):
         self.enabled = bool(self.api_key)
         if not self.enabled:
             logger.warning("[Agent] LLM_API_KEY not configured; %s disabled",
-                           self.bot_name)
-        if self.enabled and not self.bot_name:
+                           self.persona_name)
+        if self.enabled and not self.persona_name:
             logger.warning("[Agent] PERSONA_NAME is empty; the bot will only respond to "
                            "explicit @-mentions (set PERSONA_NAME so it answers to its name)")
 
@@ -249,8 +249,8 @@ class Agent(ContentIngestion, Transport, Learning):
 
         A flat copy on purpose rather than reads through ``self.settings``:
         every layer of this package and every tool reads ``self.model``,
-        ``self.judge_model``, ``self.proactive_enable`` and the rest directly,
-        and a test that assigns one of them expects the agent to behave
+        ``self.llm_judge_model``, ``self.proactive_enabled`` and the rest
+        directly, and a test that assigns one of them expects the agent to behave
         differently from the next call on.
         """
         self.api_key = s.api_key
@@ -261,29 +261,29 @@ class Agent(ContentIngestion, Transport, Learning):
         # per-language data files, and the control-flow lexicons. Single
         # source of truth — everything language-dependent reads self.agent_lang.
         self.agent_lang = s.agent_lang
-        self.fallback_model = s.fallback_model
-        self.fallback_base_url = s.fallback_base_url
-        self.fallback_api_key = s.fallback_api_key
-        self.fallback_thinking = s.fallback_thinking
-        self.judge_model = s.judge_model
-        self.private_model = s.private_model
+        self.llm_fallback_model = s.llm_fallback_model
+        self.llm_fallback_base_url = s.llm_fallback_base_url
+        self.llm_fallback_api_key = s.llm_fallback_api_key
+        self.llm_fallback_thinking = s.llm_fallback_thinking
+        self.llm_judge_model = s.llm_judge_model
+        self.llm_dm_model = s.llm_dm_model
         self.api_max_retries = s.api_max_retries
-        self.llm_timeout = s.llm_timeout
-        self.rate_window = s.rate_window
-        self.rate_threshold = s.rate_threshold
-        self.fallback_duration = s.fallback_duration
-        self.rate_limit_cooldown = s.rate_limit_cooldown
+        self.llm_timeout_s = s.llm_timeout_s
+        self.llm_rate_window_s = s.llm_rate_window_s
+        self.llm_rate_threshold = s.llm_rate_threshold
+        self.llm_fallback_duration_s = s.llm_fallback_duration_s
+        self.llm_rate_limit_cooldown_s = s.llm_rate_limit_cooldown_s
 
-        self.bot_qq = s.bot_qq
-        self.bot_name = s.bot_name
-        self.napcat_api = s.napcat_api
-        self.owner_name = s.owner_name
-        self.owner_relationship = s.owner_relationship
+        self.qq_bot_id = s.qq_bot_id
+        self.persona_name = s.persona_name
+        self.qq_onebot_url = s.qq_onebot_url
+        self.admin_name = s.admin_name
+        self.admin_relationship = s.admin_relationship
         self.on_reply = s.on_reply
 
-        self.trigger_count = s.trigger_count
-        self.context_len = s.context_len
-        self.followup_window = s.followup_window
+        self.chat_trigger_count = s.chat_trigger_count
+        self.chat_context_messages = s.chat_context_messages
+        self.chat_followup_window_s = s.chat_followup_window_s
         self.message_debounce_sec = s.message_debounce_sec
 
         raw_persona = (
@@ -306,15 +306,15 @@ class Agent(ContentIngestion, Transport, Learning):
         # Sets, not the settings' tuples: these are read on every inbound
         # message and edited in place by the tests and the admin paths.
         self.admin_ids: set = set(s.admin_ids)
-        self.allowed_groups: set = set(s.allowed_groups)
-        self.allowed_dm_users: set = set(s.allowed_dm_users)
-        self.gateway_native_platforms: set = set(s.gateway_native_platforms)
-        self.gateway_outbox = s.gateway_outbox
+        self.access_groups: set = set(s.access_groups)
+        self.access_dm_users: set = set(s.access_dm_users)
+        self.connector_qq_platforms: set = set(s.connector_qq_platforms)
+        self.connector_outbox_enabled = s.connector_outbox_enabled
 
         self.memory_file = resolve_runtime_state_file(s.memory_file)
-        self.memory_max = s.memory_max_per_group
+        self.memory_max_per_conversation = s.memory_max_per_conversation
 
-        self.eval_enable = s.eval_enable
+        self.eval_enabled = s.eval_enabled
         self.eval_model = s.eval_model
         self.eval_file = resolve_runtime_state_file(s.eval_file)
 
@@ -323,30 +323,30 @@ class Agent(ContentIngestion, Transport, Learning):
         self.vision_base_url = s.vision_base_url
         self.tavily_key = s.tavily_key
 
-        self.proactive_enable = s.proactive_enable
-        self.proactive_interval = s.proactive_interval
-        self.proactive_min_silence = s.proactive_min_silence
-        self.proactive_cooldown = s.proactive_cooldown
+        self.proactive_enabled = s.proactive_enabled
+        self.proactive_interval_s = s.proactive_interval_s
+        self.proactive_min_silence_s = s.proactive_min_silence_s
+        self.proactive_cooldown_s = s.proactive_cooldown_s
         self.proactive_prob = s.proactive_prob
-        self.proactive_dm_min_silence = s.proactive_dm_min_silence
-        self.proactive_dm_cooldown = s.proactive_dm_cooldown
+        self.proactive_dm_min_silence_s = s.proactive_dm_min_silence_s
+        self.proactive_dm_cooldown_s = s.proactive_dm_cooldown_s
         self.proactive_dm_prob = s.proactive_dm_prob
         self.proactive_platforms: set = set(s.proactive_platforms)
 
-        self.evolve_auto = s.evolve_auto
+        self.evolve_auto_enabled = s.evolve_auto_enabled
         self.evolve_interval = s.evolve_interval
         self.evolve_threshold = s.evolve_threshold
         self.evolve_batch = s.evolve_batch
         self.evolve_model = s.evolve_model
 
-        self.react_learn = s.react_learn
+        self.react_learn_enabled = s.react_learn_enabled
         self.react_model = s.react_model
-        self.react_elicit = s.react_elicit
-        self.react_elicit_delay = s.react_elicit_delay
-        self.react_elicit_cooldown = s.react_elicit_cooldown
+        self.react_elicit_enabled = s.react_elicit_enabled
+        self.react_elicit_delay_s = s.react_elicit_delay_s
+        self.react_elicit_cooldown_s = s.react_elicit_cooldown_s
 
-        self.examples_max_auto = s.examples_max_auto
-        self.feedback_max_auto = s.feedback_max_auto
+        self.promote_max_examples = s.promote_max_examples
+        self.promote_max_feedback = s.promote_max_feedback
         # Evidence -> candidate -> promotion. A reaction is recorded as
         # evidence (append-only, immutable); adjudicating it proposes a
         # versioned candidate; only a promoted candidate is materialized into
@@ -402,11 +402,11 @@ class Agent(ContentIngestion, Transport, Learning):
         self._no_route_logged: dict[str, None] = {}
 
         # Bound at construction, like the rest of the buffer's shape: a later
-        # change to self.context_len must not silently give new conversations
-        # a different depth from the ones already running.
-        context_len = self.context_len
+        # change to self.chat_context_messages must not silently give new
+        # conversations a different depth from the ones already running.
+        chat_context_messages = self.chat_context_messages
         self.buffers: dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=context_len))
+            lambda: deque(maxlen=chat_context_messages))
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -516,8 +516,8 @@ class Agent(ContentIngestion, Transport, Learning):
 
         self.pending_reactions = reactions.PendingReplies(
             max_per_conv=self.settings.react_max_pending,
-            ttl_sec=self.settings.react_ttl_sec,
-            fix_window_sec=self.settings.react_fix_window,
+            ttl_sec=self.settings.react_ttl_s,
+            fix_window_sec=self.settings.react_fix_window_s,
             max_conversations=_MAX_GATEWAY_CONVS,
             state_file=self.memory_file.with_name("pending_reactions.json"),
         )
@@ -544,7 +544,7 @@ class Agent(ContentIngestion, Transport, Learning):
             llm_caller=self._call_llm,
             # Cheap judgment model configured for THIS endpoint — a hardcoded
             # model name here would 404 on every other provider.
-            tagger_model=self.judge_model,
+            tagger_model=self.llm_judge_model,
             persona_brief=persona_brief,
         )
 
@@ -750,7 +750,7 @@ class Agent(ContentIngestion, Transport, Learning):
         pipeline runs to completion and the collected replies go back in the
         HTTP response (the forwarder relays them to the source platform)."""
         payload = synthesize_onebot_payload(
-            event, self._self_mention_id(), self.gateway_native_platforms)
+            event, self._self_mention_id(), self.connector_qq_platforms)
         if payload.get("message_type") == "private":
             gateway_key = channels.dm_routing_key(payload.get("user_id", ""))
         else:
@@ -764,7 +764,7 @@ class Agent(ContentIngestion, Transport, Learning):
         sink_platform = str(payload.get("_platform", "") or "")
         sink = GatewaySink(
             platform=sink_platform,
-            native=sink_platform in (self.gateway_native_platforms or ()),
+            native=sink_platform in (self.connector_qq_platforms or ()),
             bot_id=self._self_mention_id(),
             prefiltered=event_prefiltered(event),
         )
@@ -822,18 +822,18 @@ class Agent(ContentIngestion, Transport, Learning):
         because it is a live attribute the tests and admin paths edit; the
         set is tiny."""
         return access.parse_ids(
-            self.admin_ids, native_platforms=self.gateway_native_platforms)
+            self.admin_ids, native_platforms=self.connector_qq_platforms)
 
     def _dm_allowlist(self) -> frozenset[str]:
         """ACCESS_DM_USERS, canonical."""
         return access.parse_ids(
-            self.allowed_dm_users,
-            native_platforms=self.gateway_native_platforms)
+            self.access_dm_users,
+            native_platforms=self.connector_qq_platforms)
 
     def _group_allowlist(self) -> frozenset[str]:
         """ACCESS_GROUPS, canonical."""
         return access.parse_ids(
-            self.allowed_groups, native_platforms=self.gateway_native_platforms)
+            self.access_groups, native_platforms=self.connector_qq_platforms)
 
     def _log_refusal(self, conv_key: str, reason: str) -> None:
         """Say once per conversation why it is not answered. Silent refusals
@@ -950,12 +950,12 @@ class Agent(ContentIngestion, Transport, Learning):
             sender.get("card") or sender.get("nickname")) or "?")[:8]
 
         is_at = self._is_at_me(payload)
-        # Guard the substring test: an empty bot_name (the shipped default
+        # Guard the substring test: an empty persona_name (the shipped default
         # when PERSONA_NAME is unset) would make `"" in text` always True and the
         # bot would treat every message as a named call, replying to everything.
         # ctrl_text: a linked page's og:title containing the bot name must not
         # force called mode — only the member's own words count.
-        is_called = bool(self.bot_name) and self.bot_name in ctrl_text
+        is_called = bool(self.persona_name) and self.persona_name in ctrl_text
         addressed = is_at or is_called
         is_noise = len(text.strip()) < 4 and not addressed
 
@@ -965,7 +965,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
         # off the hot path; the message still flows through the normal reply
         # pipeline below.
-        if self.react_learn:
+        if self.react_learn_enabled:
             _quote_mid = ""
             for _seg in payload.get("message", []) or []:
                 if isinstance(_seg, dict) and _seg.get("type") == "reply":
@@ -1036,7 +1036,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 return send_result.partial
             async with self.locks[group_id]:
                 self.last_reply_at[group_id] = time.time()
-                self._append_buffer(group_id, self.bot_name, mem_reply)
+                self._append_buffer(group_id, self.persona_name, mem_reply)
             if self.on_reply:
                 try:
                     await self.on_reply(group_id, mem_reply)
@@ -1047,7 +1047,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # === Debounce: short wait outside the lock so consecutive messages batch up ===
         bare_after_strip = (
-            text.replace(f"@{self.bot_name}", "").replace(self.bot_name, "").strip()
+            text.replace(f"@{self.persona_name}", "").replace(self.persona_name, "").strip()
         )
         is_bare_call = addressed and len(bare_after_strip) <= 4
         debounce_sec = 5.0 if is_bare_call else self.message_debounce_sec
@@ -1072,7 +1072,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 return False
 
             in_followup = (
-                time.time() - self.last_reply_at[group_id] < self.followup_window
+                time.time() - self.last_reply_at[group_id] < self.chat_followup_window_s
             )
 
             sticky = self._sticky_call.get(group_id)
@@ -1105,16 +1105,16 @@ class Agent(ContentIngestion, Transport, Learning):
                 )
             elif in_followup:
                 mode = "followup"
-            elif self.counters[group_id] >= self.trigger_count:
+            elif self.counters[group_id] >= self.chat_trigger_count:
                 mode = "judge"
             elif (
                 self.last_reply_at[group_id] == 0.0
-                and self.counters[group_id] >= max(10, self.trigger_count // 3)
+                and self.counters[group_id] >= max(10, self.chat_trigger_count // 3)
             ):
                 # First-time presence: bot has never replied here, so a real
                 # person would chime in well before 30 messages of pure lurking.
                 # Use a lower threshold (~10 msgs) to establish initial presence;
-                # after the first reply, the regular trigger_count applies.
+                # after the first reply, the regular chat_trigger_count applies.
                 mode = "judge"
             else:
                 return False
@@ -1172,7 +1172,7 @@ class Agent(ContentIngestion, Transport, Learning):
                                 async with self.locks[group_id]:
                                     self.last_reply_at[group_id] = time.time()
                                     self._append_buffer(
-                                        group_id, self.bot_name, fallback)
+                                        group_id, self.persona_name, fallback)
                             else:
                                 logger.warning(
                                     "[Agent] fallback delivery failed (group=%s)",
@@ -1199,7 +1199,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 if mode == "followup":
                     self.last_reply_at[group_id] = (
-                        time.time() - self.followup_window - 1)
+                        time.time() - self.chat_followup_window_s - 1)
                 return False
             # Eval context snapshot: must be taken before appending the bot's
             # own reply, and inside the lock. Otherwise _evaluate_reply runs
@@ -1234,7 +1234,7 @@ class Agent(ContentIngestion, Transport, Learning):
             async with self.locks[group_id]:
                 self.last_reply_at[group_id] = time.time()
                 if committed:
-                    self._append_buffer(group_id, self.bot_name, committed)
+                    self._append_buffer(group_id, self.persona_name, committed)
                 if send_result.success:
                     self._commit_core_memory(group_id, _pending_core)
                     if auto_mem:
@@ -1253,7 +1253,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # Reaction learning tracks what was actually said: a reaction to a
         # truncated reply is a reaction to the truncation, and adjudicating it
         # against the full text would attribute a complaint to words nobody read.
-        if self.react_learn and committed:
+        if self.react_learn_enabled and committed:
             self.pending_reactions.record(
                 group_id, reply=committed, ctx_lines=eval_ctx, mode=mode,
                 intent=_intent, target_uid=at_uid or user_id,
@@ -1270,7 +1270,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # Self-eval only for a complete reply. Scoring a half-delivered answer
         # measures the network, not the persona, and a low score would feed the
         # learning loop a verdict about text the model never got to finish.
-        if self.eval_enable and send_result.success:
+        if self.eval_enabled and send_result.success:
             self._spawn(self._evaluate_reply(
                 group_id, mode, text, reply, send_result.sticker_files,
                 _intent, eval_ctx,
@@ -1304,7 +1304,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 # Nothing to react TO on a proactive turn: the text is the
                 # caller's cue, so matching it against a pending reaction
                 # would attribute the caller's words to the reader.
-                if self.react_learn and not proactive:
+                if self.react_learn_enabled and not proactive:
                     entry = self.pending_reactions.match(
                         channels.dm_learning_key(user_id),
                         sender_uid=user_id, is_private=True, now=time.time())
@@ -1394,7 +1394,7 @@ class Agent(ContentIngestion, Transport, Learning):
                     # `ctx_lines` would store the caller's cue as a line the
                     # reader wrote. And what a proactive reply answers is not
                     # a message at all, so there is nothing to attribute.
-                    if self.react_learn and not proactive:
+                    if self.react_learn_enabled and not proactive:
                         self.pending_reactions.record(
                             channels.dm_learning_key(user_id), reply=reply,
                             ctx_lines=[f"user: {_truncate_framed(text, 100)}"],
@@ -1463,10 +1463,10 @@ class Agent(ContentIngestion, Transport, Learning):
         )
         # Gate on `is_owner` alone: ADMIN_NAME is optional and ships empty.
         if is_owner:
-            owner_ref = self.owner_name or "the owner"
+            owner_ref = self.admin_name or "the owner"
             persona_extra = (
                 f"You're now in a one-on-one private chat with {owner_ref}"
-                + (f" ({self.owner_relationship})" if self.owner_relationship else "")
+                + (f" ({self.admin_relationship})" if self.admin_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
             # The private guides are persona-agnostic, so WHO this person is
@@ -1534,7 +1534,7 @@ class Agent(ContentIngestion, Transport, Learning):
         semi_static_block = self._sticker_guide_for_prompt(private=True)
         proactive_note = ""
         if proactive:
-            who = self.owner_name if (is_owner and self.owner_name) else "them"
+            who = self.admin_name if (is_owner and self.admin_name) else "them"
             proactive_note = (
                 "<proactive>\n"
                 f"Nobody messaged you — this is an INTERNAL cue to OPTIONALLY open the conversation, not a message from {who}. "
@@ -1590,7 +1590,7 @@ class Agent(ContentIngestion, Transport, Learning):
             raw = await self._call_llm(
                 system=system_text,
                 messages=messages,
-                model=self.private_model,
+                model=self.llm_dm_model,
                 max_tokens=4096,
                 enable_search=False,
                 json_object=True,
@@ -1684,7 +1684,7 @@ class Agent(ContentIngestion, Transport, Learning):
                     msg_urls.extend(urls)
             elif t == "at":
                 qq = _clean_prompt_source(d.get("qq", ""))
-                parts.append(f"@{self.bot_name}"
+                parts.append(f"@{self.persona_name}"
                              if qq == self._self_mention_id() else f"@{qq}")
             elif t == "image":
                 url = d.get("url") or d.get("file", "")
@@ -1708,7 +1708,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 # not get cataloged into the QQ sticker library or burn
                 # tagging calls, so skip the spawn while the gateway sink is
                 # set (the steal decision happens inside handle_gateway).
-                if group_id and sender_uid != self.bot_qq \
+                if group_id and sender_uid != self.qq_bot_id \
                         and current_sink.get() is None:
                     self._spawn(self._steal_image_async(
                         url=url,
@@ -1793,7 +1793,7 @@ class Agent(ContentIngestion, Transport, Learning):
         if not text:
             return ""
         if data.get("quote_self") is True:
-            name = self.bot_name
+            name = self.persona_name
         else:
             name = _clean_prompt_source(data.get("quote_name")).strip()[:8]
         return f"{name}: {text}" if name else text
@@ -1820,7 +1820,7 @@ class Agent(ContentIngestion, Transport, Learning):
         try:
             async with self._local_http(timeout=4) as client:
                 r = await client.post(
-                    f"{self.napcat_api}/get_msg",
+                    f"{self.qq_onebot_url}/get_msg",
                     json={"message_id": int(mid)},
                 )
             data = r.json().get("data") or {}
@@ -1855,8 +1855,8 @@ class Agent(ContentIngestion, Transport, Learning):
         """The id an @ of the bot carries: QQ_BOT_ID, or GATEWAY_SELF_ID on an
         install without QQ, where the gateway mints it for a self mention.
         Only the mention paths use it; NapCat's own-message filters and the
-        missed-mention sweep stay on bot_qq."""
-        return self.bot_qq or GATEWAY_SELF_ID
+        missed-mention sweep stay on qq_bot_id."""
+        return self.qq_bot_id or GATEWAY_SELF_ID
 
     def _is_at_me(self, payload: dict) -> bool:
         me = self._self_mention_id()
@@ -1934,10 +1934,10 @@ class Agent(ContentIngestion, Transport, Learning):
         every call, not snapshotted, because the model names and base URLs
         are plain attributes that callers and tests reassign."""
         base, key = endpoint_for(
-            model, primary_model=self.model, fallback_model=self.fallback_model,
+            model, primary_model=self.model, fallback_model=self.llm_fallback_model,
             base_url=self.base_url, api_key=self.api_key,
-            fallback_base_url=self.fallback_base_url,
-            fallback_api_key=self.fallback_api_key)
+            fallback_base_url=self.llm_fallback_base_url,
+            fallback_api_key=self.llm_fallback_api_key)
         return chat_completions_url(base), key
 
     def _thinking_off(self, payload: dict, url: str) -> dict:
@@ -1953,7 +1953,7 @@ class Agent(ContentIngestion, Transport, Learning):
         defaults to the fallback, so a 400 there silenced all three on every
         turn. OpenRouter passes `thinking` through to upstreams that ignore
         it and has a switch of its own (see textproc.apply_k2_quirks)."""
-        if (self.fallback_thinking
+        if (self.llm_fallback_thinking
                 or urlsplit(url).hostname == urlsplit(self.base_url).hostname):
             payload["thinking"] = {"type": "disabled"}
         if "openrouter.ai" in url:
@@ -2050,7 +2050,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 payload["response_format"] = {"type": "json_object"}
             if disable_thinking or force_disable_thinking:
                 self._thinking_off(payload, _url)
-            async with self._http(timeout=self.llm_timeout) as client:
+            async with self._http(timeout=self.llm_timeout_s) as client:
                 resp = await client.post(
                     _url, json=payload,
                     headers={"Authorization": f"Bearer {_key}",
@@ -2090,16 +2090,16 @@ class Agent(ContentIngestion, Transport, Learning):
                     # whichever model failed, the fallback included); only the
                     # switch needs a distinct fallback to jump to. The SHORT
                     # window: a 429 is metering, not breakage (see
-                    # AgentSettings.rate_limit_cooldown).
-                    if kind == "rate_limit" and self.fallback_model:
+                    # AgentSettings.llm_rate_limit_cooldown_s).
+                    if kind == "rate_limit" and self.llm_fallback_model:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
-                            time.time() + self.rate_limit_cooldown)
-                        if cur_model != self.fallback_model:
+                            time.time() + self.llm_rate_limit_cooldown_s)
+                        if cur_model != self.llm_fallback_model:
                             logger.warning(
                                 "[Agent] throttled (model=%s); cooldown %ds, switching to fallback=%s: %s",
-                                cur_model, self.rate_limit_cooldown, self.fallback_model, e)
-                            cur_model = self.fallback_model
+                                cur_model, self.llm_rate_limit_cooldown_s, self.llm_fallback_model, e)
+                            cur_model = self.llm_fallback_model
                             attempt = 0  # give the fallback model its own retry budget
                             continue
                     # Transient: exponential backoff + jitter, retry same model.
@@ -2115,15 +2115,15 @@ class Agent(ContentIngestion, Transport, Learning):
                     # Retries exhausted / request-level error: one last shot on the
                     # fallback model (except auth/billing, which it can't fix).
                     # Same unconditional-arm / conditional-switch split as above.
-                    if kind != "fatal_auth" and self.fallback_model:
+                    if kind != "fatal_auth" and self.llm_fallback_model:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
-                            time.time() + self.fallback_duration)
-                        if cur_model != self.fallback_model:
+                            time.time() + self.llm_fallback_duration_s)
+                        if cur_model != self.llm_fallback_model:
                             logger.warning(
                                 "[Agent] model=%s failed (%s); last attempt on fallback=%s",
-                                cur_model, kind, self.fallback_model)
-                            cur_model = self.fallback_model
+                                cur_model, kind, self.llm_fallback_model)
+                            cur_model = self.llm_fallback_model
                             attempt = 0  # give the fallback model its own retry budget
                             continue
                     logger.warning("[Agent] LLM call failed (model=%s, %s): %s",
@@ -2387,8 +2387,8 @@ class Agent(ContentIngestion, Transport, Learning):
             }
             payload = {
                 # Cheapest available model — this is only a yes/no + query
-                # decision, so route it through judge_model like the reply gate.
-                "model": self.judge_model,
+                # decision, so route it through llm_judge_model like the reply gate.
+                "model": self.llm_judge_model,
                 "messages": [
                     {"role": "system", "content": (
                         "You are a search-decision gate. If the user's message "
@@ -2397,7 +2397,7 @@ class Agent(ContentIngestion, Transport, Learning):
                         "web_search to look it up; otherwise do nothing. Only "
                         "decide — do not write a reply.\n"
                         f"The user is chatting with a character named "
-                        f"{self.bot_name or 'the character'}. Questions about "
+                        f"{self.persona_name or 'the character'}. Questions about "
                         "the character, the conversation, or the character's "
                         "own home, friends and story are answered in "
                         "character and are NEVER searched; neither are "
@@ -2416,7 +2416,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 "max_tokens": 800,
                 "temperature": 0.1,
             }
-            url, key = self._endpoint_for(self.judge_model)
+            url, key = self._endpoint_for(self.llm_judge_model)
             # Thinking off, and not only for the budget: with thinking on,
             # this endpoint rarely emits tool_calls at ANY budget (measured
             # 7/30 at max_tokens=256), so the search silently never fires.
@@ -2577,9 +2577,9 @@ class Agent(ContentIngestion, Transport, Learning):
             # ADMIN_NAME is optional and ships empty, while owner mode needs
             # only an owner id: unguarded, both lines lost their subject
             # ("latest line is from , the owner").
-            owner_ref = self.owner_name or "the owner"
-            owner_from = f"{owner_ref}, the owner" if self.owner_name else owner_ref
-            owner_is = f"{owner_ref} is" if self.owner_name else "This is"
+            owner_ref = self.admin_name or "the owner"
+            owner_from = f"{owner_ref}, the owner" if self.admin_name else owner_ref
+            owner_is = f"{owner_ref} is" if self.admin_name else "This is"
             user_prompt = (
                 f"{time_line}"
                 f"{focus_block}"
@@ -2652,12 +2652,12 @@ class Agent(ContentIngestion, Transport, Learning):
         user_prompt += blind_note
 
         owner_block = ""
-        if self.owner_name and self._owners():
-            rel = self.owner_relationship or ""
+        if self.admin_name and self._owners():
+            rel = self.admin_relationship or ""
             rel_clause = f"({rel}, " if rel else "("
             owner_block = (
                 f"\n\n[Special person]\n"
-                f"{self.owner_name} {rel_clause}one of your closer people).\n"
+                f"{self.admin_name} {rel_clause}one of your closer people).\n"
                 f"**Treat them as a close acquaintance, don't keep calling them by name** — default to 'you' or drop the subject, never repeat the name every line.\n"
                 f"Engage naturally — a touch more attentive than to others, lean towards replying — but **don't overdo intimacy, don't get cutesy, don't be clingy**.\n"
                 f"When they say something wrong or do something dumb, light teasing is fine (leave them an out), but **don't reverse-tease every time** — a flat acknowledgement, a lazy reply, or a sticker work too."
@@ -2702,7 +2702,7 @@ class Agent(ContentIngestion, Transport, Learning):
             gate_raw = await self._call_llm(
                 system=gate_system_content,
                 messages=[{"role": "user", "content": user_prompt}],
-                model=self.judge_model,
+                model=self.llm_judge_model,
                 max_tokens=1500,
                 enable_search=False,
                 disable_thinking=True,
@@ -2830,16 +2830,16 @@ class Agent(ContentIngestion, Transport, Learning):
         Opt-in (PROACTIVE_ENABLED). Skips sleep hours; per-target silence /
         cooldown / probability gating lives in the dispatchers. At most one
         proactive action (group OR dm) per tick."""
-        if not self.enabled or not self.proactive_enable:
+        if not self.enabled or not self.proactive_enabled:
             return
         logger.info(
             "[Agent] proactive loop ON (tick=%ds, group_silence=%ds, group_cooldown=%ds, p=%.2f)",
-            self.proactive_interval, self.proactive_min_silence,
-            self.proactive_cooldown, self.proactive_prob,
+            self.proactive_interval_s, self.proactive_min_silence_s,
+            self.proactive_cooldown_s, self.proactive_prob,
         )
         while True:
             try:
-                await asyncio.sleep(self.proactive_interval)
+                await asyncio.sleep(self.proactive_interval_s)
                 if TextProcessing._is_sleep_hour():
                     continue
                 acted = await self._maybe_proactive_groups()
@@ -2871,11 +2871,11 @@ class Agent(ContentIngestion, Transport, Learning):
             last_act = self.last_activity_at.get(gid, 0.0)
             # Never cold-open a group we've observed no activity in this run, and
             # only after it's been quiet long enough.
-            if not last_act or now - last_act < self.proactive_min_silence:
+            if not last_act or now - last_act < self.proactive_min_silence_s:
                 continue
-            if now - self.last_proactive_at.get(gid, 0.0) < self.proactive_cooldown:
+            if now - self.last_proactive_at.get(gid, 0.0) < self.proactive_cooldown_s:
                 continue
-            if now - self.last_reply_at.get(gid, 0.0) < self.proactive_cooldown:
+            if now - self.last_reply_at.get(gid, 0.0) < self.proactive_cooldown_s:
                 continue
             if random.random() > self.proactive_prob:
                 continue
@@ -2914,11 +2914,11 @@ class Agent(ContentIngestion, Transport, Learning):
                     # The room read the delivered part, so it is on record.
                     if result.delivered:
                         self.last_reply_at[gid] = now
-                        self._append_buffer(gid, self.bot_name, result.delivered)
+                        self._append_buffer(gid, self.persona_name, result.delivered)
                     return True
                 continue
             self.last_reply_at[gid] = now
-            self._append_buffer(gid, self.bot_name, reply)
+            self._append_buffer(gid, self.persona_name, reply)
             self._commit_core_memory(gid, _pending_core)
             if mem:
                 self._save_auto_memory(gid, mem)
@@ -2952,12 +2952,12 @@ class Agent(ContentIngestion, Transport, Learning):
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
             # Don't cold-DM someone who never messaged the bot.
-            if not last_act or now - last_act < self.proactive_dm_min_silence:
+            if not last_act or now - last_act < self.proactive_dm_min_silence_s:
                 continue
             # The learning spelling on purpose: `transport._evict_conversation`
             # pops `last_proactive_at` under the learning key.
             key = channels.dm_learning_key(uid)
-            if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown:
+            if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown_s:
                 continue
             if random.random() > self.proactive_dm_prob:
                 continue
@@ -3017,15 +3017,15 @@ class Agent(ContentIngestion, Transport, Learning):
         if not self.enabled:
             return
 
-        # Private and group chat share the primary endpoint (private_model is
+        # Private and group chat share the primary endpoint (llm_dm_model is
         # just a model name), so the group probe covers it — or, when it is
         # the fallback's name, the fallback probe does. The fallback is
         # probed only when it has an endpoint of its own: it exists for the
         # primary's outage, and a typo in its URL or key would otherwise
         # surface during that outage and not before.
         probes = [("group", self.model)]
-        if self._endpoint_for(self.fallback_model) != self._endpoint_for(self.model):
-            probes.append(("fallback", self.fallback_model))
+        if self._endpoint_for(self.llm_fallback_model) != self._endpoint_for(self.model):
+            probes.append(("fallback", self.llm_fallback_model))
         for label, model in probes:
             url, key = self._endpoint_for(model)
             try:
@@ -3056,7 +3056,7 @@ class Agent(ContentIngestion, Transport, Learning):
         (followup/judge/proactive); called/owner downgrade only on a **real**
         provider throttle (error-driven)."""
         now = time.time()
-        while self.model_calls and self.model_calls[0] < now - self.rate_window:
+        while self.model_calls and self.model_calls[0] < now - self.llm_rate_window_s:
             self.model_calls.popleft()
 
         # Error-driven fallback (real 429/5xx) applies to every mode — when the
@@ -3065,7 +3065,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # or private model says nothing about it. A cooling fallback is still
         # returned — there is no third model to try.
         if self._fallback_until.get(self.model, 0.0) > now:
-            return self.fallback_model
+            return self.llm_fallback_model
 
         # called/owner are exempt from the frequency downgrade.
         if mode in ("called", "owner"):
@@ -3073,17 +3073,17 @@ class Agent(ContentIngestion, Transport, Learning):
 
         # Self-initiated modes: still inside the frequency-downgrade cooldown
         if self._freq_fallback_until > now:
-            return self.fallback_model
+            return self.llm_fallback_model
 
         # Rate threshold exceeded → arm the (self-throttling) downgrade
-        if len(self.model_calls) >= self.rate_threshold:
-            self._freq_fallback_until = now + self.fallback_duration
+        if len(self.model_calls) >= self.llm_rate_threshold:
+            self._freq_fallback_until = now + self.llm_fallback_duration_s
             logger.warning(
                 "[Agent] high call rate (%d/%ds); self-initiated modes fall back to %s for %ds",
-                len(self.model_calls), self.rate_window,
-                self.fallback_model, self.fallback_duration,
+                len(self.model_calls), self.llm_rate_window_s,
+                self.llm_fallback_model, self.llm_fallback_duration_s,
             )
-            return self.fallback_model
+            return self.llm_fallback_model
 
         return self.model
 
@@ -3122,7 +3122,7 @@ class Agent(ContentIngestion, Transport, Learning):
     def _append_memory(self, group_id: str, item: dict) -> None:
         items = self.memories.setdefault(group_id, [])
         items.append(item)
-        if len(items) > self.memory_max:
+        if len(items) > self.memory_max_per_conversation:
             self._evict_memory(items)
         self._save_memories()
 
@@ -3183,7 +3183,7 @@ class Agent(ContentIngestion, Transport, Learning):
             "lang": self.agent_lang,
             "platform": self._conv_platform(conv_id) if conv_id else "",
             "conv_id": conv_id,
-            "persona": self.bot_name,
+            "persona": self.persona_name,
             "persona_hash": self.persona_hash,
             "persona_version": self.persona_version,
         })
@@ -3215,7 +3215,7 @@ class Agent(ContentIngestion, Transport, Learning):
             logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
             pending = []
         scores = []
-        if self.eval_enable:
+        if self.eval_enabled:
             scores = [int(r["score"]) for r in read_jsonl((self.eval_file,))
                       if r.get("group_id") == group_id and isinstance(r.get("score"), int)][-10:]
         memories = len(self.memories.get(group_id, []))
@@ -3732,7 +3732,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # ADMIN_NAME is optional and ships empty, and this block reaches EVERY
         # group and private prompt: unguarded concatenation put "haven't
         # analyzed 's chat style yet" in front of the model on every turn.
-        owner_ref = self.owner_name or "the owner"
+        owner_ref = self.admin_name or "the owner"
         profile_file = resolve_runtime_state_file("owner_profile.json")
         if not profile_file.exists():
             return (
@@ -3871,7 +3871,7 @@ class Agent(ContentIngestion, Transport, Learning):
         seen = set()
         unique = []
         for uid, nick in reversed(users):
-            if uid != self.bot_qq and uid not in seen:
+            if uid != self.qq_bot_id and uid not in seen:
                 seen.add(uid)
                 unique.append((uid, nick))
         if not unique:
@@ -3882,7 +3882,7 @@ class Agent(ContentIngestion, Transport, Learning):
         """Compute chat signals for prompt: topic heat / active count / time since bot spoke / topic type."""
         active_count = len({
             m.get("user_id") for m in history
-            if m.get("user_id") and m.get("user_id") != self.bot_qq
+            if m.get("user_id") and m.get("user_id") != self.qq_bot_id
         })
 
         heat = "hot" if len(history) >= 15 else ("moderate" if len(history) >= 5 else "quiet")
@@ -4012,17 +4012,18 @@ class Agent(ContentIngestion, Transport, Learning):
         return None
 
     def _memory_cmd_patterns(self) -> tuple:
-        """remember / forget / recall / learned regexes, cached per bot_name
-        (tests reassign bot_name after init). English + legacy Chinese forms."""
+        """remember / forget / recall / learned regexes, cached per
+        persona_name (tests reassign persona_name after init). English +
+        legacy Chinese forms."""
         cached = getattr(self, "_mem_cmd_pats", None)
-        if cached and cached[0] == self.bot_name:
+        if cached and cached[0] == self.persona_name:
             return cached[1]
         # With no name to follow, the command has to open the message (after
         # the "@" an at-mention renders as); unanchored, the empty head let
         # "I don't remember what you said" anywhere in an addressed message
         # save "what you said" as a memory.
-        if self.bot_name:
-            head = rf"{re.escape(self.bot_name)}\s*[，,]?\s*"
+        if self.persona_name:
+            head = rf"{re.escape(self.persona_name)}\s*[，,]?\s*"
         else:
             head = r"^\s*(?:@\S*\s*)?[，,]?\s*"
         # \b after the English keywords: "remembered my birthday" is not a
@@ -4040,7 +4041,7 @@ class Agent(ContentIngestion, Transport, Learning):
                        r"learned\?|(?:你)?(?:学到|学会|学了)(?:了)?(?:什么|啥))",
                        re.IGNORECASE),
         )
-        self._mem_cmd_pats = (self.bot_name, pats)
+        self._mem_cmd_pats = (self.persona_name, pats)
         return pats
 
     @staticmethod
@@ -4117,8 +4118,8 @@ class Agent(ContentIngestion, Transport, Learning):
         # attribute them to their QQ number when it knows their Telegram one.
         owner_uid = access.owner_on(channels.platform_of(group_id),
                                     self._owners())
-        if owner_uid and self.owner_name and len(self.owner_name) >= 2:
-            name_to_uid.setdefault(self.owner_name, owner_uid)
+        if owner_uid and self.admin_name and len(self.admin_name) >= 2:
+            name_to_uid.setdefault(self.admin_name, owner_uid)
         for nm, uid in name_to_uid.items():
             if nm in text:
                 return uid, nm
