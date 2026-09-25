@@ -98,7 +98,9 @@ class Config:
     groups: frozenset = frozenset()
     dm_users: frozenset = frozenset()
     outbox: bool = True
-    timeout_s: float = 180.0
+    # The agent's own ceiling is LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) plus a
+    # debounce: 360 s and change with its defaults.
+    timeout_s: float = 420.0
     inline_images: bool = False
     reply_gap_s: tuple = (0.8, 1.8)
 
@@ -113,9 +115,9 @@ class Config:
         forwarder = (env.get("SATORI_FORWARDER_ID") or "").strip() or (
             "satori-" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:8])
         try:
-            timeout = float(env.get("SATORI_TIMEOUT_S") or 180)
+            timeout = float(env.get("SATORI_TIMEOUT_S") or cls.timeout_s)
         except ValueError:
-            timeout = 180.0
+            timeout = cls.timeout_s
         return cls(
             endpoint=endpoint,
             satori_token=(env.get("SATORI_TOKEN") or "").strip(),

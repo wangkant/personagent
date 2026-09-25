@@ -555,6 +555,21 @@ async def test_the_satori_token_stays_out_of_the_log(monkeypatch) -> None:
           and "g4te" not in repr(cfg), repr(cfg))
 
 
+def test_the_default_timeout_outlasts_the_agents_default_turn() -> None:
+    from persona_agent.settings import AgentSettings
+
+    agent = AgentSettings.from_env(env={})
+    turn = agent.llm_timeout * (1 + agent.api_max_retries) + agent.message_debounce_sec
+    default = sc.Config.from_env({}).timeout_s
+    check("longer than a turn with the agent's defaults", default > turn, f"{default} vs {turn}")
+    check("the field agrees", sc.Config().timeout_s == default)
+    satori = Path(sc.__file__).parent
+    template = (satori / ".env.example").read_text(encoding="utf-8")
+    readme = (satori / "README.md").read_text(encoding="utf-8")
+    check(".env.example agrees", f"SATORI_TIMEOUT_S={default:.0f}\n" in template)
+    check("the README agrees", f"| `SATORI_TIMEOUT_S` | `{default:.0f}` |" in readme)
+
+
 def test_a_config_file_under_the_environment(tmp: Path, monkeypatch) -> None:
     file = tmp / "satori.env"
     file.write_text("SATORI_ENDPOINT=http://127.0.0.1:5500\nGATEWAY_TOKEN=from-file\n",
