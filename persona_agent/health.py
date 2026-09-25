@@ -46,7 +46,7 @@ def _llm_endpoint(model: str) -> tuple[str, str]:
         fallback_api_key=os.getenv("LLM_FALLBACK_API_KEY", ""))
 
 
-def check_private_chat():
+def check_dm_chat():
     """Private-chat model probe. LLM_DM_MODEL is an alternate model name
     (blank = LLM_MODEL) on the primary's endpoint — unless it is also the
     LLM_FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
@@ -199,7 +199,7 @@ def check_ledger_sizes():
 # (name, probe, is_critical)
 CHECKS = [
     ("Ledger sizes",            check_ledger_sizes,     False),
-    ("Private chat (openai)",   check_private_chat,     True),
+    ("Private chat (openai)",   check_dm_chat,     True),
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),

@@ -69,7 +69,7 @@ def test_seed_buffer() -> None:
               and "Robin" in buf[0]["text"])
         check("name parsed", buf[0]["name"] == "alex" and buf[1]["name"] == "jordan")
         check("latest is last text", latest == buf[-1]["text"])
-        check("caller is last speaker", caller == ("jordan", bench.NAME_QQ["jordan"]))
+        check("caller is last speaker", caller == ("jordan", bench.NAME_UID["jordan"]))
 
 
 def test_drive_scenario_stubbed() -> None:

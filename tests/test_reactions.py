@@ -52,9 +52,9 @@ def test_pending_replies() -> None:
 
     p.record("dm", **_entry_kwargs(target_uid="42", mids=[]))
     check("private: other sender no match",
-          p.match("dm", sender_uid="99", is_private=True, now=110) is None)
+          p.match("dm", sender_uid="99", is_dm=True, now=110) is None)
     check("private: interlocutor matches",
-          p.match("dm", sender_uid="42", is_private=True, now=110) is not None)
+          p.match("dm", sender_uid="42", is_dm=True, now=110) is not None)
 
     p.record("g2", **_entry_kwargs(ts=0.0))
     check("expired entry never matches",
@@ -360,10 +360,10 @@ async def test_retry_and_elicit(tmp: Path) -> None:
     # 1. Accepted rejection arms retry tracking + fires elicitation.
     sent: list[tuple] = []
 
-    async def fake_send_qq(group_id, text, at_user_id=""):
+    async def fake_send_group(group_id, text, at_user_id=""):
         sent.append((group_id, text, at_user_id))
         return SendResult(success=True)
-    a._send_qq = fake_send_qq
+    a._send_group = fake_send_group
 
     async def adj_rejection(system, messages, model, **kw):
         return json.dumps({"reaction": "rejection", "accept": True,
@@ -372,7 +372,7 @@ async def test_retry_and_elicit(tmp: Path) -> None:
                            "scenario": "missed ask"})
     a._call_llm = adj_rejection
     await a._process_reaction(_pending_entry(), "thats not what i asked",
-                              "alex", "42", False, conv_id="g1", is_private=False)
+                              "alex", "42", False, conv_id="g1", is_dm=False)
     await asyncio.sleep(0.05)  # let the delayed elicitation task run (delay=0)
     check("elicitation ask sent", len(sent) == 1 and "mean" in sent[0][1])
     check("elicited entry registered",
@@ -381,7 +381,7 @@ async def test_retry_and_elicit(tmp: Path) -> None:
     # cooldown: a second rejection does not re-ask
     a.pending_reactions.match("g1", sender_uid="42", now=_time.time())
     await a._process_reaction(_pending_entry(), "still wrong",
-                              "alex", "42", False, conv_id="g1", is_private=False)
+                              "alex", "42", False, conv_id="g1", is_dm=False)
     await asyncio.sleep(0.05)
     check("elicitation cooldown respected", len(sent) == 1)
 

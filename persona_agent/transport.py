@@ -50,7 +50,7 @@ _MAX_CONNECTOR_CONVS = 256
 # conversation" reports has no error to grep for today (eviction is a normal,
 # silent cache-capacity decision, not a bug) -- this is the one signal that a
 # deployment is approaching the point where _evict_conversation starts
-# dropping `private_history` for its least-recently-active conversations.
+# dropping `dm_history` for its least-recently-active conversations.
 _CONNECTOR_CONV_WARN_THRESHOLD = 200
 
 @dataclass
@@ -60,7 +60,7 @@ class SendResult:
     success: bool = False
     partial: bool = False
     #: Receipt ids for the chunks that went out. ALWAYS EMPTY behind a connector
-    #: sink: `_napcat_send` diverts into the sink and returns before the
+    #: sink: `_onebot_send` diverts into the sink and returns before the
     #: receipt is parsed, and the connector only learns the platform's own
     #: message id after the HTTP response is already on its way back (the
     #: outbound reply item has no id field to carry it). Consequence, and it
@@ -121,7 +121,7 @@ class Transport:
             logger.warning(
                 "[Agent] connector conversation count crossed %d (cap %d) for "
                 "bot=%s; least-recently-active conversations will start "
-                "losing their in-memory private_history once the cap is hit",
+                "losing their in-memory dm_history once the cap is hit",
                 _CONNECTOR_CONV_WARN_THRESHOLD, _MAX_CONNECTOR_CONVS,
                 self.qq_bot_id)
         self._trim_connector_convs(keep=key)
@@ -162,14 +162,14 @@ class Transport:
         pending = self._pending_outbound.pop(key, None)
         if pending is not None:
             pending.set()
-        self._private_send_owners.pop(key, None)
+        self._dm_send_tasks.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
         # Through `channels`, not spelled here: this was the third independent
         # copy of the private: -> dm: step and the other two had drifted.
         reaction_key = channels.learning_key(key)
         if channels.is_dm(key):
             uid = key.split(":", 1)[1]
-            self.private_history.pop(uid, None)
+            self.dm_history.pop(uid, None)
             self._dm_unanswered.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(reaction_key, None)
@@ -224,7 +224,7 @@ class Transport:
         w = self._send_window.get(throttle_key) or ()
         return _SEND_MAX_PER_MIN - sum(1 for t in w if t >= now - _SEND_WINDOW_SEC)
 
-    async def _napcat_send(self, endpoint: str, id_field: str, target_id: str,
+    async def _onebot_send(self, endpoint: str, id_field: str, target_id: str,
                            message, *, throttle_key: str, mids_key: str,
                            label: str) -> bool:
         """POST one message to NapCat with a small bounded retry on
@@ -289,14 +289,14 @@ class Transport:
                 return False
         return False
 
-    async def _napcat_send_group(self, group_id: str, message) -> bool:
-        return await self._napcat_send(
+    async def _onebot_send_group(self, group_id: str, message) -> bool:
+        return await self._onebot_send(
             "send_group_msg", "group_id", group_id, message,
             throttle_key=f"group:{group_id}", mids_key=group_id, label="group")
 
-    async def _napcat_send_private(self, user_id: str, message) -> bool:
+    async def _onebot_send_dm(self, user_id: str, message) -> bool:
         key = channels.dm_routing_key(user_id)
-        return await self._napcat_send(
+        return await self._onebot_send(
             "send_private_msg", "user_id", user_id, message,
             throttle_key=key, mids_key=key, label="private")
 
@@ -400,12 +400,12 @@ class Transport:
             sticker_files=sent_stickers,
         )
 
-    async def _send_qq(self, group_id: str, text: str,
+    async def _send_group(self, group_id: str, text: str,
                        at_user_id: str = "") -> SendResult:
         """Send a reply (possibly mixed text + [STICKER:tag] markers) to the
         group. Returns full/partial delivery state, NapCat message IDs, and
         sticker filenames used by reaction learning and quality evaluation."""
-        # Fresh mid list for this call; _napcat_send_group appends each sent
+        # Fresh mid list for this call; _onebot_send_group appends each sent
         # chunk's message_id (same-group sends are serialized by send_locks).
         target_key = group_id
         self._sent_mids[target_key] = []
@@ -423,24 +423,24 @@ class Transport:
             at_user_id = ""
         return await self._deliver_segments(
             TextProcessing._parse_sticker_markers(text),
-            partial(self._napcat_send_group, group_id),
+            partial(self._onebot_send_group, group_id),
             target_key=target_key, at_user_id=at_user_id,
             throttle_key=f"group:{group_id}")
 
-    async def _send_private_qq(self, user_id: str, text: str) -> SendResult:
+    async def _send_dm(self, user_id: str, text: str) -> SendResult:
         """Serialize standalone private sends.
 
         Full private conversation paths already hold this lock across delivery
-        and state commit and call ``_send_private_qq_unlocked`` directly.
+        and state commit and call ``_send_dm_unlocked`` directly.
         Background callers (for example delayed elicitation) use this wrapper.
         """
         key = channels.dm_routing_key(user_id)
-        if self._private_send_owners.get(key) is asyncio.current_task():
-            return await self._send_private_qq_unlocked(user_id, text)
+        if self._dm_send_tasks.get(key) is asyncio.current_task():
+            return await self._send_dm_unlocked(user_id, text)
         async with self.send_locks[key]:
-            return await self._send_private_qq_unlocked(user_id, text)
+            return await self._send_dm_unlocked(user_id, text)
 
-    async def _send_private_qq_unlocked(
+    async def _send_dm_unlocked(
             self, user_id: str, text: str) -> SendResult:
         target_key = channels.dm_routing_key(user_id)
         self._sent_mids[target_key] = []
@@ -455,7 +455,7 @@ class Transport:
             return SendResult()
         return await self._deliver_segments(
             TextProcessing._parse_sticker_markers(text),
-            partial(self._napcat_send_private, user_id),
+            partial(self._onebot_send_dm, user_id),
             target_key=target_key, label=" (private)",
             throttle_key=target_key)
 
@@ -474,7 +474,7 @@ class Transport:
 
     async def _send_background(self, key: str, send, *,
                                reason: str) -> SendResult:
-        """Run `send()` (a _send_qq or _send_private_qq call) for `key` when
+        """Run `send()` (a _send_group or _send_dm call) for `key` when
         no inbound request is open to answer in.
 
         A task spawned by a connector turn inherits that turn's sink, closed by

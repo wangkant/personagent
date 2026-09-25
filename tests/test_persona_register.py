@@ -1,6 +1,6 @@
 """The 1:1 register: a DM persona is company, not a service.
 
-`[COMPANY, NOT SERVICE]` and `[CONTINUITY]` in `private_style_guide` are
+`[COMPANY, NOT SERVICE]` and `[CONTINUITY]` in `dm_style_guide` are
 unconditional text, which is why they are checked over the WHOLE knob space
 rather than over the default style: the failure is not a persona choosing
 badly (no knob offers "be a service"), it is a later edit moving a section
@@ -16,14 +16,14 @@ from persona_agent.agent import Agent
 from persona_agent.prompts import (
     HONEST_DISCLOSURE,
     INTENT_RULES,
-    PRIVATE_TOOL_GUIDE,
+    DM_TOOL_GUIDE,
     REASONING_PROTOCOL,
     STYLE_GUIDE,
     STYLE_KNOBS,
     PersonaStyle,
-    private_intent_rules,
-    private_output_protocol,
-    private_style_guide,
+    dm_intent_rules,
+    dm_output_protocol,
+    dm_style_guide,
 )
 
 
@@ -61,17 +61,17 @@ def _every_style() -> list[PersonaStyle]:
             for values in itertools.product(*(STYLE_KNOBS[k] for k in knobs))]
 
 
-def _assembled_private_prompt(style: PersonaStyle) -> str:
+def _assembled_dm_prompt(style: PersonaStyle) -> str:
     """Every block of the 1:1 system prompt a `PersonaStyle` can change, in
     served order."""
-    return "\n\n".join((private_style_guide(style),
-                        private_intent_rules(style),
-                        PRIVATE_TOOL_GUIDE,
-                        private_output_protocol(style)))
+    return "\n\n".join((dm_style_guide(style),
+                        dm_intent_rules(style),
+                        DM_TOOL_GUIDE,
+                        dm_output_protocol(style)))
 
 
-async def _served_private_prompts(tmp: Path) -> dict[str, str]:
-    """The whole system prompt `_chat_private` sends, for the admin and for
+async def _served_dm_prompts(tmp: Path) -> dict[str, str]:
+    """The whole system prompt `_chat_dm` sends, for the admin and for
     anyone else: the engine-authored rest of it (overrides, `<rules>`, the
     sticker guide) is where a banned phrase would slip back in unnoticed."""
     agent = make_agent(tmp)
@@ -89,7 +89,7 @@ async def _served_private_prompts(tmp: Path) -> dict[str, str]:
     served = {}
     try:
         for who, is_admin in (("friend", False), ("admin", True)):
-            await agent._chat_private([{"role": "user", "content": "hey"}],
+            await agent._chat_dm([{"role": "user", "content": "hey"}],
                                       is_admin=is_admin, pkey="private:7")
             served[who] = captured[-1]
     finally:
@@ -163,7 +163,7 @@ def test_the_companionship_register_survives_every_knob_combination() -> None:
     missing: dict[str, list[str]] = {}
     unsafe: list[str] = []
     for style in styles:
-        assembled = _assembled_private_prompt(style)
+        assembled = _assembled_dm_prompt(style)
         for anchor, label in anchors:
             if anchor not in assembled:
                 missing.setdefault(label, []).append(repr(style))
@@ -178,7 +178,7 @@ def test_the_companionship_register_survives_every_knob_combination() -> None:
     check("...and none of them lost the crisis safety exception",
           not unsafe, f"{len(unsafe)} styles, e.g. {unsafe[:1]}")
 
-    guide = private_style_guide(PersonaStyle())
+    guide = dm_style_guide(PersonaStyle())
     voice = _section(guide, "[VOICE")
     check("the floors sit under the teasing licence they bound",
           voice.index("Light teasing only") < voice.index("Never win at")
@@ -188,7 +188,7 @@ def test_the_companionship_register_survives_every_knob_combination() -> None:
           and "DON'T FAKE KNOWING wins" in _section(guide, "[CONTINUITY"))
 
 
-async def test_no_assistant_ism_survives_the_assembled_private_prompt(
+async def test_no_assistant_ism_survives_the_assembled_dm_prompt(
         tmp: Path) -> None:
     """The banned phrases appear nowhere in the 1:1 prompt except in the one
     section that forbids them. A flat "nowhere" is unsatisfiable, because the
@@ -221,8 +221,8 @@ async def test_no_assistant_ism_survives_the_assembled_private_prompt(
                 leaked.setdefault(phrase, []).append(f"{label}: {hits[0]!r}")
 
     for style in styles:
-        audit(repr(style), _assembled_private_prompt(style))
-    for who, served in (await _served_private_prompts(tmp)).items():
+        audit(repr(style), _assembled_dm_prompt(style))
+    for who, served in (await _served_dm_prompts(tmp)).items():
         audit(f"served to the {who}", served)
 
     check(f"every prompt renders a {COMPANY_HEADER} section",
@@ -249,14 +249,14 @@ async def test_a_tool_shaped_request_is_answered_by_the_character(
     block after the persona. The group prompt, where the persona is one
     member of a room, is untouched."""
     style = PersonaStyle()
-    question = next(line for line in private_intent_rules(style).splitlines()
+    question = next(line for line in dm_intent_rules(style).splitlines()
                     if line.startswith("- `question`"))
     check("the question intent answers as this person, from what they'd know",
           "as this person and from what they'd know" in question, question)
     check("...and not having it, said in their own words, is the answer",
           "saying so in their own words IS the direct answer" in question,
           question)
-    protocol = private_output_protocol(style)
+    protocol = dm_output_protocol(style)
     check("the reasoning protocol runs a tool check",
           "- Tool check:" in protocol and "decide as the character" in protocol)
     bullets = protocol.split("Cover these ", 1)[1].split("\n\nintent", 1)[0]
@@ -266,13 +266,13 @@ async def test_a_tool_shaped_request_is_answered_by_the_character(
 
     tool_check = next(line for line in protocol.splitlines()
                       if line.startswith("- Tool check:"))
-    # "look up" is in the tool check's list, and PRIVATE_TOOL_GUIDE says to
+    # "look up" is in the tool check's list, and DM_TOOL_GUIDE says to
     # answer from fetched results as if already known. Without this the two
     # disagreed about a search the engine had already paid for.
     check("...which counts fetched search results as something they have",
           "[external_web_search_data]" in tool_check, tool_check)
 
-    served_by_who = await _served_private_prompts(tmp)
+    served_by_who = await _served_dm_prompts(tmp)
     for who, served in served_by_who.items():
         rules = served.split("<rules>", 1)[1].split("</rules>", 1)[0]
         check(f"the {who}'s <rules> say the character decides what gets done",
@@ -298,7 +298,7 @@ async def test_a_tool_shaped_request_is_answered_by_the_character(
           and "encyclopedia entry" not in group)
 
 
-async def test_the_private_guide_tells_the_character_to_receive_affection(
+async def test_the_dm_guide_tells_the_character_to_receive_affection(
         tmp: Path) -> None:
     """Four turns of "I like you" / "do you like me" / "I'm gay" came back as
     four deflections ending in "we only talk online, don't take it too
@@ -310,7 +310,7 @@ async def test_the_private_guide_tells_the_character_to_receive_affection(
     program" is one edit from "never say you are an AI", and that answer is
     still owed to anyone who sincerely asks. The style rule forbids offering
     it UNASKED, and points at the honesty block instead of restating it."""
-    guide = private_style_guide(PersonaStyle())
+    guide = dm_style_guide(PersonaStyle())
     check("1:1 guide: affection is received rather than deflected",
           "receive it, do not deflect" in guide)
     check("1:1 guide: the dodge it was measured making is named",
@@ -326,7 +326,7 @@ async def test_the_private_guide_tells_the_character_to_receive_affection(
           "sincere question about whether you are an AI, which the honesty "
           "block below covers" in guide)
 
-    for who, served in (await _served_private_prompts(tmp)).items():
+    for who, served in (await _served_dm_prompts(tmp)).items():
         check(f"the {who}'s honesty block really is below the guide",
               served.index(HONEST_DISCLOSURE)
               > served.index("receive it, do not deflect"), who)

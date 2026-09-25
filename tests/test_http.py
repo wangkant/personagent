@@ -762,18 +762,18 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
     # sends DMs to the fallback's endpoint, so that is where it is probed.
     monkeypatch.setenv("LLM_DM_MODEL", "cheap")
     posted.clear()
-    health.check_private_chat()
+    health.check_dm_chat()
     check("health: a private model that is the fallback's is probed where DMs go",
           posted == [fallback], repr(posted))
     monkeypatch.setenv("LLM_DM_MODEL", "dm-model")
     posted.clear()
-    health.check_private_chat()
+    health.check_dm_chat()
     check("health: any other private model is probed on the primary's endpoint",
           posted == [("https://primary.example/v1/chat/completions",
                       "Bearer sk-primary", "dm-model")], repr(posted))
 
 
-def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> None:
+def test_the_dm_chat_probe_uses_the_agents_default_model(monkeypatch) -> None:
     """With LLM_MODEL unset the agent runs its default model; the probe must
     too, or a skipped critical probe fails /health on a working agent. An
     explicit blank stays blank, as it does for the agent."""
@@ -790,14 +790,14 @@ def test_the_private_chat_probe_uses_the_agents_default_model(monkeypatch) -> No
                  "LLM_FALLBACK_MODEL", "LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_API_KEY", "k")
-    ok, detail = health.check_private_chat()
+    ok, detail = health.check_dm_chat()
     check("health: the private probe runs with LLM_MODEL unset", ok is True, detail)
     check("health: the private probe asks for the agent's default model",
           sent == [DEFAULT_LLM_MODEL], repr(sent))
 
     monkeypatch.setenv("LLM_MODEL", "")
     sent.clear()
-    ok, detail = health.check_private_chat()
+    ok, detail = health.check_dm_chat()
     check("health: an explicit blank LLM_MODEL is still not configured",
           ok is None and sent == [], f"{ok} {detail} {sent}")
 

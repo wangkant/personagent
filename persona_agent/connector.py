@@ -83,7 +83,7 @@ It stamps the same DM cooldown the agent's own proactive loop reads.
 
 The flag is load-bearing, not decorative. Without it the caller's own
 directive is indistinguishable from the reader's words: it lands in
-`private_history` as `{"role": "user"}`, stays for 40 turns, can be quoted
+`dm_history` as `{"role": "user"}`, stays for 40 turns, can be quoted
 back at somebody who never wrote it, and can be promoted into a memory about
 them.
 
@@ -195,7 +195,7 @@ def message_to_reply_item(
         message, *, platform: str = "", native: bool = False,
         bot_id: str = "") -> dict:
     """Convert one NapCat-shaped message (str or v11 segment list, exactly
-    what _napcat_send_group/_napcat_send_private receive) into one neutral
+    what _onebot_send_group/_onebot_send_dm receive) into one neutral
     reply item. The send paths only ever emit a bare text chunk, [at?, text]
     or [at?, image base64://...], so a single folded item is lossless.
 

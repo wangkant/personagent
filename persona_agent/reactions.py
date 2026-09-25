@@ -311,7 +311,7 @@ class PendingReplies:
         return entry
 
     def match(self, conv_id: str, *, sender_uid: str, quote_mid: str = "",
-              at_bot: bool = False, is_private: bool = False,
+              at_bot: bool = False, is_dm: bool = False,
               now: float = 0.0) -> dict | None:
         """Attribute an incoming message to a pending bot reply, or None.
 
@@ -336,7 +336,7 @@ class PendingReplies:
             # reaction to anything we track — do NOT fall through to @-logic:
             # the quote already names its target.
             return None
-        if at_bot or (is_private and str(sender_uid) == q[-1]["target_uid"]):
+        if at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
             return self._take(conv_id, q, -1, "at" if at_bot else "dm")
         # Elicited exception: the bot just asked THIS user what they meant, so
         # their next message counts even without an @ (short window).

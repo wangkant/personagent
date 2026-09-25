@@ -2288,7 +2288,7 @@ class TextProcessing:
     def _parse_sticker_markers(text: str) -> list[tuple[str, str]]:
         """Split on [STICKER:tag] markers. Returns ordered (kind, value) where
         kind is 'text' or 'sticker'. Empty text segments dropped. Used by
-        _send_qq to send mixed text/image messages."""
+        _send_group to send mixed text/image messages."""
         out: list[tuple[str, str]] = []
         pos = 0
         for m in _STICKER_MARKER_RE.finditer(text):

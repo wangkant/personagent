@@ -579,7 +579,7 @@ class Learning:
     async def _process_reaction(self, entry: dict, reaction_text: str,
                                 reactor_name: str, reactor_uid: str,
                                 is_admin: bool, conv_id: str = "",
-                                is_private: bool = False) -> None:
+                                is_dm: bool = False) -> None:
         """Adjudicate a directed user reaction and record what it proves.
 
         The reaction is written to the evidence log first, and unconditionally:
@@ -637,7 +637,7 @@ class Learning:
                 context=entry.get("ctx_lines"),
                 reaction_text=reaction_text,
                 directed=True,
-                direction=str(entry.get("matched_by") or ("dm" if is_private else "at")),
+                direction=str(entry.get("matched_by") or ("dm" if is_dm else "at")),
                 adjudicator_model=self.react_model,
                 adjudicator_prompt_version=reactions.ADJUDICATOR_VERSION,
                 source_event_id=str(
@@ -754,7 +754,7 @@ class Learning:
                     if self.react_elicit_enabled and adj.get("ask"):
                         self._spawn(self._maybe_elicit(
                             conv_id, entry, adj.get("ask", ""),
-                            reactor_uid, is_private,
+                            reactor_uid, is_dm,
                             parent_evidence_id=reaction_ev["event_id"]))
 
             # Teaching reputation: count corrective acts only (not positives),
@@ -781,7 +781,7 @@ class Learning:
                            type(e).__name__, e)
 
     async def _maybe_elicit(self, conv_id: str, entry: dict, ask: str,
-                            reactor_uid: str, is_private: bool,
+                            reactor_uid: str, is_dm: bool,
                             parent_evidence_id: str = "") -> None:
         """Delayed elicitation: wait out the bot's own normal reply to the
         rejection, then — if the user still hasn't supplied a correction and
@@ -798,7 +798,7 @@ class Learning:
                 return
             uid = ""
             route_key = conv_id
-            if is_private:
+            if is_dm:
                 uid = conv_id.split(":", 1)[1] if ":" in conv_id else reactor_uid
                 route_key = channels.dm_routing_key(uid)
             # Unreachable now: leave the cooldown unspent for a later one.
@@ -806,25 +806,25 @@ class Learning:
                 self._log_no_route(route_key, "follow_up")
                 return
             self._last_elicit_at[conv_id] = now_mono
-            if is_private:
+            if is_dm:
                 async with self.send_locks[route_key]:
-                    self._private_send_owners[route_key] = asyncio.current_task()
+                    self._dm_send_tasks[route_key] = asyncio.current_task()
                     try:
                         result = await self._send_background(
-                            route_key, lambda: self._send_private_qq(uid, ask),
+                            route_key, lambda: self._send_dm(uid, ask),
                             reason="follow_up")
                     finally:
-                        if (self._private_send_owners.get(route_key)
+                        if (self._dm_send_tasks.get(route_key)
                                 is asyncio.current_task()):
-                            self._private_send_owners.pop(route_key, None)
+                            self._dm_send_tasks.pop(route_key, None)
                 if result.success:
-                    self.private_history.setdefault(uid, []).append(
+                    self.dm_history.setdefault(uid, []).append(
                         {"role": "assistant", "content": ask})
             else:
                 async with self.send_locks[conv_id]:
                     result = await self._send_background(
                         conv_id,
-                        lambda: self._send_qq(conv_id, ask, reactor_uid),
+                        lambda: self._send_group(conv_id, ask, reactor_uid),
                         reason="follow_up")
                 if result.success:
                     self._append_buffer(conv_id, self.persona_name, ask)

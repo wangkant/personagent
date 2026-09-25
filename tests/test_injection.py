@@ -63,7 +63,7 @@ def _says_what_the_frames_mean(system: str) -> bool:
             and "external material" in text)
 
 
-async def test_private_prompt_fences_user_data_and_preserves_web_fence(
+async def test_dm_prompt_fences_user_data_and_preserves_web_fence(
         tmp: Path) -> None:
     agent = make_agent(tmp, persona="PRIVATE-SYSTEM-SECRET")
     captured: dict = {}
@@ -80,7 +80,7 @@ async def test_private_prompt_fences_user_data_and_preserves_web_fence(
     agent._call_llm = fake_call
     agent._decide_and_search = no_search
     try:
-        await agent._chat_private(
+        await agent._chat_dm(
             [{"role": "user", "content": "earlier line"},
              {"role": "assistant", "content": "my own turn"},
              {"role": "user", "content": f"{attack} {web_desc}"}],
@@ -1111,7 +1111,7 @@ async def test_a_few_shot_row_cannot_restructure_the_prompt(tmp: Path) -> None:
     agent._call_llm = fake_call
     agent._decide_and_search = no_search
     try:
-        await agent._chat_private(
+        await agent._chat_dm(
             [{"role": "user", "content": "is it raining"}],
             is_admin=False, pkey="private:u1")
     finally:

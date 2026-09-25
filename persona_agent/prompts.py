@@ -717,7 +717,7 @@ def _variant(table: dict, key: str, knob: str) -> str:
     return table[STYLE_KNOBS[knob][0]]
 
 
-def private_style_guide(style: PersonaStyle) -> str:
+def dm_style_guide(style: PersonaStyle) -> str:
     """`STYLE_GUIDE` for a one-on-one chat, with the six knobs applied.
 
     NO PERSONA-SPECIFIC STRING APPEARS IN HERE, and that is a cost decision,
@@ -849,7 +849,7 @@ def private_style_guide(style: PersonaStyle) -> str:
     )
 
 
-def private_intent_rules(style: PersonaStyle) -> str:
+def dm_intent_rules(style: PersonaStyle) -> str:
     """`INTENT_RULES` for a one-on-one chat.
 
     The `vent` bullet carries its own `SAFETY EXCEPTION`, worded differently
@@ -887,7 +887,7 @@ def private_intent_rules(style: PersonaStyle) -> str:
 
 # `TOOL_GUIDE` with the room taken out. Channel-neutral line for line except
 # where it named the group; no knob touches it.
-PRIVATE_TOOL_GUIDE = (
+DM_TOOL_GUIDE = (
     "<tools>\n"
     "When needed, the system **searches the web automatically** and drops the "
     "results into the context inside an [external_web_search_data] block "
@@ -921,7 +921,7 @@ PRIVATE_TOOL_GUIDE = (
 )
 
 
-def private_output_protocol(style: PersonaStyle) -> str:
+def dm_output_protocol(style: PersonaStyle) -> str:
     """`REASONING_PROTOCOL` for a one-on-one chat.
 
     Two substantive changes beyond deleting the seat rules.

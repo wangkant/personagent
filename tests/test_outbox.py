@@ -50,12 +50,12 @@ def make_agent(tmp: Path) -> Agent:
     async def fake_think(group_id, mode, text="", caller_override=None):
         return "on it", "called", ""
 
-    async def fake_chat_private(history, is_admin=False, pkey="",
+    async def fake_chat_dm(history, is_admin=False, pkey="",
                                 proactive=False, proactive_cue=""):
         return "hi back", ""
 
     a._think = fake_think
-    a._chat_private = fake_chat_private
+    a._chat_dm = fake_chat_dm
     return a
 
 
@@ -661,7 +661,7 @@ async def test_the_route_table(tmp: Path) -> None:
           agent._background_route("556") == "onebot")
 
 
-async def test_a_qq_send_from_a_finished_connector_turn_reaches_napcat(
+async def test_a_qq_send_from_a_finished_connector_turn_reaches_onebot(
         tmp: Path) -> None:
     """A task spawned by a connector turn inherits its sink, closed by the time
     the task runs: every such send was dropped with "sink already closed".
@@ -671,17 +671,17 @@ async def test_a_qq_send_from_a_finished_connector_turn_reaches_napcat(
     agent = make_agent(tmp)
     posted: list = []
 
-    async def fake_napcat(group_id, message):
+    async def fake_onebot(group_id, message):
         posted.append((group_id, message))
         return True
 
-    agent._napcat_send_group = fake_napcat
+    agent._onebot_send_group = fake_onebot
     dead = ConnectorSink(platform="aiocqhttp", native=True)
     dead.closed = True
     tok = current_sink.set(dead)
     try:
         result = await agent._send_background(
-            "555", lambda: agent._send_qq("555", "back in a sec"), reason="excuse")
+            "555", lambda: agent._send_group("555", "back in a sec"), reason="excuse")
     finally:
         current_sink.reset(tok)
     check("onebot: sent through NapCat, not the dead sink",
@@ -722,19 +722,19 @@ async def test_the_excuse_reaches_a_connector_conversation(tmp: Path) -> None:
           and not [m for m in agent.buffers["telegram:c5"] if m["name"] == "TestBot"])
 
 
-async def test_the_excuse_on_qq_still_goes_to_napcat(tmp: Path) -> None:
+async def test_the_excuse_on_qq_still_goes_to_onebot(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.connector_qq_platforms = {"aiocqhttp"}
     posted: list = []
 
-    async def fake_napcat(group_id, message):
+    async def fake_onebot(group_id, message):
         posted.append(group_id)
         return True
 
     async def bad_think(group_id, mode, text="", caller_override=None):
         raise RuntimeError("model down")
 
-    agent._napcat_send_group = fake_napcat
+    agent._onebot_send_group = fake_onebot
     agent._think = bad_think
     await agent.handle_onebot({
         "post_type": "message", "message_type": "group", "group_id": "556",
@@ -810,13 +810,13 @@ async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
     agent.proactive_dm_prob = 1.0
     uid = "telegram:1"
     agent.last_dm_activity_at[uid] = time.time() - agent.proactive_dm_min_silence_s - 10
-    history_before = list(agent.private_history.get(uid, []))
+    history_before = list(agent.dm_history.get(uid, []))
 
     async def opener(history, is_admin=False, pkey="", proactive=False,
                      proactive_cue=""):
         return "how did the exam go", ""
 
-    agent._chat_private = opener
+    agent._chat_dm = opener
     task = asyncio.create_task(agent._maybe_proactive_dms())
     answer = await agent.outbox.pull("fw1", wait_s=3)
     delivery = answer["deliveries"][0]
@@ -826,11 +826,11 @@ async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
           and delivery["conversation_id"] == "1"
           and delivery["reply_handle"] == "tg-bot:FriendMessage:1", repr(delivery))
     check("DM opener: not in the history before the ack",
-          agent.private_history.get(uid, []) == history_before)
+          agent.dm_history.get(uid, []) == history_before)
     await agent.outbox.pull("fw1", wait_s=0, acks=[
         {"delivery_id": delivery["delivery_id"], "status": "sent", "sent_items": 1}])
     check("DM opener: in the history after it", await asyncio.wait_for(task, 3)
-          and agent.private_history[uid][-1]
+          and agent.dm_history[uid][-1]
           == {"role": "assistant", "content": "how did the exam go"})
 
     agent.last_proactive_at.clear()
@@ -841,7 +841,7 @@ async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
         called.append(kw)
         return "x", ""
 
-    agent._chat_private = spy
+    agent._chat_dm = spy
     check("DM opener: someone the lists now refuse is not DMed",
           await agent._maybe_proactive_dms() is False and called == [])
 
@@ -889,7 +889,7 @@ async def test_the_follow_up_question_reaches_a_connector_conversation(
     await asyncio.wait_for(task, 3)
     check("follow-up: a DM gets it too, and keeps it in the history",
           delivery["conversation_key"] == "private:telegram:1"
-          and agent.private_history["telegram:1"][-1]["content"]
+          and agent.dm_history["telegram:1"][-1]["content"]
           == "which part was wrong?", repr(delivery))
 
     agent.outbox.liveness_s = -1.0

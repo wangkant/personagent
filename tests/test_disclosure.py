@@ -188,8 +188,8 @@ def _first_reject(rules: list[dict], text: str) -> str:
     return ""
 
 
-async def _private_system(tmp: Path, is_admin: bool) -> str:
-    """The system prompt `_chat_private` really assembles. Asserting on the
+async def _dm_system(tmp: Path, is_admin: bool) -> str:
+    """The system prompt `_chat_dm` really assembles. Asserting on the
     assembled prompt rather than on source is the point: an instruction
     reintroduced through `prompts.py`, a new block or the persona path is
     caught here too."""
@@ -206,7 +206,7 @@ async def _private_system(tmp: Path, is_admin: bool) -> str:
     agent._call_llm = fake_call
     agent._decide_and_search = no_search
     try:
-        await agent._chat_private(
+        await agent._chat_dm(
             [{"role": "user", "content": "are you an ai?"}],
             is_admin=is_admin, pkey="private:777")
     finally:
@@ -232,10 +232,10 @@ async def _group_system(tmp: Path, lang: str = "en",
     return captured["system"]
 
 
-async def test_the_private_prompt_does_not_instruct_denial(tmp: Path) -> None:
+async def test_the_dm_prompt_does_not_instruct_denial(tmp: Path) -> None:
     for is_admin in (False, True):
         who = "admin" if is_admin else "friend"
-        prompt = await _private_system(tmp / who, is_admin)
+        prompt = await _dm_system(tmp / who, is_admin)
         check(f"the {who} private prompt was assembled", len(prompt) > 1000,
               f"{len(prompt)} chars")
         hits = [p for p in _DENIAL_INSTRUCTIONS
@@ -271,9 +271,9 @@ async def test_both_chat_paths_carry_the_honest_disclosure_clause(
     check("answering is not breaking character",
           "your own voice" in clause, clause)
 
-    private = await _private_system(tmp / "private", is_admin=False)
+    dm = await _dm_system(tmp / "private", is_admin=False)
     group = await _group_system(tmp / "group")
-    for path, prompt in (("private", private), ("group", group)):
+    for path, prompt in (("private", dm), ("group", group)):
         check(f"the {path} prompt carries the clause",
               prompt.count(HONEST_DISCLOSURE) == 1, path)
         # Position is the point: after everything the persona document says.
@@ -326,7 +326,7 @@ async def test_no_lorebook_entry_takes_the_honest_answer_back(
 async def test_the_safety_exception_still_reaches_the_prompt(tmp: Path) -> None:
     """The deletion sits in the same static block as the crisis rules; this
     asserts they survive assembly, which a careless edit here would break."""
-    prompt = await _private_system(tmp, is_admin=False)
+    prompt = await _dm_system(tmp, is_admin=False)
     lines = [ln for ln in prompt.splitlines() if "SAFETY EXCEPTION" in ln]
     check("both SAFETY EXCEPTION clauses reach the assembled private prompt",
           len(lines) == 2, f"found {len(lines)}")

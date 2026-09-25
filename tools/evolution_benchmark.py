@@ -80,20 +80,20 @@ def scenario_families(scns: list[dict]) -> set[str]:
     return {s["family"] for s in scns}
 
 
-def _fake_qq(name: str) -> str:
-    # Deterministic fake qq so caller_override / dedup are stable across runs.
+def _fake_uid(name: str) -> str:
+    # Deterministic fake user id so caller_override / dedup are stable across runs.
     h = hashlib.md5(name.encode("utf-8")).hexdigest()
     return str(1_000_000 + int(h[:6], 16) % 9_000_000)
 
 
-class _NameQQ(dict):
+class _NameUid(dict):
     def __missing__(self, name):  # type: ignore[override]
-        v = _fake_qq(name)
+        v = _fake_uid(name)
         self[name] = v
         return v
 
 
-NAME_QQ = _NameQQ()
+NAME_UID = _NameUid()
 
 
 def _parse_line(line: str, persona_name: str) -> dict:
@@ -103,7 +103,7 @@ def _parse_line(line: str, persona_name: str) -> dict:
     else:
         name, text = "someone", line
     name = name.strip()
-    return {"name": name, "text": text, "user_id": NAME_QQ[name]}
+    return {"name": name, "text": text, "user_id": NAME_UID[name]}
 
 
 def seed_buffer(agent, group_id: str, scenario: dict, persona_name: str):

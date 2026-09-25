@@ -47,14 +47,14 @@ from .prompts import (
     DEFAULT_PERSONA,
     HONEST_DISCLOSURE,
     INTENT_RULES,
-    PRIVATE_TOOL_GUIDE,
+    DM_TOOL_GUIDE,
     REASONING_PROTOCOL,
     STYLE_GUIDE,
     TOOL_GUIDE,
     parse_persona_style,
-    private_intent_rules,
-    private_output_protocol,
-    private_style_guide,
+    dm_intent_rules,
+    dm_output_protocol,
+    dm_style_guide,
 )
 from .settings import AgentSettings
 from .stickers import StickerLibrary
@@ -161,10 +161,10 @@ class _PooledHTTP:
 
 
 # What the private-chat retry appends to the system prompt (see
-# `Agent._chat_private`). The dominant cause of an empty 1:1 turn is
+# `Agent._chat_dm`). The dominant cause of an empty 1:1 turn is
 # deterministic, an emoji-only draft the sanitizer eats, so the second prompt
 # has to differ from the first. It amends the output contract rather than
-# replacing it: it lands right after `private_output_protocol`, and "reply in
+# replacing it: it lands right after `dm_output_protocol`, and "reply in
 # plain text" from that last position would talk the model out of the JSON
 # the fail-closed parser needs, turning one empty turn into two.
 _EMPTY_DRAFT_RETRY_NOTE = (
@@ -414,7 +414,7 @@ class Agent(ContentIngestion, Transport, Learning):
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # Separate per-group send locks: _send_qq sleeps through its typing
+        # Separate per-group send locks: _send_group sleeps through its typing
         # simulation, so it runs OUTSIDE the group lock (which would otherwise
         # block message intake for the whole send). The send lock still
         # serializes same-group sends so two replies can't interleave.
@@ -426,7 +426,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # Private send locks are deliberately re-used by Transport's public
         # standalone-send wrapper. This task marker makes that lock re-entrant
         # for conversation paths which hold it through state commit.
-        self._private_send_owners: dict[str, asyncio.Task] = {}
+        self._dm_send_tasks: dict[str, asyncio.Task] = {}
         self.active_users: dict[str, deque] = defaultdict(lambda: deque(maxlen=20))
 
         self.image_caption_cache: dict[str, str] = {}
@@ -439,12 +439,12 @@ class Agent(ContentIngestion, Transport, Learning):
         self.url_info_cache: dict[str, str] = {}
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
-        self.private_history: dict[str, list[dict]] = {}
+        self.dm_history: dict[str, list[dict]] = {}
         # A DM message whose turn committed nothing (the model failed or
         # PASSed, the reply was blocked or never delivered), per user, the
-        # last three. Kept out of private_history, where a lone user turn
+        # last three. Kept out of dm_history, where a lone user turn
         # would break role alternation and silence the proactive cue, and
-        # merged into the reader's next turn instead. See _handle_private.
+        # merged into the reader's next turn instead. See _handle_dm.
         self._dm_unanswered: dict[str, list[str]] = {}
 
         # Last time any human message landed in a group / DM (silence tracking),
@@ -453,7 +453,7 @@ class Agent(ContentIngestion, Transport, Learning):
         self.last_dm_activity_at: dict[str, float] = defaultdict(float)
         self.last_proactive_at: dict[str, float] = defaultdict(float)
         self._last_elicit_at: dict[str, float] = defaultdict(float)
-        # Outbound message_ids of the current _send_qq call, per group —
+        # Outbound message_ids of the current _send_group call, per group —
         # written under the per-group send lock, consumed right after it.
         self._sent_mids: dict[str, list[str]] = {}
 
@@ -707,7 +707,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # One OneBot-shaped payload: from /v1/onebot, the catch-up sweep, or
         # handle_event after synthesize_onebot_payload.
         # `proactive`: this turn's text is a cue its CALLER wrote, not a
-        # message from the person on the other end. See _handle_private.
+        # message from the person on the other end. See _handle_dm.
         # Top-level guard so any failure in the message pipeline is logged
         # loudly instead of silently dying as an unretrieved-task warning.
         try:
@@ -895,7 +895,7 @@ class Agent(ContentIngestion, Transport, Learning):
             # `proactive` is honoured on the private path only, which can
             # hand the cue to the model for one call. A group event carrying
             # it is claimed and dropped below.
-            return await self._handle_private(user_id, payload,
+            return await self._handle_dm(user_id, payload,
                                               is_admin=is_admin,
                                               proactive=proactive)
 
@@ -986,7 +986,7 @@ class Agent(ContentIngestion, Transport, Learning):
             if _r_entry:
                 self._spawn(self._process_reaction(
                     _r_entry, text, nickname, user_id, is_admin_msg,
-                    conv_id=group_id, is_private=False))
+                    conv_id=group_id, is_dm=False))
 
         # Memory-command reply text (settled inside the lock, sent outside) — see below.
         mem_reply = None
@@ -1008,7 +1008,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
             # Explicit memory command: reply immediately, no debounce. State
             # settles inside the lock; the send moves OUTSIDE it — "what do you
-            # remember" can render dozens of memory lines and _send_qq's typing
+            # remember" can render dozens of memory lines and _send_group's typing
             # simulation could then hold the group lock for tens of seconds,
             # blocking message intake for the whole group. The send goes
             # through send_lock (same serialization as normal replies).
@@ -1035,7 +1035,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # —— group lock released —— send the memory-command reply (send_lock serialized)
         if mem_reply is not None:
             async with self.send_locks[group_id]:
-                send_result = await self._send_qq(
+                send_result = await self._send_group(
                     group_id, mem_reply, user_id if addressed else "")
             if not send_result.success:
                 logger.warning("[Agent] memory command delivery failed (group=%s)",
@@ -1150,7 +1150,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 # Commit state under the group lock, but send OUTSIDE it via a
                 # background task holding send_locks — mirroring the main
-                # path: _send_qq's typing sleeps + protocol-side retries can
+                # path: _send_group's typing sleeps + protocol-side retries can
                 # take tens of seconds, and holding the group lock that long
                 # stalls Phase-1 message absorption for the whole group;
                 # skipping send_locks would let this chunk interleave with an
@@ -1172,7 +1172,7 @@ class Agent(ContentIngestion, Transport, Learning):
                             async with self.send_locks[group_id]:
                                 result = await self._send_background(
                                     group_id,
-                                    lambda: self._send_qq(
+                                    lambda: self._send_group(
                                         group_id, fallback, user_id),
                                     reason="excuse")
                             if result.success:
@@ -1224,7 +1224,7 @@ class Agent(ContentIngestion, Transport, Learning):
         # messages can be absorbed while the bot is "typing".
         try:
             async with self.send_locks[group_id]:
-                send_result = await self._send_qq(group_id, reply, at_uid)
+                send_result = await self._send_group(group_id, reply, at_uid)
             if not send_result.success and not send_result.partial:
                 logger.warning("[Agent] reply delivery failed (mode=%s, group=%s)",
                                mode, group_id)
@@ -1285,7 +1285,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
         return send_result.success
 
-    async def _handle_private(self, user_id: str, payload: dict,
+    async def _handle_dm(self, user_id: str, payload: dict,
                               is_admin: bool = True,
                               proactive: bool = False) -> bool:
         """Run one private turn in send/commit order without blocking intake.
@@ -1295,9 +1295,9 @@ class Agent(ContentIngestion, Transport, Learning):
         reaches the model for this one call, as `proactive_cue`."""
         pkey = channels.dm_routing_key(user_id)
         async with self.send_locks[pkey]:
-            self._private_send_owners[pkey] = asyncio.current_task()
+            self._dm_send_tasks[pkey] = asyncio.current_task()
             # What this turn put in front of the model as the reader's words,
-            # and whether they reached private_history. Any other way out (the
+            # and whether they reached dm_history. Any other way out (the
             # model failed or PASSed, the reply was blocked or never
             # delivered) keeps them for the reader's next turn; dropped, that
             # turn had no record of what they said.
@@ -1314,7 +1314,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 if self.react_learn_enabled and not proactive:
                     entry = self.pending_reactions.match(
                         channels.dm_learning_key(user_id),
-                        sender_uid=user_id, is_private=True, now=time.time())
+                        sender_uid=user_id, is_dm=True, now=time.time())
                     if entry:
                         self._spawn(self._process_reaction(
                             # The reactor's name as the judge reads it and the
@@ -1322,7 +1322,7 @@ class Agent(ContentIngestion, Transport, Learning):
                             entry, text, "owner" if is_admin else "friend",
                             user_id, is_admin,
                             conv_id=channels.dm_learning_key(user_id),
-                            is_private=True))
+                            is_dm=True))
 
                 async with self.locks[pkey]:
                     if proactive:
@@ -1332,10 +1332,10 @@ class Agent(ContentIngestion, Transport, Learning):
                             channels.dm_learning_key(user_id)] = time.time()
                     else:
                         self.last_dm_activity_at[user_id] = time.time()
-                    history = list(self.private_history.get(user_id, []))
+                    history = list(self.dm_history.get(user_id, []))
                     # The one line this flag is about. Appended, the cue stays
                     # for 40 turns as something the reader supposedly said.
-                    # Left out, _chat_private's own internal cue applies —
+                    # Left out, _chat_dm's own internal cue applies —
                     # it fires only when the last turn is not a user message,
                     # so the two halves depend on each other.
                     if not proactive:
@@ -1353,7 +1353,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 cue = ({"proactive": True, "proactive_cue": text}
                        if proactive else {})
                 try:
-                    reply, auto_mem = await self._chat_private(
+                    reply, auto_mem = await self._chat_dm(
                         history, is_admin=is_admin, pkey=pkey, **cue)
                 except Exception as e:
                     logger.warning("[Agent] private-chat LLM failed: %s", e)
@@ -1371,7 +1371,7 @@ class Agent(ContentIngestion, Transport, Learning):
                     logger.info("[Agent] PASS (private user=%s)", user_id)
                     return False
 
-                send_result = await self._send_private_qq(user_id, reply)
+                send_result = await self._send_dm(user_id, reply)
                 if not send_result.success:
                     logger.warning(
                         "[Agent] private delivery failed (user=%s, partial=%s)",
@@ -1384,7 +1384,7 @@ class Agent(ContentIngestion, Transport, Learning):
                         async with self.locks[pkey]:
                             history.append({"role": "assistant",
                                             "content": send_result.delivered})
-                            self.private_history[user_id] = history[-40:]
+                            self.dm_history[user_id] = history[-40:]
                             if not proactive:
                                 self._dm_unanswered.pop(user_id, None)
                             committed = True
@@ -1392,7 +1392,7 @@ class Agent(ContentIngestion, Transport, Learning):
 
                 async with self.locks[pkey]:
                     history.append({"role": "assistant", "content": reply})
-                    self.private_history[user_id] = history[-40:]
+                    self.dm_history[user_id] = history[-40:]
                     if not proactive:
                         self._dm_unanswered.pop(user_id, None)
                     committed = True
@@ -1413,8 +1413,8 @@ class Agent(ContentIngestion, Transport, Learning):
                 logger.info("[Agent] private (%s): %s", user_id, reply[:80])
                 return True
             finally:
-                if self._private_send_owners.get(pkey) is asyncio.current_task():
-                    self._private_send_owners.pop(pkey, None)
+                if self._dm_send_tasks.get(pkey) is asyncio.current_task():
+                    self._dm_send_tasks.pop(pkey, None)
                 # Empty on a proactive turn: its text is the caller's cue.
                 if said and not committed:
                     async with self.locks[pkey]:
@@ -1448,7 +1448,7 @@ class Agent(ContentIngestion, Transport, Learning):
         `pkey` (`private:<uid>`); derived, so no call site can desync them."""
         return channels.learning_key(pkey)
 
-    async def _chat_private(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
+    async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
         LLM_DM_MODEL as an optional alternate model name.
 
@@ -1480,7 +1480,7 @@ class Agent(ContentIngestion, Transport, Learning):
             )
             # The private guides are persona-agnostic, so WHO this person is
             # has to be stated here.
-            private_overrides = (
+            dm_overrides = (
                 f"<private_overrides>\n"
                 f"- {admin_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
                 f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
@@ -1496,7 +1496,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 "You're now in a one-on-one private chat with a friend "
                 "(less close than the owner).\n"
             )
-            private_overrides = (
+            dm_overrides = (
                 "<private_overrides>\n"
                 "- This is a friend, not an attacker — most DMs are just ordinary conversation.\n"
                 "- If they ask 'who am I / do you know me' → **don't pretend to recognize them**, just say 'not super familiar / don't have you placed' in a relaxed tone, not cold.\n"
@@ -1513,9 +1513,9 @@ class Agent(ContentIngestion, Transport, Learning):
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
             f"</persona>\n\n"
-            f"{private_style_guide(self.persona_style)}\n\n"
-            f"{private_intent_rules(self.persona_style)}\n\n"
-            f"{PRIVATE_TOOL_GUIDE}\n\n"
+            f"{dm_style_guide(self.persona_style)}\n\n"
+            f"{dm_intent_rules(self.persona_style)}\n\n"
+            f"{DM_TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
             f"{HONEST_DISCLOSURE}\n\n"
             # No AI-identity rule in here, on purpose. This block used to
@@ -1540,7 +1540,7 @@ class Agent(ContentIngestion, Transport, Learning):
             f"- Even when the answer carries a lot of info, write it in chat voice paragraph-by-paragraph, never as a document: no bullets, no headings, no numbered steps, no summary line at the end.\n"
             f"</rules>\n\n"
         )
-        semi_static_block = self._sticker_guide_for_prompt(private=True)
+        semi_static_block = self._sticker_guide_for_prompt(dm=True)
         proactive_note = ""
         if proactive:
             who = self.admin_name if (is_admin and self.admin_name) else "them"
@@ -1552,7 +1552,7 @@ class Agent(ContentIngestion, Transport, Learning):
                 "If nothing feels natural, output exactly: PASS. Don't send filler like 'you there?' / 'hello?'.\n"
                 "</proactive>\n\n"
             )
-        # The private-chat memory namespace: _handle_private persists to
+        # The private-chat memory namespace: _handle_dm persists to
         # private:<uid>; the same namespace must be read back into the prompt
         # here, otherwise private memories are write-only.
         memory_blocks = ""
@@ -1563,11 +1563,11 @@ class Agent(ContentIngestion, Transport, Learning):
             )
         dynamic_block = (
             f"{proactive_note}"
-            f"{private_overrides}"
+            f"{dm_overrides}"
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
-            f"{private_output_protocol(self.persona_style)}"
+            f"{dm_output_protocol(self.persona_style)}"
         )
         system = static_block + semi_static_block + dynamic_block
         # Every turn the person wrote goes in as framed data, which the rules
@@ -2913,7 +2913,7 @@ class Agent(ContentIngestion, Transport, Learning):
             # followup to the opener has no record and reads as off-topic.
             async with self.send_locks[gid]:
                 result = await self._send_background(
-                    gid, lambda: self._send_qq(gid, reply, at_uid),
+                    gid, lambda: self._send_group(gid, reply, at_uid),
                     reason="proactive")
             if not result.success:
                 logger.warning(
@@ -2973,8 +2973,8 @@ class Agent(ContentIngestion, Transport, Learning):
             is_admin = access.is_admin(uid, admins)
             try:
                 async with self.locks[pkey]:
-                    history = list(self.private_history.get(uid, []))[-10:]
-                    reply, mem = await self._chat_private(
+                    history = list(self.dm_history.get(uid, []))[-10:]
+                    reply, mem = await self._chat_dm(
                         history, is_admin=is_admin, proactive=True, pkey=pkey)
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
@@ -2991,10 +2991,10 @@ class Agent(ContentIngestion, Transport, Learning):
                 continue
 
             async with self.send_locks[pkey]:
-                self._private_send_owners[pkey] = asyncio.current_task()
+                self._dm_send_tasks[pkey] = asyncio.current_task()
                 try:
                     result = await self._send_background(
-                        pkey, lambda: self._send_private_qq(uid, reply),
+                        pkey, lambda: self._send_dm(uid, reply),
                         reason="proactive")
                     if not result.success:
                         logger.warning("[Agent] proactive DM delivery failed (%s, partial=%s)",
@@ -3003,20 +3003,20 @@ class Agent(ContentIngestion, Transport, Learning):
                             # They read the delivered part; keep it on record.
                             if result.delivered:
                                 async with self.locks[pkey]:
-                                    self.private_history.setdefault(uid, []).append(
+                                    self.dm_history.setdefault(uid, []).append(
                                         {"role": "assistant",
                                          "content": result.delivered})
                             return True
                         continue
                     async with self.locks[pkey]:
-                        self.private_history.setdefault(uid, []).append(
+                        self.dm_history.setdefault(uid, []).append(
                             {"role": "assistant", "content": reply})
                         self._commit_core_memory(pkey, pending_core)
                         if mem:
                             self._save_auto_memory(pkey, mem)
                 finally:
-                    if self._private_send_owners.get(pkey) is asyncio.current_task():
-                        self._private_send_owners.pop(pkey, None)
+                    if self._dm_send_tasks.get(pkey) is asyncio.current_task():
+                        self._dm_send_tasks.pop(pkey, None)
             logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
             return True
         return False
@@ -3675,7 +3675,7 @@ class Agent(ContentIngestion, Transport, Learning):
         parts.append("\n</examples>")
         return "\n".join(parts)
 
-    def _sticker_guide_for_prompt(self, private: bool = False) -> str:
+    def _sticker_guide_for_prompt(self, dm: bool = False) -> str:
         """Sticker guide. ALWAYS returns content — when library is empty, gives
         anti-confab rules (don't fabricate stickers you don't have); when populated,
         encourages frequent trailing stickers (default: every message + one).
@@ -3721,7 +3721,7 @@ class Agent(ContentIngestion, Transport, Learning):
             # the default band, where 50 would retire stickers from replies
             # rather than from explanations; ~140 sits above the medium band's
             # ceiling and below the long band's.
-            f"- explanation runs past ~{140 if private else 50} chars\n"
+            f"- explanation runs past ~{140 if dm else 50} chars\n"
             "- you just sent one in the previous reply\n"
             "\n"
             "**Tag diversity — important**:\n"
