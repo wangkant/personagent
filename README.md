@@ -1,6 +1,6 @@
 # personagent
 
-![personagent — illustrated conversations](assets/personagent-cover.png)
+![personagent: a persona with headphones listens to a stream of chat bubbles, holding its own reply to three dots](assets/personagent-cover.png)
 
 **A character for your group chats that knows when to stay quiet, and learns from being corrected.**
 
@@ -16,19 +16,14 @@ Describe the character in a text file, point it at any OpenAI-compatible model, 
 
 ## Why personagent
 
-A system prompt wired to a chat account answers every message and never gets better. personagent is built around four different habits.
+- **It knows when to stay quiet.** It answers when someone says its name or @s it. The rest of the time it listens, and joins in only when a person would.
+- **It learns from corrections.** Tell it what you meant, and it keeps the better reply for next time. One joke or one troll cannot retrain it: a correction counts once it holds up, for example when you accept its second try.
+- **It remembers each chat separately.** What one group tells it stays in that group. Ask `Nova, what do you remember?` to see.
+- **Editing the character keeps what it learned.**
 
-**It picks its moments.** Say its name or @ it and it answers. Otherwise it listens. Once enough of the conversation has gone by (30 messages by default, 10 before it has ever spoken), a quick gate call (to `JUDGE_MODEL`, ideally your cheapest model) asks whether a real person would chime in here. If the answer is no, that one call is all it costs. A burst of messages gets a single reply, to the latest line, and between 02:00 and 07:00 in the persona's timezone it mostly sleeps unless someone calls it.
+No model is fine-tuned. It learns by improving the examples in its prompt.
 
-**It learns from the people it talks to.** For 15 minutes after each reply it watches for reactions aimed at that reply: a quote, an @, its name. A reaction is evidence, not an instruction. A change reaches future replies only when two compatible events from the same conversation back it, and at least one of them is strong: a correction from the person the reply was meant for, with a better line in it, or a second attempt that person accepted. Laughter and the bot's own scores never promote anything, however many pile up. Every promotion is logged and can be rolled back.
-
-**Memory belongs to one conversation.** What a group tells it stays in that group, and you can ask what it holds. `Nova, what do you remember?` and `Nova, what have you learned?` are answered from local files, without a model call.
-
-**Editing the character does not reset it.** Every revision of `persona.txt` under one `PERSONA_VERSION` keeps what was learned. Bump the version when you want a clean slate.
-
-No model is trained or fine-tuned. Learning means better examples in the prompt: replies that worked, and before/after pairs, retrieved by how closely they match the conversation at hand.
-
-![Illustrative chat between Alex and Nova about finishing work and dinner](assets/personagent-chat.en.png)
+![Three habits: it listens quietly while the group chats, answers when someone @s it, and writes down a correction](assets/personagent-habits.png)
 
 ## Quick start
 
@@ -166,7 +161,7 @@ Nova:  fair. that's a rough end to the day
 Alex:  haha yeah it is, thanks Nova
 ```
 
-A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT`).
+A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. The rule behind it: a change needs two agreeing signals from the same chat within 30 days, at least one of them strong (a correction with a better line from the person the reply was for, or a retry they accepted). Laughs and the bot's own scores never count on their own. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT`).
 
 To review or overrule the loop, use the ledger tool (on Windows, `.venv\Scripts\python.exe`):
 
@@ -193,7 +188,7 @@ Changing `BOT_NAME` or `PERSONA_VERSION` starts a new character, and what the ol
 
 ![Architecture: platforms enter one pipeline of ingest, decide, assemble, generate, validate and deliver; a separate learning path records evidence, proposes candidates and promotes them into views the prompt reads](docs/persona_llm_agent_architecture.svg)
 
-Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). The decision step picks a mode, or stays silent. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
+Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
 
 Learning runs beside that path, never inside it, and keeps its state in plain files under `runtime/`. Reactions go into an evidence log that is never rewritten. Adjudicating them proposes candidates, the promotion policy decides which may change replies, and promoted ones are written to small view files that retrieval reloads without a restart. Because the ledgers are append-only, "why does it talk like this?" always has an answer, and a rollback always has something to undo.
 
