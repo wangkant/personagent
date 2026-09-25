@@ -209,8 +209,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   direct message: `persona_agent/gateway.py` is
   `persona_agent/connector.py`, `GatewaySink` is `ConnectorSink`,
   `Agent.handle_gateway` is `handle_event`, `Agent.handle`, the OneBot entry
-  point, is `handle_onebot`, and `promotion.decide` takes `admin_id` and
-  `admin_ids`. `AgentSettings` gains `admin_ids` and `proactive_platforms`,
+  point, is `handle_onebot`, and `promotion.decide` takes the admin's
+  accounts as `admin_ids`. `AgentSettings` gains `admin_ids` and `proactive_platforms`,
   and `Agent` an `outbox` and a `connector_handles` store.
   `config_env.env_csv` is gone; `access.split_ids` replaces it.
 
