@@ -131,10 +131,12 @@ def _setting(name: str, platform: str) -> str:
 
 
 def group_refusal(group_id, allowed: Iterable[str], *, via_forwarder: bool,
-                  prefiltered: bool = True) -> str:
+                  prefiltered: bool = True, user_id="") -> str:
     """Why a group is not admitted, naming the setting; "" when it is."""
     gid = str(group_id or "")
-    if not via_forwarder and ":" in gid:
+    # The sender too: a namespaced sender in a QQ group could match an admin
+    # listed on another platform.
+    if not via_forwarder and (":" in gid or ":" in str(user_id or "")):
         return QQ_DOOR_REFUSAL
     platform = channels.platform_of(gid)
     listed = entries_on(platform, allowed)

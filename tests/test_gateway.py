@@ -11,7 +11,6 @@ import base64
 import json
 import os
 import socket
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -498,85 +497,16 @@ def test_validator_accepts_prefixed_at_marker() -> None:
 # ---------------------------------------------------------------------------
 
 def _import_plugin_module():
-    """Import the AstrBot forwarder plugin with stubbed astrbot modules so
-    its pure helpers can be tested without an AstrBot install."""
-    import enum
+    """The plugin, loaded by its own suite with that suite's astrbot stubs, so
+    its pure helpers are tested here without an AstrBot install and without a
+    second copy of the stubs to fall behind."""
     import importlib.util
-    import logging
-    import types
 
-    if "astrbot" not in sys.modules:
-        def _register(name: str) -> types.ModuleType:
-            m = types.ModuleType(name)
-            sys.modules[name] = m
-            return m
-
-        astrbot_pkg = _register("astrbot")
-        api = _register("astrbot.api")
-        astrbot_pkg.api = api
-        api.AstrBotConfig = dict
-        api.logger = logging.getLogger("plugin-test")
-
-        event_mod = _register("astrbot.api.event")
-
-        class _EventMessageType(enum.Flag):
-            GROUP_MESSAGE = enum.auto()
-            PRIVATE_MESSAGE = enum.auto()
-            OTHER_MESSAGE = enum.auto()
-            ALL = GROUP_MESSAGE | PRIVATE_MESSAGE | OTHER_MESSAGE
-
-        class _Filter:
-            EventMessageType = _EventMessageType
-
-            @staticmethod
-            def event_message_type(_t):
-                def deco(fn):
-                    return fn
-                return deco
-
-        event_mod.AstrMessageEvent = object
-        event_mod.filter = _Filter
-        api.event = event_mod
-
-        star_mod = _register("astrbot.api.star")
-        star_mod.Context = object
-        star_mod.Star = object
-        api.star = star_mod
-
-        platform_mod = _register("astrbot.api.platform")
-
-        class _MessageType(enum.Enum):
-            GROUP_MESSAGE = "GroupMessage"
-            FRIEND_MESSAGE = "FriendMessage"
-            OTHER_MESSAGE = "OtherMessage"
-
-        platform_mod.MessageType = _MessageType
-        api.platform = platform_mod
-
-        comp_mod = _register("astrbot.api.message_components")
-
-        class _Seg:
-            def __init__(self, *args, **kwargs):
-                self.__dict__.update(kwargs)
-
-        for seg_name in ("Plain", "At", "Image", "Face", "Reply"):
-            setattr(comp_mod, seg_name, type(seg_name, (_Seg,), {}))
-        comp_mod.Image.fromBase64 = staticmethod(lambda b64: b64)
-        api.message_components = comp_mod
-
-    plugin_dir = (Path(__file__).resolve().parents[1] / "integrations" / "astrbot"
-                  / "astrbot_plugin_llm_persona_gateway")
-    # A module of the plugin's package, as AstrBot imports it, so its
-    # relative imports resolve.
-    package = types.ModuleType("llm_persona_gateway_plugin")
-    package.__path__ = [str(plugin_dir)]
-    sys.modules["llm_persona_gateway_plugin"] = package
-    spec = importlib.util.spec_from_file_location(
-        "llm_persona_gateway_plugin.main", str(plugin_dir / "main.py"))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    path = Path(__file__).resolve().parent / "test_astrbot_plugin.py"
+    spec = importlib.util.spec_from_file_location("_astrbot_plugin_suite", path)
+    suite = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(suite)
+    return suite._import_plugin()
 
 
 def test_plugin_reply_id_strip() -> None:
@@ -2302,6 +2232,9 @@ async def test_the_qq_webhook_refuses_namespaced_ids(tmp: Path) -> None:
     spelled_qq = await agent.handle(_qq_group("qq:4242", "777", 1103))
     check("forged: so is a group spelled qq:, which NapCat never sends",
           spelled_qq is False and served == [], repr(served))
+    forged_sender = await agent.handle(_qq_group("4242", "telegram:1", 1105))
+    check("forged: an admin's namespaced id speaking in a QQ group is refused",
+          forged_sender is False and served == [], repr((forged_sender, served)))
     genuine = await agent.handle_gateway(_gw_dm("telegram", "1", 1104))
     check("forged: the same owner through the gateway is the owner",
           genuine["owned"] and served == [("private:telegram:1", "owner")],

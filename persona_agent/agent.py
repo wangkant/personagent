@@ -903,7 +903,8 @@ class Agent(ContentIngestion, Transport, Learning):
         # so it is measured against the QQ entries like any other.
         refusal = access.group_refusal(
             group_id, self._group_allowlist(),
-            via_forwarder=via_forwarder, prefiltered=prefiltered)
+            via_forwarder=via_forwarder, prefiltered=prefiltered,
+            user_id=user_id)
         if refusal:
             self._log_refusal(group_id, refusal)
             return False
