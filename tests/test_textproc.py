@@ -942,8 +942,8 @@ def test_the_scripts_punctuation_degrades_rather_than_silencing() -> None:
              "U+3002 ideographic full stop, which the older 破折号/句号 rule "
              "turns into a space for every language"),
             ("네, 알겠습니다！", "네, 알겠습니다！", "full-width exclamation"),
-            ("「はい」と言った", "はいと言った",
-             "corner brackets are STRUCTURE and were already stripped"),
+            ("「はい」と言った", "「はい」と言った",
+             "corner brackets are quotes, not structure"),
     ]:
         out = TP._sanitize_reply(raw, "zh")
         check(f"the shared CJK punctuation is unchanged by the widening: {why}",
@@ -1543,6 +1543,25 @@ def test_the_hard_reject_set_is_closed_under_unicode_folding() -> None:
                   repr(out))
 
 
+def test_only_quotes_around_the_whole_reply_are_unwrapped() -> None:
+    for raw, want in (("「整句被包住」", "整句被包住"),
+                      ('"wrapped"', "wrapped"),
+                      ("我会说「今天下雨了」", "我会说「今天下雨了」"),
+                      ('he said "hi"', 'he said "hi"'),
+                      ("「一」和「二」", "「一」和「二」")):
+        out = TP._unwrap_reply(raw)
+        check(f"unwrap: {raw!r}", out == want, repr(out))
+
+
+def test_a_comma_between_chinese_is_full_width() -> None:
+    for raw, want in (("清河巷,不长的一条巷子", "清河巷，不长的一条巷子"),
+                      ("好；那就这样", "好，那就这样"),
+                      ("价格是1,200元", "价格是1,200元"),
+                      ("ok, 好的", "ok, 好的")):
+        out = TP._sanitize_reply(raw, "zh")
+        check(f"comma: {raw!r}", out == want, repr(out))
+
+
 def test_cjk_bracket_structure_is_stripped_rather_than_released() -> None:
     """The neighbouring shape, and NOT the hard reject: 《书名》 is how Chinese
     writes a title and a whole-reply drop on it would be the silence this task
@@ -1551,17 +1570,13 @@ def test_cjk_bracket_structure_is_stripped_rather_than_released() -> None:
     dropped — U+3008 is not an NFKC fold of `<`, so the closure above does not
     reach it.
 
-    The sanitizer already deleted 「」『』《》【】. This is the rest of the
-    family, taken from the block instead of from the four pairs someone
-    happened to hit. U+2329 was the worst of them: it sits inside the
-    misc-technical strip range, so a DEFAULT persona lost it and an EMOJI
-    persona kept it — the widening re-opened a bracket."""
+    《》「」『』 are titles and quotes in ordinary Chinese and are kept.
+    U+2329 sits inside the misc-technical strip range, so a DEFAULT persona
+    lost it and an EMOJI persona kept it — the widening re-opened a bracket."""
     # Code points, not glyphs: U+2329 and U+3008 are indistinguishable in
     # every font, so a reviewer cannot check a table written as characters.
     for lo, hi, why in [(0x3008, 0x3009, "U+3008 CJK angle"),
                         (0x2329, 0x232A, "U+2329 angle"),
-                        (0x300A, 0x300B, "U+300A double angle"),
-                        (0x300C, 0x300D, "U+300C corner"),
                         (0x3010, 0x3011, "U+3010 lenticular"),
                         (0x3014, 0x3015, "U+3014 tortoise shell"),
                         (0x3016, 0x3017, "U+3016 white lenticular"),
@@ -2318,11 +2333,10 @@ def test_a_compatibility_twin_inherits_the_fate_of_its_fold() -> None:
     ):
         check(f"ordinary writing survives the deny set: {line[:14]}…",
               TP._sanitize_reply(line, "zh") != "", repr(line))
-    # A bracket the sanitizer STRIPS rather than rejects keeps that fate too:
-    # the halfwidth corner brackets must read like their CJK originals.
-    check("a halfwidth corner bracket is stripped like its CJK original",
-          TP._sanitize_reply("｢persona｣", "en")
-          == TP._sanitize_reply("「persona」", "en"),
+    # The halfwidth corner brackets share their CJK originals' fate: kept.
+    check("a halfwidth corner bracket is kept like its CJK original",
+          TP._sanitize_reply("｢persona｣", "en") == "｢persona｣"
+          and TP._sanitize_reply("「persona」", "en") == "「persona」",
           repr(TP._sanitize_reply("｢persona｣", "en")))
     # The arrow frame is a rule about ARRANGEMENT; it was a rule about a
     # spelling, because its character class is built from the opt-in block

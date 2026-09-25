@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reply the model wrote as plain text instead of JSON is kept.** Asking
+  for JSON mode does not guarantee it: probed on five models, between a third
+  and a half of replies came back as prose and were dropped, so the person
+  got no reply.
+  Prose now becomes the reply, and every sanitizer and leak check still runs
+  on it; output that looks like JSON is left to the parser as before.
+- **《书名》 and 「引号」 survive the sanitizer.** Only the brackets that read as
+  markup (〈〉, 【】 and their family) are still stripped. Quotes are removed
+  only when they wrap the whole reply, so one closing a phrase stays. An ASCII
+  comma between Chinese characters becomes `，`.
+- **The persona stops searching the web for its own world.** The search gate
+  now knows it is deciding for a character, so questions about the persona,
+  its home, its friends or the chat itself are answered in character.
+- **Fewer invented memories.** The style guide now says the persona's own world
+  is familiar ground, that a new person has no shared past with it, and that
+  its persona text describes it rather than being lines to recite.
 - **Re-running `quickstart.py --astrbot` no longer undoes the AstrBot setup.**
   It passed empty allowlists, so every re-run wiped the groups and DM senders
   set in AstrBot's WebUI, turned DMs off, reset any `agent_url` (an HTTPS

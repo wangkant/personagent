@@ -1213,23 +1213,15 @@ _HARD_REJECT_FOLD_RANGES: Ranges = (
     (0xFF5D, 0xFF5D, "full-width right curly bracket -> }"),
 )
 
-# CJK bracket punctuation. NOT the hard reject: 《书名》 is ordinary Chinese and
-# a whole-reply drop on it would be the silence this task exists to remove.
-# But a bracket is STRUCTURE, and '〈persona〉 You are Mira 〈/persona〉' was
-# released with its brackets intact while the ASCII twin was dropped. The
-# sanitizer already deleted 「」『』《》【】; this is the rest of the family,
-# derived from the block rather than from the four pairs someone happened to
-# hit. U+2329/U+232A are here because they are canonically equivalent to
-# U+3008/U+3009 and, sitting inside the misc-technical strip range, an emoji
-# persona was KEEPING them.
+# CJK brackets that read as markup ('〈persona〉 You are Mira'), stripped
+# rather than hard-rejected. 《》「」『』 are ordinary Chinese typography
+# (titles, quotes) and stay. U+2329/U+232A are canonically U+3008/U+3009.
 # Code points, not glyphs: U+2329 and U+3008 are indistinguishable in every
 # font, so an ASCII-only spelling is the only one a reviewer can check.
 _CJK_BRACKETS = "".join(chr(c) for c in (
     0x2329, 0x232A,                  # angle brackets, canonically U+3008/9
     0x3008, 0x3009,                  # CJK angle brackets - the pair reading as < >
-    0x300A, 0x300B,                  # double angle brackets (already stripped)
-    0x300C, 0x300D, 0x300E, 0x300F,  # corner brackets (already stripped)
-    0x3010, 0x3011,                  # lenticular brackets (already stripped)
+    0x3010, 0x3011,                  # lenticular brackets
     0x3014, 0x3015, 0x3016, 0x3017,  # tortoise-shell and white lenticular
     0x3018, 0x3019, 0x301A, 0x301B,  # white tortoise-shell and white square
 ))
@@ -1731,6 +1723,8 @@ class TextProcessing:
         text = re.sub(r'。+(?!\d)', ' ', text)
         text = text.replace('——', ' ').replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')
+        # Chinese takes the full-width comma; some models type the ASCII one.
+        text = re.sub(r'(?<=[㐀-鿿]) ?, ?(?=[㐀-鿿])', '，', text)
         text = re.sub(r'[（(][^（()）]{1,12}\.(?:jpg|png|gif|jpeg)[）)]', '', text, flags=re.IGNORECASE)
         text = re.sub(
             r'[（(](?:'
@@ -2060,6 +2054,17 @@ class TextProcessing:
             return text
         kept = [line for line in lines if not _LEAK_LABEL_RE.match(line)]
         return "\n".join(kept).strip()
+
+    @staticmethod
+    def _unwrap_reply(text: str) -> str:
+        """Drop quotes wrapping the WHOLE reply; one closing a phrase stays."""
+        text = text.strip()
+        for left, right in (('"', '"'), ("「", "」")):
+            pairs = text.count(left) if left == right else text.count(left) + text.count(right)
+            if (len(text) >= 2 and text.startswith(left) and text.endswith(right)
+                    and pairs == 2):
+                return text[1:-1].strip()
+        return text
 
     @staticmethod
     def _looks_like_reasoning_leak(text: str) -> bool:

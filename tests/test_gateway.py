@@ -3788,6 +3788,21 @@ async def test_json_mode_blank_falls_back_to_plain_text(tmp: Path) -> None:
     check("without the flag there is no second call and nothing is recovered",
           len(payloads) == 1 and out == "", repr((len(payloads), out)))
 
+    # Some upstreams ignore JSON mode and answer in prose on the FIRST call.
+    class _ProseHTTP(_HTTP):
+        async def post(self, url, headers=None, json=None):
+            payloads.append(json)
+            return _Resp("the lane is quiet tonight")
+
+    payloads.clear()
+    agent._http = lambda **_kw: _ProseHTTP("")
+    out = await agent._call_llm(
+        "sys", [{"role": "user", "content": "hi"}], model="m", max_tokens=1200,
+        enable_search=False, json_object=True, plain_text_fallback=True)
+    check("prose answered in JSON mode is wrapped, not dropped, in one call",
+          TextProcessing._parse_model_output(out)[0] == "the lane is quiet tonight"
+          and len(payloads) == 1, repr((out, len(payloads))))
+
 
 async def test_only_the_reply_calls_recover_plain_text(tmp: Path) -> None:
     """The plain-text rung is for calls whose schema IS `reply`. The group

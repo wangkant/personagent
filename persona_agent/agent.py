@@ -1343,7 +1343,7 @@ class Agent(ContentIngestion, Transport, Learning):
         had_visible = bool(filtered.strip())
         reply = TextProcessing._sanitize_reply(
             filtered, self._validator_lang(), self.reply_style)
-        reply = reply.strip().strip('"').strip("「」")
+        reply = TextProcessing._unwrap_reply(reply)
         # Non-digit targets included: gateway ids look like "telegram:12345".
         at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
         at_uid = at_match.group(1) if at_match else ""
@@ -2116,6 +2116,14 @@ class Agent(ContentIngestion, Transport, Learning):
         # whatever the rungs above left empty, whatever their reason — gating
         # it on the one diagnosis that led here would miss the next variant
         # of the same provider behaviour.
+        # JSON mode is a request, not a guarantee: some upstreams answer in
+        # prose anyway, and that prose is the reply, not something to drop.
+        if (text and json_object and plain_text_fallback
+                and not re.sub(r"^```(?:json)?\s*", "", text.lstrip(),
+                               flags=re.IGNORECASE).startswith(("{", "["))):
+            logger.info("[Agent] prose answer in JSON mode, wrapped (model=%s)",
+                        used_model)
+            text = _as_protocol_object(text)
         if not text and json_object and plain_text_fallback:
             logger.warning(
                 "[Agent] blank content in json_object mode (model=%s, "
@@ -2280,7 +2288,13 @@ class Agent(ContentIngestion, Transport, Learning):
                         "mentions a meme/slang/person/product/current event/"
                         "price/concrete fact you are unsure about, call "
                         "web_search to look it up; otherwise do nothing. Only "
-                        "decide — do not write a reply.\n\n"
+                        "decide — do not write a reply.\n"
+                        f"The user is chatting with a character named "
+                        f"{self.bot_name or 'the character'}. Questions about "
+                        "the character, the conversation, or the character's "
+                        "own home, friends and story are answered in "
+                        "character and are NEVER searched; neither are "
+                        "greetings, feelings or everyday small talk.\n\n"
                         f"{_UNTRUSTED_INPUT_RULES}"
                     )},
                     # The trigger is a person's words, and this call picks
