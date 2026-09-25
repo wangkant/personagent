@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"prefiltered": false` on the event, which makes a platform without entries
   default-deny (docs/connectors.md). A refusal is now logged once per
   conversation at INFO, naming the setting that refused it.
+- **A forwarded quote says what it quotes.** A `reply` segment may carry the
+  quoted `text`, `sender_id` and `sender_name`. When the agent never saw the
+  original itself (its own replies, or anything older than its index), a quote
+  used to read as a bare `[reply]`; it now reads `[reply Bob: ...]`, fenced as
+  text the sender did not write. An `emoji` segment's `name` reaches the model
+  as `[emoji: name]`, and an image with `"sticker": true` reads as a sticker.
+  Old forwarders send none of this and see no change.
 
 ### Deprecated
 

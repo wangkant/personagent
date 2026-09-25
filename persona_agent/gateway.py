@@ -23,14 +23,31 @@ Neutral inbound event schema (the body of POST /webhook/gateway):
       "segments": [
         {"type": "text", "text": str}
         | {"type": "mention", "user_id": str, "name": str}
-        | {"type": "image", "url": str?, "b64": str?}
-        | {"type": "emoji", "name": str?}
-        | {"type": "reply"}
+        | {"type": "image", "url": str?, "b64": str?, "sticker": bool?}
+        | {"type": "emoji", "name": str?, "id": str?}
+        | {"type": "reply", "message_id": str?, "text": str?,
+           "sender_id": str?, "sender_name": str?}
       ],
       "raw_text":        str,
       "proactive":       bool?,                  # see below
-      "prefiltered":     bool?                   # default true; see below
+      "prefiltered":     bool?,                  # default true; see below
+      "forwarder_id":    str?,                   # see below
+      "reply_handle":    str?,
+      "caps":            [str]?
     }
+
+A reply segment's `text` is the quoted message as the forwarder saw it. The
+agent prefers its own record of that message and uses the forwarder's only
+when it never saw the original (a quote of its own reply, or of something
+older than its index), fenced as text the sender did not write. An emoji's
+`name` reaches the model as `[emoji: name]`; an image with `sticker` true
+reads as `[sticker: ...]` instead of `[image: ...]`.
+
+`forwarder_id`, `reply_handle` and `caps` say how to reach the conversation
+later without an incoming message (docs/connectors.md, "Outbox"). They are
+remembered per conversation once a turn is admitted (outbox.HandleStore);
+a value of the wrong type or shape is ignored, never a 400, so an old
+forwarder that sends none of them behaves exactly as before.
 
 `prefiltered` says whether the forwarder applied its own allowlist. Absent or
 true, a platform with no ALLOWED_GROUPS / ALLOWED_DM_USERS entries is left to
@@ -257,6 +274,46 @@ class GatewaySink:
         return True
 
 
+#: Longest forwarder id and reply handle kept; a longer one is ignored. A
+#: handle is opaque and echoed back verbatim, so it is refused, not cut.
+MAX_FORWARDER_ID_CHARS = 128
+MAX_REPLY_HANDLE_CHARS = 512
+_MAX_CAPS = 16
+
+
+def _opaque(value, limit: int) -> str:
+    """A string the agent stores and hands back, or "" when it is not one:
+    not a string, blank, too long, or carrying control characters."""
+    if not isinstance(value, str):
+        return ""
+    value = value.strip()
+    if not value or len(value) > limit:
+        return ""
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        return ""
+    return value
+
+
+def event_forwarder(event: dict) -> dict:
+    """The event's outbox fields, cleaned: `forwarder_id`, `reply_handle`
+    and `caps` (a sorted tuple of lowercase names). Invalid parts read as
+    absent rather than refusing the event."""
+    caps: set[str] = set()
+    raw_caps = event.get("caps")
+    if isinstance(raw_caps, (list, tuple)):
+        for cap in raw_caps[:_MAX_CAPS]:
+            name = _opaque(cap, 32).lower()
+            if name and ":" not in name:
+                caps.add(name)
+    return {
+        "forwarder_id": _opaque(event.get("forwarder_id"),
+                                MAX_FORWARDER_ID_CHARS),
+        "reply_handle": _opaque(event.get("reply_handle"),
+                                MAX_REPLY_HANDLE_CHARS),
+        "caps": tuple(sorted(caps)),
+    }
+
+
 def event_prefiltered(event: dict) -> bool:
     """The event's `prefiltered` flag; anything but an explicit no is yes.
 
@@ -329,18 +386,40 @@ def synthesize_onebot_payload(
         elif t == "image":
             url = str(seg.get("url") or "")
             b64 = str(seg.get("b64") or "")
+            image: dict = {}
             if url:
-                message.append({"type": "image", "data": {"url": url}})
+                image = {"url": url}
             elif b64:
-                message.append({"type": "image", "data": {"file": f"base64://{b64}"}})
+                image = {"file": f"base64://{b64}"}
+            if image:
+                if seg.get("sticker") is True:
+                    image["sticker"] = True
+                message.append({"type": "image", "data": image})
         elif t == "emoji":
-            message.append({"type": "face", "data": {}})
+            face = {}
+            for key in ("name", "id"):
+                value = seg.get(key)
+                if isinstance(value, (str, int)) and str(value).strip():
+                    face[key] = str(value).strip()[:64]
+            message.append({"type": "face", "data": face})
         elif t == "reply":
             reply_id = seg.get("message_id", seg.get("id"))
             data = {}
             if reply_id is not None and reply_id != "":
                 data["id"] = _ns_mid(
                     platform, native, conversation_id, reply_id)
+            # What the forwarder saw of the quoted message; _extract_text
+            # uses it only when the agent has no record of its own.
+            quoted = seg.get("text")
+            if isinstance(quoted, str) and quoted.strip():
+                data["quote_text"] = quoted[:500]
+                sender = str(seg.get("sender_id") or "")
+                if self_id and sender == self_id:
+                    data["quote_self"] = True
+                else:
+                    name = seg.get("sender_name")
+                    if isinstance(name, str) and name.strip():
+                        data["quote_name"] = name[:64]
             message.append({"type": "reply", "data": data})
     # Some platforms signal "this message addresses the bot" without a real
     # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at

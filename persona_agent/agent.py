@@ -1656,8 +1656,11 @@ class Agent(ContentIngestion, Transport, Learning):
             elif t == "image":
                 url = d.get("url") or d.get("file", "")
                 file_field = d.get("file", "")
+                # A forwarder marks a sticker sent as an image; the focus
+                # block and the prompt treat [sticker] and [image] alike.
+                kind = "sticker" if d.get("sticker") is True else "image"
                 if not url:
-                    parts.append("[image]")
+                    parts.append(f"[{kind}]")
                     continue
                 entry = self.stickers.lookup_by_file_field(file_field)
                 if entry and entry.get("auto_tagged") and entry.get("meaning"):
@@ -1667,7 +1670,7 @@ class Agent(ContentIngestion, Transport, Learning):
                     ))
                     continue
                 desc = await self._describe_image(url)
-                parts.append(_fence(f"[image: {desc}]") if desc else "[image]")
+                parts.append(_fence(f"[{kind}: {desc}]") if desc else f"[{kind}]")
                 # Sticker stealing is a QQ-path feature: gateway images must
                 # not get cataloged into the QQ sticker library or burn
                 # tagging calls, so skip the spawn while the gateway sink is
@@ -1680,7 +1683,10 @@ class Agent(ContentIngestion, Transport, Learning):
                         group_id=group_id,
                     ))
             elif t == "face":
-                parts.append("[face]")
+                # A forwarded platform emoji carries its name; fenced because
+                # whoever named a custom emoji is not the sender.
+                name = _clean_prompt_source(d.get("name")).strip()[:40]
+                parts.append(_fence(f"[emoji: {name}]") if name else "[face]")
             elif t == "reply":
                 # QQ quote-reply: data.id is the quoted message's id. Resolve it
                 # to the original text so the model knows what's being replied to;
@@ -1688,7 +1694,9 @@ class Agent(ContentIngestion, Transport, Learning):
                 # what → wrong-person / crossed-thread replies. Falls back to a
                 # bare "[reply]" if it can't be fetched (never blocks / drops).
                 qid = d.get("id")
-                quoted = await self._resolve_quote(qid, group_id) if qid else ""
+                hint = self._quote_hint(d)
+                quoted = (await self._resolve_quote(qid, group_id, hint=hint)
+                          if qid or hint else "")
                 parts.append(_fence(f"[reply {quoted}]") if quoted else "[reply]")
             elif t == "record":
                 # Voice message — no ASR pipeline; show a clean placeholder
@@ -1744,20 +1752,37 @@ class Agent(ContentIngestion, Transport, Learning):
         if len(self._msg_index) > self._msg_index_cap:
             del self._msg_index[next(iter(self._msg_index))]
 
-    async def _resolve_quote(self, mid, group_id: str) -> str:
+    def _quote_hint(self, data: dict) -> str:
+        """The forwarder's copy of a quoted message as 'speaker: text', in
+        the shape _index_msg stores, or ''."""
+        text = " ".join(
+            _clean_prompt_source(data.get("quote_text")).split())[:60]
+        if not text:
+            return ""
+        if data.get("quote_self") is True:
+            name = self.bot_name
+        else:
+            name = _clean_prompt_source(data.get("quote_name")).strip()[:8]
+        return f"{name}: {text}" if name else text
+
+    async def _resolve_quote(self, mid, group_id: str, hint: str = "") -> str:
         """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
         understands the referent. Layer A: local _msg_index (zero cost, hits most
-        recent messages). Layer B: NapCat get_msg (one call, only on a miss). Any
-        failure returns '' — the caller degrades to a bare '[reply]', never
-        blocking or dropping the message."""
-        if mid is None:
-            return ""
-        key = str(mid)
-        hit = self._msg_index.get(key)
-        if hit:
-            return hit
+        recent messages). Then the forwarder's own copy (`hint`), which covers
+        the bot's replies and anything older than the index. Layer B: NapCat
+        get_msg (one call, only on a miss). Any failure returns '' — the caller
+        degrades to a bare '[reply]', never blocking or dropping the message."""
+        key = "" if mid is None or mid == "" else str(mid)
+        if key:
+            hit = self._msg_index.get(key)
+            if hit:
+                return hit
+        if hint:
+            if key:
+                self._index_msg(key, hint)
+            return hint
         # Gateway path has no NapCat to query; skip the API call.
-        if current_sink.get() is not None:
+        if not key or current_sink.get() is not None:
             return ""
         try:
             async with self._local_http(timeout=4) as client:
