@@ -32,6 +32,9 @@ Inbound, for each message in an allowed room:
   sent to the agent as bytes, up to 4 MB. Matrix media has needed an access
   token since spec 1.11, so the agent could not fetch a URL itself. Voice
   messages, videos and files are described in words.
+- A room's messages reach the agent in the order they were sent: one sent
+  after an image waits until the image is downloaded. The agent can still
+  work on several at once.
 - The timestamp is the homeserver's `origin_server_ts`.
 - Skipped: the bot's own messages, `m.notice` (the message type bots use,
   so two bots never answer each other), edits, reactions, messages from
@@ -95,6 +98,11 @@ again.
 To use an existing access token instead, set `MATRIX_ACCESS_TOKEN`; the
 connector asks the homeserver whose it is. Do not take the token of a session
 you use yourself: logging that session out also logs the bot out.
+
+When the homeserver logs the bot out (`M_UNKNOWN_TOKEN`), the connector stops
+with an error saying so. After a password login, starting it again logs in
+again; with `MATRIX_ACCESS_TOKEN`, set a new token first. Any other failed
+sync is retried after a wait that doubles up to a minute.
 
 ### Where the agent can run
 

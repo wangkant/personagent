@@ -89,16 +89,18 @@ def _platform_name(raw: str) -> str:
 @dataclass
 class Config:
     endpoint: str = DEFAULT_ENDPOINT
-    satori_token: str = ""
+    satori_token: str = field(default="", repr=False)
     agent_url: str = DEFAULT_AGENT_URL
-    gateway_token: str = ""
+    gateway_token: str = field(default="", repr=False)
     forwarder_id: str = ""
     platforms: frozenset = frozenset()
     platform_names: dict = field(default_factory=lambda: dict(DEFAULT_PLATFORM_NAMES))
     groups: frozenset = frozenset()
     dm_users: frozenset = frozenset()
     outbox: bool = True
-    timeout_s: float = 180.0
+    # The agent's own ceiling is LLM_TIMEOUT x (1 + LLM_MAX_RETRIES) plus a
+    # debounce: 360 s and change with its defaults.
+    timeout_s: float = 420.0
     inline_images: bool = False
     reply_gap_s: tuple = (0.8, 1.8)
 
@@ -113,9 +115,9 @@ class Config:
         forwarder = (env.get("SATORI_FORWARDER_ID") or "").strip() or (
             "satori-" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:8])
         try:
-            timeout = float(env.get("SATORI_TIMEOUT_S") or 180)
+            timeout = float(env.get("SATORI_TIMEOUT_S") or cls.timeout_s)
         except ValueError:
-            timeout = 180.0
+            timeout = cls.timeout_s
         return cls(
             endpoint=endpoint,
             satori_token=(env.get("SATORI_TOKEN") or "").strip(),
@@ -726,9 +728,20 @@ def _retry_after(response: httpx.Response) -> float:
         return 3.0
 
 
+def redacted_info(base: type) -> type:
+    """satori-python's WebsocketsInfo with a repr that leaves the token out:
+    the library logs the whole config when the server reports no login."""
+    class WebsocketsInfo(base):
+        def __repr__(self) -> str:
+            return (f"WebsocketsInfo(host={self.host!r}, port={self.port!r}, "
+                    f"path={self.path!r}, secure={self.secure!r})")
+    return WebsocketsInfo
+
+
 async def serve(config: Config) -> None:
     import satori
     from satori.client import App, WebsocketsInfo
+    from satori.client.network.websocket import WsNetwork
 
     connector = sdk.Connector(config.agent_url, config.gateway_token,
                               forwarder_id=config.forwarder_id, timeout_s=config.timeout_s)
@@ -736,7 +749,10 @@ async def serve(config: Config) -> None:
     if info["token"] and not info["secure"] and not _loopback(config.satori_host):
         logger.warning("SATORI_TOKEN goes to %s in clear text; use https or a tunnel",
                        config.satori_host)
-    app = App(WebsocketsInfo(**info))
+    safe_info = redacted_info(WebsocketsInfo)
+    # App picks the network by the config's exact class, not a subclass.
+    App.register_config(safe_info, WsNetwork)
+    app = App(safe_info(**info))
     bridge = SatoriBridge(config, connector, accounts=lambda: list(app.accounts.values()),
                           lib=satori)
     app.register_on(satori.EventType.MESSAGE_CREATED)(bridge.on_message)

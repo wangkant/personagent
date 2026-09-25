@@ -73,6 +73,8 @@ TYPING_TIMEOUT_MS = 30_000
 TYPING_REFRESH_S = 20.0
 MAX_CONCURRENT_TURNS = 16
 RECENT_EVENTS = 1024
+# The wait after a failed sync: doubling from the first, up to the second.
+SYNC_RETRY_S = (1.0, 60.0)
 HTML_FORMAT = "org.matrix.custom.html"
 _BLOCK_TAGS = frozenset({"p", "div", "li", "blockquote", "pre", "tr", "ul", "ol", "table",
                          "h1", "h2", "h3", "h4", "h5", "h6"})
@@ -436,8 +438,8 @@ class MatrixConnector:
 
     `client` is a matrix-nio AsyncClient, or anything with the same few
     methods: room_send, room_typing, upload, download, room_get_event,
-    room_read_markers, join, list_direct_rooms, and the `rooms` and `user_id`
-    attributes."""
+    room_read_markers, join, list_direct_rooms, stop_sync_forever, and the
+    `rooms` and `user_id` attributes."""
 
     def __init__(self, client: Any, settings: Settings, agent: sdk.Connector, *,
                  decrypt: Optional[Callable[[bytes, str, str, str], bytes]] = None):
@@ -448,11 +450,17 @@ class MatrixConnector:
         self.direct_rooms: set[str] = set()
         self.pause_s = (0.8, 1.8)
         self.now: Callable[[], float] = time.time
+        self.sleep: Callable[[float], Any] = asyncio.sleep
+        # Why the homeserver logged the bot out, once it has.
+        self.revoked = ""
+        self._sync_failures = 0
         # event id -> (sender, text), so most replies resolve without a fetch.
         self._recent: collections.OrderedDict[str, tuple[str, str]] = collections.OrderedDict()
         self._typing: dict[str, int] = {}
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._tasks: set[asyncio.Task] = set()
+        # room id -> done once the room's latest event has gone to the agent.
+        self._posted: dict[str, asyncio.Future] = {}
         self._turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
         self._joining: set[str] = set()
         self._warned: set[str] = set()
@@ -531,13 +539,44 @@ class MatrixConnector:
             response = await self.client.join(room_id)
         except Exception as exc:
             response = exc
-        if not getattr(response, "room_id", None):
+        finally:
+            # Only while the join is in flight: the bot may be invited back
+            # after a kick or a leave.
             self._joining.discard(room_id)
+        if not getattr(response, "room_id", None):
             logger.warning("could not join %s: %s", room_id, response)
             return
         if is_direct:
             self.direct_rooms.add(room_id)
         logger.info("joined %s on an invite from %s", room_id, inviter)
+
+    # ----- the sync loop -----
+
+    async def on_sync(self, response: Any) -> None:
+        """nio response callback for SyncResponse."""
+        self._sync_failures = 0
+
+    async def on_sync_error(self, response: Any) -> None:
+        """nio response callback for SyncError. sync_forever retries a failed
+        sync at once and forever, but awaits this first: waiting here is the
+        backoff, and a revoked token stops the loop instead."""
+        code = str(getattr(response, "status_code", "") or "")
+        message = str(getattr(response, "message", "") or "")
+        if code == "M_UNKNOWN_TOKEN":
+            remedy = ("set a new MATRIX_ACCESS_TOKEN" if self.settings.access_token
+                      else "restart the connector to log in again with MATRIX_PASSWORD")
+            self.revoked = f"the homeserver logged the bot out ({code}: {message}); {remedy}"
+            logger.error("%s", self.revoked)
+            self.client.stop_sync_forever()
+            return
+        if code == "M_LIMIT_EXCEEDED":
+            return  # nio already waits out a rate limit before it retries
+        low, high = SYNC_RETRY_S
+        delay = min(low * 2 ** self._sync_failures, high)
+        self._sync_failures += 1
+        logger.warning("sync failed (%s: %s); retrying in %.0f s", code or "no errcode",
+                       message, delay)
+        await self.sleep(delay)
 
     # ----- inbound -----
 
@@ -569,7 +608,10 @@ class MatrixConnector:
         if event_id in self._recent:
             return self._recent[event_id]
         try:
-            response = await self.client.room_get_event(room.room_id, event_id)
+            # Bounded: nio retries a timeout forever, and the room's later
+            # events wait for this one.
+            response = await asyncio.wait_for(
+                self.client.room_get_event(room.room_id, event_id), DOWNLOAD_TIMEOUT_S)
             event = getattr(response, "event", None)
             source = getattr(event, "source", None)
             if isinstance(source, dict) and source.get("type") == "m.room.encrypted":
@@ -706,20 +748,41 @@ class MatrixConnector:
         return event
 
     async def handle(self, room: Any, source: Mapping) -> None:
-        async with self._turns:
-            try:
-                event = await self.build_event(room, source)
-            except Exception:
-                logger.exception("could not read event %s", source.get("event_id"))
-                return
+        # Events are built at once but go to the agent in timeline order, so a
+        # text never overtakes an image still downloading; the turns overlap.
+        # Tasks start in the order nio delivered the events.
+        room_id = str(getattr(room, "room_id", ""))
+        previous = self._posted.get(room_id)
+        posted = asyncio.get_running_loop().create_future()
+        self._posted[room_id] = posted
+        try:
+            async with self._turns:
+                try:
+                    event = await self.build_event(room, source)
+                except Exception:
+                    logger.exception("could not read event %s", source.get("event_id"))
+                    event = None
+            # Without a slot: the event before may still be waiting for one.
+            if previous is not None:
+                await previous
             if event is not None:
-                await self._turn(room, event)
+                async with self._turns:
+                    await self._turn(room, event, posted)
+        finally:
+            if not posted.done():
+                posted.set_result(None)
+            if self._posted.get(room_id) is posted:
+                del self._posted[room_id]
 
-    async def _turn(self, room: Any, event: dict) -> None:
+    async def _turn(self, room: Any, event: dict,
+                    posted: Optional[asyncio.Future] = None) -> None:
         room_id = room.room_id
         thread_root = event.pop("_thread_root", "")
         await self._typing_start(room_id)
         try:
+            if posted is not None:
+                # The next event wakes after this post has started.
+                posted.set_result(None)
             try:
                 answer = await self.agent.send_event(event)
             except httpx.HTTPStatusError as exc:
@@ -1013,6 +1076,8 @@ async def run(settings: Settings, *, nio_module: Any = None,
         await connector.refresh_direct_rooms()
         client.add_event_callback(connector.on_room_event,
                                   (nio.RoomMessage, nio.StickerEvent, nio.MegolmEvent))
+        client.add_response_callback(connector.on_sync, nio.SyncResponse)
+        client.add_response_callback(connector.on_sync_error, nio.SyncError)
         logger.info("listening as %s on %s", client.user_id, settings.homeserver)
 
         jobs = [asyncio.ensure_future(client.sync_forever(timeout=30_000)),
@@ -1025,6 +1090,8 @@ async def run(settings: Settings, *, nio_module: Any = None,
             job.cancel()
         await asyncio.gather(*jobs, return_exceptions=True)
         await connector.drain()
+        if connector.revoked:
+            raise SystemExit(connector.revoked)
         for job in done:
             if not job.cancelled() and job.exception() is not None:
                 raise job.exception()

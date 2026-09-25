@@ -375,6 +375,74 @@ def test_a_threaded_message_is_answered_in_its_thread() -> None:
         "m.in_reply_to": {"event_id": "$e1"}}, repr(relation))
 
 
+def test_events_reach_the_agent_in_timeline_order_and_turns_overlap() -> None:
+    order: list[str] = []
+
+    async def main() -> None:
+        downloaded, text_arrived = asyncio.Event(), asyncio.Event()
+
+        async def agent(request: httpx.Request) -> httpx.Response:
+            event_id = json.loads(request.content)["message_id"]
+            order.append(event_id)
+            if event_id == "$img":
+                # The image's turn is still running when the text arrives.
+                await asyncio.wait_for(text_arrived.wait(), 2)
+            else:
+                text_arrived.set()
+            return httpx.Response(200, json={"owned": True, "replies": []})
+
+        conn, client = make()
+        conn.agent = mc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="mx1",
+                                      client=httpx.AsyncClient(transport=httpx.MockTransport(agent)))
+        client.media["mxc://example.org/pic"] = PNG
+        fetch = client.download
+
+        async def slow_download(mxc=None, **kwargs):
+            await downloaded.wait()
+            return await fetch(mxc=mxc)
+
+        client.download = slow_download
+        build = conn.build_event
+
+        async def build_or_fail(room, source):
+            if source["event_id"] == "$bad":
+                raise ValueError("unreadable")
+            return await build(room, source)
+
+        conn.build_event = build_or_fail
+        room = client.rooms[GROUP]
+        conn.on_room_event(room, Obj(source=msg("cat.png", msgtype="m.image", event_id="$img",
+                                                url="mxc://example.org/pic")))
+        conn.on_room_event(room, Obj(source=msg("?", event_id="$bad")))
+        conn.on_room_event(room, Obj(source=msg("look at this", event_id="$txt")))
+        for _ in range(20):
+            await asyncio.sleep(0)
+        check("the text waits for the image before it", order == [], repr(order))
+        downloaded.set()
+        await asyncio.wait_for(conn.drain(), 5)
+        check("nothing left in the chain", not conn._posted, repr(conn._posted))
+
+    asyncio.run(main())
+    check("timeline order, past an event that could not be read",
+          order == ["$img", "$txt"], repr(order))
+
+
+def test_a_quote_whose_fetch_hangs_falls_back(monkeypatch) -> None:
+    # Later events in the room wait for this one, so the fetch is bounded.
+    monkeypatch.setattr(mc, "DOWNLOAD_TIMEOUT_S", 0.05)
+    conn, client = make()
+
+    async def hang(room_id, event_id):
+        await asyncio.Event().wait()
+
+    client.room_get_event = hang
+    source = msg("> <@bob:example.org> earlier\n\nand?",
+                 **{"m.relates_to": {"m.in_reply_to": {"event_id": "$lost"}}})
+    event = asyncio.run(asyncio.wait_for(conn.build_event(client.rooms[GROUP], source), 2))
+    check("the fallback text stands in", event["segments"][0] == {
+        "type": "reply", "message_id": "$lost", "text": "earlier"}, repr(event["segments"]))
+
+
 # ---------- outbound ----------
 
 def test_a_turn_sends_the_replies_in_order_with_typing() -> None:
@@ -482,6 +550,23 @@ def test_invites_are_accepted_only_when_allowed() -> None:
     check("a direct invite marks a DM", conn.direct_rooms == {"!chat:example.org"})
 
 
+def test_a_room_left_and_invited_to_again_is_joined_again() -> None:
+    conn, client = make()
+    event = Obj(state_key=BOT, membership="invite", sender=ALEX,
+                content={"membership": "invite"})
+    asyncio.run(conn.on_invite(Obj(room_id=GROUP), event))
+    # Kicked, or left; then invited back.
+    asyncio.run(conn.on_invite(Obj(room_id=GROUP), event))
+    check("joined both times", client.joined == [GROUP, GROUP], repr(client.joined))
+
+    async def refused(room_id):
+        raise RuntimeError("M_FORBIDDEN")
+
+    client.join = refused
+    asyncio.run(conn.on_invite(Obj(room_id="!other:example.org"), event))
+    check("nothing is left marked as joining", not conn._joining, repr(conn._joining))
+
+
 # ---------- the matrix-nio wiring ----------
 
 def fake_nio(rooms: list):
@@ -503,6 +588,12 @@ def fake_nio(rooms: list):
     class InviteMemberEvent(Event):
         pass
 
+    class SyncResponse(Obj):
+        pass
+
+    class SyncError(Obj):
+        pass
+
     class AsyncClientConfig:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -515,16 +606,28 @@ def fake_nio(rooms: list):
             self.user_id = user
             self.homeserver, self.config = homeserver, config
             self.callbacks: list = []
+            self.response_callbacks: list = []
             self.should_upload_keys = False
             self.closed = False
+            self.stopping = False
             self.syncs = 0
             AsyncClient.instances.append(self)
 
         def add_event_callback(self, callback, filter):
             self.callbacks.append((callback, filter))
 
+        def add_response_callback(self, callback, filter):
+            self.response_callbacks.append((callback, filter))
+
+        def stop_sync_forever(self):
+            self.stopping = True
+
         async def whoami(self):
             return Obj(user_id=BOT, device_id="DEV")
+
+        async def login(self, password, device_name=None):
+            self.user_id, self.device_id, self.access_token = BOT, "DEV", "from-password"
+            return Obj(user_id=BOT, device_id="DEV", access_token="from-password")
 
         def restore_login(self, user_id, device_id, access_token):
             self.user_id, self.device_id, self.access_token = user_id, device_id, access_token
@@ -544,14 +647,25 @@ def fake_nio(rooms: list):
 
         async def sync_forever(self, timeout=None, **_):
             await self._dispatch(nio.live)
-            await asyncio.Event().wait()
+            # As nio does: a failed sync goes to the response callbacks and is
+            # retried at once, until stop_sync_forever.
+            for response in nio.failures:
+                if self.stopping:
+                    return
+                self.syncs += 1
+                for callback, kinds in self.response_callbacks:
+                    if isinstance(response, kinds):
+                        await callback(response)
+            if not self.stopping:
+                await asyncio.Event().wait()
 
         async def close(self):
             self.closed = True
 
-    for cls in (RoomMessage, StickerEvent, MegolmEvent, InviteMemberEvent, AsyncClientConfig,
-                AsyncClient):
+    for cls in (RoomMessage, StickerEvent, MegolmEvent, InviteMemberEvent, SyncResponse,
+                SyncError, AsyncClientConfig, AsyncClient):
         setattr(nio, cls.__name__, cls)
+    nio.backlog, nio.live, nio.failures = [], [], []
     return nio
 
 
@@ -598,3 +712,41 @@ def test_run_skips_the_backlog_and_serves_events_and_the_outbox() -> None:
     check("encryption off unless asked", client.config.kwargs == {
         "encryption_enabled": False, "store_sync_tokens": False})
     check("closed", client.closed)
+
+
+def test_a_revoked_token_stops_the_connector_instead_of_spinning(tmp: Path) -> None:
+    # A token login needs a new token; a password login only a restart.
+    for access_token, remedy in (("t", "MATRIX_ACCESS_TOKEN"), ("", "restart")):
+        nio = fake_nio(rooms=[Room(GROUP, {BOT: "Nova", ALEX: "Alex"})])
+        nio.failures = [nio.SyncError(message="Invalid access token passed.",
+                                      status_code="M_UNKNOWN_TOKEN")] * 50
+        s = settings(outbox=False, access_token=access_token, password="pw", store_path=tmp)
+        with pytest.raises(SystemExit, match=remedy) as stopped:
+            asyncio.run(asyncio.wait_for(
+                mc.run(s, nio_module=nio, agent_client=agent_client([], [])), 2))
+        client = nio.AsyncClient.instances[0]
+        check("the reason is named", "Invalid access token passed." in str(stopped.value),
+              str(stopped.value))
+        check("no sync after the refusal", client.syncs == 2, str(client.syncs))
+        check("closed", client.closed)
+
+
+def test_a_failing_sync_backs_off_until_one_succeeds() -> None:
+    conn, _ = make()
+    delays: list = []
+
+    async def sleep(seconds: float) -> None:
+        delays.append(seconds)
+
+    async def main() -> None:
+        conn.sleep = sleep
+        for _ in range(8):
+            await conn.on_sync_error(Obj(message="Internal server error", status_code="M_UNKNOWN"))
+        await conn.on_sync_error(Obj(message="Too many requests", status_code="M_LIMIT_EXCEEDED"))
+        await conn.on_sync(Obj(next_batch="s9"))
+        await conn.on_sync_error(Obj(message="unknown error", status_code=None))
+
+    asyncio.run(main())
+    check("doubling up to a minute, nio's own rate-limit wait left alone, reset by a sync",
+          delays == [1, 2, 4, 8, 16, 32, 60, 60, 1], repr(delays))
+    check("a server error does not stop the connector", not conn.revoked)

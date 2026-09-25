@@ -7,9 +7,10 @@ import base64
 import json
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import httpx
 
@@ -487,6 +488,86 @@ def test_settings_from_the_environment() -> None:
           default.forwarder_id == sc.Config.from_env({}).forwarder_id
           and default.forwarder_id != cfg.forwarder_id
           and default.forwarder_id.startswith("satori-"))
+
+
+def fake_satori(monkeypatch) -> SimpleNamespace:
+    """satori-python's client as serve() uses it. Like the real App, it finds
+    the network by the config's exact class, and logs the config as-is when
+    the server reports no login."""
+    @dataclass
+    class WebsocketsInfo:
+        host: str = "localhost"
+        port: int = 5140
+        path: str = ""
+        token: str | None = None
+        secure: bool = False
+        timeout: float | None = None
+
+    class App:
+        mapping: dict = {WebsocketsInfo: "WsNetwork"}
+        instances: list = []
+
+        @classmethod
+        def register_config(cls, tc, tn) -> None:
+            cls.mapping[tc] = tn
+
+        def __init__(self, *configs):
+            for config in configs:
+                if config.__class__ not in self.mapping:
+                    raise TypeError(f"Unknown config type: {config}")
+            self.configs, self.accounts, self.logged = configs, {}, []
+            App.instances.append(self)
+
+        def register_on(self, event_type):
+            return lambda func: func
+
+        def lifecycle(self, callback) -> None:
+            pass
+
+        async def run_async(self) -> None:
+            self.logged.append(f"No account available for {self.configs[0]}")
+
+    fake = SimpleNamespace(App=App, WebsocketsInfo=WebsocketsInfo)
+    satori = ModuleType("satori")
+    satori.EventType = SimpleNamespace(MESSAGE_CREATED="message-created")
+    client = ModuleType("satori.client")
+    client.App, client.WebsocketsInfo = App, WebsocketsInfo
+    websocket = ModuleType("satori.client.network.websocket")
+    websocket.WsNetwork = "WsNetwork"
+    for name, module in (("satori", satori), ("satori.client", client),
+                         ("satori.client.network", ModuleType("satori.client.network")),
+                         ("satori.client.network.websocket", websocket)):
+        monkeypatch.setitem(sys.modules, name, module)
+    return fake
+
+
+async def test_the_satori_token_stays_out_of_the_log(monkeypatch) -> None:
+    fake = fake_satori(monkeypatch)
+    cfg = sc.Config.from_env({"SATORI_TOKEN": "s3cret", "GATEWAY_TOKEN": "g4te",
+                              "SATORI_OUTBOX": "false"})
+    await sc.serve(cfg)
+    app = fake.App.instances[0]
+    check("the network still gets the token", app.configs[0].token == "s3cret"
+          and isinstance(app.configs[0], fake.WebsocketsInfo))
+    check("the line satori-python logs without a login leaves it out",
+          "s3cret" not in app.logged[0] and "127.0.0.1" in app.logged[0], app.logged[0])
+    check("so does the connector's own config", "s3cret" not in repr(cfg)
+          and "g4te" not in repr(cfg), repr(cfg))
+
+
+def test_the_default_timeout_outlasts_the_agents_default_turn() -> None:
+    from persona_agent.settings import AgentSettings
+
+    agent = AgentSettings.from_env(env={})
+    turn = agent.llm_timeout * (1 + agent.api_max_retries) + agent.message_debounce_sec
+    default = sc.Config.from_env({}).timeout_s
+    check("longer than a turn with the agent's defaults", default > turn, f"{default} vs {turn}")
+    check("the field agrees", sc.Config().timeout_s == default)
+    satori = Path(sc.__file__).parent
+    template = (satori / ".env.example").read_text(encoding="utf-8")
+    readme = (satori / "README.md").read_text(encoding="utf-8")
+    check(".env.example agrees", f"SATORI_TIMEOUT_S={default:.0f}\n" in template)
+    check("the README agrees", f"| `SATORI_TIMEOUT_S` | `{default:.0f}` |" in readme)
 
 
 def test_a_config_file_under_the_environment(tmp: Path, monkeypatch) -> None:
