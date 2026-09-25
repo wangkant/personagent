@@ -1,256 +1,297 @@
 # Deploying personagent
 
-The README covers the happy path. This covers the parts that are load-bearing
-and were previously written down nowhere — every item here was found by an
-audit that tried to deploy from a clean clone and hit something the docs did
-not mention.
+The README takes you from a clone to a first chat. This guide covers what a
+live deployment needs, and what to check when the bot goes quiet.
 
 ## The shortest config that works
 
-**To get one reply out of `python try_chat.py`: one setting.**
+For `python try_chat.py`, one setting:
 
 ```
 LLM_API_KEY=...
 ```
 
-`LLM_BASE_URL` and `LLM_MODEL` have working defaults; set them to use any
-other OpenAI-compatible `/v1` endpoint, hosted or a local ollama or
-llama.cpp server. There
-is no `persona.txt` requirement; a default persona ships in the code.
+`LLM_BASE_URL` and `LLM_MODEL` default to `https://api.deepseek.com` and
+`deepseek-chat`; point them at any OpenAI-compatible endpoint, hosted or local
+(Ollama, llama.cpp). Until you write a `persona.txt`, the bundled
+`data/persona.example.<lang>.txt` stands in.
 
-**To run live on QQ: three.**
+To run live behind AstrBot:
 
 ```
 LLM_API_KEY=...
-BOT_NAME=...          # what the persona is called, and what it answers to
-BOT_QQ=...            # the bot account's number
+BOT_NAME=...                         # the name it answers to
+GATEWAY_TOKEN=...                    # shared with the plugin; recommended, required across hosts
+# QQ only
+BOT_QQ=...                           # the bot account's number
+GATEWAY_NATIVE_PLATFORMS=aiocqhttp
 ```
 
-`NAPCAT_API` defaults to `http://127.0.0.1:3000`, `HOST`/`PORT` default to
-`127.0.0.1:8080`, and an empty `QQ_GROUPS` means every group the account is in.
+Everything else in `.env.example` has a working default: `HOST`/`PORT` are
+`127.0.0.1:8080`, `NAPCAT_API` is `http://127.0.0.1:3000`, and an empty
+`QQ_GROUPS` allows every group.
 
-Everything else in `.env.example` has a working default. Run
-`python tools/healthcheck.py` after configuring: it reports missing settings,
-**misspelled** ones (a typo is otherwise completely silent — the value is
-ignored and the default is used), and whether each upstream service answers.
+Then run `python tools/healthcheck.py`. It reports missing and **misspelled**
+settings (a typo is otherwise silent: the default is used) and whether each
+upstream service answers. Startup logs the same settings check.
 
-## What the host has to provide
+## What the host must provide
 
-Four requirements that nothing else states:
-
-1. **The deployment root must be writable.** Startup takes an instance lock at
+1. **A writable deployment root.** Startup takes a lock at
    `<AGENT_HOME>/.personagent.instance.lock`, outside `runtime/`. A read-only
    checkout fails to start.
-2. **One process per root.** That lock is how two copies are kept from
-   corrupting each other's ledgers. To run several personas from one installed
-   copy, give each its own `AGENT_HOME`.
-3. **`python main.py` runs from the repository root.** It starts uvicorn with
-   an import string (`main:app`), so the working directory has to contain it.
-4. **`data/` must sit next to the package.** If it does not, the root detector
-   falls back to the working directory and every seed lookup silently misses.
+2. **One process per root.** The lock stops two copies from corrupting each
+   other's ledgers. To run several personas from one installed copy, give each
+   its own `AGENT_HOME`.
+3. **`data/` next to the package.** Without `AGENT_HOME`, the root is the
+   checkout if `data/` sits beside `persona_agent/`, otherwise the working
+   directory. If neither has `data/`, every seed lookup silently misses.
 
-Two path rules that follow from `AGENT_HOME`: `AGENT_RUNTIME_DIR` must resolve
-beneath it (startup raises otherwise), and a relative `PERSONA_FILE` /
-`PERSONA_CARD_FILE` is resolved under it too, so a persona kept outside the
-checkout needs an absolute path.
+`AGENT_RUNTIME_DIR` must resolve beneath `AGENT_HOME`, or startup fails. A
+relative `PERSONA_FILE` or `PERSONA_CARD_FILE` resolves under it too, so a
+persona kept elsewhere needs an absolute path.
 
-## The OneBot bridge
+## Connecting through AstrBot
 
-> **Deprecated since 0.3.0.** The direct ingress described here — the
-> bridge's webhook posting to `/webhook/qq` — still works and is warned about
-> once at first use, but the supported path is AstrBot with
-> `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` (next section), which manages the QQ
-> client itself. Nothing below is lost on that path: the bridge's HTTP API
-> (`NAPCAT_API`) still carries the QQ-only background actions.
+personagent never logs in to a chat platform. AstrBot does, and the plugin in
+`integrations/astrbot/astrbot_plugin_llm_persona_gateway/` posts each message
+to `POST /webhook/gateway` and relays the replies in the response. This is the
+supported path for every platform, QQ included.
 
-This is the largest piece of the deployment and none of it lives in this
-repository. You need, roughly in order:
+`python quickstart.py` connects the two; `--astrbot <AstrBot data dir> [--qq]`
+does it without the wizard. It copies the plugin into `<data dir>/plugins/`,
+writes one `GATEWAY_TOKEN` to both `.env` and the plugin config, and points
+`agent_url` at `http://127.0.0.1:<PORT>/webhook/gateway`. With QQ it sets
+`excluded_platforms` to `[]` and `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`; without
+QQ it sets `["aiocqhttp"]` and blanks the setting. Either way it replaces the
+whole list. Rerunning `--astrbot` also empties the allowlists, turns
+`private_enabled` off and resets `agent_url`, so re-check the plugin settings
+afterwards.
 
-1. **A second QQ account.** Do not use your own — see `DISCLAIMER.md`.
-2. **The QQ NT desktop client**, which the bridge attaches to.
-3. **A OneBot v11 implementation**: [NapCat](https://github.com/NapNeko/NapCatQQ),
-   LLOneBot or Lagrange. NapCat is what this project is tested against.
-4. **A logged-in session** on that account, usually by QR, that survives
-   restarts.
-5. **Two network directions configured in the bridge**, which is the part
-   people get wrong:
-   - an **HTTP server** the agent calls to send messages — this is what
-     `NAPCAT_API` points at, `http://127.0.0.1:3000` by default;
-   - an **HTTP client / webhook** the bridge calls to deliver events, pointed
-     at `http://127.0.0.1:8080/webhook/qq` (`HOST`/`PORT`).
-6. **The bot account added to the target group.**
+The plugin is default-deny: fill in `group_whitelist`, and for DMs
+`private_enabled` and `private_whitelist`, in AstrBot's WebUI (every key is in
+the [plugin README](../integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)).
+On the personagent side:
 
-The exact configuration shape is the bridge's, not ours, and it has changed
-between NapCat major versions — read
-[NapCat's own configuration documentation](https://napneko.github.io/) rather
-than copying a snippet from here. What must be true is the two directions
-above; how they are spelled is theirs.
+- `GATEWAY_TOKEN` authenticates each request: the `X-Gateway-Token` header
+  plus an HMAC-SHA256 keyed with the token over `timestamp.nonce.body`, with a
+  replay guard. A captured request cannot be replayed or altered, but the
+  token is also the signing key: keep it out of logs and rotate it if it
+  leaks. Optional on one host, required across hosts.
+- `GATEWAY_OWNER_IDS` lists platform-prefixed ids (`telegram:12345`) that get
+  the owner branch in DMs, as `OWNER_QQ` does on QQ.
 
-**Verify the bridge before blaming the agent**, in this order:
+## QQ through AstrBot
 
-```bash
-# 1. the outbound direction: the agent -> the bridge
-curl http://127.0.0.1:3000/get_login_info
+You need a second QQ account (not your own; see
+[DISCLAIMER.md](../DISCLAIMER.md)) in the target groups, logged in (usually
+by QR code, in a session that survives restarts) to a OneBot v11
+implementation connected to AstrBot's `aiocqhttp` adapter:
+[NapCat](https://github.com/NapNeko/NapCatQQ) (tested; it attaches to the
+QQ NT desktop client), LLOneBot or Lagrange.
+Then remove `aiocqhttp` from the plugin's `excluded_platforms`, set
+`GATEWAY_NATIVE_PLATFORMS=aiocqhttp` (`--qq` does both), and set `BOT_QQ`.
 
-# 2. the inbound direction: send the bot a message in the group and watch
-#    the agent's log for the webhook arriving
-```
+**`GATEWAY_NATIVE_PLATFORMS` is not optional.** Without it, QQ ids arrive
+namespaced (`aiocqhttp:123456`) and every conversation looks new. Memory,
+history and learned examples are keyed by the bare id, and the ledgers derive
+row ids from the conversation id, so the split cannot be repaired afterwards.
 
-If (1) fails, the agent can never send. If (1) works and (2) never logs
-anything, the bridge's webhook is not configured or is pointed elsewhere. Both
-failures look identical from the outside — a bot that is running and silent.
+Bare ids carry QQ authority, so `OWNER_QQ`, `QQ_GROUPS` and
+`PRIVATE_ALLOWED_QQS` apply on top of the plugin's allowlists: a QQ DM must be
+in `private_whitelist` *and* come from `OWNER_QQ` or `PRIVATE_ALLOWED_QQS`.
+Only list a platform in `GATEWAY_NATIVE_PLATFORMS` if you trust its forwarder
+with that authority.
+
+**Keep NapCat's HTTP server on**, at `NAPCAT_API`. AstrBot reaches NapCat over
+a reverse WebSocket for messages and replies, but what personagent starts
+itself goes straight to `NAPCAT_API`: proactive messages (`PROACTIVE_ENABLE`,
+off by default), and the sweep for @-mentions missed while offline. The sweep
+runs at startup and then every 30 minutes, covers the groups in `QQ_GROUPS`
+plus any group with traffic since the last restart, and replays @-mentions
+under an hour old. Without the server the bot keeps answering but loses both,
+and (with `BOT_QQ` set) `healthcheck.py` shows the OneBot bridge failing.
+
+**Lost on this path**, with no setting to bring it back:
+
+- the OCR fallback for images that no vision model described;
+- quote lookup through NapCat. Quotes resolve only from personagent's own
+  index of recent messages.
+- collecting new stickers from images posted in groups;
+- anything sent after the request returns: the question asked two minutes
+  after a rejection (`REACT_ELICIT`), and the excuse sent when the model call
+  fails.
 
 ## More than one platform
 
-Everything above is the QQ path. For Telegram, Discord, Slack and the rest,
-the agent does not connect to the platform at all — a forwarder does, and
-POSTs a platform-neutral event to `POST /webhook/gateway`. The one in this
-repo is an [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin at
-`integrations/astrbot/astrbot_plugin_llm_persona_gateway/`; copy it into
-AstrBot's `data/plugins/`, and configure the platforms in AstrBot's own UI.
-The persona, memory, learning and typing simulation stay here.
+Telegram, Discord, Slack, KOOK, Lark and the other AstrBot platforms connect
+the same way (`quickstart.py --astrbot <dir> --platform <kind> --token <token>` switches one
+of the first five on in AstrBot's config). Their
+ids are namespaced as `<platform>:<id>`, so they never collide with a QQ
+number; the plugin's allowlists are their only filter.
 
-`python quickstart.py` connects the two for you: it copies the plugin into
-AstrBot's `data/plugins/`, generates `GATEWAY_TOKEN` and writes it to `.env`
-and to the plugin's config, writes the allowlists, and sets
-`GATEWAY_NATIVE_PLATFORMS` when QQ is included. `--astrbot <data dir> [--qq]`
-does the same without the wizard. What follows is what it writes and why.
+With no side channel like NapCat's HTTP API, personagent speaks only inside
+the request that brought a message. The proactive loops skip these
+conversations, and the delayed question and failure excuse are dropped, as on
+QQ.
 
-Two settings and one decision:
+**To speak first in a DM**, have your own scheduler (an AstrBot plugin task,
+a cron entry) post an ordinary private gateway event with `"proactive": true`
+(schema at the top of `persona_agent/gateway.py`). Its text is a cue to the
+persona ("they have been quiet a day; their exam was this morning"), not the
+other person's words, cut at 500 characters. The engine's proactive
+instructions still decide the turn and may keep the persona silent; if it
+speaks, the reply comes back in the response for the scheduler to relay.
+The request needs what the plugin's requests carry: the signed headers, every
+required field, the same platform name and raw user id the plugin sends,
+non-empty text, and a fresh `message_id` each time (a repeated one is dropped
+without a word).
 
-- `GATEWAY_TOKEN` — shared with the plugin. Required off-host, and the
-  request carries an HMAC-SHA256 envelope over `timestamp.nonce.body` with a
-  replay guard, so a token seen in a log is not enough on its own.
-- `GATEWAY_OWNER_IDS` — platform-prefixed ids (`telegram:12345`) that get the
-  owner branch in DMs. Gateway identities are namespaced `<platform>:<id>` so
-  they can never collide with a QQ number.
-- The decision: **does QQ go through the forwarder too?**
-
-Leave QQ on NapCat and you have two inbound paths but nothing to reconcile.
-Route it through the forwarder and there is one door and one place to
-configure platforms — but then set `GATEWAY_NATIVE_PLATFORMS` to the
-forwarder's QQ adapter name (`aiocqhttp` for AstrBot), or every QQ
-conversation arrives under a namespaced name it has never had before. Memory,
-history and every learned example are keyed the bare way, and the evidence and
-candidate ledgers content-address their rows over the conversation id — so the
-rename changes every id derived from it and cannot be undone by rewriting a
-field. `GATEWAY_NATIVE_PLATFORMS` keeps the ids identical to NapCat's.
-
-Naming a platform there grants its forwarder QQ authority, since bare ids are
-what `OWNER_QQ`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS` are compared against.
-Which is why those whitelists then apply to it, unlike to a namespaced
-platform — the forwarder's own allowlist is not the only filter any more.
-
-Do not run both doors for QQ at once; the same message would arrive twice.
-
-**Keep NapCat's HTTP server on either way.** AstrBot talks to NapCat over a
-reverse WebSocket, which covers inbound and replies — but it is not the
-channel this agent uses. What the agent starts on its own goes out through
-`NAPCAT_API` directly, and those are the two that depend on it: proactive
-messages, and the catch-up sweep for `@`s it missed while offline. Turn the
-HTTP server off because "AstrBot handles QQ now" and the bot keeps answering
-while quietly losing both, with nothing in the log to say so.
-
-Two more that used to be listed here do **not** survive the move, and no
-setting brings them back: resolving an old quoted message falls back to the
-agent's own in-process message index, and the OCR fallback is skipped
-outright. Both bail the moment the gateway sink is set, which
-`handle_gateway` installs for every forwarded event — including a native
-`aiocqhttp` one. NapCat is only asked for those on the deprecated direct
-ingress.
-
-That direct channel is also why QQ loses little by moving inbound: the
-outbound path never depended on where the message came from.
-
-**Other platforms have no such channel** — the agent can only speak inside the
-request that brought a message, because the reply sink closes when that
-request returns. The proactive loops skip any conversation whose id is
-namespaced, for want of anywhere to send.
-
-For proactive turns in a DM that is worked around rather than solved, by
-inverting them: POST an ordinary private gateway event with
-`"proactive": true`, and the text on it is read as a cue to the persona
-("they have been quiet a day; their exam was this morning") instead of as the
-other person's words. It is reference, not orders: the engine's own
-proactive instructions still decide what the turn is and let the persona stay
-silent, and the cue is cut at 500 characters. If it decides to speak, the
-reply comes back in the response like any other, and the caller relays it.
-Anything scheduling those requests works — AstrBot plugins can hold a
-background task or a cron entry.
-
-The flag is what keeps the cue out of the transcript. Without it the caller's
-own directive lands in the conversation history as something the reader said,
-stays for 40 turns, can be quoted back at them, and can be promoted into a
-memory about them.
-
-Group conversations have no such turn. A group event marked `"proactive"` is
-claimed, so your forwarder keeps its own model out of the room, and then
-dropped: nothing is said, and the text is never read as anyone's words.
-
-Delayed elicitation and the LLM-failure excuse are still lost on those
-platforms; both are fire-and-forget sends with no request to ride back on.
+Always set the flag. Without it, the cue is stored as the other person's
+words: it stays in the DM history for the next 40 messages, can be quoted back
+at them, and can be saved as a memory about them. A group event marked
+`"proactive"` is claimed (`owned: true`, so the forwarder keeps its own model
+quiet) and dropped unread.
 
 ## Exposing the webhook
 
-Keep the default loopback binding when the bridge and the agent share a
-machine. If they do not, set `HOST=0.0.0.0` **and both** `WEBHOOK_SECRET` and
-`GATEWAY_TOKEN`. Startup refuses a non-loopback `HOST` without them, including
-for a QQ-only deployment: `/webhook/gateway` is mounted whether or not you use
-it, so binding a public interface without a gateway token would leave it open.
+Keep `HOST=127.0.0.1` when AstrBot and personagent share a machine (a
+container counts only with the host's network namespace or host networking).
+Otherwise:
 
-With a credential blank, its endpoint accepts only local programs calling
-`http://127.0.0.1` (or `localhost`) directly. A request carrying `Origin`,
-a cross-site `Sec-Fetch-Site`, any other `Host` name, or a proxy header
-(`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`) is refused
-with 403 `non_local_request`: that is a browser tab or a tunnel, not NapCat or
-the plugin. Put a tunnel in front only with the credential set.
+1. Set `HOST=0.0.0.0` and **both** `GATEWAY_TOKEN` and `WEBHOOK_SECRET`.
+   Startup refuses a non-loopback `HOST` without both, since `/webhook/qq` is
+   served even if unused.
+2. Put an HTTPS reverse proxy or a private tunnel in front. The plugin posts
+   only to loopback, or to HTTPS with `gateway_token` set, and logs anything
+   else as `refusing unsafe agent_url`.
+3. Keep the body byte-for-byte intact (the signature covers it) and the
+   clocks within five minutes.
 
-## The detailed health endpoint
+With a credential blank, its endpoint serves only local programs calling
+`http://127.0.0.1` or `http://localhost` directly. A request with `Origin`, a
+`Sec-Fetch-Site` other than
+`none`, a `Host` other than `localhost`, `127.0.0.1` or `::1`, or a proxy
+header (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`) gets
+403 `non_local_request`. So set the credential before adding a tunnel, even
+on one host.
 
-`GET /health` is free and unauthenticated. `GET /health/details` probes the
-upstream services (cached 60 s) and is gated: with `GATEWAY_TOKEN` blank it
-answers loopback only; once a token is configured it answers **only** requests
-carrying a matching `X-Gateway-Token` header, and loopback alone is refused.
-A degraded critical dependency turns it into HTTP 503.
+## Health endpoints
 
-## Costs to know about
+- `GET /health` is free, open, and calls nothing.
+- `GET /health/details` probes the upstream services (cached 60 s). With
+  `GATEWAY_TOKEN` blank it answers local requests only; with a token, **only**
+  requests carrying a matching `X-Gateway-Token` header, even from loopback.
+  It returns 503 when a critical probe fails or cannot run: the chat models,
+  or the OneBot bridge when `BOT_QQ` is set.
+- `python tools/healthcheck.py [--json]` runs the same probes plus the
+  settings check, and exits non-zero in the same case.
 
-The gateway retains transient state for up to 256 namespaced conversations,
-evicting idle sessions in least-recently-used order. Active requests are pinned
-and may temporarily exceed this cap; completion reclaims the excess. Native
-QQ conversations do not enter this cache. Eviction clears recent history and
-pending reactions, but preserves long-term memories, core notes and learning
-ledgers. The memory maps are loaded from disk at startup and are not bounded
-by the transient conversation cap; back up `runtime/` to preserve learned state.
+## Costs
 
-- **`tools/healthcheck.py` spends credits.** Its probes POST to
-  `/v1/chat/completions` on every configured endpoint — primary, private, eval
-  and vision. The `GET /health` endpoint is the cheap one. The config and
-  ledger-size sections of the CLI cost nothing; the service probes do.
-- **`tools/prompt_lab.py` needs a second vendor.** `pip install -e ".[judge]"`
-  plus `ANTHROPIC_API_KEY`, because the lab generates through a different model
-  from the one being tuned — that separation is what makes it a measurement.
-- **`tools/auto_reviewer.py --dry-run` is free**; it calls no model. `--no-write`
-  reviews for real and prints instead of writing.
+- **Probes spend credit.** `healthcheck.py` and `/health/details` send one
+  tiny chat completion to each configured model endpoint (chat, private, eval
+  and vision), plus one Tavily search if `TAVILY_API_KEY` is set. `/health`
+  and the settings and ledger checks are free.
+- **`tools/prompt_lab.py` needs a second vendor**, so the tuning signal does
+  not come from the model being tuned: `pip install -e ".[judge]"`,
+  `ANTHROPIC_API_KEY` and `PROMPT_LAB_MODEL`.
+- **`tools/auto_reviewer.py --dry-run` is free**: no model call, nothing
+  written. `--no-write` reviews for real and prints instead of writing.
+- **Memory.** Past 256 namespaced (non-QQ) conversations, the least recently
+  active idle one loses its recent history and pending reactions; long-term
+  memories, core notes and ledgers stay. A conversation mid-request is never
+  evicted. Long-term memories are loaded from disk at startup and are not
+  bounded by this cap.
+- **Disk.** The evidence log and candidate ledger in `runtime/` are
+  append-only and never truncated; `healthcheck.py` flags either past 50 MB
+  (`AGENT_EVIDENCE_WARN_BYTES`, `AGENT_CANDIDATE_LEDGER_WARN_BYTES`). Back up
+  `runtime/`: it holds everything the bot has learned.
 
 ## When the bot goes quiet
 
-In rough order of likelihood:
+Most common first:
 
-1. **`BOT_QQ` unset or wrong on QQ.** A QQ @-mention carries the account's
-   number, so the mention detector never matches it: the bot starts cleanly,
-   logs nothing, and never answers. `healthcheck` warns about this now. Other
-   platforms need no `BOT_QQ`.
-2. **A misspelled setting.** Silent by construction — the default is used.
-   `healthcheck` lists any key `.env.example` does not know.
-3. **A BOM on `.env`.** The first setting's name carries it and never reaches
-   the process, and the file looks correct in every editor.
-4. **The bridge's webhook is not reaching you.** See the verification above.
-5. **`BOT_NAME` or `PERSONA_VERSION` changed.** Either starts a new character
-   and the promoted material of the old one is refused, with a warning when an
-   entire view is dropped. Editing `persona.txt` itself does not do this any
-   more: every revision seen under one `PERSONA_VERSION` shares the learning
-   scope (`runtime/persona_lineage.json`). Rows learned before that file
-   existed can be folded in with
-   `python tools/candidates_admin.py lineage adopt <hash>` (the hash is on the
-   candidate's scope in `show`), then `rebuild`.
+1. **The plugin forwards nothing.** Fill in its allowlists (DMs also need
+   `private_enabled`). On QQ, take `aiocqhttp` out of `excluded_platforms`.
+2. **AstrBot's own model answers instead.** The request failed, or
+   personagent turned the message away (item 4), and the plugin fell back.
+   AstrBot's log shows `refusing unsafe agent_url`, `agent refused the request
+   (403): <message>` (or another status; see the table below), or `timed out
+   waiting for the agent`. `timeout_s` (default 180) must cover the debounce
+   and every model call in the turn: keep `LLM_TIMEOUT × (1 + LLM_MAX_RETRIES)`
+   under it. The defaults (120 × 3 = 360 s) do not.
+3. **It was not called.** In a group it answers its name (`BOT_NAME`) or an
+   @. Otherwise it waits for enough conversation (`AGENT_TRIGGER_COUNT`, 30
+   messages by default) and may still pass.
+4. **personagent's QQ allowlists.** `QQ_GROUPS`, `OWNER_QQ` and
+   `PRIVATE_ALLOWED_QQS` apply to QQ through AstrBot too. A message they turn
+   away goes back unclaimed, so AstrBot's own model answers it.
+5. **A misspelled setting.** Silent by construction. The startup log and
+   `healthcheck.py` list every key `.env.example` does not know.
+6. **A BOM on `.env`.** The first setting's name carries it and never reaches
+   the process, though the file looks fine in every editor. Startup and
+   `healthcheck.py` report it; re-save as UTF-8 without a BOM.
+7. **`BOT_QQ` unset or wrong on QQ.** Through AstrBot, @-mentions still work
+   but the missed-mention sweep matches on it. On the direct ingress an
+   @-mention is never recognised: the bot starts cleanly, logs nothing, and
+   never answers one. `healthcheck.py` warns when `BOT_QQ` is empty and other
+   QQ settings are set; the template's `NAPCAT_API` line counts, so a non-QQ
+   deployment that keeps it sees the warning too.
+8. **It answers, but has forgotten what it learned.** QQ is arriving without
+   `GATEWAY_NATIVE_PLATFORMS=aiocqhttp`, or `BOT_NAME` or `PERSONA_VERSION`
+   changed, which starts a new character; the log warns when the old one's
+   promoted material is refused whole. Editing `persona.txt` does not: its
+   revisions under one `PERSONA_VERSION` share a learning scope
+   (`runtime/persona_lineage.json`). To fold in rows learned under a persona
+   hash the lineage does not list (for example, from before that file
+   existed), run `python tools/candidates_admin.py lineage adopt <hash>` (the
+   hash is in the candidate's scope in `show`), then `rebuild`. Changing
+   `AGENT_LANG` also switches to that language's learned files in
+   `runtime/`.
+
+Errors from `/webhook/gateway`. The plugin logs the message; `code` is the
+stable field a client can branch on.
+
+| Status | `code` | Message in AstrBot's log | Cause |
+|---|---|---|---|
+| 403 | `unauthenticated` | authentication required | no `GATEWAY_TOKEN`, and the caller is not on this machine |
+| 403 | `non_local_request` | no credential is configured; only local requests accepted | no `GATEWAY_TOKEN`; sent through a browser, a proxy or another host name |
+| 403 | `invalid_envelope` | invalid, stale, or replayed gateway envelope | missing or wrong token, headers or signature; clocks over 5 min apart; a reused nonce; or a full replay guard (`gateway replay guard full` in the agent's log) |
+| 403 | `stale_source_event` | stale gateway source event | the platform timestamp differs from now by more than `GATEWAY_SOURCE_MAX_AGE_SECONDS` (24 h), including future or millisecond timestamps |
+| 400 | `invalid_schema` | invalid gateway event schema | a required field is missing: `platform`, `message_type`, `user_id`, `message_id`, `source_timestamp`, and `conversation_id` for groups |
+| 400 | `client_disconnected` | client disconnected | the caller hung up while sending |
+| 408 | `body_timeout` | request body not received in time | the body took more than 30 s to arrive |
+| 413 | `body_too_large` | request body too large | over `MAX_WEBHOOK_BODY_BYTES` (8 MB), usually an inline image |
+| 429 | `capacity_exceeded` | webhook capacity exceeded | over `MAX_INFLIGHT_GATEWAY` turns in flight; retry after 3 s |
+
+## Legacy: the direct OneBot ingress
+
+Deprecated since 0.3.0, to be removed in a later release. NapCat's webhook posts
+events to `POST /webhook/qq`, and personagent replies through `NAPCAT_API`. It
+still works, warns once at first use, and marks every response
+`Deprecation: true`. `launch.vbs`, which starts NapCat and then `main.py` on
+Windows, is deprecated with it.
+
+To move over, connect NapCat to AstrBot's `aiocqhttp` adapter, run
+`python quickstart.py --astrbot <AstrBot data dir> --qq`, fill in the
+allowlists, and turn off NapCat's HTTP client (keep its HTTP server). Memory
+and learning carry over, because `GATEWAY_NATIVE_PLATFORMS` keeps the ids.
+
+If you still run it:
+
+- Set up both directions per [NapCat's documentation](https://napneko.github.io/)
+  (the format changes between versions): an **HTTP server** at `NAPCAT_API`
+  for sending, and an **HTTP client** posting to
+  `http://127.0.0.1:8080/webhook/qq` (`HOST`, `PORT`).
+- Set `WEBHOOK_SECRET` to the HTTP client's `secret`, or anyone who can reach
+  the port can forge events. Bodies must then carry `x-signature: sha1=<hex>`
+  (403 `bad_signature`), and events timestamped over five minutes off get 403
+  `stale_event`.
+- With AstrBot on the same account, keep `aiocqhttp` in `excluded_platforms`,
+  or every message arrives twice.
+
+Check sending with `curl http://127.0.0.1:3000/get_login_info`, and receiving
+by watching personagent's log while you message the bot in a group. A failure
+in either direction looks the same from outside: a bot that runs and stays
+silent.

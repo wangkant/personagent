@@ -834,8 +834,8 @@ async def gateway_webhook(request: Request):
 
     SYNCHRONOUS round-trip, unlike ``/webhook/qq``: the forwarder needs the
     replies in the response body to relay them to the source platform, so the
-    whole pipeline — debounce and typing simulation included — runs before
-    this returns. Set the plugin's HTTP timeout accordingly; a caller that
+    whole pipeline, debounce and every model call included, runs before this
+    returns (the typing pauses are skipped behind the sink). Set the plugin's HTTP timeout accordingly; a caller that
     gives up early does not stop the turn, which still commits its reply and
     everything it learned from it.
 
