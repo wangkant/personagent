@@ -38,5 +38,20 @@
     "type": "bool",
     "description": "Stop the AstrBot pipeline after forwarding so the built-in LLM never double-replies in conversations owned by the agent.",
     "default": true
+  },
+  "forward_quoted_text": {
+    "type": "bool",
+    "description": "When someone quotes a message, send the agent the quoted text and who wrote it, where the platform provides them. Off sends only the quoted message's id.",
+    "default": true
+  },
+  "quote_max_chars": {
+    "type": "int",
+    "description": "Longest quoted text sent to the agent, in characters; longer quotes are cut.",
+    "default": 200
+  },
+  "max_inline_image_bytes": {
+    "type": "int",
+    "description": "Largest image, in bytes, sent to the agent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one reaches the agent as the note '(sent an image)'. Keep it under the agent's MAX_IMAGE_BYTES.",
+    "default": 4000000
   }
 }

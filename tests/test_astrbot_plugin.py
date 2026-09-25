@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import enum
 import hashlib
 import hmac
 import importlib.util
+import json
 import logging
+import os
 import sys
 import types
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -69,24 +73,39 @@ def _import_plugin():
         def event_message_type(_kind):
             return lambda fn: fn
 
+    class MessageChain:
+        def __init__(self, chain=None):
+            self.chain = list(chain or [])
+
     Filter.EventMessageType = EventMessageType
     event_mod.AstrMessageEvent = object
+    event_mod.MessageChain = MessageChain
     event_mod.filter = Filter
 
     platform_mod = register("astrbot.api.platform")
 
     class MessageType(enum.Enum):
-        GROUP_MESSAGE = "group"
-        FRIEND_MESSAGE = "friend"
-        OTHER_MESSAGE = "other"
+        GROUP_MESSAGE = "GroupMessage"
+        FRIEND_MESSAGE = "FriendMessage"
+        OTHER_MESSAGE = "OtherMessage"
 
     platform_mod.MessageType = MessageType
 
     star_mod = register("astrbot.api.star")
 
     class Star:
-        def __init__(self, _context=None):
-            pass
+        # AstrBot's plugin store, one per plugin; shared by every instance
+        # built from this import, as a reload would see it.
+        kv: dict = {}
+
+        def __init__(self, context=None):
+            self.context = context
+
+        async def get_kv_data(self, key, default):
+            return type(self).kv.get(key, default)
+
+        async def put_kv_data(self, key, value):
+            type(self).kv[key] = value
 
     star_mod.Context = object
     star_mod.Star = Star
@@ -110,9 +129,30 @@ def _import_plugin():
             super().__init__(qq="all", **kwargs)
 
     class Image(Segment):
+        # What AstrBot's download would return, by URL.
+        downloads: dict = {}
+
+        def __init__(self, file=None, **kwargs):
+            kwargs.setdefault("url", "")
+            super().__init__(file=file, **kwargs)
+
         @classmethod
         def fromBase64(cls, value):
-            return cls(b64=value)
+            return cls(file="base64://" + value)
+
+        @classmethod
+        def fromFileSystem(cls, path):
+            return cls(file="file:///" + os.path.abspath(path), path=path)
+
+        async def convert_to_base64(self):
+            src = self.url or self.file or ""
+            if src.startswith("base64://"):
+                return src[len("base64://"):]
+            if src.startswith("file:///"):
+                return base64.b64encode(Path(src[len("file:///"):]).read_bytes()).decode()
+            if src in Image.downloads:
+                return base64.b64encode(Image.downloads[src]).decode()
+            raise Exception(f"not a valid file: {src}")
 
     class Face(Segment):
         pass
@@ -193,12 +233,17 @@ class _Event:
         self.message_obj = types.SimpleNamespace(
             type=message_type, message=[], message_id="incoming-1",
             timestamp=1_725_000_000, raw_message=None,
+            session_id="user-1" if private else "group-1",
         )
         self.message_str = "hello"
         self._private = private
         self._platform = platform
         self.stopped = False
         self.typing = []
+        self.results = []
+        self.unified_msg_origin = (
+            f"{self.get_platform_id()}:{message_type.value}:"
+            f"{self.message_obj.session_id}")
 
     async def send_typing(self):
         self.typing.append("on")
@@ -208,6 +253,9 @@ class _Event:
 
     def get_platform_name(self):
         return self._platform
+
+    def get_platform_id(self):
+        return f"my-{self._platform}"
 
     def get_self_id(self):
         return "bot"
@@ -231,33 +279,101 @@ class _Event:
         self.stopped = True
 
 
-def _plugin_instance(module, config):
-    plugin = module.LLMPersonaGateway(None, config)
+class _Result(list):
+    """A chain_result that records the result flags the plugin sets."""
+
+    def __init__(self, chain):
+        super().__init__(chain)
+        self.flags = {}
+
+    def use_t2i(self, value):
+        self.flags["t2i"] = value
+        return self
+
+    def use_markdown(self, value):
+        self.flags["markdown"] = value
+        return self
+
+
+class _Inst:
+    """A running AstrBot platform adapter instance."""
+
+    def __init__(self, name, pid=None, **attrs):
+        self._meta = types.SimpleNamespace(name=name, id=pid or f"my-{name}")
+        self.__dict__.update(attrs)
+
+    def meta(self):
+        return self._meta
+
+
+class _Context:
+    def __init__(self, *insts, config=None, fail_at=None, refuse=False):
+        self.insts = {inst.meta().id: inst for inst in insts}
+        self.config = config or {}
+        self.sent = []
+        self.fail_at = fail_at
+        self.refuse = refuse
+
+    def get_platform_inst(self, platform_id):
+        return self.insts.get(platform_id)
+
+    def get_config(self, umo=None):
+        return self.config
+
+    async def send_message(self, session, chain):
+        if self.fail_at is not None and len(self.sent) == self.fail_at:
+            raise RuntimeError("platform said no")
+        if self.refuse:
+            return False
+        self.sent.append((session, chain.chain))
+        return True
+
+
+def _plugin_instance(module, config, context=None):
+    plugin = module.LLMPersonaGateway(context, config)
     plugin._client = _RecordingClient()
     return plugin
+
+
+def _run(plugin, event):
+    async def collect():
+        return [item async for item in plugin.forward_to_agent(event)]
+    return asyncio.run(collect())
+
+
+def _map(plugin, event, platform, self_id="bot"):
+    return asyncio.run(plugin._map_segments(event, self_id, platform))
+
+
+def _names(chain):
+    return [type(c).__name__ for c in chain]
+
+
+async def _no_sleep(_seconds):
+    return None
 
 
 def test_the_vendored_sdk_is_the_sdk():
     """The plugin ships integrations/sdk/personagent_connector.py as a copy
     (AstrBot installs one folder); an edit to either must reach both."""
     vendored = PLUGIN_DIR / "personagent_connector.py"
-    assert vendored.read_bytes() == SDK.read_bytes(), (
+
+    def text(path):
+        return path.read_bytes().replace(b"\r\n", b"\n")
+
+    assert text(vendored) == text(SDK), (
         "copy integrations/sdk/personagent_connector.py into the plugin folder")
 
 
 def test_reply_component_preserves_quoted_message_id():
     module = _import_plugin()
-    event = types.SimpleNamespace(
-        message_obj=types.SimpleNamespace(
-            message=[module.Comp.Reply(id="quoted-42", sender_id="bot")]
-        )
-    )
+    plugin = _plugin_instance(module, {})
+    event = _Event(module, private=False, platform="aiocqhttp")
+    event.message_obj.message = [module.Comp.Reply(id="quoted-42", sender_id="bot")]
 
-    segments, is_at_me = module.LLMPersonaGateway._map_segments(
-        object(), event, "bot"
-    )
+    segments, is_at_me = _map(plugin, event, "")
 
-    assert segments == [{"type": "reply", "message_id": "quoted-42"}]
+    assert segments == [{"type": "reply", "message_id": "quoted-42", "sender_id": "bot"}]
     assert is_at_me is True
 
 
@@ -265,11 +381,8 @@ def test_default_configuration_forwards_neither_groups_nor_private_messages():
     module = _import_plugin()
     plugin = _plugin_instance(module, {})
 
-    async def collect(event):
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect(_Event(module, private=False))) == []
-    assert asyncio.run(collect(_Event(module, private=True))) == []
+    assert _run(plugin, _Event(module, private=False)) == []
+    assert _run(plugin, _Event(module, private=True)) == []
     assert plugin._client.calls == []
 
 
@@ -356,16 +469,12 @@ def test_malformed_endpoint_is_rejected_without_a_request():
     assert plugin._client.calls == []
 
 
+_DM_CONFIG = {"private_enabled": True, "private_whitelist": ["user-1"], "block_default": True}
+
+
 def test_forwarding_failure_does_not_stop_astrbot_fallback():
     module = _import_plugin()
-    plugin = _plugin_instance(
-        module,
-        {
-            "private_enabled": True,
-            "private_whitelist": ["user-1"],
-            "block_default": True,
-        },
-    )
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
     event = _Event(module, private=True)
 
     async def fail(_neutral_event):
@@ -373,30 +482,17 @@ def test_forwarding_failure_does_not_stop_astrbot_fallback():
 
     plugin._post_to_agent = fail
 
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect()) == []
+    assert _run(plugin, event) == []
     assert event.stopped is False
 
 
 def test_unhandled_gateway_response_does_not_stop_astrbot_fallback():
     module = _import_plugin()
-    plugin = _plugin_instance(
-        module,
-        {
-            "private_enabled": True,
-            "private_whitelist": ["user-1"],
-            "block_default": True,
-        },
-    )
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
     plugin._client = _UnhandledClient()
     event = _Event(module, private=True)
 
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect()) == []
+    assert _run(plugin, event) == []
     assert event.stopped is False
 
 
@@ -407,34 +503,17 @@ def test_a_silent_but_owned_conversation_blocks_the_fallback():
     pins the other direction: an agent too old to send `owned` still falls
     back to `handled`, so nothing changes for it."""
     module = _import_plugin()
-    plugin = _plugin_instance(
-        module,
-        {
-            "private_enabled": True,
-            "private_whitelist": ["user-1"],
-            "block_default": True,
-        },
-    )
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
     plugin._client = _SilentButOwnedClient()
     event = _Event(module, private=True)
 
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect()) == []
+    assert _run(plugin, event) == []
     assert event.stopped is True
 
 
 def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
     module = _import_plugin()
-    plugin = _plugin_instance(
-        module,
-        {
-            "private_enabled": True,
-            "private_whitelist": ["user-1"],
-            "block_default": True,
-        },
-    )
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
     event = _Event(module, private=True)
     captured = {}
 
@@ -444,18 +523,9 @@ def test_forwarded_event_carries_source_timestamp_and_success_blocks_fallback():
 
     plugin._post_to_agent = succeed
 
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect()) == []
+    assert _run(plugin, event) == []
     assert captured["source_timestamp"] == 1_725_000_000
     assert event.stopped is True
-
-
-def _run(plugin, event):
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-    return asyncio.run(collect())
 
 
 def test_typing_indicator_brackets_the_round_trip(monkeypatch):
@@ -476,10 +546,6 @@ def test_typing_indicator_brackets_the_round_trip(monkeypatch):
     assert event.typing == ["on", "on", "off"], event.typing
 
 
-async def _no_sleep(_seconds):
-    return None
-
-
 def test_discord_text_unfolds_mentions_emoji_and_channels():
     module = _import_plugin()
     plugin = _plugin_instance(module, {})
@@ -490,7 +556,7 @@ def test_discord_text_unfolds_mentions_emoji_and_channels():
         channel_mentions=[types.SimpleNamespace(id=9, name="general")],
     )
     event.message_obj.message = [module.Comp.Plain("hey <@42> see <#9> <a:party:1> <@&7> <@!99>")]
-    segments, _ = plugin._map_segments(event, "bot", "discord")
+    segments, _ = _map(plugin, event, "discord")
     assert segments == [
         {"type": "text", "text": "hey "},
         {"type": "mention", "user_id": "42", "name": "Bob"},
@@ -504,13 +570,16 @@ def test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn():
     plugin = _plugin_instance(module, {})
     event = _Event(module, private=False, platform="slack")
     event.message_obj.message = [module.Comp.Plain("look <https://x.io|the site> &amp; <https://y.io>")]
-    segments, _ = plugin._map_segments(event, "bot", "slack")
+    segments, _ = _map(plugin, event, "slack")
     assert segments == [{"type": "text", "text": "look the site (https://x.io) & https://y.io"}], segments
-    chain = plugin._build_chain({"type": "text", "text": "hi", "at_user_id": "slack:U1"}, "slack", True, "C1")
-    assert [type(c).__name__ for c in chain] == ["Plain", "Plain"], chain
-    assert chain[0].text == "<@U1>", chain[0].__dict__
-    chain = plugin._build_chain({"type": "text", "text": "hi", "at_user_id": "discord:5"}, "discord", True, "C1")
-    assert type(chain[0]).__name__ == "At", chain
+    [(chain, _)] = plugin._render(
+        [{"type": "text", "text": "hi & bye", "at_user_id": "slack:U1"}], "slack", True, "C1", [])
+    assert _names(chain) == ["Plain"], chain
+    assert chain[0].text == "<@U1> hi &amp; bye", chain[0].__dict__
+    [(chain, _)] = plugin._render(
+        [{"type": "text", "text": "hi", "at_user_id": "discord:5"}], "discord", True, "C1", [])
+    assert _names(chain) == ["At", "Plain"], chain
+    assert chain[1].text == " hi"
 
 
 def test_media_components_become_notes_the_agent_can_read():
@@ -521,38 +590,29 @@ def test_media_components_become_notes_the_agent_can_read():
         module.Comp.Video(file="v.mp4"), module.Comp.File(name="deck.pdf"),
         module.Comp.Record(file="a.ogg"), module.Comp.Plain("thoughts?"),
     ]
-    segments, _ = plugin._map_segments(event, "bot", "telegram")
+    segments, _ = _map(plugin, event, "telegram")
     assert [s["text"] for s in segments] == [
         "(sent a video)", "(sent a file: deck.pdf)", "(sent a voice message)", "thoughts?"], segments
 
 
 def test_missing_source_timestamp_is_not_forwarded_or_blocked():
     module = _import_plugin()
-    plugin = _plugin_instance(
-        module,
-        {
-            "private_enabled": True,
-            "private_whitelist": ["user-1"],
-            "block_default": True,
-        },
-    )
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
     event = _Event(module, private=True)
     event.message_obj.timestamp = None
 
-    async def collect():
-        return [item async for item in plugin.forward_to_agent(event)]
-
-    assert asyncio.run(collect()) == []
+    assert _run(plugin, event) == []
     assert plugin._client.calls == []
     assert event.stopped is False
 
 
-def _group_addressing(module, platform, components, *, wake_flag,
-                      message_str="hello"):
+def _group_addressing(module, platform, components, *, wake_flag=False,
+                      message_str="hello", raw=None, context=None):
     """Forward one whitelisted group event; return what the agent was sent."""
-    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]}, context)
     event = _Event(module, private=False, platform=platform)
     event.message_obj.message = components
+    event.message_obj.raw_message = raw
     event.message_str = message_str
     event.is_at_or_wake_command = wake_flag
     captured = {}
@@ -697,3 +757,513 @@ def test_no_retry_once_the_signed_envelope_would_arrive_stale(monkeypatch):
         plugin._post_to_agent({"message": "hi"})) == (False, False, [])
     assert len(plugin._client.calls) == 1
     assert sleeps == []
+
+
+# ---------------------------------------------------------------------------
+# Inbound, per platform: what each adapter delivers, read the way people
+# meant it (AstrBot 4.25.5)
+# ---------------------------------------------------------------------------
+
+def _onebot(messages, **fields):
+    """The raw OneBot v11 event the aiocqhttp adapter keeps."""
+    raw = {"post_type": "message", "time": 1_700_000_000, "message": messages}
+    raw.update(fields)
+    return raw
+
+
+def test_qq_notices_and_requests_are_not_forwarded_as_turns():
+    """aiocqhttp types pokes, recalls and friend requests as messages with an
+    empty chain; each reached the agent as an empty turn."""
+    module = _import_plugin()
+    for post_type in ("notice", "request"):
+        sent = _group_addressing(module, "aiocqhttp", [], message_str="",
+                                 raw={"post_type": post_type, "sub_type": "poke"})
+        assert sent == {}, (post_type, sent)
+    sent = _group_addressing(module, "aiocqhttp", [module.Comp.Plain("hi")],
+                             raw=_onebot([{"type": "text", "data": {"text": "hi"}}]))
+    assert sent["segments"] == [{"type": "text", "text": "hi"}]
+
+
+def test_qq_faces_stickers_and_time_come_from_the_raw_event():
+    module = _import_plugin()
+    raw = _onebot([
+        {"type": "face", "data": {"id": "178", "raw": {"faceText": "/斜眼笑"}}},
+        {"type": "image", "data": {"file": "a.gif", "sub_type": 1, "summary": "[动画表情]"}},
+        {"type": "mface", "data": {"summary": "[吃瓜]", "emoji_id": "e1"}},
+    ], time=1_700_000_123)
+    sent = _group_addressing(module, "aiocqhttp", [
+        module.Comp.Face(id=178),
+        module.Comp.Image(file="a.gif", url="https://multimedia.nt.qq.com.cn/a"),
+    ], raw=raw)
+    assert sent["segments"] == [
+        {"type": "emoji", "name": "斜眼笑", "id": "178"},
+        {"type": "image", "url": "https://multimedia.nt.qq.com.cn/a", "sticker": True},
+        {"type": "emoji", "name": "吃瓜", "id": "e1"},
+    ], sent["segments"]
+    assert sent["source_timestamp"] == 1_700_000_123
+
+
+def test_a_qq_at_the_adapter_could_not_look_up_still_addresses_the_bot():
+    module = _import_plugin()
+    raw = _onebot([{"type": "at", "data": {"qq": "bot"}}, {"type": "text", "data": {"text": "hi"}}])
+    sent = _group_addressing(module, "aiocqhttp", [module.Comp.Plain("hi")], raw=raw)
+    assert sent["is_at_me"] is True
+
+
+def test_a_quote_carries_its_text_and_sender():
+    module = _import_plugin()
+    quoted = module.Comp.Reply(id="9", sender_id="555", sender_nickname="Bob",
+                               message_str="see you at " + "x" * 300)
+    sent = _group_addressing(module, "aiocqhttp", [quoted, module.Comp.Plain("ok")],
+                             raw=_onebot([]))
+    reply = sent["segments"][0]
+    assert reply["message_id"] == "9" and reply["sender_id"] == "555"
+    assert reply["sender_name"] == "Bob"
+    assert reply["text"].startswith("see you at ") and len(reply["text"]) == 201
+
+    plugin = _plugin_instance(module, {"forward_quoted_text": False})
+    event = _Event(module, private=False, platform="aiocqhttp")
+    event.message_obj.message = [quoted]
+    segments, _ = _map(plugin, event, "aiocqhttp")
+    assert segments == [{"type": "reply", "message_id": "9"}], segments
+
+
+def test_a_quoted_photo_without_caption_is_outlined():
+    module = _import_plugin()
+    quoted = module.Comp.Reply(id="9", sender_id="1", message_str="",
+                               chain=[module.Comp.Image(file="https://x/y.jpg")])
+    sent = _group_addressing(module, "aiocqhttp", [quoted, module.Comp.Plain("lol")],
+                             raw=_onebot([]))
+    assert sent["segments"][0]["text"] == "(image)"
+
+
+def _tg_update(*, text="hi", sticker=None, reply_from=None, date=1_700_000_500):
+    user = types.SimpleNamespace(id=4242, username="alice", full_name="Alice A")
+    quoted = None
+    if reply_from is not None:
+        quoted = types.SimpleNamespace(
+            message_id=31, text="earlier", caption=None,
+            from_user=types.SimpleNamespace(id=1, username=reply_from, full_name=""))
+    message = types.SimpleNamespace(
+        text=text, sticker=sticker, reply_to_message=quoted, from_user=user,
+        date=datetime.fromtimestamp(date, tz=timezone.utc),
+        is_topic_message=False, message_thread_id=None)
+    return types.SimpleNamespace(message=message)
+
+
+def test_a_telegram_photo_reply_to_the_bot_addresses_it_without_the_artifact():
+    """The adapter's '/@bot' hack exists for text messages only; a photo
+    replying to the bot carried no sign of it."""
+    module = _import_plugin()
+    url = "https://api.telegram.org/file/botTOKEN/p.jpg"
+    module.Comp.Image.downloads[url] = b"\xff\xd8jpeg"
+    sent = _group_addressing(module, "telegram", [
+        module.Comp.Reply(id="31", sender_id="1", sender_nickname="bot", message_str="earlier"),
+        module.Comp.Image(file=url, url=url),
+    ], raw=_tg_update(text=None, reply_from="Bot"), message_str="")
+    assert sent["is_at_me"] is True
+    assert sent["source_timestamp"] == 1_700_000_500
+    image = sent["segments"][1]
+    assert image == {"type": "image", "b64": base64.b64encode(b"\xff\xd8jpeg").decode()}
+    assert "api.telegram.org" not in json.dumps(sent), "the bot token left AstrBot"
+
+
+def test_telegram_files_come_through_the_adapters_own_bot():
+    """The adapter's bot carries its proxy settings; AstrBot's generic
+    download does not."""
+    module = _import_plugin()
+    fetched = []
+
+    class _Request:
+        async def retrieve(self, url):
+            fetched.append(url)
+            return bytearray(b"\xff\xd8via-bot")
+
+    raw = _tg_update(text=None)
+    raw.message.get_bot = lambda: types.SimpleNamespace(request=_Request())
+    url = "https://api.telegram.org/file/botTOKEN/q.jpg"
+    sent = _group_addressing(module, "telegram", [module.Comp.Image(file=url, url=url)],
+                             raw=raw, message_str="")
+    assert fetched == [url]
+    assert sent["segments"] == [{"type": "image",
+                                 "b64": base64.b64encode(b"\xff\xd8via-bot").decode()}]
+
+
+def test_a_telegram_sticker_is_an_emoji_and_an_animated_one_has_no_image():
+    module = _import_plugin()
+    url = "https://api.telegram.org/file/botTOKEN/s.webp"
+    module.Comp.Image.downloads[url] = b"RIFF0000WEBPVP8 "
+    for animated, expect_image in ((False, True), (True, False)):
+        sticker = types.SimpleNamespace(emoji="😀", is_animated=animated, is_video=False)
+        sent = _group_addressing(module, "telegram", [
+            module.Comp.Image(file=url, url=url), module.Comp.Plain("Sticker: 😀"),
+        ], raw=_tg_update(text=None, sticker=sticker), message_str="Sticker: 😀")
+        kinds = [s["type"] for s in sent["segments"]]
+        assert kinds == (["image", "emoji"] if expect_image else ["emoji"]), sent["segments"]
+        assert sent["segments"][-1] == {"type": "emoji", "name": "😀"}
+        if expect_image:
+            assert sent["segments"][0]["sticker"] is True
+        assert sent["raw_text"] == "", "the adapter's 'Sticker:' words are not the person's"
+
+
+def test_telegram_mentions_by_username_become_the_senders_numeric_id():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    first = _Event(module, private=False, platform="telegram")
+    first.message_obj.raw_message = _tg_update()  # alice (4242) talks once
+    captured = {}
+
+    async def capture(neutral_event):
+        captured.update(neutral_event)
+        return False, False, []
+
+    plugin._post_to_agent = capture
+    _run(plugin, first)
+    second = _Event(module, private=False, platform="telegram")
+    second.message_obj.message = [module.Comp.At(qq="Alice", name="Alice"), module.Comp.Plain("hi")]
+    _run(plugin, second)
+    assert captured["segments"][0] == {"type": "mention", "user_id": "4242", "name": "Alice"}
+
+
+def _discord_message(**fields):
+    base = dict(mentions=[], role_mentions=[], channel_mentions=[], stickers=[],
+                attachments=[], reference=None, guild=None,
+                created_at=datetime.fromtimestamp(1_700_000_900, tz=timezone.utc))
+    base.update(fields)
+    return types.SimpleNamespace(**base)
+
+
+def test_a_discord_leading_mention_the_adapter_stripped_still_addresses_the_bot():
+    module = _import_plugin()
+    bot = types.SimpleNamespace(id="bot", display_name="Nova")
+    sent = _group_addressing(module, "discord", [module.Comp.Plain("how was your day")],
+                             raw=_discord_message(mentions=[bot]))
+    assert sent["is_at_me"] is True
+    assert sent["source_timestamp"] == 1_700_000_900
+
+    role = types.SimpleNamespace(id=77, name="bots")
+    sent = _group_addressing(module, "discord", [module.Comp.Plain("hey")], raw=_discord_message(
+        role_mentions=[role], guild=types.SimpleNamespace(me=types.SimpleNamespace(roles=[role]))))
+    assert sent["is_at_me"] is True
+
+
+def test_a_discord_reply_quotes_the_resolved_message():
+    module = _import_plugin()
+    resolved = _discord_message(
+        content="ask <@42> about it", mentions=[types.SimpleNamespace(id=42, display_name="Bob")],
+        author=types.SimpleNamespace(id="bot", display_name="Nova"))
+    raw = _discord_message(reference=types.SimpleNamespace(message_id=880, resolved=resolved))
+    sent = _group_addressing(module, "discord", [module.Comp.Plain("ok")], raw=raw)
+    assert sent["segments"][0] == {"type": "reply", "message_id": "880", "text": "ask @Bob about it",
+                                   "sender_id": "bot", "sender_name": "Nova"}, sent["segments"]
+    assert sent["is_at_me"] is True
+
+
+def test_discord_stickers_and_voice_attachments_are_not_lost():
+    module = _import_plugin()
+    sticker = types.SimpleNamespace(id=5, name="Wumpus wave",
+                                    url="https://media.discordapp.net/stickers/5.png",
+                                    format=types.SimpleNamespace(name="png"))
+    voice = types.SimpleNamespace(url="https://cdn/voice.ogg", filename="voice-message.ogg",
+                                  content_type="audio/ogg")
+    sent = _group_addressing(module, "discord", [
+        module.Comp.File(name="voice-message.ogg", url="https://cdn/voice.ogg"),
+    ], raw=_discord_message(stickers=[sticker], attachments=[voice]), message_str="")
+    assert sent["segments"] == [
+        {"type": "text", "text": "(sent a voice message)"},
+        {"type": "emoji", "name": "Wumpus wave", "id": "5"},
+        {"type": "image", "url": "https://media.discordapp.net/stickers/5.png", "sticker": True},
+    ], sent["segments"]
+
+
+def test_a_lark_reply_to_the_bot_names_the_app_as_sender():
+    module = _import_plugin()
+    context = _Context(_Inst("lark", appid="cli_app"))
+    sent = _group_addressing(module, "lark", [
+        module.Comp.Reply(id="om_1", sender_id="cli_app", sender_nickname="cli_app",
+                          message_str="hi"),
+        module.Comp.Plain("and you?"),
+    ], context=context)
+    assert sent["is_at_me"] is True
+    assert "sender_name" not in sent["segments"][0], "id[:8] is not a name"
+
+
+def test_slack_threads_subtypes_and_message_ids():
+    module = _import_plugin()
+    raw = {"ts": "1700000000.000200", "thread_ts": "1699999999.000100",
+           "parent_user_id": "bot", "text": "sure"}
+    sent = _group_addressing(module, "slack", [module.Comp.Plain("sure")], raw=raw)
+    assert sent["is_at_me"] is True
+    assert sent["message_id"] == "1700000000.000200"
+    assert sent["segments"][0] == {"type": "reply", "message_id": "1699999999.000100",
+                                   "sender_id": "bot"}
+    joined = _group_addressing(module, "slack", [module.Comp.Plain("has joined")],
+                               raw={"ts": "1.2", "subtype": "channel_join"})
+    assert joined == {}
+
+
+def test_kook_emoji_quotes_and_time():
+    module = _import_plugin()
+    raw = {"msg_timestamp": 1_700_000_700_123,
+           "extra": {"quote": {"id": "q1", "content": "hello (emj)wave(emj)[1/abc]",
+                               "author": {"id": "bot", "username": "Nova"}}}}
+    sent = _group_addressing(
+        module, "kook", [module.Comp.Plain("nice (emj)smile(emj)[2/xyz] \\*wow\\*")], raw=raw)
+    assert sent["source_timestamp"] == 1_700_000_700
+    assert sent["is_at_me"] is True
+    assert sent["segments"] == [
+        {"type": "reply", "message_id": "q1", "text": "hello :wave:",
+         "sender_id": "bot", "sender_name": "Nova"},
+        {"type": "text", "text": "nice "},
+        {"type": "emoji", "name": "smile", "id": "2/xyz"},
+        {"type": "text", "text": " *wow*"},
+    ], sent["segments"]
+
+
+def test_a_wecom_smart_bot_group_is_a_group_that_addressed_the_bot():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"group_whitelist": ["chat-9"]})
+    event = _Event(module, private=False, platform="wecom_ai_bot")
+    event.get_group_id = lambda: ""  # the adapter never sets it
+    event.message_obj.raw_message = {"message_data": {"chatid": "chat-9", "msgid": "m-7",
+                                                      "msgtype": "voice"}}
+    event.message_obj.message = [module.Comp.Plain("[voice消息]")]
+    event.message_str = "[voice消息]"
+    captured = {}
+
+    async def capture(neutral_event):
+        captured.update(neutral_event)
+        return False, False, []
+
+    plugin._post_to_agent = capture
+    _run(plugin, event)
+    assert captured["message_type"] == "group" and captured["conversation_id"] == "chat-9"
+    assert captured["is_at_me"] is True
+    assert captured["message_id"] == "m-7"
+    assert captured["segments"] == [{"type": "text", "text": "(sent a voice message)"}]
+
+
+def test_satori_milliseconds_and_quote_senders():
+    module = _import_plugin()
+    raw = {"message": {"quote": {"user": {"id": "bot", "nick": "Nova"}}, "content": "ok"}}
+    sent = _group_addressing(module, "satori", [
+        module.Comp.Reply(id="q", sender_id="", sender_nickname="内容", message_str="earlier"),
+        module.Comp.Plain("ok"),
+    ], raw=raw)
+    assert sent["is_at_me"] is True
+    assert sent["segments"][0]["sender_name"] == "Nova"
+    # Without a quote author the adapter writes placeholders, not a quote.
+    sent = _group_addressing(module, "satori", [
+        module.Comp.Reply(id="q", sender_id="", sender_nickname="内容", message_str="[引用消息]",
+                          chain=[]),
+        module.Comp.Plain("ok"),
+    ], raw={"message": {"quote": {"id": "q"}}})
+    assert sent["segments"][0] == {"type": "reply", "message_id": "q"}, sent["segments"]
+
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    event = _Event(module, private=False, platform="satori")
+    event.message_obj.timestamp = 1_700_000_800_456
+    captured = {}
+
+    async def capture(neutral_event):
+        captured.update(neutral_event)
+        return False, False, []
+
+    plugin._post_to_agent = capture
+    _run(plugin, event)
+    assert captured["source_timestamp"] == 1_700_000_800
+
+
+def test_line_stickers_and_self_mentions():
+    module = _import_plugin()
+    raw = {"message": {"type": "sticker", "stickerId": "52002734", "keywords": ["Hi", "wave"]}}
+    sent = _group_addressing(module, "line", [module.Comp.Plain("[sticker]")], raw=raw,
+                             message_str="[sticker]")
+    assert sent["segments"] == [{"type": "emoji", "name": "Hi", "id": "52002734"}]
+    raw = {"message": {"type": "text", "mention": {"mentionees": [{"isSelf": True}]}}}
+    sent = _group_addressing(module, "line", [module.Comp.Plain("@Nova hi")], raw=raw)
+    assert sent["is_at_me"] is True
+
+
+def test_qq_official_takes_the_platforms_iso_timestamp():
+    module = _import_plugin()
+    raw = types.SimpleNamespace(timestamp="2023-11-14T22:13:20+00:00")
+    sent = _group_addressing(module, "qq_official",
+                             [module.Comp.At(qq="bot"), module.Comp.Plain("hi")], raw=raw)
+    assert sent["source_timestamp"] == 1_700_000_000
+    assert sent["is_at_me"] is True
+
+
+def test_local_and_private_images_are_inlined_and_oversized_ones_described(tmp):
+    """DingTalk, Mattermost, WebChat and personal WeChat hand over a path on
+    the AstrBot host; the agent cannot open it."""
+    module = _import_plugin()
+    picture = tmp / "p.jpg"
+    picture.write_bytes(b"\xff\xd8local")
+    plugin = _plugin_instance(module, {"max_inline_image_bytes": 1000})
+    event = _Event(module, private=False, platform="dingtalk")
+    event.message_obj.message = [
+        module.Comp.Image(file="file:///" + str(picture)),
+        module.Comp.Image(file="http://127.0.0.1:3000/img.png"),
+        module.Comp.Image(file="data:image/png;base64,iVBORw0K"),
+        module.Comp.Image(file="https://cdn.example.com/public.png"),
+    ]
+    module.Comp.Image.downloads["http://127.0.0.1:3000/img.png"] = b"x" * 5000
+    segments, _ = _map(plugin, event, "dingtalk")
+    assert segments == [
+        {"type": "image", "b64": base64.b64encode(b"\xff\xd8local").decode()},
+        {"type": "text", "text": "(sent an image)"},
+        {"type": "image", "b64": "iVBORw0K"},
+        {"type": "image", "url": "https://cdn.example.com/public.png"},
+    ], segments
+
+
+def test_voice_transcripts_ride_along_where_the_platform_has_one():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    event = _Event(module, private=True, platform="wecom")
+    event.message_obj.raw_message = types.SimpleNamespace(recognition="call me later")
+    event.message_obj.message = [module.Comp.Record(file="a.wav")]
+    segments, _ = _map(plugin, event, "wecom")
+    assert segments == [{"type": "text", "text": "(sent a voice message: call me later)"}]
+
+
+def test_wecom_customer_service_hears_only_the_customer():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, dict(_DM_CONFIG))
+    for origin, forwarded in ((3, True), (5, False)):
+        event = _Event(module, private=True, platform="wecom")
+        event.message_obj.raw_message = {"_wechat_kf_flag": None, "origin": origin,
+                                         "send_time": 1_700_000_050}
+        plugin._client = _RecordingClient()
+        _run(plugin, event)
+        assert bool(plugin._client.calls) is forwarded, origin
+
+
+# ---------------------------------------------------------------------------
+# Outbound, per platform: each adapter's own mention, length limit and
+# formatting
+# ---------------------------------------------------------------------------
+
+def _render(plugin, platform, *items, group=True, temps=None):
+    return plugin._render(list(items), platform, group, "group-1",
+                          [] if temps is None else temps)
+
+
+def test_qq_mentions_carry_one_space_and_long_text_stays_under_the_forward_card():
+    """The aiocqhttp adapter adds its own space after an At, and AstrBot turns
+    any reply over forward_threshold into a merged-forward card."""
+    module = _import_plugin()
+    context = _Context(config={"platform_settings": {"forward_threshold": 120}})
+    plugin = _plugin_instance(module, {}, context)
+    [(chain, done)] = _render(plugin, "aiocqhttp",
+                              {"type": "text", "text": "hi", "at_user_id": "aiocqhttp:42"})
+    assert _names(chain) == ["At", "Plain"] and chain[1].text == "hi" and done == 1
+    long = " ".join(["this sentence keeps going."] * 20)
+    chains = _render(plugin, "aiocqhttp", {"type": "text", "text": long})
+    assert len(chains) > 1
+    assert all(len(c[0][0].text) <= 120 for c in chains)
+    assert " ".join(c[0][0].text for c in chains) == long
+    assert {c[1] for c in chains} == {1}
+
+
+def test_telegram_text_is_shown_as_typed_and_mentions_use_usernames():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    [(chain, _)] = _render(plugin, "telegram", {"type": "text", "text": "*sighs* 2*3"})
+    assert chain[0].text == "\\*sighs\\* 2\\*3"
+    plugin._people.see("telegram", "4242", "alice", "Alice A")
+    plugin._people.see("telegram", "77", None, "Bo [x]")
+    [(chain, _)] = _render(plugin, "telegram",
+                           {"type": "text", "text": "hi", "at_user_id": "telegram:4242"})
+    assert _names(chain) == ["At", "Plain"] and chain[0].name == "alice", chain
+    [(chain, _)] = _render(plugin, "telegram",
+                           {"type": "text", "text": "hi", "at_user_id": "telegram:77"})
+    assert chain[0].text == "[Bo \\[x\\]](tg://user?id=77) hi", chain[0].text
+    [(chain, _)] = _render(plugin, "telegram",
+                           {"type": "text", "text": "hi", "at_user_id": "telegram:99"})
+    assert _names(chain) == ["Plain"] and chain[0].text == "hi", "an unknown id is inert"
+
+
+def test_kook_mentions_inline_and_images_go_through_a_file(tmp):
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    [(chain, _)] = _render(plugin, "kook",
+                           {"type": "text", "text": "hi (met)all(met)", "at_user_id": "kook:9"})
+    assert _names(chain) == ["Plain"]
+    assert chain[0].text == "(met)9(met) hi \\(met\\)all\\(met\\)", chain[0].text
+    temps = []
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\nrest").decode()
+    [(chain, _)] = _render(plugin, "kook", {"type": "image", "b64": png}, temps=temps)
+    assert chain[0].file.startswith("file:///") and temps and temps[0].endswith(".png")
+    assert Path(temps[0]).read_bytes().startswith(b"\x89PNG")
+    module._remove_files(temps)
+    assert not Path(temps[0]).exists()
+
+
+def test_discord_splits_at_2000_and_keeps_everyone_pings_inert():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    chains = _render(plugin, "discord", {"type": "text", "text": "@everyone " + "word " * 600})
+    assert len(chains) == 2 and all(len(c[0][0].text) <= 2000 for c in chains)
+    assert chains[0][0][0].text.startswith("@​everyone")
+
+
+def test_platforms_without_mentions_drop_them_cleanly():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    for platform in ("qq_official", "dingtalk", "line", "wecom_ai_bot"):
+        [(chain, _)] = _render(plugin, platform,
+                               {"type": "text", "text": "hi", "at_user_id": f"{platform}:1"})
+        assert _names(chain) == ["Plain"] and chain[0].text == "hi", (platform, chain)
+
+
+def test_qq_official_replies_ask_for_plain_text_and_every_reply_skips_t2i():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"group_whitelist": ["group-1"]})
+    event = _Event(module, private=False, platform="qq_official")
+    event.chain_result = _Result
+
+    async def reply(_neutral):
+        return True, True, [{"type": "text", "text": "**hi**"}]
+
+    plugin._post_to_agent = reply
+    [result] = _run(plugin, event)
+    assert result.flags == {"t2i": False, "markdown": False}
+
+
+def test_wecom_splits_by_bytes():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    chains = _render(plugin, "wecom", {"type": "text", "text": "好" * 1000}, group=False)
+    assert len(chains) == 2
+    assert all(len(c[0][0].text.encode("utf-8")) <= 2048 for c in chains)
+
+
+def test_one_message_platforms_get_the_turn_as_one_and_line_batches():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {})
+    items = [{"type": "text", "text": "a"}, {"type": "text", "text": "b"},
+             {"type": "image", "b64": "AAAA"}]
+    [(chain, done)] = _render(plugin, "wecom_ai_bot", *items)
+    assert _names(chain) == ["Plain", "Image"] and chain[0].text == "a\nb" and done == 3
+    many = [{"type": "text", "text": str(n)} for n in range(7)]
+    chains = _render(plugin, "line", *many)
+    assert [len(c[0]) for c in chains] == [5, 2] and [c[1] for c in chains] == [5, 7]
+
+
+# ---------------------------------------------------------------------------
+# platforms.py: the pure rules
+# ---------------------------------------------------------------------------
+
+def test_split_text_prefers_boundaries_and_never_loses_text():
+    module = _import_plugin()
+    platforms = sys.modules[_PACKAGE + ".platforms"]
+    text = "First paragraph here.\n\nSecond one is a bit longer. It has two sentences."
+    parts = platforms.split_text(text, 40)
+    assert parts == ["First paragraph here.", "Second one is a bit longer.",
+                     "It has two sentences."], parts
+    assert platforms.split_text("x" * 95, 40) == ["x" * 40, "x" * 40, "x" * 15]
+    assert platforms.split_text("", 40) == [] and platforms.split_text("ok", 0) == ["ok"]
+    assert module.rules_for("nope") is platforms.DEFAULT_RULES
+
