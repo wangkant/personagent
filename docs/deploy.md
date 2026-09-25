@@ -20,17 +20,18 @@ To run live behind AstrBot:
 
 ```
 LLM_API_KEY=...
-PERSONA_NAME=...                         # the name it answers to
-CONNECTOR_TOKEN=...                    # shared with the plugin; recommended, required across hosts
+PERSONA_NAME=...                     # the name it answers to
+CONNECTOR_TOKEN=...                  # shared with the plugin; recommended, required across hosts
 ADMIN_IDS=telegram:12345             # optional: the admin's accounts, <platform>:<id>
 # QQ only
-QQ_BOT_ID=...                           # the bot account's number
+QQ_BOT_ID=...                        # the bot account's number
 CONNECTOR_QQ_PLATFORMS=aiocqhttp
 ```
 
-Everything else in `.env.example` has a working default: `SERVER_HOST`/`SERVER_PORT` are
-`127.0.0.1:8080`, `QQ_ONEBOT_URL` is `http://127.0.0.1:3000`, and an empty
-`ACCESS_GROUPS` leaves every group to the plugin's allowlist.
+Everything else in `.env.example` has a working default: `SERVER_HOST` and
+`SERVER_PORT` are `127.0.0.1:8080`, `QQ_ONEBOT_URL` is
+`http://127.0.0.1:3000`, and an empty `ACCESS_GROUPS` leaves every group to
+the plugin's allowlist.
 
 Then run `python tools/healthcheck.py`. It reports missing and **misspelled**
 settings (a typo is otherwise silent: the default is used) and whether each
@@ -55,7 +56,7 @@ persona kept elsewhere needs an absolute path.
 ## Connectors
 
 personagent never logs in to a chat platform. A connector does: it turns each
-message into a neutral event, posts it to `POST /webhook/gateway`, and sends
+message into a neutral event, posts it to `POST /v1/events`, and sends
 the replies that come back. Three ship in this repository:
 
 | Connector | Reaches | Guide |
@@ -76,8 +77,8 @@ twice.
 ## Connecting through AstrBot
 
 AstrBot logs in to the platforms, and the plugin in
-`integrations/astrbot/astrbot_plugin_llm_persona_gateway/` posts each message
-to `POST /webhook/gateway` and relays the replies in the response. It reaches
+`integrations/astrbot/astrbot_plugin_personagent/` posts each message to
+`POST /v1/events` and relays the replies in the response. It reaches
 the most platforms, and it is the one the wizard sets up. It also pulls
 personagent's outbox (`outbox_enabled`, on by default), so the persona can
 speak first wherever the platform lets a bot do that; the plugin README has
@@ -86,22 +87,21 @@ the table.
 `python quickstart.py` connects the two; `--astrbot <AstrBot data dir>`
 does it without the wizard. It copies the plugin into `<data dir>/plugins/`,
 writes one `CONNECTOR_TOKEN` to both `.env` and the plugin config, and sets
-`agent_url` to `http://127.0.0.1:<SERVER_PORT>/webhook/gateway` unless the plugin
+`personagent_url` to `http://127.0.0.1:<SERVER_PORT>` unless the plugin
 already has one it accepts (a loopback URL, tunnels included, or HTTPS).
 `--qq` takes `aiocqhttp` out of `excluded_platforms`; `--no-qq` puts it back;
 with neither, QQ routing stays as it is, and `CONNECTOR_QQ_PLATFORMS` follows
 whichever the plugin ends up doing. A first run leaves the allowlists empty;
-rerunning keeps them, and keeps `private_enabled` and any other excluded
-platforms.
+rerunning keeps them, and any other excluded platforms.
 
-The plugin is default-deny: fill in `group_whitelist`, and for DMs
-`private_enabled` and `private_whitelist`, in AstrBot's WebUI (every key is in
-the [plugin README](../integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md)).
+The plugin is default-deny: fill in `groups`, and for DMs `dm_users`, in
+AstrBot's WebUI; DMs are forwarded once `dm_users` is not empty (every key is
+in the [plugin README](../integrations/astrbot/astrbot_plugin_personagent/README.md)).
 On the personagent side:
 
-- `CONNECTOR_TOKEN` authenticates each request: the `X-Gateway-Token` header
-  plus an HMAC-SHA256 keyed with the token over `timestamp.nonce.body`, with a
-  replay guard. A captured request cannot be replayed or altered, but the
+- `CONNECTOR_TOKEN` authenticates each request: the `X-Personagent-Token`
+  header plus an HMAC-SHA256 keyed with the token over `timestamp.nonce.body`,
+  with a replay guard. A captured request cannot be replayed or altered, but the
   token is also the signing key: keep it out of logs and rotate it if it
   leaks. Optional on one host, required across hosts.
 - `ADMIN_IDS` lists the admin's accounts as `<platform>:<id>`
@@ -114,10 +114,7 @@ On the personagent side:
   itself, in the same `<platform>:<id>` form. Each platform is gated on its
   own: one with no entries is left to the plugin's allowlists, and one entry
   restricts that platform to its entries. A turn personagent refuses goes
-  back unclaimed, so AstrBot's own model may answer it. The old names
-  (`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS`, `PRIVATE_ALLOWED_QQS`) still
-  work, and their ids are added to the new ones'; so do `OWNER_NAME` and
-  `OWNER_RELATIONSHIP`, which the new names override.
+  back unclaimed, so AstrBot's own model may answer it.
 
 ## QQ through AstrBot
 
@@ -137,10 +134,10 @@ row ids from the conversation id, so the split cannot be repaired afterwards.
 
 Bare ids carry QQ authority, so the QQ entries of `ADMIN_IDS`,
 `ACCESS_GROUPS` and `ACCESS_DM_USERS` apply on top of the plugin's
-allowlists: a QQ DM must be in `private_whitelist` *and* come from the admin or
+allowlists: a QQ DM must be in `dm_users` *and* come from the admin or
 an `ACCESS_DM_USERS` entry, and when `ACCESS_GROUPS` lists QQ groups, a QQ
 group must be in both. Only list a platform in `CONNECTOR_QQ_PLATFORMS` if
-you trust its forwarder with that authority.
+you trust its connector with that authority.
 
 **NapCat's HTTP server** (`QQ_ONEBOT_URL`) is optional on this path. What
 personagent starts itself (proactive messages, off by default with
@@ -173,23 +170,24 @@ Messages nobody asked for (proactive openers, the question asked after a
 rejection, the excuse when the model call fails) reach a platform through a
 connector that pulls personagent's outbox. All three connectors here do, on
 platforms where a bot may send first; a connector of your own sends
-`forwarder_id`, `reply_handle` and `"caps": ["outbox"]` with its events and
-long-polls `/webhook/gateway/outbox` (see [the connector protocol](connectors.md)).
+`connector_id`, `reply_handle` and `"capabilities": ["outbox"]` with its
+events and long-polls `/v1/outbox` (see [the connector protocol](connectors.md)).
 Without one, personagent speaks only inside the request that brought a
 message: the proactive loops skip those conversations, and the question and
 the excuse are not sent. `PROACTIVE_PLATFORMS` limits where the proactive loop
 may speak first (`PROACTIVE_PLATFORMS=qq` keeps it on QQ), and
 `CONNECTOR_OUTBOX_ENABLED=false` turns the outbox off altogether.
 
-**To speak first in a DM without the outbox**, have your own scheduler (an AstrBot plugin task,
-a cron entry) post an ordinary private gateway event with `"proactive": true`
-(schema at the top of `persona_agent/gateway.py`). Its text is a cue to the
-persona ("they have been quiet a day; their exam was this morning"), not the
-other person's words, cut at 500 characters. The engine's proactive
+**To speak first in a DM without the outbox**, have your own scheduler (an
+AstrBot plugin task, a cron entry) post an ordinary DM event with
+`"proactive": true` to `/v1/events` (schema in
+[the connector protocol](connectors.md)). Its text is a cue to the persona
+("they have been quiet a day; their exam was this morning"), not the other
+person's words, cut at 500 characters. The engine's proactive
 instructions still decide the turn and may keep the persona silent; if it
 speaks, the reply comes back in the response for the scheduler to relay.
 The request needs what the plugin's requests carry: the signed headers, every
-required field, the same platform name and raw user id the plugin sends,
+required field, the same platform name and raw sender id the plugin sends,
 non-empty text, and a fresh `message_id` each time (a repeated one is dropped
 without a word). It counts against the same DM cooldown
 (`PROACTIVE_DM_COOLDOWN_S`) as the agent's own openers.
@@ -197,22 +195,22 @@ without a word). It counts against the same DM cooldown
 Always set the flag. Without it, the cue is stored as the other person's
 words: it stays in the DM history for the next 40 messages, can be quoted back
 at them, and can be saved as a memory about them. A group event marked
-`"proactive"` is claimed (`owned: true`, so the forwarder keeps its own model
+`"proactive"` is claimed (`owned: true`, so the connector keeps its own model
 quiet) and dropped unread.
 
-## Exposing the webhook
+## Exposing the endpoints
 
 Keep `SERVER_HOST=127.0.0.1` when the connector and personagent share a machine (a
 container counts only with the host's network namespace or host networking).
 Otherwise:
 
 1. Set `SERVER_HOST=0.0.0.0` and **both** `CONNECTOR_TOKEN` and `QQ_ONEBOT_SECRET`.
-   Startup refuses a non-loopback `SERVER_HOST` without both, since `/webhook/qq` is
-   served even if unused.
+   Startup refuses a non-loopback `SERVER_HOST` without both, since `/v1/onebot`
+   is served even if unused.
 2. Put an HTTPS reverse proxy or a private tunnel in front. Every connector
    here posts only to loopback, or to HTTPS with a token set; the AstrBot
-   plugin logs anything else as `refusing unsafe agent_url`, and the Satori
-   and Matrix connectors refuse to start.
+   plugin logs anything else as `refusing unsafe personagent_url`, and the
+   Satori and Matrix connectors refuse to start.
 3. Keep the body byte-for-byte intact (the signature covers it) and the
    clocks within five minutes.
 
@@ -229,7 +227,8 @@ on one host.
 - `GET /health` is free, open, and calls nothing.
 - `GET /health/details` probes the upstream services (cached 60 s). With
   `CONNECTOR_TOKEN` blank it answers local requests only; with a token, **only**
-  requests carrying a matching `X-Gateway-Token` header, even from loopback.
+  requests carrying a matching `X-Personagent-Token` header, even from
+  loopback.
   It returns 503 when a critical probe fails or cannot run: the chat models,
   or the OneBot bridge when `QQ_BOT_ID` is set and `CONNECTOR_QQ_PLATFORMS`
   is not (QQ on the direct ingress).
@@ -239,8 +238,8 @@ on one host.
 ## Costs
 
 - **Probes spend credit.** `healthcheck.py` and `/health/details` send one
-  tiny chat completion to each configured model endpoint (chat, private, eval
-  and vision), plus one Tavily search if `TAVILY_API_KEY` is set. `/health`
+  tiny chat completion to each configured model endpoint (chat, DM, eval and
+  vision), plus one Tavily search if `TAVILY_API_KEY` is set. `/health`
   and the settings and ledger checks are free.
 - **`tools/prompt_lab.py` needs a second vendor**, so the tuning signal does
   not come from the model being tuned: `pip install -e ".[judge]"`,
@@ -261,15 +260,15 @@ on one host.
 
 Most common first:
 
-1. **The connector forwards nothing.** In the AstrBot plugin, fill in its
-   allowlists (DMs also need `private_enabled`), and on QQ take `aiocqhttp`
-   out of `excluded_platforms`. The Satori and Matrix connectors have their
+1. **The connector forwards nothing.** In the AstrBot plugin, fill in
+   `groups` (and `dm_users` for DMs), and on QQ take `aiocqhttp` out of
+   `excluded_platforms`. The Satori and Matrix connectors have their
    own allowlists in their `.env`; see their READMEs.
 2. **AstrBot's own model answers instead.** The request failed, or
    personagent turned the message away (item 4), and the plugin fell back.
-   AstrBot's log shows `refusing unsafe agent_url`, `agent refused the request
-   (403): <message>` (or another status; see the table below), or `timed out
-   waiting for the agent`. `timeout_s` (default 180) must cover the debounce
+   AstrBot's log shows `refusing unsafe personagent_url`, `agent refused the
+   request (403): <message>` (or another status; see the table below), or
+   `timed out waiting for the agent`. `timeout_s` (default 180) must cover the debounce
    and every model call in the turn: keep `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`
    under it. The defaults (120 × 3 = 360 s) do not.
 3. **It was not called.** In a group it answers its name (`PERSONA_NAME`) or an
@@ -303,16 +302,16 @@ Most common first:
    `AGENT_LANG` also switches to that language's learned files in
    `runtime/`.
 
-Errors from `/webhook/gateway`. The plugin logs the message; `code` is the
+Errors from `/v1/events`. The plugin logs the message; `code` is the
 stable field a client can branch on.
 
 | Status | `code` | Message in AstrBot's log | Cause |
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | no `CONNECTOR_TOKEN`, and the caller is not on this machine |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | no `CONNECTOR_TOKEN`; sent through a browser, a proxy or another host name |
-| 403 | `invalid_envelope` | invalid, stale, or replayed gateway envelope | missing or wrong token, headers or signature; clocks over 5 min apart; a reused nonce; or a full replay guard (`gateway replay guard full` in the agent's log) |
-| 403 | `stale_source_event` | stale gateway source event | the platform timestamp differs from now by more than `CONNECTOR_MAX_EVENT_AGE_S` (24 h), including future or millisecond timestamps |
-| 400 | `invalid_schema` | invalid gateway event schema | a required field is missing: `platform`, `message_type`, `user_id`, `message_id`, `source_timestamp`, and `conversation_id` for groups |
+| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | missing or wrong token, headers or signature; clocks over 5 min apart; a reused nonce; or a full replay guard (`connector replay guard full` in the agent's log) |
+| 403 | `stale_event` | stale or invalid sent_at | `sent_at` differs from now by more than `CONNECTOR_MAX_EVENT_AGE_S` (24 h), including future or millisecond timestamps |
+| 400 | `invalid_schema` | invalid event schema | a required field is missing: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, and `conversation_id` for groups |
 | 400 | `client_disconnected` | client disconnected | the caller hung up while sending |
 | 408 | `body_timeout` | request body not received in time | the body took more than 30 s to arrive |
 | 413 | `body_too_large` | request body too large | over `SERVER_MAX_BODY_BYTES` (8 MB), usually an inline image |
@@ -321,7 +320,7 @@ stable field a client can branch on.
 ## Legacy: the direct OneBot ingress
 
 Deprecated since 0.3.0, to be removed in a later release. NapCat's webhook posts
-events to `POST /webhook/qq`, and personagent replies through `QQ_ONEBOT_URL`. It
+events to `POST /v1/onebot`, and personagent replies through `QQ_ONEBOT_URL`. It
 still works, warns once at first use, and marks every response
 `Deprecation: true`. `launch.vbs`, which starts NapCat and then `main.py` on
 Windows, is deprecated with it.
@@ -336,7 +335,7 @@ If you still run it:
 - Set up both directions per [NapCat's documentation](https://napneko.github.io/)
   (the format changes between versions): an **HTTP server** at `QQ_ONEBOT_URL`
   for sending, and an **HTTP client** posting to
-  `http://127.0.0.1:8080/webhook/qq` (`SERVER_HOST`, `SERVER_PORT`).
+  `http://127.0.0.1:8080/v1/onebot` (`SERVER_HOST`, `SERVER_PORT`).
 - Set `QQ_ONEBOT_SECRET` to the HTTP client's `secret`, or anyone who can reach
   the port can forge events. Bodies must then carry `x-signature: sha1=<hex>`
   (403 `bad_signature`), and events timestamped over five minutes off get 403

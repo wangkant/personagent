@@ -6,21 +6,241 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **One naming standard.** Every setting, connector key, endpoint, header and
+  event field now follows one set of rules, and each old name is gone rather
+  than kept as an alias, while there are few deployments to move:
+  - each setting sits under one module prefix (`LLM_`, `VISION_`, `PERSONA_`,
+    `ADMIN_`, `ACCESS_`, `CHAT_`, `MEMORY_`, `SERVER_`, `CONNECTOR_`, `QQ_`,
+    `PROACTIVE_`, `REACT_`, `PROMOTE_`, `EVOLVE_`, `EVAL_`, `LEDGER_`, ...);
+  - a duration ends in its unit (`_S`, `_HOURS`, `_DAYS`), a size in `_BYTES`;
+  - an on/off switch ends in `_ENABLED`;
+  - a vendor's credentials keep the vendor's own names (`TAVILY_API_KEY`,
+    `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`);
+  - the server and its connectors call their shared token the same thing,
+    `CONNECTOR_TOKEN`, and the three connectors use the same name for the
+    same setting (docs/connectors.md has the table).
+
+  Old names are no longer read: rename them in `.env` and in each connector's
+  configuration by the tables below. Preflight, at startup and in
+  `tools/healthcheck.py`, names each old name it finds in the environment or
+  `.env` together with its new one, and never uses its value. The AstrBot
+  plugin is now `astrbot_plugin_personagent`; `quickstart.py --astrbot`
+  installs it under that name and deletes the old directory it installed
+  before, which would otherwise forward every message twice. What personagent
+  has learned stays valid: memory, the ledgers, the lineage, stickers and eval
+  rows keep their keys, and a DM's stored conversation key keeps its
+  `private:` prefix. The prompts the model reads are unchanged.
+
+  Settings:
+
+  | Old | New |
+  |---|---|
+  | `LLM_TIMEOUT` | `LLM_TIMEOUT_S` |
+  | `PRIVATE_MODEL`, `ANTHROPIC_PRIVATE_MODEL` | `LLM_DM_MODEL` |
+  | `JUDGE_MODEL` | `LLM_JUDGE_MODEL` |
+  | `FALLBACK_MODEL` | `LLM_FALLBACK_MODEL` |
+  | `FALLBACK_BASE_URL` | `LLM_FALLBACK_BASE_URL` |
+  | `FALLBACK_API_KEY` | `LLM_FALLBACK_API_KEY` |
+  | `FALLBACK_THINKING` | `LLM_FALLBACK_THINKING` |
+  | `FALLBACK_DURATION` | `LLM_FALLBACK_DURATION_S` |
+  | `RATE_WINDOW` | `LLM_RATE_WINDOW_S` |
+  | `RATE_THRESHOLD` | `LLM_RATE_THRESHOLD` |
+  | `RATE_LIMIT_COOLDOWN` | `LLM_RATE_LIMIT_COOLDOWN_S` |
+  | `GLM_API_KEY` | `VISION_API_KEY` |
+  | `GLM_BASE_URL` | `VISION_BASE_URL` |
+  | `MAX_IMAGE_BYTES` | `VISION_MAX_IMAGE_BYTES` |
+  | `BOT_NAME` | `PERSONA_NAME` |
+  | `TZ_OFFSET_HOURS` | `PERSONA_TZ_OFFSET_HOURS` |
+  | `OWNER_QQ`, `GATEWAY_OWNER_IDS` | `ADMIN_IDS` |
+  | `OWNER_NAME` | `ADMIN_NAME` |
+  | `OWNER_RELATIONSHIP` | `ADMIN_RELATIONSHIP` |
+  | `QQ_GROUPS`, `ALLOWED_GROUPS` | `ACCESS_GROUPS` |
+  | `PRIVATE_ALLOWED_QQS`, `ALLOWED_DM_USERS` | `ACCESS_DM_USERS` |
+  | `AGENT_TRIGGER_COUNT` | `CHAT_TRIGGER_COUNT` |
+  | `AGENT_CONTEXT_LEN` | `CHAT_CONTEXT_MESSAGES` |
+  | `AGENT_FOLLOWUP_WINDOW` | `CHAT_FOLLOWUP_WINDOW_S` |
+  | `AGENT_MEMORY_FILE` | `MEMORY_FILE` |
+  | `AGENT_MEMORY_MAX` | `MEMORY_MAX_PER_CONVERSATION` |
+  | `AGENT_ENABLE` | `AGENT_ENABLED` |
+  | `HOST` | `SERVER_HOST` |
+  | `PORT` | `SERVER_PORT` |
+  | `MAX_WEBHOOK_BODY_BYTES` | `SERVER_MAX_BODY_BYTES` |
+  | `LOG_FILE` | `SERVER_LOG_FILE` |
+  | `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
+  | `GATEWAY_SOURCE_MAX_AGE_SECONDS` | `CONNECTOR_MAX_EVENT_AGE_S` |
+  | `GATEWAY_NATIVE_PLATFORMS` | `CONNECTOR_QQ_PLATFORMS` |
+  | `GATEWAY_OUTBOX` | `CONNECTOR_OUTBOX_ENABLED` |
+  | `MAX_INFLIGHT_GATEWAY` | `CONNECTOR_MAX_INFLIGHT` |
+  | `BOT_QQ` | `QQ_BOT_ID` |
+  | `NAPCAT_API` | `QQ_ONEBOT_URL` |
+  | `NAPCAT_IMAGE_DIR` | `QQ_ONEBOT_IMAGE_DIR` |
+  | `WEBHOOK_SECRET` | `QQ_ONEBOT_SECRET` |
+  | `MAX_INFLIGHT_WEBHOOKS` | `QQ_ONEBOT_MAX_INFLIGHT` |
+  | `PROACTIVE_ENABLE` | `PROACTIVE_ENABLED` |
+  | `PROACTIVE_INTERVAL` | `PROACTIVE_INTERVAL_S` |
+  | `PROACTIVE_MIN_SILENCE` | `PROACTIVE_MIN_SILENCE_S` |
+  | `PROACTIVE_COOLDOWN` | `PROACTIVE_COOLDOWN_S` |
+  | `PROACTIVE_DM_MIN_SILENCE` | `PROACTIVE_DM_MIN_SILENCE_S` |
+  | `PROACTIVE_DM_COOLDOWN` | `PROACTIVE_DM_COOLDOWN_S` |
+  | `REACT_LEARN` | `REACT_LEARN_ENABLED` |
+  | `REACT_TTL_SEC` | `REACT_TTL_S` |
+  | `REACT_FIX_WINDOW` | `REACT_FIX_WINDOW_S` |
+  | `REACT_ELICIT` | `REACT_ELICIT_ENABLED` |
+  | `REACT_ELICIT_DELAY` | `REACT_ELICIT_DELAY_S` |
+  | `REACT_ELICIT_COOLDOWN` | `REACT_ELICIT_COOLDOWN_S` |
+  | `PROMOTE_AUTO` | `PROMOTE_AUTO_ENABLED` |
+  | `EXAMPLES_MAX_AUTO` | `PROMOTE_MAX_EXAMPLES` |
+  | `FEEDBACK_MAX_AUTO` | `PROMOTE_MAX_FEEDBACK` |
+  | `EVOLVE_AUTO` | `EVOLVE_AUTO_ENABLED` |
+  | `EVAL_ENABLE` | `EVAL_ENABLED` |
+  | `AGENT_EVIDENCE_WARN_BYTES` | `LEDGER_EVIDENCE_WARN_BYTES` |
+  | `AGENT_CANDIDATE_LEDGER_WARN_BYTES` | `LEDGER_CANDIDATES_WARN_BYTES` |
+  | `PROMPT_LAB_MODEL` | `LAB_MODEL` |
+  | `BENCH_EVAL_DELAY` | `BENCH_EVAL_DELAY_S` |
+
+  Connector configuration:
+
+  | Connector | Old | New |
+  |---|---|---|
+  | Satori, Matrix | `PERSONAGENT_URL`, the event endpoint (`http://127.0.0.1:8080/webhook/gateway`) | `PERSONAGENT_URL`, the base URL (`http://127.0.0.1:8080`) |
+  | Satori, Matrix | `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
+  | Satori | `SATORI_ENDPOINT` | `SATORI_URL` |
+  | Satori | `SATORI_FORWARDER_ID` | `SATORI_CONNECTOR_ID` |
+  | Satori | `SATORI_OUTBOX` | `SATORI_OUTBOX_ENABLED` |
+  | Satori | `SATORI_INLINE_IMAGES` | `SATORI_INLINE_IMAGES_ENABLED` |
+  | Matrix | `MATRIX_HOMESERVER` | `MATRIX_URL` |
+  | Matrix | `MATRIX_ROOMS` | `MATRIX_GROUPS` |
+  | Matrix | `MATRIX_FORWARDER_ID` | `MATRIX_CONNECTOR_ID` |
+  | Matrix | `MATRIX_OUTBOX` | `MATRIX_OUTBOX_ENABLED` |
+  | Matrix | `MATRIX_E2EE` | `MATRIX_E2EE_ENABLED` |
+  | Matrix | `MATRIX_READ_RECEIPTS` | `MATRIX_READ_RECEIPTS_ENABLED` |
+  | Matrix | `MATRIX_STORE_PATH` | `MATRIX_STORE_DIR` |
+  | AstrBot plugin | `astrbot_plugin_llm_persona_gateway` (directory and plugin name) | `astrbot_plugin_personagent` |
+  | AstrBot plugin | `agent_url`, the event endpoint | `personagent_url`, the base URL |
+  | AstrBot plugin | `gateway_token` | `connector_token` |
+  | AstrBot plugin | `forwarder_id` | `connector_id` |
+  | AstrBot plugin | `group_whitelist` | `groups` |
+  | AstrBot plugin | `private_whitelist` | `dm_users` |
+  | AstrBot plugin | `private_enabled` | none: DMs are forwarded when `dm_users` is not empty |
+
+  Protocol (docs/connectors.md), where the signing scheme, the segments and
+  every field not listed are unchanged:
+
+  | Old | New |
+  |---|---|
+  | `POST /webhook/gateway` | `POST /v1/events` |
+  | `POST /webhook/gateway/outbox` | `POST /v1/outbox` |
+  | `POST /webhook/qq`, the direct OneBot ingress (its `X-Signature` header stays) | `POST /v1/onebot` |
+  | `X-Gateway-Token`, `X-Gateway-Timestamp`, `X-Gateway-Nonce`, `X-Gateway-Signature` | `X-Personagent-Token`, `X-Personagent-Timestamp`, `X-Personagent-Nonce`, `X-Personagent-Signature` |
+  | `message_type`: `"group"` / `"private"`, in events and outbox deliveries | `conversation_type`: `"group"` / `"dm"` |
+  | `user_id` | `sender_id` |
+  | `self_id` | `bot_id` |
+  | `source_timestamp` | `sent_at` |
+  | `is_at_me` | `addressed` |
+  | `raw_text` | `text` |
+  | `forwarder_id`, in events and outbox pulls | `connector_id` |
+  | `caps` | `capabilities` |
+  | a reply's `at_user_id` | `mention_user_id` |
+  | error code `stale_source_event` | `stale_event` |
+
+- **The AstrBot plugin reads each platform the way its adapter delivers it.**
+  QQ pokes, recalls and requests no longer reach the persona as empty turns.
+  More messages count as addressing the bot, on purpose: a Discord message
+  starting with `@bot` (which the adapter strips), a ping of the bot's role,
+  and replies to the bot on Telegram (photos and voice too), Discord, Lark,
+  Slack threads, KOOK and Satori. Quotes carry their text and author; sticker
+  and emoji names, voice transcripts and the platform's own send time come
+  through. Telegram images are sent inline, so the bot token in their URLs
+  never reaches the agent. Because the send time is now the platform's, a
+  backlog older than `CONNECTOR_MAX_EVENT_AGE_S` is refused as stale.
+- **The AstrBot plugin writes each platform's way.** Mentions no longer carry
+  a double space on QQ and Telegram, long replies are split under each
+  platform's limit, counted with the mention and the escapes as the platform
+  counts them, so Discord and Misskey cut nothing off and Slack refuses no
+  part (on QQ under `forward_threshold`, so none becomes a merged-forward
+  card), Telegram shows `*` and `_` as typed, text cannot ping
+  a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
+  other than JPEG no longer post an error, and QQ official replies are plain
+  text.
+- **The admin is the admin on every platform.** An admin account on a
+  platform other than QQ used to get only the admin's DM persona; in a group
+  it was an ordinary member. It now gets everything the QQ admin gets: the
+  closer persona in groups (sticky calls included), the authority over group
+  memories ("forget" and "what do you remember" cover every member), the
+  extra weight when it corrects the bot, the exemption from
+  `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
+  longer needs a QQ admin), and memories that name `ADMIN_NAME` are
+  attributed to the admin's account on that conversation's platform.
+  Proactive DMs reach the admin through a connector that pulls the outbox,
+  and QQ ids without one through NapCat. All the `ADMIN_IDS` entries name one
+  person, `ADMIN_NAME`: when moving the admin lists into `ADMIN_IDS` (see One
+  naming standard), leave out anyone else.
+  `tools/candidates_admin.py`, `tools/bootstrap_from_history.py` and
+  `try_chat.py` read the admin the same way the agent does.
+- **The group prompt no longer assumes QQ.** Speakers are labelled `id=`
+  rather than `qq=`, the mention marker is taught as `[AT:id]`, the bystander
+  rule says "not you" instead of naming a bot-number placeholder nothing ever
+  filled in, and the example mention is spelled the way the conversation's
+  ids are (`[AT:telegram:123456]` in a Telegram room), where a bare number
+  taught a Telegram model to write mentions the connector could not resolve.
+  This changes the live QQ prompt text too, so the provider's prompt cache
+  misses once after upgrading.
+- **QQ through AstrBot sends the follow-up question and the excuse.**
+  With `CONNECTOR_QQ_PLATFORMS=aiocqhttp` both were dropped once the
+  connector's request returned. They now go back through the AstrBot plugin's
+  outbox while it is pulling, and so do proactive messages, so QQ through
+  AstrBot no longer needs NapCat's HTTP server for any of them; without a
+  pulling connector they go to `QQ_ONEBOT_URL`, as on the direct route.
+- **A connector's own `"proactive": true` DM counts against the DM cooldown.**
+  It used to stamp the reader's activity, as if they had written. It now
+  stamps `PROACTIVE_DM_COOLDOWN_S`'s clock, which the agent's own loop reads,
+  so the two schedulers cannot both open the same DM.
+- **A half-delivered proactive opener is kept on record.** When only part of
+  it went out, the part people read is now in the room's buffer or the DM
+  history, as a half-delivered reply already was.
+- **For code built on the engine:** an `AgentSettings` field whose setting
+  was renamed takes the new setting's name in lowercase (`llm_timeout_s`,
+  `llm_dm_model`, `connector_token`, `access_groups`, `access_dm_users`,
+  `connector_outbox_enabled`, ...), and so do the `Agent` attributes that
+  mirror them. Identifiers say admin where they said owner, connector where
+  they said gateway or forwarder, and dm where they said private for a
+  direct message: `persona_agent/gateway.py` is
+  `persona_agent/connector.py`, `GatewaySink` is `ConnectorSink`,
+  `Agent.handle_gateway` is `handle_event`, `Agent.handle`, the OneBot entry
+  point, is `handle_onebot`, and `promotion.decide` takes the admin's
+  accounts as `admin_ids`. `AgentSettings` gains `admin_ids` and `proactive_platforms`,
+  and `Agent` an `outbox` and a `connector_handles` store.
+  `config_env.env_csv` is gone; `access.split_ids` replaces it.
+
+- **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
+  `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /
+  `vision_base_url`, `Agent._describe_image_glm` is `_describe_image_vision`,
+  and `health.eval_endpoint` takes `vision_key` / `vision_base`. The default
+  chat model and endpoint are defined once, as `config_env.DEFAULT_LLM_MODEL`
+  and `DEFAULT_LLM_BASE_URL`, instead of in every file that fell back to them,
+  and logs and comments name the vision endpoint rather than a vendor.
+- **`tools/import_stickers_folder.py` no longer defaults `VISION_MODEL`** to
+  one vendor's model: tagging needs `VISION_MODEL` and the vision endpoint set,
+  as the agent does. `tools/sticker_holdout_eval.py` stops with that message up
+  front instead of scoring every sticker None.
+
 ### Added
 
 - **An admin and allowlists that work on every platform: `ADMIN_IDS`,
-  `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** Entries are `<platform>:<id>`
+  `ACCESS_GROUPS` and `ACCESS_DM_USERS`.** Entries are `<platform>:<id>`
   (`telegram:-1001234`, `discord:4242`); a bare id, or `qq:<id>`, is QQ, and a
-  platform in `GATEWAY_NATIVE_PLATFORMS` may be written with its prefix
+  platform in `CONNECTOR_QQ_PLATFORMS` may be written with its prefix
   (`aiocqhttp:10000`) and means the bare id its events carry. The lists apply
   per platform: a platform with no entries is not restricted by the agent, so
   QQ still answers every group when none is listed and QQ DMs still need the
-  admin or an entry, while a forwarded platform stays under the forwarder's own
-  allowlist until it has entries. One Telegram entry therefore gates Telegram
-  and leaves QQ alone, where `QQ_GROUPS=telegram:-100` used to close every QQ
-  group. A connector that did not filter can say so with
-  `"prefiltered": false` on the event, which makes a platform without entries
-  default-deny (docs/connectors.md). A refusal is now logged once per
+  admin or an entry, while a platform a connector carries stays under the
+  connector's own allowlist until it has entries. One Telegram entry
+  therefore gates Telegram and leaves QQ alone, where one in 0.4.0's QQ group
+  list used to close every QQ group. A connector that did not filter can say
+  so with `"prefiltered": false` on the event, which makes a platform without
+  entries default-deny (docs/connectors.md). A refusal is now logged once per
   conversation at INFO, naming the setting that refused it.
 - **A forwarded quote says what it quotes.** A `reply` segment may carry the
   quoted `text`, `sender_id` and `sender_name`. When the agent never saw the
@@ -28,73 +248,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used to read as a bare `[reply]`; it now reads `[reply Bob: ...]`, fenced as
   text the sender did not write. An `emoji` segment's `name` reaches the model
   as `[emoji: name]`, and an image with `"sticker": true` reads as a sticker.
-  Old forwarders send none of this and see no change.
-- **The outbox: `POST /webhook/gateway/outbox`.** A connector that sends
-  `forwarder_id`, `reply_handle` and `"caps": ["outbox"]` on its events can
+  Older connectors send none of this and see no change.
+- **The outbox: `POST /v1/outbox`.** A connector that sends `connector_id`,
+  `reply_handle` and `"capabilities": ["outbox"]` on its events can
   long-poll this endpoint for messages no request is waiting for
   (docs/connectors.md). The agent remembers each admitted conversation's
-  handle in `runtime/gateway_handles.json` (bounded, keyed like every other
+  handle in `runtime/connector_handles.json` (bounded, keyed like every other
   store), hands each delivery out once, and counts as said only what the
   connector acks as sent. Same token, signature and replay guard as
-  `/webhook/gateway`, with its own concurrency budget so a long-poll never
+  `/v1/events`, with its own concurrency budget so a long-poll never
   takes a turn's slot. The body names its kind (`outbox.pull`), and each
   endpoint refuses the other's. A delivery not acked by the connector's next
   pull counts as not sent, so a restarted connector cannot hold a
   conversation for minutes, and stopping personagent releases open
-  long-polls at once. `GATEWAY_OUTBOX=false` turns it off.
+  long-polls at once. `CONNECTOR_OUTBOX_ENABLED=false` turns it off.
 - **Proactive openers, the follow-up question and the excuse reach every
   platform with such a connector.** Until now they existed only on QQ: the
   proactive loops skipped every other conversation, and the question asked
   after a rejection and the excuse for a failed model call were dropped once
-  the gateway request had returned. They now go through the outbox, and are
-  remembered only once the connector acks them. The DM loop also considers
-  anyone who has DMed the bot through such a connector (and is still
-  admitted), not only the QQ ids in `ADMIN_IDS` and `ALLOWED_DM_USERS`. A
-  conversation no connector can reach is skipped before any model call.
-  **Upgrade note:** with `PROACTIVE_ENABLE=true`, openers start on Telegram
+  the connector's request had returned. They now go through the outbox, and
+  are remembered only once the connector acks them. The DM loop also
+  considers anyone who has DMed the bot through such a connector (and is
+  still admitted), not only the QQ ids in `ADMIN_IDS` and `ACCESS_DM_USERS`.
+  A conversation no connector can reach is skipped before any model call.
+  **Upgrade note:** with `PROACTIVE_ENABLED=true`, openers start on Telegram
   and the other platforms as soon as their connector pulls the outbox. The
   new `PROACTIVE_PLATFORMS` (for example `qq`) keeps the loop where you want
   it; blank means everywhere it can reach.
 - **The AstrBot plugin (0.5.0) is a full connector.** Its events carry a
-  `forwarder_id`, a `reply_handle` and `caps`, and it pulls the agent's outbox
-  and delivers what the persona says unprompted through AstrBot, on every
-  platform that can send first (not QQ official, WeChat official accounts or
-  WeCom smart bots). A delivery goes only to a session the plugin itself took
-  from a message in that conversation, so an event posted to the agent by
-  anything else cannot aim it at another chat, and the allowlists are checked
-  again at send time. It is on by default (`outbox_enabled`); an agent
-  without the outbox answers 404 and nothing else changes.
+  `connector_id`, a `reply_handle` and `capabilities`, and it pulls the
+  agent's outbox and delivers what the persona says unprompted through
+  AstrBot, on every platform that can send first (not QQ official, WeChat
+  official accounts or WeCom smart bots). A delivery goes only to a session
+  the plugin itself took from a message in that conversation, so an event
+  posted to the agent by anything else cannot aim it at another chat, and
+  the allowlists are checked again at send time. It is on by default
+  (`outbox_enabled`); an agent without the outbox answers 404 and nothing
+  else changes.
 
-### Deprecated
+### Removed
 
 - **`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS`
-  are now `ADMIN_IDS`, `ALLOWED_GROUPS` and `ALLOWED_DM_USERS`.** The old
-  names keep working and leave the template. Unlike the vision rename they
-  are merged rather than overridden: `OWNER_QQ` and `GATEWAY_OWNER_IDS` add to
-  `ADMIN_IDS`, `QQ_GROUPS` to `ALLOWED_GROUPS` and `PRIVATE_ALLOWED_QQS` to
-  `ALLOWED_DM_USERS`, so an `.env` half moved to the new names keeps every id
-  it had; to remove an id, delete it from the old name too. Preflight names
-  each old name in use, and warns about an id pasted without its platform
-  prefix (it reads as a QQ id), a capitalised platform (it never matches), a
-  non-QQ id in a QQ-only name (its meaning changed, see Added), and a
-  `GATEWAY_NATIVE_PLATFORMS` entry other than `aiocqhttp` (its ids would be
-  read as QQ numbers).
-- **The owner is now called the admin.** `OWNER_NAME` and `OWNER_RELATIONSHIP`
-  are now `ADMIN_NAME` and `ADMIN_RELATIONSHIP`; the old names keep working,
-  and a new name that is set wins. `try_chat.py --owner` and `/owner` are now
-  `--admin` and `/admin`, the old spellings still accepted, and the persona
-  and lorebook templates say `{admin_name}` and `{admin_relationship}`. The
-  wizard asks for the admin on any platform, not only with QQ, writes the new
-  names, and empties the old ones it read, since their ids would otherwise
-  outlive a removal. The persona's own prompts are unchanged.
-- **`GLM_API_KEY` and `GLM_BASE_URL` are now `VISION_API_KEY` and
-  `VISION_BASE_URL`.** They configure whichever OpenAI-compatible model
-  `VISION_MODEL` names, not one vendor's. The old names keep working exactly as
-  before, default endpoint included, and a new name that is set wins.
-  `VISION_BASE_URL` has no default: the vision model decides the provider, so
-  name its endpoint. The template used to ship `GLM_BASE_URL` blank while
-  calling blank the default, but a blank value has always turned vision off; it
-  now asks for the URL.
+  are no longer read; `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS`
+  replace them.** Move every id across: `OWNER_QQ` and `GATEWAY_OWNER_IDS`
+  to `ADMIN_IDS`, `QQ_GROUPS` to `ACCESS_GROUPS` and `PRIVATE_ALLOWED_QQS` to
+  `ACCESS_DM_USERS`, writing a non-QQ id with its platform prefix. Preflight
+  names each old name still set, and warns about an id pasted without its
+  platform prefix (it reads as a QQ id), a capitalised platform (it never
+  matches), and a `CONNECTOR_QQ_PLATFORMS` entry other than `aiocqhttp` (its
+  ids would be read as QQ numbers).
+- **`OWNER_NAME` and `OWNER_RELATIONSHIP` are no longer read; the owner is
+  now called the admin.** Set `ADMIN_NAME` and `ADMIN_RELATIONSHIP` instead.
+  `try_chat.py` takes `--admin` and `/admin`; `--owner` and `/owner` are
+  gone. The persona and lorebook templates say `{admin_name}` and
+  `{admin_relationship}`, and the wizard asks for the admin on any platform,
+  not only with QQ, and writes the new names. The persona's own prompts are
+  unchanged.
+- **`GLM_API_KEY` and `GLM_BASE_URL` are no longer read; `VISION_API_KEY`
+  and `VISION_BASE_URL` replace them.** They configure whichever
+  OpenAI-compatible model `VISION_MODEL` names, not one vendor's.
+  `VISION_BASE_URL` has no default: the vision model decides the provider,
+  so name its endpoint. The template used to ship `GLM_BASE_URL` blank while
+  calling blank the default, but a blank value has always turned vision off;
+  it now asks for the URL.
 
 ### Fixed
 
@@ -116,17 +332,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its persona text describes it rather than being lines to recite.
 - **Re-running `quickstart.py --astrbot` no longer undoes the AstrBot setup.**
   It passed empty allowlists, so every re-run wiped the groups and DM senders
-  set in AstrBot's WebUI, turned DMs off, reset any `agent_url` (an HTTPS
-  proxy's or a tunnel's) to the default, dropped every other excluded
+  set in AstrBot's WebUI, turned DMs off, reset any `personagent_url` (an
+  HTTPS proxy's or a tunnel's) to the default, dropped every other excluded
   platform, and without `--qq` switched QQ routing off, while `--help`
-  promised re-running was safe. Values not given are now kept, and only an
-  `agent_url` the plugin would refuse is replaced; `--no-qq` is the explicit
-  way to stop routing QQ; `GATEWAY_NATIVE_PLATFORMS` follows whatever the
-  plugin ends up forwarding, keeping its other entries; and the wizard offers
-  the current allowlists and QQ choice as its defaults and writes `.env`
-  before asking about platforms. When `.env` has no `GATEWAY_TOKEN`, the
-  plugin's existing token is reused if it would survive `.env`. `.env` values
-  are now read as dotenv reads them, quotes and inline comments included.
+  promised re-running was safe. Values not given are now kept, and only a
+  `personagent_url` the plugin would refuse is replaced; `--no-qq` is the
+  explicit way to stop routing QQ; `CONNECTOR_QQ_PLATFORMS` follows whatever
+  the plugin ends up forwarding, keeping its other entries; and the wizard
+  offers the current allowlists and QQ choice as its defaults and writes
+  `.env` before asking about platforms. When `.env` has no `CONNECTOR_TOKEN`,
+  the plugin's existing token is reused if it would survive `.env`. `.env`
+  values are now read as dotenv reads them, quotes and inline comments
+  included.
 - **A failed persona-lineage save no longer drops the earlier revisions out of
   scope.** `extend()` rolls the new hash back when the save fails, and the
   agent then registered a lineage without its own hash, so everything learned
@@ -136,7 +353,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vision timeout, 429 or network failure was cached as a miss, so the image
   stayed undescribed for as long as the cache kept it. A miss is now cached
   only when vision and OCR both answered.
-- **`/health` probes the private chat with the agent's default model when
+- **`/health` probes the DM chat with the agent's default model when
   `LLM_MODEL` is unset**, instead of failing the probe as "not configured" on a
   working agent. An explicit blank `LLM_MODEL` still reads as blank, as it does
   for the agent, so preflight keeps reporting it.
@@ -147,86 +364,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **`/webhook/qq` refuses namespaced ids.** NapCat only sends QQ numbers, but
-  a payload forged with an admin-listed `telegram:` id passed the DM check
-  through the admin bypass, and a namespaced group skipped `QQ_GROUPS`. Any id
-  with a platform prefix, `qq:` included, is now refused on that route.
-
-### Changed
-
-- **The AstrBot plugin reads each platform the way its adapter delivers it.**
-  QQ pokes, recalls and requests no longer reach the persona as empty turns.
-  More messages count as addressing the bot, on purpose: a Discord message
-  starting with `@bot` (which the adapter strips), a ping of the bot's role,
-  and replies to the bot on Telegram (photos and voice too), Discord, Lark,
-  Slack threads, KOOK and Satori. Quotes carry their text and author; sticker
-  and emoji names, voice transcripts and the platform's own send time come
-  through. Telegram images are sent inline, so the bot token in their URLs
-  never reaches the agent. Because the send time is now the platform's, a
-  backlog older than `GATEWAY_SOURCE_MAX_AGE_SECONDS` is refused as stale.
-- **The AstrBot plugin writes each platform's way.** Mentions no longer carry
-  a double space on QQ and Telegram, long replies are split under each
-  platform's limit, counted with the mention and the escapes as the platform
-  counts them, so Discord and Misskey cut nothing off and Slack refuses no
-  part (on QQ under `forward_threshold`, so none becomes a merged-forward
-  card), Telegram shows `*` and `_` as typed, text cannot ping
-  a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
-  other than JPEG no longer post an error, and QQ official replies are plain
-  text.
-- **The admin is the admin on every platform.** An account in
-  `GATEWAY_OWNER_IDS` (now `ADMIN_IDS`) used to get only the owner's DM
-  persona; in a group it was an ordinary member. It now gets everything
-  `OWNER_QQ` gets: the closer persona in groups (sticky calls included), the
-  authority over group memories ("forget" and "what do you remember" cover
-  every member), the extra weight when it corrects the bot, the exemption
-  from `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
-  longer needs `OWNER_QQ`), and memories that name `ADMIN_NAME` are attributed
-  to the admin's account on that conversation's platform. Proactive DMs reach
-  the admin through a connector that pulls the outbox, and QQ ids without one
-  through NapCat. All the admin entries name one person, `ADMIN_NAME`: if
-  `GATEWAY_OWNER_IDS` lists anyone else, remove them before upgrading.
-  `tools/candidates_admin.py`, `tools/bootstrap_from_history.py` and
-  `try_chat.py` read the admin the same way the agent does.
-- **The group prompt no longer assumes QQ.** Speakers are labelled `id=`
-  rather than `qq=`, the mention marker is taught as `[AT:id]`, the bystander
-  rule says "not you" instead of naming a `BOT_QQ` placeholder nothing ever
-  filled in, and the example mention is spelled the way the conversation's ids
-  are (`[AT:telegram:123456]` in a Telegram room), where a bare number taught a
-  Telegram model to write mentions the forwarder could not resolve. This
-  changes the live QQ prompt text too, so the provider's prompt cache misses
-  once after upgrading.
-- **QQ through AstrBot sends the follow-up question and the excuse.**
-  With `GATEWAY_NATIVE_PLATFORMS=aiocqhttp` both were dropped once the
-  gateway request returned. They now go back through the AstrBot plugin's
-  outbox while it is pulling, and so do proactive messages, so QQ through
-  AstrBot no longer needs NapCat's HTTP server for any of them; without a
-  pulling connector they go to `NAPCAT_API`, as on the direct route.
-- **A connector's own `"proactive": true` DM counts against the DM cooldown.**
-  It used to stamp the reader's activity, as if they had written. It now
-  stamps `PROACTIVE_DM_COOLDOWN`'s clock, which the agent's own loop reads,
-  so the two schedulers cannot both open the same DM.
-- **A half-delivered proactive opener is kept on record.** When only part of
-  it went out, the part people read is now in the room's buffer or the DM
-  history, as a half-delivered reply already was.
-- **For code built on the engine:** `AgentSettings` gains `admin_ids` and
-  `allowed_dm_users`, and the `owners` / `dm_users` properties that fold the
-  old fields in; `owner_qq`, `gateway_owner_ids` and `private_allowed_qqs`
-  still work. `promotion.decide` takes `owner_ids` next to `owner_id`.
-  `config_env.env_csv` is gone; `access.split_ids` replaces it.
-  `AgentSettings` also gains `gateway_outbox` and `proactive_platforms`, and
-  `Agent` an `outbox` and a `gateway_handles` store.
-
-- **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
-  `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /
-  `vision_base_url`, `Agent._describe_image_glm` is `_describe_image_vision`,
-  and `health.eval_endpoint` takes `vision_key` / `vision_base`. The default
-  chat model and endpoint are defined once, as `config_env.DEFAULT_LLM_MODEL`
-  and `DEFAULT_LLM_BASE_URL`, instead of in every file that fell back to them,
-  and logs and comments name the vision endpoint rather than a vendor.
-- **`tools/import_stickers_folder.py` no longer defaults `VISION_MODEL`** to
-  one vendor's model: tagging needs `VISION_MODEL` and the vision endpoint set,
-  as the agent does. `tools/sticker_holdout_eval.py` stops with that message up
-  front instead of scoring every sticker None.
+- **The direct OneBot ingress, `/v1/onebot`, refuses namespaced ids.** NapCat
+  only sends QQ numbers, but a payload forged with an admin-listed `telegram:`
+  id passed the DM check through the admin bypass, and a namespaced group
+  skipped the QQ group allowlist. Any id with a platform prefix, `qq:`
+  included, is now refused on that route.
 
 ## [0.4.0] — 2026-09-24
 

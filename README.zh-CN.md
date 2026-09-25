@@ -109,7 +109,7 @@ personagent 从不登录聊天账号。登录由连接器负责：它把每条�
 
 1. 安装 [AstrBot](https://github.com/AstrBotDevs/AstrBot)，在它的 WebUI 里配好目标平台。
 2. 再运行一次 `python quickstart.py`，选择连接 AstrBot，填入 AstrBot 的 data 目录。向导会复制插件，并把共享的 `CONNECTOR_TOKEN` 写进两边的配置。之前填过的内容会作为默认值保留。
-3. 把允许机器人参与的群加进插件白名单。不填就什么都不转发；私聊还需要 `private_enabled=true`，发送者也要在白名单里。
+3. 把允许机器人参与的群填进插件的 `groups` 设置。不填就什么都不转发；私聊只转发 `dm_users` 里列出的发送者。
 4. 检查 personagent `.env` 中的 `PERSONA_NAME`，也就是它会响应的名字。接 QQ 时还要把 `QQ_BOT_ID` 设为机器人账号的 QQ 号。
 5. 重启 AstrBot，然后在仓库根目录启动 personagent：`.venv/bin/python main.py`（Windows：`.venv\Scripts\python.exe main.py`）。
 
@@ -131,14 +131,14 @@ QQ 还需要 NapCat 等 OneBot v11 实现，并通过 AstrBot 的 `aiocqhttp` �
 - 从插件的 `excluded_platforms` 中移除 `aiocqhttp`。
 - 在 personagent 的 `.env` 中设置 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`，让 QQ 会话保持原有的身份和记忆。`--qq` 会同时处理这两项。
 - NapCat 的 HTTP 服务（`QQ_ONEBOT_URL`）可开可不开。开着的话，personagent 能补回离线期间漏掉的 @；插件没在拉取 outbox 时，它主动发出的消息也会改走这里。这条路径下 OCR 回退会跳过。
-- `/webhook/qq` 直连入口自 0.3.0 起废弃。不要与 AstrBot 转发同时启用，否则每条消息都会收到两次。
+- OneBot 直连入口（`/v1/onebot`）自 0.3.0 起废弃。不要与 AstrBot 转发同时启用，否则每条消息都会收到两次。
 
 </details>
 
 <details>
 <summary>AstrBot 跑在 Docker 里或另一台机器上</summary>
 
-插件只会发往回环地址（同一台机器，或共享网络命名空间、使用 host 网络的容器），或者设置了 `gateway_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe agent_url`，随后由 AstrBot 自己的模型回复。`agent_url` 在插件设置里修改，同机默认值是 `http://127.0.0.1:8080/webhook/gateway`。
+插件只会发往回环地址（同一台机器，或共享网络命名空间、使用 host 网络的容器），或者设置了 `connector_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe personagent_url`，随后由 AstrBot 自己的模型回复。`personagent_url` 在插件设置里修改，同机默认值是 `http://127.0.0.1:8080`。
 
 personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `SERVER_HOST` 时，必须同时配置 `CONNECTOR_TOKEN` 和 `QQ_ONEBOT_SECRET`。请在前面放 HTTPS 反向代理或私有隧道，保证请求体原样转发，两端时钟偏差不超过五分钟。
 
@@ -215,9 +215,9 @@ personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`
 
 ## 常见问题
 
-**服务在跑，但就是不回复。** 先查连接器。AstrBot 插件查白名单、`private_enabled`、`agent_url`，接 QQ 时还有 `excluded_platforms`；Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。再查 `PERSONA_NAME`、接 QQ 时的 `QQ_BOT_ID`，以及两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
+**服务在跑，但就是不回复。** 先查连接器。AstrBot 插件查 `groups`、`dm_users`、`personagent_url`，接 QQ 时还有 `excluded_platforms`；Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。再查 `PERSONA_NAME`、接 QQ 时的 `QQ_BOT_ID`，以及两边的 token。群聊里它不会每条都回，测试时直接叫它的名字。部署指南按可能性列出了[常见原因](docs/deploy.md#when-the-bot-goes-quiet)（英文）。
 
-**怎么确认服务在线？** `curl http://127.0.0.1:8080/health` 不调用模型。`.venv/bin/python tools/healthcheck.py` 还会检查配置、指出拼错的变量名并探测上游服务，这些探测可能消耗额度。`/health/details` 同样会探测，配置 token 后需要 `X-Gateway-Token` 请求头。
+**怎么确认服务在线？** `curl http://127.0.0.1:8080/health` 不调用模型。`.venv/bin/python tools/healthcheck.py` 还会检查配置、指出拼错的变量名并探测上游服务，这些探测可能消耗额度。`/health/details` 同样会探测，配置 token 后需要 `X-Personagent-Token` 请求头。
 
 **改了设置没效果。** 确认重启了读取它的进程，检查拼写，并用 UTF-8 无 BOM 保存 `.env`。系统环境变量优先于 `.env`；布尔值写 `true` / `false`。重新运行向导时它会按本次回答重写部分设置，请逐项看清再回答。`PERSONA_TZ_OFFSET_HOURS`（默认 8，即 UTC+8）决定夜间时段和主动发言的安静时段。
 
@@ -226,7 +226,7 @@ personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`
 Beta。QQ 是真正长期运行过的场景。AstrBot 的其他平台并非都经过完整的端到端验证；Satori 和 Matrix 连接器是新加的，目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.12、在 Windows 上用 Python 3.12 运行测试。`tools/` 里的调优与评估脚本属于实验，不能说明它实际聊得有多好。
 
 - [部署指南](docs/deploy.md)（英文）
-- 连接器：[AstrBot 插件](integrations/astrbot/astrbot_plugin_llm_persona_gateway/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [协议](docs/connectors.md)
+- 连接器：[AstrBot 插件](integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [协议](docs/connectors.md)
 - [全部设置](.env.example)
 - [更新日志](CHANGELOG.md) · [贡献指南](CONTRIBUTING.md)
 
