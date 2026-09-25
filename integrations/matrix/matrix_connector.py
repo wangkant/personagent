@@ -459,6 +459,8 @@ class MatrixConnector:
         self._typing: dict[str, int] = {}
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._tasks: set[asyncio.Task] = set()
+        # room id -> done once the room's latest event has gone to the agent.
+        self._posted: dict[str, asyncio.Future] = {}
         self._turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
         self._joining: set[str] = set()
         self._warned: set[str] = set()
@@ -606,7 +608,10 @@ class MatrixConnector:
         if event_id in self._recent:
             return self._recent[event_id]
         try:
-            response = await self.client.room_get_event(room.room_id, event_id)
+            # Bounded: nio retries a timeout forever, and the room's later
+            # events wait for this one.
+            response = await asyncio.wait_for(
+                self.client.room_get_event(room.room_id, event_id), DOWNLOAD_TIMEOUT_S)
             event = getattr(response, "event", None)
             source = getattr(event, "source", None)
             if isinstance(source, dict) and source.get("type") == "m.room.encrypted":
@@ -743,20 +748,41 @@ class MatrixConnector:
         return event
 
     async def handle(self, room: Any, source: Mapping) -> None:
-        async with self._turns:
-            try:
-                event = await self.build_event(room, source)
-            except Exception:
-                logger.exception("could not read event %s", source.get("event_id"))
-                return
+        # Events are built at once but go to the agent in timeline order, so a
+        # text never overtakes an image still downloading; the turns overlap.
+        # Tasks start in the order nio delivered the events.
+        room_id = str(getattr(room, "room_id", ""))
+        previous = self._posted.get(room_id)
+        posted = asyncio.get_running_loop().create_future()
+        self._posted[room_id] = posted
+        try:
+            async with self._turns:
+                try:
+                    event = await self.build_event(room, source)
+                except Exception:
+                    logger.exception("could not read event %s", source.get("event_id"))
+                    event = None
+            # Without a slot: the event before may still be waiting for one.
+            if previous is not None:
+                await previous
             if event is not None:
-                await self._turn(room, event)
+                async with self._turns:
+                    await self._turn(room, event, posted)
+        finally:
+            if not posted.done():
+                posted.set_result(None)
+            if self._posted.get(room_id) is posted:
+                del self._posted[room_id]
 
-    async def _turn(self, room: Any, event: dict) -> None:
+    async def _turn(self, room: Any, event: dict,
+                    posted: Optional[asyncio.Future] = None) -> None:
         room_id = room.room_id
         thread_root = event.pop("_thread_root", "")
         await self._typing_start(room_id)
         try:
+            if posted is not None:
+                # The next event wakes after this post has started.
+                posted.set_result(None)
             try:
                 answer = await self.agent.send_event(event)
             except httpx.HTTPStatusError as exc:

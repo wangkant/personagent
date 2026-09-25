@@ -375,6 +375,74 @@ def test_a_threaded_message_is_answered_in_its_thread() -> None:
         "m.in_reply_to": {"event_id": "$e1"}}, repr(relation))
 
 
+def test_events_reach_the_agent_in_timeline_order_and_turns_overlap() -> None:
+    order: list[str] = []
+
+    async def main() -> None:
+        downloaded, text_arrived = asyncio.Event(), asyncio.Event()
+
+        async def agent(request: httpx.Request) -> httpx.Response:
+            event_id = json.loads(request.content)["message_id"]
+            order.append(event_id)
+            if event_id == "$img":
+                # The image's turn is still running when the text arrives.
+                await asyncio.wait_for(text_arrived.wait(), 2)
+            else:
+                text_arrived.set()
+            return httpx.Response(200, json={"owned": True, "replies": []})
+
+        conn, client = make()
+        conn.agent = mc.sdk.Connector("http://127.0.0.1:8080/webhook/gateway", forwarder_id="mx1",
+                                      client=httpx.AsyncClient(transport=httpx.MockTransport(agent)))
+        client.media["mxc://example.org/pic"] = PNG
+        fetch = client.download
+
+        async def slow_download(mxc=None, **kwargs):
+            await downloaded.wait()
+            return await fetch(mxc=mxc)
+
+        client.download = slow_download
+        build = conn.build_event
+
+        async def build_or_fail(room, source):
+            if source["event_id"] == "$bad":
+                raise ValueError("unreadable")
+            return await build(room, source)
+
+        conn.build_event = build_or_fail
+        room = client.rooms[GROUP]
+        conn.on_room_event(room, Obj(source=msg("cat.png", msgtype="m.image", event_id="$img",
+                                                url="mxc://example.org/pic")))
+        conn.on_room_event(room, Obj(source=msg("?", event_id="$bad")))
+        conn.on_room_event(room, Obj(source=msg("look at this", event_id="$txt")))
+        for _ in range(20):
+            await asyncio.sleep(0)
+        check("the text waits for the image before it", order == [], repr(order))
+        downloaded.set()
+        await asyncio.wait_for(conn.drain(), 5)
+        check("nothing left in the chain", not conn._posted, repr(conn._posted))
+
+    asyncio.run(main())
+    check("timeline order, past an event that could not be read",
+          order == ["$img", "$txt"], repr(order))
+
+
+def test_a_quote_whose_fetch_hangs_falls_back(monkeypatch) -> None:
+    # Later events in the room wait for this one, so the fetch is bounded.
+    monkeypatch.setattr(mc, "DOWNLOAD_TIMEOUT_S", 0.05)
+    conn, client = make()
+
+    async def hang(room_id, event_id):
+        await asyncio.Event().wait()
+
+    client.room_get_event = hang
+    source = msg("> <@bob:example.org> earlier\n\nand?",
+                 **{"m.relates_to": {"m.in_reply_to": {"event_id": "$lost"}}})
+    event = asyncio.run(asyncio.wait_for(conn.build_event(client.rooms[GROUP], source), 2))
+    check("the fallback text stands in", event["segments"][0] == {
+        "type": "reply", "message_id": "$lost", "text": "earlier"}, repr(event["segments"]))
+
+
 # ---------- outbound ----------
 
 def test_a_turn_sends_the_replies_in_order_with_typing() -> None:
