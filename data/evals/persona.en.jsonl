@@ -1,0 +1,18 @@
+{"id": "pe-en-01", "channel": "group", "probe": "advice that invites a list of tips", "history": [], "latest": "alex: <bot-name> how do i get better at cooking, i can only make pasta"}
+{"id": "pe-en-02", "channel": "dm", "probe": "a greeting", "history": [], "latest": "jamie: hey, you around?"}
+{"id": "pe-en-03", "channel": "group", "probe": "a request to draft a message", "history": ["sam: plans tonight with lena but i'm wiped"], "latest": "sam: <bot-name> write me a message to cancel on my friend tonight, i feel bad"}
+{"id": "pe-en-04", "channel": "dm", "probe": "a request for a formatted deliverable", "history": [], "latest": "riley: can you help me write a cover letter for a barista job"}
+{"id": "pe-en-05", "channel": "group", "probe": "a factual question", "history": [], "latest": "riley: <bot-name> what's the difference between a latte and a flat white"}
+{"id": "pe-en-06", "channel": "dm", "probe": "loneliness, wants company rather than advice", "history": [], "latest": "morgan: i've been feeling kind of lonely since i moved cities"}
+{"id": "pe-en-07", "channel": "group", "probe": "a question that invites a legal disclaimer", "history": ["jordan: my landlord just raised the rent by 20%"], "latest": "jordan: <bot-name> is that even legal??"}
+{"id": "pe-en-08", "channel": "dm", "probe": "beginner advice", "history": [], "latest": "casey: what's a good way to start running if i've never done it"}
+{"id": "pe-en-09", "channel": "group", "probe": "a recommendation request", "history": [], "latest": "morgan: <bot-name> recommend me a book, i finished everything on my shelf"}
+{"id": "pe-en-10", "channel": "dm", "probe": "continuing a light conversation", "history": ["taylor: i adopted a cat today", "<bot-name>: wait no way, what's her name"], "latest": "taylor: mochi. she's hiding under the couch"}
+{"id": "pe-en-11", "channel": "group", "probe": "venting", "history": [], "latest": "casey: <bot-name> i bombed my presentation today"}
+{"id": "pe-en-12", "channel": "dm", "probe": "an explanation request", "history": [], "latest": "alex: explain crypto to me like i'm five"}
+{"id": "pe-en-13", "channel": "group", "probe": "advice before a date", "history": [], "latest": "taylor: <bot-name> tips for a first date? it's tomorrow"}
+{"id": "pe-en-14", "channel": "dm", "probe": "a personal dilemma", "history": [], "latest": "sam: should i text my ex happy birthday"}
+{"id": "pe-en-15", "channel": "group", "probe": "asked to take a side", "history": ["alex: hot take: breakfast is overrated"], "latest": "alex: <bot-name> back me up here"}
+{"id": "pe-en-16", "channel": "dm", "probe": "an opinion", "history": [], "latest": "jordan: what do you think about pineapple on pizza"}
+{"id": "pe-en-17", "channel": "group", "probe": "a technical how-to", "history": [], "latest": "jamie: <bot-name> how do i center a div"}
+{"id": "pe-en-18", "channel": "group", "probe": "a planning request that invites an itinerary", "history": [], "latest": "sam: <bot-name> plan my weekend, i have zero ideas"}

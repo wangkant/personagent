@@ -1,0 +1,24 @@
+{"id": "sp-zh-01", "mode": "judge", "label": "speak", "reason": "an open question to the whole room is a clear opening", "history": ["阿杰: 终于周五了", "小周: 冲冲冲"], "latest": "小林: 周末大家都看啥剧，求推荐，剧荒了"}
+{"id": "sp-zh-02", "mode": "judge", "label": "silent", "reason": "two members in their own thread, @-ing each other: the bystander seat, PASS", "history": ["小林: @阿杰 发票发给客户了吗", "阿杰: @小林 早上发了，抄送你了"], "latest": "小林: @阿杰 好，客户确认金额了没"}
+{"id": "sp-zh-03", "mode": "judge", "label": "speak", "reason": "an explicit invitation for anyone to talk", "history": ["老王: 今天群里好安静"], "latest": "老王: 来个人说句话，上班无聊死了"}
+{"id": "sp-zh-04", "mode": "judge", "label": "silent", "reason": "wrap-up closing signal: PASS", "history": ["老王: 今天就到这吧", "小周: 同，脑子已经糊了"], "latest": "老王: 睡了睡了，大家晚安"}
+{"id": "sp-zh-05", "mode": "judge", "label": "speak", "reason": "good news announced to the whole room invites a congratulation", "history": ["阿琳: 有人在吗"], "latest": "小美: 我科目三终于过了！！考了第三次！"}
+{"id": "sp-zh-06", "mode": "judge", "label": "silent", "reason": "serious work detail between two colleagues: PASS", "history": ["大刘: 上线之后一直报 502", "小陈: 我在回滚了，你看下数据库连接池", "大刘: 连接池满了，100 个全占着，有地方没释放"], "latest": "小陈: 那你把 worker 一个一个重启，盯着连接池的监控"}
+{"id": "sp-zh-07", "mode": "judge", "label": "speak", "reason": "a vote asked of everyone is a direct opening", "history": ["小林: 豆腐脑就该吃咸的", "阿杰: 甜的才对", "小周: 你俩别吵了"], "latest": "小林: 来来来大家都投个票，甜的还是咸的"}
+{"id": "sp-zh-08", "mode": "judge", "label": "silent", "reason": "noise fragment: PASS", "history": ["阿琳: 哈", "小美: 嗯"], "latest": "阿琳: D . e"}
+{"id": "sp-zh-09", "mode": "followup", "label": "speak", "reason": "asks the bot about what it just said", "history": ["小林: 有人去过五道口新开的那家拉面吗", "<bot-name>: 上周去了，汤头是真的顶"], "latest": "小林: 值得排队吗，听说要排一个小时"}
+{"id": "sp-zh-10", "mode": "followup", "label": "silent", "reason": "perfunctory closing signal: PASS", "history": ["老王: 这电脑用啥充电器", "<bot-name>: type-c 的，65w 够了"], "latest": "老王: 哦"}
+{"id": "sp-zh-11", "mode": "followup", "label": "speak", "reason": "answers the question the bot just asked", "history": ["小周: 今晚做点啥吃", "<bot-name>: 你想多懒，一锅出还是认真做"], "latest": "小周: 一锅出，二十分钟以内"}
+{"id": "sp-zh-12", "mode": "followup", "label": "silent", "reason": "the topic moves to someone else and the line @s them: PASS", "history": ["小林: 有没有靠谱的宠物医院", "<bot-name>: 榆树街那家还行"], "latest": "小林: @阿杰 你车从修理厂提回来没"}
+{"id": "sp-zh-13", "mode": "followup", "label": "speak", "reason": "answers the question the bot just asked", "history": ["阿杰: 马拉松训练计划终于做完了", "<bot-name>: 可以啊，现在一次跑多远"], "latest": "阿杰: 周日拉 30 公里，腿已经废了"}
+{"id": "sp-zh-14", "mode": "followup", "label": "silent", "reason": "wrap-up closing signal: PASS", "history": ["阿琳: 谢谢推荐", "<bot-name>: 不客气，看完说说咋样"], "latest": "阿琳: 好嘞，我先撤了，回头聊"}
+{"id": "sp-zh-15", "mode": "followup", "label": "speak", "reason": "asks the bot's opinion directly", "history": ["小美: 新一季是不是有点拖", "<bot-name>: 不是你的错觉，第三集确实水"], "latest": "小美: 对吧？？你觉得后面会好看吗，还是我直接弃了"}
+{"id": "sp-zh-16", "mode": "followup", "label": "silent", "reason": "a burst in progress with a dangling line: PASS and wait", "history": ["小陈: 我今天上班", "<bot-name>: 咋了"], "latest": "小陈: 就是说……"}
+{"id": "sp-zh-17", "mode": "called", "label": "speak", "reason": "called with a direct question", "history": ["阿杰: 这周好漫长"], "latest": "小林: <bot-name> 你最近在看啥"}
+{"id": "sp-zh-18", "mode": "called", "label": "silent", "reason": "an incidental mention inside two members' own thread: nothing is directed at the bot", "history": ["小周: @阿杰 旅行咋样", "阿杰: @小周 超好玩，青旅里全是名字奇怪的人"], "latest": "阿杰: @小周 有个人真的就叫<bot-name>，笑死"}
+{"id": "sp-zh-19", "mode": "called", "label": "speak", "reason": "called by someone venting to the bot", "history": [], "latest": "小周: <bot-name> 我今天代码评审被喷惨了"}
+{"id": "sp-zh-20", "mode": "called", "label": "speak", "reason": "called with a direct request", "history": ["阿杰: 晚饭没吃饱"], "latest": "阿杰: <bot-name> 推荐个零食，想吃咸的"}
+{"id": "sp-zh-21", "mode": "called", "label": "silent", "reason": "the name is only part of a folder name in a work thread between two members", "history": ["小林: @阿琳 周一的 PPT 做完了吗", "阿琳: @小林 快了，卡在预算那页"], "latest": "小林: @阿琳 用<bot-name>项目文件夹里那个模板，公式都在里面"}
+{"id": "sp-zh-22", "mode": "called", "label": "speak", "reason": "called with news for the bot", "history": [], "latest": "小美: <bot-name> 猜猜谁租到那套房子了！！"}
+{"id": "sp-zh-23", "mode": "called", "label": "silent", "reason": "the name is only the wifi's name, in two members' own thread", "history": ["阿杰: @老王 你是不是又改 wifi 名了", "老王: @阿杰 可能吧"], "latest": "老王: @阿杰 现在叫<bot-name>-5G，密码没变"}
+{"id": "sp-zh-24", "mode": "called", "label": "speak", "reason": "called with a direct question", "history": ["小陈: 睡不着"], "latest": "阿琳: <bot-name> 还没睡吗"}

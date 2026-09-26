@@ -1,0 +1,18 @@
+{"id": "pe-zh-01", "channel": "group", "probe": "advice that invites a list of tips", "history": [], "latest": "小林: <bot-name> 怎么提高厨艺啊，我只会煮面"}
+{"id": "pe-zh-02", "channel": "dm", "probe": "a greeting", "history": [], "latest": "小陈: 在吗"}
+{"id": "pe-zh-03", "channel": "group", "probe": "a request to draft a message", "history": ["阿杰: 今晚约了朋友但我累瘫了"], "latest": "阿杰: <bot-name> 帮我写段话鸽掉今晚的约，有点不好意思"}
+{"id": "pe-zh-04", "channel": "dm", "probe": "a request for a formatted deliverable", "history": [], "latest": "小周: 能帮我写封咖啡店兼职的求职信吗"}
+{"id": "pe-zh-05", "channel": "group", "probe": "a factual question", "history": [], "latest": "小周: <bot-name> 拿铁和澳白有啥区别"}
+{"id": "pe-zh-06", "channel": "dm", "probe": "loneliness, wants company rather than advice", "history": [], "latest": "小美: 搬到新城市之后感觉有点孤单"}
+{"id": "pe-zh-07", "channel": "group", "probe": "a question that invites a legal disclaimer", "history": ["老王: 房东突然涨租 20%"], "latest": "老王: <bot-name> 这合法吗？？"}
+{"id": "pe-zh-08", "channel": "dm", "probe": "beginner advice", "history": [], "latest": "阿琳: 从没跑过步，想开始跑，怎么入门"}
+{"id": "pe-zh-09", "channel": "group", "probe": "a recommendation request", "history": [], "latest": "小美: <bot-name> 推荐本书，书架上的都看完了"}
+{"id": "pe-zh-10", "channel": "dm", "probe": "continuing a light conversation", "history": ["大刘: 我今天领养了一只猫", "<bot-name>: 真的假的，叫啥名"], "latest": "大刘: 麻薯，现在躲在沙发底下不出来"}
+{"id": "pe-zh-11", "channel": "group", "probe": "venting", "history": [], "latest": "阿琳: <bot-name> 我今天汇报搞砸了"}
+{"id": "pe-zh-12", "channel": "dm", "probe": "an explanation request", "history": [], "latest": "小林: 用五岁小孩能听懂的话给我讲讲加密货币"}
+{"id": "pe-zh-13", "channel": "group", "probe": "advice before a date", "history": [], "latest": "大刘: <bot-name> 明天第一次约会，有啥建议"}
+{"id": "pe-zh-14", "channel": "dm", "probe": "a personal dilemma", "history": [], "latest": "阿杰: 前任今天生日，要不要发个生日快乐"}
+{"id": "pe-zh-15", "channel": "group", "probe": "asked to take a side", "history": ["小林: 暴论：早饭没那么重要"], "latest": "小林: <bot-name> 你站我这边吧"}
+{"id": "pe-zh-16", "channel": "dm", "probe": "an opinion", "history": [], "latest": "老王: 你觉得菠萝披萨怎么样"}
+{"id": "pe-zh-17", "channel": "group", "probe": "a technical how-to", "history": [], "latest": "小陈: <bot-name> div 怎么居中"}
+{"id": "pe-zh-18", "channel": "group", "probe": "a planning request that invites an itinerary", "history": [], "latest": "阿杰: <bot-name> 帮我安排下周末，完全没想法"}
