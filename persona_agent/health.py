@@ -15,7 +15,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, vision_endpoint_from_env
-from .endpoints import chat_completions_url, endpoint_for
+from .endpoints import chat_completions_url, embedding_endpoint, endpoint_for
 from .textproc import apply_k2_quirks
 
 
@@ -139,6 +139,21 @@ def check_eval():
     return True, f"{model} -> {txt[:20]!r}"
 
 
+def check_embeddings():
+    """Optional embedding endpoint; retrieval ranks without it when it is down."""
+    model = os.getenv("EMBEDDING_MODEL", "").strip()
+    if not model:
+        return None, "not configured (retrieval ranks without embeddings)"
+    url, key = embedding_endpoint(
+        base_url=(os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL) or "").rstrip("/"),
+        api_key=os.getenv("LLM_API_KEY", ""),
+        embedding_base_url=os.getenv("EMBEDDING_BASE_URL", "").strip().rstrip("/"),
+        embedding_api_key=os.getenv("EMBEDDING_API_KEY", "").strip())
+    r = _post_json(url, {"model": model, "input": ["ping"]},
+                   {"Authorization": f"Bearer {key}"} if key else {})
+    return True, f"{model} -> {len(r['data'][0]['embedding'])} dims"
+
+
 def check_tavily():
     """Optional keyed web-search backend; web search falls back to DuckDuckGo
     when no key is set."""
@@ -203,6 +218,7 @@ CHECKS = [
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),
+    ("Embeddings",              check_embeddings,         False),
     ("Web search (Tavily)",     check_tavily,             False),
     ("OneBot bridge",           check_onebot,             True),
 ]

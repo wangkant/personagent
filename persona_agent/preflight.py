@@ -429,6 +429,17 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                 f" ({fallback_host}), so LLM_API_KEY is sent there. Give the"
                 " fallback provider its own key"))
 
+    # Embeddings are off until a model is named, so an endpoint without one
+    # looks configured and does nothing. Reachability is probed at startup.
+    if not str(configured.get("EMBEDDING_MODEL") or "").strip():
+        for key in ("EMBEDDING_BASE_URL", "EMBEDDING_API_KEY"):
+            if str(configured.get(key) or "").strip():
+                findings.append(Finding(
+                    "WARN", key,
+                    "is set, but EMBEDDING_MODEL is blank, so retrieval ranks"
+                    " without embeddings and this has no effect"))
+                break
+
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))
     return findings

@@ -196,6 +196,13 @@ class DataViews:
             rec["_rt"] = _retrieval_fields(rec)
         return rows
 
+    @staticmethod
+    def _read_seed(path: Path) -> list:
+        rows = read_jsonl((path,))
+        for rec in rows:
+            rec["_seed"] = True  # ranked below what this deployment learned
+        return rows
+
     def _set_pool_pos(self, attr: str, eof: int, offset: int, sig: bytes) -> None:
         setattr(self, attr + "_eof", eof)
         setattr(self, attr + "_offset", offset)
@@ -256,9 +263,9 @@ class DataViews:
                 return self._tag_rows(records), True
             # _read_jsonl_appended rejected the prefix and re-read the runtime
             # file whole; the seed still has to be prepended.
-            return self._tag_rows(read_jsonl((seed_path,)) + records), False
+            return self._tag_rows(self._read_seed(seed_path) + records), False
 
-        seed_records = read_jsonl((seed_path,))
+        seed_records = self._read_seed(seed_path)
         if runtime_path.exists():
             runtime_records, _, eof, offset, sig = _read_jsonl_appended(
                 runtime_path, 0, 0, b"")

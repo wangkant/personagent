@@ -325,6 +325,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marks the report. Each run builds its agents in a throwaway deployment root,
   deleted afterwards unless `--keep`, and writes a JSON report with every
   case's inputs, replies and verdicts.
+- **Hybrid retrieval.** Examples, contrastive pairs and memories are ranked
+  on four signals instead of substring hits (`persona_agent/ranking.py`):
+  BM25 over the words a row shares with the message, IDF taken from its pool,
+  on the same tokens as before, so Chinese still matches on two-character
+  windows; where the row was learned, this conversation above this persona
+  above the shipped seeds (promoted rows are still filtered by scope exactly
+  as before); exponential recency; and, when `EMBEDDING_MODEL` is set,
+  cosine similarity from any OpenAI-compatible `/embeddings` endpoint
+  (`EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY`, blank meaning the primary
+  endpoint). Without embeddings the order stays close to the old one: a row
+  that shared only a word every row has, such as the bot's name, now ranks
+  lower, and memory recency halves every 7 days instead of reaching zero at
+  14. The lorebook stays keyword-triggered. Vectors are fetched before the
+  prompt is built, the message itself within 3 seconds and the pools and
+  memories in the background, and cached in memory and in
+  `runtime/embeddings.jsonl` by model and text hash, so a restart does not
+  embed them again. A failing or slow endpoint never fails a turn: it is
+  logged once, left alone for five minutes, and the turn is ranked on the
+  other three signals. The startup probe, `tools/healthcheck.py` and
+  `/health/details` report a configured endpoint that does not answer (never
+  as critical), and preflight reports an embedding endpoint set without a
+  model.
 
 ### Removed
 

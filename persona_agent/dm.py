@@ -213,6 +213,7 @@ class DirectMessages:
         It joins the internal cue as bounded external material: the engine's
         own `<proactive>` note still says what the turn is and that PASS is
         allowed, because a scheduler's text has no authority to say either."""
+        await self._prepare_retrieval(self._last_user_text(history), pkey)
         prompt = self._build_dm_prompt(history, is_admin=is_admin,
                                        proactive=proactive, pkey=pkey,
                                        proactive_cue=proactive_cue)

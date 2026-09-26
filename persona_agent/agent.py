@@ -13,6 +13,7 @@ from typing import Optional
 
 
 from . import candidates as candidate_ledger_mod
+from . import embeddings as embeddings_mod
 from . import evidence as evidence_mod
 from . import lineage as lineage_mod
 from . import outbox as outbox_mod
@@ -222,6 +223,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.vision_api_key = s.vision_api_key
         self.vision_base_url = s.vision_base_url
         self.tavily_key = s.tavily_key
+        self.embedding_model = s.embedding_model
+        self.embedding_base_url = s.embedding_base_url
+        self.embedding_api_key = s.embedding_api_key
 
         self.proactive_enabled = s.proactive_enabled
         self.proactive_interval_s = s.proactive_interval_s
@@ -487,6 +491,11 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._view_pairs_stamp: tuple = ()
         # Edge-triggered "every promoted row refused by scope" warning.
         self._scope_drop_warned = False
+        # Optional embeddings (retrieval.py): the one backfill in flight, when
+        # a failed endpoint may be tried again, and whether it has said so.
+        self._embedding_backfill: asyncio.Task | None = None
+        self._embedding_retry_at = 0.0
+        self._embedding_warned = False
 
         # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
         self.output_filter_file = resolve_seed_lang_file(
@@ -509,6 +518,12 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             obj = cls(path)
             setattr(self, attr, obj)
         return obj
+
+    @property
+    def embedding_cache(self) -> embeddings_mod.EmbeddingCache:
+        """Retrieval's vectors, beside the pools they were computed from."""
+        return self._sidecar("_embedding_cache", embeddings_mod.EmbeddingCache,
+                             self.learning_dir / "embeddings.jsonl")
 
     @property
     def example_candidates(self) -> promotion.CandidatePool:

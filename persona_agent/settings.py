@@ -170,6 +170,15 @@ class AgentSettings:
     stickers_dir: str = "stickers"
     stickers_file: str = "stickers.json"
 
+    # ---- retrieval embeddings (optional) ---------------------------------
+    #: An OpenAI-compatible /embeddings model that adds a semantic signal to
+    #: retrieval. Blank = off: rows are ranked on words, scope and recency.
+    embedding_model: str = ""
+    #: Blank = the primary's endpoint and key. A URL of its own is sent
+    #: ``embedding_api_key`` only, never ``api_key``.
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+
     # ---- model-error fallback ---------------------------------------------
     #: Two independent fallback clocks share these numbers: the error-driven
     #: one, kept per model (a failed model is skipped in every mode, for
@@ -299,6 +308,9 @@ class AgentSettings:
         self.qq_bot_id = str(self.qq_bot_id)
         self.vision_model = (self.vision_model or "").strip()
         self.tavily_key = (self.tavily_key or "").strip()
+        self.embedding_model = (self.embedding_model or "").strip()
+        self.embedding_base_url = str(self.embedding_base_url or "").strip().rstrip("/")
+        self.embedding_api_key = (self.embedding_api_key or "").strip()
         self.message_debounce_sec = max(0.0, self.message_debounce_sec)
         if not self.agent_lang:
             self.agent_lang = self.lang or env_str("AGENT_LANG", "")
@@ -399,6 +411,9 @@ class AgentSettings:
             vision_api_key=vision_key,
             vision_base_url=vision_base,
             tavily_key=_str("TAVILY_API_KEY"),
+            embedding_model=_str("EMBEDDING_MODEL"),
+            embedding_base_url=_str("EMBEDDING_BASE_URL"),
+            embedding_api_key=_str("EMBEDDING_API_KEY"),
             lang=_str("AGENT_LANG", "en", strip=True).lower(),
             connector_qq_platforms=identity.native_platforms,
         )

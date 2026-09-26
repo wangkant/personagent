@@ -31,3 +31,26 @@ def chat_completions_url(base: str) -> str:
     if not path.endswith("/chat/completions"):
         path += "/chat/completions" if path.endswith("/v1") else "/v1/chat/completions"
     return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+
+
+def embeddings_url(base: str) -> str:
+    """/embeddings beside a root, a version base (/v1, /api/paas/v4) or a
+    complete /chat/completions endpoint, or a complete /embeddings one."""
+    parts = urlsplit(base.strip().rstrip("/"))
+    path = parts.path.rstrip("/")
+    last = path.rsplit("/", 1)[-1]
+    if path.endswith("/chat/completions"):
+        path = path[:-len("/chat/completions")] + "/embeddings"
+    elif not path.endswith("/embeddings"):
+        versioned = len(last) > 1 and last[0] == "v" and last[1:].isdigit()
+        path += "/embeddings" if versioned else "/v1/embeddings"
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+
+
+def embedding_endpoint(*, base_url: str, api_key: str, embedding_base_url: str,
+                       embedding_api_key: str) -> tuple[str, str]:
+    """(embeddings URL, API key). Blank EMBEDDING_BASE_URL means the primary's
+    endpoint and key; a URL of its own is never sent the primary's key."""
+    if embedding_base_url:
+        return embeddings_url(embedding_base_url), embedding_api_key
+    return embeddings_url(base_url), embedding_api_key or api_key
