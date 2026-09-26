@@ -446,15 +446,20 @@ class PromptBuilder:
             "</core_memory>"
         )
 
+    @staticmethod
+    def _last_user_text(history: list[dict]) -> str:
+        """What a one-on-one turn's retrieval is focused on."""
+        return next(
+            (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
+            "",
+        )
+
     def _build_dm_prompt(self, history: list[dict], *, is_admin: bool = True,
                          proactive: bool = False, pkey: str = "",
                          proactive_cue: str = "") -> "DMPrompt":
         """The system prompt and the framed turns of a one-on-one chat; see
         `_chat_dm` for what each argument means."""
-        last_user = next(
-            (m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
-            "",
-        )
+        last_user = self._last_user_text(history)
         # Gate on `is_admin` alone: ADMIN_NAME is optional and ships empty.
         if is_admin:
             admin_ref = self.admin_name or "the owner"

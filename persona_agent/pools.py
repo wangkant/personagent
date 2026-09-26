@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from .embeddings import text_key
 
 logger = logging.getLogger("agent")
 
@@ -99,11 +100,20 @@ def epoch(ts) -> float:
         return 0.0
 
 
-def _retrieval_fields(rec: dict) -> tuple[str, str, float]:
+def embedding_text(rec: dict) -> str:
+    """What a row is embedded as: the situation it answers, not the reply."""
+    ctx = rec.get("context") or []
+    if not isinstance(ctx, list):
+        ctx = [ctx]
+    return "\n".join([str(rec.get("scenario") or ""), *(str(c) for c in ctx)])
+
+
+def _retrieval_fields(rec: dict) -> tuple[str, str, float, str]:
     """Precompute what the few-shot relevance scorer needs, once per record at
     load time instead of once per record on every LLM turn: the lowercased
-    scenario / context blobs the focus tokens are matched against, and the
-    entry's timestamp as an epoch float for the recency decay.
+    scenario / context blobs the focus tokens are matched against, the
+    entry's timestamp as an epoch float for the recency decay, and the key
+    its embedding is cached under.
 
     ts_epoch is 0.0 when there is no parsable timestamp — same as the old
     inline parse, which simply skipped the recency bonus on failure. Naive
@@ -117,4 +127,5 @@ def _retrieval_fields(rec: dict) -> tuple[str, str, float]:
         str(rec.get("scenario") or "").lower(),
         " ".join(str(c) for c in ctx).lower(),
         ts_epoch,
+        text_key(embedding_text(rec)),
     )

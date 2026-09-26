@@ -474,6 +474,21 @@ class ModelCalls:
                                 label, model, actual)
             except Exception as e:
                 logger.warning("[Agent] %s model probe failed: %s", label, e)
+        await self._probe_embeddings()
+
+    async def _probe_embeddings(self) -> None:
+        """Say at startup whether a configured embedding endpoint answers, and
+        embed the pools before the first turn needs them."""
+        if not self.embedding_model:
+            return
+        try:
+            vectors = await self._embed(["hi"], 15.0)
+        except Exception as e:
+            self._embedding_failed(e)
+            return
+        logger.info("[Agent] embedding probe OK: model=%s dims=%d",
+                    self.embedding_model, len(vectors[0]))
+        self._start_embedding_backfill()
 
     def _pick_group_model(self, mode: str = "") -> str:
         """Pick primary or fallback model based on recent call frequency.

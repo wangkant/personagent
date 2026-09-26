@@ -22,6 +22,7 @@ class Thinking:
         latest_text: str = "",
         caller_override: Optional[tuple] = None,
     ) -> tuple[str, str, str]:
+        await self._prepare_retrieval(latest_text, group_id)
         prompt = self._build_group_prompt(group_id, mode, latest_text,
                                           caller_override)
         # Model routing — two stages for self-initiated modes:

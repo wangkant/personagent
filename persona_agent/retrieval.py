@@ -1,16 +1,20 @@
 """What past material a turn sees: examples, memories and lorebook entries."""
 from __future__ import annotations
 
+import asyncio
 import heapq
 import json
 import logging
 import re
 import time
 from collections import defaultdict
+from itertools import chain
 
-from . import ranking
+from . import embeddings, ranking
+from .endpoints import embedding_endpoint
 from .pools import (
     _retrieval_fields,
+    embedding_text,
 )
 from .textproc import (
     _clean_prompt_source,
@@ -23,6 +27,108 @@ logger = logging.getLogger("agent")
 
 
 class Retrieval:
+    # -------- Embeddings: fetched in the async path, read by the ranking --------
+    def _stored_vector(self, key: str):
+        if not self.embedding_model:
+            return None
+        return self.embedding_cache.get(self.embedding_model, key)
+
+    def _query_vector(self, focus_text: str):
+        if not (self.embedding_model and focus_text.strip()):
+            return None
+        return self._stored_vector(embeddings.text_key(focus_text))
+
+    async def _embed(self, texts: list[str], timeout_s: float) -> list:
+        url, key = embedding_endpoint(
+            base_url=self.base_url, api_key=self.api_key,
+            embedding_base_url=self.embedding_base_url,
+            embedding_api_key=self.embedding_api_key)
+        async with self._http(timeout=embeddings.BATCH_TIMEOUT_S) as client:
+            return await asyncio.wait_for(
+                embeddings.fetch(client, url, key, self.embedding_model, texts),
+                timeout_s)
+
+    def _embedding_failed(self, exc: BaseException) -> None:
+        self._embedding_retry_at = time.monotonic() + embeddings.RETRY_AFTER_S
+        if not self._embedding_warned:
+            self._embedding_warned = True
+            logger.warning(
+                "[Agent] embedding endpoint failed (model=%s, %s: %s); retrieval "
+                "ranks without embeddings, next try in %ds",
+                self.embedding_model, type(exc).__name__, exc,
+                embeddings.RETRY_AFTER_S)
+
+    def _embedding_answered(self) -> None:
+        if self._embedding_warned:
+            self._embedding_warned = False
+            logger.info("[Agent] embedding endpoint answers again (model=%s)",
+                        self.embedding_model)
+
+    async def _prepare_retrieval(self, focus_text: str, memory_key: str = "") -> None:
+        """Embed what this turn's ranking will look up, before its prompt is
+        built. Only the query and a few new memories are waited for, briefly;
+        pool rows are backfilled in the background. Never raises."""
+        if not self.embedding_model or time.monotonic() < self._embedding_retry_at:
+            return
+        model, cache = self.embedding_model, self.embedding_cache
+        try:
+            query = ([focus_text] if focus_text.strip()
+                     and not cache.has(model, embeddings.text_key(focus_text)) else [])
+            fresh = [text for text in dict.fromkeys(
+                it.get("text", "") for it in self.memories.get(memory_key, []))
+                if embeddings.clip(text) and not cache.has(model, embeddings.text_key(text))]
+            fresh = fresh[:embeddings.BATCH_SIZE - len(query)]
+            if query or fresh:
+                vectors = await self._embed(query + fresh, embeddings.QUERY_TIMEOUT_S)
+                if query:
+                    cache.put(model, {embeddings.text_key(focus_text): vectors[0]},
+                              persist=False)
+                if fresh:
+                    cache.put(model, {embeddings.text_key(t): v for t, v
+                                      in zip(fresh, vectors[len(query):])}, persist=True)
+                self._embedding_answered()
+            self._start_embedding_backfill()
+        except Exception as exc:
+            self._embedding_failed(exc)
+
+    def _start_embedding_backfill(self) -> None:
+        """Embed every pool row and memory that has no vector yet, in the
+        background, one task at a time."""
+        if self._embedding_backfill is not None and not self._embedding_backfill.done():
+            return
+        self._reload_examples_if_stale()
+        self._reload_pairs_if_stale()
+        self._reload_views_if_stale()
+        model, cache = self.embedding_model, self.embedding_cache
+        wanted: dict[str, object] = {}
+        for row in chain(self._examples_cache, self._pairs_cache,
+                         self._view_examples_cache, self._view_pairs_cache):
+            wanted[(row.get("_rt") or _retrieval_fields(row))[3]] = row
+        for items in self.memories.values():
+            for it in items:
+                text = it.get("text", "")
+                wanted[embeddings.text_key(text)] = text
+        cache.prune(model, set(wanted))
+        missing = [(key, src if isinstance(src, str) else embedding_text(src))
+                   for key, src in wanted.items() if not cache.has(model, key)]
+        # An empty input fails the whole batch it is in.
+        missing = [(key, text) for key, text in missing if embeddings.clip(text)]
+        if missing:
+            self._embedding_backfill = self._spawn(self._embedding_backfill_run(missing))
+
+    async def _embedding_backfill_run(self, missing: list[tuple[str, str]]) -> None:
+        model, cache = self.embedding_model, self.embedding_cache
+        try:
+            for i in range(0, len(missing), embeddings.BATCH_SIZE):
+                batch = missing[i:i + embeddings.BATCH_SIZE]
+                vectors = await self._embed([text for _, text in batch],
+                                            embeddings.BATCH_TIMEOUT_S)
+                cache.put(model, {key: vec for (key, _), vec in zip(batch, vectors)},
+                          persist=True)
+            self._embedding_answered()
+        except Exception as exc:
+            self._embedding_failed(exc)
+
     def _examples_for_prompt(
         self,
         focus_text: str = "",
@@ -32,10 +138,10 @@ class Retrieval:
         conv_id: str = "",
     ) -> str:
         """Hermes-style: contrastive pairs first (stronger signal), then chosen-only goods.
-        Dynamic retrieval: rank by BM25 over scenario and context, scope,
-        recency and mode match (ranking.py); with no signal at all, take the
-        newest. Pairs are auto-mined from feedback.jsonl entries the user
-        rated 'better'."""
+        Dynamic retrieval: rank by BM25 over scenario and context, embedding
+        similarity when EMBEDDING_MODEL is set, scope, recency and mode match
+        (ranking.py); with no signal at all, take the newest. Pairs are
+        auto-mined from feedback.jsonl entries the user rated 'better'."""
         self._reload_examples_if_stale()
         self._reload_pairs_if_stale()
         self._reload_views_if_stale()
@@ -85,12 +191,13 @@ class Retrieval:
             return ""
 
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
+        query_vec = self._query_vector(focus_text)
         conv_key = current_scope["conv_id"]
         weights = ranking.EXAMPLE_WEIGHTS
         now = time.time()
 
         def _scorer(pool: list):
-            # The fields are lowercased and parsed once at load time
+            # The fields are lowercased, parsed and hashed once at load time
             # (_retrieval_fields); the fallback covers records injected
             # straight into the cache.
             fields = [ex.get("_rt") or _retrieval_fields(ex) for ex in pool]
@@ -98,10 +205,12 @@ class Retrieval:
             by_row = {id(ex): f for ex, f in zip(pool, fields)}
 
             def _score(ex: dict) -> float:
-                scenario_lc, ctx_lc, ts_epoch = by_row[id(ex)]
+                scenario_lc, ctx_lc, ts_epoch, key = by_row[id(ex)]
                 return ranking.score(
                     weights,
                     lexical=lexicon.score((scenario_lc, ctx_lc), weights.fields),
+                    similarity=None if query_vec is None else ranking.cosine(
+                        query_vec, self._stored_vector(key)),
                     tier=ranking.scope_tier(ex, conv_key),
                     # A row without a parsable timestamp gets no recency bonus.
                     age_s=(now - ts_epoch) if ts_epoch else None,
@@ -110,7 +219,7 @@ class Retrieval:
 
         # nlargest is equivalent to sorted(..., reverse=True)[:n], ties and
         # all, but keeps a heap of n instead of sorting the whole pool.
-        have_signal = bool(focus_tokens or mode)
+        have_signal = bool(focus_tokens or mode or query_vec is not None)
         if have_signal:
             pairs = heapq.nlargest(limit_pairs, pairs_pool, key=_scorer(pairs_pool))
         else:
@@ -174,6 +283,7 @@ class Retrieval:
 
         now = time.time()
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
+        query_vec = self._query_vector(focus_text)
         weights = ranking.MEMORY_WEIGHTS
         lexicon = ranking.Lexicon(
             focus_tokens, [(it.get("text", "").lower(),) for it in items])
@@ -183,6 +293,8 @@ class Retrieval:
             return ranking.score(
                 weights,
                 lexical=lexicon.score((text.lower(),), weights.fields),
+                similarity=None if query_vec is None else ranking.cosine(
+                    query_vec, self._stored_vector(embeddings.text_key(text))),
                 age_s=now - it.get("time", now))
 
         group_level: list[dict] = []

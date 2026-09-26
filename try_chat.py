@@ -57,6 +57,9 @@ def _build_agent(lang: str) -> Agent:
         eval_enabled=False,
         vision_model="",
         tavily_key=os.getenv("TAVILY_API_KEY", ""),
+        embedding_model=os.getenv("EMBEDDING_MODEL", ""),
+        embedding_base_url=os.getenv("EMBEDDING_BASE_URL", ""),
+        embedding_api_key=os.getenv("EMBEDDING_API_KEY", ""),
         lang=lang,
     )
 
