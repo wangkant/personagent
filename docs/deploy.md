@@ -241,7 +241,8 @@ on one host.
 
 - **Probes spend credit.** `healthcheck.py` and `/health/details` send one
   tiny chat completion to each configured model endpoint (chat, DM, eval and
-  vision), plus one Tavily search if `TAVILY_API_KEY` is set. `/health`
+  vision), one embedding if `EMBEDDING_MODEL` is set, plus one Tavily search
+  if `TAVILY_API_KEY` is set. `/health`
   and the settings and ledger checks are free.
 - **`tools/prompt_lab.py` needs a second vendor**, so the tuning signal does
   not come from the model being tuned: `pip install -e ".[judge]"`,

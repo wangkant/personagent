@@ -209,7 +209,7 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `SERVER_HOST` 时
 
 personagent 保存的一切都在你自己的机器上：`runtime/`、`.env`、`persona.txt` 和 `persona.card.json`。这些文件不会提交到 Git，可能包含密钥和真实对话，请备份并妥善保管。
 
-模型供应商会看到对话内容。聊天上下文会发送到你配置的 `LLM_BASE_URL`。如果配置了备用供应商（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`），它在普通回合中也会被调用（回复判断、搜索决策、反应判定、自评和表情包标注），同样会收到聊天上下文。图片会发给视觉接口；模型决定查资料时，搜索词会发给 Tavily（设置了 `TAVILY_API_KEY` 时）或 DuckDuckGo。
+模型供应商会看到对话内容。聊天上下文会发送到你配置的 `LLM_BASE_URL`。如果配置了备用供应商（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`），它在普通回合中也会被调用（回复判断、搜索决策、反应判定、自评和表情包标注），同样会收到聊天上下文。图片会发给视觉接口；模型决定查资料时，搜索词会发给 Tavily（设置了 `TAVILY_API_KEY` 时）或 DuckDuckGo。设置了 `EMBEDDING_MODEL` 时，正在回复的消息、记忆和检索用的示例会发给向量接口（`EMBEDDING_BASE_URL`，留空时为 `LLM_BASE_URL`）。
 
 接入真实聊天前，请告诉参与者这是机器人，并征得他们同意处理其消息。QQ 第三方协议客户端存在封号风险，详见[免责声明](DISCLAIMER.md)。
 

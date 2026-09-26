@@ -112,7 +112,9 @@ modules, so each can be read, tested and replaced on its own:
 | `persona_agent/turns.py` | Intake: dedup, admission, debounce and the group turn from message to send |
 | `persona_agent/decision.py` | Whether to speak: a group turn's mode (`choose_group_mode`), pacing skips (`pacing_skip`), the cheap gate model (`_gate`), chat signals |
 | `persona_agent/prompt.py` | What the model reads: `_build_group_prompt`, `_build_dm_prompt` and their context blocks |
-| `persona_agent/retrieval.py` | What past material a turn sees: examples, memories, lorebook entries |
+| `persona_agent/retrieval.py` | What past material a turn sees: examples, memories, lorebook entries, and the embeddings fetched for them ahead of the prompt |
+| `persona_agent/ranking.py` | The retrieval score: BM25, embedding similarity, scope and recency, with their weights (pure logic) |
+| `persona_agent/embeddings.py` | The optional `/embeddings` call and its cache, in memory and in `runtime/embeddings.jsonl` |
 | `persona_agent/thinking.py` | One group turn's model work: prompt, gate, reply (`_think`) |
 | `persona_agent/dm.py` | The one-on-one turn |
 | `persona_agent/messages.py` | Reading a message: its text, quotes, buffer lines, @-mentions |
