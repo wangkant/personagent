@@ -8,6 +8,7 @@ import re
 import time
 from collections import defaultdict
 
+from . import ranking
 from .pools import (
     _retrieval_fields,
 )
@@ -31,9 +32,10 @@ class Retrieval:
         conv_id: str = "",
     ) -> str:
         """Hermes-style: contrastive pairs first (stronger signal), then chosen-only goods.
-        Dynamic retrieval: rank by relevance (scenario + context ngram overlap with
-        focus_text, mode match) and fall back to recency. Pairs are auto-mined from
-        feedback.jsonl entries the user rated 'better'."""
+        Dynamic retrieval: rank by BM25 over scenario and context, scope,
+        recency and mode match (ranking.py); with no signal at all, take the
+        newest. Pairs are auto-mined from feedback.jsonl entries the user
+        rated 'better'."""
         self._reload_examples_if_stale()
         self._reload_pairs_if_stale()
         self._reload_views_if_stale()
@@ -83,36 +85,34 @@ class Retrieval:
             return ""
 
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
+        conv_key = current_scope["conv_id"]
+        weights = ranking.EXAMPLE_WEIGHTS
         now = time.time()
 
-        def _score(ex: dict) -> float:
-            # scenario/context blobs and the timestamp are lowercased/parsed
-            # once at load time (_retrieval_fields); doing it here meant
-            # re-lowercasing the entire pool on every single LLM turn. The
-            # fallback covers records injected straight into the cache.
-            scenario_lc, ctx_lc, ts_epoch = ex.get("_rt") or _retrieval_fields(ex)
-            s = 0.0
-            for tok in focus_tokens:
-                if tok in scenario_lc:
-                    s += 1.0
-                if tok in ctx_lc:
-                    s += 0.3
-            if mode and ex.get("mode") == mode:
-                s += 0.5
-            # Recency: half-life 14 days, max bonus +0.3 — recent samples
-            # win ties but cannot outweigh a strong content match. (The old
-            # `len(ts) * 0.001` was a constant offset; all ISO timestamps
-            # are 19 chars so it gave every entry the same bump.) Age is
-            # clamped at 0 so a future-dated entry can't exceed the +0.3 cap.
-            if ts_epoch:
-                s += 0.3 * (0.5 ** (max(0.0, now - ts_epoch) / 86400.0 / 14.0))
-            return s
+        def _scorer(pool: list):
+            # The fields are lowercased and parsed once at load time
+            # (_retrieval_fields); the fallback covers records injected
+            # straight into the cache.
+            fields = [ex.get("_rt") or _retrieval_fields(ex) for ex in pool]
+            lexicon = ranking.Lexicon(focus_tokens, [f[:2] for f in fields])
+            by_row = {id(ex): f for ex, f in zip(pool, fields)}
+
+            def _score(ex: dict) -> float:
+                scenario_lc, ctx_lc, ts_epoch = by_row[id(ex)]
+                return ranking.score(
+                    weights,
+                    lexical=lexicon.score((scenario_lc, ctx_lc), weights.fields),
+                    tier=ranking.scope_tier(ex, conv_key),
+                    # A row without a parsable timestamp gets no recency bonus.
+                    age_s=(now - ts_epoch) if ts_epoch else None,
+                    mode_match=bool(mode) and ex.get("mode") == mode)
+            return _score
 
         # nlargest is equivalent to sorted(..., reverse=True)[:n], ties and
         # all, but keeps a heap of n instead of sorting the whole pool.
         have_signal = bool(focus_tokens or mode)
         if have_signal:
-            pairs = heapq.nlargest(limit_pairs, pairs_pool, key=_score)
+            pairs = heapq.nlargest(limit_pairs, pairs_pool, key=_scorer(pairs_pool))
         else:
             pairs = pairs_pool[-limit_pairs:]
 
@@ -142,7 +142,7 @@ class Retrieval:
                 limit_good,
                 (e for e in examples_pool
                  if e.get("reply", "") not in pair_chosen_set),
-                key=_score,
+                key=_scorer(examples_pool),
             )
         else:
             goods = [e for e in examples_pool
@@ -174,15 +174,16 @@ class Retrieval:
 
         now = time.time()
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
+        weights = ranking.MEMORY_WEIGHTS
+        lexicon = ranking.Lexicon(
+            focus_tokens, [(it.get("text", "").lower(),) for it in items])
 
         def _score(it: dict) -> float:
-            text_lc = it.get("text", "").lower()
-            age_days = max(0.0, (now - it.get("time", now)) / 86400.0)
-            s = max(0.0, 1.0 - age_days / 14.0)
-            for tok in focus_tokens:
-                if tok in text_lc:
-                    s += 0.5
-            return s
+            text = it.get("text", "")
+            return ranking.score(
+                weights,
+                lexical=lexicon.score((text.lower(),), weights.fields),
+                age_s=now - it.get("time", now))
 
         group_level: list[dict] = []
         per_user: dict[str, list[dict]] = defaultdict(list)

@@ -1,11 +1,15 @@
 """Tests for hybrid retrieval: lexical, embedding, scope and recency.
 
-The ranking math is checked on hand-built rows. Nothing here reaches a
-network or needs a key.
+The ranking math is checked on hand-built rows, and through a real agent.
+Nothing here reaches a network or needs a key.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from persona_agent import ranking
+from persona_agent.agent import Agent
 from persona_agent.textproc import _focus_tokens
 
 
@@ -92,3 +96,53 @@ def test_an_embedding_neighbour_with_no_shared_words_needs_embeddings() -> None:
           rank(query) == ["paraphrase", "word_match"])
     check("embedding: a missing or mismatched row vector is no signal, not an error",
           ranking.cosine(query, None) is None and ranking.cosine(query, [1.0, 0.0]) is None)
+
+
+# ---------------------------------------------------------------------------
+# Through the real agent
+# ---------------------------------------------------------------------------
+
+def make_agent(tmp: Path, **settings) -> Agent:
+    """An agent whose every state file, the embedding cache included, is in `tmp`."""
+    tmp.mkdir(parents=True, exist_ok=True)
+    a = Agent(
+        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
+        memory_file=str(tmp / "memory.json"),
+        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
+        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
+        **settings,
+    )
+    a._seen_msg_file = tmp / "seen_msg_ids.json"
+    a.core_memory_file = tmp / "core_memory.json"
+    a.core_memory = {}
+    a.examples_seed_file = tmp / "seed_examples.jsonl"
+    a.examples_file = tmp / "examples.jsonl"
+    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
+    a.feedback_file = tmp / "feedback.jsonl"
+    return a
+
+
+def ex(reply: str, scenario: str, context: list[str], **extra) -> dict:
+    return {"scenario": scenario, "mode": "called", "context": context,
+            "reply": reply, **extra}
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                    encoding="utf-8")
+
+
+def test_the_same_text_ranks_by_where_it_was_learned(tmp: Path) -> None:
+    a = make_agent(tmp)
+    scope = {"lang": a.agent_lang, "platform": "qq", "conv_id": "g1",
+             "persona": a.persona_name, "persona_hash": a.persona_hash,
+             "persona_version": a.persona_version}
+    same = dict(scenario="deploy broke prod", context=["[u] it broke"])
+    write_jsonl(a.examples_seed_file, [ex("SEED_ROW", **same)])
+    write_jsonl(a.examples_file, [ex("LEARNED_ROW", **same)])
+    write_jsonl(a.promoted_examples_file, [ex(
+        "PROMOTED_ROW", **same, src="promoted_candidate", candidate_id="c1", scope=scope)])
+    block = a._examples_for_prompt("deploy broke", "called", conv_id="g1", limit_good=3)
+    order = [block.index(r) for r in ("PROMOTED_ROW", "LEARNED_ROW", "SEED_ROW")]
+    check("scope: this conversation, then this persona, then the seed",
+          order == sorted(order), block)
