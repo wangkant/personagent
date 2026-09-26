@@ -26,7 +26,8 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from persona_agent import access  # noqa: E402
-from persona_agent.agent import ADMIN_MODE, Agent  # noqa: E402
+from persona_agent.access import ADMIN_MODE  # noqa: E402
+from persona_agent.agent import Agent  # noqa: E402
 from persona_agent.config_env import (  # noqa: E402
     DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool)
 from persona_agent.textproc import TextProcessing  # noqa: E402

@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 
 from persona_agent import evidence, reactions
-from persona_agent.agent import Agent, SendResult
+from persona_agent.agent import Agent
+from persona_agent.transport import SendResult
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:

@@ -79,8 +79,8 @@ async def main_async(args) -> int:
     scns = bench.load_scenarios(Path(args.candidates))
     print(f"probing {len(scns)} scenario(s) with the weak style guide "
           f"(model={bench.os.getenv('LLM_MODEL', bench.DEFAULT_LLM_MODEL)})")
-    import persona_agent.agent as pa
-    pa.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
+    import persona_agent.prompt as group_prompt
+    group_prompt.STYLE_GUIDE = bench.WEAK_STYLE_GUIDE
 
     persona_name = bench.os.getenv("PERSONA_NAME", "Robin") or "Robin"
     out_dir = Path(args.outdir)

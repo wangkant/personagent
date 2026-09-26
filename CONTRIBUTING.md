@@ -101,13 +101,26 @@ both have answers.
 
 ## Code layout
 
-`Agent` is composed from three mixins, `ContentIngestion` (`ingestion.py`),
-`Transport` (`transport.py`) and `Learning` (`learning.py`), and calls the
-other modules by name. One concern per module:
+`Agent` (`agent.py`) builds the runtime state and is composed from mixins,
+one per concern; it calls the pure modules below by name. Deciding whether to
+speak, building the prompt and retrieving what goes into it are separate
+modules, so each can be read, tested and replaced on its own:
 
 | Module | Owns |
 |---|---|
-| `persona_agent/agent.py` | Orchestration: message intake, modes, debounce, `_think`, prompt assembly |
+| `persona_agent/agent.py` | `Agent`: construction, runtime state, the ledgers and views it holds, shutdown |
+| `persona_agent/turns.py` | Intake: dedup, admission, debounce and the group turn from message to send |
+| `persona_agent/decision.py` | Whether to speak: a group turn's mode (`choose_group_mode`), pacing skips (`pacing_skip`), the cheap gate model (`_gate`), chat signals |
+| `persona_agent/prompt.py` | What the model reads: `_build_group_prompt`, `_build_dm_prompt` and their context blocks |
+| `persona_agent/retrieval.py` | What past material a turn sees: examples, memories, lorebook entries |
+| `persona_agent/thinking.py` | One group turn's model work: prompt, gate, reply (`_think`) |
+| `persona_agent/dm.py` | The one-on-one turn |
+| `persona_agent/messages.py` | Reading a message: its text, quotes, buffer lines, @-mentions |
+| `persona_agent/llm.py` | Model calls: clients, endpoints, retries, fallback, probes, model routing |
+| `persona_agent/search.py` | Web search when a turn needs it |
+| `persona_agent/proactive.py` | Speaking first: the proactive loops |
+| `persona_agent/memory.py` | Memory commands, automatic memories, core memory |
+| `persona_agent/views.py` | Seed and learned data kept fresh from disk: pools, promoted views, filters, lorebook |
 | `persona_agent/settings.py` | `AgentSettings`: everything the agent is configured with, built once and passed in |
 | `persona_agent/config_env.py` | The one way to read a setting from the environment (`env_int`, `env_bool`, `env_str`, ...) |
 | `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |

@@ -20,7 +20,8 @@ import httpx
 from persona_agent import channels
 from persona_agent import paths as agent_paths
 from persona_agent import promotion
-from persona_agent.agent import Agent, SendResult
+from persona_agent.agent import Agent
+from persona_agent.transport import SendResult
 from persona_agent.learning import Learning
 from persona_agent.textproc import TextProcessing, _strip_web_desc
 from persona_agent.connector import (ConnectorSink, current_sink,
@@ -1029,7 +1030,7 @@ async def test_one_reply_fans_out_into_at_most_the_cap(
     send in a minute, so a cap of 24 checked against a stubbed send passed
     while QQ readers lost the folded overflow with messages 21-24."""
     from persona_agent import transport
-    from persona_agent.agent import _SEND_MAX_PER_MIN
+    from persona_agent.transport import _SEND_MAX_PER_MIN
     from persona_agent.textproc import MAX_REPLY_MESSAGES
 
     agent = make_agent(tmp)
@@ -1564,7 +1565,7 @@ async def test_a_retold_memory_updates_instead_of_stacking(tmp: Path) -> None:
 async def test_throttle_send(tmp: Path) -> None:
     """Outbound throttle: enforces a min interval between sends and drops beyond
     the per-target 60s cap (anti-flood). Never touches group/send locks."""
-    from persona_agent.agent import _SEND_MAX_PER_MIN
+    from persona_agent.transport import _SEND_MAX_PER_MIN
     agent = make_agent(tmp)
     t0 = time.monotonic()
     await agent._throttle_send("group:X")
@@ -2480,7 +2481,7 @@ async def test_connector_conv_eviction(tmp: Path) -> None:
     """Connector conversation keys are LRU-capped so a runaway/malicious
     connector can't grow the per-conversation dicts without bound. In-flight
     (locked) conversations are skipped; QQ-path state is never touched."""
-    from persona_agent.agent import _MAX_CONNECTOR_CONVS
+    from persona_agent.transport import _MAX_CONNECTOR_CONVS
     agent = make_agent(tmp)
     agent.buffers["123456"].append({"name": "q", "text": "qq group", "user_id": "7"})
     agent.buffers["tg:0"].append({"name": "x", "text": "hi", "user_id": "9"})
@@ -2533,7 +2534,7 @@ async def test_connector_conv_eviction(tmp: Path) -> None:
 
 
 async def test_connector_inflight_is_pinned(tmp: Path) -> None:
-    from persona_agent.agent import _MAX_CONNECTOR_CONVS
+    from persona_agent.transport import _MAX_CONNECTOR_CONVS
 
     agent = make_agent(tmp)
     started = asyncio.Event()
@@ -2571,7 +2572,7 @@ async def test_connector_inflight_is_pinned(tmp: Path) -> None:
 
 
 async def test_connector_burst_reclaims_idle_state(tmp: Path) -> None:
-    from persona_agent.agent import _MAX_CONNECTOR_CONVS
+    from persona_agent.transport import _MAX_CONNECTOR_CONVS
 
     agent = make_agent(tmp)
     release = asyncio.Event()
@@ -4263,7 +4264,7 @@ async def test_an_unrenderable_dm_draft_retries_once(tmp: Path) -> None:
     costs one more call, and that call must not repeat the first: the same
     prompt gets the same emoji back, so the retry's prompt carries a note
     the first one does not."""
-    from persona_agent.agent import _EMPTY_DRAFT_RETRY_NOTE
+    from persona_agent.dm import _EMPTY_DRAFT_RETRY_NOTE
 
     agent = make_agent(tmp)
     agent._decide_and_search = _no_search
@@ -4473,7 +4474,7 @@ def test_the_retry_note_amends_the_output_contract_instead_of_breaking_it() -> N
     position in the prompt, and prose is what the fail-closed parser drops.
     Pinned as text, because the failure is a model picking the wrong one of
     two instructions, which no stub reproduces."""
-    from persona_agent.agent import _EMPTY_DRAFT_RETRY_NOTE
+    from persona_agent.dm import _EMPTY_DRAFT_RETRY_NOTE
     from persona_agent.prompts import PersonaStyle, dm_output_protocol
 
     note = _EMPTY_DRAFT_RETRY_NOTE

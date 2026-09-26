@@ -21,7 +21,7 @@ try:
     import anthropic
 except ImportError:  # not a runtime dependency of the bot — see pyproject [judge]
     sys.exit("prompt_lab needs the Anthropic SDK: pip install -e \".[judge]\"")
-from persona_agent.agent import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE
+from persona_agent.prompts import DEFAULT_PERSONA, STYLE_GUIDE, TOOL_GUIDE
 from persona_agent.paths import (
     read_jsonl,
     resolve_runtime_lang_file,

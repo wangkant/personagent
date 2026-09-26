@@ -224,6 +224,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accounts as `admin_ids`. `AgentSettings` gains `admin_ids` and `proactive_platforms`,
   and `Agent` an `outbox` and a `connector_handles` store.
   `config_env.env_csv` is gone; `access.split_ids` replaces it.
+- **`persona_agent/agent.py` is split by concern** (from 4,400 lines to 770):
+  `Agent` keeps the construction and runtime state, and gains mixins for the
+  turn (`turns.py`, `dm.py`), deciding whether to speak (`decision.py`, whose
+  `choose_group_mode` and `pacing_skip` are pure functions now), the prompt
+  (`prompt.py`: `_build_group_prompt`, `_build_dm_prompt`), retrieval
+  (`retrieval.py`), the model turn (`thinking.py`), model calls (`llm.py`),
+  search, proactive loops, memory, and the data views. Behaviour is unchanged.
+  Names that moved: `ADMIN_MODE` is in `access`, `SendResult` and the send
+  limits in `transport`, the prompt constants in `prompts`, and a benchmark
+  that swaps `STYLE_GUIDE` patches `persona_agent.prompt`.
 
 - **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
   `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /

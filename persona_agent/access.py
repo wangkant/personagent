@@ -25,6 +25,10 @@ from typing import Iterable, Mapping
 
 from . import channels
 
+#: The admin's reply mode, spelled as the eval, evidence and ledger rows store
+#: it, so the rows already written keep matching.
+ADMIN_MODE = "owner"
+
 #: The identity settings, each a comma list of ids.
 IDENTITY_SETTINGS: tuple[str, ...] = ("ADMIN_IDS", "ACCESS_GROUPS",
                                       "ACCESS_DM_USERS")

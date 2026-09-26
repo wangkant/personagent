@@ -684,8 +684,8 @@ async def cmd_run(args) -> int:
     # read at prompt-assembly time) so the model's default assistant voice
     # shows through and the loop has real tells to re-learn. Both arms share it.
     if args.style == "weak":
-        import persona_agent.agent as pa
-        pa.STYLE_GUIDE = WEAK_STYLE_GUIDE
+        import persona_agent.prompt as group_prompt
+        group_prompt.STYLE_GUIDE = WEAK_STYLE_GUIDE
         print("[benchmark] STYLE ABLATION ON: using weak style guide for both arms")
     train = load_scenarios(DATA / f"scenarios.train.{args.lang}.jsonl")
     holdout = load_scenarios(DATA / f"scenarios.holdout.{args.lang}.jsonl")
