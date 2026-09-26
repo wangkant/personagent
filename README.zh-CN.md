@@ -197,6 +197,23 @@ personagent 默认监听 `127.0.0.1:8080`。使用非回环的 `SERVER_HOST` 时
 
 修改 `PERSONA_NAME` 或 `PERSONA_VERSION` 等于开始一个新角色，旧角色学到的内容不再适用。
 
+## 衡量效果
+
+`tools/behavior_eval.py` 用 `data/evals/` 里标注好的用例驱动真实的 agent，给出数字：
+
+| 测试集 | 衡量什么 |
+|---|---|
+| `speak` | 该不该说话：准确率、该沉默时开口的比例、该开口时沉默的比例，按模式分别统计 |
+| `persona` | 像不像人设：裁判模型给每条回复打分、标出助手腔，并在它的回复和同一模型以普通助手身份给出的回复之间盲选 |
+| `learning` | 纠正后有没有学会：纠正和被接受的重试走真实的反应处理流程，前后各用同一聊天里的一条新消息检验 |
+
+```bash
+.venv/bin/python tools/behavior_eval.py --suite speak
+.venv/bin/python tools/behavior_eval.py --suite all --lang zh --limit 6
+```
+
+`persona` 和 `learning` 需要一个与被测模型不同的裁判模型：设置 `BENCH_JUDGE_MODEL`，如果它由别的接口提供，再设置 `BENCH_JUDGE_BASE_URL` 和 `BENCH_JUDGE_API_KEY`。没有裁判，或裁判就是被测模型时，这两项会拒绝运行。`learning` 自己从不让任何候选生效，纠正能否改变回复，完全按上面的规则决定。每次运行都会真实调用你的模型，在一份用完即删的状态副本上进行，并写出一份 JSON 报告，包含每个用例及其判定。
+
 ## 工作原理
 
 ![架构：群聊消息依次经过判断、组装提示词、模型和校验，回复经连接器发回；决定不开口时什么都不发。反应经判定写入证据日志，只有通过晋升的内容才会进入提示词读取的示例](docs/persona_llm_agent_architecture.zh-CN.svg)

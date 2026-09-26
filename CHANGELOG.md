@@ -306,6 +306,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the allowlists are checked again at send time. It is on by default
   (`outbox_enabled`); an agent without the outbox answers 404 and nothing
   else changes.
+- **A behavioural eval: `tools/behavior_eval.py`.** It runs the real agent on
+  labelled cases in `data/evals/` (English and Chinese) and reports numbers
+  in three suites. `speak` runs the real `_think` on group-chat moments
+  labelled speak or silent, and reports accuracy and the rates of speaking
+  when it should stay quiet and of staying quiet when it should speak, per
+  mode; it needs no judge. `persona` has a separate judge model rate each
+  reply on a written rubric (in character, not an assistant voice, natural
+  length), flag assistant tells, and pick blind between the agent's reply and
+  a plain-assistant reply from the same model; it reports the mean score, the
+  tell rate and the pick rate with its sample size. `learning` drives a reply,
+  the recipient's correction and an accepted retry through the real reaction
+  path and the automatic promotion policy, which it never bypasses, and
+  judges a held-out probe before and after; it reports how many scenarios
+  were promoted, learned, regressed and stayed. The judge is
+  `BENCH_JUDGE_MODEL`: the persona and learning suites refuse to run without
+  it, or when it is the model under test unless `--allow-same-judge`, which
+  marks the report. Each run builds its agents in a throwaway deployment root,
+  deleted afterwards unless `--keep`, and writes a JSON report with every
+  case's inputs, replies and verdicts.
 
 ### Removed
 

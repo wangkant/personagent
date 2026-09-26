@@ -196,6 +196,23 @@ The defaults, all in `.env`:
 
 Changing `PERSONA_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
 
+## Measuring it
+
+`tools/behavior_eval.py` runs the real agent on the labelled cases in `data/evals/` and reports numbers:
+
+| Suite | Measures |
+|---|---|
+| `speak` | Whether it talks when it should: accuracy, how often it speaks when it should stay quiet, and how often it stays quiet when it should speak, per mode |
+| `persona` | Whether it sounds like the character: a judge scores each reply, flags assistant phrasing, and picks blind between its reply and a plain assistant's from the same model |
+| `learning` | Whether a correction sticks: a correction and an accepted retry go through the real reaction path, and a new message in the same chat is judged before and after |
+
+```bash
+.venv/bin/python tools/behavior_eval.py --suite speak
+.venv/bin/python tools/behavior_eval.py --suite all --lang zh --limit 6
+```
+
+The persona and learning suites need a judge that is a different model from the one being measured: set `BENCH_JUDGE_MODEL`, and `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it. Without one, or with the model under test, they refuse to run. The learning suite never promotes anything itself, so a correction changes a reply only when the rule above allows it. Every run calls your models, works on a throwaway copy of the state, and writes a JSON report with each case and its verdict.
+
 ## How it works
 
 ![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through the connector; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
