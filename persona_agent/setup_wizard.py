@@ -247,6 +247,8 @@ _TEXT: dict[str, tuple[str, str]] = {
     # finish
     "done": ("Setup complete", "设置完成"),
     "next": ("Next:", "接下来："),
+    "next_demo": ("Watch it stay quiet and learn from a correction (a minute, no chat account needed):",
+                  "看它如何判断该不该开口、如何从纠正中学习（一分钟，不需要聊天账号）："),
     "next_chat": ("Chat with {name} in this terminal:", "在终端里和{name}聊天："),
     "next_run": ("Start personagent and keep it running (AstrBot talks to it):",
                  "启动 personagent 并保持运行（AstrBot 会连接它）："),
@@ -1361,6 +1363,10 @@ def finish(launcher: Launcher, home: Path, *, name: str, has_key: bool,
             n += 1
         _say(f"{n}. " + t("next_say", name=name))
         n += 1
+    _say(f"{n}. " + t("next_demo"))
+    for line in launcher.shown("demo"):
+        _say(f"     {line}")
+    n += 1
     _say(f"{n}. " + t("next_chat", name=name))
     for line in launcher.shown("chat"):
         _say(f"     {line}")
