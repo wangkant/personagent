@@ -294,7 +294,7 @@ Editing `persona.txt` keeps what it learned. Changing `PERSONA_NAME` or `PERSONA
 
 ## The dashboard
 
-`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject, roll back or replace.
+`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject, roll back or replace. Each conversation reads like the chat itself: who said what, the bot's replies, a note wherever it chose to stay quiet and why, a struck-through reply where it was corrected, and what it learned from that, right under it.
 
 It opens only through its private link, which `personagent run` prints when it starts and `personagent doctor` prints on its last line:
 
