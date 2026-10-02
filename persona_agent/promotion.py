@@ -70,7 +70,7 @@ MIN_STRONG = 1
 #
 # Set PROMOTE_MIN_SPEAKERS=2 for a room where strangers should not be able to
 # teach the agent unaided. Nothing is lost when it blocks: the candidate is
-# still proposed and waits in `candidates_admin.py list` for a human.
+# still proposed and waits in `personagent learned list` for a human.
 MIN_SPEAKERS = 1
 # Evidence older than this stops counting as support. A correction from four
 # months and one persona revision ago is history, not a mandate. 0 turns the
@@ -147,7 +147,8 @@ def _label_compatible(a: str, b: str) -> bool:
 
 
 def scope_compatible(a: dict, b: dict, *,
-                     require_same_conversation: bool = REQUIRE_SAME_CONVERSATION) -> bool:
+                     require_same_conversation: bool = REQUIRE_SAME_CONVERSATION,
+                     compare_mode: bool = True) -> bool:
     """May evidence in scope `a` be combined with evidence in scope `b`.
 
     Persona identity and language must match exactly: a correction earned by one
@@ -156,7 +157,9 @@ def scope_compatible(a: dict, b: dict, *,
     evidence about how the old one talked should not authorize changes to the
     new one. Conversation scope is on by default and configurable. Mode is
     compared because it comes from a fixed vocabulary (owner / called / followup
-    / judge) and genuinely names a different situation.
+    / judge) and genuinely names a different situation. `compare_mode=False`
+    asks whether two rewrites would meet in one prompt, which mode does not
+    decide: retrieval authorizes by conversation and only ranks by mode.
 
     **Scenario** compatibility is enforced structurally, not by label. Every
     combination this module performs already requires the events to be about the
@@ -175,7 +178,7 @@ def scope_compatible(a: dict, b: dict, *,
         return False
     if require_same_conversation and str(a.get("conv_id") or "") != str(b.get("conv_id") or ""):
         return False
-    return _label_compatible(a.get("mode", ""), b.get("mode", ""))
+    return not compare_mode or _label_compatible(a.get("mode", ""), b.get("mode", ""))
 
 
 def supports_candidate(event: dict, cand: dict, *,
@@ -258,7 +261,8 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
         if str(other.get("reply") or "") != str(cand.get("reply") or ""):
             continue
         if not scope_compatible(other.get("scope") or {}, cand.get("scope") or {},
-                                require_same_conversation=policy.require_same_conversation):
+                                require_same_conversation=policy.require_same_conversation,
+                                compare_mode=False):
             continue
         if str(other.get("better") or "") != str(cand.get("better") or ""):
             if other.get("state") == candidates.STATE_PROPOSED:
@@ -294,12 +298,35 @@ def answered_drafts(cand: dict, peers, *,
                 or str(other.get("better") or "") == str(cand.get("better") or "")):
             continue
         if not scope_compatible(other.get("scope") or {}, cand.get("scope") or {},
-                                require_same_conversation=policy.require_same_conversation):
+                                require_same_conversation=policy.require_same_conversation,
+                                compare_mode=False):
             continue
         ids = set(other.get("evidence") or ())
         if ids and ids <= backing:
             out.append(str(other.get("candidate_id") or ""))
     return [cid for cid in out if cid]
+
+
+def active_rivals(cand: dict, ledger_rows, *,
+                  policy: Policy = DEFAULT_POLICY) -> list[dict]:
+    """Promoted rewrites of `cand`'s reply into something else, in a scope
+    whose prompt would carry both: what promoting `cand` would leave beside
+    it. An operator replaces one with `supersede` instead."""
+    if cand.get("type") != candidates.TYPE_PAIR:
+        return []
+    reply = str(cand.get("reply") or "").strip()
+    better = str(cand.get("better") or "").strip()
+    return [
+        other for other in ledger_rows or ()
+        if other.get("candidate_id") != cand.get("candidate_id")
+        and other.get("state") == candidates.STATE_PROMOTED
+        and other.get("type") == candidates.TYPE_PAIR
+        and str(other.get("reply") or "").strip() == reply
+        and str(other.get("better") or "").strip() != better
+        and scope_compatible(other.get("scope") or {}, cand.get("scope") or {},
+                             require_same_conversation=policy.require_same_conversation,
+                             compare_mode=False)
+    ]
 
 
 # The two event kinds nobody witnessed: the agent scoring itself, and the
@@ -335,14 +362,9 @@ def related_events(cand: dict, events) -> list[dict]:
     REWRITE as arguing against the pair, so filtering to the original alone
     makes that branch unreachable.
 
-    ONE FUNCTION BECAUSE THERE ARE TWO CALLERS. The running agent
-    (`learning._decide_promotion`) and the operator's CLI
-    (`tools/candidates_admin.py`) each built this list, and when only the
-    first was widened the CLI went on printing `policy: would promote` for a
-    pair whose rewrite the user had explicitly rejected — with an
-    unconditional `promote` command sitting next to it. Same shape as the
-    conversation-key mapping that lived in three places: the defect was not
-    the filter, it was that there was more than one of it.
+    One function because there are two callers, the running agent
+    (`learning._decide_promotion`) and `personagent learned`, and the two
+    must judge a candidate from the same list.
     """
     wanted = {str(cand.get("reply") or "").strip()}
     better = str(cand.get("better") or "").strip()
