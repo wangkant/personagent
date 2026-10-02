@@ -24,8 +24,8 @@ it unpacks to `personagent-main`.
 Everything personagent keeps lives in one **home folder**: `.env` (settings),
 `persona.txt`, and `runtime/` (what it remembers and learned). The home is:
 
-1. the folder `AGENT_HOME` names, or `--home DIR` (it goes before the command:
-   `personagent --home D:\bot run`);
+1. the folder `AGENT_HOME` names, or `--home DIR`, before or after the
+   command (`personagent --home D:\bot run` or `personagent run --home D:\bot`);
 2. else the clone, when you run from one;
 3. else the current folder, if it holds both `.env` and `persona.txt`;
 4. else `~/personagent`, which `personagent init` creates.
@@ -45,7 +45,8 @@ LLM_API_KEY=...
 local (Ollama, llama.cpp); the API address can be pasted the way the provider
 documents it, a root or a version base such as `.../v1` or `.../api/paas/v4`.
 Until you write a `persona.txt`, the bundled `data/persona.example.<lang>.txt`
-stands in.
+stands in, and until `PERSONA_NAME` is set (`personagent init` sets it), the
+character is called "bot".
 
 To run live behind AstrBot:
 
@@ -71,9 +72,10 @@ personagent run                  # from a clone: start.bat, start.ps1, start.sh,
 ```
 
 It prints a short banner: the version, the address, the home folder, the
-dashboard address, and whether the agent is on (with the model and language) or
-`OFF` with the reason. Keep it running; the connectors talk to it. `--host` and
-`--port` override `SERVER_HOST` and `SERVER_PORT`.
+dashboard's private link, and whether the agent is on (with the model and
+language) or `OFF` with the reason and the fix. Keep it running; the
+connectors talk to it. `--host` and `--port` override `SERVER_HOST` and
+`SERVER_PORT`; a blank value means `127.0.0.1`, never every interface.
 
 From a clone, `start.bat` (double-click on Windows), `start.ps1` and `start.sh`
 do the same. If there is no `.env` yet, they run the setup wizard first.
@@ -81,19 +83,48 @@ do the same. If there is no `.env` yet, they run the setup wizard first.
 `personagent doctor` checks the setup and every upstream service
 (`--json` for a script). `tools/healthcheck.py` still works and is the same
 command. It reports missing and **misspelled** settings (a typo is otherwise
-silent: the default is used), then probes each service. Startup logs the same
-settings check.
+silent: the default is used), then probes each service, and prints the
+dashboard's link on its last line. Startup logs the same settings check.
 
-Open `http://127.0.0.1:8080/` (your `SERVER_PORT`) for the dashboard: whether
-messages arrive, which connectors are pulling, why it spoke or stayed quiet in
-each chat, what it learned with the evidence behind it, and promote / reject /
-roll back buttons. It needs no extra install. It answers only this machine:
-a request from another host, through a proxy or tunnel, or carrying an
-`Origin` from another site is refused, unless it carries the
-`X-Personagent-Token` header with `CONNECTOR_TOKEN`. To see it from another
-computer, use an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 host`), or a reverse
-proxy that adds the header. `DASHBOARD_ENABLED=false` removes the page and its
-API. It never shows keys or tokens.
+**Settings renamed in 1.0.** A start refuses, with exit code 2, while any
+setting name that 1.0 retired is still set, and lists each as `OLD -> NEW`.
+`personagent doctor --fix` renames them in `<home>/.env`: it keeps the values
+and comments, saves the old file as `.env.bak`, and comments out an old line
+whose new name is already set. A retired name set in the environment rather
+than `.env` must be renamed where it is set. `personagent doctor` exits 1
+while any remain, and `--json` lists them under `retired_settings`. `HOST`,
+`PORT` and `LOG_FILE` count only when they are written in `.env`.
+
+### The dashboard
+
+The dashboard shows whether messages arrive, which connectors are pulling, why
+it spoke or stayed quiet in each chat, what it learned with the evidence
+behind it, and promote / reject / roll back / replace buttons. It needs no
+extra install and loads nothing from the internet. It never shows keys or
+tokens. `DASHBOARD_ENABLED=false` removes the page and its API.
+
+It opens only through its private link,
+`http://127.0.0.1:<SERVER_PORT>/?token=<token>`, which the startup banner and
+`personagent doctor` print (`doctor --json` gives it as `dashboard`). The
+token lives in `dashboard.token` in the runtime folder (`<home>/runtime/`
+unless `AGENT_RUNTIME_DIR` moves it), readable only by the owner;
+it is created at first start and kept across restarts. Delete the file and
+restart to issue a new one, which signs every browser out.
+
+- Opening the link sets an HttpOnly, `SameSite=Strict` cookie that lasts a
+  year, then redirects to the page without the token in the address bar.
+  Scripts can send the header `X-Personagent-Dashboard-Token` instead.
+- Without the token every page, data and action request gets 401
+  (`dashboard_token`), and the page says where to find the link; a wrong token
+  gets 403 (`wrong_token`). `CONNECTOR_TOKEN` and `X-Personagent-Token` do not
+  open it: they are for connectors and `/health/details` only.
+- A browser must name `localhost`, an IP address or `SERVER_HOST` as the host;
+  any other host name gets 403 (`foreign_host`), which stops DNS rebinding.
+- From another computer, use an SSH tunnel to `127.0.0.1`
+  (`ssh -L 8080:127.0.0.1:8080 <host>`, then open the link), or set
+  `SERVER_HOST` to this machine's LAN or Tailscale address (with
+  `CONNECTOR_TOKEN`, as any network bind needs) and open the link the banner
+  prints, which uses that address.
 
 ## What the host must provide
 
@@ -160,7 +191,9 @@ to both `.env` and the plugin config, and sets `personagent_url` to
 `excluded_platforms`; `--no-qq` puts it back; with neither, QQ routing stays as
 it is, and `CONNECTOR_QQ_PLATFORMS` follows whichever the plugin ends up
 doing. `--platform telegram|discord|slack|kook|lark --token <token>` also
-switches that adapter on in AstrBot's own config, and `--url https://...` sets
+switches that adapter on in AstrBot's own config; an adapter entry that
+already exists keeps its other settings (proxy, base URL, polling) and gets
+only the new credentials. `--url https://...` sets
 an HTTPS address for the plugin to post to. The first run leaves the
 allowlists empty; rerunning keeps them, and any other excluded platforms.
 `personagent init` offers the same step at its end, and `python quickstart.py
@@ -229,7 +262,7 @@ you trust its connector with that authority.
 **NapCat's HTTP server** (`QQ_ONEBOT_URL`, blank by default) is optional on
 this path. What personagent starts itself (proactive messages, off by default
 with `PROACTIVE_ENABLED`; the question asked two minutes after a rejection,
-`REACT_ELICIT_ENABLED`; the excuse sent when the model call fails) goes back
+`REACT_ELICIT_ENABLED`; the excuse sent in a group when the model call fails) goes back
 through the plugin's outbox while the plugin is pulling it, and to
 `QQ_ONEBOT_URL` when it is not and the URL is set. Only the sweep for
 @-mentions missed while offline needs the server (and `QQ_BOT_ID`): it runs at
@@ -255,8 +288,9 @@ number. The connector's allowlists are their filter until `ACCESS_GROUPS` or
 `ACCESS_DM_USERS` lists an entry for that platform.
 
 Messages nobody asked for (proactive openers, the question asked after a
-rejection, the excuse when the model call fails) reach a platform through a
-connector that pulls personagent's outbox. All three connectors here do, on
+rejection, the excuse when the model call fails in a group) reach a platform
+through a connector that pulls personagent's outbox. A DM's excuse goes back
+in the response to the request that brought the message. All three connectors here do, on
 platforms where a bot may send first; a connector of your own sends
 `connector_id`, `reply_handle` and `"capabilities": ["outbox"]` with its
 events and long-polls `/v1/outbox` (see [the connector protocol](connectors.md)).
@@ -293,9 +327,10 @@ container counts only with the host's network namespace or host networking).
 Otherwise:
 
 1. Set `SERVER_HOST=0.0.0.0` (or `--host 0.0.0.0`) and `CONNECTOR_TOKEN`.
-   Startup refuses a network bind without the token. `QQ_ONEBOT_SECRET` is
-   needed only when a NapCat on another machine must reach the deprecated
-   `/v1/onebot`; without it that route answers only programs on this host.
+   Startup refuses a network bind without the token. It does not need
+   `QQ_ONEBOT_SECRET`, but without it the deprecated `/v1/onebot` is off on a
+   network bind: every request to it gets 403 `onebot_disabled`, and the log
+   says why once.
 2. Put an HTTPS reverse proxy or a private tunnel in front. Every connector
    here posts only to loopback, or to HTTPS with a token set; the AstrBot
    plugin logs anything else as `refusing unsafe personagent_url`, and the
@@ -305,11 +340,14 @@ Otherwise:
 
 With a credential blank, its endpoint serves only local programs calling
 `http://127.0.0.1` or `http://localhost` directly. A request with `Origin`, a
-`Sec-Fetch-Site` other than
-`none`, a `Host` other than `localhost`, `127.0.0.1` or `::1`, or a proxy
-header (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`) gets
-403 `non_local_request`. So set the credential before adding a tunnel, even
-on one host.
+`Sec-Fetch-Site` other than `none`, a `Host` other than `localhost`,
+`127.0.0.1` or `::1`, or a proxy header (`X-Forwarded-For`, `Forwarded`,
+`X-Real-IP`, `CF-Connecting-IP`, `Via`, `X-Forwarded-Host`,
+`X-Forwarded-Proto`, `X-Forwarded-Port`, `True-Client-IP`, `X-Client-IP`,
+`X-Original-Forwarded-For`) gets 403 `non_local_request`. A proxy on the same
+host that adds none of these still looks local, so set `CONNECTOR_TOKEN` (and
+`QQ_ONEBOT_SECRET` if you use `/v1/onebot`) before you add any proxy or
+tunnel, even on one host.
 
 ## Health endpoints
 
@@ -347,32 +385,35 @@ on one host.
 
 ## When the bot goes quiet
 
-Most common first. The dashboard (`http://127.0.0.1:8080/`) shows most of
-these at a glance.
+Most common first. The dashboard (open the link `personagent run` or
+`personagent doctor` prints) shows most of these at a glance.
 
 1. **The connector forwards nothing.** In the AstrBot plugin, fill in
    `groups` (and `dm_users` for DMs), and on QQ take `aiocqhttp` out of
    `excluded_platforms`. The Satori and Matrix connectors have their
    own allowlists in their `.env`; see their READMEs. The dashboard says
    "nothing has arrived" when this is the case.
-2. **The agent is off.** The banner at `personagent run` says `agent: OFF` and
-   why: `LLM_API_KEY` is not set (check `<home>/.env`, or run
-   `personagent init`) or `AGENT_ENABLED=false`. Every event then gets
-   `owned: false`, and the first one logs a single ERROR line naming the cause.
+2. **The agent is off.** The banner at `personagent run` says `agent: OFF`,
+   why, and the fix: with no `LLM_API_KEY`, run `personagent init` (or set
+   `LLM_API_KEY`) and restart; with `AGENT_ENABLED=false`, set it to `true` in
+   `<home>/.env` and restart. Every event then gets `owned: false`, and the
+   first one logs a single ERROR line with the same advice.
 3. **AstrBot's own model answers instead.** The request failed, or
    personagent turned the message away (item 5), or the agent is off (item 2),
    and the plugin fell back.
    AstrBot's log shows `refusing unsafe personagent_url`, `agent refused the
    request (403): <message>` (or another status; see the table below), or
-   `timed out waiting for the agent`. `timeout_s` (default 180) must cover the debounce
+   `timed out waiting for the agent`. `timeout_s` must cover the debounce
    and every model call in the turn: keep `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`
-   under it. The defaults (120 × 3 = 360 s) do not.
+   under it. Its default (420) covers the agent's defaults (120 × 3 = 360 s);
+   raise it when you raise those two.
 4. **It was not called.** In a group it answers its name (`PERSONA_NAME`) or an
    @. Otherwise it waits for enough conversation (`CHAT_TRIGGER_COUNT`, 30
    messages by default) and may still pass; from 02:00 to 07:00 in its time
-   zone (`PERSONA_TZ_OFFSET_HOURS`, this machine's by default) it mostly
-   stays out of chats it was not called into. The dashboard shows the reason for each recent turn. To watch
-   the same decision offline, `personagent chat --trigger 4`.
+   zone it mostly stays out of chats it was not called into. The time zone is
+   `PERSONA_TZ_OFFSET_HOURS`; blank means UTC+8 when `AGENT_LANG=zh` and this
+   machine's offset otherwise. The dashboard shows the reason for each recent
+   turn. To watch the same decision offline, `personagent chat --trigger 4`.
 5. **personagent's allowlists.** `ACCESS_GROUPS` and `ACCESS_DM_USERS`
    (and a QQ DM needs the admin or an entry) apply behind AstrBot too. A
    message they turn away goes back unclaimed, so AstrBot's own model answers
@@ -383,8 +424,10 @@ these at a glance.
    the setting to fix. Run `personagent doctor`: it sends a tiny request to
    each model endpoint and shows the status, which also catches a wrong
    `LLM_BASE_URL` or `LLM_MODEL`. While the model
-   is down the persona sends a short in-character excuse, at most once per
-   conversation every five minutes.
+   is down the persona sends a short in-character excuse when it is called,
+   at most once per conversation every five minutes. The five minutes count
+   from an excuse that was delivered: when sending one fails, the next
+   failure tries again.
 7. **A misspelled setting.** Silent by construction. The startup log and
    `personagent doctor` list every key `.env.example` does not know, and any
    value that starts with `#`.
@@ -442,11 +485,16 @@ If you still run it:
   (the format changes between versions): an **HTTP server** at `QQ_ONEBOT_URL`
   for sending, and an **HTTP client** posting to
   `http://127.0.0.1:8080/v1/onebot` (`SERVER_HOST`, `SERVER_PORT`).
+  `QQ_ONEBOT_URL` is blank by default, so write it in `.env`; without it the
+  bot receives but never replies. Preflight and `personagent doctor` warn when
+  this route looks configured (`QQ_BOT_ID` or `QQ_ONEBOT_SECRET` set,
+  `CONNECTOR_QQ_PLATFORMS` empty) and `QQ_ONEBOT_URL` is blank.
 - Set `QQ_ONEBOT_SECRET` to the HTTP client's `secret` if NapCat is on another
   machine, or anyone who can reach the port can forge events. Bodies must then
   carry `x-signature: sha1=<hex>` (403 `bad_signature`), and events timestamped
   over five minutes off get 403 `stale_event`. Without the secret the route
-  answers only programs on this host.
+  answers only programs on this host, and on a network bind it is off
+  (403 `onebot_disabled`).
 - With AstrBot on the same account, keep `aiocqhttp` in `excluded_platforms`,
   or every message arrives twice.
 

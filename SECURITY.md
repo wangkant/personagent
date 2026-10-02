@@ -37,19 +37,25 @@ them is a vulnerability.
   a restart inside the window still refuses a replay.
 - **Local-only endpoints.** With no credential set, the endpoints answer only a
   program on this machine. A request carrying `Origin`, a `Sec-Fetch-Site`
-  other than `none`, a foreign `Host`, or a proxy header is refused, which
-  stops a web page or a tunnel from reaching them. A network bind
-  (`SERVER_HOST=0.0.0.0`) will not start without `CONNECTOR_TOKEN`, and the
-  deprecated `/v1/onebot` route answers only this machine unless
-  `QQ_ONEBOT_SECRET` is set.
+  other than `none`, a foreign `Host`, or a proxy header (`X-Forwarded-For`,
+  `Forwarded`, `Via`, `X-Real-IP` and the others listed in
+  [docs/deploy.md](docs/deploy.md#exposing-the-endpoints)) is refused, which
+  stops a web page or a tunnel from reaching them. A blank `SERVER_HOST` means
+  `127.0.0.1`. A network bind (`SERVER_HOST=0.0.0.0`) will not start without
+  `CONNECTOR_TOKEN`, and on it the deprecated `/v1/onebot` route is off
+  (403 `onebot_disabled`) unless `QQ_ONEBOT_SECRET` is set.
 - **The SSRF guard.** Every fetch of a link, share card or image goes through
   one guard: public addresses only, every address a name resolves to checked,
   redirects checked at each hop.
-- **The dashboard.** It is served only to this machine (a loopback peer, a local
-  `Host`, no proxy headers) unless a request carries `CONNECTOR_TOKEN`. Changes
-  need a same-origin POST with a custom header. It sends a strict content
-  security policy, and never shows a value whose name ends in `_KEY`,
-  `_TOKEN`, `_SECRET` or `PASSWORD`.
+- **The dashboard.** Every request needs its own token, from
+  `<runtime>/dashboard.token` (owner-only): the HttpOnly, `SameSite=Strict`
+  cookie its private link sets, or the `X-Personagent-Dashboard-Token`
+  header. `CONNECTOR_TOKEN` does not open it. A browser must name
+  `localhost`, an IP address or `SERVER_HOST` as the host, which stops DNS
+  rebinding. Changes need a same-origin POST with a custom header. It sends a
+  strict content security policy, masks credentials in URLs it shows, and
+  never shows a value whose name ends in `_KEY`, `_TOKEN`, `_SECRET` or
+  `PASSWORD`.
 - **Secrets in `.env`.** API keys and tokens live in the home folder's `.env`.
   Setup narrows its permissions where the operating system allows it.
   Anything that leaks them to a log, a response, a connector or another user is
@@ -74,6 +80,7 @@ them is a vulnerability.
 ## Running it safely
 
 Keep `SERVER_HOST=127.0.0.1` when the connector is on the same machine. If you
-expose it, set `CONNECTOR_TOKEN` and put HTTPS in front. Keep `.env` and
-`runtime/` private and out of version control. See
+expose it, set `CONNECTOR_TOKEN` before you add any proxy or tunnel, and put
+HTTPS in front. Keep `.env`, `runtime/` and the dashboard's link private and
+out of version control. See
 [docs/deploy.md](docs/deploy.md#exposing-the-endpoints).

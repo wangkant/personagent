@@ -17,7 +17,7 @@ agent's replies back.
   where the agent asks for one) back through AstrBot, written the way each
   platform expects.
 - Delivers what the agent says unprompted (a scheduled opener, a follow-up
-  question, the excuse when its model is down) by pulling its outbox. See
+  question, the excuse in a group when its model is down) by pulling its outbox. See
   [Outbox](#outbox).
 - Stops AstrBot's own pipeline when the agent claims the conversation
   (`block_default`), so AstrBot's built-in model never answers in the
@@ -97,8 +97,8 @@ which the agent answers unless `ACCESS_GROUPS` lists some).
 2. Say the bot's name (the agent's `PERSONA_NAME`) in an allowed group.
 
 If nothing comes back, look for `personagent:` lines in AstrBot's log, open the
-agent's dashboard at `http://127.0.0.1:8080/`, and see
-[Troubleshooting](#troubleshooting).
+agent's dashboard through the link its banner printed (`personagent doctor`
+prints it too), and see [Troubleshooting](#troubleshooting).
 
 ## Configuration
 
@@ -106,7 +106,7 @@ agent's dashboard at `http://127.0.0.1:8080/`, and see
 | --- | --- | --- | --- |
 | `personagent_url` | string | `http://127.0.0.1:8080` | The agent's base URL; the plugin appends `/v1/events` and `/v1/outbox`. Must be loopback, or HTTPS with `connector_token` set. |
 | `connector_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `personagent_url`. |
-| `timeout_s` | int | `180` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
+| `timeout_s` | int | `420` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
 | `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ through this plugin. |
 | `groups` | list | `[]` | Group IDs to forward. Empty forwards no groups; `*` forwards all of them unfiltered. |
 | `dm_users` | list | `[]` | Sender IDs whose DMs are forwarded. Empty forwards no DMs; `*` forwards all of them unfiltered. |
@@ -141,7 +141,9 @@ enabled), or put the agent behind HTTPS and set that address as
 NapCat container in the same compose file needs host networking too.
 
 The agent listens on `127.0.0.1:8080` by default. If you set its `SERVER_HOST` to a
-non-loopback address, it refuses to start unless `CONNECTOR_TOKEN` is set.
+non-loopback address, it refuses to start unless `CONNECTOR_TOKEN` is set. Set
+the token before you add a proxy or tunnel in front of the agent, even on one
+host.
 
 ### Timeouts
 
@@ -153,8 +155,9 @@ AstrBot's own model answers the same message in a different voice.
 
 Keep the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` under `timeout_s`. With
 the agent's defaults (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`) a turn whose
-model calls keep timing out can take over 360 s, so with a slow model raise
-`timeout_s` or lower those two settings.
+model calls keep timing out can take over 360 s, which the default `timeout_s`
+of 420 covers. If you raise either setting on the agent, raise `timeout_s` with
+it.
 
 A 429 or 500 from the agent is retried up to twice, honouring `Retry-After`
 on a 429, as long as the signed request is still fresh.
@@ -182,8 +185,8 @@ QQ goes through this plugin like any other platform, using AstrBot's
    `QQ_BOT_ID` (the bot account's number).
 3. Optional: set the agent's `QQ_ONEBOT_URL` to NapCat's HTTP server for the
    catch-up sweep for missed mentions (it also needs `QQ_BOT_ID`). Proactive
-   messages, the follow-up question after a rejection and the excuse when the
-   model fails go through this plugin's [outbox](#outbox) while it is pulling,
+   messages, the follow-up question after a rejection and a group's excuse when
+   the model fails go through this plugin's [outbox](#outbox) while it is pulling,
    and through NapCat directly otherwise, when that URL is set.
 4. If NapCat also posts to the agent's `/v1/onebot`, turn that off. That
    route is deprecated, and running both delivers every message twice.
@@ -261,7 +264,8 @@ On every platform:
 ## Outbox
 
 Some messages are not an answer to anything: a scheduled opener, the
-follow-up question after a rejection, the excuse when the model is down.
+follow-up question after a rejection, the excuse in a group when the model is
+down (a DM's excuse comes back in the event's own response).
 The agent queues those, and this plugin pulls them from
 `POST <personagent_url>/v1/outbox` (with the same signing as events), so the agent
 never has to reach AstrBot. It is on by default (`outbox_enabled`).

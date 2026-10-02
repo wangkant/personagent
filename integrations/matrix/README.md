@@ -129,7 +129,8 @@ sync is retried after a wait that doubles up to a minute.
 
 The rule is the protocol's: `PERSONAGENT_URL` must be a loopback address, or
 HTTPS with `CONNECTOR_TOKEN` set to the agent's `CONNECTOR_TOKEN`. The connector
-refuses to start otherwise.
+refuses to start otherwise. Set the token on both sides before you add any
+proxy or tunnel in front of the agent, even on one host.
 
 ## Settings
 

@@ -48,9 +48,9 @@ personagent init
 
 到「现在连接 AstrBot 吗？」这一步先选**否**（直接回车），最后选择在终端里聊几句。你应该看到机器人用你选的性格回话。
 
-> 想把数据放在别的盘：每条命令前加 `--home`，例如 `personagent --home D:\personagent init`，之后的 `chat`、`connect`、`run` 都要带上同样的 `--home`。不加的话，数据放在 `C:\Users\你的用户名\personagent`。
+> 想把数据放在别的盘：每条命令都加上 `--home`，放在命令前后都行，例如 `personagent --home D:\personagent init` 或 `personagent init --home D:\personagent`，之后的 `chat`、`connect`、`run` 都要带上同样的 `--home`。不加的话，数据放在 `C:\Users\你的用户名\personagent`。
 
-在终端里它是怎么判断「该说还是该安静」的，可以先运行 `personagent demo --lang zh` 看一遍（不需要 key，一分钟）。
+在终端里它是怎么判断「该说还是该安静」的，可以先运行 `personagent demo --lang zh` 看一遍（用写好的脚本演，不调用模型、不花钱，一分钟）。
 
 ## 第二部分：装 AstrBot
 
@@ -155,53 +155,57 @@ personagent run
 personagent 1.0.0
   listening:  http://127.0.0.1:8080
   home:       C:\Users\你的用户名\personagent
-  dashboard:  http://127.0.0.1:8080/
+  dashboard:  http://127.0.0.1:8080/?token=...
   agent:      on (model deepseek-flash, lang zh)
 ```
 
-如果最后一行是 `agent: OFF`，后面会写原因，多半是没填 API key：重新运行 `personagent init`。
+`dashboard` 那一行是管理面板的专用链接，`token=` 后面是一长串随机字符，第 3 步要用。
 
-如果它一句话就退出了，也会写原因：同一个文件夹里已经有一个 personagent 在跑、`8080` 端口被占用等等。按它说的处理。
+如果最后一行是 `agent: OFF`，后面会写原因和办法，多半是没填 API key：重新运行 `personagent init`，再重启。
+
+如果它一句话就退出了，也会写原因：同一个文件夹里已经有一个 personagent 在跑、`8080` 端口被占用，或者 `.env` 里还有 1.0 改掉的旧设置名（每个一行 `旧名 -> 新名`，运行 `personagent doctor --fix` 就能改好）。按它说的处理。
 
 **2. 在群里测试。** 用你的主号（或别的号）在目标群里发一句 `小夏，你好`（换成机器人的名字）。你应该在几秒到十几秒内看到小号回复。
 
-**3. 打开控制面板。** 浏览器打开 `http://127.0.0.1:8080/`。你应该看到服务在运行、连接器一栏有记录、群里刚才那条消息的「说话原因」。面板只有这台电脑能打开，里面不会显示密钥。
+**3. 打开控制面板。** 把 `dashboard` 那一行的整条链接（带着 `?token=...`）复制到浏览器里打开。你应该看到服务在运行、连接器一栏有记录、群里刚才那条消息的「说话原因」。
+
+面板只能用这条带令牌的链接打开，直接输 `http://127.0.0.1:8080/` 会提示你去找链接；`CONNECTOR_TOKEN` 也打不开它。打开过一次，这个浏览器一年内都不用再输。找不到链接了就运行 `personagent doctor`，最后一行就是。想在别的电脑上看，用 SSH 隧道，或者把 `SERVER_HOST` 设成这台电脑的局域网或 Tailscale 地址（这时必须同时设 `CONNECTOR_TOKEN`）。面板里不会显示密钥。
 
 现在你有三个窗口要一直开着：NapCat、AstrBot、personagent。
 
 ## 它怎么学习
 
-机器人不会因为一句话就变样。一个改变要同时满足：同一个聊天里有两次一致的反应，并且其中至少一次够「强」，也就是**被回复的那个人用自己的话纠正它，或者接受了它的第二次回答**。一声哈哈、旁观者的纠正、陌生人的指令、有人直接换了话题，都不算。所以默认情况下，一个人只能教它怎么回答他自己，并且只在他自己的那个聊天里。
+机器人不会因为一句话就变样。一个改变要同时满足：同一个聊天里有两次一致的反应，并且其中至少一次够「强」，也就是**被回复的那个人用自己的话纠正它，或者接受了它的第二次回答**。一声哈哈、旁观者的纠正（哪怕机器人回头问了他）、陌生人的指令、有人直接换了话题，都不算。所以默认情况下，一个人只能教它怎么回答他自己，并且只在他自己的那个聊天里。旁观者抱怨也撤不掉它学到的东西，只有原回复的对象或者管理员能撤。
 
 学到的所有东西都记在只追加的账本里，随时可以撤销：
 
-- 在控制面板里，每一条学到的东西后面有「采纳」「拒绝」「撤回」按钮（点两下确认）。
+- 在控制面板里，每一条学到的东西后面有「采纳」「拒绝」「撤回」按钮（点两下确认）。同一条回复已经有改写在用时，「采纳」会换成「替换」。
 - 或者用命令：`personagent learned list`、`personagent learned show <编号>`、`personagent learned rollback <编号>`。
 
 想让它更保守，在 `.env` 里加 `PROMOTE_MIN_SPEAKERS=2`：要两个不同的人都同意才会改。
 
-在群里对它说 `小夏 记住 …`、`小夏 忘掉 …`、`小夏 你都记得什么` 可以直接管理它的记忆；`小夏 学到了什么` 会列出它学到的东西。
+在群里对它说 `小夏 记住 …`、`小夏 忘掉 …`、`小夏 你都记得什么` 可以直接管理它的记忆；`小夏 学到了什么` 会列出它学到的东西。命令要放在消息开头；以「吗」「呢」「没」等结尾的问句（比如 `小夏 记住了吗`）只是聊天，`小夏 忘掉这个` 等于「算了」，什么都不删。每条笔记会记下是谁记的、说的是谁；不针对某个人的笔记全群可见，列出来时标着「来自某某」。
 
 ## 日常使用
 
 - 每次开机后，要重新启动三个：NapCat、AstrBot、`personagent run`。
 - `.env`（设置）和 `persona.txt`（人设）都在 personagent 的数据文件夹里，也就是 `personagent run` 启动时打印的 `home` 那一行。用记事本改，保存为 UTF-8。
 - 改了 `.env` 或 `persona.txt`，重启 `personagent run`。改了 AstrBot 或插件的设置，重启 AstrBot。
-- 更新：`uv tool upgrade personagent`。
+- 更新：`uv tool upgrade personagent`。从 0.x 升级上来的，`personagent run` 如果说有旧设置名，运行 `personagent doctor --fix` 把 `.env` 里的旧名字换成新的（原文件另存为 `.env.bak`）。
 - 改人设不会清空它学到的东西。
 
 ## 机器人不说话
 
-按顺序排查，越靠前越常见。先看 `personagent run` 的窗口，再看 AstrBot 网页里的日志，再看控制面板（`http://127.0.0.1:8080/`），它会直接告诉你「还没收到任何消息」「消息被拒绝了」或者「收到了但没说话」。
+按顺序排查，越靠前越常见。先看 `personagent run` 的窗口，再看 AstrBot 网页里的日志，再看控制面板（用 `personagent run` 打印的 `dashboard` 链接打开），它会直接告诉你「还没收到任何消息」「消息被拒绝了」或者「收到了但没说话」。
 
 1. **AstrBot 没把消息交出来。** 在 AstrBot 网页里打开 personagent 插件的设置，确认 `groups` 里有这个群号；私聊要在 `dm_users` 里填发送者的 QQ 号。再确认 `excluded_platforms` 里没有 `aiocqhttp`（有就删掉）。
-2. **personagent 没开，或者没有 key。** 看 `personagent run` 那一行 `agent:`。是 `OFF` 就重新运行 `personagent init`，或者在 `.env` 里填 `LLM_API_KEY`。
+2. **personagent 没开，或者没有 key。** 看 `personagent run` 那一行 `agent:`。是 `OFF` 的话，后面写着原因和办法：没有 key 就重新运行 `personagent init`，或者在 `.env` 里填 `LLM_API_KEY`；是 `AGENT_ENABLED=false` 就把它改成 `true`。改完重启。
 3. **回话的不是机器人，是 AstrBot 自带的模型（口气突然变了）。** 说明 AstrBot 没连上 personagent，或者 personagent 拒绝了这条消息。看 AstrBot 的日志：
    - `refusing unsafe personagent_url`：插件里的 `personagent_url` 不对。在同一台电脑上就用 `http://127.0.0.1:8080`。
    - `agent refused the request (403)`：两边的 `CONNECTOR_TOKEN` 不一致，或者两台电脑的时钟差了五分钟以上。重新运行 `personagent connect astrbot` 会把两边改成同一个。
-   - `timed out waiting for the agent`：模型太慢。把插件的 `timeout_s` 调大，或者把 `.env` 里的 `LLM_TIMEOUT_S` 调小。
+   - `timed out waiting for the agent`：模型太慢。插件的 `timeout_s` 默认 420 秒，够 personagent 默认设置下最坏的 360 秒；如果你调大过 `LLM_TIMEOUT_S` 或 `LLM_MAX_RETRIES`，就把 `timeout_s` 也调大，或者把它们调回来。
    - `agent request failed`：personagent 没在运行，或者地址、端口写错了。
-4. **它没被叫到。** 在群里它只回应带它名字（`PERSONA_NAME`）或者 @ 它的消息。别的时候，它要等群里聊够 `CHAT_TRIGGER_COUNT` 条（默认 30 条）才会考虑插话，而且考虑了也可能选择不说。凌晨 2 点到 7 点它更不爱插话。先用名字叫它测试。
+4. **它没被叫到。** 在群里它只回应带它名字（`PERSONA_NAME`）或者 @ 它的消息。别的时候，它要等群里聊够 `CHAT_TRIGGER_COUNT` 条（默认 30 条）才会考虑插话，而且考虑了也可能选择不说。凌晨 2 点到 7 点它更不爱插话：`AGENT_LANG=zh` 时按北京时间算，想换时区就在 `.env` 里设 `PERSONA_TZ_OFFSET_HOURS`。先用名字叫它测试。
 5. **QQ 群或私聊被 personagent 自己的白名单挡了。** `.env` 里的 `ACCESS_GROUPS`、`ACCESS_DM_USERS` 只要写了 QQ 号，就只放行写了的。QQ 私聊还必须来自管理员（`ADMIN_IDS`）或在 `ACCESS_DM_USERS` 里。被挡的会话，personagent 的窗口里会记一行，控制面板里也有。
 6. **模型调用失败。** key 无效、余额用完，窗口里会有一行 ERROR，写着是哪个服务、该改哪个设置。运行 `personagent doctor` 会向每个模型发一个很小的请求，直接看到状态码。
 7. **设置写错了。** 写错的设置名不会报错，只是悄悄用默认值。`personagent doctor` 和启动日志会列出不认识的设置名。
@@ -230,7 +234,7 @@ NapCat 的 HTTP 服务在这条路上是可选的。不开也能正常聊天；�
 
 ### 旧的直连方式
 
-NapCat 直接把事件发给 personagent 的 `/v1/onebot` 这条路已经不推荐，但在 1.x 里仍然能用。如果你以前用的是它，改成本文的方式后，要把 NapCat 里指向 `/v1/onebot` 的 HTTP 客户端关掉，否则每条消息会收到两遍。你学到的记忆会保留。
+NapCat 直接把事件发给 personagent 的 `/v1/onebot` 这条路已经不推荐，但在 1.x 里仍然能用。还在用的话，`.env` 里要写上 `QQ_ONEBOT_URL`（它现在默认留空，没有它机器人只收不回；`personagent doctor` 会提醒）。如果你以前用的是它，改成本文的方式后，要把 NapCat 里指向 `/v1/onebot` 的 HTTP 客户端关掉，否则每条消息会收到两遍。你学到的记忆会保留。
 
 ### 其他文档
 

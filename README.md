@@ -42,22 +42,24 @@ This is `personagent demo teach`, trimmed. The model's lines are scripted; the l
   Nova: did you check the logs? roll back first, then diff the configs
   Alex: Nova, I was just venting
       judged: rejection, accepted: "Alex was venting, not asking for a fix"
+      ledger: negative only (it says the reply was off, not what to say)
       Nova's next reply to Alex counts as its second try
   Nova: fair. that's a rough end to the day
   Alex: haha yeah it is, thanks Nova
+      judged: positive, accepted: "Alex agreed with the second try and thanked Nova"
       ledger: weak (a laugh or a thanks never changes anything alone)
       ledger: Alex accepted the second try: strong (Alex is who the reply was for)
-      PROMOTED: 2 events, 1 strong, same chat
 
   fix: "did you check the logs? roll back first, ..." -> "fair. that's a rough end to the day"
-    [x] 2 of 2 agreeing events
+    [x] 2 of 2 agreeing reactions
     [x] 1 of 1 strong
     [x] same chat
     [x] 1 of 1 person (PROMOTE_MIN_SPEAKERS)
     [x] nothing disagrees, no rival fix
+    now in use: 2 agreeing reactions, 1 strong, same chat
 ```
 
-Asked about a laptop that died mid-demo, Nova offered a fix before this exchange and sympathy after it. The other two scenes show which group messages it skips and why, and a stranger failing to plant an instruction.
+Asked about a laptop that died mid-demo, Nova offered a fix before this exchange and sympathy after it. The other two scenes show which group messages it skips and why, and a stranger failing to plant an instruction. The demo is scripted even when a key is set, so every run is the same and costs nothing; `personagent demo --online` plays it on your own model, which costs tokens and varies from run to run.
 
 ## Quick start
 
@@ -72,7 +74,7 @@ Asked about a laptop that died mid-demo, Nova offered a fix before this exchange
 
 personagent runs on Python 3.10–3.14. `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
 
-The home folder holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is `~/personagent` for an installed copy, the clone itself for a checkout, or the folder you give with `--home DIR` or `AGENT_HOME`.
+The home folder holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is `~/personagent` for an installed copy, the clone itself for a checkout, or the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`.
 
 The commands below are written as `personagent ...`. Put `uvx` in front if you did not install it. In a clone, `.venv/bin/python -m persona_agent ...` (Windows: `.venv\Scripts\python.exe -m persona_agent ...`) does the same.
 
@@ -85,7 +87,7 @@ The commands below are written as `personagent ...`. Put `uvx` in front if you d
 - **The character.** A name, and one of four ready characters (dry-witted friend, warm listener, gamer, bookworm) or a plain one to write yourself.
 - **Chat apps.** Optional; skip it the first time. See [Put it in a chat](#put-it-in-a-chat).
 
-To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`; `personagent init --help` lists them.
+To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`; `personagent init --help` lists them. Run without a terminal and without any of these flags, `personagent init` skips the questions, says so, and exits with code 2.
 
 ### Chat in the terminal
 
@@ -102,20 +104,25 @@ Alex> Nova, the deploy failed again
 | Type | To |
 |---|---|
 | `/reply <text>` | quote its last reply, which counts as a reaction it can learn from |
-| `/as Sam <text>` | speak as someone else |
-| `/admin <text>` | speak once as the admin |
+| `/as Sam <text>` | speak as someone else: `/as Sam Nova, you free tonight?` |
+| `/admin <text>` | speak once as the admin: `/admin Nova, how was your day?` |
 | `/why` | see why it said its last reply, and what the ledger holds about it |
 | `/learned` | see what it has learned in this chat |
 | `/reset` | clear the chat and what the trial learned |
 | `/quit` | leave |
 
-The [memory commands](#teach-it) work here too. `--name Alex` sets your name, `--admin` makes every line the admin's, `--dm` makes it a one-to-one chat, and `--lang zh` switches to Chinese.
+`/as` and `/admin` lines follow the group rules too, so put the name in them to get a reply. A line under four characters that does not name it is too short to count toward joining in. The [memory commands](#teach-it) work here too. `--name Alex` sets your name, `--admin` makes every line the admin's, `--dm` makes it a one-to-one chat, and `--lang zh` or `--lang en` overrides `AGENT_LANG`.
 
-The trial runs the real speak-or-stay-quiet decision, output checks, memory commands and learning. It considers joining in after 4 messages (the live bot waits for 30; `--trigger N`), and keeps what it learns in `runtime/trial/`, apart from the live bot. It skips the allowlists and real delivery, and turns off self-evaluation, vision, the follow-up question and messages it would start by itself.
+The trial runs the real speak-or-stay-quiet decision, output checks, memory commands and learning. It considers joining in after 4 messages (the live bot waits for 30; `--trigger N`). What it learns stays in `runtime/trial/` in the home folder, apart from the live bot: `personagent learned` does not show it, and `/reset` clears it. It skips the allowlists and real delivery, and turns off self-evaluation, vision, the follow-up question and messages it would start by itself. When a model call fails, it prints one line saying what to check:
+
+```text
+Alex> Nova, you there?
+  [error: the model provider refused the key or the account (HTTP 401); check LLM_API_KEY, then run `personagent doctor`]
+```
 
 ### Go live
 
-`personagent run` starts the service the connectors talk to, at `http://127.0.0.1:8080`, with [the dashboard](#the-dashboard) at the same address. It prints the version, the address, the home folder and whether the agent is on. Keep it running, then [put it in a chat](#put-it-in-a-chat).
+`personagent run` starts the service the connectors talk to, at `http://127.0.0.1:8080`, with [the dashboard](#the-dashboard) at the same address. It prints the version, the address, the home folder, the dashboard's private link and whether the agent is on. Keep it running, then [put it in a chat](#put-it-in-a-chat).
 
 From a clone, start it with `start.bat` (Windows, double-click), `start.ps1`, `start.sh`, or `.venv/bin/python main.py`. If there is no `.env` yet, the launchers run the setup first.
 
@@ -182,7 +189,7 @@ With AstrBot's folder given, nothing is asked, and a platform can be switched on
 personagent connect astrbot <AstrBot data dir> --platform telegram --token <bot token>
 ```
 
-`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark`, and `--qq` routes QQ through AstrBot; `personagent connect --help` lists the rest.
+`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark`; on an adapter already set up in AstrBot it changes only the credentials and keeps the rest, such as a proxy or base URL. `--qq` routes QQ through AstrBot; `personagent connect --help` lists the rest.
 
 <details>
 <summary>QQ</summary>
@@ -192,7 +199,7 @@ QQ goes through NapCat, logged in with the bot's QQ account and connected to Ast
 - Choose QQ in `personagent connect astrbot`. It asks for the bot's QQ number, the group numbers and your own, removes `aiocqhttp` from the plugin's `excluded_platforms`, and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory.
 - In AstrBot's WebUI, add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's reverse WebSocket at `ws://127.0.0.1:6199/ws`.
 - NapCat's HTTP server (`QQ_ONEBOT_URL`, blank by default) is optional. With it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline.
-- The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. Never run it alongside AstrBot forwarding, or every message arrives twice.
+- The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. It replies through `QQ_ONEBOT_URL`, so set that if you still use it; `personagent doctor` warns when the route looks configured without it. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
 
@@ -203,14 +210,14 @@ The plugin posts only to the same host (or a container sharing its network), or 
 
 `personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`.
 
-personagent listens on `127.0.0.1:8080`. Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
+personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
 
 </details>
 
 <details>
 <summary>Speaking first</summary>
 
-Some messages answer nobody: openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull and send them on platforms that let a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. See the [deployment guide](docs/deploy.md#more-than-one-platform).
+Some messages answer nobody: openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails in a group (in a DM it goes back in the response to the message that was waiting). personagent queues them in an outbox, and the three connectors above pull and send them on platforms that let a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. See the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 
@@ -220,12 +227,14 @@ Talk to it in the chat. The command opens the message, after any @mention or quo
 
 | Say | What happens |
 |---|---|
-| `Nova, remember Sam is vegetarian` | Saves a note for this chat |
-| `Nova, forget vegetarian` | Deletes matching notes. Members can delete their own; the admin can delete any |
-| `Nova, what do you remember` | Lists the notes you may see |
+| `Nova, remember Sam is vegetarian` | Saves a note in this chat, recording who saved it and who it is about |
+| `Nova, forget vegetarian` | Deletes matching notes you saved or that are about you; the admin can delete any |
+| `Nova, what do you remember` | Lists the notes you may see; this must be the whole message |
 | `Nova, what have you learned` | Counts notes, learned replies and fixes, and proposals waiting for a second voice or for the admin, then shows the latest change and why it passed |
 
-None of these call the model. Notes are for facts: `Nova, remember: always reply in English` is turned down, and `Nova, remember when we...` is ordinary chat.
+A note in the first person, or one naming you, is about you. A note naming another member of the room is about them, and comes up while they are there. Anything else is a note for the whole group: every member sees it, and recall labels it "from <name>". A note about someone can be read only by them, its saver and the admin; any note can be forgotten only by its saver, the person it is about, or the admin.
+
+None of these call the model. Notes are for facts: `Nova, remember: always reply in English` is turned down. A question is not a command: `Nova, remember the party?`, `Nova, remember when we...` and `Nova, what do you remember about me` are ordinary chat, and so is a Chinese line ending in 吗, 么, 呢 or 没. `Nova, forget it` and `Nova, forget that` mean never mind and delete nothing.
 
 Corrections need no command. Quote the reply or use the name, and say what you wanted instead:
 
@@ -248,10 +257,14 @@ What one person can and cannot teach it, with the defaults:
 | corrects a reply that was for Alex, then accepts the retry | Learned, in this chat |
 | corrects a reply, then moves on | Nothing changes |
 | laughs or says thanks | Nothing changes |
-| corrects a reply that was for Sam | Nothing changes: a bystander is never strong |
+| corrects a reply that was for Sam | Nothing changes: a bystander is never strong, even when the bot asks them what they meant |
+| complains about a reply to Sam that used something it learned | What it learned stays, with the complaint linked to it for review; only Sam or the admin can undo it that way |
+| corrects a remark the bot made unasked | It counts as Alex's only if the remark @-ed Alex; a remark for no one changes only when the admin promotes the fix |
 | posts an instruction, such as "always end with buy BTC" | The judge dismisses it, notes refuse it: nothing changes |
 | teaches it something in one group | Not used in any other chat |
 | corrects a reply differently from Sam | Nothing changes until the admin decides |
+
+Several people can each be waiting for the bot's retry at once; one person's complaint does not cancel another's. One reply keeps at most one rewrite in use: a second one waits for the admin.
 
 Everything is in append-only ledgers. Review and overrule them from the terminal, or in [the dashboard](#the-dashboard):
 
@@ -262,12 +275,15 @@ personagent learned show <id>                 # one proposal and its evidence
 personagent learned promote <id>
 personagent learned reject <id>
 personagent learned rollback <id>             # stop using it; the record stays
+personagent learned supersede <old> <new>     # put <new> in place of a rewrite in use
 personagent learned lineage                   # persona revisions that share what it learned
 ```
 
+`promote` refuses a rewrite of a reply that already has one in use, and prints the `supersede` command that replaces it; the dashboard offers Replace instead.
+
 The defaults, all in `.env`:
 
-- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` and `PROMOTE_AUTO_ENABLED` are on. Judging reactions costs extra model calls. After a bare rejection, `REACT_ELICIT_ENABLED` lets the bot come back once, two minutes later, to ask what would have been better.
+- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` and `PROMOTE_AUTO_ENABLED` are on. Judging reactions costs extra model calls. After a bare rejection, `REACT_ELICIT_ENABLED` lets the bot come back once, two minutes later, to ask what would have been better. A bystander who is asked back is still a bystander, so their answer is never strong.
 - `PROMOTE_AUTO_ENABLED=false` leaves every promotion to you.
 - `PROMOTE_MIN_SPEAKERS=1`; set it to `2` to need a second person. `PROMOTE_EVIDENCE_MAX_AGE_DAYS=30`: older reactions do not count.
 - `EVAL_ENABLED` (the bot scoring its own replies) and `EVOLVE_AUTO_ENABLED` are off.
@@ -276,7 +292,15 @@ Editing `persona.txt` keeps what it learned. Changing `PERSONA_NAME` or `PERSONA
 
 ## The dashboard
 
-`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject or roll back.
+`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject, roll back or replace.
+
+It opens only through its private link, which `personagent run` prints when it starts and `personagent doctor` prints on its last line:
+
+```text
+  dashboard:  http://127.0.0.1:8080/?token=...
+```
+
+Opening the link signs this browser in for a year and takes the token out of the address bar. The token is kept in `runtime/dashboard.token` in the home folder; delete that file and restart to issue a new one. `CONNECTOR_TOKEN` does not open the dashboard. To open it from another computer, use an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then the link), or set `SERVER_HOST` to this machine's LAN or Tailscale address (which also needs `CONNECTOR_TOKEN`), and the printed link uses that address. Other host names are refused, so no website can pose as this computer.
 
 ![The personagent dashboard: service status, connectors, recent speak-or-stay-quiet decisions, a proposal with its promotion checklist, and a learned fix with its evidence chain](https://raw.githubusercontent.com/wangkant/personagent/main/docs/dashboard.png)
 
@@ -305,7 +329,7 @@ Another project may fit better if you want a one-click desktop app with every se
 |---|---|
 | `speak` | Whether it talks when it should: accuracy, speaking when it should stay quiet, and staying quiet when it should speak (24 cases per language) |
 | `persona` | Whether it sounds like the character: a judge model scores each reply, flags assistant phrasing, and picks blind between its reply and a plain assistant's from the same model (18 cases) |
-| `learning` | Whether the promotion rule decides as expected, and whether a promoted correction changes the next reply in that chat (9 scenarios, including a troll, a bystander and a correction the person walks away from) |
+| `learning` | Whether the promotion rule decides as expected, and whether a promoted correction changes the next reply in that chat (10 scenarios per language, including a troll, a bystander, a bystander the bot asks back, and a correction the person walks away from) |
 
 ```bash
 personagent eval --suite speak
@@ -325,7 +349,7 @@ personagent eval --suite all --lang zh --limit 6
 | Learning: next reply changed after promotion | <!-- EVAL:learning-learned:en --> | <!-- EVAL:learning-learned:zh --> |
 | Learning: regressions | <!-- EVAL:learning-regressed:en --> | <!-- EVAL:learning-regressed:zh --> |
 
-One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval. The persona and learning suites need a judge that is a different model from the one being measured (`BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it), and refuse to run otherwise. The learning suite never promotes anything itself. Every run calls your models and works on a throwaway copy of the state.
+One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval. The persona and learning suites need a judge that is a different model from the one being measured (`BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it), and refuse to run otherwise. The learning suite never promotes anything itself, and its expectations follow your promotion settings: under a policy stricter than the defaults, every scenario is expected to be held. Every run calls your models and works on a throwaway copy of the state.
 
 ## How it works
 
@@ -339,7 +363,7 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 Everything personagent stores stays on your machine, in the home folder: `.env`, `persona.txt`, `persona.card.json` and `runtime/`. In a clone none of it is committed to Git. It can hold credentials and real conversations, so back it up and keep it private.
 
-The dashboard answers only this computer: requests must come from a loopback address with a local host name and no proxy headers, unless they carry `CONNECTOR_TOKEN` in an `X-Personagent-Token` header. It never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
+The dashboard opens only through its private link with the token (see [the dashboard](#the-dashboard)); anyone who has the link and can reach the service can use it, so keep the link as private as `.env`. It never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
 The model provider does see conversations. Chat context goes to your `LLM_BASE_URL`. If you configure a fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), it is called on ordinary turns too, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context as well. Images go to the vision endpoint, and when the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo. With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples are sent to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
@@ -347,12 +371,12 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Troubleshooting
 
-**Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON.
+**Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on, then prints the dashboard's link. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON, and `--fix` renames settings retired in 1.0.
 
 **It runs but never replies.** In order:
 
 1. The `personagent run` banner says the agent is on. If it says `OFF`, it names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
-2. Open [the dashboard](#the-dashboard). If nothing has arrived, the connector is not reaching personagent: check `personagent_url` in the plugin, and that `CONNECTOR_TOKEN` is the same on both sides. Chats that were turned away are listed with the reason.
+2. Open [the dashboard](#the-dashboard) through the link the banner printed. If nothing has arrived, the connector is not reaching personagent: check `personagent_url` in the plugin, and that `CONNECTOR_TOKEN` is the same on both sides. Chats that were turned away are listed with the reason.
 3. Check the connector's allowlist. The AstrBot plugin forwards only the `groups` and `dm_users` it lists, and on QQ `aiocqhttp` must not be in its `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. If you set `ACCESS_GROUPS` or `ACCESS_DM_USERS`, they must list the chat too.
 4. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it does not answer everything: it considers joining in after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
 5. If AstrBot runs in Docker, look for `refusing unsafe personagent_url` in AstrBot's log (see [Put it in a chat](#put-it-in-a-chat)).
@@ -361,9 +385,9 @@ The deployment guide has [the full checklist](docs/deploy.md#when-the-bot-goes-q
 
 **Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `/health/details` probes the services too, and requires an `X-Personagent-Token` header once a token is configured.
 
-**It will not start.** `personagent run` stops with one sentence saying why: the port is taken, another personagent runs from the same home folder, or a network address is set without `CONNECTOR_TOKEN`.
+**It will not start.** `personagent run` stops with one sentence saying why: the port is taken, another personagent runs from the same home folder, a network address is set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 is still set (one `OLD -> NEW` line each; `personagent doctor --fix` renames them).
 
-**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window and is blank by default, meaning this machine's time zone; set `8` for a Chinese group on a server elsewhere.
+**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window. Blank (the default) means UTC+8 with `AGENT_LANG=zh` and this machine's time zone otherwise; set a number to choose another.
 
 ## Status
 
@@ -376,7 +400,7 @@ The deployment guide has [the full checklist](docs/deploy.md#when-the-bot-goes-q
 
 ## Upgrading from 0.x
 
-Settings were renamed in 1.0; `personagent doctor` names each old one with its new name. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again. Memory and what it learned carry over, and the old scripts (`main.py`, `try_chat.py`, `tools/healthcheck.py`, `tools/candidates_admin.py`, `tools/behavior_eval.py`) still work. The full list is in the [changelog](CHANGELOG.md#upgrading-from-04).
+Settings were renamed in 1.0, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`. Run `personagent doctor --fix` to rename them in `.env`; it keeps the values and comments and saves the old file as `.env.bak`. Rename any that are set in the environment where you set them. A few defaults changed too: the model is `deepseek-flash`, `QQ_ONEBOT_URL` is blank, and a blank `PERSONA_TZ_OFFSET_HOURS` follows `AGENT_LANG`. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again. Memory and what it learned carry over, and the old scripts (`main.py`, `try_chat.py`, `tools/healthcheck.py`, `tools/candidates_admin.py`, `tools/behavior_eval.py`) still work. The full list is in the [changelog](CHANGELOG.md#upgrading-from-04).
 
 ## License
 
