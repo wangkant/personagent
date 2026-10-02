@@ -4,433 +4,253 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] — 2026-10-03
 
-### Changed
+personagent 1.0 installs as a package, sets itself up in English or Chinese, and shows its work: a demo that needs no key, a terminal chat that says why the bot spoke or stayed quiet, and a local dashboard for what it learned and the evidence behind it. Learning from a correction now works end to end, under a rule that one message, a bystander or a stranger cannot get around.
 
-- **One naming standard.** Every setting, connector key, endpoint, header and
-  event field now follows one set of rules, and each old name is gone rather
-  than kept as an alias, while there are few deployments to move:
-  - each setting sits under one module prefix (`LLM_`, `VISION_`, `PERSONA_`,
-    `ADMIN_`, `ACCESS_`, `CHAT_`, `MEMORY_`, `SERVER_`, `CONNECTOR_`, `QQ_`,
-    `PROACTIVE_`, `REACT_`, `PROMOTE_`, `EVOLVE_`, `EVAL_`, `LEDGER_`, ...);
-  - a duration ends in its unit (`_S`, `_HOURS`, `_DAYS`), a size in `_BYTES`;
-  - a switch that turns a feature on or off ends in `_ENABLED`
-    (`LLM_FALLBACK_THINKING`, `PROMOTE_REQUIRE_SAME_CONVERSATION` and the
-    plugin's `block_default` and `forward_quoted_text` say what they do and
-    keep their names);
-  - a vendor's credentials keep the vendor's own names (`TAVILY_API_KEY`,
-    `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`);
-  - the server and its connectors call their shared token the same thing,
-    `CONNECTOR_TOKEN`, and the three connectors use the same name for the
-    same setting (docs/connectors.md has the table).
+1.0 is also a stable interface. Through 1.x, the setting names, the `/v1` connector protocol (paths, headers, fields and error codes) and the data personagent stores (memory, the ledgers, the persona lineage, stickers and eval rows) stay compatible, so a 1.x upgrade needs no renames and keeps everything it learned. Getting there renamed most settings once: see "Upgrading from 0.4" below. The direct OneBot route `/v1/onebot` and `launch.vbs` are deprecated and keep working through 1.x.
 
-  Old names are no longer read: rename them in `.env` and in each connector's
-  configuration by the tables below. Preflight, at startup and in
-  `tools/healthcheck.py`, names each old name it finds in the environment or
-  `.env` together with its new one, and never uses its value. The AstrBot
-  plugin is now `astrbot_plugin_personagent`; `quickstart.py --astrbot`
-  installs it under that name and deletes the old directory it installed
-  before, which would otherwise forward every message twice, together with
-  the old settings file. The first run carries across QQ routing and the
-  settings that kept their names; `groups`, `dm_users` and a
-  `personagent_url` other than the local default start empty, so set them
-  again in AstrBot's WebUI. What personagent
-  has learned stays valid: memory, the ledgers, the lineage, stickers and eval
-  rows keep their keys, and a DM's stored conversation key keeps its
-  `private:` prefix. The prompts the model reads are unchanged.
+### Highlights
 
-  Settings:
+- **Install with one command:** `uvx personagent demo` runs with nothing set up, and `uv tool install personagent` or `pipx install personagent` gives a permanent `personagent` command. A clone still works.
+- **`personagent init` sets it up in English or Chinese:** 11 AI services (DeepSeek, SiliconFlow, Qwen, Zhipu, Kimi, Doubao, Ollama and more), the key tested as you enter it, four ready characters, and the AstrBot connection.
+- **See it before you connect it:** `personagent demo` shows it staying quiet and learning from a correction on a scripted model, and `personagent chat` is a simulated group that says why the bot spoke or stayed quiet.
+- **Corrections that hold up are learned:** one message never teaches it anything, a change needs two agreeing reactions from the same chat with one of them strong, and every change can be rolled back.
+- **A local dashboard** at `http://127.0.0.1:8080/` shows status, why it spoke or stayed quiet, and what it learned with the evidence, with promote, reject and roll back.
+- **Every platform through connectors:** the AstrBot plugin (QQ, Telegram, Discord, Slack, KOOK, Lark and more), Satori and Matrix, and an outbox so the bot can speak first on any of them.
+- **One naming standard** for every setting, connector key and protocol field, kept through 1.x.
+- **Python 3.10 to 3.14**, tested on Linux and Windows.
 
-  | Old | New |
-  |---|---|
-  | `LLM_TIMEOUT` | `LLM_TIMEOUT_S` |
-  | `PRIVATE_MODEL`, `ANTHROPIC_PRIVATE_MODEL` | `LLM_DM_MODEL` |
-  | `JUDGE_MODEL` | `LLM_JUDGE_MODEL` |
-  | `FALLBACK_MODEL` | `LLM_FALLBACK_MODEL` |
-  | `FALLBACK_BASE_URL` | `LLM_FALLBACK_BASE_URL` |
-  | `FALLBACK_API_KEY` | `LLM_FALLBACK_API_KEY` |
-  | `FALLBACK_THINKING` | `LLM_FALLBACK_THINKING` |
-  | `FALLBACK_DURATION` | `LLM_FALLBACK_DURATION_S` |
-  | `RATE_WINDOW` | `LLM_RATE_WINDOW_S` |
-  | `RATE_THRESHOLD` | `LLM_RATE_THRESHOLD` |
-  | `RATE_LIMIT_COOLDOWN` | `LLM_RATE_LIMIT_COOLDOWN_S` |
-  | `GLM_API_KEY` | `VISION_API_KEY` |
-  | `GLM_BASE_URL` | `VISION_BASE_URL` |
-  | `MAX_IMAGE_BYTES` | `VISION_MAX_IMAGE_BYTES` |
-  | `BOT_NAME` | `PERSONA_NAME` |
-  | `TZ_OFFSET_HOURS` | `PERSONA_TZ_OFFSET_HOURS` |
-  | `OWNER_QQ`, `GATEWAY_OWNER_IDS` | `ADMIN_IDS` |
-  | `OWNER_NAME` | `ADMIN_NAME` |
-  | `OWNER_RELATIONSHIP` | `ADMIN_RELATIONSHIP` |
-  | `QQ_GROUPS`, `ALLOWED_GROUPS` | `ACCESS_GROUPS` |
-  | `PRIVATE_ALLOWED_QQS`, `ALLOWED_DM_USERS` | `ACCESS_DM_USERS` |
-  | `AGENT_TRIGGER_COUNT` | `CHAT_TRIGGER_COUNT` |
-  | `AGENT_CONTEXT_LEN` | `CHAT_CONTEXT_MESSAGES` |
-  | `AGENT_FOLLOWUP_WINDOW` | `CHAT_FOLLOWUP_WINDOW_S` |
-  | `AGENT_MEMORY_FILE` | `MEMORY_FILE` |
-  | `AGENT_MEMORY_MAX` | `MEMORY_MAX_PER_CONVERSATION` |
-  | `AGENT_ENABLE` | `AGENT_ENABLED` |
-  | `HOST` | `SERVER_HOST` |
-  | `PORT` | `SERVER_PORT` |
-  | `MAX_WEBHOOK_BODY_BYTES` | `SERVER_MAX_BODY_BYTES` |
-  | `LOG_FILE` | `SERVER_LOG_FILE` |
-  | `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
-  | `GATEWAY_SOURCE_MAX_AGE_SECONDS` | `CONNECTOR_MAX_EVENT_AGE_S` |
-  | `GATEWAY_NATIVE_PLATFORMS` | `CONNECTOR_QQ_PLATFORMS` |
-  | `GATEWAY_OUTBOX` | `CONNECTOR_OUTBOX_ENABLED` |
-  | `MAX_INFLIGHT_GATEWAY` | `CONNECTOR_MAX_INFLIGHT` |
-  | `BOT_QQ` | `QQ_BOT_ID` |
-  | `NAPCAT_API` | `QQ_ONEBOT_URL` |
-  | `NAPCAT_IMAGE_DIR` | `QQ_ONEBOT_IMAGE_DIR` |
-  | `WEBHOOK_SECRET` | `QQ_ONEBOT_SECRET` |
-  | `MAX_INFLIGHT_WEBHOOKS` | `QQ_ONEBOT_MAX_INFLIGHT` |
-  | `PROACTIVE_ENABLE` | `PROACTIVE_ENABLED` |
-  | `PROACTIVE_INTERVAL` | `PROACTIVE_INTERVAL_S` |
-  | `PROACTIVE_MIN_SILENCE` | `PROACTIVE_MIN_SILENCE_S` |
-  | `PROACTIVE_COOLDOWN` | `PROACTIVE_COOLDOWN_S` |
-  | `PROACTIVE_DM_MIN_SILENCE` | `PROACTIVE_DM_MIN_SILENCE_S` |
-  | `PROACTIVE_DM_COOLDOWN` | `PROACTIVE_DM_COOLDOWN_S` |
-  | `REACT_LEARN` | `REACT_LEARN_ENABLED` |
-  | `REACT_TTL_SEC` | `REACT_TTL_S` |
-  | `REACT_FIX_WINDOW` | `REACT_FIX_WINDOW_S` |
-  | `REACT_ELICIT` | `REACT_ELICIT_ENABLED` |
-  | `REACT_ELICIT_DELAY` | `REACT_ELICIT_DELAY_S` |
-  | `REACT_ELICIT_COOLDOWN` | `REACT_ELICIT_COOLDOWN_S` |
-  | `PROMOTE_AUTO` | `PROMOTE_AUTO_ENABLED` |
-  | `EXAMPLES_MAX_AUTO` | `PROMOTE_MAX_EXAMPLES` |
-  | `FEEDBACK_MAX_AUTO` | `PROMOTE_MAX_FEEDBACK` |
-  | `EVOLVE_AUTO` | `EVOLVE_AUTO_ENABLED` |
-  | `EVAL_ENABLE` | `EVAL_ENABLED` |
-  | `AGENT_EVIDENCE_WARN_BYTES` | `LEDGER_EVIDENCE_WARN_BYTES` |
-  | `AGENT_CANDIDATE_LEDGER_WARN_BYTES` | `LEDGER_CANDIDATES_WARN_BYTES` |
-  | `PROMPT_LAB_MODEL` | `LAB_MODEL` |
-  | `BENCH_EVAL_DELAY` | `BENCH_EVAL_DELAY_S` |
+### Upgrading from 0.4
 
-  Connector configuration:
+1. **Rename your settings.** Old names are no longer read. Rename them in `.env` by the Settings table below; preflight at startup and `personagent doctor` name each old name they find, with its new one, and never use its value. `ADMIN_IDS` names one person, `ADMIN_NAME`: when moving `OWNER_QQ` and `GATEWAY_OWNER_IDS` into it, leave anyone else out. Write a non-QQ id with its platform prefix (`telegram:-1001234`).
+2. **Check three defaults.** `LLM_MODEL=deepseek-chat` must become `deepseek-flash`: DeepSeek retired the old name. `QQ_ONEBOT_URL` (was `NAPCAT_API`) is now blank by default, meaning no NapCat HTTP server; if you use one and `.env` does not name it, set it (for example `http://127.0.0.1:3000`). A blank `PERSONA_TZ_OFFSET_HOURS` now means this machine's UTC offset rather than UTC+8.
+3. **Reinstall the AstrBot plugin** with `personagent connect astrbot <AstrBot data folder>` (or `python quickstart.py --astrbot` in a clone), then restart AstrBot. It installs `astrbot_plugin_personagent` and deletes the old `astrbot_plugin_llm_persona_gateway` directory and its settings file; left beside the new plugin, the old one would forward every message twice.
+4. **Re-enter the plugin's `groups` and `dm_users`** in AstrBot's WebUI, and a `personagent_url` other than the local default. The first run carries over QQ routing and the settings that kept their names; these start empty.
+5. **Update Satori and Matrix connectors** by the Connector configuration table: `PERSONAGENT_URL` is now the base URL, and the token is `CONNECTOR_TOKEN`.
+6. **Code that calls the HTTP API itself** moves to the paths, headers and fields in the Protocol table. A process started as `uvicorn main:app` starts `persona_agent.server:app` instead, or `personagent run`.
+7. **With `PROACTIVE_ENABLED=true`,** openers now start on every platform whose connector pulls the outbox. `PROACTIVE_PLATFORMS=qq` keeps them on QQ.
+8. **Keep your data.** Memory, the ledgers, the persona lineage, stickers and eval rows keep their keys, and a DM's stored conversation key keeps its `private:` prefix, so nothing learned is lost. The group prompt's wording changed, so the provider's prompt cache misses once.
 
-  | Connector | Old | New |
-  |---|---|---|
-  | Satori, Matrix | `PERSONAGENT_URL`, the event endpoint (`http://127.0.0.1:8080/webhook/gateway`) | `PERSONAGENT_URL`, the base URL (`http://127.0.0.1:8080`) |
-  | Satori, Matrix | `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
-  | Satori | `SATORI_ENDPOINT` | `SATORI_URL` |
-  | Satori | `SATORI_FORWARDER_ID` | `SATORI_CONNECTOR_ID` |
-  | Satori | `SATORI_OUTBOX` | `SATORI_OUTBOX_ENABLED` |
-  | Satori | `SATORI_INLINE_IMAGES` | `SATORI_INLINE_IMAGES_ENABLED` |
-  | Matrix | `MATRIX_HOMESERVER` | `MATRIX_URL` |
-  | Matrix | `MATRIX_ROOMS` | `MATRIX_GROUPS` |
-  | Matrix | `MATRIX_FORWARDER_ID` | `MATRIX_CONNECTOR_ID` |
-  | Matrix | `MATRIX_OUTBOX` | `MATRIX_OUTBOX_ENABLED` |
-  | Matrix | `MATRIX_E2EE` | `MATRIX_E2EE_ENABLED` |
-  | Matrix | `MATRIX_READ_RECEIPTS` | `MATRIX_READ_RECEIPTS_ENABLED` |
-  | Matrix | `MATRIX_STORE_PATH` | `MATRIX_STORE_DIR` |
-  | AstrBot plugin | `astrbot_plugin_llm_persona_gateway` (directory and plugin name) | `astrbot_plugin_personagent` |
-  | AstrBot plugin | `agent_url`, the event endpoint | `personagent_url`, the base URL |
-  | AstrBot plugin | `gateway_token` | `connector_token` |
-  | AstrBot plugin | `forwarder_id` | `connector_id` |
-  | AstrBot plugin | `group_whitelist` | `groups` |
-  | AstrBot plugin | `private_whitelist` | `dm_users` |
-  | AstrBot plugin | `private_enabled` | none: DMs are forwarded when `dm_users` is not empty |
+Settings:
 
-  `*` in the plugin's `groups` or `dm_users`, as in the other connectors'
-  lists, now forwards every conversation of that kind with
-  `"prefiltered": false`, so personagent's `ACCESS_*` lists decide.
+| Old | New |
+|---|---|
+| `LLM_TIMEOUT` | `LLM_TIMEOUT_S` |
+| `PRIVATE_MODEL`, `ANTHROPIC_PRIVATE_MODEL` | `LLM_DM_MODEL` |
+| `JUDGE_MODEL` | `LLM_JUDGE_MODEL` |
+| `FALLBACK_MODEL` | `LLM_FALLBACK_MODEL` |
+| `FALLBACK_BASE_URL` | `LLM_FALLBACK_BASE_URL` |
+| `FALLBACK_API_KEY` | `LLM_FALLBACK_API_KEY` |
+| `FALLBACK_THINKING` | `LLM_FALLBACK_THINKING` |
+| `FALLBACK_DURATION` | `LLM_FALLBACK_DURATION_S` |
+| `RATE_WINDOW` | `LLM_RATE_WINDOW_S` |
+| `RATE_THRESHOLD` | `LLM_RATE_THRESHOLD` |
+| `RATE_LIMIT_COOLDOWN` | `LLM_RATE_LIMIT_COOLDOWN_S` |
+| `GLM_API_KEY` | `VISION_API_KEY` |
+| `GLM_BASE_URL` | `VISION_BASE_URL` |
+| `MAX_IMAGE_BYTES` | `VISION_MAX_IMAGE_BYTES` |
+| `BOT_NAME` | `PERSONA_NAME` |
+| `TZ_OFFSET_HOURS` | `PERSONA_TZ_OFFSET_HOURS` |
+| `OWNER_QQ`, `GATEWAY_OWNER_IDS` | `ADMIN_IDS` |
+| `OWNER_NAME` | `ADMIN_NAME` |
+| `OWNER_RELATIONSHIP` | `ADMIN_RELATIONSHIP` |
+| `QQ_GROUPS`, `ALLOWED_GROUPS` | `ACCESS_GROUPS` |
+| `PRIVATE_ALLOWED_QQS`, `ALLOWED_DM_USERS` | `ACCESS_DM_USERS` |
+| `AGENT_TRIGGER_COUNT` | `CHAT_TRIGGER_COUNT` |
+| `AGENT_CONTEXT_LEN` | `CHAT_CONTEXT_MESSAGES` |
+| `AGENT_FOLLOWUP_WINDOW` | `CHAT_FOLLOWUP_WINDOW_S` |
+| `AGENT_MEMORY_FILE` | `MEMORY_FILE` |
+| `AGENT_MEMORY_MAX` | `MEMORY_MAX_PER_CONVERSATION` |
+| `AGENT_ENABLE` | `AGENT_ENABLED` |
+| `HOST` | `SERVER_HOST` |
+| `PORT` | `SERVER_PORT` |
+| `MAX_WEBHOOK_BODY_BYTES` | `SERVER_MAX_BODY_BYTES` |
+| `LOG_FILE` | `SERVER_LOG_FILE` |
+| `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
+| `GATEWAY_SOURCE_MAX_AGE_SECONDS` | `CONNECTOR_MAX_EVENT_AGE_S` |
+| `GATEWAY_NATIVE_PLATFORMS` | `CONNECTOR_QQ_PLATFORMS` |
+| `GATEWAY_OUTBOX` | `CONNECTOR_OUTBOX_ENABLED` |
+| `MAX_INFLIGHT_GATEWAY` | `CONNECTOR_MAX_INFLIGHT` |
+| `BOT_QQ` | `QQ_BOT_ID` |
+| `NAPCAT_API` | `QQ_ONEBOT_URL` |
+| `NAPCAT_IMAGE_DIR` | `QQ_ONEBOT_IMAGE_DIR` |
+| `WEBHOOK_SECRET` | `QQ_ONEBOT_SECRET` |
+| `MAX_INFLIGHT_WEBHOOKS` | `QQ_ONEBOT_MAX_INFLIGHT` |
+| `PROACTIVE_ENABLE` | `PROACTIVE_ENABLED` |
+| `PROACTIVE_INTERVAL` | `PROACTIVE_INTERVAL_S` |
+| `PROACTIVE_MIN_SILENCE` | `PROACTIVE_MIN_SILENCE_S` |
+| `PROACTIVE_COOLDOWN` | `PROACTIVE_COOLDOWN_S` |
+| `PROACTIVE_DM_MIN_SILENCE` | `PROACTIVE_DM_MIN_SILENCE_S` |
+| `PROACTIVE_DM_COOLDOWN` | `PROACTIVE_DM_COOLDOWN_S` |
+| `REACT_LEARN` | `REACT_LEARN_ENABLED` |
+| `REACT_TTL_SEC` | `REACT_TTL_S` |
+| `REACT_FIX_WINDOW` | `REACT_FIX_WINDOW_S` |
+| `REACT_ELICIT` | `REACT_ELICIT_ENABLED` |
+| `REACT_ELICIT_DELAY` | `REACT_ELICIT_DELAY_S` |
+| `REACT_ELICIT_COOLDOWN` | `REACT_ELICIT_COOLDOWN_S` |
+| `PROMOTE_AUTO` | `PROMOTE_AUTO_ENABLED` |
+| `EXAMPLES_MAX_AUTO` | `PROMOTE_MAX_EXAMPLES` |
+| `FEEDBACK_MAX_AUTO` | `PROMOTE_MAX_FEEDBACK` |
+| `EVOLVE_AUTO` | `EVOLVE_AUTO_ENABLED` |
+| `EVAL_ENABLE` | `EVAL_ENABLED` |
+| `AGENT_EVIDENCE_WARN_BYTES` | `LEDGER_EVIDENCE_WARN_BYTES` |
+| `AGENT_CANDIDATE_LEDGER_WARN_BYTES` | `LEDGER_CANDIDATES_WARN_BYTES` |
+| `PROMPT_LAB_MODEL` | `LAB_MODEL` |
+| `BENCH_EVAL_DELAY` | `BENCH_EVAL_DELAY_S` |
 
-  Protocol (docs/connectors.md), where the signing scheme, the segments and
-  every field not listed are unchanged:
+Connector configuration:
 
-  | Old | New |
-  |---|---|
-  | `POST /webhook/gateway` | `POST /v1/events` |
-  | `POST /webhook/gateway/outbox` | `POST /v1/outbox` |
-  | `POST /webhook/qq`, the direct OneBot ingress (its `X-Signature` header stays) | `POST /v1/onebot` |
-  | `X-Gateway-Token`, `X-Gateway-Timestamp`, `X-Gateway-Nonce`, `X-Gateway-Signature` | `X-Personagent-Token`, `X-Personagent-Timestamp`, `X-Personagent-Nonce`, `X-Personagent-Signature` |
-  | `message_type`: `"group"` / `"private"`, in events and outbox deliveries | `conversation_type`: `"group"` / `"dm"` |
-  | `user_id` | `sender_id` |
-  | `self_id` | `bot_id` |
-  | `source_timestamp` | `sent_at` |
-  | `is_at_me` | `addressed` |
-  | `raw_text` | `text` |
-  | `forwarder_id`, in events and outbox pulls | `connector_id` |
-  | `caps` | `capabilities` |
-  | a reply's `at_user_id` | `mention_user_id` |
-  | error code `stale_source_event` | `stale_event` |
+| Connector | Old | New |
+|---|---|---|
+| Satori, Matrix | `PERSONAGENT_URL`, the event endpoint (`http://127.0.0.1:8080/webhook/gateway`) | `PERSONAGENT_URL`, the base URL (`http://127.0.0.1:8080`) |
+| Satori, Matrix | `GATEWAY_TOKEN` | `CONNECTOR_TOKEN` |
+| Satori | `SATORI_ENDPOINT` | `SATORI_URL` |
+| Satori | `SATORI_FORWARDER_ID` | `SATORI_CONNECTOR_ID` |
+| Satori | `SATORI_OUTBOX` | `SATORI_OUTBOX_ENABLED` |
+| Satori | `SATORI_INLINE_IMAGES` | `SATORI_INLINE_IMAGES_ENABLED` |
+| Matrix | `MATRIX_HOMESERVER` | `MATRIX_URL` |
+| Matrix | `MATRIX_ROOMS` | `MATRIX_GROUPS` |
+| Matrix | `MATRIX_FORWARDER_ID` | `MATRIX_CONNECTOR_ID` |
+| Matrix | `MATRIX_OUTBOX` | `MATRIX_OUTBOX_ENABLED` |
+| Matrix | `MATRIX_E2EE` | `MATRIX_E2EE_ENABLED` |
+| Matrix | `MATRIX_READ_RECEIPTS` | `MATRIX_READ_RECEIPTS_ENABLED` |
+| Matrix | `MATRIX_STORE_PATH` | `MATRIX_STORE_DIR` |
+| AstrBot plugin | `astrbot_plugin_llm_persona_gateway` (directory and plugin name) | `astrbot_plugin_personagent` |
+| AstrBot plugin | `agent_url`, the event endpoint | `personagent_url`, the base URL |
+| AstrBot plugin | `gateway_token` | `connector_token` |
+| AstrBot plugin | `forwarder_id` | `connector_id` |
+| AstrBot plugin | `group_whitelist` | `groups` |
+| AstrBot plugin | `private_whitelist` | `dm_users` |
+| AstrBot plugin | `private_enabled` | none: DMs are forwarded when `dm_users` is not empty |
 
-- **The AstrBot plugin reads each platform the way its adapter delivers it.**
-  QQ pokes, recalls and requests no longer reach the persona as empty turns.
-  More messages count as addressing the bot, on purpose: a Discord message
-  starting with `@bot` (which the adapter strips), a ping of the bot's role,
-  and replies to the bot on Telegram (photos and voice too), Discord, Lark,
-  Slack threads, KOOK and Satori. Quotes carry their text and author; sticker
-  and emoji names, voice transcripts and the platform's own send time come
-  through. Telegram images are sent inline, so the bot token in their URLs
-  never reaches the agent. Because the send time is now the platform's, a
-  backlog older than `CONNECTOR_MAX_EVENT_AGE_S` is refused as stale.
-- **The AstrBot plugin writes each platform's way.** Mentions no longer carry
-  a double space on QQ and Telegram, long replies are split under each
-  platform's limit, counted with the mention and the escapes as the platform
-  counts them, so Discord and Misskey cut nothing off and Slack refuses no
-  part (on QQ under `forward_threshold`, so none becomes a merged-forward
-  card), Telegram shows `*` and `_` as typed, text cannot ping
-  a whole Slack, Discord, KOOK, Mattermost or Misskey channel, KOOK images
-  other than JPEG no longer post an error, and QQ official replies are plain
-  text.
-- **The admin is the admin on every platform.** An admin account on a
-  platform other than QQ used to get only the admin's DM persona; in a group
-  it was an ordinary member. It now gets everything the QQ admin gets: the
-  closer persona in groups (sticky calls included), the authority over group
-  memories ("forget" and "what do you remember" cover every member), the
-  extra weight when it corrects the bot, the exemption from
-  `PROMOTE_MIN_SPEAKERS`, the `[Special person]` prompt block (which no
-  longer needs a QQ admin), and memories that name `ADMIN_NAME` are
-  attributed to the admin's account on that conversation's platform.
-  Proactive DMs reach the admin through a connector that pulls the outbox,
-  and QQ ids without one through NapCat. All the `ADMIN_IDS` entries name one
-  person, `ADMIN_NAME`: when moving the admin lists into `ADMIN_IDS` (see One
-  naming standard), leave out anyone else.
-  `tools/candidates_admin.py`, `tools/bootstrap_from_history.py` and
-  `try_chat.py` read the admin the same way the agent does.
-- **The group prompt no longer assumes QQ.** Speakers are labelled `id=`
-  rather than `qq=`, the mention marker is taught as `[AT:id]`, the bystander
-  rule says "not you" instead of naming a bot-number placeholder nothing ever
-  filled in, and the example mention is spelled the way the conversation's
-  ids are (`[AT:telegram:123456]` in a Telegram room), where a bare number
-  taught a Telegram model to write mentions the connector could not resolve.
-  This changes the live QQ prompt text too, so the provider's prompt cache
-  misses once after upgrading.
-- **QQ through AstrBot sends the follow-up question and the excuse.**
-  With `CONNECTOR_QQ_PLATFORMS=aiocqhttp` both were dropped once the
-  connector's request returned. They now go back through the AstrBot plugin's
-  outbox while it is pulling, and so do proactive messages, so QQ through
-  AstrBot no longer needs NapCat's HTTP server for any of them; without a
-  pulling connector they go to `QQ_ONEBOT_URL`, as on the direct route.
-- **A connector's own `"proactive": true` DM counts against the DM cooldown.**
-  It used to stamp the reader's activity, as if they had written. It now
-  stamps `PROACTIVE_DM_COOLDOWN_S`'s clock, which the agent's own loop reads,
-  so the two schedulers cannot both open the same DM.
-- **A half-delivered proactive opener is kept on record.** When only part of
-  it went out, the part people read is now in the room's buffer or the DM
-  history, as a half-delivered reply already was.
-- **For code built on the engine:** an `AgentSettings` field whose setting
-  was renamed takes the new setting's name in lowercase (`llm_timeout_s`,
-  `llm_dm_model`, `qq_onebot_url`, `access_groups`, `access_dm_users`,
-  `connector_outbox_enabled`, ...), and so do the `Agent` attributes that
-  mirror them. Identifiers say admin where they said owner, connector where
-  they said gateway or forwarder, and dm where they said private for a
-  direct message: `persona_agent/gateway.py` is
-  `persona_agent/connector.py`, `GatewaySink` is `ConnectorSink`,
-  `Agent.handle_gateway` is `handle_event`, `Agent.handle`, the OneBot entry
-  point, is `handle_onebot`, and `promotion.decide` takes the admin's
-  accounts as `admin_ids`. `AgentSettings` gains `admin_ids` and `proactive_platforms`,
-  and `Agent` an `outbox` and a `connector_handles` store.
-  `config_env.env_csv` is gone; `access.split_ids` replaces it.
-- **`persona_agent/agent.py` is split by concern** (from 4,400 lines to 770):
-  `Agent` keeps the construction and runtime state, and gains mixins for the
-  turn (`turns.py`, `dm.py`), deciding whether to speak (`decision.py`, whose
-  `choose_group_mode` and `pacing_skip` are pure functions now), the prompt
-  (`prompt.py`: `_build_group_prompt`, `_build_dm_prompt`), retrieval
-  (`retrieval.py`), the model turn (`thinking.py`), model calls (`llm.py`),
-  search, proactive loops, memory, and the data views. Behaviour is unchanged.
-  Names that moved: `ADMIN_MODE` is in `access`, `SendResult` and the send
-  limits in `transport`, the prompt constants in `prompts`, and a benchmark
-  that swaps `STYLE_GUIDE` patches `persona_agent.prompt`.
+`*` in the plugin's `groups` or `dm_users`, as in the other connectors' lists, forwards every conversation of that kind with `"prefiltered": false`, so personagent's `ACCESS_*` lists decide.
 
-- **BREAKING for code built on the engine:** `AgentSettings.glm_api_key` /
-  `glm_base_url` and the matching `Agent` attributes are now `vision_api_key` /
-  `vision_base_url`, `Agent._describe_image_glm` is `_describe_image_vision`,
-  and `health.eval_endpoint` takes `vision_key` / `vision_base`. The default
-  chat model and endpoint are defined once, as `config_env.DEFAULT_LLM_MODEL`
-  and `DEFAULT_LLM_BASE_URL`, instead of in every file that fell back to them,
-  and logs and comments name the vision endpoint rather than a vendor.
-- **`tools/import_stickers_folder.py` no longer defaults `VISION_MODEL`** to
-  one vendor's model: tagging needs `VISION_MODEL` and the vision endpoint set,
-  as the agent does. `tools/sticker_holdout_eval.py` stops with that message up
-  front instead of scoring every sticker None.
+Protocol (docs/connectors.md), where the signing scheme, the segments and every field not listed are unchanged:
+
+| Old | New |
+|---|---|
+| `POST /webhook/gateway` | `POST /v1/events` |
+| `POST /webhook/gateway/outbox` | `POST /v1/outbox` |
+| `POST /webhook/qq`, the direct OneBot ingress (its `X-Signature` header stays) | `POST /v1/onebot` |
+| `X-Gateway-Token`, `X-Gateway-Timestamp`, `X-Gateway-Nonce`, `X-Gateway-Signature` | `X-Personagent-Token`, `X-Personagent-Timestamp`, `X-Personagent-Nonce`, `X-Personagent-Signature` |
+| `message_type`: `"group"` / `"private"`, in events and outbox deliveries | `conversation_type`: `"group"` / `"dm"` |
+| `user_id` | `sender_id` |
+| `self_id` | `bot_id` |
+| `source_timestamp` | `sent_at` |
+| `is_at_me` | `addressed` |
+| `raw_text` | `text` |
+| `forwarder_id`, in events and outbox pulls | `connector_id` |
+| `caps` | `capabilities` |
+| a reply's `at_user_id` | `mention_user_id` |
+| error code `stale_source_event` | `stale_event` |
 
 ### Added
 
-- **An admin and allowlists that work on every platform: `ADMIN_IDS`,
-  `ACCESS_GROUPS` and `ACCESS_DM_USERS`.** Entries are `<platform>:<id>`
-  (`telegram:-1001234`, `discord:4242`); a bare id, or `qq:<id>`, is QQ, and a
-  platform in `CONNECTOR_QQ_PLATFORMS` may be written with its prefix
-  (`aiocqhttp:10000`) and means the bare id its events carry. The lists apply
-  per platform: a platform with no entries is not restricted by the agent, so
-  QQ still answers every group when none is listed and QQ DMs still need the
-  admin or an entry, while a platform a connector carries stays under the
-  connector's own allowlist until it has entries. One Telegram entry
-  therefore gates Telegram and leaves QQ alone, where one in 0.4.0's QQ group
-  list used to close every QQ group. A connector that did not filter can say
-  so with `"prefiltered": false` on the event, which makes a platform without
-  entries default-deny (docs/connectors.md). A refusal is now logged once per
-  conversation at INFO, naming the setting that refused it.
-- **A forwarded quote says what it quotes.** A `reply` segment may carry the
-  quoted `text`, `sender_id` and `sender_name`. When the agent never saw the
-  original itself (its own replies, or anything older than its index), a quote
-  used to read as a bare `[reply]`; it now reads `[reply Bob: ...]`, fenced as
-  text the sender did not write. An `emoji` segment's `name` reaches the model
-  as `[emoji: name]`, and an image with `"sticker": true` reads as a sticker.
-  Older connectors send none of this and see no change.
-- **The outbox: `POST /v1/outbox`.** A connector that sends `connector_id`,
-  `reply_handle` and `"capabilities": ["outbox"]` on its events can
-  long-poll this endpoint for messages no request is waiting for
-  (docs/connectors.md). The agent remembers each admitted conversation's
-  handle in `runtime/connector_handles.json` (bounded, keyed like every other
-  store), hands each delivery out once, and counts as said only what the
-  connector acks as sent. Same token, signature and replay guard as
-  `/v1/events`, with its own concurrency budget so a long-poll never
-  takes a turn's slot. The body names its kind (`outbox.pull`), and each
-  endpoint refuses the other's. A delivery not acked by the connector's next
-  pull counts as not sent, so a restarted connector cannot hold a
-  conversation for minutes, and stopping personagent releases open
-  long-polls at once. `CONNECTOR_OUTBOX_ENABLED=false` turns it off.
-- **Proactive openers, the follow-up question and the excuse reach every
-  platform with such a connector.** Until now they existed only on QQ: the
-  proactive loops skipped every other conversation, and the question asked
-  after a rejection and the excuse for a failed model call were dropped once
-  the connector's request had returned. They now go through the outbox, and
-  are remembered only once the connector acks them. The DM loop also
-  considers anyone who has DMed the bot through such a connector (and is
-  still admitted), not only the QQ ids in `ADMIN_IDS` and `ACCESS_DM_USERS`.
-  A conversation no connector can reach is skipped before any model call.
-  **Upgrade note:** with `PROACTIVE_ENABLED=true`, openers start on Telegram
-  and the other platforms as soon as their connector pulls the outbox. The
-  new `PROACTIVE_PLATFORMS` (for example `qq`) keeps the loop where you want
-  it; blank means everywhere it can reach.
-- **The AstrBot plugin (0.5.0) is a full connector.** Its events carry a
-  `connector_id`, a `reply_handle` and `capabilities`, and it pulls the
-  agent's outbox and delivers what the persona says unprompted through
-  AstrBot, on every platform that can send first (not QQ official, WeChat
-  official accounts or WeCom smart bots). A delivery goes only to a session
-  the plugin itself took from a message in that conversation, so an event
-  posted to the agent by anything else cannot aim it at another chat, and
-  the allowlists are checked again at send time. It is on by default
-  (`outbox_enabled`); an agent without the outbox answers 404 and nothing
-  else changes.
-- **A behavioural eval: `tools/behavior_eval.py`.** It runs the real agent on
-  labelled cases in `data/evals/` (English and Chinese) and reports numbers
-  in three suites. `speak` runs the real `_think` on group-chat moments
-  labelled speak or silent, and reports accuracy and the rates of speaking
-  when it should stay quiet and of staying quiet when it should speak, per
-  mode; it needs no judge. `persona` has a separate judge model rate each
-  reply on a written rubric (in character, not an assistant voice, natural
-  length), flag assistant tells, and pick blind between the agent's reply and
-  a plain-assistant reply from the same model; it reports the mean score, the
-  tell rate and the pick rate with its sample size. `learning` drives a reply,
-  the recipient's correction and an accepted retry through the real reaction
-  path and the automatic promotion policy, which it never bypasses, and
-  judges a held-out probe before and after; it reports how many scenarios
-  were promoted, learned, regressed and stayed. The judge is
-  `BENCH_JUDGE_MODEL`: the persona and learning suites refuse to run without
-  it, or when it is the model under test unless `--allow-same-judge`, which
-  marks the report. Each run builds its agents in a throwaway deployment root,
-  deleted afterwards unless `--keep`, and writes a JSON report with every
-  case's inputs, replies and verdicts.
-- **Hybrid retrieval.** Examples, contrastive pairs and memories are ranked
-  on four signals instead of substring hits (`persona_agent/ranking.py`):
-  BM25 over the words a row shares with the message, IDF taken from its pool,
-  on the same tokens as before, so Chinese still matches on two-character
-  windows; where the row was learned, this conversation above this persona
-  above the shipped seeds (promoted rows are still filtered by scope exactly
-  as before); exponential recency; and, when `EMBEDDING_MODEL` is set,
-  cosine similarity from any OpenAI-compatible `/embeddings` endpoint
-  (`EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY`, blank meaning the primary
-  endpoint). Without embeddings the order stays close to the old one: a row
-  that shared only a word every row has, such as the bot's name, now ranks
-  lower, and memory recency halves every 7 days instead of reaching zero at
-  14. The lorebook stays keyword-triggered. Vectors are fetched before the
-  prompt is built, the message itself within 3 seconds and the pools and
-  memories in the background, and cached in memory and in
-  `runtime/embeddings.jsonl` by model and text hash, so a restart does not
-  embed them again. A failing or slow endpoint never fails a turn: it is
-  logged once, left alone for five minutes, and the turn is ranked on the
-  other three signals. The startup probe, `tools/healthcheck.py` and
-  `/health/details` report a configured endpoint that does not answer (never
-  as critical), and preflight reports an embedding endpoint set without a
-  model.
+- **The `personagent` command, installable from PyPI.** `uvx personagent <command>` runs it without installing anything (uv fetches a suitable Python); `uv tool install personagent`, `pipx install personagent` or `pip install personagent` install it for good, and `pip install -e .` in a clone gives it the command too. The commands are `init`, `chat`, `demo`, `run`, `connect astrbot`, `doctor`, `learned` and `eval`; `python -m persona_agent` is the same command. The package ships the seed data, the example personas, the eval sets, `.env.example` and the AstrBot plugin, so it runs without a clone.
+- **One home folder for settings, the persona and what it learned.** It is `--home DIR` or `AGENT_HOME`; else the clone being run; else the current folder when it holds `.env` and `persona.txt`; else `~/personagent`. A file under `<home>/data/` with a shipped seed's name (for example `lorebook.en.json`) overrides the shipped copy, and anything not overridden comes from the package.
+- **`personagent init`, a setup in English or Chinese.** It asks the language first, defaulting to the system's, then explains each term in one line. It offers 11 AI services, each with its documented address, a current model and the page where keys are made: DeepSeek, SiliconFlow (硅基流动), Alibaba Bailian / Qwen (阿里云百炼), Zhipu GLM, Moonshot / Kimi, Volcengine Ark / Doubao (火山方舟), OpenRouter, OpenAI, Google Gemini, Ollama on this computer, and Other. The key is typed hidden, shown masked and tested with one tiny request; a failure shows the address called, the HTTP status and a likely fix, and offers another try. It offers four ready characters per language (a dry-witted friend, a warm listener, a gamer, a bookworm) or the plain template, and writes `persona.txt` with the name filled in, replacing it only while it is an unedited shipped file. It ends with the next steps as exact commands for this machine, `personagent demo` and `personagent chat` among them, and offers to start the chat. Re-running offers the current values. `--no-input` with `--provider`, `--base-url`, `--model`, `--key-env VAR`, `--name`, `--lang en|zh` and `--persona` sets up a home with no questions, as a piped stdin does. `python quickstart.py` creates `.venv`, installs the requirements and runs the same setup; it keeps its flags and refuses Python older than 3.10.
+- **`personagent connect astrbot [DATA_DIR]` installs or updates the AstrBot plugin** and writes the shared token on both sides. It finds AstrBot through `ASTRBOT_ROOT`, the desktop app's `~/.astrbot`, or an AstrBot folder beside personagent or in the working, home, Desktop or Documents folder, and accepts its root or its `data/` once it holds `cmd_config.json` (AstrBot has to have started once). It asks which chat app first (QQ, Telegram, Discord, Slack, KOOK, Lark / Feishu, or one already set up in AstrBot), asks QQ details only for QQ, and asks the admin's id per platform: the QQ number, or what AstrBot's `/sid` shows. When AstrBot runs in Docker it explains host networking or takes an HTTPS address for personagent, and never writes one the plugin would refuse. With `DATA_DIR` and `--qq` / `--no-qq`, `--platform ... --token ...` or `--url https://...` it asks nothing.
+- **`personagent demo [quiet|teach|troll|all]`** plays three scenes: which lines of a group chat it answers or skips, and why; a correction that holds up, with the evidence chain, the promotion checklist and a probe before and after showing the fix reach the prompt; and a stranger's planted instruction that the reaction judge dismisses and the memory filter refuses, with nothing changed in the ledger. With no `LLM_API_KEY`, or with `--offline`, a scripted model answers and the ledger and promotion code are real; with a key it uses the configured model with web search off. It plays a built-in character (Nova / 小夏) in a temporary folder deleted afterwards and never touches your `runtime/`. `--lang en|zh`.
+- **A local dashboard at `http://127.0.0.1:<SERVER_PORT>/`**, served by `personagent run` with no extra install and nothing loaded from the internet. It shows the version, uptime and home folder, the models in use, each connector (platform, last message, capabilities, whether it pulls the outbox), the outbox, and preflight's findings. When nothing has arrived it says what to check, lists conversations that were turned away and why, and explains when it is receiving but has not spoken yet. Per conversation it shows why the bot spoke or stayed quiet on recent turns, the memory notes, what it learned with the full evidence chain (who reacted, how, strong or weak, when, what they said, the judge's reason, the wording before and after), and proposals with each promotion rule ticked or crossed and what each is still waiting for. Promote, Reject and Roll back (click twice to confirm) write to the same append-only ledger as `personagent learned`, recorded as `dashboard`, and the running bot uses the change from its next reply. The page is in English and Chinese (following `AGENT_LANG`, with a toggle), light, dark or auto, and works on a phone. Only this machine can open it: a loopback address with a local host name and no proxy headers; anything else needs `X-Personagent-Token: <CONNECTOR_TOKEN>` (a reverse proxy can add it) or an SSH tunnel. Changes need a same-origin POST, and keys and tokens are never shown. Speak decisions are kept in memory only, the last 50 per conversation. `DASHBOARD_ENABLED=false` removes the page and its routes.
+- **`start.bat`**: double-click it to start personagent on Windows. It runs `start.ps1` and keeps the window open when something fails.
+- **A startup banner** with the version, the listening address, the home folder, the dashboard's address, and whether the agent is on (with its model and language) or off and why. The log also names the reply model and the reply-gate model, and suggests a cheaper `LLM_JUDGE_MODEL` when they are the same.
+- **A behavioural eval: `personagent eval`.** It runs the real agent on labelled cases in `data/evals/`, in English and Chinese, in three suites. `speak` runs the real decision on group-chat moments labelled speak or silent, and reports accuracy and the rates of speaking when it should stay quiet and of staying quiet when it should speak, per mode; it needs no judge. `persona` has a separate judge model rate each reply on a written rubric (in character, not an assistant voice, natural length), flag assistant tells, and pick blind between the agent's reply and a plain-assistant reply from the same model; it reports the mean score, the tell rate and the pick rate with its sample size. `learning` drives a reply, a correction and an accepted retry through the real reaction path and the automatic promotion policy, which it never bypasses, judges a held-out probe before and after, and reports how many scenarios were promoted, learned, regressed and stayed, and whether the policy promoted or held each one as its case expects (a bystander's correction, a stranger's instruction and a correction the person walks away from must be held). The judge is `BENCH_JUDGE_MODEL`: the persona and learning suites refuse to run without it, or when it is the model under test unless `--allow-same-judge`, which marks the report. Each run builds its agents in a throwaway folder, deleted unless `--keep`, and writes a JSON report with every case's inputs, replies and verdicts to `<home>/benchmark_runs/`.
+- **Hybrid retrieval.** Examples, contrastive pairs and memories are ranked on four signals instead of substring hits: BM25 over the words a row shares with the message (Chinese still matches on two-character windows); where the row was learned, this conversation above this persona above the shipped seeds (learned rows are still filtered by scope); exponential recency; and, when `EMBEDDING_MODEL` is set, cosine similarity from any OpenAI-compatible `/embeddings` endpoint (`EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY`, blank meaning the main endpoint). Without embeddings the order stays close to before: a row that shared only a word every row has, such as the bot's name, ranks lower, and memory recency halves every 7 days instead of reaching zero at 14. The lorebook stays keyword-triggered. Vectors are cached in memory and in `runtime/embeddings.jsonl` by model and text hash. A failing or slow endpoint never fails a turn: it is logged once, left alone for five minutes, and the turn is ranked on the other three signals. The startup probe, `personagent doctor` and `/health/details` report a configured endpoint that does not answer (never as critical), and preflight reports an embedding endpoint set without a model.
+- **An admin and allowlists that work on every platform: `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS`.** Entries are `<platform>:<id>` (`telegram:-1001234`, `discord:4242`); a bare id, or `qq:<id>`, is QQ, and a platform in `CONNECTOR_QQ_PLATFORMS` may be written with its prefix (`aiocqhttp:10000`). The lists apply per platform: a platform with no entries is not restricted by the agent, so QQ still answers every group when none is listed and QQ DMs still need the admin or an entry, while a platform a connector carries stays under the connector's own allowlist until it has entries. One Telegram entry therefore gates Telegram and leaves QQ alone. A connector that did not filter can say so with `"prefiltered": false` on the event, which makes a platform without entries default-deny (docs/connectors.md). A refusal is logged once per conversation at INFO, naming the setting that refused it.
+- **The outbox: `POST /v1/outbox`.** A connector that sends `connector_id`, `reply_handle` and `"capabilities": ["outbox"]` on its events can long-poll this endpoint for messages no request is waiting for (docs/connectors.md). The agent remembers each admitted conversation's handle in `runtime/connector_handles.json`, hands each delivery out once, and counts as said only what the connector acks as sent; a delivery not acked by the connector's next pull counts as not sent. Same token, signature and replay guard as `/v1/events`, with its own concurrency budget so a long-poll never takes a turn's slot, and stopping personagent releases open long-polls at once. `CONNECTOR_OUTBOX_ENABLED=false` turns it off.
+- **Proactive openers, the follow-up question and the excuse reach every platform with such a connector.** They go through the outbox and are remembered only once the connector acks them. The DM loop also considers anyone who has DMed the bot through such a connector (and is still admitted), not only the QQ ids in `ADMIN_IDS` and `ACCESS_DM_USERS`. A conversation no connector can reach is skipped before any model call. `PROACTIVE_PLATFORMS` (for example `qq`) keeps the loop where you want it; blank means everywhere it can reach.
+- **The AstrBot plugin (1.0.0) is a full connector.** Its events carry a `connector_id`, a `reply_handle` and `capabilities`, and it pulls the agent's outbox and delivers what the persona says unprompted through AstrBot, on every platform that can send first (not QQ official, WeChat official accounts or WeCom smart bots). A delivery goes only to a session the plugin itself took from a message in that conversation, so an event posted to the agent by anything else cannot aim it at another chat, and the allowlists are checked again at send time. It is on by default (`outbox_enabled`); an agent without the outbox answers 404 and nothing else changes.
+- **A forwarded quote says what it quotes.** A `reply` segment may carry the quoted `text`, `sender_id` and `sender_name`, so a quote of something the agent never saw reads `[reply Bob: ...]`, fenced as text the sender did not write, instead of a bare `[reply]`. An `emoji` segment's `name` reaches the model as `[emoji: name]`, and an image with `"sticker": true` reads as a sticker. Older connectors send none of this and see no change.
+- **Python 3.10 to 3.14.** CI runs the suite on Linux for each version and on Windows with 3.12, and builds the package, installs it and runs the `personagent` command on both. Each release is built once, smoke-tested, published to PyPI and attached to its GitHub Release.
 
-### Removed
+### Changed
 
-- **`OWNER_QQ`, `GATEWAY_OWNER_IDS`, `QQ_GROUPS` and `PRIVATE_ALLOWED_QQS`
-  are no longer read; `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS`
-  replace them.** Move every id across: `OWNER_QQ` and `GATEWAY_OWNER_IDS`
-  to `ADMIN_IDS`, `QQ_GROUPS` to `ACCESS_GROUPS` and `PRIVATE_ALLOWED_QQS` to
-  `ACCESS_DM_USERS`, writing a non-QQ id with its platform prefix. Preflight
-  names each old name still set, and warns about an id pasted without its
-  platform prefix (it reads as a QQ id), a capitalised platform (it never
-  matches), and a `CONNECTOR_QQ_PLATFORMS` entry other than `aiocqhttp` (its
-  ids would be read as QQ numbers).
-- **`OWNER_NAME` and `OWNER_RELATIONSHIP` are no longer read; the owner is
-  now called the admin.** Set `ADMIN_NAME` and `ADMIN_RELATIONSHIP` instead.
-  `try_chat.py` takes `--admin` and `/admin`; `--owner` and `/owner` are
-  gone. The persona and lorebook templates say `{admin_name}` and
-  `{admin_relationship}`, and the wizard asks for the admin on any platform,
-  not only with QQ, and writes the new names. The persona's own prompts are
-  unchanged.
-- **`GLM_API_KEY` and `GLM_BASE_URL` are no longer read; `VISION_API_KEY`
-  and `VISION_BASE_URL` replace them.** They configure whichever
-  OpenAI-compatible model `VISION_MODEL` names, not one vendor's.
-  `VISION_BASE_URL` has no default: the vision model decides the provider,
-  so name its endpoint. The template used to ship `GLM_BASE_URL` blank while
-  calling blank the default, but a blank value has always turned vision off;
-  it now asks for the URL.
+- **One naming standard.** Every setting, connector key, endpoint, header and event field follows one set of rules, and each old name is gone rather than kept as an alias (see Upgrading from 0.4):
+  - each setting sits under one module prefix (`LLM_`, `VISION_`, `PERSONA_`, `ADMIN_`, `ACCESS_`, `CHAT_`, `MEMORY_`, `SERVER_`, `CONNECTOR_`, `QQ_`, `PROACTIVE_`, `REACT_`, `PROMOTE_`, `EVOLVE_`, `EVAL_`, `LEDGER_`, ...);
+  - a duration ends in its unit (`_S`, `_HOURS`, `_DAYS`), a size in `_BYTES`;
+  - a switch that turns a feature on or off ends in `_ENABLED` (`LLM_FALLBACK_THINKING`, `PROMOTE_REQUIRE_SAME_CONVERSATION` and the plugin's `block_default` and `forward_quoted_text` say what they do and keep their names);
+  - a vendor's credentials keep the vendor's own names (`TAVILY_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`);
+  - the server and its connectors call their shared token the same thing, `CONNECTOR_TOKEN`, and the three connectors use the same name for the same setting (docs/connectors.md has the table).
+- **A correction that holds up is learned.** When the person a reply was for corrects it, or says it missed, the bot's next reply to that person is its retry. If they then react well to the retry ("haha yes, thanks"), the old reply is learned as "say the retry instead". If they move on, nothing is learned. The reaction judge's own drafted rewrite for that complaint is then rejected in the ledger with the reason "the person accepted the retry instead", and the delayed "what did you mean" question is not sent. The rule: one message never teaches it anything. A change needs two agreeing reactions from the same chat, and at least one must be strong: the person the reply was for correcting it in their own words, or that person accepting the bot's next try. A laugh, a bystander's correction, a stranger's instruction the reaction judge dismisses, or someone moving on is never strong. So with the default `PROMOTE_MIN_SPEAKERS=1`, one person can teach it only how to answer them, in their own chat; `PROMOTE_MIN_SPEAKERS=2` requires a second person to agree before anything changes (the admin is exempt). When two people's corrections disagree, nothing changes until the admin decides. Everything is in append-only ledgers, and `personagent learned rollback <id>` or the dashboard undoes a change.
+- **Behind connectors, replying to or quoting the bot's message counts as a reaction it can learn from**, as an @ already did, on Telegram, Discord, Matrix, Satori and the rest.
+- **Name calls match whole words, in any case.** "luna are you there" calls Luna; "Lunar" and "Moonluna" do not. A name in Chinese, Japanese or Korean characters matches anywhere in the message. The missed-mention catch-up uses the same rule.
+- **Memory commands must start the message** (after any @-mention or quote): "Luna, remember ...", "Luna forget ...", "Luna what do you remember", "Luna what have you learned". "Luna remember when we...", a "remember ...?" question and "Luna forget it" are ordinary chat, and "drop" is no longer a forget keyword. "remember that X" saves X and "forget about X" forgets X. Chinese recall also accepts "小夏 你都记得什么". With `AGENT_LANG=zh` every memory-command reply is in Chinese.
+- **"What have you learned" says what each proposal waits for.** Its first line counts the proposals awaiting a second voice and those awaiting the admin (positive examples, and proposals blocked by a conflict or by disagreeing evidence); then it shows the latest promotion with a "why:" line (for example "why: alex said it missed, alex accepted the retry, passed with 2 events, 1 strong", or "promoted by the admin"). It never calls a model and is at most four lines, and a member's name with characters the reply policy refuses can no longer get the reply dropped.
+- **`PROMOTE_*` settings behave like every other setting.** An invalid or below-floor value logs a warning and uses the default or the floor: `PROMOTE_MIN_EVENTS` below 2 means 2, `PROMOTE_MIN_STRONG` and `PROMOTE_MIN_SPEAKERS` below 1 mean 1, and a negative `PROMOTE_EVIDENCE_MAX_AGE_DAYS` means 30, not "no window" (0 still turns the window off). A typo in `PROMOTE_AUTO_ENABLED` keeps it on. The defaults are unchanged.
+- **`personagent chat` is a simulated group chat** (`python try_chat.py` in a clone runs the same). A plain line is group chat and goes through the live bot's speak-or-stay-quiet decision, printing `(Nova stays quiet: <reason>)` or `(Nova joins in: <reason>)`; a line with the bot's name is a call. It considers joining in after 4 messages (`--trigger N`; the live bot waits for `CHAT_TRIGGER_COUNT`, default 30). Memory commands work as in a group. Your next message naming the bot, or `/reply <text>`, which quotes its last reply, is judged as a reaction and recorded, and a `[learning]` line shows the verdict and what happened. `/why` explains the last reply (why it spoke, which reply it retried, the learned material in its prompt, what the ledger holds about it), `/learned` prints what it learned in this chat, and `/reset` clears the conversation and everything the trial learned. `--dm` runs a one-to-one chat through the live DM path. The trial keeps its state in `<runtime>/trial/`, apart from the live bot's, runs the gate, the output filter and reaction learning, and leaves out the allowlists, the debounce, real delivery, self-evaluation, vision, the follow-up question and the proactive and evolve loops. Its messages follow `AGENT_LANG` or `--lang`. With no `LLM_API_KEY` it points to `personagent init` and `personagent demo`, exits with code 1 and creates nothing.
+- **The scripts became `personagent` commands:** `personagent run` (`main.py`), `personagent chat` (`try_chat.py`), `personagent doctor` (`tools/healthcheck.py`), `personagent learned` (`tools/candidates_admin.py`) and `personagent eval` (`tools/behavior_eval.py`). The old scripts keep working with the same flags.
+- **The default model is DeepSeek's `deepseek-flash`** at `https://api.deepseek.com`, in `.env.example` and in the code. DeepSeek retired `deepseek-chat`.
+- **An exhausted balance or quota is fatal and said once.** HTTP 402, or OpenAI's `insufficient_quota` 429, is not retried or failed over; the log shows one ERROR line naming the provider's host and `LLM_API_KEY` / `LLM_BASE_URL` (or the fallback's settings). A rejected key (401/403) gets a similar line. A per-minute 429 is still a rate limit.
+- **`QQ_ONEBOT_URL` is blank by default**, meaning no NapCat HTTP server: no missed-mention sweep and no NapCat quote or OCR lookups, `personagent doctor` and `/health/details` show the OneBot bridge as "not configured" instead of FAIL, and a QQ message the bot starts itself goes out only through a connector that pulls the outbox (the log says why when it cannot). Set it (for example `http://127.0.0.1:3000`) for the direct `/v1/onebot` route or the sweep, which also needs `QQ_BOT_ID`.
+- **`PERSONA_TZ_OFFSET_HOURS` is blank by default**, meaning this machine's current UTC offset, daylight saving included, rather than a fixed UTC+8. It sets the time shown to the model and the 02:00 to 07:00 sleep window. A value that is not a number or is out of range falls back to the machine's offset with a warning. A Chinese bot on a server in another timezone should set 8.
+- **`AGENT_LANG` accepts `zh-CN`, `zh_cn`, `cn` and `chinese`** (read as `zh`) and `en-US` and `english` (read as `en`); any other value is warned about once.
+- **The model-failure excuse reaches the admin too**, in @-mentions and DMs, in the agent's language, and goes out at most once per conversation every five minutes.
+- **A network bind needs only `CONNECTOR_TOKEN`.** `QQ_ONEBOT_SECRET` is needed only for a NapCat on another machine to reach `/v1/onebot`; without it, that route accepts only programs on this host.
+- **A start that cannot work stops with one sentence**, exit code 2, instead of a traceback: the home folder does not exist, another personagent runs from the same home, the port is taken or not allowed, or a network bind (for example `--host 0.0.0.0`) has no `CONNECTOR_TOKEN`.
+- **An agent that cannot answer says so.** With no `LLM_API_KEY`, or `AGENT_ENABLED=false`, `/v1/events` returns `"owned": false`, and the first event logs one ERROR naming the cause and saying to run `personagent init`.
+- **The launchers no longer start a server that cannot answer.** `start.sh`, `start.ps1` and `start.bat` run the setup when there is no `.env` and `LLM_API_KEY` is not in the environment, or, with no terminal, print "Run python quickstart.py" and exit.
+- **The connector replay guard holds 16,384 nonces** in its five-minute window, up from 4,096. It appends one small line per request instead of rewriting a file, and a restart inside the window still refuses a replayed request.
+- **`.env.example` reads top-down:** the required settings first (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `PERSONA_NAME`, `AGENT_LANG`), then persona and access, connectors, service and storage, optional features, and the QQ / NapCat block last. Every comment is on its own line, so the file also works with `docker --env-file` and systemd.
+- **Preflight warns about what is really configured.** It no longer warns about `QQ_BOT_ID` on Telegram, Discord or Matrix setups: only QQ ids or a NapCat setting you wrote count as QQ. It warns about an `AGENT_LANG` other than English or Chinese and a `PERSONA_TZ_OFFSET_HOURS` that is not an offset, checks a home without its own `.env.example` against the shipped one, and its warning about base URLs ending in a version path is gone.
+- **Dependencies:** `pydantic>=2.9,<3`, `fastapi>=0.128` and `Pillow>=10.4`, so a fresh install resolves quickly and never lands on pydantic 1. `requirements.txt` is the one dependency list.
+- **`EVOLVE_INTERVAL_HOURS` below 0.1** is raised to 0.1 hours with a warning instead of running the evolve loop back to back.
+- **Logs and health checks say "DM"** instead of "private"; the health check "Private chat (openai)" is now "DM chat".
+- **The AstrBot plugin reads each platform the way its adapter delivers it.** QQ pokes, recalls and requests no longer reach the persona as empty turns. More messages count as addressing the bot, on purpose: a Discord message starting with `@bot` (which the adapter strips), a ping of the bot's role, and replies to the bot on Telegram (photos and voice too), Discord, Lark, Slack threads, KOOK and Satori. Quotes carry their text and author; sticker and emoji names, voice transcripts and the platform's own send time come through. Telegram images are sent inline, so the bot token in their URLs never reaches the agent. Because the send time is now the platform's, a backlog older than `CONNECTOR_MAX_EVENT_AGE_S` is refused as stale.
+- **The AstrBot plugin writes each platform's way.** Mentions no longer carry a double space on QQ and Telegram; long replies are split under each platform's limit, counted with the mention and the escapes as the platform counts them, so Discord and Misskey cut nothing off and Slack refuses no part (on QQ under `forward_threshold`, so none becomes a merged-forward card); Telegram shows `*` and `_` as typed; text cannot ping a whole Slack, Discord, KOOK, Mattermost or Misskey channel; KOOK images other than JPEG no longer post an error; and QQ official replies are plain text.
+- **The admin is the admin on every platform.** An admin account on any platform gets what the QQ admin gets: the closer persona in groups (sticky calls included), the authority over group memories ("forget" and "what do you remember" cover every member), the extra weight when it corrects the bot, the exemption from `PROMOTE_MIN_SPEAKERS`, and the `[Special person]` prompt block; memories that name `ADMIN_NAME` are attributed to the admin's account on that conversation's platform. Proactive DMs reach the admin through a connector that pulls the outbox, and QQ ids without one through NapCat when `QQ_ONEBOT_URL` is set.
+- **The group prompt no longer assumes QQ.** Speakers are labelled `id=` rather than `qq=`, the mention marker is taught as `[AT:id]`, and the example mention is spelled the way the conversation's ids are (`[AT:telegram:123456]` in a Telegram room), so a Telegram model writes mentions the connector can resolve. The group style guide no longer names a placeholder for the bot's name.
+- **QQ through AstrBot sends the follow-up question, the excuse and proactive messages** through the plugin's outbox while it is pulling, so it no longer needs NapCat's HTTP server for any of them; without a pulling connector they go to `QQ_ONEBOT_URL` when it is set.
+- **A connector's own `"proactive": true` DM counts against the DM cooldown** (`PROACTIVE_DM_COOLDOWN_S`), which the agent's own loop reads, so the two schedulers cannot both open the same DM.
+- **A half-delivered proactive opener is kept on record.** When only part of it went out, the part people read is in the room's buffer or the DM history, as a half-delivered reply already was.
+- **`tools/import_stickers_folder.py` no longer defaults `VISION_MODEL`** to one vendor's model: tagging needs `VISION_MODEL` and the vision endpoint set, as the agent does. `tools/sticker_holdout_eval.py` stops with that message up front instead of scoring every sticker None.
+- **For code built on the engine:**
+  - the entry points live in the package: `persona_agent.server` (`main(host, port)` runs `persona_agent.server:app`; was `main.py` and `main:app`), `persona_agent.chat`, `persona_agent.doctor`, `persona_agent.ledger_admin`, `persona_agent.evals`, and the `personagent` command in `persona_agent.cli`;
+  - an `AgentSettings` field whose setting was renamed takes the new setting's name in lowercase (`llm_timeout_s`, `llm_dm_model`, `qq_onebot_url`, `access_groups`, `access_dm_users`, `connector_outbox_enabled`, `vision_api_key`, `vision_base_url`, ...), and so do the `Agent` attributes that mirror them; `AgentSettings` gains `admin_ids` and `proactive_platforms`, and `Agent` an `outbox` and a `connector_handles` store;
+  - `AgentSettings(...)` built in code has the same defaults as `.env.example`: self-eval off, `llm_rate_window_s` 120, `llm_rate_threshold` 30, `llm_fallback_duration_s` 180, `qq_onebot_url` blank;
+  - identifiers say admin where they said owner, connector where they said gateway or forwarder, and dm where they said private: `persona_agent/gateway.py` is `persona_agent/connector.py`, `GatewaySink` is `ConnectorSink`, `Agent.handle_gateway` is `handle_event`, `Agent.handle` (the OneBot entry point) is `handle_onebot`, `Agent._describe_image_glm` is `_describe_image_vision`, `health.eval_endpoint` takes `vision_key` / `vision_base`, and `promotion.decide` takes the admin's accounts as `admin_ids`;
+  - `persona_agent/agent.py` is split by concern: `Agent` keeps the construction and runtime state, with mixins for the turn (`turns.py`, `dm.py`), deciding whether to speak (`decision.py`), the prompt (`prompt.py`), retrieval (`retrieval.py`), the model turn (`thinking.py`), model calls (`llm.py`), search, the proactive loops, memory and the data views. `ADMIN_MODE` is in `access`, `SendResult` and the send limits in `transport`, and the prompt constants in `prompts`;
+  - the default chat model and endpoint are defined once, as `config_env.DEFAULT_LLM_MODEL` and `DEFAULT_LLM_BASE_URL`; `config_env.env_csv` is gone, and `access.split_ids` replaces it.
 
 ### Fixed
 
-- **A reply the model wrote as plain text instead of JSON is kept.** Asking
-  for JSON mode does not guarantee it: probed on five models, between a third
-  and a half of replies came back as prose and were dropped, so the person
-  got no reply.
-  Prose now becomes the reply, and every sanitizer and leak check still runs
-  on it; output that looks like JSON is left to the parser as before.
-- **《书名》 and 「引号」 survive the sanitizer.** Only the brackets that read as
-  markup (〈〉, 【】 and their family) are still stripped. Quotes are removed
-  only when they wrap the whole reply, so one closing a phrase stays. An ASCII
-  comma between Chinese characters becomes `，`.
-- **The persona stops searching the web for its own world.** The search gate
-  now knows it is deciding for a character, so questions about the persona,
-  its home, its friends or the chat itself are answered in character.
-- **Fewer invented memories.** The style guide now says the persona's own world
-  is familiar ground, that a new person has no shared past with it, and that
-  its persona text describes it rather than being lines to recite.
-- **Re-running `quickstart.py --astrbot` no longer undoes the AstrBot setup.**
-  It passed empty allowlists, so every re-run wiped the groups and DM senders
-  set in AstrBot's WebUI, turned DMs off, reset any `personagent_url` (an
-  HTTPS proxy's or a tunnel's) to the default, dropped every other excluded
-  platform, and without `--qq` switched QQ routing off, while `--help`
-  promised re-running was safe. Values not given are now kept, and only a
-  `personagent_url` the plugin would refuse is replaced; `--no-qq` is the
-  explicit way to stop routing QQ; `CONNECTOR_QQ_PLATFORMS` follows whatever
-  the plugin ends up forwarding, keeping its other entries; and the wizard
-  offers the current allowlists and QQ choice as its defaults and writes
-  `.env` before asking about platforms. When `.env` has no `CONNECTOR_TOKEN`,
-  the plugin's existing token is reused if it would survive `.env`. `.env`
-  values are now read as dotenv reads them, quotes and inline comments
-  included.
-- **A failed persona-lineage save no longer drops the earlier revisions out of
-  scope.** `extend()` rolls the new hash back when the save fails, and the
-  agent then registered a lineage without its own hash, so everything learned
-  under earlier revisions stopped counting for the rest of the process. The
-  running hash is now scoped in regardless.
-- **An image seen during a vision outage is described once the outage ends.** A
-  vision timeout, 429 or network failure was cached as a miss, so the image
-  stayed undescribed for as long as the cache kept it. A miss is now cached
-  only when vision and OCR both answered.
-- **`/health/details` and `tools/healthcheck.py` probe the DM chat with the agent's default model when
-  `LLM_MODEL` is unset**, instead of failing the probe as "not configured" on a
-  working agent. An explicit blank `LLM_MODEL` still reads as blank, as it does
-  for the agent, so preflight keeps reporting it.
-- **A leftover `.env.tmp` no longer keeps its old mode.** `os.open` applies the
-  mode only when it creates the file, so a temp file left by an interrupted
-  wizard run kept whatever mode it had; it is now removed and created fresh,
-  owner-only.
+- **OpenAI, Groq, Gemini and OpenRouter work as the main model**, including the reply gate, the web-search decision and the sticker tagger. DeepSeek's `thinking` field goes only to DeepSeek, Zhipu (`bigmodel.cn`, `z.ai`), Moonshot / Kimi, Volcengine Ark, or a host whose startup probe accepted it; `LLM_FALLBACK_THINKING=true` still forces it for the fallback's endpoint. OpenAI reasoning models work too: when an endpoint refuses `max_tokens` or a fixed temperature, the call is retried with `max_completion_tokens` or without the temperature, and the endpoint and model are remembered. Replies, self-evaluation, the startup probe and `personagent doctor` all adapt this way.
+- **Base URLs work as their vendors document them.** Zhipu `https://open.bigmodel.cn/api/paas/v4`, Volcengine Ark `https://ark.cn-beijing.volces.com/api/v3` and Gemini `https://generativelanguage.googleapis.com/v1beta/openai/` get only `/chat/completions` (and `/embeddings`) appended. A plain provider root still gets `/v1/chat/completions`, and Groq's `https://api.groq.com/openai` still gets `/openai/v1/...`.
+- **Replies in Spanish (¡ ¿), Vietnamese, Hindi, Marathi and Nepali (Devanagari), Bengali, Tamil, Thai and Hebrew are delivered** instead of silently dropped. Hebrew vowel points are removed, the danda becomes `.`, and native digits become 0-9. Armenian, Georgian and the other Indic scripts are still refused.
+- **Short letterless replies are delivered** when the model wrote them that way: `?`, `...`, `!!!`, `:)`, `^_^`, `10/10`, `233`, `+1`.
+- **A reply the model wrote as plain text instead of JSON is kept.** Asking for JSON mode does not guarantee it, and between a third and a half of replies on some models came back as prose and were dropped. Prose now becomes the reply, and every sanitizer and leak check still runs on it.
+- **A JSON reply with extra keys, capitalised keys or `"mem": []`** is understood instead of producing an empty reply, logged once per model.
+- **A `persona.txt` copied from the shipped template works unedited.** `{bot_name}`, `{admin_name}` and `{admin_relationship}` are filled from `PERSONA_NAME`, `ADMIN_NAME` and `ADMIN_RELATIONSHIP`, the line about the admin is dropped when `ADMIN_NAME` is blank, and the template's closing note is removed. The log says once which persona file is in use.
+- **After the persona is edited, the first turn after a restart uses what was learned**, and the misleading "all promoted rows refused by scope" warning is gone.
+- **A setting whose value starts with `#` is named at startup.** In older templates `REACT_MODEL=  # ...` and `EVOLVE_MODEL=  # ...` were read with the comment as the model name.
+- **《书名》 and 「引号」 survive the sanitizer.** Only the brackets that read as markup (〈〉, 【】 and their family) are still stripped. Quotes are removed only when they wrap the whole reply, so one closing a phrase stays. An ASCII comma between Chinese characters becomes `，`.
+- **The persona stops searching the web for its own world.** The search gate knows it is deciding for a character, so questions about the persona, its home, its friends or the chat itself are answered in character.
+- **Fewer invented memories.** The style guide says the persona's own world is familiar ground, that a new person has no shared past with it, and that its persona text describes it rather than being lines to recite.
+- **The bot's own message, echoed back by a connector** (`sender_id` equal to `bot_id`), is ignored and answered with `"owned": true, "handled": false`.
+- **A connector message marked `addressed`** reads `@Name text` to the model, with a space after the mention.
+- **Re-running `personagent connect astrbot` no longer undoes the AstrBot setup.** Values not given are kept: the allowlists set in AstrBot's WebUI, DMs, a `personagent_url` such as an HTTPS proxy's or a tunnel's, the other excluded platforms and QQ routing. Only a `personagent_url` the plugin would refuse is replaced, `--no-qq` is the explicit way to stop routing QQ, and `CONNECTOR_QQ_PLATFORMS` follows what the plugin forwards, keeping its other entries. When `.env` has no `CONNECTOR_TOKEN`, the plugin's existing token is reused if it would survive `.env`. `.env` values are read as dotenv reads them, quotes and inline comments included.
+- **A failed persona-lineage save no longer drops the earlier revisions out of scope**, so what was learned under earlier revisions keeps counting.
+- **An image seen during a vision outage is described once the outage ends.** A miss is cached only when vision and OCR both answered.
+- **`personagent doctor` and `/health/details` probe the DM chat with the agent's default model when `LLM_MODEL` is unset**, instead of failing it as "not configured" on a working agent.
+- **`personagent learned` reads `AGENT_LANG` and the pool caps as the agent does**, so `AGENT_LANG=zh-CN` opens the same ledger files.
+- **Health probes to loopback services** (NapCat, a local Ollama) bypass `HTTP_PROXY` and `HTTPS_PROXY`.
+- **A crashed background task is logged at ERROR with the task's name.**
+- **A leftover `.env.tmp` no longer keeps its old mode.** It is removed and created fresh, owner-only.
 
 ### Security
 
-- **The direct OneBot ingress, `/v1/onebot`, refuses namespaced ids.** NapCat
-  only sends QQ numbers, but a payload forged with an admin-listed `telegram:`
-  id passed the DM check through the admin bypass, and a namespaced group
-  skipped the QQ group allowlist. Any id with a platform prefix, `qq:`
-  included, is now refused on that route.
+- **Only the person a reply was for can make a correction stick.** A bystander who accepted a retry the bot sent them counted as strong evidence, the bot's next reply to someone else could be linked as the retry, and a retry sent before the reaction judge's verdict could link a later unrelated reply; each could promote a reply the person it was for never accepted. Now only the bot's next reply to the person who complained counts as the retry, accepting it is strong only from the person the original reply was for, and a retry nobody accepted cannot be promoted on the strength of the complaint it answers. A complaint about a reply meant for someone else cannot teach it alone.
+- **The direct OneBot ingress, `/v1/onebot`, refuses namespaced ids.** NapCat only sends QQ numbers, but a payload forged with an admin-listed `telegram:` id passed the DM check through the admin bypass, and a namespaced group skipped the QQ group allowlist. Any id with a platform prefix, `qq:` included, is refused on that route.
+
+### Removed
+
+- **The setting names retired by the naming standard are no longer read** (see Upgrading from 0.4). Preflight names each one still set, and warns about an id pasted without its platform prefix (it reads as a QQ id), a capitalised platform (it never matches), and a `CONNECTOR_QQ_PLATFORMS` entry other than `aiocqhttp` (its ids would be read as QQ numbers).
+- **The owner is now called the admin.** `ADMIN_NAME` and `ADMIN_RELATIONSHIP` replace `OWNER_NAME` and `OWNER_RELATIONSHIP`; `personagent chat` takes `--admin` and `/admin`, and `--owner` and `/owner` are gone. The lorebook says `{admin_name}` and `{admin_relationship}`, and a persona file may too.
+- **`GLM_API_KEY` and `GLM_BASE_URL` become `VISION_API_KEY` and `VISION_BASE_URL`**, for whichever OpenAI-compatible model `VISION_MODEL` names. `VISION_BASE_URL` has no default: name the vision model's endpoint, or vision stays off.
+
+### Deprecated
+
+- **`/v1/onebot`, the direct OneBot ingress, and `launch.vbs`, which starts it,** keep working through 1.x. Every response from `/v1/onebot` carries `Deprecation: true`, with no `Sunset` date. The supported QQ route is AstrBot with `CONNECTOR_QQ_PLATFORMS=aiocqhttp`.
 
 ## [0.4.0] — 2026-09-24
 
@@ -1932,8 +1752,7 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[1.0.0]: https://github.com/wangkant/personagent/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/wangkant/personagent/releases/tag/v0.4.0
 [0.3.0]: https://github.com/wangkant/personagent/releases/tag/v0.3.0
 [0.2.0]: https://github.com/wangkant/personagent/releases/tag/v0.2.0
-[0.1.1]: https://github.com/wangkant/personagent/releases/tag/v0.1.1
-[0.1.0]: https://github.com/wangkant/personagent/releases/tag/v0.1.0
