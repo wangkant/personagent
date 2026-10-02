@@ -685,6 +685,73 @@ def test_the_page_tells_an_error_answer_from_an_unreachable_service() -> None:
           repr(out["counts"]))
 
 
+_TEXT_PROBE = r"""
+const fs = require("fs"), vm = require("vm");
+const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
+                        matchMedia: () => ({ matches: false }) },
+              document: { addEventListener() {}, hidden: false }, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
+const out = vm.runInContext(`(() => {
+  view.status = { persona: { name: "Nova" } };
+  const row = { ts: 5, spoke: true, excerpt: "count me in", answered: "@Nova Nova, the final?",
+                sender: "Sam", mode: "called", reason: "addressed", count: 1 };
+  const ledger = { ledger: true, reply: "old reply", cands: [{ context: ["Sam: hi", "Nova: hey",
+                   "Priya: which film tonight?"] }] };
+  const mine = { ledger: true, reply: "x", cands: [{ context: ["Priya: hi", "Nova: hey"] }] };
+  const en = { asked: askedOf({ row, cands: [] }), ledger: askedOf(ledger), mine: askedOf(mine),
+               quiet: askedOf({ row: { spoke: false, excerpt: "lol", sender: "Sam" }, cands: [] }),
+               doubled: memberText("@Nova Nova, the final?"), plain: memberText("which match?"),
+               lead: lead("waiting_for"), list: joined(["a", "b"], true) + "|" + joined(["a", "b"]),
+               verdict: serverText("0/1 strong events (1 supporting)") };
+  view.lang = "zh";
+  const zh = { lead: lead("waiting_for"), list: joined(["甲", "乙"], true) + "|" + joined(["甲", "乙"]),
+               verdict: serverText("0/1 strong events (1 supporting)"),
+               ready: serverText("2 compatible events, 1 strong"),
+               history: serverText("the person accepted the retry instead"),
+               refusal: serverText("not in ACCESS_GROUPS, which lists telegram groups"),
+               model: serverText("Alex was venting, not asking for a fix"),
+               judge: t("m_judge"), quiet: t("m_judge_quiet") };
+  return { en, zh, judge: STRINGS.en.m_judge };
+})()`, ctx);
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_chat_shows_both_sides_and_reads_as_chinese() -> None:
+    script = Path(dashboard.STATIC_DIR) / "app.js"
+    run = subprocess.run(["node", "-e", _TEXT_PROBE, str(script)], capture_output=True,
+                         text=True, encoding="utf-8", timeout=60)
+    check("probe ran", run.returncode == 0, run.stderr)
+    out = json.loads(run.stdout)
+    en, zh = out["en"], out["zh"]
+    check("a reply shows the message it answered, by its sender",
+          en["asked"] == {"who": "Sam", "text": "@Nova Nova, the final?"}, repr(en["asked"]))
+    check("a reply older than the log answers its context's last line",
+          en["ledger"] == {"who": "Priya", "text": "which film tonight?"}, repr(en["ledger"]))
+    check("not when that line is its own", en["mine"] is None, repr(en["mine"]))
+    check("a silence has no reply to precede", en["quiet"] is None, repr(en["quiet"]))
+    check("a connector's mention in front of the name is left out",
+          en["doubled"] == "Nova, the final?" and en["plain"] == "which match?", repr(en))
+    check("English: a label, a space, ASCII separators",
+          en["lead"] == "Waiting for: " and en["list"] == "a; b|a, b"
+          and en["verdict"] == "0/1 strong events (1 supporting)", repr(en))
+    check("Chinese: no space after the full-width colon, full-width separators",
+          zh["lead"] == "还在等：" and zh["list"] == "甲；乙|甲，乙", repr(zh))
+    check("Chinese: the fixed server phrases are translated",
+          zh["verdict"] == "强证据 0/1（1 条支持）"
+          and zh["ready"] == "2 条一致的证据，其中 1 条是强证据"
+          and zh["history"] == "对方接受了它的重说"
+          and "ACCESS_GROUPS" in zh["refusal"] and "telegram" in zh["refusal"]
+          and "which lists" not in zh["refusal"], repr(zh))
+    check("Chinese: model-written text stays as it is",
+          zh["model"] == "Alex was venting, not asking for a fix", repr(zh["model"]))
+    check("plain words for joining in on its own",
+          out["judge"] == "joined in on its own" and zh["judge"] == "自己决定插话"
+          and zh["quiet"] == "可以插话", repr(out))
+
+
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_ENABLED", "false")
     app = FastAPI()

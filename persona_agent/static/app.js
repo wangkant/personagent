@@ -86,7 +86,8 @@ const STRINGS = {
     r_first: "first time in this chat",
     m_called: "called",
     m_owner: "admin",
-    m_judge: "own judgement",
+    m_judge: "joined in on its own",
+    m_judge_quiet: "could join in",
     m_followup: "follow-up",
     m_proactive: "proactive",
     pending: "Waiting for approval",
@@ -176,7 +177,7 @@ const STRINGS = {
     h_nokey_t: "No model key",
     h_nokey: "LLM_API_KEY is empty, so it cannot reply. Run `{cli} init`.",
     h_none_t: "No message has arrived since the service started",
-    h_none_url: "Your chat connector (for example the AstrBot plugin) must send to {url}",
+    h_none_url: "Your chat connector (for example the AstrBot plugin) must send to `{url}`",
     h_none_token_set: "CONNECTOR_TOKEN is set here, so the connector needs the same token.",
     h_none_token_blank: "CONNECTOR_TOKEN is blank here: leave the connector's token blank too, or set the same one on both sides.",
     h_none_access: "If ACCESS_GROUPS or ACCESS_DM_USERS is set, the chat has to be listed there.",
@@ -218,6 +219,11 @@ const STRINGS = {
     next_step: "Next step",
     rules_passed: "{have} of {n} passed",
     back: "All conversations",
+    show_all: "Show all {n}",
+    show_fewer: "Show fewer",
+    latest: "Jump to latest",
+    lang_zh: "Chinese (zh)",
+    lang_en: "English (en)",
   },
   zh: {
     title: "personagent 面板",
@@ -252,7 +258,7 @@ const STRINGS = {
     connectors: "连接器",
     no_connectors: "还没有连接器转发过消息。",
     unnamed_connector: "（没有连接器 id）",
-    last_event: "最近消息 {t}",
+    last_event: "最近消息：{t}",
     no_event: "还没有消息",
     convs_n: "{n} 个会话",
     pulling: "正在拉取发件箱",
@@ -299,7 +305,8 @@ const STRINGS = {
     r_first: "第一次在这个会话出现",
     m_called: "被叫到",
     m_owner: "管理员",
-    m_judge: "自主判断",
+    m_judge: "自己决定插话",
+    m_judge_quiet: "可以插话",
     m_followup: "跟进",
     m_proactive: "主动",
     pending: "等待确认",
@@ -388,7 +395,7 @@ const STRINGS = {
     h_nokey_t: "缺少模型密钥",
     h_nokey: "LLM_API_KEY 是空的，它没法回复。运行 `{cli} init`。",
     h_none_t: "服务启动以来还没收到任何消息",
-    h_none_url: "聊天连接器（比如 AstrBot 插件）要发到 {url}",
+    h_none_url: "聊天连接器（比如 AstrBot 插件）要发到 `{url}`",
     h_none_token_set: "这里设置了 CONNECTOR_TOKEN，连接器那边要填同一个。",
     h_none_token_blank: "这里的 CONNECTOR_TOKEN 是空的：连接器那边也留空，或者两边设成同一个。",
     h_none_access: "如果设置了 ACCESS_GROUPS 或 ACCESS_DM_USERS，这个会话必须在名单里。",
@@ -396,7 +403,7 @@ const STRINGS = {
     h_refused_t: "收到了消息，但被拒之门外",
     h_quiet_t: "消息在进来，它还没开口",
     h_quiet: "被点名（{name}）或 @ 时它会回答；否则大约 {n} 条消息后才考虑插话，而且可能决定不说。",
-    footer: "私密页面：只能通过带令牌的链接打开。修改会以 “dashboard” 的身份写进只增不删的账本。",
+    footer: "私密页面：只能通过带令牌的链接打开。修改会以“dashboard”的身份写进只增不删的账本。",
     updated: "更新于 {t}",
     down: "连不上服务。`{cli} run` 还在运行吗？",
     h_auth_t: "需要重新用链接打开这个页面",
@@ -428,8 +435,83 @@ const STRINGS = {
     next_step: "下一步",
     rules_passed: "已满足 {have}/{n}",
     back: "全部会话",
+    show_all: "全部展开（{n}）",
+    show_fewer: "收起",
+    latest: "跳到最新",
+    lang_zh: "中文（zh）",
+    lang_en: "英文（en）",
+    lv_ERROR: "错误",
+    lv_WARN: "警告",
+    lv_INFO: "提示",
+    e_active_rival: "这条回复已经有一个生效中的改写，请用“替换”",
+    e_illegal_transition: "它的状态已经变了，不能再这样操作",
+    e_unknown_candidate: "找不到这条提议",
+    e_cross_site: "拒绝了来自其他网站的请求",
+    e_foreign_origin: "拒绝了来自其他来源的请求",
   },
 };
+
+// Fixed English phrases the server sends (policy verdicts, ledger reasons,
+// refusals), in Chinese. Anything else, model-written text included, stays as it is.
+const SERVER_ZH = [
+  [/^automatic promotion disabled \(PROMOTE_AUTO_ENABLED\)$/, () => "自动晋升已关闭（PROMOTE_AUTO_ENABLED）"],
+  [/^state is (\w+), not proposed$/, (m) => "状态是“" + t("s_" + m[1], null, m[1]) + "”，不是待确认"],
+  [/^compatible evidence disagrees — left for review$/, () => "有证据和它相反，留给人来看"],
+  [/^a conflicting candidate exists — left for review$/, () => "有和它冲突的提议，留给人来看"],
+  [/^\S+ is promotable only by a person: nothing that supports one classifies strong \((\d+) supporting\)$/,
+    (m) => "这一类只能由人来采纳：支持它的证据都算不上强证据（" + m[1] + " 条支持）"],
+  [/^(\d+)\/(\d+) strong events \((\d+) supporting\)$/, (m) => "强证据 " + m[1] + "/" + m[2] + "（" + m[3] + " 条支持）"],
+  [/^(\d+)\/(\d+) compatible events$/, (m) => "一致的证据 " + m[1] + "/" + m[2]],
+  [/^(\d+)\/(\d+) distinct speakers \((\d+) events, but corroboration means people\)$/,
+    (m) => "不同的人 " + m[1] + "/" + m[2] + "（有 " + m[3] + " 条证据，但佐证要靠不同的人）"],
+  [/^(\d+) compatible events, (\d+) strong$/, (m) => m[1] + " 条一致的证据，其中 " + m[2] + " 条是强证据"],
+  [/^answered by (\S+)$/, (m) => "已由 " + m[1] + " 解决"],
+  [/^replaced by (\S+)$/, (m) => "已被 " + m[1] + " 替换"],
+  [/^(promote|reject|rollback|superseded) by operator$/, () => "在命令行操作"],
+  [/^the person accepted the retry instead$/, () => "对方接受了它的重说"],
+  [/^user accepted the bot's retry$/, () => "对方接受了它的重说"],
+  [/^the person it was for disagreed$/, () => "被回复的人不同意"],
+  [/^the admin disagreed$/, () => "管理员不同意"],
+  [/^not in ACCESS_GROUPS, which lists (\S+) groups$/, (m) => "不在 ACCESS_GROUPS 里（那里列了 " + m[1] + " 的群）"],
+  [/^ACCESS_GROUPS has no (\S+) entries and the connector did not filter \(prefiltered=false\)$/,
+    (m) => "ACCESS_GROUPS 里没有 " + m[1] + " 的条目，连接器也没有筛选（prefiltered=false）"],
+  [/^not in ADMIN_IDS or ACCESS_DM_USERS, one of which every QQ DM needs$/,
+    () => "不在 ADMIN_IDS 或 ACCESS_DM_USERS 里，QQ 私聊必须在其中之一"],
+  [/^not in ADMIN_IDS or ACCESS_DM_USERS, which lists (\S+) users$/,
+    (m) => "不在 ADMIN_IDS 或 ACCESS_DM_USERS 里（那里列了 " + m[1] + " 的用户）"],
+  [/^ACCESS_DM_USERS has no (\S+) entries and the connector did not filter \(prefiltered=false\)$/,
+    (m) => "ACCESS_DM_USERS 里没有 " + m[1] + " 的条目，连接器也没有筛选（prefiltered=false）"],
+  [/^the QQ webhook carries bare QQ ids only$/, () => "QQ 的 webhook 只接收不带前缀的 QQ 号"],
+];
+
+function serverText(text) {
+  const s = String(text || "");
+  if (view.lang !== "zh") return s;
+  for (const [re, make] of SERVER_ZH) {
+    const m = re.exec(s);
+    if (m) return make(m);
+  }
+  return s;
+}
+
+// A label with its colon, ready for the value: a Chinese "：" takes no space after it.
+function lead(key) {
+  const s = t(key);
+  return s.endsWith("：") ? s : s + " ";
+}
+
+function colon() { return view.lang === "zh" ? "：" : ": "; }
+
+// "a; b" and "a, b" in English, "a；b" and "a，b" in Chinese.
+function joined(items, strong) {
+  if (view.lang === "zh") return items.join(strong ? "；" : "，");
+  return items.join(strong ? "; " : ", ");
+}
+
+// `command` in a sentence is shown as code; the rest stays text.
+function rich(text) {
+  return String(text).split("`").map((part, i) => (i % 2 ? h("code", { text: part }) : part));
+}
 
 const REASONS = {
   "below the trigger count": "r_below",
@@ -631,14 +713,26 @@ function render() {
   const convKey = JSON.stringify([view.lang, view.convs, view.selected]);
   if (convKey !== view.shown.convs) {
     view.shown.convs = convKey;
-    renderConversations();
+    keepFocus(renderConversations);
   }
   const detailKey = JSON.stringify([view.lang, view.selected, view.detail, view.convs && view.convs.length]);
   if (detailKey !== view.shown.detail && !view.armed && !view.busy) {
     view.shown.detail = detailKey;
-    renderDetail();
+    keepFocus(renderDetail);
   }
   renderFooter();
+}
+
+// A redraw replaces elements; the keyboard stays on the control with the same
+// data-key (a conversation, a button, a disclosure), wherever it moved.
+function keepFocus(draw) {
+  const was = document.activeElement;
+  const holder = was && was !== document.body && was.closest ? was.closest("[data-key]") : null;
+  const key = holder ? holder.getAttribute("data-key") : null;
+  draw();
+  if (!key || (was.isConnected && document.activeElement === was)) return;
+  const next = [...document.querySelectorAll("[data-key]")].find((el) => el.getAttribute("data-key") === key);
+  if (next) next.focus({ preventScroll: true });
 }
 
 function renderTop() {
@@ -673,7 +767,7 @@ function hintList() {
   if (f) {
     out.push(f.status === 401
       ? { level: "error", title: t("h_auth_t"), items: [t("h_auth")] }
-      : { level: "error", title: t("h_error_t", { status: f.status }), items: [f.message + (f.code ? " (" + f.code + ")" : "")] });
+      : { level: "error", title: t("h_error_t", { status: f.status }), items: [f.message + (f.code ? (view.lang === "zh" ? "（" + f.code + "）" : " (" + f.code + ")") : "")] });
     return out;
   }
   const st = view.status;
@@ -699,7 +793,7 @@ function hintList() {
     out.push({
       level: "warn",
       title: t("h_refused_t"),
-      items: a.refused.map((r) => r.conversation + ": " + r.reason),
+      items: a.refused.map((r) => r.conversation + colon() + serverText(r.reason)),
     });
   }
   if (a.received && !a.spoke && st.agent === "ready") {
@@ -718,7 +812,7 @@ function renderHints(hints) {
     h("span", { class: "hint-mark", "aria-hidden": "true" }, icon(hint.level === "info" ? "info" : "alert")),
     h("div", { class: "hint-body" },
       h("h3", { text: hint.title }),
-      h(hint.ordered ? "ol" : "ul", null, hint.items.map((item) => h("li", { text: item })))))));
+      h(hint.ordered ? "ol" : "ul", null, hint.items.map((item) => h("li", null, rich(item))))))));
 }
 
 function renderWelcome(fresh, steps) {
@@ -734,7 +828,7 @@ function renderWelcome(fresh, steps) {
       steps ? h("div", { class: "steps" },
         h("p", { class: "eyebrow", text: t("next_step") }),
         h("h3", { text: steps.title }),
-        h("ol", null, steps.items.map((item) => h("li", { text: item })))) : null)));
+        h("ol", null, steps.items.map((item) => h("li", null, rich(item))))) : null)));
 }
 
 // ------------------------------------------------------------- icons ----
@@ -797,7 +891,7 @@ function renderOverview() {
       [t("version"), st.version],
       [t("uptime"), duration(st.uptime_s)],
       [t("home"), h("span", { class: "mono", text: st.home })],
-      [t("language"), st.lang === "zh" ? "中文 (zh)" : "English (en)"],
+      [t("language"), t(st.lang === "zh" ? "lang_zh" : "lang_en")],
       [t("outbox"), st.outbox ? t("on") : t("off")],
     ]));
 
@@ -847,7 +941,7 @@ function renderOverview() {
   const checksCard = card(t("checks"), "",
     findings.length
       ? h("ul", { class: "rows" }, findings.map((f) => h("li", { class: "finding" },
-        h("span", { class: "chip " + levelClass(f.level), text: f.level }),
+        h("span", { class: "chip " + levelClass(f.level), text: t("lv_" + f.level, null, f.level) }),
         h("span", { class: "mono", text: f.key }),
         h("span", { class: "detail", text: f.detail }))))
       : h("p", { class: "empty", text: t("no_findings") }));
@@ -860,12 +954,12 @@ function renderOverview() {
   const first = connectors[0];
   const facts = [
     names.length ? h("span", { class: "fact" },
-      h("span", { class: "mono", text: names.join(", ") }),
+      h("span", { class: "mono", text: joined(names) }),
       h("span", { class: "soft", text: " · " + t("roles_n", { n: roles }) })) : null,
     first ? h("span", { class: "fact" },
       h("span", { class: "dot " + (first.pulling ? "on" : "off"), "aria-hidden": "true" }),
       h("span", { class: "mono", title: first.id || null, text: first.id ? shortId(first.id, 22) : t("unnamed_connector") }),
-      h("span", { class: "soft", text: " · " + first.platforms.join(", ")
+      h("span", { class: "soft", text: " · " + joined(first.platforms)
         + (connectors.length > 1 ? " +" + (connectors.length - 1) : "") }))
       : h("span", { class: "fact" }, h("span", { class: "dot off", "aria-hidden": "true" }), t("no_connector_short")),
     h("span", { class: "fact", text: t(st.outbox ? "outbox_on" : "outbox_off") }),
@@ -902,6 +996,7 @@ function renderConversations() {
   replace(list, convs.map((c) => h("button", {
     type: "button",
     class: "conv",
+    "data-key": "conv:" + c.id,
     "aria-current": c.id === view.selected ? "true" : "false",
     onclick: () => select(c.id, true),
   },
@@ -976,6 +1071,7 @@ function renderDetail() {
         h("img", { src: "dashboard/listening.webp", alt: "", width: 560, height: 373 })),
       h("strong", { text: none ? t("no_convs_t") : t("pick_t") }),
       h("span", { text: none ? t("no_convs") : t("pick") })));
+    watchLatest(box);
     return;
   }
   const conv = (view.convs || []).find((c) => c.id === d.id) || {};
@@ -986,6 +1082,7 @@ function renderDetail() {
     approvals(d, stream.bubbleOf),
     chatStream(d, stream),
     composer(d));
+  watchLatest(box);
 }
 
 function chatHead(d, conv) {
@@ -996,13 +1093,13 @@ function chatHead(d, conv) {
   const waitingN = totals.pending || d.pending.length;
   const stat = (cls, n, text) => h("li", { class: "stat" + (n ? " " + cls : ""), text });
   return h("div", { class: "chat-head" },
-    h("button", { type: "button", class: "back ghost", onclick: back },
+    h("button", { type: "button", class: "back ghost", "data-key": "back", onclick: back },
       icon("back"), h("span", { text: t("back") })),
     h("div", { class: "chat-id" },
       h("span", { class: "avatar big " + (d.kind === "dm" ? "dm" : "group"), "aria-hidden": "true" },
         icon(d.kind === "dm" ? "person" : "group")),
       h("div", { class: "chat-name" },
-        h("h2", { tabindex: "-1", title: d.id, text: label(d) }),
+        h("h2", { tabindex: "-1", "data-key": "head", title: d.id, text: label(d) }),
         h("div", { class: "line" },
           h("span", { class: "chip accent", text: d.platform }),
           h("span", { class: "chip", text: d.kind === "dm" ? t("dm") : t("group") }),
@@ -1038,7 +1135,7 @@ function more(d, group, title) {
   const total = (d.totals || {})[group] || d[group].length;
   if (total <= d[group].length) return null;
   const text = t("shown_of", { shown: d[group].length, n: total });
-  return h("p", { class: "empty" }, title ? h("strong", { text: title + ": " }) : null, text);
+  return h("p", { class: "empty" }, title ? h("strong", { text: title + colon() }) : null, text);
 }
 
 function approvals(d, bubbleOf) {
@@ -1046,23 +1143,65 @@ function approvals(d, bubbleOf) {
   if (!d.pending.length) {
     return h("p", { class: "all-clear" }, icon("check"), t("no_pending"));
   }
+  // More than a few: one line each until someone asks for the full cards.
+  const long = d.pending.length > QUEUE_AFTER;
+  const all = !long || view.open.has(ALL_KEY);
+  const toggle = long ? h("button", {
+    type: "button", class: "link show-all", "data-key": ALL_KEY,
+    "aria-expanded": all ? "true" : "false",
+    onclick: () => {
+      if (view.open.has(ALL_KEY)) view.open.delete(ALL_KEY); else view.open.add(ALL_KEY);
+      keepFocus(renderDetailNow);
+    },
+  }, t(all ? "show_fewer" : "show_all", { n: d.pending.length }), icon(all ? "up" : "down")) : null;
   return h("section", { class: "approvals", "aria-labelledby": "approvals-title" },
     h("div", { class: "approvals-head" },
       h("h3", { id: "approvals-title" },
         h("span", { class: "pulse", "aria-hidden": "true" }), t("pending"),
         h("span", { class: "count", text: String(total) })),
-      h("img", { class: "vignette", src: "dashboard/learned-notebook.webp", alt: "", width: 320, height: 210 })),
-    d.pending.map((c) => pendingItem(c, bubbleOf[c.id])),
+      h("span", { class: "spacer" }),
+      toggle,
+      h("span", { class: "vignette" },
+        h("img", { src: "dashboard/learned-notebook.webp", alt: "", width: 320, height: 210 }))),
+    all ? d.pending.map((c) => pendingItem(c, bubbleOf[c.id]))
+      : h("ul", { class: "queue" }, d.pending.map((c) => queueRow(c, bubbleOf[c.id]))),
     more(d, "pending"));
+}
+
+const QUEUE_AFTER = 3;
+const ALL_KEY = "approvals:all";
+
+// One proposal on one line: said -> better, the meter, the buttons.
+function queueRow(c, bubbleId) {
+  const isPair = c.type === "preference_pair" && c.better;
+  const cl = c.checklist;
+  const full = isPair ? c.reply + " → " + c.better : c.reply;
+  return h("li", { class: "q-row", id: "p-" + c.id, tabindex: "-1", "data-key": "p:" + c.id },
+    h("span", { class: "q-kind", text: t("t_" + c.type, null, c.type) }),
+    h("span", { class: "q-text", title: full },
+      isPair ? [
+        h("span", { class: "sr-only", text: t("it_said") + colon() }),
+        h("span", { class: "q-said", text: c.reply }),
+        h("span", { class: "q-arrow", "aria-hidden": "true" }, icon("next")),
+        h("span", { class: "sr-only", text: t("better") + colon() }),
+        h("span", { class: "q-better", text: c.better }),
+      ] : h("span", { class: "q-keep", text: c.reply })),
+    cl ? h("span", { class: "q-meter" }, h("span", { class: "sr-only", text: t("checklist") + colon() }), checkBar(cl, true)) : null,
+    h("span", { class: "q-end" },
+      bubbleId ? h("button", {
+        type: "button", class: "link icon-only", "data-key": "jump:" + c.id,
+        title: t("show_in_chat"), "aria-label": t("show_in_chat"), onclick: () => jump("b-" + bubbleId),
+      }, icon("down")) : null,
+      c.actions.length ? renderActions(c) : null));
 }
 
 function pendingItem(c, bubbleId) {
   const isPair = c.type === "preference_pair" && c.better;
   const cl = c.checklist;
   // At a glance: the swap, how far it is, who reacted, the buttons; the rest opens.
-  return h("article", { class: "proposal", id: "p-" + c.id, tabindex: "-1" },
+  return h("article", { class: "proposal", id: "p-" + c.id, tabindex: "-1", "data-key": "p:" + c.id },
     candHead(c, bubbleId ? h("button", {
-      type: "button", class: "link", onclick: () => jump("b-" + bubbleId),
+      type: "button", class: "link", "data-key": "jump:" + c.id, onclick: () => jump("b-" + bubbleId),
     }, t("show_in_chat"), icon("down")) : null),
     h("div", { class: "swap" },
       sayBubble(isPair ? t("it_said") : t("reply"), c.reply, isPair ? "x-said" : "x-keep"),
@@ -1079,27 +1218,30 @@ function pendingItem(c, bubbleId) {
           h("div", { class: "why" }, cl ? renderChecklist(cl) : null, historyBlock(c))))));
 }
 
-function checkBar(cl) {
+function checkBar(cl, short) {
   const scored = cl.rules.filter((rule) => rule.id !== "same_chat");
   const passed = scored.filter((rule) => rule.ok).length;
+  const full = t("rules_passed", { have: passed, n: scored.length });
   return [
     h("span", { class: "bar", "aria-hidden": "true" },
       scored.map((rule) => h("span", { class: "seg" + (rule.ok ? " on" : "") }))),
-    h("span", { class: "tally", text: t("rules_passed", { have: passed, n: scored.length }) }),
+    short ? [h("span", { class: "tally", "aria-hidden": "true", title: full, text: passed + "/" + scored.length }),
+      h("span", { class: "sr-only", text: full })]
+      : h("span", { class: "tally", text: full }),
   ];
 }
 
 function waitingText(cl) {
   return cl.waiting_for.length
-    ? cl.waiting_for.map((w) => t("w_" + w, null, w)).join("; ")
+    ? joined(cl.waiting_for.map((w) => t("w_" + w, null, w)), true)
     : (cl.promote ? t("w_ready") : "");
 }
 
 function checkSummary(cl) {
   const waiting = waitingText(cl);
   return h("div", { class: "glance" },
-    h("span", { class: "glance-bar" }, h("span", { class: "sr-only", text: t("checklist") + ": " }), checkBar(cl)),
-    waiting ? h("span", { class: "glance-wait" }, h("strong", { text: t("waiting_for") + " " }), waiting) : null);
+    h("span", { class: "glance-bar" }, h("span", { class: "sr-only", text: t("checklist") + colon() }), checkBar(cl)),
+    waiting ? h("span", { class: "glance-wait" }, h("strong", { text: lead("waiting_for") }), waiting) : null);
 }
 
 function voices(c) {
@@ -1141,7 +1283,7 @@ function contextBlock(c) {
       const who = m ? m[1].trim() : "";
       return h("li", { class: who && who === me ? "me" : null },
         who ? h("span", { class: "who", text: who }) : null,
-        h("span", { class: "text", text: m ? m[2] : line }));
+        h("span", { class: "text" }, memberText(m ? m[2] : line)));
     })));
 }
 
@@ -1169,7 +1311,7 @@ function historyBlock(c) {
     h("ul", { class: "history" }, c.history.map((row) => h("li", null,
       h("time", { title: stamp(row.ts), text: ago(row.ts) }), " · ",
       historyLine(row),
-      row.reason ? " · " + row.reason : ""))));
+      row.reason ? " · " + serverText(row.reason) : ""))));
 }
 
 function historyLine(row) {
@@ -1177,7 +1319,8 @@ function historyLine(row) {
   const actor = row.actor || "?";
   const who = actor === "auto" || actor === "dashboard"
     ? t("by_" + actor + "_actor") : t("by_actor", { actor });
-  return view.lang === "zh" ? who + what : what + " " + who;
+  if (view.lang !== "zh") return what + " " + who;
+  return who + (actor === "auto" || actor === "dashboard" ? "" : " ") + what;
 }
 
 function stateClass(state) {
@@ -1193,11 +1336,13 @@ function initial(name) {
   return /[\u3400-\u9fff]/.test(chars[0]) ? last : chars[0].toUpperCase();
 }
 
-function tone(name) {
+function toneOf(name) {
   let n = 0;
   for (const ch of String(name || "")) n = (n * 31 + ch.codePointAt(0)) % 997;
-  return "tone-" + (n % TONES);
+  return n % TONES;
 }
+
+function tone(name) { return "tone-" + toneOf(name); }
 
 function renderEvent(e) {
   const who = e.speaker || "?";
@@ -1209,8 +1354,8 @@ function renderEvent(e) {
         h("span", { class: "kind", text: t("k_" + e.kind, null, e.kind) + (e.reaction_type && e.kind === "reaction" ? " · " + t("rt_" + e.reaction_type, null, e.reaction_type) : "") }),
         h("span", { class: "chip " + (e.strength === "strong" ? "strong" : "weak"), text: t("st_" + e.strength, null, e.strength) }),
         h("span", { class: "when" }, when(e.ts))),
-      e.said ? h("p", { class: "said", text: e.said }) : null,
-      e.verdict ? h("div", { class: "verdict", text: t("judge") + " " + e.verdict }) : null,
+      e.said ? h("p", { class: "said" }, memberText(e.said)) : null,
+      e.verdict ? h("div", { class: "verdict", text: lead("judge") + serverText(e.verdict) }) : null,
       h("div", { class: "verdict flags", text: [
         e.speaker_is_recipient ? t("aimed_at_them") : null,
         e.accepted ? null : t("dismissed"),
@@ -1233,7 +1378,7 @@ function renderChecklist(cl) {
   return h("div", { class: "checklist-block" },
     h("div", { class: "sub row" }, h("span", { text: t("checklist") }), checkBar(cl)),
     h("ul", { class: "checklist" }, items),
-    h("div", { class: "verdict-line", text: t("policy") + " " + cl.verdict }));
+    h("div", { class: "verdict-line", text: lead("policy") + serverText(cl.verdict) }));
 }
 
 function meter(have, need) {
@@ -1250,6 +1395,7 @@ function renderActions(c) {
       type: "button",
       class: "btn " + (armed ? "armed" : action === "promote" || action === "replace" ? "primary" : "danger"),
       "data-act": c.id + ":" + action,
+      "data-key": "act:" + c.id + ":" + action,
       disabled: view.busy || null,
       onclick: () => act(c.id, action),
     }, armed ? t("confirm") : t("a_" + action));
@@ -1354,11 +1500,18 @@ function chatStream(d, stream) {
   return h("section", { class: "stream", "aria-labelledby": "stream-title" },
     h("h3", { id: "stream-title", class: "sr-only", text: t("decisions") }),
     learnedShown, pastShown,
-    h("ol", { class: "msgs" }, rows));
+    h("ol", { class: "msgs" }, rows),
+    h("div", { class: "latest-dock" },
+      // Shown as it was, so a redraw can hand the keyboard back to it.
+      h("button", { type: "button", class: "to-latest", hidden: latestShown ? null : true, "data-key": "latest", onclick: toLatest },
+        icon("down"), h("span", { text: t("latest") }))));
 }
 
 function modeChip(r) {
-  return r.mode ? h("span", { class: "chip mode", text: t("m_" + r.mode, null, r.mode) }) : null;
+  if (!r.mode) return null;
+  // "judge" on a quiet line: it could have joined in, and chose not to.
+  const key = r.mode === "judge" && !r.spoke ? "m_judge_quiet" : "m_" + r.mode;
+  return h("span", { class: "chip mode", text: t(key, null, r.mode) });
 }
 
 function reasonText(r) {
@@ -1366,10 +1519,21 @@ function reasonText(r) {
   return key ? t(key) : r.reason;
 }
 
+// A member's message: their initial, their name, the bubble on the left.
+function fromMember(who, body, cls) {
+  return [
+    who ? h("span", { class: "face small " + tone(who), "aria-hidden": "true", text: initial(who) })
+      : h("span", { class: "face small blank", "aria-hidden": "true" }),
+    h("div", { class: "said-by" },
+      who ? h("span", { class: "name ink-" + toneOf(who), text: who }) : null,
+      h("p", { class: cls }, body)),
+  ];
+}
+
 function quietRow(r) {
   return h("li", { class: "msg quiet" },
-    r.excerpt ? h("p", { class: "heard" },
-      h("span", { class: "sr-only", text: t("after") + " " }), r.excerpt) : null,
+    r.excerpt ? h("div", { class: "from" },
+      fromMember(r.sender, [h("span", { class: "sr-only", text: lead("after") }), memberText(r.excerpt)], "heard")) : null,
     h("p", { class: "aside" },
       h("span", { class: "ring", "aria-hidden": "true" }),
       h("strong", { text: t("quiet") }),
@@ -1377,6 +1541,34 @@ function quietRow(r) {
       h("span", { class: "reason", text: reasonText(r) }),
       r.count > 1 ? h("span", { class: "chip", text: t("times", { n: r.count }) }) : null,
       hm(r.ts)));
+}
+
+// A leading @mention of the persona reads as a mention. One a connector put in
+// front of a message that already names it ("@Nova Nova, ...") is left out.
+function memberText(text) {
+  const me = personaName();
+  const s = String(text || "");
+  if (!me || !s.startsWith("@" + me)) return s;
+  const rest = s.slice(me.length + 1).trimStart();
+  if (rest.startsWith(me)) return rest;
+  return [h("span", { class: "mention", text: "@" + me }), rest ? " " + rest : ""];
+}
+
+// What a reply answered: the log's excerpt, or for a reply older than the log,
+// the last line of a proposal's context when someone else wrote it.
+function askedOf(item) {
+  const r = item.row;
+  if (r) return r.answered ? { who: r.sender || "", text: r.answered } : null;
+  const me = personaName();
+  for (const c of item.cands) {
+    const line = (c.context || [])[c.context.length - 1];
+    const m = line ? /^([^:：]{1,40})[:：]\s?(.*)$/.exec(line) : null;
+    if (m && m[1].trim() !== me && m[2].trim()) {
+      const text = [...m[2].trim()];
+      return { who: m[1].trim(), text: text.length > 60 ? text.slice(0, 59).join("") + "…" : text.join("") };
+    }
+  }
+  return null;
 }
 
 function botRow(item) {
@@ -1389,14 +1581,51 @@ function botRow(item) {
   const pending = cands.find((c) => c.state === "proposed");
   const mark = live ? (live.type === "preference_pair" ? " corrected" : " kept")
     : pending ? (pending.type === "preference_pair" ? " questioned" : " nominated") : "";
-  return h("li", { class: "msg bot" + mark, id: "b-" + item.key, tabindex: cands.length ? "-1" : null },
+  const asked = askedOf(item);
+  return [
+    asked ? h("li", { class: "msg in" }, fromMember(asked.who, memberText(asked.text), "bubble in")) : null,
+    h("li", { class: "msg bot" + mark, id: "b-" + item.key, tabindex: cands.length ? "-1" : null,
+      "data-key": "b:" + (r ? r.ts : "ledger:" + norm(item.reply)) },
     h("p", { class: "bubble" },
-      h("span", { class: "sr-only", text: t("spoke") + ", " + t("said") + " " }), text,
+      h("span", { class: "sr-only", text: t("spoke") + (view.lang === "zh" ? "，" : ", ") + lead("said") }), text,
       live && live.type !== "preference_pair" ? icon("star", "kept-star") : null),
     h("p", { class: "meta" },
       r ? [hm(r.ts), modeChip(r), h("span", { class: "reason", text: reasonText(r) })]
         : [icon("clock"), h("span", { text: t("from_ledger") })]),
-    cands.map((c) => annotation(c)));
+    cands.map((c) => annotation(c))),
+  ];
+}
+
+let latestWatch = null;
+let latestShown = false;
+
+// "Jump to latest" shows while a transcript taller than the window has its end below the fold.
+function watchLatest(box) {
+  if (latestWatch) { latestWatch.disconnect(); latestWatch = null; }
+  const btn = box.querySelector(".to-latest");
+  const list = box.querySelector(".msgs");
+  if (!btn || !list || !list.lastElementChild || typeof IntersectionObserver !== "function") {
+    latestShown = false;
+    return;
+  }
+  latestWatch = new IntersectionObserver((entries) => {
+    const entry = entries[entries.length - 1];
+    const below = !entry.isIntersecting && entry.boundingClientRect.top > 0;
+    latestShown = below && list.offsetHeight > window.innerHeight;
+    btn.hidden = !latestShown;
+  });
+  latestWatch.observe(list.lastElementChild);
+}
+
+function toLatest() {
+  const list = document.querySelector(".msgs");
+  const end = list && list.lastElementChild;
+  if (!end) return;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  end.scrollIntoView({ block: "end", behavior: still ? "auto" : "smooth" });
+  // The button hides once the end is in view; the keyboard lands on the last message.
+  if (!end.hasAttribute("tabindex")) end.setAttribute("tabindex", "-1");
+  end.focus({ preventScroll: true });
 }
 
 function annotation(c) {
@@ -1404,7 +1633,7 @@ function annotation(c) {
   const tag = c.state === "promoted" ? "learned" : c.state === "proposed" ? "waiting" : "past";
   if (tag === "waiting") {
     return h("div", { class: "note-card waiting-card" },
-      h("button", { type: "button", class: "tag", onclick: () => jump("p-" + c.id) },
+      h("button", { type: "button", class: "tag", "data-key": "tag:" + c.id, onclick: () => jump("p-" + c.id) },
         icon("up"), t("pending") + " · " + t("t_" + c.type, null, c.type)),
       isPair && c.better ? h("p", { class: "bubble better proposed" }, icon("turn"), h("span", { text: c.better })) : null);
   }
@@ -1444,7 +1673,7 @@ function disclosure(key, summary, ...body) {
     class: "more",
     open: view.open.has(key) || null,
     ontoggle: (e) => { if (e.currentTarget.open) view.open.add(key); else view.open.delete(key); },
-  }, h("summary", null, icon("chev", "chev"), summary), body);
+  }, h("summary", { "data-key": "more:" + key }, icon("chev", "chev"), summary), body);
 }
 
 function composer(d) {
@@ -1492,7 +1721,7 @@ async function act(id, action) {
     });
     toast(result.views_rebuilt === false ? t("views_failed") : t("done_" + action), result.views_rebuilt === false);
   } catch (e) {
-    toast(t("refused", { msg: e.message }), true);
+    toast(t("refused", { msg: e.code ? t("e_" + e.code, null, e.message) : e.message }), true);
   }
   view.busy = false;
   view.shown.detail = "";
@@ -1521,7 +1750,7 @@ let toastTimer = null;
 
 function toast(message, isError) {
   const el = document.getElementById("toast");
-  el.textContent = message;
+  replace(el, rich(message));
   el.className = "toast show" + (isError ? " err" : "");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = "toast"; }, 4000);
