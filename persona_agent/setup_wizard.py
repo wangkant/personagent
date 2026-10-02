@@ -268,6 +268,10 @@ _TEXT: dict[str, tuple[str, str]] = {
                 "--no-input with --provider, --key-env and --name.",
                 "已跳过设置问答：{why}。请在终端里运行 `{cmd}`，或加 --no-input 和 "
                 "--provider、--key-env、--name 等参数。"),
+    "key_cleared": ("The API key saved for the previous AI service was cleared, so it is not sent to the new one. "
+                    "Pass --key-env VAR to set a key for this service.",
+                    "原来那个 AI 服务的 API key 已清除，不会发给新服务。"
+                    "请用 --key-env VAR 为新服务设置 key。"),
     "skip_tty": ("input is not a terminal", "输入不是终端"),
     "rerun_q": ("personagent is already set up. Run the setup questions again?",
                 "personagent 已经设置过了。要重新回答设置问题吗？"),
@@ -438,6 +442,15 @@ def _say(text: str = "") -> None:
 # .env
 # ---------------------------------------------------------------------------
 
+def env_literal(value) -> str:
+    """`value` as one .env right-hand side that dotenv reads back unchanged."""
+    text = str(value)
+    if (text != text.strip() or text.startswith("#") or " #" in text
+            or any(ch in text for ch in "\"'\n\r")):
+        return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    return text
+
+
 def set_env_values(env_text: str, values: dict) -> str:
     """`env_text` with every uncommented KEY= line of a key in `values`
     rewritten (dotenv reads the last one, so all of them); keys not present
@@ -448,11 +461,11 @@ def set_env_values(env_text: str, values: dict) -> str:
         m = re.match(r"^([A-Z][A-Z0-9_]*)=", line)
         if m and m.group(1) in values:
             key = m.group(1)
-            lines[i] = f"{key}={values[key]}"
+            lines[i] = f"{key}={env_literal(values[key])}"
             found.add(key)
     for key, value in values.items():
         if key not in found:
-            lines.append(f"{key}={value}")
+            lines.append(f"{key}={env_literal(value)}")
     out = "\n".join(lines)
     if env_text.endswith("\n") and not out.endswith("\n"):
         out += "\n"
@@ -489,18 +502,12 @@ def secure_env_file(env_path: Path) -> None:
 
 
 def env_get(env_path: Path, key: str) -> str:
-    """The value of `key` in .env as dotenv reads it ('' if blank or missing):
-    the last line, one pair of quotes, or a bare value up to an inline ` #`."""
+    """The value of `key` in .env exactly as the agent loads it ('' if blank or missing)."""
     if not env_path.exists():
         return ""
-    found = re.findall(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
-    if not found:
-        return ""
-    raw = found[-1].strip()
-    quoted = re.match(r"""^(["'])(.*?)\1""", raw)
-    if quoted:
-        return quoted.group(2)
-    return re.split(r"\s+#", raw, maxsplit=1)[0].strip()
+    from dotenv import dotenv_values
+
+    return str(dotenv_values(env_path).get(key) or "").strip()
 
 
 def copy_env_template(home: Path) -> Path:
@@ -1029,15 +1036,23 @@ def astrbot_main_config_path(data_dir: Path) -> Path:
 
 
 def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
-    """Add, or replace by id, an entry in AstrBot's cmd_config.json, which
-    AstrBot reads when it starts."""
+    """Add an entry to AstrBot's cmd_config.json, which AstrBot reads when it
+    starts. An entry with the same id keeps its other settings and gets the new credentials."""
     path = astrbot_main_config_path(data_dir)
     cfg = json.loads(path.read_text(encoding="utf-8-sig"))
     platforms = cfg.get("platform")
     if not isinstance(platforms, list):
         platforms = []
-    platforms = [p for p in platforms if not (isinstance(p, dict) and p.get("id") == entry["id"])]
-    platforms.append(entry)
+    for i, existing in enumerate(platforms):
+        if isinstance(existing, dict) and existing.get("id") == entry["id"]:
+            # Keep the user's own adapter settings (proxy, base URL, ...): only the credentials change.
+            fields = ["enable"] + [key for key, _ in PLATFORMS.get(entry.get("type"), ())]
+            same_kind = existing.get("type") == entry.get("type")
+            platforms[i] = ({**existing, **{k: entry[k] for k in fields if k in entry}}
+                            if same_kind else entry)
+            break
+    else:
+        platforms.append(entry)
     cfg["platform"] = platforms
     return _write_json(path, cfg)
 
@@ -1067,7 +1082,11 @@ class Launcher:
         return homes.is_checkout()
 
     def _home_args(self) -> list[str]:
-        return ["--home", str(self.home)] if os.environ.get("AGENT_HOME", "").strip() else []
+        # A home other than the one a bare command finds needs saying.
+        usual = homes.CHECKOUT if self.in_checkout else homes.default_home()
+        if os.environ.get("AGENT_HOME", "").strip() or _resolved(self.home) != _resolved(usual):
+            return ["--home", str(self.home)]
+        return []
 
     def argv(self, sub: str) -> list[str]:
         return [self.python, "-m", "persona_agent", *self._home_args(), sub]
@@ -1087,17 +1106,31 @@ class Launcher:
             except ValueError:
                 pass
             return [f"cd {_quote(str(homes.CHECKOUT))}",
-                    f"{_quote(str(python))} -m persona_agent {tail}"]
+                    f"{_program(str(python))} -m persona_agent {tail}"]
         prefix = sys.prefix.replace("\\", "/").lower()
         if "/archive-v" in prefix and "/uv/" in prefix:
             return [f"uvx personagent {tail}"]
         if shutil.which("personagent"):
             return [f"personagent {tail}"]
-        return [f"{_quote(self.python)} -m persona_agent {tail}"]
+        return [f"{_program(self.python)} -m persona_agent {tail}"]
+
+
+def _resolved(path: Path) -> Path:
+    try:
+        return Path(path).expanduser().resolve()
+    except OSError:
+        return Path(path)
 
 
 def _quote(text: str) -> str:
     return f'"{text}"' if " " in text else text
+
+
+def _program(path: str) -> str:
+    """`path` as the first word of a command; PowerShell needs `&` to run a quoted path."""
+    if " " in path and os.name == "nt" and "PROMPT" not in os.environ:
+        return f'& "{path}"'
+    return _quote(path)
 
 
 # ---------------------------------------------------------------------------
@@ -1440,14 +1473,24 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     lang = lang if lang in LANGS else "en"
     set_lang(lang)
     values: dict = {"AGENT_LANG": lang}
+    keyless = False
     if args.provider and args.provider != "other":
         provider = provider_named(args.provider)
         values["LLM_BASE_URL"] = provider.base_url
         values["LLM_MODEL"] = provider.model
-        if not provider.needs_key and not env_get(env_path, "LLM_API_KEY"):
+        keyless = not provider.needs_key
+        if keyless and not env_get(env_path, "LLM_API_KEY"):
             values["LLM_API_KEY"] = "ollama"
     if args.base_url:
         values["LLM_BASE_URL"] = args.base_url
+    old_url = env_get(env_path, "LLM_BASE_URL").rstrip("/")
+    new_url = str(values.get("LLM_BASE_URL", old_url)).rstrip("/")
+    if (existed and old_url and new_url != old_url and not args.key_env
+            and env_get(env_path, "LLM_API_KEY") and "LLM_API_KEY" not in values):
+        # The saved key belongs to the service being replaced; never send it to the new one.
+        values["LLM_API_KEY"] = "ollama" if keyless else ""
+        if not keyless:
+            print(t("key_cleared"))
     if args.model:
         values["LLM_MODEL"] = args.model
     if args.key_env:
@@ -1512,7 +1555,8 @@ def _prepare_output() -> None:
 
 
 def run(argv: list[str] | None, prog: str, *, python: str | None = None,
-        confirm_rerun: bool = False, args: argparse.Namespace | None = None) -> int:
+        confirm_rerun: bool = False, args: argparse.Namespace | None = None,
+        strict_skip: bool = False) -> int:
     """`init` with an interpreter of choice: quickstart passes its .venv's,
     and the flags it has already parsed."""
     _prepare_output()
@@ -1524,7 +1568,11 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         if not args.no_input:
             set_lang(args.lang or detect_lang())
             print(t("skipped", why=t("skip_tty"), cmd=prog))
-        return setup_without_questions(home, args, launcher)
+        done = setup_without_questions(home, args, launcher)
+        flagged = any((args.provider, args.base_url, args.model, args.key_env,
+                       args.name, args.lang, args.persona))
+        # Piped without flags nothing was configured, and a script must be able to tell.
+        return 2 if strict_skip and not args.no_input and not flagged else done
     env_path = home / ".env"
     if confirm_rerun and env_get(env_path, "LLM_API_KEY"):
         set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
@@ -1537,7 +1585,7 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
 
 def main(argv: list[str] | None = None, prog: str = "personagent init") -> int:
     try:
-        return run(argv, prog)
+        return run(argv, prog, strict_skip=True)
     except (KeyboardInterrupt, EOFError):
         print()
         return 130

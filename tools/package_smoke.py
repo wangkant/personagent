@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPLY = "hey there"
+# Names of the two model probes in persona_agent.health.CHECKS.
+CHAT_PROBES = ("DM chat", "Primary chat (/v1 tools)")
 STEPS = ("version", "init", "chat", "run", "doctor")
 # Settings a developer's shell may carry that would override the test home's .env.
 _SCRUBBED_PREFIXES = ("LLM_", "AGENT_", "PERSONA_", "CONNECTOR_", "SERVER_", "QQ_",
@@ -173,8 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             except json.JSONDecodeError:
                 report = {}
             chat_probes = [s for s in report.get("services", [])
-                           if s.get("name", "").startswith(("Private chat", "Primary chat"))]
-            expect("doctor --json", len(chat_probes) == 2
+                           if s.get("name") in CHAT_PROBES]
+            expect("doctor --json", len(chat_probes) == len(CHAT_PROBES)
                    and all(s.get("ok") is True for s in chat_probes),
                    repr(chat_probes or r.stdout[:300]))
     finally:

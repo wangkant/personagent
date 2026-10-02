@@ -55,7 +55,12 @@ def ensure_venv() -> Path:
         _info(f".venv already exists at {venv}")
         return venv
     _info(f"creating virtualenv at {venv} ...")
-    subprocess.check_call([sys.executable, "-m", "venv", str(venv)])
+    try:
+        subprocess.check_call([sys.executable, "-m", "venv", str(venv)])
+    except subprocess.CalledProcessError:
+        raise SystemExit("could not create .venv; check that this Python can make virtual "
+                         "environments (on Debian or Ubuntu: apt install python3-venv), "
+                         f"then run `{PROG}` again") from None
     return venv
 
 
@@ -68,7 +73,11 @@ def ensure_deps(venv: Path) -> None:
         subprocess.check_call([py, "-m", "pip", "install", "--upgrade", "pip", "--quiet"])
     except subprocess.CalledProcessError:
         _info("pip self-upgrade failed - continuing with the bundled pip")
-    subprocess.check_call([py, "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")])
+    try:
+        subprocess.check_call([py, "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")])
+    except subprocess.CalledProcessError:
+        raise SystemExit("installing the requirements failed. Check your network connection "
+                         f"(and proxy settings), then run `{PROG}` again; it picks up where it stopped.") from None
 
 
 def build_parser() -> argparse.ArgumentParser:

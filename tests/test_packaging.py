@@ -177,3 +177,9 @@ def test_release_notes_come_from_the_changelog_section_of_the_tag() -> None:
         notes["changelog_section"](changelog, "2.0.0")
     assert notes["project_version"](_pyproject()) == persona_agent.__version__
     assert notes["main"](["v0.0.0-not-this"]) == 1
+
+
+def test_the_package_smoke_script_names_real_health_checks() -> None:
+    from persona_agent import health
+    smoke = runpy.run_path(str(ROOT / "tools" / "package_smoke.py"))
+    assert set(smoke["CHAT_PROBES"]) <= {name for name, _fn, _crit in health.CHECKS}

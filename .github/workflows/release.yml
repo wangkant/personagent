@@ -1,8 +1,9 @@
 name: Release
 
-# A v* tag builds once, publishes that build to PyPI (trusted publishing), then
-# creates the GitHub Release with the same files. A manual run from a branch
-# only builds and uploads the artifacts; run it from a tag to release.
+# A v* tag must sit on main and pass the test suite; it then builds once,
+# publishes that build to PyPI (trusted publishing), then creates the GitHub
+# Release with the same files. A manual run from a branch only builds and
+# uploads the artifacts; run it from a tag to release.
 on:
   push:
     tags: ["v*"]
@@ -23,10 +24,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - name: Require the tagged commit to be on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "::error::$GITHUB_REF_NAME is not on main; merge it first, then tag main"
+            exit 1
+          fi
+      - name: Run the test suite
+        run: |
+          python -m pip install -r requirements.txt "pytest>=8,<10"
+          python -m pytest -q
       - name: Check the tag and take its notes from CHANGELOG.md
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

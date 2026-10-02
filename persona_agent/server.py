@@ -1168,6 +1168,11 @@ def startup_problem(host: str, port: int) -> str | None:
     if not ROOT.is_dir():
         return (f"the home folder {ROOT} does not exist; run `personagent init` "
                 "to create it, or pass --home DIR")
+    from persona_agent.doctor import fix_command
+
+    retired = preflight.retired_problem(fix_command(), ROOT)
+    if retired:
+        return retired
     try:
         _validate_exposure_config(host, QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
     except ValueError as exc:

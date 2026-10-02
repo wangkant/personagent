@@ -172,7 +172,7 @@ class Retrieval:
                     "these agree. Live scope: %r. Usual causes: PERSONA_NAME changed "
                     "(persona), PERSONA_VERSION was bumped, or the rows predate "
                     "the persona lineage — adopt their hash with "
-                    "`tools/candidates_admin.py lineage adopt <hash>`.",
+                    "`personagent learned lineage adopt <hash>`.",
                     len(rows), conv_id, current_scope)
             return authorized
 

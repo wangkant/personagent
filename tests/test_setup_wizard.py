@@ -453,7 +453,7 @@ def test_a_first_astrbot_connection_for_telegram(monkeypatch, tmp_path, capsys) 
     check("telegram: the adapter is switched on",
           platforms and platforms[0]["telegram_token"] == "123:tok", repr(platforms))
     check("telegram: the next steps say how to start the service",
-          "-m persona_agent run" in out or "personagent run" in out, out)
+          re.search(r"(-m persona_agent|personagent) .* run\s*$", out, re.MULTILINE), out)
 
 
 def test_astrbot_in_docker_gets_the_fix_instead_of_a_refused_url(monkeypatch, tmp_path, capsys) -> None:
@@ -578,13 +578,17 @@ def test_astrbot_is_found_where_it_keeps_its_data(monkeypatch, tmp_path) -> None
 def test_the_next_steps_fit_this_machine(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("AGENT_HOME", raising=False)
     launcher = sw.Launcher(python=str(homes.CHECKOUT / ".venv" / "Scripts" / "python.exe"),
-                           home=tmp_path)
+                           home=homes.CHECKOUT)
     if homes.is_checkout():
         lines = launcher.shown("run")
         check("checkout: from the checkout, with its .venv python",
               lines[0].startswith("cd ") and lines[1].endswith("-m persona_agent run")
               and not Path(lines[1].split(" -m")[0]).is_absolute(), repr(lines))
         check("checkout: the chat runs from the checkout", launcher.cwd() == str(homes.CHECKOUT))
+    elsewhere = sw.Launcher(python=launcher.python, home=tmp_path)
+    monkeypatch.delenv("AGENT_HOME", raising=False)
+    check("a home that a bare command would not find is named, set or not",
+          "--home" in " ".join(elsewhere.shown("chat")))
     monkeypatch.setenv("AGENT_HOME", str(tmp_path))
-    check("--home is carried into the commands", "--home" in " ".join(launcher.shown("chat"))
-          and launcher.argv("chat")[-3:] == ["--home", str(tmp_path), "chat"])
+    check("--home is carried into the commands", "--home" in " ".join(elsewhere.shown("chat"))
+          and elsewhere.argv("chat")[-3:] == ["--home", str(tmp_path), "chat"])
