@@ -24,6 +24,8 @@ knowing before you reach for them: ``PendingReplies`` persists to
 from __future__ import annotations
 
 import json
+import logging
+import math
 import time
 from collections import deque
 from pathlib import Path
@@ -31,7 +33,64 @@ from pathlib import Path
 from .storage import atomic_write_text
 from .textproc import _fence_user_data, _truncate_framed, strip_json_fences
 
+logger = logging.getLogger("agent")
+
 REACTION_TYPES = {"correction", "rejection", "positive", "neutral"}
+
+# Complaints one conversation keeps armed at once, one per complainant.
+MAX_ARMED_PER_CONV = 8
+
+
+def _is_time(value) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+def _str_list(value) -> list[str] | None:
+    if not isinstance(value, list) or not all(
+            isinstance(v, (str, int)) and not isinstance(v, bool) for v in value):
+        return None
+    return [str(v) for v in value]
+
+
+def _loaded_pending(row) -> dict | None:
+    """A persisted pending row in the shape `match` reads, or None. A state
+    file is hand-editable, so a row that would raise on the hot path is
+    dropped here instead of wedging its conversation."""
+    if not isinstance(row, dict):
+        return None
+    mids = _str_list(row.get("mids", []))
+    ctx = _str_list(row.get("ctx_lines", []))
+    seq = row.get("seq") or 0
+    reply = row.get("reply")
+    if (not isinstance(reply, str) or not reply.strip() or not _is_time(row.get("ts"))
+            or mids is None or ctx is None
+            or not isinstance(seq, int) or isinstance(seq, bool)):
+        return None
+    out = {**row, "mids": mids, "ctx_lines": ctx, "seq": seq,
+           "mode": str(row.get("mode") or "called")}
+    for key in ("intent", "target_uid", "target_name", "elicited_uid",
+                "parent_evidence_id"):
+        out[key] = str(row.get(key) or "")
+    if not isinstance(out.get("fixes", {}), dict):
+        out.pop("fixes")
+    return out
+
+
+def _loaded_awaiting(row) -> dict | None:
+    """A persisted armed complaint, or None (see `_loaded_pending`)."""
+    if not isinstance(row, dict):
+        return None
+    ctx = _str_list(row.get("ctx_lines", []))
+    reply = row.get("reply")
+    if (not isinstance(reply, str) or not reply.strip() or ctx is None
+            or not _is_time(row.get("rejected_ts"))
+            or not str(row.get("complainant_uid") or "")):
+        return None
+    out = {**row, "ctx_lines": ctx, "mode": str(row.get("mode") or "called")}
+    for key in ("complainant_uid", "target_uid", "evidence_id"):
+        out[key] = str(row.get(key) or "")
+    return out
 
 # Stamped onto every evidence event this module's prompt produced. A verdict is
 # only as good as the prompt that asked for it, so the audit trail has to say
@@ -135,7 +194,9 @@ class PendingReplies:
         self.max_conversations = max(1, int(max_conversations))
         self.state_file = Path(state_file) if state_file else None
         self._by_conv: dict[str, deque] = {}
-        self._awaiting_fix: dict[str, dict] = {}
+        # conv -> {complainant uid: the reply they rejected}, oldest first: one
+        # person's complaint must not disarm another's.
+        self._awaiting_fix: dict[str, dict[str, dict]] = {}
         self._conversation_order: dict[str, None] = {}
         # Order of record() calls. A counter, not the clock: a coarse clock
         # gives a reply and the match of its complaint the same timestamp.
@@ -170,18 +231,22 @@ class PendingReplies:
                 key = str(conv_id)
                 rows = pending.get(key) or []
                 if isinstance(rows, list):
-                    valid = [dict(row) for row in rows if isinstance(row, dict)]
+                    valid = [r for r in map(_loaded_pending, rows) if r is not None]
                     for row in valid:
-                        seq = row.get("seq")
-                        if isinstance(seq, int) and seq > self._seq:
-                            self._seq = seq
+                        if row["seq"] > self._seq:
+                            self._seq = row["seq"]
                     if valid:
                         self._by_conv[key] = deque(
                             valid[-self.max_per_conv:],
                             maxlen=self.max_per_conv)
                 fix = awaiting.get(key)
                 if isinstance(fix, dict):
-                    self._awaiting_fix[key] = dict(fix)
+                    # A single row is the one-slot shape of earlier state files.
+                    armed = [fix] if "reply" in fix else list(fix.values())
+                    slots = {bad["complainant_uid"]: bad for bad in
+                             map(_loaded_awaiting, armed) if bad is not None}
+                    if slots:
+                        self._awaiting_fix[key] = slots
                 if key in self._by_conv or key in self._awaiting_fix:
                     self._touch(key)
         except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError,
@@ -287,17 +352,16 @@ class PendingReplies:
         }
         # Attach the rejected reply this one may be fixing (retry-completion):
         # only a reply to the person who complained is their retry. A reply
-        # to anyone else leaves the complaint armed. A row without a
-        # complainant (an older state file) never links and simply expires.
-        bad = self._awaiting_fix.get(conv_id)
-        if bad is not None:
-            if ts - bad.get("rejected_ts", 0.0) > self.fix_window_sec:
+        # to anyone else leaves every complaint armed.
+        slots = self._awaiting_fix.get(conv_id)
+        if slots:
+            for who, bad in list(slots.items()):
+                if ts - bad.get("rejected_ts", 0.0) > self.fix_window_sec:
+                    del slots[who]
+            if not entry["elicited_uid"] and entry["target_uid"] in slots:
+                entry["fixes"] = self._fix_of(slots.pop(entry["target_uid"]))
+            if not slots:
                 self._awaiting_fix.pop(conv_id, None)
-            elif (not entry["elicited_uid"]
-                  and bad.get("complainant_uid")
-                  and entry["target_uid"] == str(bad["complainant_uid"])):
-                self._awaiting_fix.pop(conv_id, None)
-                entry["fixes"] = self._fix_of(bad)
         self._seq = entry["seq"]
         # A re-registered rejected reply was not sent again: not a retry.
         if not entry["elicited_uid"]:
@@ -322,10 +386,15 @@ class PendingReplies:
         `evidence_id` is the complaint's evidence event, so the retry that
         follows can be linked back to the complaint it answers."""
         complainant = str(complainant_uid or "")
+        if not complainant:
+            return  # no one whose next reply could be the retry
         bad = {**entry, "rejected_ts": ts, "evidence_id": str(evidence_id or ""),
                "complainant_uid": complainant}
+        slots = self._awaiting_fix.get(conv_id) or {}
+        # This complaint supersedes an older one from the same person.
+        slots.pop(complainant, None)
         after = entry.get("match_seq")
-        if complainant and isinstance(after, int):
+        if isinstance(after, int):
             retry = next((
                 queued for queued in self._by_conv.get(conv_id) or ()
                 if queued.get("target_uid") == complainant
@@ -333,17 +402,26 @@ class PendingReplies:
                 and int(queued.get("seq") or 0) > after), None)
             replied = self._last_reply_to.get(conv_id, {}).get(complainant, 0) > after
             if retry is not None or replied:
-                # This complaint supersedes an older one from the same person.
-                if (self._awaiting_fix.get(conv_id) or {}).get(
-                        "complainant_uid") == complainant:
+                if not slots:
                     self._awaiting_fix.pop(conv_id, None)
                 if retry is not None:
                     retry["fixes"] = self._fix_of(bad)
                 self._save()
                 return
-        self._awaiting_fix[conv_id] = bad
+        slots[complainant] = bad
+        while len(slots) > MAX_ARMED_PER_CONV:
+            slots.pop(next(iter(slots)))
+        self._awaiting_fix[conv_id] = slots
         self._touch(conv_id)
         self._save()
+
+    def awaiting(self, conv_id: str, complainant: str = "") -> dict | None:
+        """The rejected reply a retry is awaited for: `complainant`'s, or with
+        no one named, the latest armed in `conv_id`."""
+        slots = self._awaiting_fix.get(conv_id) or {}
+        if complainant:
+            return slots.get(str(complainant))
+        return next(reversed(slots.values()), None)
 
     def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
         """True if an elicited entry for `uid` is still pending (i.e. the user
@@ -385,8 +463,8 @@ class PendingReplies:
         return entry
 
     def match(self, conv_id: str, *, sender_uid: str, quote_mid: str = "",
-              at_bot: bool = False, is_dm: bool = False,
-              now: float = 0.0) -> dict | None:
+              at_bot: bool = False, is_dm: bool = False, now: float = 0.0,
+              quote_by_bot: bool | None = None) -> dict | None:
         """Attribute an incoming message to a pending bot reply, or None.
 
         Precision-first (locked in design): group messages count only when
@@ -396,7 +474,25 @@ class PendingReplies:
         how the attribution was made — recorded as the directedness of the
         resulting evidence, since "the user @-ed the bot" and "the user answered
         a question the bot asked them" are different strengths of address.
+        `quote_by_bot` is whether the quoted message was the bot's, when the
+        connector says (None when it does not).
+
+        Never raises: a conversation whose rows cannot be read is dropped,
+        because learning must not stop a reply.
         """
+        try:
+            return self._match(conv_id, sender_uid=sender_uid,
+                               quote_mid=quote_mid, at_bot=at_bot, is_dm=is_dm,
+                               now=now, quote_by_bot=quote_by_bot)
+        except Exception as e:
+            logger.warning("[Agent] pending reactions for %s unreadable, "
+                           "dropped: %s: %s", conv_id, type(e).__name__, e)
+            self.drop_conversation(conv_id)
+            return None
+
+    def _match(self, conv_id: str, *, sender_uid: str, quote_mid: str,
+               at_bot: bool, is_dm: bool, now: float,
+               quote_by_bot: bool | None) -> dict | None:
         self._expire(conv_id, now)
         q = self._by_conv.get(conv_id)
         if not q:
@@ -411,6 +507,9 @@ class PendingReplies:
             # never known, so there the quote proves nothing either way and
             # the address decides, as for any other message.
             if any(e.get("mids") for e in q):
+                return None
+            # Quoting another member is about their message, address or not.
+            if quote_by_bot is False:
                 return None
         if at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
             return self._take(conv_id, q, -1, "at" if at_bot else "dm", now)

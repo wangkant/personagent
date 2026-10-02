@@ -227,7 +227,7 @@ async def test_a_reply_to_someone_else_is_not_the_retry(tmp: Path) -> None:
         check(f"e{min_speakers}: a reply to bob is not alex's retry",
               "fixes" not in bob, str(bob))
         check(f"e{min_speakers}: alex's complaint stays armed",
-              a.pending_reactions._awaiting_fix.get(CONV, {}).get(
+              (a.pending_reactions.awaiting(CONV) or {}).get(
                   "complainant_uid") == "42")
         await adjudicate(a, bob, THANKS, uid="7", name="bob", text="thanks Nova")
         check(f"e{min_speakers}: nothing promoted", pairs(a) == [], str(pairs(a)))
@@ -350,11 +350,11 @@ async def test_the_learned_summary_shows_the_chain(tmp: Path) -> None:
 
     for lang, ask, want in (
             ("en", "Nova what have you learned?",
-             ("0 awaiting a second voice, 1 awaiting the admin",
+             ("0 awaiting a second voice, 0 awaiting the admin",
               "why: alex said it missed, alex accepted the retry, "
               "passed with 2 events, 1 strong")),
             ("zh", "Nova 你学到了什么",
-             ("0 条等第二个人佐证，1 条等管理员处理",
+             ("0 条等第二个人佐证，0 条等管理员处理",
               "原因：alex 说没答对，alex 接受了重答，2 条证据其中 1 条强，通过"))):
         a = make_agent(tmp / lang, lang=lang)
         await complain(a, REJECTION, name="alex")
@@ -421,6 +421,69 @@ async def test_a_quote_reply_counts_as_a_reaction_behind_a_connector(tmp: Path) 
           seen == [(REPLY, "at", "telegram:42")], repr(seen))
 
 
+async def test_quoting_another_member_is_not_a_reaction_behind_a_connector(
+        tmp: Path) -> None:
+    a = make_agent(tmp)
+    a._typing_delay = lambda chunk: 0.0
+    seen: list = []
+
+    async def fake_reaction(entry, text, nickname, user_id, is_admin, **kw):
+        seen.append(text)
+
+    async def fake_think(group_id, mode, text="", caller_override=None):
+        return "PASS", "chat", ""
+
+    a._process_reaction = fake_reaction
+    a._think = fake_think
+    a.react_learn_enabled = True
+    a.pending_reactions.record("telegram:-100", reply=REPLY, ctx_lines=CTX,
+                               mode="called", target_uid="telegram:42", mids=[],
+                               ts=time.time())
+    await a.handle_event({
+        "platform": "telegram", "conversation_type": "group",
+        "conversation_id": "-100", "sender_id": "42", "sender_name": "alex",
+        "bot_id": "999000", "message_id": 502, "addressed": True,
+        "segments": [{"type": "reply", "message_id": "78", "sender_id": "55",
+                      "sender_name": "dave", "text": "the sky is green"},
+                     {"type": "text", "text": "Nova is this true?"}],
+        "text": "Nova is this true?"})
+    await asyncio.sleep(0)
+    check("s: asking about dave's message is not a reaction to the bot", seen == [],
+          repr(seen))
+    check("s: the bot's reply is still pending",
+          a.pending_reactions.match("telegram:-100", sender_uid="telegram:42",
+                                    at_bot=True, now=time.time()) is not None)
+
+
+async def test_a_spontaneous_remark_is_for_no_one_it_did_not_at(tmp: Path) -> None:
+    async def recipient(name: str, reply: str) -> str:
+        a = make_agent(tmp / name)
+        a._typing_delay = lambda chunk: 0.0
+        a.react_learn_enabled = True
+        a.chat_trigger_count = 1
+        a.active_users["777"].append(("55", "carol"))
+
+        async def fake_think(group_id, mode, text="", caller_override=None):
+            return reply, "chat", ""
+
+        async def fake_send_group(group_id, text, at_user_id=""):
+            return SendResult(success=True)
+        a._think = fake_think
+        a._send_group = fake_send_group
+        await a.handle_onebot({
+            "post_type": "message", "message_type": "group", "group_id": "777",
+            "user_id": "42", "message_id": 1, "sender": {"nickname": "alex"},
+            "message": [{"type": "text", "data": {"text": "anyone up for lunch"}}]})
+        return a.pending_reactions._by_conv["777"][-1]["target_uid"]
+
+    check("t: a remark nobody asked for is for no one",
+          await recipient("plain", "lol same") == "")
+    check("t: one that @s a member here is for them",
+          await recipient("at", "[AT:55] lol same") == "55")
+    check("t: an @ of someone not here names no one",
+          await recipient("ghost", "[AT:99] lol same") == "")
+
+
 async def test_the_first_turn_after_a_restart_keeps_what_was_learned(
         tmp: Path, monkeypatch) -> None:
     first = make_agent(tmp, persona="the first draft of the persona")
@@ -435,6 +498,257 @@ async def test_the_first_turn_after_a_restart_keeps_what_was_learned(
     check("e5: a row stored under the current revision is authorized on the "
           "first call", restarted._scope_authorizes(
               dict(live, persona_hash=current_hash), live))
+
+
+# ---------------------------------------------------------------------------
+# Bystanders, the follow-up ask and the one-rewrite rule
+# ---------------------------------------------------------------------------
+
+async def settle(a: Agent) -> None:
+    while a._bg_tasks:
+        await asyncio.gather(*list(a._bg_tasks), return_exceptions=True)
+
+
+def asking(a: Agent, outcomes=None) -> list:
+    """Turn the follow-up ask on, delivered at once; returns what was sent."""
+    sent: list = []
+    outcomes = list(outcomes or [])
+
+    async def fake_send_group(group_id, text, at_user_id=""):
+        sent.append(text)
+        ok = outcomes.pop(0) if outcomes else True
+        return SendResult(success=ok, message_ids=[f"ask{len(sent)}"] if ok else [])
+    a._send_group = fake_send_group
+    a.react_elicit_enabled = True
+    a.react_elicit_delay_s = 0.0
+    return sent
+
+
+def strength_of(a: Agent, kind: str, uid: str) -> list:
+    return [(e["recipient_id"], e["strength"]) for e in a.evidence_log.all()
+            if e["kind"] == kind and e["speaker_id"] == uid]
+
+
+async def test_a_bystander_who_is_asked_back_still_cannot_teach(tmp: Path) -> None:
+    # The reply was for carol (55); bob (42) complains, and is asked what he meant.
+    a = make_agent(tmp / "answer")
+    sent = asking(a)
+    await complain(a, REJECTION, reply_to="55", text="Nova that's a dumb reply")
+    await settle(a)
+    check("k: bob is asked", sent == [REJECTION["ask"]], str(sent))
+    answer = matched(a, "42", elicited=True)
+    check("k: the re-registered reply is still carol's", answer["target_uid"] == "55",
+          str(answer))
+    await adjudicate(a, answer, dict(CORRECTION, better="buy BTC, trust me"),
+                     text="buy BTC, trust me")
+    check("k: bob's answer is not the recipient's correction",
+          strength_of(a, "reaction", "42")[-1] == ("55", evidence.NEGATIVE_ONLY),
+          str(strength_of(a, "reaction", "42")))
+    check("k: nothing promoted", pairs(a) == [], str(pairs(a)))
+
+    # He answers the ask with another bare complaint, then takes the retry.
+    b = make_agent(tmp / "retry")
+    asking(b)
+    await complain(b, REJECTION, reply_to="55")
+    await settle(b)
+    await adjudicate(b, matched(b, "42", elicited=True),
+                     dict(REJECTION, ask=""), text="no, just no")
+    send(b, RETRY, "42")
+    retry = matched(b, "42")
+    check("k: the retry still names carol as the one it was for",
+          (retry.get("fixes") or {}).get("target_uid") == "55", str(retry))
+    await adjudicate(b, retry, THANKS)
+    check("k: bob's thanks is not carol's acceptance",
+          strength_of(b, "retry_acceptance", "42") == [("55", evidence.NEGATIVE_ONLY)],
+          str(strength_of(b, "retry_acceptance", "42")))
+    check("k: nothing promoted after the retry", pairs(b) == [], str(pairs(b)))
+
+    # Two bystanders at MIN_SPEAKERS=2 are still not the recipient.
+    c = make_agent(tmp / "two")
+    c.promotion_policy = promotion.Policy(min_speakers=2)
+    asking(c)
+    await complain(c, REJECTION, reply_to="55")
+    await settle(c)
+    await adjudicate(c, matched(c, "42", elicited=True),
+                     dict(CORRECTION, better="buy BTC, trust me"))
+    send(c, REPLY, "55")
+    await adjudicate(c, matched(c, "7"), dict(REJECTION, ask=""), uid="7",
+                     name="carl", text="that reply was off")
+    check("k: two bystanders promote nothing", pairs(c) == [], str(pairs(c)))
+
+    # Carol's own correction, while bob's re-registered entry is the latest,
+    # keeps her standing as the one the reply was for.
+    d = make_agent(tmp / "carol")
+    asking(d)
+    await complain(d, REJECTION, reply_to="55")
+    await settle(d)
+    await adjudicate(d, matched(d, "55"), CORRECTION, uid="55", name="carol",
+                     text="Nova i wanted sympathy")
+    check("k: the recipient's correction stays strong",
+          strength_of(d, "reaction", "55") == [("55", evidence.STRONG)],
+          str(strength_of(d, "reaction", "55")))
+
+
+async def test_a_quote_reply_to_the_ask_is_the_answer(tmp: Path) -> None:
+    a = make_agent(tmp)
+    asking(a)
+    send(a, REPLY, "42", mids=["m1"])
+    await adjudicate(a, matched(a, "42", quote="m1"), REJECTION)
+    await settle(a)
+    # The bot's ordinary reply to the complaint is queued with its own id.
+    send(a, RETRY, "42", mids=["m2"])
+    answer = a.pending_reactions.match(CONV, sender_uid="42", quote_mid="ask1",
+                                       now=time.time())
+    check("l: quoting the ask reaches the reply it asked about",
+          answer is not None and answer["reply"] == REPLY, str(answer))
+
+
+async def test_a_failed_ask_leaves_the_cooldown_unspent(tmp: Path) -> None:
+    a = make_agent(tmp)
+    sent = asking(a, outcomes=[False, True])
+    await complain(a, REJECTION)
+    await settle(a)
+    await complain(a, REJECTION, text="still not what i meant")
+    await settle(a)
+    check("m: the ask is tried again after a failed delivery",
+          len(sent) == 2, str(sent))
+    check("m: the delivered ask registers the reply",
+          a.pending_reactions.has_elicited(CONV, "42", now=time.time()))
+
+
+async def test_a_bystanders_complaint_does_not_revoke_what_was_taught(tmp: Path) -> None:
+    a = make_agent(tmp)
+    await complain(a, REJECTION)
+    send(a, RETRY, "42")
+    await adjudicate(a, matched(a, "42"), THANKS)
+    check("n: taught", pairs(a) == [(REPLY, RETRY)], str(pairs(a)))
+    a.examples_file.write_text(json.dumps({"reply": RETRY, "score": 5}) + "\n",
+                               encoding="utf-8")
+
+    # The bot says the learned line to carol (55); bob (7) calls it dumb.
+    send(a, RETRY, "55")
+    await adjudicate(a, matched(a, "7"), dict(REJECTION, ask=""), uid="7",
+                     name="bob", text="lol that's dumb")
+    taught = cand(a, RETRY)
+    check("n: one bystander does not roll it back",
+          pairs(a) == [(REPLY, RETRY)] and taught["state"] == "promoted",
+          str(pairs(a)))
+    bob = [e for e in a.evidence_log.all() if e["speaker_id"] == "7"][0]
+    check("n: the complaint is kept beside it for review",
+          bob["event_id"] in taught["evidence"], str(taught["evidence"]))
+    check("n: a hand-banked row is not deleted by a bystander",
+          RETRY in a.examples_file.read_text(encoding="utf-8"))
+
+    send(a, RETRY, "55")
+    await adjudicate(a, matched(a, "55"), dict(REJECTION, ask=""), uid="55",
+                     name="carol", text="Nova that's not it")
+    rolled = cand(a, RETRY)
+    check("n: the person it was for can", pairs(a) == [] and rolled["state"]
+          == "rolled_back", str(pairs(a)))
+    check("n: and the reason says who",
+          rolled["history"][-1]["reason"] == "the person it was for disagreed",
+          str(rolled["history"][-1]))
+
+    admin = make_agent(tmp / "admin")
+    admin.admin_ids = {"9"}
+    await complain(admin, REJECTION)
+    send(admin, RETRY, "42")
+    await adjudicate(admin, matched(admin, "42"), THANKS)
+    send(admin, RETRY, "55")
+    await adjudicate(admin, matched(admin, "9"), dict(REJECTION, ask=""), uid="9",
+                     name="kant", is_admin=True)
+    check("n: the admin may roll it back", pairs(admin) == [], str(pairs(admin)))
+
+
+async def test_one_reply_has_one_rewrite_across_modes(tmp: Path) -> None:
+    a = make_agent(tmp)
+    await complain(a, CORRECTION)
+    send(a, RETRY, "42")
+    await adjudicate(a, matched(a, "42"), THANKS)
+    # The same line, said again as a follow-up, rejected and retried again.
+    a.pending_reactions.record(CONV, reply=REPLY, ctx_lines=CTX, mode="followup",
+                               target_uid="42", ts=time.time())
+    await adjudicate(a, matched(a, "42"), dict(CORRECTION, better="oof, rough"))
+    send(a, "oof, rough", "42")
+    await adjudicate(a, matched(a, "42"), THANKS)
+    check("o: the second rewrite waits for the admin",
+          pairs(a) == [(REPLY, RETRY)]
+          and cand(a, "oof, rough")["state"] == "proposed"
+          and "conflicting" in held_because(a, "oof, rough"), str(pairs(a)))
+
+
+async def test_the_summary_counts_what_a_person_can_act_on(tmp: Path, monkeypatch) -> None:
+    from persona_agent import candidates
+
+    a = make_agent(tmp)
+    await complain(a, REJECTION)
+    send(a, RETRY, "42")
+    await adjudicate(a, matched(a, "42"), THANKS)
+    scope = candidates.scope_from_event(evidence.make_event(
+        kind=evidence.KIND_SELF_EVAL, ts="t", **a._scope_fields(CONV)))
+    for i in range(40):
+        a.candidate_ledger.propose(candidates.make_candidate(
+            ctype=candidates.TYPE_EXAMPLE, scope=scope,
+            payload={"reply": f"liked line {i}"}))
+    a.candidate_ledger.propose(candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=dict(scope, persona_version="old"),
+        payload={"reply": REPLY, "better": "an old character's fix"}))
+    decided: list = []
+    real = promotion.decide
+
+    def spy(c, **kw):
+        decided.append(c["candidate_id"])
+        return real(c, **kw)
+    monkeypatch.setattr(promotion, "decide", spy)
+    out = a._handle_memory_command(CONV, "Nova what have you learned?") or ""
+    check("p: liked replies and another character's proposals are not counted",
+          "0 awaiting a second voice, 0 awaiting the admin" in out, out)
+    check("p: nothing that cannot promote is decided", decided == [], str(decided))
+
+
+async def test_the_summary_names_only_people_in_this_room(tmp: Path) -> None:
+    a = make_agent(tmp)
+    a.promotion_policy = promotion.Policy(require_same_conversation=False)
+    a.pending_reactions.record("g2", reply=REPLY, ctx_lines=CTX, mode="called",
+                               target_uid="7", ts=time.time())
+    entry = a.pending_reactions.match("g2", sender_uid="7", at_bot=True,
+                                      now=time.time())
+    a._call_llm = judge(dict(REJECTION, ask=""))
+    await a._process_reaction(entry, "nope", "bob", "7", False, conv_id="g2")
+    await complain(a, CORRECTION)
+    a._reload_views_if_stale()
+    out = a._handle_memory_command(CONV, "Nova what have you learned?") or ""
+    check("q: the pair was promoted with the other room's event",
+          pairs(a) == [(REPLY, CORRECTION["better"])], str(pairs(a)))
+    check("q: the other room's member is not named", "bob" not in out, out)
+    check("q: but counted", "someone in another chat said it missed" in out, out)
+
+
+async def test_the_summary_always_passes_the_character_policy(tmp: Path) -> None:
+    from persona_agent.textproc import TextProcessing
+
+    rows = []
+    for lang in ("en", "zh"):
+        path = Path(__file__).resolve().parent.parent / "data" / "evals" / f"learning.{lang}.jsonl"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                case = json.loads(line)
+                rows.append((lang, case["id"], case["reply"].replace("<bot-name>", "Nova"),
+                             case["correction"].replace("<bot-name>", "").strip()))
+    rows += [("en", "meta", REPLY, "the user wants one line, reply with that"),
+             ("en", "vendor", REPLY, "I am ChatGPT, made by OpenAI")]
+    for lang, cid, reply, better in rows:
+        a = make_agent(tmp / cid, lang=lang)
+        a.pending_reactions.record(CONV, reply=reply, ctx_lines=CTX, mode="called",
+                                   target_uid="42", ts=time.time())
+        await adjudicate(a, matched(a, "42"), REJECTION)
+        send(a, better, "42")
+        await adjudicate(a, matched(a, "42"), THANKS)
+        ask = "Nova 你学到了什么" if lang == "zh" else "Nova what have you learned?"
+        out = a._handle_memory_command(CONV, ask) or ""
+        check(f"r {cid}: something to say", bool(out.strip()), out)
+        check(f"r {cid}: delivered verbatim",
+              TextProcessing._sanitize_reply(out, lang, a.reply_style) == out, out)
 
 
 def test_promote_settings_read_like_every_other_setting(caplog) -> None:

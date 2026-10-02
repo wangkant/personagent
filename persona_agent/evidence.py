@@ -195,18 +195,11 @@ SCOPE_LIMITS = {
 def normalize_scope(scope: dict) -> dict:
     """A live scope, as the ledger would have stored it.
 
-    `_authorized_view` requires all six fields to match exactly, and the
-    ledger holds TRUNCATED values while retrieval built its side from the raw
-    configuration. So `PERSONA_VERSION=release-2026-08-28-persona-rewrite-b7f3`
-    (45 characters) was written as 32 and compared against 45: candidates
-    promoted normally, the view file was written normally, `candidates_admin
-    list --state promoted` showed them, and every single row was dropped on
-    every turn. Nothing logged anything. The learning loop looked healthy and
-    was inert.
-
-    Any field over its limit is a silent total failure of retrieval, which is
-    why this is a shared function and not a comment asking the next caller to
-    remember."""
+    `_authorized_view` requires all six fields to match exactly and the
+    ledger holds bounded values, so a live scope has to be bounded the same
+    way: a 45-character PERSONA_VERSION compared raw against its stored form
+    would drop every promoted row on every turn, silently. A shared function
+    rather than a comment asking the next caller to remember."""
     return {key: _scope_text(scope.get(key), limit)
             for key, limit in SCOPE_LIMITS.items()}
 
@@ -361,7 +354,7 @@ def can_be_strong(candidate_type: str) -> bool:
     `classify_strength` calls both WEAK: "laughter, agreement, banter, the
     agent's own score. Never sufficient to promote anything, at any
     quantity." Such a candidate is still proposed, still audited, and still
-    promotable — by a person, through `tools/candidates_admin.py promote`.
+    promotable — by a person, through `personagent learned promote`.
     It is waiting for a human, not for more events.
 
     Promotion asks this so its refusal can say WHICH of those two it is. The

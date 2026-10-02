@@ -5,16 +5,17 @@ promotion policy would not promote on its own — a single correction, anything
 backed only by laughter, two suggestions that contradict each other — sit in
 `proposed` until someone looks at them here.
 
-    python tools/candidates_admin.py list                 # pending proposals
-    python tools/candidates_admin.py list --state promoted # what is live now
-    python tools/candidates_admin.py show <id>            # with its evidence
-    python tools/candidates_admin.py promote <id>         # grant authority
-    python tools/candidates_admin.py reject <id>          # refuse it
-    python tools/candidates_admin.py rollback <id>        # revoke authority
-    python tools/candidates_admin.py supersede <old> <new>
-    python tools/candidates_admin.py rebuild              # re-derive the views
+    personagent learned list                  # pending proposals
+    personagent learned list --state promoted # what is live now
+    personagent learned show <id>             # with its evidence
+    personagent learned promote <id>          # grant authority
+    personagent learned reject <id>           # refuse it
+    personagent learned rollback <id>         # revoke authority
+    personagent learned supersede <old> <new> # replace a live rewrite
+    personagent learned rebuild               # re-derive the views
 
-Ids may be abbreviated to any unique prefix.
+Ids may be abbreviated to any unique prefix. A reply has at most one live
+rewrite: `promote` refuses a second one and names the `supersede` to run.
 
 Every action appends a lifecycle event; nothing in the log is ever edited or
 removed. Promotion, rejection, rollback and supersession all re-derive the
@@ -80,14 +81,9 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
 
 
 def _decide(ledger, log, cand, policy) -> promotion.Decision:
-    """What the policy would say, using the SAME inputs the agent uses.
-
-    This built its own `related_events` and filtered to the candidate's reply
-    alone, so `counter_evidence`'s rewrite branch was unreachable from here:
-    `list` printed `why not:` and `show` printed `would promote` for a pair
-    whose rewrite the user had rejected, next to an unconditional `promote`.
-    The admins come from the agent's own reader, so every account in ADMIN_IDS
-    is exempt here as it is there."""
+    """What the policy would say, using the same inputs the agent uses: the
+    same `related_events`, and the admins from the agent's own reader, so
+    every account in ADMIN_IDS is exempt here as it is there."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
@@ -226,11 +222,28 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
     reason = args.reason or f"{action} by operator"
     fn = {"promote": ledger.promote, "reject": ledger.reject,
           "rollback": ledger.rollback}[action]
-    before = ledger.get(cid).get("state")
+    cand = ledger.get(cid)
+    before = cand.get("state")
+    rivals = (promotion.active_rivals(cand, ledger.all(), policy=policy)
+              if action == "promote" else [])
+    if rivals:
+        rival = rivals[0]["candidate_id"]
+        print(f"refused: {rival[:12]} already rewrites this reply, as "
+              f"{_short(rivals[0].get('better'), 50)!r}. One reply keeps one "
+              f"rewrite; to replace it run:\n"
+              f"  {args.prog} supersede {rival[:12]} {cid[:12]}")
+        return 1
     if not fn(cid, ts=now, actor=args.actor, reason=reason):
         print(f"refused: cannot {action} a candidate in state {before!r}")
         return 1
     print(f"{cid}: {before} -> {ledger.get(cid).get('state')}")
+    if action == "promote":
+        # Drafts of the complaint this pair answers have nothing left for them.
+        for other in promotion.answered_drafts(ledger.get(cid), ledger.all(),
+                                               policy=policy):
+            if ledger.reject(other, ts=now, actor=args.actor,
+                             reason=f"answered by {cid}"):
+                print(f"{other}: proposed -> rejected (answered by {cid[:12]})")
     _rebuild(paths, ledger)
     return 0
 
@@ -261,6 +274,8 @@ def cmd_rebuild(args, ledger, log, policy, paths) -> int:
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     p = argparse.ArgumentParser(prog=prog, description=__doc__.splitlines()[0])
+    # How this install spells the command, for the hints it prints.
+    p.set_defaults(prog=p.prog)
     p.add_argument("--lang", default=AGENT_LANG,
                    help="language pool to operate on (default AGENT_LANG)")
     p.add_argument("--actor", default="admin",

@@ -1470,3 +1470,64 @@ def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
     check("and the reason names a person, not a count",
           "person" in decision.reason and "/1 strong" not in decision.reason,
           decision.reason)
+
+
+def test_active_rivals_are_live_rewrites_that_would_meet_in_one_prompt() -> None:
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1", scenario="", mode="called")
+
+    def pair(better: str, state: str, **over) -> dict:
+        c = candidates.make_candidate(
+            ctype=candidates.TYPE_PAIR, scope={**scope, **over},
+            payload={"reply": "just restart it lol", "better": better})
+        c["state"] = state
+        return c
+
+    new = pair("check the logs first", "proposed")
+    rows = [new,
+            pair("logs, then restart", "promoted", mode="followup"),
+            pair("restart it twice", "promoted", conv_id="g2"),
+            pair("an older character's fix", "promoted", persona_version="v0"),
+            pair("only proposed", "proposed"),
+            pair("check the logs first", "promoted", mode="judge")]
+    rivals = [c["better"] for c in promotion.active_rivals(new, rows)]
+    check("rivals: a live rewrite in another mode counts, other rooms, other "
+          "characters, proposals and the same rewrite do not",
+          rivals == ["logs, then restart"], str(rivals))
+    check("rivals: an example has none",
+          promotion.active_rivals(dict(new, type=candidates.TYPE_EXAMPLE), rows) == [])
+
+
+async def test_the_operator_cannot_leave_two_live_rewrites(
+        tmp: Path, monkeypatch, capsys) -> None:
+    from persona_agent import ledger_admin
+
+    a = make_agent(tmp)
+    await react(a, CORRECTION, text="no, look at the logs")
+    await react(a, dict(CORRECTION, better="logs first, then restart if clean"),
+                text="actually phrase it like this")
+    by_better = {c["better"]: c["candidate_id"] for c in a.candidate_ledger.all()}
+    first = by_better["check the logs first"]
+    second = by_better["logs first, then restart if clean"]
+    monkeypatch.setattr(ledger_admin, "_paths", lambda lang: {
+        "evidence": a.evidence_file, "ledger": a.candidate_ledger_file,
+        "examples_view": a.promoted_examples_file,
+        "feedback_view": a.promoted_feedback_file})
+
+    def run(*argv: str) -> tuple[int, str]:
+        code = ledger_admin.main(list(argv), prog="personagent learned")
+        return code, capsys.readouterr().out
+
+    check("cli: the first rewrite is promoted", run("promote", first[:8])[0] == 0)
+    code, out = run("promote", second[:8])
+    check("cli: a second live rewrite is refused", code == 1, out)
+    check("cli: and the refusal names the command that replaces it",
+          f"personagent learned supersede {first[:12]} {second[:12]}" in out, out)
+    ledger = candidates.CandidateLedger(a.candidate_ledger_file)
+    check("cli: nothing changed", ledger.get(second)["state"] == "proposed"
+          and [r["better"] for r in view_pairs(a)] == ["check the logs first"],
+          str(view_pairs(a)))
+    check("cli: supersede replaces it",
+          run("supersede", first[:8], second[:8])[0] == 0
+          and [r["better"] for r in view_pairs(a)]
+          == ["logs first, then restart if clean"], str(view_pairs(a)))

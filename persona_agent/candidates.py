@@ -403,12 +403,10 @@ class CandidateLedger:
         """Append one lifecycle event. False when the transition is not legal
         from the candidate's current state (nothing is written).
 
-        It used to take `supersedes` / `superseded_by` as well, and no caller
-        ever passed either: supersession is written as its own
-        `ROW_SUPERSESSION` row by `supersede()`. `_apply_row` still READS both
-        fields off a lifecycle row, and that half stays — it is how a
-        schema-1 log written by an older build still projects, and
-        `tools/candidates_admin.py` prints them."""
+        Supersession is written as its own `ROW_SUPERSESSION` row by
+        `supersede()`. `_apply_row` still reads `supersedes` /
+        `superseded_by` off a lifecycle row, so a schema-1 log still projects
+        and `personagent learned show` still prints them."""
         cand = self.get(cid)
         if cand is None or state not in _ALLOWED_FROM:
             return False

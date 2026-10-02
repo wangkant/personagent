@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-from . import candidates, channels, evidence, evolution, promotion, reactions
+from . import access, candidates, channels, evidence, evolution, promotion, reactions
 from .textproc import (_fence_user_data, _truncate_framed, apply_k2_quirks,
                        salvage_json_object)
 from .storage import append_jsonl_rotating
@@ -55,6 +55,25 @@ class Learning:
             "persona_hash": self.persona_hash,
             "persona_version": self.persona_version,
         }
+
+    def _reaction_recipient(self, conv_id: str, mode: str, at_uid: str,
+                            user_id: str) -> str:
+        """Who a group reply was for, as reaction learning records it: the
+        member it @'d when they are in the room, else the caller of a called
+        or admin turn. A spontaneous remark that @'d nobody is for no one, so
+        speaking last before it gives nobody a recipient's standing."""
+        present = {str(uid) for uid, _ in self.active_users.get(conv_id, ())}
+        at = str(at_uid or "")
+        platform = channels.platform_of(conv_id)
+        # The model may write a namespaced member's bare id.
+        if (at and at not in present and ":" not in at
+                and platform != channels.NATIVE_PLATFORM):
+            at = f"{platform}:{at}"
+        if at in present:
+            return at
+        if mode in ("called", access.ADMIN_MODE):
+            return str(user_id or "")
+        return ""
 
     def _record_evidence(self, event: dict) -> bool:
         """Append one immutable evidence event. False when already recorded.
@@ -281,6 +300,34 @@ class Learning:
                 raise
             return (-1, -1)
 
+    @staticmethod
+    def _teaches(cand: dict, reply: str) -> bool:
+        """Does promoted `cand` put `reply` in front of the model: an example
+        of it, or a rewrite into it."""
+        return ((cand.get("type") == candidates.TYPE_EXAMPLE
+                 and str(cand.get("reply") or "").strip() == reply)
+                or (cand.get("type") == candidates.TYPE_PAIR
+                    and str(cand.get("better") or "").strip() == reply))
+
+    def _dispute_promoted_for(self, reply: str, ts: str, event_id: str) -> int:
+        """Someone the reply was not for disagreed with `reply`: link their
+        event to every promoted candidate that teaches it, where `personagent
+        learned show` lists it, and leave the authority to a person."""
+        reply = (reply or "").strip()
+        disputed = 0
+        try:
+            for cand in self.candidate_ledger.active():
+                if self._teaches(cand, reply) and self.candidate_ledger.link_evidence(
+                        cand["candidate_id"], [event_id], ts=ts,
+                        note="disputed by someone the reply was not for"):
+                    disputed += 1
+                    logger.info("[Agent] candidate %s DISPUTED by a bystander, "
+                                "kept for review: %r", cand["candidate_id"], reply[:50])
+        except Exception as e:
+            logger.warning("[Agent] dispute record failed: %s: %s",
+                           type(e).__name__, e)
+        return disputed
+
     def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
                                reason: str = "") -> int:
         """A human disagreed with `reply`: revoke every promoted candidate that
@@ -295,16 +342,10 @@ class Learning:
         reply = (reply or "").strip()
         rolled = 0
         for cand in ledger.active():
-            teaches = (
-                (cand.get("type") == candidates.TYPE_EXAMPLE
-                 and str(cand.get("reply") or "").strip() == reply)
-                or (cand.get("type") == candidates.TYPE_PAIR
-                    and str(cand.get("better") or "").strip() == reply)
-            )
-            if not teaches:
+            if not self._teaches(cand, reply):
                 continue
             if ledger.rollback(cand["candidate_id"], ts=ts, actor="auto",
-                               reason=reason or "recipient disagreed",
+                               reason=reason or "the person it was for disagreed",
                                evidence=[event_id] if event_id else ()):
                 rolled += 1
                 logger.info("[Agent] candidate ROLLED BACK %s: %r",
@@ -545,7 +586,7 @@ class Learning:
                            type(e).__name__, e)
 
     def _retract_reply(self, reply: str, ts: str = "",
-                       event_id: str = "") -> None:
+                       event_id: str = "", reason: str = "") -> None:
         """A human disagreed with this reply — stop imitating it, everywhere.
 
         Two eras have to be handled, because a deployment that has been running
@@ -564,7 +605,8 @@ class Learning:
             return
         ts = ts or datetime.now().isoformat(timespec="seconds")
         try:
-            self._rollback_promoted_for(reply, ts, event_id=event_id)
+            self._rollback_promoted_for(reply, ts, event_id=event_id,
+                                        reason=reason)
         except Exception as e:
             logger.warning("[Agent] candidate rollback failed: %s: %s",
                            type(e).__name__, e)
@@ -760,10 +802,23 @@ class Learning:
                     outcomes.append("example:" + self._propose_candidate(
                         reaction_ev, candidates.TYPE_EXAMPLE, ex, now))
 
-                # A rejected or corrected reply must stop being imitated.
+                # A rejected or corrected reply must stop being imitated, on
+                # the word of the person it was for or the admin. Anyone
+                # else's complaint is kept beside what it disputes for review:
+                # one bystander must not undo what took two events to grant.
                 if adj["reaction"] in ("rejection", "correction"):
-                    self._retract_reply(str(entry.get("reply") or ""), ts=now,
-                                        event_id=reaction_ev["event_id"])
+                    recipient = bool(reaction_ev["recipient_id"]) and (
+                        reaction_ev["recipient_id"] == reaction_ev["speaker_id"])
+                    if recipient or is_admin:
+                        self._retract_reply(
+                            str(entry.get("reply") or ""), ts=now,
+                            event_id=reaction_ev["event_id"],
+                            reason=("the person it was for disagreed" if recipient
+                                    else "the admin disagreed"))
+                    else:
+                        self._dispute_promoted_for(
+                            str(entry.get("reply") or ""), ts=now,
+                            event_id=reaction_ev["event_id"])
 
                 # Accepted complaint: the bot's next reply to this person is
                 # its retry, and their acceptance of it is what can promote.
@@ -830,6 +885,9 @@ class Learning:
             if self._background_route(route_key) is None:
                 self._log_no_route(route_key, "follow_up")
                 return
+            # Spent before the send so a second complaint cannot ask too, and
+            # handed back below if the ask never reached anyone.
+            spent_before = self._last_elicit_at[conv_id]
             self._last_elicit_at[conv_id] = now_mono
             if is_dm:
                 async with self.send_locks[route_key]:
@@ -856,15 +914,21 @@ class Learning:
             if not result.success:
                 logger.warning("[Agent] elicitation delivery failed (conv=%s, partial=%s)",
                                conv_id, result.partial)
+                if self._last_elicit_at[conv_id] == now_mono:
+                    self._last_elicit_at[conv_id] = spent_before
                 return
             # Register the ORIGINAL rejected reply as an elicited pending
             # entry: the rejector's answer will adjudicate against it, and is
-            # recorded as a child of the rejection that prompted the ask.
+            # recorded as a child of the rejection that prompted the ask. It
+            # stays the reply to whoever it was for; asking a bystander back
+            # does not make them its recipient. The ask's ids let a quote-reply
+            # to it find the entry.
             self.pending_reactions.record(
                 conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
                 mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
-                target_uid=reactor_uid, elicited_uid=reactor_uid, ts=time.time(),
-                parent_evidence_id=parent_evidence_id)
+                target_uid=str(entry.get("target_uid") or ""),
+                elicited_uid=reactor_uid, mids=list(result.message_ids or ()),
+                ts=time.time(), parent_evidence_id=parent_evidence_id)
             logger.info("[Agent] elicitation sent (conv=%s): %s", conv_id, ask[:60])
         except Exception as e:
             logger.warning("[Agent] elicitation failed: %s: %s",
@@ -892,8 +956,7 @@ class Learning:
 
         A self-diagnosis is one automatic signal that nobody witnessed, so it
         proposes and waits like everything else: promotion needs a real user
-        event to corroborate it, or a human at tools/candidates_admin.py. What
-        used to be an unattended writer is now an unattended *proposer*."""
+        event to corroborate it, or a human at `personagent learned`."""
         if not self.enabled or not self.evolve_auto_enabled:
             return
         if not self.eval_enabled:

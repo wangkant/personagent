@@ -31,6 +31,7 @@ _COMMAND_REPLIES = {
         "empty": ("head's empty", "nothing in there", "blank slate"),
         "recall_head": ("Here's what I remember:",),
         "about": ("about {name}: ",),
+        "from": ("from {name}: ",),
     },
     "zh": {
         "remember_what": ("记什么？你啥也没说", "说呀，记啥", "要我记啥"),
@@ -42,6 +43,7 @@ _COMMAND_REPLIES = {
         "empty": ("脑子里空空的", "啥也没记", "一片空白"),
         "recall_head": ("我记得这些：",),
         "about": ("关于{name}：",),
+        "from": ("来自{name}：",),
     },
 }
 
@@ -50,6 +52,35 @@ _NOT_A_NOTE = (r"(?!\s*(?:when|how|what|who|why|where|whether|if|me|"
                r"the\s+time|that\s+time)\b)")
 # "forget it" / "forget about it" means never mind.
 _NOT_A_DELETE = r"(?!\s*(?:about\s+)?it\b)"
+
+# Chinese drops the question mark: "记住了吗", "记下来没", "忘记我说的话了吗".
+_QUESTION_END = re.compile(r"(?:[?？]|吗|么|呢|没有?)[\s?？!！。.~～]*$")
+# Asking words, judged on a forget only: "忘了带伞怎么办" asks, it does not delete.
+_ASKING = re.compile(r"怎么|怎样|咋|为什么|为啥|什么|啥|哪|多少|是不是|有没有|能不能")
+# A particle or aspect marker where the note should start: "记住了，..." / "记一下呗".
+_LEAD_PARTICLES = re.compile(
+    r"^(?:了|啊|呀|哦|喔|嘛|啦|哈|吧|呗)+(?=[\s，,。:：!！~～]|$)[\s，,。:：!！~～]*")
+# A forget naming no note means never mind, like "forget it".
+_DEICTIC = frozenset({
+    "that", "this", "it", "those", "these", "that one", "this one",
+    "这个", "那个", "这", "那", "这事", "那事", "这件事", "那件事", "这条", "那条",
+    "它", "刚才那个", "刚才的", "刚才说的"})
+# ...and one naming every note is too broad to act on.
+_EVERYTHING = frozenset({
+    "everything", "all", "all of it", "all of that", "all that", "every note",
+    "全部", "所有", "一切", "全部的", "所有的", "所有事", "全部记忆", "所有记忆"})
+_FIRST_PERSON = re.compile(
+    r"(?<![\w'])(?:i|i'm|i've|i'd|i'll|me|my|mine|myself)(?![\w'])|我(?!们)",
+    re.IGNORECASE)
+
+
+def _is_question(content: str) -> bool:
+    return bool(_QUESTION_END.search(content.strip()))
+
+
+def _forget_query(content: str) -> str:
+    query = re.sub(r"^(?:about|that)\s+", "", content.strip(), flags=re.IGNORECASE)
+    return query.strip(" \t.!?,;:。！？，、~～…")
 
 # When a new auto-memory is a fuller telling of one already written down
 # (`Agent._restated_memory`). The rule that does the work is the dropped
@@ -127,6 +158,27 @@ class Memory:
             logger.info("[Agent] core_memory updated (group=%s, %d chars)",
                         group_id, len(note))
 
+    def _parse_memory_command(self, text: str) -> Optional[tuple[str, str]]:
+        """(kind, what follows the keyword) when `text` is a memory command:
+        learned, remember, forget or recall. None for conversation."""
+        remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
+        if learned_pat.search(text):
+            return "learned", ""
+        m = remember_pat.search(text)
+        # A question is reminiscing ("Luna remember the party?"), not a note.
+        if m and not _is_question(m.group(1)):
+            return "remember", m.group(1)
+        m = forget_pat.search(text)
+        if (m and not _is_question(m.group(1)) and not _ASKING.search(m.group(1))
+                and _forget_query(m.group(1)).lower() not in _DEICTIC):
+            return "forget", m.group(1)
+        if recall_pat.search(text):
+            return "recall", ""
+        return None
+
+    def _is_memory_command(self, text: str) -> bool:
+        return self._parse_memory_command(text) is not None
+
     def _handle_memory_command(
         self,
         group_id: str,
@@ -134,38 +186,54 @@ class Memory:
         user_id: str = "",
         user_name: str = "",
     ) -> Optional[str]:
-        remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
+        parsed = self._parse_memory_command(text)
+        if parsed is None:
+            return None
+        kind, arg = parsed
         is_admin = access.is_admin(user_id, self._admins())
+        caller = str(user_id or "")
         say = self._memory_reply
-        if learned_pat.search(text):
+        if kind == "learned":
             return self._learned_summary(group_id)
-        m = remember_pat.search(text)
-        # A question is reminiscing ("Luna remember the party?"), not a note.
-        if m and not m.group(1).rstrip().endswith(("?", "？")):
-            content = re.sub(r"^that\s+", "", m.group(1).strip(), flags=re.IGNORECASE)
+
+        if kind == "remember":
+            content = re.sub(r"^that\s+", "", arg.strip(), flags=re.IGNORECASE)
+            content = _LEAD_PARTICLES.sub("", content)
             if not content:
                 return say("remember_what")
             content = self._validate_memory_candidate(content)
             if not content:
                 return say("not_instructions")
             item: dict = {"text": content, "time": time.time()}
-            if user_id and not is_admin:
-                item["user_id"] = user_id
+            if caller and not is_admin:
+                # Who saved it (theirs to forget) and who it is about (whose
+                # presence brings it into the prompt) are kept apart.
+                item["saved_by"] = caller
                 if user_name:
-                    item["user_name"] = user_name
+                    item["saved_by_name"] = user_name
+                uid, name = self._note_subject(group_id, content, caller, user_name)
+                if uid:
+                    item["user_id"] = uid
+                    if name:
+                        item["user_name"] = name
             self._append_memory(group_id, item)
             return say("noted")
 
-        m = forget_pat.search(text)
-        if m:
-            query = re.sub(r"^(?:about|that)\s+", "", m.group(1).strip(),
-                           flags=re.IGNORECASE)
+        def owns(it: dict) -> bool:
+            if is_admin:
+                return True
+            if not caller:
+                return not it.get("user_id") and not it.get("saved_by")
+            return caller in (str(it.get("user_id") or ""), str(it.get("saved_by") or ""))
+
+        if kind == "forget":
+            query = _forget_query(arg)
             # A too-short query over-deletes, and the admin's reaches every
             # member's rows. An English query must be 3+ characters and match
             # whole words ("tea" must not hit "steak"); CJK has no spaces to
             # find words by, so it keeps a substring match at 2+ characters.
             by_word = query.isascii()
-            if len(query) < (3 if by_word else 2):
+            if len(query) < (3 if by_word else 2) or query.lower() in _EVERYTHING:
                 return say("forget_what")
             word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(query)}(?![A-Za-z0-9_])",
                               re.IGNORECASE)
@@ -173,16 +241,12 @@ class Memory:
             before = len(items)
             # One-directional match (query in text): a short memory ("cat")
             # must not collide with a long forget sentence. Authority fails
-            # closed: only the admin (which requires a user_id) may delete
-            # others' entries; an anonymous caller owns only unattributed ones.
-            caller = str(user_id or "")
+            # closed: only the admin may delete others' entries; an anonymous
+            # caller owns only notes nobody owns.
             kept = [
                 it for it in items
                 if not (word.search(it["text"]) if by_word else query in it["text"])
-                or (
-                    not is_admin
-                    and str(it.get("user_id") or "") != caller
-                )
+                or not owns(it)
             ]
             if len(kept) == before:
                 return say("nothing_to_forget")
@@ -190,25 +254,37 @@ class Memory:
             self._save_memories()
             return say("forgotten")
 
-        if recall_pat.search(text):
-            items = self.memories.get(group_id, [])
-            if user_id and not is_admin:
-                items = [
-                    it for it in items
-                    if not it.get("user_id") or it.get("user_id") == user_id
-                ]
-            if not items:
-                return say("empty")
-            # No brackets, no list markers: the reply crosses the character
-            # policy, which hard-refuses `[` and strips leading `- `.
-            lines: list[str] = []
-            for it in items:
-                tag = (say("about").format(name=it.get("user_name"))
-                       if it.get("user_name") else "")
-                lines.append(f"{tag}{it['text']}")
-            return say("recall_head") + "\n" + "\n".join(lines)
+        items = self.memories.get(group_id, [])
+        if not is_admin:
+            # A note about someone is theirs and its saver's to read; with no
+            # id there is no one to show it to.
+            items = [it for it in items if not it.get("user_id") or (
+                caller and caller in (str(it.get("user_id")),
+                                      str(it.get("saved_by") or "")))]
+        if not items:
+            return say("empty")
+        # No brackets, no list markers: the reply crosses the character
+        # policy, which hard-refuses `[` and strips leading `- `.
+        lines: list[str] = []
+        for it in items:
+            if it.get("user_id") and it.get("user_name"):
+                tag = say("about").format(name=it["user_name"])
+            elif it.get("saved_by_name"):
+                tag = say("from").format(name=it["saved_by_name"])
+            else:
+                tag = ""
+            lines.append(f"{tag}{it['text']}")
+        return say("recall_head") + "\n" + "\n".join(lines)
 
-        return None
+    def _note_subject(self, group_id: str, text: str, saver: str,
+                      saver_name: str) -> tuple[str, str]:
+        """Who a member's saved note is about: themselves when it speaks in
+        the first person or names them, a member of this room it names, or
+        nobody (a note for the whole group)."""
+        if _FIRST_PERSON.search(text) or (
+                saver_name and len(saver_name) >= 2 and saver_name in text):
+            return saver, saver_name
+        return self._memory_subject(group_id, text)
 
     def _memory_reply(self, key: str) -> str:
         table = _COMMAND_REPLIES.get(self.agent_lang, _COMMAND_REPLIES["en"])
@@ -239,14 +315,16 @@ class Memory:
         # \b after the English keywords: "remembered my birthday" is not a
         # command to save "ed my birthday". CJK needs none (and \b would not
         # work there: Python counts CJK as word characters).
+        # Recall is the whole message: "小夏 记忆力真好" is a compliment.
+        tail = r"\s*(?:呢|呀|啊|吗|嘛)?[\s?？!！.。~～]*$"
         pats = (
             re.compile(head + r"(?:(?:remember|memorize)\b" + _NOT_A_NOTE
-                       + r"|记(?:住|一下|下))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
+                       + r"|记(?:住|一下|下来|下))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
             re.compile(head + r"(?:forget\b" + _NOT_A_DELETE
                        + r"|忘(?:了|记|掉))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
             re.compile(head + r"(?:what do you remember|what'?s in your memory|memory\?|"
-                       r"(?:你\s*)?(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
-                       re.IGNORECASE),
+                       r"(?:你\s*)?(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))"
+                       + tail, re.IGNORECASE),
             re.compile(head + r"(?:what (?:have|did) you learn(?:ed)?|what'?ve you learned|"
                        r"learned\?|(?:你)?(?:学到|学会|学了)(?:了)?(?:什么|啥))",
                        re.IGNORECASE),

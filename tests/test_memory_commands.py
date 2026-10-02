@@ -139,3 +139,116 @@ def test_memory_replies_follow_the_language(tmp: Path) -> None:
                 check(f"{lang}/{key}: {line!r} survives the character policy",
                       TextProcessing._sanitize_reply(shown, lang, a.reply_style)
                       == shown)
+
+
+def test_a_forget_naming_no_note_deletes_nothing(tmp: Path) -> None:
+    a = make_agent(tmp)
+    a.admin_ids = {"admin"}
+    g = "g1"
+    notes = ["Kay thinks that jazz is overrated", "Sam said that he moved to Oslo",
+             "this group meets on Fridays", "everything is better with jazz"]
+    a.memories[g] = [{"text": t, "time": 1.0} for t in notes]
+    for text in ("Luna, forget that", "Luna forget about that", "Luna forget this",
+                 "Luna forget that!", "Luna, forget those"):
+        check(f"never mind, not a command: {text!r}",
+              a._handle_memory_command(g, text, "admin", "Admin") is None)
+    check("forget everything is too broad to act on",
+          a._handle_memory_command(g, "Luna forget everything", "admin", "Admin")
+          in _COMMAND_REPLIES["en"]["forget_what"])
+    check("every note kept", [it["text"] for it in a.memories[g]] == notes)
+
+    z = make_agent(tmp / "zh", name="小夏", lang="zh")
+    z.admin_ids = {"admin"}
+    z.memories[g] = [{"text": "这个周末去爬山", "time": 1.0}]
+    check("zh: 忘掉这个 is never mind",
+          z._handle_memory_command(g, "小夏 忘掉这个", "admin", "Admin") is None
+          and len(z.memories[g]) == 1)
+
+
+def test_zh_questions_and_compliments_are_not_commands(tmp: Path) -> None:
+    a = make_agent(tmp, name="小夏", lang="zh")
+    g = "g-zh"
+    a.memories[g] = [{"text": "阿杰喜欢猫", "time": 1.0}]
+    for text in ("小夏 记住了吗", "小夏 记下来没", "小夏 记住我生日了吗",
+                 "小夏 记忆力真好", "小夏 忘了带伞怎么办", "小夏 忘记我说的话了吗"):
+        check(f"conversation, not a command: {text!r}",
+              a._handle_memory_command(g, text, "42", "阿杰") is None)
+    check("nothing stored or deleted", [it["text"] for it in a.memories[g]]
+          == ["阿杰喜欢猫"], repr(a.memories[g]))
+    check("a particle is not a note",
+          a._handle_memory_command(g, "小夏 记一下呗", "42", "阿杰")
+          in _COMMAND_REPLIES["zh"]["remember_what"])
+    a._handle_memory_command(g, "小夏 记住了，周五开会", "42", "阿杰")
+    a._handle_memory_command(g, "小夏 记下来：周六聚餐", "42", "阿杰")
+    check("the note starts after the particle",
+          [it["text"] for it in a.memories[g]][-2:] == ["周五开会", "周六聚餐"],
+          repr(a.memories[g]))
+    check("recall still answers the whole question",
+          (a._handle_memory_command(g, "小夏 你都记得什么呀？", "42", "阿杰") or "")
+          .startswith("我记得这些"))
+
+
+def test_a_note_is_filed_under_who_it_is_about(tmp: Path) -> None:
+    a = make_agent(tmp)
+    a.admin_ids = {"admin"}
+    g = "g1"
+    a._append_buffer(g, "Sam", "hi all", "7")
+    a._handle_memory_command(g, "Luna, remember Sam is vegetarian", "42", "alex")
+    a._handle_memory_command(g, "Luna, remember I hate cilantro", "42", "alex")
+    a._handle_memory_command(g, "Luna, remember the room likes jazz", "42", "alex")
+    sam, me, room = a.memories[g]
+    check("about the member it names", sam.get("user_id") == "7"
+          and sam.get("saved_by") == "42", repr(sam))
+    check("about the saver when it says I", me.get("user_id") == "42", repr(me))
+    check("about the group when it names no one",
+          "user_id" not in room and room.get("saved_by") == "42", repr(room))
+    sams = a._handle_memory_command(g, "Luna what do you remember", "7", "Sam") or ""
+    check("the subject can read it", "about Sam: Sam is vegetarian" in sams, sams)
+    check("a group note says who saved it", "from alex: the room likes jazz" in sams,
+          sams)
+    check("someone else's own note stays theirs", "cilantro" not in sams, sams)
+    prompt = a._memories_for_prompt(g)
+    check("with only Sam in the room, the prompt has his note and the group's",
+          "Sam is vegetarian" in prompt and "the room likes jazz" in prompt
+          and "cilantro" not in prompt, prompt)
+    nobody = a._handle_memory_command(g, "Luna what do you remember", "", "") or ""
+    check("no id, no attributed notes", "vegetarian" not in nobody
+          and "cilantro" not in nobody, nobody)
+    a._handle_memory_command(g, "Luna forget vegetarian", "7", "Sam")
+    a._handle_memory_command(g, "Luna forget jazz", "9", "kim")
+    check("the subject may forget it, a third member may not forget the group note",
+          [it["text"] for it in a.memories[g]] == ["I hate cilantro",
+                                                    "the room likes jazz"],
+          repr(a.memories[g]))
+    a._handle_memory_command(g, "Luna forget jazz", "42", "alex")
+    check("the saver may", [it["text"] for it in a.memories[g]] == ["I hate cilantro"])
+
+
+async def test_a_memory_command_is_not_a_reaction(tmp: Path) -> None:
+    import time
+
+    from persona_agent.transport import SendResult
+
+    a = make_agent(tmp)
+    a.react_learn_enabled = True
+    seen: list = []
+
+    async def fake_reaction(entry, text, *args, **kw):
+        seen.append(text)
+
+    async def fake_send_group(group_id, text, at_user_id=""):
+        return SendResult(success=True)
+    a._process_reaction = fake_reaction
+    a._send_group = fake_send_group
+    a._typing_delay = lambda chunk: 0.0
+    a.pending_reactions.record("777", reply="did you check the logs", ctx_lines=[],
+                               mode="called", target_uid="42", ts=time.time())
+    await a.handle_onebot({
+        "post_type": "message", "message_type": "group", "group_id": "777",
+        "user_id": "42", "message_id": 9, "sender": {"nickname": "alex"},
+        "message": [{"type": "text", "data": {"text": "Luna, remember Sam is vegetarian"}}]})
+    check("no adjudication", seen == [], repr(seen))
+    check("the reply still waits for a real reaction",
+          a.pending_reactions.match("777", sender_uid="42", at_bot=True,
+                                    now=time.time()) is not None)
+    check("the note was kept", a.memories["777"][-1]["text"] == "Sam is vegetarian")
