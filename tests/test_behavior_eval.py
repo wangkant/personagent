@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-import behavior_eval as be
+from persona_agent import evals as be
 from persona_agent import paths
 from persona_agent.agent import Agent
 
