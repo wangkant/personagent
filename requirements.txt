@@ -1,23 +1,13 @@
-fastapi>=0.115,<1
+# The runtime dependencies; pyproject.toml reads this file. Full-line comments only.
+fastapi>=0.128,<1
+# A floor here keeps the resolver off the pydantic 1.x line.
+pydantic>=2.9,<3
 uvicorn[standard]>=0.34,<1
 python-dotenv>=1.0,<2
 httpx>=0.27,<1
-# Direct, not transitive. ingestion.py imports `httpcore._backends.auto` — a
-# PRIVATE module — to pin DNS resolution per hop in safe_fetch_url's SSRF
-# guard. httpx only constrains `httpcore==1.*`, so without a direct pin any
-# 1.x that moves that path breaks `import persona_agent.ingestion`, i.e. the
-# whole agent, at startup.
+# Direct, not transitive: ingestion.py's SSRF guard imports httpcore._backends.auto.
 httpcore>=1.0,<2
-# Used by the vision pipeline to extract the first frame of a GIF as PNG
-# (many vision endpoints reject GIFs directly).
-Pillow>=10,<13
-# No-key web search backend for the agent's auto-lookup (the primary chat model
-# decides the query via /v1 function-calling; ddgs fetches via DuckDuckGo).
-# Swappable for Tavily/Serper later by editing _web_search.
+# Decodes the first frame of a GIF for vision endpoints that reject GIFs.
+Pillow>=10.4,<13
+# The no-key web search backend (DuckDuckGo).
 ddgs>=9,<10
-
-# NOT required to run the bot. The agent itself speaks only the OpenAI-compatible
-# /v1 endpoint over httpx, with no vendor SDK. `anthropic` is needed solely by two
-# optional dev tools — tools/prompt_lab.py and `evolution_benchmark.py --judge
-# anthropic`, which deliberately score replies with a DIFFERENT vendor than the one
-# being measured. Install it only if you use them:  pip install -e ".[judge]"
