@@ -50,8 +50,10 @@ from persona_agent.agent import Agent
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
 from persona_agent.endpoints import chat_completions_url
 from persona_agent.home import load_env
+from persona_agent.promotion import Policy
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import salvage_json_object
+from persona_agent.transport import SendResult
 
 EVAL_DATA = paths.seed_file("evals")
 SUITES = ("speak", "persona", "learning")
@@ -70,7 +72,8 @@ POLICY_NOTE = (
     "Promotion needs two agreeing signals from the same conversation, at least "
     "one of them strong: a correction with a better line from the person the "
     "reply was for, or a retry that person accepted. This eval runs the "
-    "automatic policy as configured and promotes nothing itself.")
+    "automatic policy as configured and promotes nothing itself; under a "
+    "stricter policy than the default, every case is expected to be held.")
 NOISE_NOTE = (
     "Without a promotion the probe prompt is unchanged, so flips in the "
     "not_promoted row are sampling noise.")
@@ -175,6 +178,9 @@ def _check_learning(c: dict) -> None:
           "reactor, when given, is someone other than the person")
     _need(c, c.get("expect") in (None, "promoted", "held"),
           "expect is promoted or held")
+    elicited = c.get("elicited")
+    _need(c, elicited is None or (isinstance(elicited, str) and bool(elicited.strip())),
+          "elicited, when given, is the answer to the bot's follow-up ask")
     probe = c.get("probe")
     _need(c, isinstance(probe, dict) and _is_lines(probe.get("history"))
           and _is_line(probe.get("latest")) and BOT in probe["latest"],
@@ -763,10 +769,12 @@ def _event_summary(e: dict) -> dict:
             "better": adj.get("better", ""), "reason": adj.get("reason", "")}
 
 
-async def _react(agent, conv: str, person: str, uid: str, text: str) -> dict:
-    """One addressed message from `person`, through the live attribution and
-    the reaction model, as the group turn spawns it."""
-    entry = agent.pending_reactions.match(conv, sender_uid=uid, at_bot=True,
+async def _react(agent, conv: str, person: str, uid: str, text: str, *,
+                 at_bot: bool = True) -> dict:
+    """One message from `person`, addressed unless it answers the bot's
+    follow-up ask, through the live attribution and the reaction model, as
+    the group turn spawns it."""
+    entry = agent.pending_reactions.match(conv, sender_uid=uid, at_bot=at_bot,
                                           now=time.time())
     if entry is None:
         return {"text": text, "matched": None, "events": []}
@@ -805,6 +813,32 @@ async def _probe(agent, judge: Judge, case: dict, conv: str, name: str) -> dict:
             "reason": verdict["reason"] if verdict else "", "error": err}
 
 
+def expected_outcome(expect, policy) -> str | None:
+    """A case's expectation under the policy this run uses. The dataset is
+    written for the defaults; a stricter policy holds what they promote."""
+    default = Policy()
+    if expect == "promoted" and not (
+            policy.auto_promote and policy.min_speakers <= default.min_speakers
+            and policy.min_events <= default.min_events
+            and policy.min_strong <= default.min_strong):
+        return "held"
+    return expect
+
+
+def _ask_at_once(agent, conv: str) -> None:
+    """The follow-up ask on for one scenario, sent at once and delivered."""
+    async def deliver(group_id, text, at_user_id=""):
+        return SendResult(success=True, message_ids=[f"{conv}-ask"])
+    agent._send_group = deliver
+    agent.react_elicit_enabled = True
+    agent.react_elicit_delay_s = 0.0
+
+
+async def _settle(agent) -> None:
+    while agent._bg_tasks:
+        await asyncio.gather(*list(agent._bg_tasks), return_exceptions=True)
+
+
 async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     conv = f"eval-learn-{case['id']}"
     person = case["person"]
@@ -812,7 +846,8 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     # A bystander may react instead of the person the reply was for.
     reactor = case.get("reactor") or person
     ruid = NAME_UID[reactor]
-    row = {"id": case["id"], "target": case["target"], "expect": case.get("expect")}
+    row = {"id": case["id"], "target": case["target"],
+           "expect": expected_outcome(case.get("expect"), agent.promotion_policy)}
     row["before"] = await _probe(agent, judge, case, conv, name)
 
     # The reply being corrected, sent to the person.
@@ -822,9 +857,18 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     # The correction: adjudicated first (the live turn spawns it), then the
     # addressed message gets the ordinary called turn, which is the retry.
     correction = _fill(case["correction"], name)
+    if case.get("elicited"):
+        _ask_at_once(agent, conv)
     row["correction"] = await _react(agent, conv, reactor, ruid, correction)
     agent._append_buffer(conv, reactor, correction, ruid)
-    raw, intent, _mem = await agent._think(conv, "called", correction,
+    said = correction
+    if case.get("elicited"):
+        # A bare complaint is asked back; the answer needs no address.
+        await _settle(agent)
+        said = _fill(case["elicited"], name)
+        row["elicited"] = await _react(agent, conv, reactor, ruid, said, at_bot=False)
+        agent._append_buffer(conv, reactor, said, ruid)
+    raw, intent, _mem = await agent._think(conv, "called", said,
                                            caller_override=(reactor, ruid))
     retry = sent_text(agent, raw)
     row["retry"] = {"reply": retry, "raw_reply": raw or ""}
@@ -976,7 +1020,8 @@ async def run(args, env=None) -> dict:
                    "same_judge": same},
         "conditions": {
             "web_search": "off", "pacing_skips": "not applied (random and clock-driven)",
-            "frequency_downgrade": "off", "follow_up_ask": "off",
+            "frequency_downgrade": "off",
+            "follow_up_ask": "only in cases with an elicited answer, sent at once",
             "order": "cases run one after another, adjudication before the retry turn"},
         "suites": {},
     }
