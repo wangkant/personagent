@@ -1,5 +1,35 @@
 name: astrbot_plugin_personagent
-desc: The personagent connector for AstrBot - brings a personagent persona to every AstrBot platform, relaying its replies and what it says unprompted.
+display_name: personagent
+short_desc: 让 personagent 角色进群：会判断什么时候该闭嘴，被纠正后经得起检验才学会。A group-chat character that knows when to stay quiet and learns from being corrected.
+desc: |
+  把 [personagent](https://github.com/wangkant/personagent) 的角色接进 AstrBot 的每个平台：它只在被叫到、或判断真人会接话时开口；
+  别人纠正它、它的第二次回答被接受后，才把更好的说法记下来，一个捣乱的人教不坏它；每个群的记忆分开，学到的东西都有记录、可以撤回。
+
+  这个插件只负责转发，需要另外运行 personagent 服务：`uvx personagent init`，然后 `uvx personagent run`
+  （或 `pip install personagent`）。用 `personagent connect astrbot <AstrBot 数据目录>` 可以自动装好本插件并配好口令。
+
+  Connects a personagent character to every AstrBot platform. Needs the personagent service running
+  (`uvx personagent init`, then `uvx personagent run`); `personagent connect astrbot <AstrBot data dir>` installs and
+  configures this plugin for you.
 version: 1.0.0
 author: Qiankang Wang
-repo: https://github.com/wangkant/personagent
+repo: https://github.com/wangkant/astrbot_plugin_personagent
+astrbot_version: ">=4.25,<5"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - qq_official_webhook
+  - telegram
+  - discord
+  - slack
+  - kook
+  - lark
+  - dingtalk
+  - line
+  - wecom
+  - wecom_ai_bot
+  - weixin_official_account
+  - weixin_oc
+  - mattermost
+  - misskey
+  - satori
