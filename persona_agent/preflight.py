@@ -355,6 +355,15 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         if key in configured and not str(configured.get(key) or "").strip():
             findings.append(Finding("WARN", key, f"is empty — {why}"))
 
+    # `KEY=   # note` reads as the value "# note", as older templates had it for
+    # REACT_MODEL and EVOLVE_MODEL. Not echoed: the value may be a secret.
+    commented = (k for k, v in configured.items() if str(v or "").lstrip().startswith("#"))
+    for key in sorted(commented):
+        findings.append(Finding(
+            "WARN", key,
+            "starts with '#': a comment after an empty value is read as the value."
+            " Put the comment on its own line and leave the value blank"))
+
     home = str(configured.get("AGENT_HOME") or "").strip()
     if home:
         try:
