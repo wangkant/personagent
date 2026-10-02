@@ -1,8 +1,6 @@
 name: CI
 
-# Run the offline regression suite on every push / PR to main. The tests
-# need no API keys or network (they stub the model and transport), so a plain
-# dependency install + one command is enough.
+# The offline regression suite: no API keys or network, the tests stub the model and transport.
 on:
   push:
     branches: [main]
@@ -19,14 +17,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -36,15 +34,7 @@ jobs:
         run: |
           bash -n start.sh
           test -x start.sh
-      # Dead and undefined names only — not a style gate. The module split
-      # that produced this package copied one import header into six files
-      # and left 114 unused imports behind; F821 is the one that would have
-      # caught a name the split dropped. Re-exports carry an explicit
-      # `# noqa: F401` saying they are API surface. F841 catches the half of
-      # "computed, then dropped" that is mechanically visible — a value bound
-      # to a name nobody reads. It would NOT have caught 2f93615, where
-      # _record_and_corroborate's bool was discarded by never being bound at
-      # all; Python cannot tell that from a call made for its side effect.
+      # Dead and undefined names only, not a style gate; re-exports carry `# noqa: F401`.
       - name: Lint for dead and undefined names
         run: |
           python -m pip install "ruff>=0.6,<1"
@@ -55,21 +45,15 @@ jobs:
           python -m compileall -q .
 
   windows:
-    # The real suite must run here, not just the launchers — and it does:
-    # `pytest -q` collects tests/test_launchers.py like any other module.
-    # Windows is the platform this is actually deployed on, and the only one
-    # that executes storage.FileLock's msvcrt branch — the lock every runtime JSONL
-    # writer now depends on for not losing records, since Windows O_APPEND is
-    # seek-to-end-then-write rather than an atomic append. Until this job ran
-    # the suite, that branch was executed by no CI job on any platform.
+    # Windows is the main deployment platform and the only one running storage.FileLock's msvcrt branch.
     runs-on: windows-2022
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -80,59 +64,67 @@ jobs:
           python -m pytest -q
           python -m compileall -q .
 
-  packaging:
-    # The test job runs from a checkout, which hides packaging breakage: a
-    # missing py.typed, a module left out of the wheel, or paths.ROOT resolving
-    # next to site-packages all still "work" in-tree. This job installs the
-    # built artifact somewhere else entirely and imports it from there.
-    runs-on: ubuntu-24.04
+  package:
+    # A checkout hides packaging breakage, so the built artifacts are installed and run elsewhere.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
+      - name: Build the sdist and the wheel, then check their metadata
+        run: |
+          python -m pip install "build>=1.2,<2" "twine>=6,<8"
+          python -m build
+          python -m twine check --strict dist/*
       - name: Editable install
         run: |
-          python -m pip install "build>=1.2,<2"
           python -m pip install -e .
           python -c "import persona_agent; print('editable', persona_agent.__version__)"
-      - name: Build wheel + sdist
-        run: python -m build
-      - name: Install the wheel into a clean venv and import from outside the checkout
+      - name: Install the wheel into a clean venv and import it from outside the checkout
         run: |
-          python -m venv /tmp/wheelenv
-          /tmp/wheelenv/bin/pip install --quiet dist/*.whl
-          cd /tmp
-          /tmp/wheelenv/bin/python -c "
-          import persona_agent, importlib.metadata as md
-          from persona_agent.paths import ROOT
+          python -m venv "$RUNNER_TEMP/wheelenv"
+          if [ "$RUNNER_OS" = Windows ]; then BIN="$RUNNER_TEMP/wheelenv/Scripts"; else BIN="$RUNNER_TEMP/wheelenv/bin"; fi
+          echo "WHEEL_BIN=$BIN" >> "$GITHUB_ENV"
+          "$BIN/python" -m pip install --quiet dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$BIN/python" -c "
+          import importlib.metadata as md
+          import persona_agent
+          from persona_agent import home
           from persona_agent.agent import Agent
-          # Cross-check rather than pin: a hard-coded '0.1.' both red-lights a
-          # correct 0.2.0 and green-lights pyproject/__init__ drift, which is
-          # the failure actually worth catching.
-          dist = md.version('personagent')
-          assert persona_agent.__version__ == dist, (persona_agent.__version__, dist)
-          # A wheel install has no data/ next to the package: ROOT must fall back
-          # to the working directory, never to site-packages.
-          assert 'site-packages' not in str(ROOT), ROOT
-          import importlib.resources as r
-          assert (r.files('persona_agent') / 'py.typed').is_file(), 'py.typed missing from wheel'
-          print('wheel import ok; ROOT =', ROOT)
+          assert persona_agent.__version__ == md.version('personagent'), persona_agent.__version__
+          assert not home.is_checkout(), home.CHECKOUT
+          for shipped in ('.env.example', 'data/persona.example.en.txt', 'data/evals/speak.en.jsonl',
+                          'integrations/astrbot/astrbot_plugin_personagent/metadata.yaml'):
+              assert home.resource(*shipped.split('/')).is_file(), shipped
+          assert (home.PACKAGE_DIR / 'py.typed').is_file(), 'py.typed missing from the wheel'
+          print('wheel import ok', persona_agent.__version__)
           "
-      - name: Install the sdist into a clean venv and import from outside the checkout
+      - name: Smoke-test the installed command offline (init, chat, run, doctor)
         run: |
-          python -m venv /tmp/sdistenv
-          /tmp/sdistenv/bin/python -m pip install --quiet dist/*.tar.gz
-          cd /tmp
-          /tmp/sdistenv/bin/python -c "
-          import persona_agent, importlib.metadata as md
-          from persona_agent.agent import Agent
-          dist = md.version('personagent')
-          assert persona_agent.__version__ == dist, (persona_agent.__version__, dist)
-          print('sdist import ok', persona_agent.__version__)
+          VERSION=$(python -c "import persona_agent; print(persona_agent.__version__)")
+          python tools/package_smoke.py --personagent "$WHEEL_BIN/personagent" --version "$VERSION"
+      - name: Install the sdist into a clean venv and import it from outside the checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/sdistenv"
+          if [ "$RUNNER_OS" = Windows ]; then BIN="$RUNNER_TEMP/sdistenv/Scripts"; else BIN="$RUNNER_TEMP/sdistenv/bin"; fi
+          "$BIN/python" -m pip install --quiet dist/*.tar.gz
+          cd "$RUNNER_TEMP"
+          "$BIN/python" -c "
+          from persona_agent import home
+          assert home.resource('data', 'persona.example.en.txt').is_file()
+          print('sdist install ok')
           "
