@@ -1071,7 +1071,8 @@ def test_a_terse_reply_is_content_and_template_residue_is_not() -> None:
 
 def test_a_reply_that_only_trails_off_is_delivered() -> None:
     """'……' is the commonest terse Chinese reply, and the ellipsis glyph is
-    stripped for a persona that did not opt into it, which left nothing."""
+    stripped for a persona that did not opt into it; the reply is spelled
+    '...' rather than emptied."""
     for raw, want in (("…", "..."), ("……", "..."), ("。。。", "..."), ("…?", "...?")):
         for lang in ("en", "zh"):
             check(f"{raw!r} is delivered ({lang})",
