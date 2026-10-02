@@ -19,6 +19,7 @@ class StartIsolationTests(unittest.TestCase):
         self.root = Path(self.temp.name) / "project with spaces"
         self.root.mkdir()
         shutil.copyfile(Path(__file__).resolve().parents[1] / "start.sh", self.root / "start.sh")
+        (self.root / ".env").write_text("LLM_API_KEY=sk-test\n")
         self.bin = Path(self.temp.name) / "bin"
         self.bin.mkdir()
         (self.bin / "dirname").symlink_to(shutil.which("dirname"))
@@ -49,12 +50,12 @@ elif sys.argv[1:3] == ["-m", "pip"]:
     def run_start(self, **options):
         env = {**os.environ, "PATH": str(self.bin), "CALL_LOG": str(self.log),
                "SERVER_HOST": "127.0.0.1", "SERVER_PORT": "8123"}
-        for key in ("BOOTSTRAP_FAIL", "DEPS_PRESENT", "INSTALL_FAIL"):
+        for key in ("BOOTSTRAP_FAIL", "DEPS_PRESENT", "INSTALL_FAIL", "LLM_API_KEY"):
             env.pop(key, None)
         env.update(options)
         result = subprocess.run([shutil.which("bash"), str(self.root / "start.sh")],
                                 cwd=self.temp.name, env=env, capture_output=True,
-                                text=True, timeout=15)
+                                stdin=subprocess.DEVNULL, text=True, timeout=15)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, calls
 
@@ -95,6 +96,21 @@ elif sys.argv[1:3] == ["-m", "pip"]:
         self.assertIn(".venv", result.stderr)
         self.assertEqual(marker.read_text(), "existing user files")
         self.assertFalse(any(c[1:3] in (["-m", "pip"], ["-m", "venv"]) for c in calls))
+
+    def test_an_unconfigured_checkout_is_sent_to_setup(self):
+        (self.root / ".env").unlink()
+        result, calls = self.run_start()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("quickstart.py", result.stderr)
+        self.assertFalse(any(c[1:3] in (["-m", "pip"], ["-m", "venv"]) for c in calls))
+        self.assertFalse(any(c[1:] == ["main.py"] for c in calls))
+
+    def test_configuration_in_the_environment_is_enough(self):
+        (self.root / ".env").unlink()
+        self.write_python(self.root / ".venv/bin/python")
+        result, calls = self.run_start(DEPS_PRESENT="1", LLM_API_KEY="sk-test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-1][1:], ["main.py"])
 
     def test_host_port_and_foreign_working_directory_are_preserved(self):
         self.write_python(self.root / ".venv/bin/python")

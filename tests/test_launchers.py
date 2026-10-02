@@ -32,11 +32,11 @@ class LauncherTests(unittest.TestCase):
         )
         return modules
 
-    def _run_powershell_launcher(self, host: str) -> tuple[dict, Path]:
-        powershell = shutil.which("powershell") or shutil.which("pwsh")
-        if not powershell:
+    def _windows_repo(self, *, configured: bool = True) -> tuple[Path, Path, dict]:
+        """A copy of the Windows launchers in a path with spaces, plus the env
+        that makes its dependency probe pass without installing anything."""
+        if not (shutil.which("powershell") or shutil.which("pwsh")):
             self.skipTest("PowerShell is not installed")
-
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         base = Path(temp.name)
@@ -45,38 +45,64 @@ class LauncherTests(unittest.TestCase):
         repo.mkdir()
         caller.mkdir()
         shutil.copy2(ROOT / "start.ps1", repo / "start.ps1")
+        shutil.copy2(ROOT / "start.bat", repo / "start.bat")
         (repo / "requirements.txt").write_text("", encoding="utf-8")
+        if configured:
+            (repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
         modules = self._fake_python_modules(base)
-        capture = base / "capture.json"
-        env = os.environ.copy()
-        env.update(
-            {
-                "SERVER_HOST": host,
-                "SERVER_PORT": "8123",
-                "PYTHONPATH": str(modules),
-                "LAUNCHER_CAPTURE": str(capture),
-            }
-        )
-        result = subprocess.run(
-            [
-                powershell,
-                "-NoLogo",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(repo / "start.ps1"),
-            ],
-            cwd=caller,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=60,
-        )
+        env = {k: v for k, v in os.environ.items() if k != "LLM_API_KEY"}
+        env.update({"PYTHONPATH": str(modules),
+                    "LAUNCHER_CAPTURE": str(base / "capture.json")})
+        return repo, caller, env
+
+    def _run(self, cmd: list[str], *, cwd: Path, env: dict) -> subprocess.CompletedProcess:
+        # A GBK console must not break the reader: decode leniently.
+        return subprocess.run(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=120)
+
+    def _powershell(self, repo: Path) -> list[str]:
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        return [powershell, "-NoLogo", "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", str(repo / "start.ps1")]
+
+    def _run_powershell_launcher(self, host: str) -> tuple[dict, Path]:
+        repo, caller, env = self._windows_repo()
+        env.update({"SERVER_HOST": host, "SERVER_PORT": "8123"})
+        result = self._run(self._powershell(repo), cwd=caller, env=env)
+        capture = Path(env["LAUNCHER_CAPTURE"])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(capture.is_file(), result.stdout + result.stderr)
         return json.loads(capture.read_text(encoding="utf-8")), repo
+
+    def test_powershell_launcher_points_an_unconfigured_checkout_at_setup(self) -> None:
+        repo, caller, env = self._windows_repo(configured=False)
+        result = self._run(self._powershell(repo), cwd=caller, env=env)
+        combined = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("quickstart.py", combined)
+        self.assertFalse(Path(env["LAUNCHER_CAPTURE"]).exists(),
+                         "a server without configuration must not start")
+
+    @unittest.skipUnless(os.name == "nt", "cmd.exe launcher")
+    def test_bat_launcher_runs_start_ps1(self) -> None:
+        repo, caller, env = self._windows_repo()
+        env.update({"SERVER_HOST": "127.0.0.3", "SERVER_PORT": "8124"})
+        result = self._run(["cmd", "/c", str(repo / "start.bat")], cwd=caller, env=env)
+        capture = Path(env["LAUNCHER_CAPTURE"])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        recorded = json.loads(capture.read_text(encoding="utf-8"))
+        self.assertEqual(Path(recorded["cwd"]).resolve(), repo.resolve())
+        self.assertEqual((recorded["host"], recorded["port"]), ("127.0.0.3", "8124"))
+
+    def test_windows_scripts_are_crlf(self) -> None:
+        bat = (ROOT / "start.bat").read_bytes()
+        self.assertNotIn(b"\n", bat.replace(b"\r\n", b""))
+        self.assertIn(b"-ExecutionPolicy Bypass", bat)
+        self.assertIn(b'"%~dp0start.ps1"', bat)
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        for pattern in ("*.bat", "*.cmd", "*.vbs"):
+            self.assertIn(f"{pattern} text eol=crlf", attributes)
 
     def test_powershell_launcher_runs_from_repository_root(self) -> None:
         capture, repo = self._run_powershell_launcher("127.0.0.1")
@@ -97,6 +123,7 @@ class LauncherTests(unittest.TestCase):
             python.parent.mkdir(parents=True)
             launcher = repo / "start.sh"
             shutil.copy2(ROOT / "start.sh", launcher)
+            (repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
             capture = repo / "capture.json"
             python.write_text(
                 f"#!{sys.executable}\n"

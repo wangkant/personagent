@@ -48,6 +48,7 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.repo.mkdir()
         shutil.copy2(ROOT / "start.ps1", self.repo / "start.ps1")
         (self.repo / "requirements.txt").write_text("", encoding="utf-8")
+        (self.repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
         # Proves the server was never reached: start.ps1's last act is
         # `& $pySource main.py`, so this file existing means it got that far.
         (self.repo / "main.py").write_text(
@@ -71,13 +72,16 @@ class StartPs1IsolationTests(unittest.TestCase):
              pythonpath: str | None = None) -> subprocess.CompletedProcess:
         env = os.environ.copy()
         env.pop("PYTHONPATH", None)
+        env.pop("LLM_API_KEY", None)
         env["PATH"] = _SYSTEM_PATH if path is None else path
         if pythonpath is not None:
             env["PYTHONPATH"] = pythonpath
         return subprocess.run(
             [self.powershell, "-NoLogo", "-NoProfile", "-NonInteractive",
              "-ExecutionPolicy", "Bypass", "-File", str(self.repo / "start.ps1")],
-            cwd=self.base, env=env, text=True, capture_output=True, timeout=180,
+            cwd=self.base, env=env, stdin=subprocess.DEVNULL, capture_output=True,
+            # PowerShell writes in the console code page (GBK here): never crash on it.
+            text=True, encoding="utf-8", errors="replace", timeout=180,
         )
 
     def _path_with_real_python(self) -> str:
@@ -121,6 +125,18 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertIn("not found", combined)
         self.assertNotIn("Incomplete", combined)
         self.assertEqual(marker.read_text(encoding="utf-8"), "existing user files")
+        self.assertFalse(self._server_started())
+
+    def test_an_unconfigured_checkout_is_sent_to_setup(self) -> None:
+        (self.repo / ".env").unlink()
+
+        result = self._run(path=self._path_with_real_python())
+        combined = result.stdout + result.stderr
+
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("quickstart.py", combined)
+        self.assertFalse((self.repo / ".venv").exists(),
+                         "nothing is installed before the setup has run")
         self.assertFalse(self._server_started())
 
     def test_install_failure_does_not_launch_the_server(self) -> None:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# personagent — one-click start (Linux/macOS)
+# personagent - start the service from a checkout (Linux/macOS)
 set -e
 cd "$(dirname "$0")"
 
@@ -11,9 +11,26 @@ if [ ! -x ".venv/bin/python" ]; then
   fi
   BASE_PY="$(command -v python3 || command -v python || true)"
   if [ -z "$BASE_PY" ]; then
-    echo "error: python3 not found. Install Python and run quickstart.py first." >&2
+    echo "error: python3 not found. Install Python 3.10 or newer, then run: python3 quickstart.py" >&2
     exit 1
   fi
+fi
+
+# Not set up yet: run the setup wizard instead of a server that cannot answer.
+if [ ! -f ".env" ] && [ -z "${LLM_API_KEY:-}" ]; then
+  if [ ! -t 0 ]; then
+    echo "error: personagent is not set up here yet (no .env). Run: python3 quickstart.py" >&2
+    exit 1
+  fi
+  echo "No .env yet: starting the setup wizard (quickstart.py)."
+  if [ -x ".venv/bin/python" ]; then SETUP_PY=".venv/bin/python"; else SETUP_PY="$BASE_PY"; fi
+  "$SETUP_PY" quickstart.py
+  if [ ! -f ".env" ]; then
+    exit 1
+  fi
+fi
+
+if [ ! -x ".venv/bin/python" ]; then
   echo "creating project virtual environment..."
   if ! "$BASE_PY" -m venv .venv; then
     echo "error: could not create .venv. Check that Python's venv support is installed." >&2
