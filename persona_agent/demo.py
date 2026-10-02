@@ -1,15 +1,16 @@
 """Watch it stay quiet, learn from a correction, and refuse a troll.
 
-    personagent demo              # all three scenes
+    personagent demo              # all three scenes, scripted, no key needed
     personagent demo teach        # one scene: quiet, teach or troll
-    personagent demo --offline    # the scripted model, even with a key set
+    personagent demo --online     # your own model instead (costs tokens)
     personagent demo --lang zh
 
 The scenes run through the same turn functions as `personagent chat` and the
 real evidence, candidate and promotion code, in a temporary home that is
-deleted afterwards. Without a key, or with --offline, a scripted model stands
-in for the LLM: its answers are fixed, and everything that decides what to do
-with them is the real code.
+deleted afterwards. A scripted model stands in for the LLM by default: its
+answers are fixed, and everything that decides what to do with them is the
+real code. --online asks your configured model instead; --offline is the
+default, kept as an alias.
 """
 from __future__ import annotations
 
@@ -26,15 +27,22 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from persona_agent import agent as agent_module
 from persona_agent import candidates, evidence, home, paths, reactions
 from persona_agent.agent import Agent
 from persona_agent.chat import (
     TRIAL_TRIGGER,
+    Failure,
     Trial,
     Turn,
     checklist,
     clip,
+    describe_failure,
+    failure_text,
     held_reason,
+    hint,
+    normalize_lang,
+    plural,
     promoted_line,
     reaction_label,
     reason,
@@ -185,20 +193,28 @@ _TEXT = {
     "en": {
         "banner_offline": "personagent demo: scripted model, real ledger and promotion code",
         "sub_offline": ("No API key needed, and nothing is sent anywhere. The model's answers\n"
-                        "are fixed; what is done with them is decided by the real code."),
+                        "are fixed; what is done with them is decided by the real code.\n"
+                        "The ledger is the record of how people reacted to its replies.\n"
+                        "To use your own model instead (it costs tokens): {online}"),
         "banner_online": "personagent demo: your model ({model}), real ledger and promotion code",
-        "sub_online": ("Answers differ from run to run; `personagent demo --offline` runs\n"
-                       "the scripted version."),
+        "sub_online": ("This asks your model for every reply and every judgement, so it costs\n"
+                       "tokens, and the answers differ from run to run: the scenes below may\n"
+                       "not play out as described. The scripted version: {offline}"),
         "quiet": "== quiet: most of a group chat is not for {name} ==",
         "quiet_intro": ("{name} answers when named. Otherwise it joins in only when a gate model\n"
                         "thinks a person would, and here it asks after {n} messages (the live\n"
                         "default is {live})."),
         "teach": "== teach: a correction that holds up ==",
         "teach_intro": ("One message never changes how {name} talks. A correction counts once\n"
-                        "it holds up: here, when {alex} accepts the second try."),
+                        "it holds up: here, when {alex} accepts the second try.{alone}"),
+        "alone": (" By default one person can\n"
+                  "teach alone; PROMOTE_MIN_SPEAKERS asks for more."),
         "troll": "== troll: a stranger tries to plant an instruction ==",
         "troll_intro": ("Each reaction is judged against the reply it answers, and only the\n"
-                        "person a reply was for can give the strong signal a change needs."),
+                        "person a reply was for can give the strong signal a change needs.{scripted}"),
+        "troll_scripted": ("\nHere the judge's verdicts are scripted; what the code does with them is\n"
+                           "real: nothing is proposed from a dismissed reaction, and the memory\n"
+                           "check refuses instructions."),
         "quiet_note": "(quiet: {reason})",
         "joins_note": "(joins in: {reason})",
         "named_note": "(named, so it answers)",
@@ -217,7 +233,7 @@ _TEXT = {
                       "so {who}'s correction is negative only"),
         "memory_refused": "memory: nothing saved; notes keep facts, not instructions",
         "memory_saved": "memory: saved",
-        "chain": "evidence, in order (append-only):",
+        "chain": "what the ledger recorded, in order (rows are only added, never edited):",
         "chain_line": "{i}. {who} {verb} {said} - {strength}{tag}",
         "verbs": {"rejection": "rejected", "correction": "corrected",
                   "positive": "liked", "neutral": "moved on from"},
@@ -225,8 +241,10 @@ _TEXT = {
         "verb_retry_moved": "moved on from the second try",
         "dismissed_tag": ", dismissed",
         "fix": 'fix: "{a}" -> "{b}"',
-        "no_fix": "no fix was proposed: the judge did not accept a reaction",
-        "rule_events": "{n} of {need} agreeing events",
+        "no_fix": "no fix was proposed: the judge did not accept any reaction",
+        "no_fix_unused": ("no fix was proposed: a reaction was accepted, but no rewrite of "
+                          "the reply came out of it"),
+        "rule_events": "{n} of {need} agreeing reactions",
         "rule_strong": "{n} of {need} strong",
         "rule_chat": "same chat",
         "rule_chat_off": "same chat not required (PROMOTE_REQUIRE_SAME_CONVERSATION)",
@@ -234,8 +252,8 @@ _TEXT = {
         "person": "person",
         "persons": "people",
         "rule_conflict": "nothing disagrees, no rival fix",
-        "held": "held: {why}",
-        "other": 'other fix for the same reply: "{better}"',
+        "held": "not in use yet: {why}",
+        "other": 'a second rewrite was also drafted for that reply: "{better}"',
         "colon": ": ",
         "say": "{who}: {text}",
         "quote": '"{}"',
@@ -246,26 +264,35 @@ _TEXT = {
         "offered_many": "learned in its prompt: {n} fixes from this chat",
         "would_say": "{name} would say: {reply}",
         "would_pass": "{name} would stay quiet",
-        "troll_sum": ("ledger: {events} reaction(s) recorded, {dismissed} dismissed; "
-                      "{proposals} proposal(s), {promoted} in use."),
+        "troll_sum": ("ledger: {events} {reactions} recorded, {dismissed} dismissed; "
+                      "{proposals} {proposal_word} proposed, {promoted} in use."),
         "unchanged": "Nothing {name} says has changed.",
-        "outro": ("Try it with your own model: `personagent chat` "
-                  "(run `personagent init` first if there is no key yet)."),
+        "stopped": "The demo stopped: the model did not answer. {why}",
+        "needs_key": "--online needs a model key. Run {init} to set one, or leave --online off.",
+        "outro": ("Try it with your own model: {chat} "
+                  "(run {init} first if there is no key yet)."),
     },
     "zh": {
         "banner_offline": "personagent demo：脚本模型，真实的账本和晋升代码",
-        "sub_offline": "不需要 API Key，也不联网。模型的回答是写好的；怎么处理这些回答，由真实代码决定。",
+        "sub_offline": ("不需要 API Key，也不联网。模型的回答是写好的；怎么处理这些回答，由真实代码决定。\n"
+                        "账本就是记录大家对它回复有何反应的清单。\n"
+                        "想改用你自己的模型（会消耗 token）：{online}"),
         "banner_online": "personagent demo：你的模型（{model}），真实的账本和晋升代码",
-        "sub_online": "每次运行的回答都会不同。`personagent demo --offline` 运行脚本版本。",
+        "sub_online": ("这会让你的模型来写每条回复、做每次判定，所以要消耗 token，\n"
+                       "而且每次的回答都不同：下面的场景不一定会照描述的那样发展。\n"
+                       "脚本版本：{offline}"),
         "quiet": "== 安静：群里大部分话不是对{name}说的 ==",
         "quiet_intro": ("被点名时{name}一定回答；否则只有判断模型认为真人会接话时才插话。\n"
                         "这里攒够 {n} 条消息才问一次（正式默认是 {live} 条）。"),
         "teach": "== 教它：经得起检验的纠正 ==",
         "teach_intro": ("一句话永远改变不了{name}的说话方式。纠正要经得起检验才算数：\n"
-                        "这里是{alex}接受了第二次尝试。"),
+                        "这里是{alex}接受了第二次尝试。{alone}"),
+        "alone": "默认一个人就能教它；PROMOTE_MIN_SPEAKERS 可以要求更多人。",
         "troll": "== 捣乱：陌生人想塞一条指令 ==",
         "troll_intro": ("每条反应都对照它所回应的那条回复来判定；\n"
-                        "只有那条回复的对象，才能给出改动所需的强证据。"),
+                        "只有那条回复的对象，才能给出改动所需的强证据。{scripted}"),
+        "troll_scripted": ("\n这里判定模型的结论是写好的；代码对它们的处理是真的：\n"
+                           "不采信的反应不会提出任何改动，记忆检查会拒绝指令。"),
         "quiet_note": "（没说话：{reason}）",
         "joins_note": "（插话：{reason}）",
         "named_note": "（被点名，所以回答）",
@@ -283,7 +310,7 @@ _TEXT = {
         "bystander": "就算被采信也不算数：那条回复是对{target}说的，{who}的纠正只算仅否定",
         "memory_refused": "记忆：没有保存；笔记只记事实，不记指令",
         "memory_saved": "记忆：已保存",
-        "chain": "证据（按发生顺序，只追加）：",
+        "chain": "账本记下的内容（按发生顺序，只增不改）：",
         "chain_line": "{i}. {who}{verb}{said}，{strength}{tag}",
         "verbs": {"rejection": "否定了", "correction": "纠正了",
                   "positive": "认可了", "neutral": "略过了"},
@@ -292,7 +319,8 @@ _TEXT = {
         "dismissed_tag": "，不采信",
         "fix": "改写：「{a}」->「{b}」",
         "no_fix": "没有提出改写：判定模型没有采信任何反应",
-        "rule_events": "一致证据 {n}/{need} 条",
+        "no_fix_unused": "没有提出改写：有反应被采信了，但没有产生对那条回复的改写",
+        "rule_events": "一致的反应 {n}/{need} 条",
         "rule_strong": "强证据 {n}/{need} 条",
         "rule_chat": "同一个聊天",
         "rule_chat_off": "不要求同一个聊天（PROMOTE_REQUIRE_SAME_CONVERSATION）",
@@ -301,7 +329,7 @@ _TEXT = {
         "persons": "",
         "rule_conflict": "没有相反证据，也没有别的改法",
         "held": "暂不生效：{why}",
-        "other": "同一条回复的另一种改法：「{better}」",
+        "other": "判定模型还为同一条回复拟了另一种改写：「{better}」",
         "colon": "：",
         "say": "{who}：{text}",
         "quote": "「{}」",
@@ -314,7 +342,9 @@ _TEXT = {
         "would_pass": "{name}不会接话",
         "troll_sum": "账本：记录了 {events} 条反应，{dismissed} 条不采信；{proposals} 条提议，{promoted} 条生效。",
         "unchanged": "{name}的说话方式没有任何改变。",
-        "outro": "用你自己的模型试试：`personagent chat`（还没有密钥的话先运行 `personagent init`）。",
+        "stopped": "演示中止：模型没有回答。{why}",
+        "needs_key": "--online 需要模型密钥。运行 {init} 来设置，或者不加 --online。",
+        "outro": "用你自己的模型试试：{chat}（还没有密钥的话先运行 {init}）。",
     },
 }
 
@@ -371,14 +401,19 @@ def throwaway_home(base: str | None = None):
     """A deployment root that exists for the block and is deleted after it."""
     tmp = Path(tempfile.mkdtemp(prefix="personagent-demo-", dir=base))
     saved_root = paths.ROOT
-    saved_env = {k: os.environ.get(k) for k in ("AGENT_HOME", "AGENT_RUNTIME_DIR")}
-    paths.ROOT = tmp
+    # The persona card and text are read from the module's own copy of ROOT.
+    saved_agent_root = agent_module.ROOT
+    saved_env = {k: os.environ.get(k) for k in (
+        "AGENT_HOME", "AGENT_RUNTIME_DIR", "PERSONA_FILE", "PERSONA_CARD_FILE")}
+    paths.ROOT = agent_module.ROOT = tmp
     os.environ["AGENT_HOME"] = str(tmp)
-    os.environ.pop("AGENT_RUNTIME_DIR", None)
+    for key in ("AGENT_RUNTIME_DIR", "PERSONA_FILE", "PERSONA_CARD_FILE"):
+        os.environ.pop(key, None)
     try:
         yield tmp
     finally:
         paths.ROOT = saved_root
+        agent_module.ROOT = saved_agent_root
         for key, value in saved_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -419,12 +454,22 @@ def build_agent(lang: str, root: Path, *, offline: bool
     return agent, model
 
 
+class ModelFailed(Exception):
+    """The model did not answer; the demo stops rather than play on."""
+
+    def __init__(self, failure: Failure) -> None:
+        super().__init__(failure.kind)
+        self.failure = failure
+
+
 class Demo:
     """Runs the scenes and says what happened and why."""
 
     def __init__(self, agent: Agent, model: ScriptedModel | None, lang: str,
                  out: Callable[[str], None] = print) -> None:
         self.trial = Trial(agent)
+        # Scripted openings play the same on every machine, at every hour.
+        self.trial.pacing = model is None
         self.model = model
         self.lang = lang
         self.t = _TEXT[lang]
@@ -437,16 +482,19 @@ class Demo:
         return self.trial.agent
 
     def banner(self) -> None:
+        demo = "demo"
         if self.model is not None:
             self.out(self.t["banner_offline"])
-            self.out(self.t["sub_offline"])
+            self.out(self.t["sub_offline"].format(
+                online=hint(f"{demo} --online", self.lang)))
         else:
             self.out(self.t["banner_online"].format(model=self.agent.model))
-            self.out(self.t["sub_online"])
+            self.out(self.t["sub_online"].format(offline=hint(demo, self.lang)))
 
     def outro(self) -> None:
         self.out("")
-        self.out(self.t["outro"])
+        self.out(self.t["outro"].format(chat=hint("chat", self.lang),
+                                        init=hint("init", self.lang)))
 
     def _scene(self, key: str, **fmt) -> list[Beat]:
         self.trial.conv = f"demo-{key}"
@@ -471,8 +519,12 @@ class Demo:
         self._line(self.people[beat.who], beat.text)
         if self.model is not None:
             self.model.load(beat)
-        return await self.trial.say(self.people[beat.who], UIDS[beat.who],
+        turn = await self.trial.say(self.people[beat.who], UIDS[beat.who],
                                     beat.text)
+        failure = turn.failure or (turn.reaction.failure if turn.reaction else None)
+        if failure is not None:
+            raise ModelFailed(failure)
+        return turn
 
     def _bot(self, turn: Turn) -> None:
         for line in turn.reply.splitlines():
@@ -498,7 +550,9 @@ class Demo:
     # -- teach -----------------------------------------------------------------
 
     async def teach(self) -> None:
-        script = self._scene("teach", alex=self.people["alex"])
+        alone = (self.t["alone"] if self.agent.promotion_policy.min_speakers <= 1
+                 else "")
+        script = self._scene("teach", alex=self.people["alex"], alone=alone)
         who, text, advice, sympathy = _PROBE[self.lang]
         retry = _RETRY[self.lang]
         probe = Beat(who, text,
@@ -522,8 +576,11 @@ class Demo:
     async def _probe(self, beat: Beat) -> None:
         if self.model is not None:
             self.model.load(beat)
-        turn = await self.trial.probe(self.people[beat.who], UIDS[beat.who],
-                                      beat.text)
+        try:
+            turn = await self.trial.probe(self.people[beat.who], UIDS[beat.who],
+                                          beat.text)
+        except Exception as e:
+            raise ModelFailed(describe_failure(e)) from e
         fixes = [row for row in turn.offered if row.get("better")]
         key = "offered_none" if not fixes else (
             "offered" if len(fixes) == 1 else "offered_many")
@@ -562,8 +619,6 @@ class Demo:
                 self._note(self.t["ev_negative"])
         if r.armed:
             self._note(self.t["armed"].format(name=self.name, who=who))
-        for _cand, check in r.promoted:
-            self._note(promoted_line(self.lang, check))
 
     @staticmethod
     def _bystander(event: dict) -> bool:
@@ -611,7 +666,9 @@ class Demo:
         pairs = [c for c in self._conv_candidates()
                  if c.get("type") == candidates.TYPE_PAIR]
         if not pairs:
-            self.out("  " + self.t["no_fix"])
+            accepted = any((e.get("adjudication") or {}).get("accept")
+                           for e in self._conv_events())
+            self.out("  " + self.t["no_fix_unused" if accepted else "no_fix"])
             return
         pairs.sort(key=lambda c: (c.get("state") != candidates.STATE_PROMOTED,
                                   not has_retry(c)))
@@ -654,7 +711,8 @@ class Demo:
     # -- troll -----------------------------------------------------------------
 
     async def troll(self) -> None:
-        for beat in self._scene("troll"):
+        scripted = self.t["troll_scripted"] if self.model is not None else ""
+        for beat in self._scene("troll", scripted=scripted):
             turn = await self._beat(beat)
             if turn.reaction is not None:
                 self._explain(turn)
@@ -669,30 +727,44 @@ class Demo:
         self.out("")
         summary = self.t["troll_sum"].format(
             events=len(events),
+            reactions=plural(self.lang, len(events), "reaction", "reactions"),
             dismissed=sum(not (e.get("adjudication") or {}).get("accept")
                           for e in events),
-            proposals=len(cands), promoted=promoted)
+            proposals=len(cands),
+            proposal_word=plural(self.lang, len(cands), "proposal", "proposals"),
+            promoted=promoted)
         self.out("  " + summary)
         if not promoted:
             self.out("  " + self.t["unchanged"].format(name=self.name))
 
 
 async def run(scenes, *, lang: str, offline: bool,
-              out: Callable[[str], None] = print, base: str | None = None) -> None:
-    """Play `scenes` in a throwaway home; nothing outlives the call."""
+              out: Callable[[str], None] = print, base: str | None = None) -> int:
+    """Play `scenes` in a throwaway home; nothing outlives the call. 0 when
+    every scene played, 1 when the model stopped it."""
+    # Spelled against the real home, before the throwaway one is swapped in.
+    for sub in ("chat", "init", "doctor", "demo", "demo --online"):
+        hint(sub, lang)
     logger = logging.getLogger("agent")
     level = logger.level
     # The scenes say what happened; the agent's own log lines would repeat it.
-    logger.setLevel(logging.ERROR)
+    logger.setLevel(logging.CRITICAL)
     try:
         with throwaway_home(base) as root:
             agent, model = build_agent(lang, root, offline=offline)
             try:
                 demo = Demo(agent, model, lang, out)
                 demo.banner()
-                for scene in scenes:
-                    await getattr(demo, scene)()
+                try:
+                    for scene in scenes:
+                        await getattr(demo, scene)()
+                except ModelFailed as stop:
+                    out("")
+                    out("  " + _TEXT[lang]["stopped"].format(
+                        why=failure_text(lang, stop.failure)))
+                    return 1
                 demo.outro()
+                return 0
             finally:
                 await agent.aclose()
     finally:
@@ -707,17 +779,26 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         description="Watch it stay quiet, learn from a correction and refuse a troll.")
     p.add_argument("scene", nargs="?", default="all", choices=("all",) + SCENES,
                    help="which scene to play (default: all three)")
-    p.add_argument("--offline", action="store_true",
-                   help="use the scripted model even when a key is configured "
-                        "(the default without one)")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--online", action="store_true",
+                      help="ask your configured model instead of the scripted one "
+                           "(costs tokens; results vary)")
+    mode.add_argument("--offline", action="store_true",
+                      help="the scripted model, with no key and no network "
+                           "(the default)")
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
                    help="en (default) or zh")
     args = p.parse_args(argv)
-    lang = "zh" if args.lang.strip().lower().startswith("zh") else "en"
-    offline = args.offline or not os.getenv("LLM_API_KEY", "").strip()
+    lang = normalize_lang(args.lang)
+    if args.online and not os.getenv("LLM_API_KEY", "").strip():
+        print(_TEXT[lang]["needs_key"].format(init=hint("init", lang)))
+        return 1
     scenes = SCENES if args.scene == "all" else (args.scene,)
-    asyncio.run(run(scenes, lang=lang, offline=offline))
-    return 0
+    try:
+        return asyncio.run(run(scenes, lang=lang, offline=not args.online))
+    except KeyboardInterrupt:
+        print()
+        return 130
 
 
 if __name__ == "__main__":

@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import functools
 import itertools
+import logging
 import os
 import re
 import shutil
@@ -29,11 +32,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx
+
 from persona_agent import access, candidates, channels, evidence, home, paths, promotion
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
 from persona_agent.decision import GATED_MODES, choose_group_mode, pacing_skip
+from persona_agent.llm import _status_of
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import (
     TextProcessing,
@@ -58,9 +64,14 @@ _TEXT = {
         "banner_dm": "personagent chat: a one-to-one chat with {name} (model {model}, {lang})",
         "you_are": 'You are "{you}". A plain line is group chat; put "{name}" in it to call {name}.',
         "you_are_dm": 'You are "{you}". Everything you type goes to {name}.',
-        "trigger": ("{name} considers joining in after {n} messages here "
+        "trigger": ("{name} considers joining in after {n} {messages} here "
                     "(the live bot waits for {live}; --trigger N)."),
-        "state": "What the trial learns stays in {path}, apart from the live bot.",
+        "state": ("What the trial learns stays in {path}, apart from the live bot: "
+                  "{learned} does not show it, and /reset clears it."),
+        "resumed": "(this folder already holds what an earlier session learned; /reset starts clean)",
+        "name_unset": ('PERSONA_NAME is not set, so the character is called "{name}" '
+                       "here; set it in {env} to give it its own name."),
+        "admin_name": "--admin speaks as {admin}, so --name is ignored.",
         "commands": [
             ("/reply <text>", "quote {name}'s last reply"),
             ("/as Name <msg>", "speak as someone else"),
@@ -70,18 +81,33 @@ _TEXT = {
             ("/reset", "start over: clear this chat and what the trial learned"),
             ("/quit", "leave"),
         ],
-        "no_key": ("No model key yet. Run `personagent init` to choose a model and "
-                   "key, or `personagent demo` to watch it work without one."),
+        "no_key": ("No model key yet. Run {init} to choose a model and "
+                   "key, or {demo} to watch it work without one."),
         "bye": "bye",
         "reset": "(started over: this chat and what the trial learned are gone)",
-        "nothing_to_quote": "(nothing to quote yet: {name} has not replied)",
+        "nothing_to_quote": "(no reply from {name} is waiting to be quoted)",
         "usage_as": "usage: /as Name your message",
+        "unknown": "unknown command {cmd}; the commands are:",
         "error": "[error: {error}]",
+        "failures": {
+            "auth": ("the model provider refused the key or the account{http}; "
+                     "check LLM_API_KEY, then run {doctor}"),
+            "request": ("the model provider rejected the request{http}; check "
+                        "LLM_MODEL and LLM_BASE_URL, then run {doctor}"),
+            "rate_limit": ("the model provider is rate limiting or out of credit"
+                           "{http}; wait a moment and try again"),
+            "unreachable": ("could not reach the model provider; check "
+                            "LLM_BASE_URL and the network, then run {doctor}"),
+            "server": "the model provider had an error{http}; try again in a moment",
+            "other": "the model call failed ({detail})",
+        },
         "quiet": "({name} stays quiet: {reason})",
         "joins": "({name} joins in: {reason})",
         "below": "not addressed, {count} of {trigger} messages",
+        "short": ("not addressed, {count} of {trigger} messages so far; this one "
+                  "is too short to count (under 4 characters)"),
         "trigger_count": "{count} of {trigger} messages",
-        "first_appearance": "{count} messages and it has not spoken here yet",
+        "first_appearance": "{count} {messages} and it has not spoken here yet",
         "followup": "it spoke in the last {window} s",
         "gate_pass": "{why}, but the gate model said stay quiet",
         "gate_speak": "{why}, and the gate model said speak",
@@ -91,7 +117,6 @@ _TEXT = {
         "filter": "the output filter blocked its reply",
         "character": "the character check rejected its reply {raw}",
         "dm_none": "no usable reply came back",
-        "model_error": "model error: {error}",
         "learning": "[learning] {text}",
         "judged": "judged: {reaction}, accepted ({strength})",
         "judged_dismissed": "judged: {reaction}, dismissed",
@@ -99,26 +124,28 @@ _TEXT = {
         "then": " - ",
         "retry_ok": "its retry was accepted ({strength})",
         "retry_moved_on": "its retry got a move-on, not a thanks ({strength})",
-        "no_verdict": "no verdict: the judge's answer could not be read",
+        "no_verdict": "no verdict: the judge model's answer could not be read",
+        "judge_failed": "no verdict: the call to the judge model failed: {why}",
         "blocked_teacher": ("not judged: this person's teaching is mostly dismissed, "
-                            "so it is no longer weighed"),
-        "promoted": "PROMOTED: {events} events, {strong} strong{chat}",
+                            "so it is no longer weighed (/reset clears that)"),
+        "promoted": "now in use: {events} agreeing {reactions}, {strong} strong{chat}",
         "same_chat": ", same chat",
-        "held": "held: {why}",
-        "rolled_back": "stopped using {n} learned row(s) about that reply",
+        "held": "not in use yet: {why}",
+        "rolled_back": "stopped using {n} learned {rows} about that reply",
         "armed": "waiting for your reaction to its retry",
         "nothing": "nothing to learn",
         "why_off": "automatic promotion is off",
-        "why_against": "evidence about it disagrees; left for the admin",
+        "why_against": "other reactions disagree; left for the admin",
         "why_conflict": "a different fix for the same reply exists; left for the admin",
-        "why_person": "this kind only a person can approve",
-        "why_strong": "{strong} of {need} strong events",
-        "why_events": "{events} of {need} agreeing events",
-        "why_speakers": "{speakers} of {need} different people",
+        "why_person": "only the admin can approve this kind; to see what is waiting: {learned}",
+        "why_other": "",
+        "why_strong": "{strong} of {need} strong reactions so far",
+        "why_events": "{events} of {need} agreeing reactions so far",
+        "why_speakers": "{speakers} of {need} different people so far",
         "why_head": 'why {name} said "{reply}":',
         "why_none": "nothing to explain yet: {name} has not replied",
-        "why_named": "  answered {who}: named",
-        "why_admin": "  answered {who}: the admin named it",
+        "why_named": "  answered {who}: {who} used its name",
+        "why_admin": "  answered {who}: the admin used its name",
         "why_joined": "  joined in after {who}: {reason}",
         "why_memory": "  a memory command from {who}, no model call",
         "why_dm": "  answered {who} in a one-to-one chat",
@@ -141,7 +168,11 @@ _TEXT = {
         "you_are": "你是「{you}」。普通的一句话就是群聊；带上「{name}」就是在叫它。",
         "you_are_dm": "你是「{you}」。你说的每句话都发给{name}。",
         "trigger": "这里{name}攒够 {n} 条消息才考虑插话（正式运行时是 {live} 条；--trigger N 可改）。",
-        "state": "试用里学到的东西存在 {path}，和正式运行的 bot 分开。",
+        "state": ("试用里学到的东西存在 {path}，和正式运行的 bot 分开：{learned} 看不到它，"
+                  "用 /reset 可以清空。"),
+        "resumed": "（这个文件夹里还留着上一次试用学到的东西；用 /reset 可以从头开始）",
+        "name_unset": "没有设置 PERSONA_NAME，所以这里角色叫「{name}」；在 {env} 里设置它，角色才有自己的名字。",
+        "admin_name": "--admin 以 {admin} 的身份说话，所以 --name 不起作用。",
         "commands": [
             ("/reply <内容>", "引用{name}的上一条回复"),
             ("/as 名字 <消息>", "换一个人说话"),
@@ -151,16 +182,26 @@ _TEXT = {
             ("/reset", "从头来：清空聊天和试用里学到的东西"),
             ("/quit", "退出"),
         ],
-        "no_key": ("还没有配置模型密钥。运行 `personagent init` 选择模型并填写密钥；"
-                   "也可以先运行 `personagent demo`，不用密钥就能看效果。"),
+        "no_key": ("还没有配置模型密钥。运行 {init} 选择模型并填写密钥；"
+                   "也可以先运行 {demo}，不用密钥就能看效果。"),
         "bye": "再见",
         "reset": "（已从头开始：这个聊天和试用里学到的东西都清空了）",
-        "nothing_to_quote": "（还没有可引用的：{name}还没回复过）",
+        "nothing_to_quote": "（没有等着被引用的{name}的回复）",
         "usage_as": "用法：/as 名字 你的消息",
+        "unknown": "不认识的命令 {cmd}，可用的命令有：",
         "error": "[出错：{error}]",
+        "failures": {
+            "auth": "模型服务拒绝了密钥或账号{http}；检查 LLM_API_KEY，再运行 {doctor}",
+            "request": "模型服务拒绝了这次请求{http}；检查 LLM_MODEL 和 LLM_BASE_URL，再运行 {doctor}",
+            "rate_limit": "模型服务限流或额度用完了{http}；稍等一会儿再试",
+            "unreachable": "连不上模型服务；检查 LLM_BASE_URL 和网络，再运行 {doctor}",
+            "server": "模型服务出错了{http}；稍后再试",
+            "other": "调用模型失败（{detail}）",
+        },
         "quiet": "（{name}没说话：{reason}）",
         "joins": "（{name}插话：{reason}）",
         "below": "没被点名，{count}/{trigger} 条消息",
+        "short": "没被点名，目前 {count}/{trigger} 条消息；这句太短，不计数（少于 4 个字符）",
         "trigger_count": "攒够 {count}/{trigger} 条消息",
         "first_appearance": "已经 {count} 条消息，它在这里还没说过话",
         "followup": "它 {window} 秒内刚说过话",
@@ -172,7 +213,6 @@ _TEXT = {
         "filter": "输出过滤器拦下了回复",
         "character": "回复没通过字符校验 {raw}",
         "dm_none": "没有拿到能发出的回复",
-        "model_error": "模型出错：{error}",
         "learning": "[学习] {text}",
         "judged": "判定：{reaction}，采信（{strength}）",
         "judged_dismissed": "判定：{reaction}，不采信",
@@ -181,7 +221,8 @@ _TEXT = {
         "retry_ok": "它的重试被接受了（{strength}）",
         "retry_moved_on": "对重试没表态，只是聊别的了（{strength}）",
         "no_verdict": "没有判定：判定模型的回答读不出来",
-        "blocked_teacher": "不判定：此人教的东西大多被驳回，已不再考虑",
+        "judge_failed": "没有判定：调用判定模型失败：{why}",
+        "blocked_teacher": "不判定：此人教的东西大多被驳回，已不再考虑（用 /reset 可以清除）",
         "promoted": "已生效：{events} 条证据，{strong} 条强证据{chat}",
         "same_chat": "，同一个聊天",
         "held": "暂不生效：{why}",
@@ -191,7 +232,8 @@ _TEXT = {
         "why_off": "自动生效已关闭",
         "why_against": "关于它的证据互相矛盾，留给管理员",
         "why_conflict": "同一条回复已有另一种改法，留给管理员",
-        "why_person": "这类只能由人来批准",
+        "why_person": "这类只能由管理员批准；查看待批准的：{learned}",
+        "why_other": "还没满足自动生效的条件",
         "why_strong": "强证据 {strong}/{need}",
         "why_events": "一致证据 {events}/{need}",
         "why_speakers": "不同的人 {speakers}/{need}",
@@ -225,6 +267,57 @@ def text_for(lang: str) -> dict:
 def clip(text, width: int = 40) -> str:
     text = " ".join(str(text or "").split())
     return text if len(text) <= width else text[:width - 3] + "..."
+
+
+def normalize_lang(value: str | None) -> str:
+    """The two languages there are: zh and zh-CN are Chinese, anything else English."""
+    return "zh" if str(value or "").strip().lower().startswith("zh") else "en"
+
+
+def plural(lang: str, n: int, one: str, many: str) -> str:
+    return one if lang != "zh" and n == 1 else many
+
+
+@functools.lru_cache(maxsize=None)
+def hint(sub: str, lang: str = "en") -> str:
+    """`personagent <sub>` as this install runs it, ready to show in a sentence.
+    Cached so the demo can ask before it swaps in its throwaway home."""
+    from persona_agent.setup_wizard import Launcher
+    lines = Launcher(python=sys.executable, home=paths.ROOT).shown(sub)
+    return ("，然后" if lang == "zh" else ", then ").join(f"`{line}`" for line in lines)
+
+
+@dataclass(frozen=True)
+class Failure:
+    """Why a model call failed, in terms a newcomer can act on."""
+
+    kind: str
+    status: int | None = None
+    detail: str = ""
+
+
+def describe_failure(exc: BaseException) -> Failure:
+    if isinstance(exc, (httpx.TransportError, OSError, asyncio.TimeoutError)):
+        return Failure("unreachable")
+    status = _status_of(exc)
+    kind = Agent._classify_api_error(exc)
+    if kind == "fatal_auth":
+        return Failure("auth", status)
+    if kind == "fatal_request":
+        return Failure("request", status)
+    if kind == "rate_limit":
+        return Failure("rate_limit", status)
+    if status and status >= 500:
+        return Failure("server", status)
+    first = (str(exc).strip().splitlines() or [""])[0]
+    return Failure("other", status, f"{type(exc).__name__}: {clip(first, 100)}")
+
+
+def failure_text(lang: str, failure: Failure, doctor: str | None = None) -> str:
+    http = f" (HTTP {failure.status})" if failure.status else ""
+    return text_for(lang)["failures"][failure.kind].format(
+        http=http, detail=failure.detail,
+        doctor=doctor if doctor is not None else hint("doctor", lang))
 
 
 # ---------------------------------------------------------------------------
@@ -277,8 +370,7 @@ def checklist(agent: Agent, cand: dict) -> Checklist:
         e for e in log.many(cand.get("evidence") or [])
         if promotion.supports_candidate(e, cand, policy=policy)
         and not (max_age > 0 and now - promotion.epoch(e.get("ts")) > max_age)]
-    strong = [e for e in supporting
-              if evidence.classify_strength(e) == evidence.STRONG]
+    strong = [e for e in supporting if promotion.anchors(e, cand)]
     speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
     admins = {str(a).strip()[:64] for a in agent._admins()} - {""}
     related = promotion.related_events(cand, log.all())
@@ -315,6 +407,8 @@ class Reaction:
     held: list = field(default_factory=list)       # (candidate, Checklist)
     rolled_back: int = 0
     armed: bool = False
+    #: Set when the judge could not be reached, as opposed to giving no verdict.
+    failure: Failure | None = None
 
 
 @dataclass
@@ -325,6 +419,8 @@ class Turn:
     uid: str
     text: str
     reply: str = ""
+    #: The reply as the ledger stores it, stickers unrendered.
+    sent: str = ""
     mode: str = ""
     why: str = ""
     count: int = 0
@@ -332,13 +428,17 @@ class Turn:
     window: int = 0
     #: Why it stayed quiet, a key into the text table; "" when it spoke.
     quiet: str = ""
+    #: The line was too short to count toward the trigger.
+    short: bool = False
     raw: str = ""
-    error: str = ""
+    #: Set when the model could not answer; nothing was said and nothing is kept.
+    failure: Failure | None = None
     memory: bool = False
     memory_saved: bool = False
     reaction: Reaction | None = None
     retry_of: str = ""
     offered: list = field(default_factory=list)
+    conv: str = ""
 
 
 def _awaiting_fix(agent: Agent, conv: str) -> dict | None:
@@ -349,6 +449,47 @@ def _awaiting_fix(agent: Agent, conv: str) -> dict | None:
 def _names_bot(agent: Agent, text: str) -> bool:
     """The live name-call test (turns.py), so the trial calls when it would."""
     return agent._names_me(text)
+
+
+@contextlib.contextmanager
+def _patched(obj, **wrappers):
+    """Wrap methods of one instance for the block; each wrapper gets the original."""
+    own = {name: name in vars(obj) for name in wrappers}
+    saved = {name: getattr(obj, name) for name in wrappers}
+    for name, wrap in wrappers.items():
+        setattr(obj, name, wrap(saved[name]))
+    try:
+        yield
+    finally:
+        for name in wrappers:
+            if own[name]:
+                setattr(obj, name, saved[name])
+            else:
+                delattr(obj, name)
+
+
+def _collecting(sink: list):
+    """A wrapper that appends every result of a sync call to `sink`."""
+    def wrap(inner):
+        def wrapped(*args, **kwargs):
+            out = inner(*args, **kwargs)
+            sink.append(out)
+            return out
+        return wrapped
+    return wrap
+
+
+def _catching(sink: list):
+    """A wrapper that notes the exception an async call raises, and re-raises it."""
+    def wrap(inner):
+        async def wrapped(*args, **kwargs):
+            try:
+                return await inner(*args, **kwargs)
+            except Exception as e:
+                sink.append(e)
+                raise
+        return wrapped
+    return wrap
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +508,9 @@ class Trial:
         self.dm = dm
         self.factory = factory
         self.state_dir = state_dir
+        #: False plays every opening the way a person at the keyboard would,
+        #: with no random pass and no sleep window.
+        self.pacing = True
         self.last: Turn | None = None
         self.last_mid = ""
         self._mids = itertools.count(1)
@@ -402,8 +546,11 @@ class Trial:
                   quote: bool = False) -> Turn:
         if self.dm:
             return await self._dm_turn(name, uid, text)
-        return await self._group_turn(name, uid, text,
+        turn = await self._group_turn(name, uid, text,
                                       self.last_mid if quote else "")
+        if quote and turn.reaction is not None:
+            self.last_mid = ""
+        return turn
 
     # -- reactions -----------------------------------------------------------
 
@@ -416,13 +563,18 @@ class Trial:
         before = {c["candidate_id"]: (c.get("state"), set(c.get("evidence") or ()))
                   for c in agent.candidate_ledger.all()}
         blocked = not is_admin and agent.teacher_stats.hard_block(uid)
-        await agent._process_reaction(entry, text, name, uid, is_admin,
-                                      conv_id=conv, is_dm=self.dm)
+        errors: list[Exception] = []
+        # The judge's failures are swallowed inside, so listen from outside.
+        with _patched(agent, _call_llm=_catching(errors)):
+            await agent._process_reaction(entry, text, name, uid, is_admin,
+                                          conv_id=conv, is_dm=self.dm)
         events = [e for e in agent.evidence_log.all() if e["event_id"] not in seen]
         new_ids = {e["event_id"] for e in events}
         out = Reaction(reply=str(entry.get("reply") or ""),
                        target=str(entry.get("target_name") or ""),
                        events=events, blocked=blocked)
+        if errors and not events:
+            out.failure = describe_failure(errors[-1])
         for cand in agent.candidate_ledger.all():
             old_state, old_ev = before.get(cand["candidate_id"], ("", set()))
             state = cand.get("state")
@@ -451,7 +603,7 @@ class Trial:
                    "sender": {"nickname": nickname},
                    "message": [{"type": "text", "data": {"text": text}}]}
         text = await agent._extract_text(payload)
-        turn = Turn(speaker=nickname, uid=uid, text=text,
+        turn = Turn(speaker=nickname, uid=uid, text=text, conv=conv,
                     trigger=agent.chat_trigger_count,
                     window=agent.chat_followup_window_s)
         if not text:
@@ -471,7 +623,8 @@ class Trial:
         agent._append_buffer(conv, nickname, _truncate_framed(text, 200), uid)
         agent.last_activity_at[conv] = time.time()
         agent.active_users[conv].append((uid, nickname))
-        if len(text.strip()) >= 4 or addressed:
+        turn.short = not (len(text.strip()) >= 4 or addressed)
+        if not turn.short:
             agent.counters[conv] += 1
 
         if addressed:
@@ -480,7 +633,7 @@ class Trial:
             if mem_reply is not None:
                 turn.mode, turn.memory = "memory", True
                 turn.memory_saved = len(agent.memories.get(conv, [])) > notes
-                turn.reply = TextProcessing._sanitize_reply(
+                turn.reply = turn.sent = TextProcessing._sanitize_reply(
                     mem_reply, agent._validator_lang(), agent.reply_style)
                 agent.last_reply_at[conv] = time.time()
                 agent._append_buffer(conv, agent.persona_name, mem_reply)
@@ -500,25 +653,30 @@ class Trial:
             turn.quiet = "below"
             return turn
         agent.counters[conv] = 0
-        skip = pacing_skip(mode, first_appearance=never_replied,
-                           sleep_hour=TextProcessing._is_sleep_hour())
+        skip = (pacing_skip(mode, first_appearance=never_replied,
+                            sleep_hour=TextProcessing._is_sleep_hour())
+                if self.pacing else "")
         if skip:
             turn.quiet = "sleep" if skip == "sleep window" else "skip"
             return turn
 
         self._gate_verdict = None
+        blocks: list[str] = []
         try:
-            reply, intent, auto_mem = await agent._think(conv, mode, text)
+            with _patched(agent, _examples_for_prompt=_collecting(blocks)):
+                reply, intent, auto_mem = await agent._think(conv, mode, text)
         except Exception as e:
-            turn.quiet, turn.error = "model_error", f"{type(e).__name__}: {e}"
+            # Not a decision: the count it spent goes back.
+            agent.counters[conv] = turn.count
+            turn.failure = describe_failure(e)
             return turn
         if mode in GATED_MODES and self._gate_verdict is False:
             turn.quiet = "gate_pass"
             return turn
-        return self._commit_group(turn, reply, intent, auto_mem)
+        return self._commit_group(turn, reply, intent, auto_mem, blocks)
 
     def _commit_group(self, turn: Turn, raw: str, intent: str,
-                      auto_mem: str) -> Turn:
+                      auto_mem: str, blocks: list[str]) -> Turn:
         agent, conv = self.agent, self.conv
         final = agent._finalize_reply(raw, log_ctx=f"trial mode={turn.mode}")
         if final is None:
@@ -556,8 +714,8 @@ class Trial:
                 target_name=turn.speaker, mids=[self.last_mid], ts=time.time())
             if awaiting and _awaiting_fix(agent, conv) is None:
                 turn.retry_of = str(awaiting.get("reply") or "")
-        turn.reply = _render(sent)
-        turn.offered = self.offered(conv, turn.text, turn.mode)
+        turn.reply, turn.sent = _render(sent), sent
+        turn.offered = self.offered(conv, blocks)
         self.last = turn
         return turn
 
@@ -570,7 +728,7 @@ class Trial:
         agent = self.agent
         conv = channels.dm_learning_key(uid)
         is_admin = access.is_admin(uid, agent._admins())
-        turn = Turn(speaker=name, uid=uid, text=text,
+        turn = Turn(speaker=name, uid=uid, text=text, conv=conv,
                     mode=ADMIN_MODE if is_admin else "called", why="dm")
         if agent.react_learn_enabled:
             entry = agent.pending_reactions.match(
@@ -585,52 +743,71 @@ class Trial:
                    "message": [{"type": "text", "data": {"text": text}}]}
         sink = ConnectorSink(bot_id=agent._self_mention_id())
         token = current_sink.set(sink)
+        failures: list[Exception] = []
+        recorded: list[dict] = []
+        blocks: list[str] = []
+
+        def spy_record(inner):
+            def wrapped(conv_key, **kwargs):
+                recorded.append(kwargs)
+                return inner(conv_key, **kwargs)
+            return wrapped
         try:
-            await agent._handle_dm(uid, payload, is_admin=is_admin)
+            # The handler answers a failed call with an excuse in the persona's
+            # voice; that is not a reply, so listen for the failure itself.
+            with _patched(agent, _chat_dm=_catching(failures),
+                          _examples_for_prompt=_collecting(blocks)), \
+                    _patched(agent.pending_reactions, record=spy_record):
+                await agent._handle_dm(uid, payload, is_admin=is_admin)
         except Exception as e:
-            turn.quiet, turn.error = "model_error", f"{type(e).__name__}: {e}"
-            return turn
+            failures.append(e)
         finally:
             sink.closed = True
             current_sink.reset(token)
+        if failures:
+            turn.failure = describe_failure(failures[-1])
+            return turn
         said = [item.get("text", "") for item in sink.items
                 if item.get("type") == "text" and item.get("text")]
         if not said:
             turn.quiet = "dm_none"
             return turn
         turn.reply = "\n".join(said)
+        turn.sent = str(recorded[-1].get("reply") or "") if recorded else turn.reply
         if awaiting and _awaiting_fix(agent, conv) is None:
             turn.retry_of = str(awaiting.get("reply") or "")
-        turn.offered = self.offered(conv, text, "")
+        turn.offered = self.offered(conv, blocks)
         self.last = turn
         return turn
 
     # -- reading back ----------------------------------------------------------
 
-    def offered(self, conv: str, focus: str, mode: str) -> list[dict]:
-        """Learned rows from this chat that retrieval puts in the prompt for
-        `focus` now."""
+    def offered(self, conv: str, blocks: list[str]) -> list[dict]:
+        """Learned rows from this chat that were in the prompt: those whose
+        text is in the examples block the turn's own prompt build produced."""
         agent = self.agent
+        if not blocks:
+            return []
         agent._reload_views_if_stale()
         scope = agent._live_scope(conv)
         rows = [r for r in agent._view_pairs_cache + agent._view_examples_cache
                 if agent._scope_authorizes(r.get("scope"), scope)]
-        if not rows:
-            return []
-        block = agent._examples_for_prompt(focus, mode, conv_id=conv)
+        used = "\n".join(blocks)
         return [r for r in rows
-                if _example_field(r.get("better") or r.get("reply") or "") in block]
+                if _example_field(r.get("better") or r.get("reply") or "") in used]
 
     async def probe(self, name: str, uid: str, text: str) -> Turn:
         """What it would answer to `text` in this chat now, from a clean
         context, without the chat seeing it."""
         agent, conv = self.agent, self.conv
-        turn = Turn(speaker=name, uid=uid, text=text, mode="called")
+        turn = Turn(speaker=name, uid=uid, text=text, mode="called", conv=conv)
         saved = agent.buffers.pop(conv, None)
+        blocks: list[str] = []
         try:
             agent._append_buffer(conv, name, text, uid)
-            reply, _intent, _mem = await agent._think(
-                conv, "called", text, caller_override=(name, uid))
+            with _patched(agent, _examples_for_prompt=_collecting(blocks)):
+                reply, _intent, _mem = await agent._think(
+                    conv, "called", text, caller_override=(name, uid))
         finally:
             agent.buffers.pop(conv, None)
             if saved is not None:
@@ -639,18 +816,21 @@ class Trial:
         turn.reply = _render(final[0]) if final else ""
         if not turn.reply or re.match(r"PASS\b", turn.reply, re.IGNORECASE):
             turn.reply, turn.quiet = "", "pass"
-        turn.offered = self.offered(conv, text, "called")
+        turn.offered = self.offered(conv, blocks)
         return turn
 
-    def about(self, reply: str) -> tuple[list[dict], list[dict]]:
-        """Ledger events and candidates about one reply, oldest first."""
-        reply = reply.strip()
+    def about(self, turn: Turn) -> tuple[list[dict], list[dict]]:
+        """Ledger events and candidates about the reply `turn` made, in its own
+        chat, oldest first."""
+        reply, conv = turn.sent.strip(), turn.conv
         events = [e for e in self.agent.evidence_log.all()
-                  if str(e.get("reply") or "").strip() == reply
-                  or str((e.get("adjudication") or {}).get("better") or "").strip() == reply]
+                  if e.get("conv_id") == conv
+                  and (str(e.get("reply") or "").strip() == reply
+                       or str((e.get("adjudication") or {}).get("better") or "").strip() == reply)]
         cands = [c for c in self.agent.candidate_ledger.all()
-                 if reply in (str(c.get("reply") or "").strip(),
-                              str(c.get("better") or "").strip())]
+                 if (c.get("scope") or {}).get("conv_id") == conv
+                 and reply in (str(c.get("reply") or "").strip(),
+                               str(c.get("better") or "").strip())]
         return events, cands
 
 
@@ -669,12 +849,13 @@ def _render(text: str) -> str:
 def reason(lang: str, turn: Turn, name: str) -> str:
     """Why the turn spoke or stayed quiet, in one phrase."""
     t = text_for(lang)
-    counts = {"count": turn.count, "trigger": turn.trigger, "window": turn.window}
+    counts = {"count": turn.count, "trigger": turn.trigger, "window": turn.window,
+              "messages": plural(lang, turn.count, "message", "messages")}
     base = {"below the trigger count": t["below"], "trigger count": t["trigger_count"],
             "first appearance": t["first_appearance"],
             "followup window": t["followup"]}.get(turn.why, "").format(**counts)
     if turn.quiet == "below":
-        return base
+        return t["short"].format(**counts) if turn.short else base
     if turn.quiet == "gate_pass":
         return t["gate_pass"].format(why=base)
     if turn.mode in GATED_MODES and not turn.quiet:
@@ -684,8 +865,6 @@ def reason(lang: str, turn: Turn, name: str) -> str:
         return t[key].format(name=name)
     if key == "character":
         return t["character"].format(raw=f'"{turn.raw}"' if turn.raw else "")
-    if key == "model_error":
-        return t["model_error"].format(error=turn.error)
     return base
 
 
@@ -693,17 +872,19 @@ def held_reason(lang: str, check: Checklist) -> str:
     t = text_for(lang)
     key = check.waiting_for()
     if not key:
-        return check.decision.reason
+        return t["why_other"] or check.decision.reason
     need = {"why_strong": check.need_strong, "why_events": check.need_events,
             "why_speakers": check.need_speakers}.get(key, 0)
     return t[key].format(strong=check.strong, need=need, events=check.events,
-                         speakers=check.speakers)
+                         speakers=check.speakers, learned=hint("learned list", lang))
 
 
 def promoted_line(lang: str, check: Checklist) -> str:
     t = text_for(lang)
-    return t["promoted"].format(events=check.events, strong=check.strong,
-                                chat=t["same_chat"] if check.same_chat else "")
+    return t["promoted"].format(
+        events=check.events, strong=check.strong,
+        reactions=plural(lang, check.events, "reaction", "reactions"),
+        chat=t["same_chat"] if check.same_chat else "")
 
 
 def reaction_label(lang: str, rtype: str) -> str:
@@ -732,17 +913,22 @@ def judged(lang: str, event: dict) -> str:
     return t["judged"].format(reaction=reaction, strength=strength)
 
 
-def trace(lang: str, r: Reaction) -> str:
+def trace(lang: str, r: Reaction, doctor: str | None = None) -> str:
     """A reaction's one-line learning trace."""
     t = text_for(lang)
     if not r.events:
-        return t["learning"].format(
-            text=t["blocked_teacher" if r.blocked else "no_verdict"])
+        if r.failure is not None:
+            text = t["judge_failed"].format(
+                why=failure_text(lang, r.failure, doctor))
+        else:
+            text = t["blocked_teacher" if r.blocked else "no_verdict"]
+        return t["learning"].format(text=text)
     verdicts = t["and"].join(judged(lang, e) for e in r.events)
     if r.promoted:
         outcome = promoted_line(lang, r.promoted[0][1])
     elif r.rolled_back:
-        outcome = t["rolled_back"].format(n=r.rolled_back)
+        outcome = t["rolled_back"].format(
+            n=r.rolled_back, rows=plural(lang, r.rolled_back, "row", "rows"))
     elif r.armed:
         outcome = t["armed"]
     elif r.held:
@@ -794,7 +980,7 @@ def why_lines(lang: str, trial: Trial, name: str) -> list[str]:
                 lines.append(shown)
         else:
             lines.append(t["why_prompt_none"])
-    events, cands = trial.about(turn.reply)
+    events, cands = trial.about(turn)
     if not events and not cands:
         lines.append(t["why_ledger_none"])
         return lines
@@ -845,19 +1031,16 @@ def build_agent(lang: str, trigger: int) -> tuple[Agent, Path]:
     return agent, state
 
 
-def _shown_path(path: Path) -> str:
-    try:
-        return str(path.relative_to(paths.ROOT)) + os.sep
-    except ValueError:
-        return str(path) + os.sep
-
-
 class ChatSession:
     """The terminal side: parses a line, runs it, prints what happened."""
 
     def __init__(self, trial: Trial, *, lang: str, you: str, admin: bool,
-                 live_trigger: int) -> None:
+                 live_trigger: int, resumed: bool = False, name_unset: bool = False,
+                 name_ignored: bool = False) -> None:
         self.trial = trial
+        self.resumed = resumed
+        self.name_unset = name_unset
+        self.name_ignored = name_ignored
         self.lang = lang
         self.t = text_for(lang)
         agent = trial.agent
@@ -873,11 +1056,20 @@ class ChatSession:
         print(head.format(name=self.name, model=agent.model, lang=agent.agent_lang))
         print(t["you_are_dm" if self.trial.dm else "you_are"].format(
             you=self.you[0], name=self.name))
+        if self.name_ignored:
+            print(t["admin_name"].format(admin=self.you[0]))
+        if self.name_unset:
+            print(t["name_unset"].format(name=self.name, env=paths.ROOT / ".env"))
         if not self.trial.dm:
-            print(t["trigger"].format(name=self.name, n=agent.chat_trigger_count,
-                                      live=self.live_trigger))
+            print(t["trigger"].format(
+                name=self.name, n=agent.chat_trigger_count, live=self.live_trigger,
+                messages=plural(self.lang, agent.chat_trigger_count,
+                                "message", "messages")))
         if self.trial.state_dir is not None:
-            print(t["state"].format(path=_shown_path(self.trial.state_dir)))
+            print(t["state"].format(path=str(self.trial.state_dir) + os.sep,
+                                    learned=hint("learned", self.lang)))
+            if self.resumed:
+                print(t["resumed"])
         self.commands()
 
     def commands(self) -> None:
@@ -928,6 +1120,7 @@ class ChatSession:
                 return True
             quote, msg = True, rest
         elif command.startswith("/"):
+            print("  " + self.t["unknown"].format(cmd=command))
             self.commands()
             return True
         if not msg.strip():
@@ -935,7 +1128,8 @@ class ChatSession:
         try:
             turn = await self.trial.say(name, uid, msg.strip(), quote=quote)
         except Exception as e:
-            print("  " + self.t["error"].format(error=f"{type(e).__name__}: {e}"))
+            print("  " + self.t["error"].format(
+                error=failure_text(self.lang, describe_failure(e))))
             return True
         self.show(turn)
         return True
@@ -944,7 +1138,10 @@ class ChatSession:
         t = self.t
         if turn.reaction is not None:
             print("  " + trace(self.lang, turn.reaction))
-        if turn.reply:
+        if turn.failure is not None:
+            print("  " + t["error"].format(
+                error=failure_text(self.lang, turn.failure)))
+        elif turn.reply:
             if turn.mode in GATED_MODES:
                 print("  " + t["joins"].format(
                     name=self.name, reason=reason(self.lang, turn, self.name)))
@@ -981,20 +1178,30 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                    help=f"messages before it considers joining in (default "
                         f"{TRIAL_TRIGGER}; the live bot uses CHAT_TRIGGER_COUNT)")
     args = p.parse_args(argv)
-    lang = args.lang.strip().lower()
+    lang = normalize_lang(args.lang)
     trigger = max(1, args.trigger)
 
     live = AgentSettings.from_env(lang=lang)
-    if not live.api_key:
+    if not (live.api_key or "").strip():
         # Before anything is built: a home without a key gets no trial folder.
-        print(text_for(live.agent_lang)["no_key"])
+        print(text_for(lang)["no_key"].format(init=hint("init", lang),
+                                              demo=hint("demo", lang)))
         return 1
+    trial_dir = paths.runtime_dir() / TRIAL_DIR
+    resumed = trial_dir.is_dir() and any(trial_dir.iterdir())
     agent, state = build_agent(lang, trigger)
     trial = Trial(agent, dm=args.dm, state_dir=state,
                   factory=lambda: build_agent(lang, trigger)[0])
-    session = ChatSession(trial, lang=agent.agent_lang, you=args.name,
-                          admin=args.admin, live_trigger=live.chat_trigger_count)
+    session = ChatSession(
+        trial, lang=agent.agent_lang, you=args.name, admin=args.admin,
+        live_trigger=live.chat_trigger_count, resumed=resumed,
+        name_unset=not os.getenv("PERSONA_NAME", "").strip(),
+        name_ignored=args.admin and args.name != "you")
     session.banner()
+    # The trial words every failure itself; the agent's log lines would repeat it.
+    logger = logging.getLogger("agent")
+    level = logger.level
+    logger.setLevel(logging.CRITICAL)
     try:
         while True:
             try:
@@ -1007,6 +1214,7 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(session.t["bye"])
         return 0
     finally:
+        logger.setLevel(level)
         await trial.agent.aclose()
 
 
