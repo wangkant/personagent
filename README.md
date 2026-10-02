@@ -1,60 +1,127 @@
 # personagent
 
-![personagent — illustrated conversations](assets/personagent-cover.png)
+![personagent — illustrated conversations](https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.png)
 
 **A character for your group chats that knows when to stay quiet, and learns from being corrected.**
 
-Describe the character in a text file, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, a connector carries it into your chats: [AstrBot](https://github.com/AstrBotDevs/AstrBot) for QQ, Telegram, Discord, Slack and a dozen more, [Satori](https://satori.chat) for anything Koishi reaches, or [Matrix](https://matrix.org) and its bridges for WhatsApp and Signal.
+Pick a character or write your own, point it at any OpenAI-compatible model, and chat with it in your terminal. When it is ready, a connector carries it into your chats: [AstrBot](https://github.com/AstrBotDevs/AstrBot) for QQ, Telegram, Discord, Slack and a dozen more, [Satori](https://satori.chat) for anything Koishi reaches, or [Matrix](https://matrix.org) and its bridges for WhatsApp and Signal.
 
 For an easier way to use personagent for one-on-one chats, try [**Charune**](https://www.charune.com/), which uses personagent as its conversation engine.
 
 **English** · [简体中文](README.zh-CN.md)
 
+[![PyPI](https://img.shields.io/pypi/v/personagent?color=3776AB)](https://pypi.org/project/personagent/)
 [![CI](https://github.com/wangkant/personagent/actions/workflows/ci.yml/badge.svg)](https://github.com/wangkant/personagent/actions/workflows/ci.yml)
-[![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python 3.10–3.14](https://img.shields.io/badge/Python-3.10%E2%80%933.14-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
 
-[Why personagent](#why-personagent) · [Quick start](#quick-start) · [Write a persona](#write-a-persona) · [Put it in a chat](#put-it-in-a-chat) · [Teach it](#teach-it) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
+[Try it](#try-it-in-one-minute) · [Why](#why-personagent) · [Quick start](#quick-start) · [Put it in a chat](#put-it-in-a-chat) · [Teach it](#teach-it) · [Dashboard](#the-dashboard) · [Compare](#how-it-compares) · [Measured](#measured) · [Troubleshooting](#troubleshooting)
+
+## Try it in one minute
+
+```bash
+uvx personagent demo    # watch it stay quiet and learn; no key, nothing to configure
+uvx personagent init    # pick a model service, paste its key, pick a character
+uvx personagent chat    # talk to it in a simulated group chat
+```
+
+`uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you. Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS, Linux) or `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
 
 ## Why personagent
 
-- **It knows when to stay quiet.** It answers when someone says its name or @s it. The rest of the time it listens, and joins in only when a person would.
-- **It learns from corrections.** Tell it what you meant, and it keeps the better reply for next time. One joke or one troll cannot retrain it: a correction counts once it holds up, for example when you accept its second try.
-- **It remembers each chat separately.** What one group tells it stays in that group. Ask `Nova, what do you remember?` to see.
-- **Editing the character keeps what it learned.**
+- **It knows when to stay quiet.** It answers when called; otherwise a model judges whether a person would chime in. No dice roll.
+- **It learns from being corrected, but only when the correction holds up.** One troll cannot retrain it.
+- **Every change is on record.** You can see why it changed, and roll any change back.
+- **Each chat has its own memory, and editing the character keeps what it learned.**
+- **It is measured.** `personagent eval` scores when it speaks, whether it stays in character, and whether corrections stick.
 
-No model is fine-tuned. It learns by improving the examples in its prompt.
+This is `personagent demo teach`, trimmed. The model's lines are scripted; the ledger and the promotion rule are the real code:
 
-![Illustrative chat between Alex and Nova about finishing work and dinner](assets/personagent-chat.en.png)
+```text
+  Alex: Nova, the deploy failed again
+  Nova: did you check the logs? roll back first, then diff the configs
+  Alex: Nova, I was just venting
+      judged: rejection, accepted: "Alex was venting, not asking for a fix"
+      Nova's next reply to Alex counts as its second try
+  Nova: fair. that's a rough end to the day
+  Alex: haha yeah it is, thanks Nova
+      ledger: weak (a laugh or a thanks never changes anything alone)
+      ledger: Alex accepted the second try: strong (Alex is who the reply was for)
+      PROMOTED: 2 events, 1 strong, same chat
+
+  fix: "did you check the logs? roll back first, ..." -> "fair. that's a rough end to the day"
+    [x] 2 of 2 agreeing events
+    [x] 1 of 1 strong
+    [x] same chat
+    [x] 1 of 1 person (PROMOTE_MIN_SPEAKERS)
+    [x] nothing disagrees, no rival fix
+```
+
+Asked about a laptop that died mid-demo, Nova offered a fix before this exchange and sympathy after it. The other two scenes show which group messages it skips and why, and a stranger failing to plant an instruction.
 
 ## Quick start
 
-You need Git, Python 3.10–3.12, and an API key for an OpenAI-compatible endpoint, or a local Ollama. No chat account is needed to try it.
+### Install
 
-```bash
-git clone https://github.com/wangkant/personagent.git
-cd personagent
-python quickstart.py
+| Route | Command |
+|---|---|
+| Run without installing | `uvx personagent <command>` |
+| A permanent `personagent` command | `uv tool install personagent` or `pipx install personagent` |
+| Into an environment you already have | `pip install personagent` |
+| From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
+
+personagent runs on Python 3.10–3.14. `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
+
+The home folder holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is `~/personagent` for an installed copy, the clone itself for a checkout, or the folder you give with `--home DIR` or `AGENT_HOME`.
+
+The commands below are written as `personagent ...`. Put `uvx` in front if you did not install it. In a clone, `.venv/bin/python -m persona_agent ...` (Windows: `.venv\Scripts\python.exe -m persona_agent ...`) does the same.
+
+### Set it up
+
+`personagent init` asks about eight questions, in English or Chinese, and explains each term in a line:
+
+- **The AI service.** DeepSeek, SiliconFlow, Alibaba Bailian (Qwen), Zhipu GLM, Moonshot (Kimi), Volcengine Ark (Doubao), OpenRouter, OpenAI, Google Gemini, Ollama on this computer, or any other OpenAI-compatible service. The default is DeepSeek's `deepseek-flash`. For Ollama, name a model you have already pulled; no key is needed.
+- **The key.** It is hidden while you type, then tested with one tiny request. If the test fails, it shows the address it called, the HTTP status and a likely fix.
+- **The character.** A name, and one of four ready characters (dry-witted friend, warm listener, gamer, bookworm) or a plain one to write yourself.
+- **Chat apps.** Optional; skip it the first time. See [Put it in a chat](#put-it-in-a-chat).
+
+To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`; `personagent init --help` lists them.
+
+### Chat in the terminal
+
+`personagent chat` puts you in a simulated group chat with the character. A plain line is group chat, and it tells you whether it would join in and why. A line with its name is a call:
+
+```text
+Alex> anyone around tonight?
+  (Nova stays quiet: not addressed, 1 of 4 messages)
+
+Alex> Nova, the deploy failed again
+  Nova > did you check the logs? roll back first, then diff the configs
 ```
-
-The wizard creates `.venv`, installs the dependencies, and asks for the endpoint, model, key, the character's name and a language (English or Chinese). Skip the AstrBot step the first time; at the end it offers to open a chat in your terminal. For Ollama, choose `Ollama (local)`, enter a model you have already pulled, and keep the placeholder key.
-
-To chat again later, run `.venv/bin/python try_chat.py` (Windows: `.venv\Scripts\python.exe try_chat.py`).
 
 | Type | To |
 |---|---|
-| `/as Alex I could use an early finish today` | speak as someone else |
-| `/admin How was your day?` | speak once as the configured admin |
-| `/reset` | clear the conversation |
+| `/reply <text>` | quote its last reply, which counts as a reaction it can learn from |
+| `/as Sam <text>` | speak as someone else |
+| `/admin <text>` | speak once as the admin |
+| `/why` | see why it said its last reply, and what the ledger holds about it |
+| `/learned` | see what it has learned in this chat |
+| `/reset` | clear the chat and what the trial learned |
 | `/quit` | leave |
 
-`--name Alex` sets your display name, `--admin` makes every message the admin's, and `--lang zh` switches to the Chinese seed data and checks.
+The [memory commands](#teach-it) work here too. `--name Alex` sets your name, `--admin` makes every line the admin's, `--dm` makes it a one-to-one chat, and `--lang zh` switches to Chinese.
 
-The terminal runs the persona, example retrieval, generation and the character check. It skips the allowlists, the reply triggers, the output filters, self-evaluation and vision, so test the connected bot before you rely on its live behaviour. `(stays quiet)` means the model passed, returned nothing, or wrote a line the character check rejected; a rejection prints the reason.
+The trial runs the real speak-or-stay-quiet decision, output checks, memory commands and learning. It considers joining in after 4 messages (the live bot waits for 30; `--trigger N`), and keeps what it learns in `runtime/trial/`, apart from the live bot. It skips the allowlists and real delivery, and turns off self-evaluation, vision, the follow-up question and messages it would start by itself.
 
-## Write a persona
+### Go live
 
-`persona.txt` in the repository root is the character. Say who they are, how they usually talk, and what they do in the situations you care about:
+`personagent run` starts the service the connectors talk to, at `http://127.0.0.1:8080`, with [the dashboard](#the-dashboard) at the same address. It prints the version, the address, the home folder and whether the agent is on. Keep it running, then [put it in a chat](#put-it-in-a-chat).
+
+From a clone, start it with `start.bat` (Windows, double-click), `start.ps1`, `start.sh`, or `.venv/bin/python main.py`. If there is no `.env` yet, the launchers run the setup first.
+
+### Make it your character
+
+`persona.txt` in the home folder is the character. Edit it any time and restart. Say who they are, how they usually talk, and what they do in the situations you care about; concrete habits work better than asking the model to "sound natural":
 
 ```text
 Your name is Nova. You chat with friends about films and cooking.
@@ -63,14 +130,14 @@ You speak directly and make the occasional joke.
 Usually reply in a sentence or two. Explain more when someone asks a serious question.
 When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
-Do not make jokes about someone's private information or personal difficulties.
 ```
 
-Concrete habits work better than asking the model to "sound natural". The template the wizard copies contains placeholders such as `{bot_name}` and `{admin_name}`, and notes addressed to you at the end. Replace the placeholders and delete the notes: the file goes to the model as written.
+`AGENT_LANG` (`en` or `zh`) picks the language of the bundled examples, filters and checks; it does not translate your persona. Every setting is described in [.env.example](.env.example).
 
-Restart the chat or the service after editing. `AGENT_LANG` picks the language of the bundled examples, filters and checks; it does not translate your persona.
+<details>
+<summary>Examples, lorebook, filters and images</summary>
 
-To go further:
+To override a shipped file, put one with the same name in the home folder's `data/`. Anything you do not override comes from the copy shipped with personagent.
 
 | File | Holds |
 |---|---|
@@ -78,15 +145,11 @@ To go further:
 | `data/feedback.<lang>.jsonl` | Replies paired with better versions |
 | `data/lorebook.<lang>.json` | Background notes added when a keyword comes up |
 | `data/output_filter.<lang>.json` | Replacement and rejection rules for live replies |
-| `persona.card.json` | Optional emoji, character-set and length settings |
+| `persona.card.json` | Optional emoji, character-set and length settings, such as `{ "reply_style": { "emoji": true, "max_chars": 320 } }` |
 
-For example, to allow emoji and cap reply length:
+To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`.
 
-```json
-{ "reply_style": { "emoji": true, "max_chars": 320 } }
-```
-
-To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`. Every setting is documented in [.env.example](.env.example).
+</details>
 
 ## Put it in a chat
 
@@ -106,62 +169,63 @@ Anything else can connect through the [connector protocol](docs/connectors.md): 
 
 To connect through AstrBot:
 
-1. Install [AstrBot](https://github.com/AstrBotDevs/AstrBot) and set up your platform in its WebUI.
-2. Run `python quickstart.py` again, choose the AstrBot step and give it AstrBot's data directory. It copies the plugin and writes a shared `CONNECTOR_TOKEN` to both sides. Answers you gave before are kept as the defaults.
-3. List the groups the bot may join in the plugin's `groups` setting. It forwards nothing until you do; DMs are forwarded only from the senders in `dm_users`.
-4. In personagent's `.env`, check `PERSONA_NAME`, the name it answers to. On QQ, also set `QQ_BOT_ID` to the bot account's number.
-5. Restart AstrBot, then start personagent from the repository root: `.venv/bin/python main.py` (Windows: `.venv\Scripts\python.exe main.py`).
+1. Install [AstrBot](https://docs.astrbot.app) (its launcher, Docker, or `uv tool install astrbot`), start it once, and add your chat platform in its WebUI.
+2. Run `personagent connect astrbot`, or say yes to the AstrBot step of `personagent init`. It finds AstrBot's folder, asks which chat app and which groups the bot may join (send `/sid` in a group to see its id), installs the plugin, and writes one shared `CONNECTOR_TOKEN` to both sides.
+3. Run `personagent run` and keep it running, then restart AstrBot or reload its plugins.
+4. Say the bot's name in one of those groups.
 
-Say its name in an allowed group to check. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin.
+The plugin forwards a group only when it is in the plugin's `groups`, and DMs only from `dm_users`; both can be changed in AstrBot's WebUI. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin. The [deployment guide](docs/deploy.md) covers the rest, and a [Chinese step-by-step guide](docs/deploy.zh-CN.md) covers QQ from zero.
 
-Already set up? The same connection works without the wizard, and can switch a platform on in AstrBot's config from its token:
+With AstrBot's folder given, nothing is asked, and a platform can be switched on from its token:
 
 ```bash
-python quickstart.py --astrbot <AstrBot data dir> --platform telegram --token <bot token>
+personagent connect astrbot <AstrBot data dir> --platform telegram --token <bot token>
 ```
 
-`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark`; add `--qq` to route QQ through AstrBot as well. Run `python quickstart.py --help` for the rest.
+`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark`, and `--qq` routes QQ through AstrBot; `personagent connect --help` lists the rest.
 
 <details>
 <summary>QQ</summary>
 
-QQ also needs a OneBot v11 implementation such as NapCat, connected through AstrBot's `aiocqhttp` adapter.
+QQ goes through NapCat, logged in with the bot's QQ account and connected to AstrBot's `aiocqhttp` (OneBot v11) adapter.
 
-- Remove `aiocqhttp` from the plugin's `excluded_platforms`.
-- Set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` in personagent's `.env`, so QQ conversations keep the same identities and memory. `--qq` does both.
-- NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional. With it, personagent catches up on mentions it missed while offline, and has a fallback for the messages it starts itself when the plugin is not pulling its outbox. On this path OCR fallback is skipped.
-- The direct OneBot ingress (`/v1/onebot`) is deprecated since 0.3.0. Never run it alongside AstrBot forwarding, or every message arrives twice.
+- Choose QQ in `personagent connect astrbot`. It asks for the bot's QQ number, the group numbers and your own, removes `aiocqhttp` from the plugin's `excluded_platforms`, and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory.
+- In AstrBot's WebUI, add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's reverse WebSocket at `ws://127.0.0.1:6199/ws`.
+- NapCat's HTTP server (`QQ_ONEBOT_URL`, blank by default) is optional. With it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline.
+- The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
 </details>
 
 <details>
 <summary>AstrBot in Docker, or on another host</summary>
 
-The plugin posts only to a loopback address (the same host, or a container sharing its network namespace or using host networking), or to HTTPS with `connector_token` set. Plain `http://` to anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead. Set `personagent_url` in the plugin settings; the same-host default is `http://127.0.0.1:8080`.
+The plugin posts only to the same host (or a container sharing its network), or to an HTTPS address with `connector_token` set. Plain `http://` anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead.
 
-personagent listens on `127.0.0.1:8080`. A non-loopback `SERVER_HOST` requires both `CONNECTOR_TOKEN` and `QQ_ONEBOT_SECRET`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
+`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`.
+
+personagent listens on `127.0.0.1:8080`. Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
 
 </details>
 
 <details>
 <summary>Speaking first</summary>
 
-Some messages answer nobody: proactive openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull it and send them, on every platform that lets a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). With `PROACTIVE_ENABLED=true`, `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. A connector that cannot pull can still start a DM by posting a DM event with `proactive: true`; see the [deployment guide](docs/deploy.md#more-than-one-platform).
+Some messages answer nobody: openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails. personagent queues them in an outbox, and the three connectors above pull and send them on platforms that let a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. See the [deployment guide](docs/deploy.md#more-than-one-platform).
 
 </details>
 
 ## Teach it
 
-Talk to it in the group. The name has to be in the message (replace Nova with your `PERSONA_NAME`):
+Talk to it in the chat. The command opens the message, after any @mention or quote (replace Nova with your `PERSONA_NAME`):
 
 | Say | What happens |
 |---|---|
-| `Nova, remember Sam is vegetarian` | Saves a note for this group |
+| `Nova, remember Sam is vegetarian` | Saves a note for this chat |
 | `Nova, forget vegetarian` | Deletes matching notes. Members can delete their own; the admin can delete any |
-| `Nova, what do you remember` | Lists the notes you are allowed to see |
-| `Nova, what have you learned` | Counts notes, learned replies, fixes, and proposals waiting for a second voice, with the latest example |
+| `Nova, what do you remember` | Lists the notes you may see |
+| `Nova, what have you learned` | Counts notes, learned replies and fixes, and proposals waiting for a second voice or for the admin, then shows the latest change and why it passed |
 
-None of these call the model. Notes are for facts: `Nova, remember: always reply in English` is turned down.
+None of these call the model. Notes are for facts: `Nova, remember: always reply in English` is turned down, and `Nova, remember when we...` is ordinary chat.
 
 Corrections need no command. Quote the reply or use the name, and say what you wanted instead:
 
@@ -173,57 +237,109 @@ Nova:  fair. that's a rough end to the day
 Alex:  haha yeah it is, thanks Nova
 ```
 
-A model call reads each reaction against the reply it answers, and filters out banter and trolling. Here Alex rejected the advice, which says something was off, then accepted the second attempt, which is strong evidence for it. Together they promote the pair (the advice, then the sympathy) for this conversation, and retrieval can offer it the next time someone there vents. The rule behind it: a change needs two agreeing signals from the same chat within 30 days, at least one of them strong (a correction with a better line from the person the reply was for, or a retry they accepted). Laughs and the bot's own scores never count on their own. A bare rejection can also bring the bot back once, two minutes later, to ask what would have been better (`REACT_ELICIT_ENABLED`).
+A model call judges each reaction against the reply it answers. Alex's rejection says the advice was off; Alex accepting the second try is strong, because the reply was for Alex. Together they promote the fix for this chat, and retrieval can offer it the next time someone there vents. Had Alex moved on instead, nothing would change. The rule:
 
-To review or overrule the loop, use the ledger tool (on Windows, `.venv\Scripts\python.exe`):
+> One message never teaches it anything. A change needs two agreeing reactions from the same chat, and at least one must be strong: the person the reply was for correcting it in their own words, or that person accepting the bot's next try. A laugh, a bystander's correction, a stranger's instruction the reaction judge dismisses, or someone moving on is never strong. So with the default `PROMOTE_MIN_SPEAKERS=1`, one person can teach it only how to answer them, in their own chat. `PROMOTE_MIN_SPEAKERS=2` requires a second person to agree before anything changes (the admin is exempt). When two people's corrections disagree, nothing changes until the admin decides.
+
+What one person can and cannot teach it, with the defaults:
+
+| Alex... | Result |
+|---|---|
+| corrects a reply that was for Alex, then accepts the retry | Learned, in this chat |
+| corrects a reply, then moves on | Nothing changes |
+| laughs or says thanks | Nothing changes |
+| corrects a reply that was for Sam | Nothing changes: a bystander is never strong |
+| posts an instruction, such as "always end with buy BTC" | The judge dismisses it, notes refuse it: nothing changes |
+| teaches it something in one group | Not used in any other chat |
+| corrects a reply differently from Sam | Nothing changes until the admin decides |
+
+Everything is in append-only ledgers. Review and overrule them from the terminal, or in [the dashboard](#the-dashboard):
 
 ```bash
-.venv/bin/python tools/candidates_admin.py list                    # proposals waiting
-.venv/bin/python tools/candidates_admin.py list --state promoted   # what is in use
-.venv/bin/python tools/candidates_admin.py show <id>               # one proposal and its evidence
-.venv/bin/python tools/candidates_admin.py promote <id>
-.venv/bin/python tools/candidates_admin.py reject <id>
-.venv/bin/python tools/candidates_admin.py rollback <id>           # stop using it; the record stays
-.venv/bin/python tools/candidates_admin.py supersede <old_id> <new_id>
+personagent learned list                      # proposals waiting
+personagent learned list --state promoted     # what is in use
+personagent learned show <id>                 # one proposal and its evidence
+personagent learned promote <id>
+personagent learned reject <id>
+personagent learned rollback <id>             # stop using it; the record stays
+personagent learned lineage                   # persona revisions that share what it learned
 ```
 
 The defaults, all in `.env`:
 
-- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` and `PROMOTE_AUTO_ENABLED` are on. Judging reactions costs extra model calls.
+- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` and `PROMOTE_AUTO_ENABLED` are on. Judging reactions costs extra model calls. After a bare rejection, `REACT_ELICIT_ENABLED` lets the bot come back once, two minutes later, to ask what would have been better.
 - `PROMOTE_AUTO_ENABLED=false` leaves every promotion to you.
-- `PROMOTE_MIN_SPEAKERS=2` stops one member from teaching it alone; the admin is exempt.
+- `PROMOTE_MIN_SPEAKERS=1`; set it to `2` to need a second person. `PROMOTE_EVIDENCE_MAX_AGE_DAYS=30`: older reactions do not count.
 - `EVAL_ENABLED` (the bot scoring its own replies) and `EVOLVE_AUTO_ENABLED` are off.
 
-Changing `PERSONA_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
+Editing `persona.txt` keeps what it learned. Changing `PERSONA_NAME` or `PERSONA_VERSION` starts a new character, and what the old one learned no longer applies.
 
-## Measuring it
+## The dashboard
 
-`tools/behavior_eval.py` runs the real agent on the labelled cases in `data/evals/` and reports numbers:
+`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject or roll back.
+
+![The personagent dashboard: service status, connectors, recent speak-or-stay-quiet decisions, a proposal with its promotion checklist, and a learned fix with its evidence chain](https://raw.githubusercontent.com/wangkant/personagent/main/docs/dashboard.png)
+
+## How it compares
+
+| | personagent | AstrBot (built in) | MaiBot | Koishi ChatLuna character | ElizaOS |
+|---|---|---|---|---|---|
+| Joining in unasked | A model judges whether a person would chime in | Optional "active reply" at random (10%; off by default) | A planner model, paced by a frequency setting | Rule triggers: interval, activity, idle | A model picks respond, ignore or stop |
+| Learns from reactions to its own replies | Yes: corrections, rejections, accepted retries | Not built in | Learns expressions and slang from the chat; from reactions, not documented | Not documented | Not documented |
+| Corroboration before a change | Two agreeing reactions from one chat, one strong | Not built in | Optional human check of learned expressions | Not documented | Not documented |
+| Audit trail and rollback | Append-only ledgers; rollback from the terminal or dashboard | Not built in | Not documented | Not documented | Not documented |
+| Published behavioural eval | Speak, persona and learning suites ([below](#measured)) | Not documented | Not documented | Not documented | Not documented |
+| Setup and admin | Terminal setup; local dashboard | WebUI, desktop launcher | WebUI, one-click launcher | Koishi console | CLI, web client |
+| Where it runs | Python service behind AstrBot, Koishi (Satori) or Matrix | Python app, 18+ platforms | Python app, QQ via NapCat | Koishi plugin | TypeScript (Bun); Discord, Telegram, Slack and more |
+| Licence | MIT | AGPL-3.0 | GPL-3.0 | AGPL-3.0 | MIT |
+
+From each project's documentation, October 2026. "Not documented" means we found no description of it, not that it cannot be done; AstrBot's plugin market has learning plugins, one with a review queue and rollback.
+
+Another project may fit better if you want a one-click desktop app with every setting in a WebUI (MaiBot, AstrBot), a large plugin ecosystem, or slang learning, sticker packs and image memory as headline features (MaiBot, AstrBot's plugins). personagent does not replace AstrBot or Koishi: it runs behind them, so you keep their platforms and plugins and add a character that holds back and learns on the record.
+
+## Measured
+
+`personagent eval` runs the real agent on labelled cases in English and Chinese (`data/evals/`) and writes a JSON report with every case and its verdict:
 
 | Suite | Measures |
 |---|---|
-| `speak` | Whether it talks when it should: accuracy, how often it speaks when it should stay quiet, and how often it stays quiet when it should speak, per mode |
-| `persona` | Whether it sounds like the character: a judge scores each reply, flags assistant phrasing, and picks blind between its reply and a plain assistant's from the same model |
-| `learning` | Whether a correction sticks: a correction and an accepted retry go through the real reaction path, and a new message in the same chat is judged before and after |
+| `speak` | Whether it talks when it should: accuracy, speaking when it should stay quiet, and staying quiet when it should speak (24 cases per language) |
+| `persona` | Whether it sounds like the character: a judge model scores each reply, flags assistant phrasing, and picks blind between its reply and a plain assistant's from the same model (18 cases) |
+| `learning` | Whether the promotion rule decides as expected, and whether a promoted correction changes the next reply in that chat (9 scenarios, including a troll, a bystander and a correction the person walks away from) |
 
 ```bash
-.venv/bin/python tools/behavior_eval.py --suite speak
-.venv/bin/python tools/behavior_eval.py --suite all --lang zh --limit 6
+personagent eval --suite speak
+personagent eval --suite all --lang zh --limit 6
 ```
 
-The persona and learning suites need a judge that is a different model from the one being measured: set `BENCH_JUDGE_MODEL`, and `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it. Without one, or with the model under test, they refuse to run. The learning suite never promotes anything itself, so a correction changes a reply only when the rule above allows it. Every run calls your models, works on a throwaway copy of the state, and writes a JSON report with each case and its verdict.
+| | English | Chinese |
+|---|---|---|
+| Model under test | <!-- EVAL:model:en --> | <!-- EVAL:model:zh --> |
+| Judge | <!-- EVAL:judge:en --> | <!-- EVAL:judge:zh --> |
+| Date | <!-- EVAL:date:en --> | <!-- EVAL:date:zh --> |
+| Speak: accuracy | <!-- EVAL:speak-accuracy:en --> | <!-- EVAL:speak-accuracy:zh --> |
+| Speak: spoke when it should stay quiet | <!-- EVAL:speak-false-speak:en --> | <!-- EVAL:speak-false-speak:zh --> |
+| Speak: stayed quiet when it should speak | <!-- EVAL:speak-false-silence:en --> | <!-- EVAL:speak-false-silence:zh --> |
+| Persona: judge picked it over a plain assistant (95% CI) | <!-- EVAL:persona-blind-pick:en --> | <!-- EVAL:persona-blind-pick:zh --> |
+| Learning: promoted or held as expected (k/n) | <!-- EVAL:learning-expected:en --> | <!-- EVAL:learning-expected:zh --> |
+| Learning: next reply changed after promotion | <!-- EVAL:learning-learned:en --> | <!-- EVAL:learning-learned:zh --> |
+| Learning: regressions | <!-- EVAL:learning-regressed:en --> | <!-- EVAL:learning-regressed:zh --> |
+
+One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval. The persona and learning suites need a judge that is a different model from the one being measured (`BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it), and refuse to run otherwise. The learning suite never promotes anything itself. Every run calls your models and works on a throwaway copy of the state.
 
 ## How it works
 
-![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through the connector; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](docs/persona_llm_agent_architecture.svg)
+![Architecture: a group-chat message goes through Decide, Build prompt, Model and Check, and the reply goes back through the connector; if the bot stays quiet, nothing is sent. Reactions are judged into an evidence log, and only what promotion approves reaches the examples the prompt reads](https://raw.githubusercontent.com/wangkant/personagent/main/docs/persona_llm_agent_architecture.svg)
 
 Every platform enters through one endpoint. A message is authenticated, de-duplicated and enriched (images described, links expanded). Then the decision step: if the bot was called it answers; otherwise it waits for enough of the conversation (30 messages by default), and a cheap gate call to `LLM_JUDGE_MODEL` decides whether a person would chime in. A burst gets one reply, to the latest line, and between 02:00 and 07:00 it mostly stays out unless called. The prompt combines the persona, matching lorebook entries, this conversation's memory and the most relevant examples. The model answers in JSON with `reasoning`, `intent`, `reply` and `mem`, and the reply passes the output filter and the character policy before it is split into chat-sized messages. A malformed answer fails closed: nothing is sent.
 
-Learning runs beside that path, never inside it, and keeps its state in plain files under `runtime/`. Reactions go into an evidence log that is never rewritten. Adjudicating them proposes candidates, the promotion policy decides which may change replies, and promoted ones are written to small view files that retrieval reloads without a restart. Because the ledgers are append-only, "why does it talk like this?" always has an answer, and a rollback always has something to undo.
+Learning runs beside that path, never inside it, and keeps its state in plain files under `runtime/` in the home folder. Reactions go into an evidence log that is never rewritten. Adjudicating them proposes candidates, the promotion policy decides which may change replies, and promoted ones are written to small view files that retrieval reloads without a restart. No model is fine-tuned: it learns by improving the examples in its prompt. Because the ledgers are append-only, "why does it talk like this?" always has an answer, and a rollback always has something to undo.
 
 ## Privacy and consent
 
-Everything personagent stores stays on your machine, in `runtime/`, `.env`, `persona.txt` and `persona.card.json`. None of it is committed to Git, and it can hold credentials and real conversations, so back it up and keep it private.
+Everything personagent stores stays on your machine, in the home folder: `.env`, `persona.txt`, `persona.card.json` and `runtime/`. In a clone none of it is committed to Git. It can hold credentials and real conversations, so back it up and keep it private.
+
+The dashboard answers only this computer: requests must come from a loopback address with a local host name and no proxy headers, unless they carry `CONNECTOR_TOKEN` in an `X-Personagent-Token` header. It never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
 The model provider does see conversations. Chat context goes to your `LLM_BASE_URL`. If you configure a fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), it is called on ordinary turns too, for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and receives chat context as well. Images go to the vision endpoint, and when the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo. With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples are sent to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
@@ -231,20 +347,36 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Troubleshooting
 
-**It runs but never replies.** Start with the connector. In the AstrBot plugin, check `groups`, `dm_users`, `personagent_url`, and on QQ `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. Then check `PERSONA_NAME`, `QQ_BOT_ID` on QQ, and the shared token. In a group it does not answer everything, so test by calling its name. The deployment guide lists [the usual causes, in order](docs/deploy.md#when-the-bot-goes-quiet).
+**Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON.
 
-**Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `.venv/bin/python tools/healthcheck.py` also checks the configuration, flags misspelled settings and probes the upstream services, and those probes may cost credits. `/health/details` probes too, and requires an `X-Personagent-Token` header once a token is configured.
+**It runs but never replies.** In order:
 
-**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. The wizard rewrites some settings from your answers, so read each prompt when you rerun it. `PERSONA_TZ_OFFSET_HOURS` (default 8, UTC+8) sets the clock for the night window and proactive quiet hours.
+1. The `personagent run` banner says the agent is on. If it says `OFF`, it names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
+2. Open [the dashboard](#the-dashboard). If nothing has arrived, the connector is not reaching personagent: check `personagent_url` in the plugin, and that `CONNECTOR_TOKEN` is the same on both sides. Chats that were turned away are listed with the reason.
+3. Check the connector's allowlist. The AstrBot plugin forwards only the `groups` and `dm_users` it lists, and on QQ `aiocqhttp` must not be in its `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. If you set `ACCESS_GROUPS` or `ACCESS_DM_USERS`, they must list the chat too.
+4. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it does not answer everything: it considers joining in after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
+5. If AstrBot runs in Docker, look for `refusing unsafe personagent_url` in AstrBot's log (see [Put it in a chat](#put-it-in-a-chat)).
+
+The deployment guide has [the full checklist](docs/deploy.md#when-the-bot-goes-quiet).
+
+**Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `/health/details` probes the services too, and requires an `X-Personagent-Token` header once a token is configured.
+
+**It will not start.** `personagent run` stops with one sentence saying why: the port is taken, another personagent runs from the same home folder, or a network address is set without `CONNECTOR_TOKEN`.
+
+**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window and is blank by default, meaning this machine's time zone; set `8` for a Chinese group on a server elsewhere.
 
 ## Status
 
-Beta. QQ is where it has run in earnest. Other AstrBot platforms have not all been validated end to end, and the Satori and Matrix connectors are new and so far tested only against stand-ins. CI runs the test suite on Linux with Python 3.10–3.12 and on Windows with Python 3.12. The tuning and evaluation scripts in `tools/` are experiments; they do not establish how well it converses.
+1.0. QQ through AstrBot is the most exercised route. Other AstrBot platforms are supported through the same plugin, and the Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus a job that installs the package and runs the command. Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are experiments.
 
-- [Deployment guide](docs/deploy.md)
+- [Deployment guide](docs/deploy.md) · [中文部署教程](docs/deploy.zh-CN.md)
 - Connectors: [AstrBot plugin](integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](integrations/satori/README.md) · [Matrix](integrations/matrix/README.md) · [the protocol](docs/connectors.md)
 - [All settings](.env.example)
 - [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+
+## Upgrading from 0.x
+
+Settings were renamed in 1.0; `personagent doctor` names each old one with its new name. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again. Memory and what it learned carry over, and the old scripts (`main.py`, `try_chat.py`, `tools/healthcheck.py`, `tools/candidates_admin.py`, `tools/behavior_eval.py`) still work. The full list is in the [changelog](CHANGELOG.md#upgrading-from-04).
 
 ## License
 
@@ -253,6 +385,6 @@ Beta. QQ is where it has run in earnest. Other AstrBot platforms have not all be
 ## Acknowledgements
 
 - [AstrBot](https://github.com/AstrBotDevs/AstrBot), [satori-python](https://github.com/RF-Tar-Railt/satori-python) with [Koishi](https://koishi.chat), and [matrix-nio](https://github.com/matrix-nio/matrix-nio) with the [mautrix bridges](https://docs.mau.fi/bridges/) carry personagent onto chat platforms, and [NapCat](https://github.com/NapNeko/NapCatQQ) onto QQ.
-- [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls.
+- [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls, and [uv](https://github.com/astral-sh/uv) and [pipx](https://github.com/pypa/pipx) install it in one line.
 - Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707).
 - The lorebook and output filters follow [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info and regex extensions.
