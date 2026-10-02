@@ -20,7 +20,8 @@ from .textproc import (
 logger = logging.getLogger("agent")
 
 # Hosts whose chat endpoint takes DeepSeek's `thinking` switch, and hosts
-# known to refuse it; any other host is asked once, by the startup probe.
+# known to refuse it; any other endpoint is asked by its first call that
+# turns thinking off (or the startup probe), and the answer remembered.
 _THINKING_HOSTS = ("deepseek.com", "bigmodel.cn", "z.ai", "moonshot.cn",
                    "moonshot.ai", "volces.com")
 _NO_THINKING_HOSTS = ("openai.com", "groq.com", "googleapis.com",
@@ -175,38 +176,42 @@ class ModelCalls:
     @property
     def _api_quirks(self) -> dict:
         """What each endpoint has shown it refuses or takes, learned per
-        process: ("thinking", url) -> bool, and (field, url, model) -> True
-        for a `max_tokens` or `temperature` it refused."""
+        process: ("thinking", url, model) -> bool, and (field, url, model) ->
+        True for a `max_tokens` or `temperature` it refused."""
         quirks = self.__dict__.get("_api_quirks_map")
         if quirks is None:
             quirks = self.__dict__["_api_quirks_map"] = {}
         return quirks
 
-    def _takes_thinking(self, url: str) -> bool:
-        """Whether `url` is sent DeepSeek's `thinking` switch.
+    def _thinking_verdict(self, url: str, model: str):
+        """Whether `model` at `url` takes DeepSeek's `thinking` switch: True,
+        False, or None when nobody knows yet.
 
         Elsewhere it is rejected rather than ignored (Groq answers `400
         property 'thinking' is unsupported`, OpenAI 400s any unknown
-        argument), and the gate, the search decision and the sticker tagger
-        all ask for it, so only a host known to take it gets it: a listed
-        vendor, one the startup probe saw accept it, or the fallback's host
-        with LLM_FALLBACK_THINKING."""
-        verdict = self._api_quirks.get(("thinking", url))
+        argument). Known: what this model at this URL showed, a listed
+        vendor, the fallback's host with LLM_FALLBACK_THINKING, or a vendor
+        known to refuse it. Per model, because one gateway serves many."""
+        verdict = self._api_quirks.get(("thinking", url, model))
         if verdict is not None:
             return verdict
         host = _host(url)
         if _on_host(host, _THINKING_HOSTS):
             return True
-        if self.llm_fallback_thinking:
-            return host == _host(self.llm_fallback_base_url or self.base_url)
-        return False
+        if (self.llm_fallback_thinking
+                and host == _host(self.llm_fallback_base_url or self.base_url)):
+            return True
+        if _on_host(host, _NO_THINKING_HOSTS):
+            return False
+        return None
 
     def _thinking_off(self, payload: dict, url: str) -> dict:
         """Ask the model behind `url` to skip hidden reasoning, in the
-        spellings that endpoint accepts. OpenRouter passes `thinking` through
-        to upstreams that ignore it and has a switch of its own (see
-        textproc.apply_k2_quirks)."""
-        if self._takes_thinking(url):
+        spellings that endpoint accepts. An endpoint nobody knows yet is sent
+        `thinking` and _post_chat learns from its answer. OpenRouter passes
+        `thinking` through to upstreams that ignore it and has a switch of
+        its own (see textproc.apply_k2_quirks)."""
+        if self._thinking_verdict(url, str(payload.get("model") or "")) is not False:
             payload["thinking"] = {"type": "disabled"}
         if "openrouter.ai" in url:
             payload["reasoning"] = {"enabled": False}
@@ -216,7 +221,7 @@ class ModelCalls:
         """Spell `payload` the way `url` has shown it accepts."""
         quirks = self._api_quirks
         model = str(payload.get("model") or "")
-        if quirks.get(("thinking", url)) is False:
+        if quirks.get(("thinking", url, model)) is False:
             payload.pop("thinking", None)
         if ("max_tokens", url, model) in quirks and "max_tokens" in payload:
             payload["max_completion_tokens"] = payload.pop("max_tokens")
@@ -224,40 +229,49 @@ class ModelCalls:
             payload.pop("temperature", None)
 
     def _remember_refusal(self, url: str, model: str, field: str) -> None:
-        if field == "thinking":
-            self._api_quirks[("thinking", url)] = False
-        else:
-            self._api_quirks[(field, url, model)] = True
+        self._api_quirks[(field, url, model)] = False if field == "thinking" else True
         instead = ("sending max_completion_tokens instead"
                    if field == "max_tokens" else "leaving it out")
-        logger.info("[Agent] %s does not take `%s`%s; %s from now on",
-                    _host(url) or url, field,
-                    "" if field == "thinking" else f" for model {model}", instead)
+        logger.info("[Agent] %s does not take `%s` for model %s; %s from now on",
+                    _host(url) or url, field, model, instead)
 
     async def _post_chat(self, url: str, key: str, payload: dict, *,
                          timeout: float):
         """POST one chat completion and return the response, unraised.
 
-        A 400 that names a field this endpoint does not take (`thinking`, or
-        `max_tokens` / `temperature` on OpenAI's reasoning models) is retried
-        without it, and the endpoint is remembered so later calls are spelled
-        right the first time."""
+        A 400 that refuses a field this endpoint does not take (`thinking`,
+        or `max_tokens` / `temperature` on OpenAI's reasoning models) is
+        retried without it. When the retry succeeds the endpoint and model
+        are remembered, so later calls are spelled right the first time; so
+        is whether an endpoint nobody knew about takes `thinking`."""
         self._apply_quirks(url, payload)
+        model = str(payload.get("model") or "")
+        asking = ("thinking" in payload
+                  and self._thinking_verdict(url, model) is None)
         headers = {"Authorization": f"Bearer {key}",
                    "Content-Type": "application/json"}
         status = 200
+        refused: list[str] = []
         async with self._http(timeout=timeout) as client:
-            for _ in range(3):
+            for _ in range(4):
                 resp = await client.post(url, json=dict(payload), headers=headers)
                 status = getattr(resp, "status_code", 200)
                 if status not in (400, 422):
                     break
                 field = adapt_rejected_payload(
                     payload, str(getattr(resp, "text", "") or ""))
+                if not field and asking and "thinking" in payload:
+                    # An endpoint being asked may refuse it in words of its own.
+                    payload.pop("thinking")
+                    field = "thinking"
                 if not field:
                     break
-                self._remember_refusal(url, str(payload.get("model") or ""), field)
+                refused.append(field)
         if isinstance(status, int) and 200 <= status < 300:
+            for field in refused:
+                self._remember_refusal(url, model, field)
+            if asking and "thinking" in payload:
+                self._api_quirks[("thinking", url, model)] = True
             # Working again, so a later failure is worth a line again.
             reported = self._fatal_reported_hosts()
             for item in [k for k in reported if k[0] == _host(url)]:
@@ -616,18 +630,13 @@ class ModelCalls:
             payload = {"model": model,
                        "messages": [{"role": "user", "content": "hi"}],
                        "max_tokens": 1}
-            # A host of unknown dialect is asked about `thinking` here, once,
-            # rather than by every gate call.
-            asking = (self._api_quirks.get(("thinking", url)) is None
-                      and not self._takes_thinking(url)
-                      and not _on_host(_host(url), _NO_THINKING_HOSTS))
-            if asking:
+            # A host of unknown dialect is asked about `thinking` here, before
+            # the first gate call; _post_chat remembers the answer.
+            if self._thinking_verdict(url, model) is None:
                 payload["thinking"] = {"type": "disabled"}
             try:
                 r = await self._post_chat(url, key, payload, timeout=15)
                 r.raise_for_status()
-                if asking and "thinking" in payload:
-                    self._api_quirks[("thinking", url)] = True
                 actual = r.json().get("model", "?")
                 logger.info("[Agent] %s model probe OK: configured=%s actual=%s",
                             label, model, actual)
