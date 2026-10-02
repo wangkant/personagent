@@ -1492,6 +1492,8 @@ _ASCII_ADMITTED = frozenset(
 # whitespace removed; anything else without a letter is still read as template
 # residue. Numbers stop at four digits a group: a leaked token id is longer.
 _TERSE_REPLY_MAX = 12
+# A reply that is nothing but trailing off, with at least one '…' or '。'.
+_TRAILING_OFF_RE = re.compile(r"(?=.*[…。])[…。.?!？！~～]{1,8}")
 _TERSE_REPLY_RE = re.compile(
     r"[?!.~？！～…]{1,8}"                                # ? ... !!! ?! ~
     r"|[+-]?\d{1,4}(?:[.,:/-]\d{1,4}){0,2}%?[?!.~]{0,3}"  # 1 233 10/10 +1 100% 3:00
@@ -1985,6 +1987,13 @@ class TextProcessing:
         text = re.sub(r'(?m)^>\s+', '', text)
         text = re.sub(r'(?m)^---+\s*$', '', text)
         text = text.translate(_STRUCTURE_STRIP_TABLE)
+        # A reply that only trails off ('……', '。。。', '…?') is a terse
+        # answer the strips below would empty; spell it '...' unless the
+        # persona keeps the glyph.
+        if _TRAILING_OFF_RE.fullmatch(re.sub(r'\s+', '', text)):
+            text = re.sub(r'。+', '...', text)
+            if not style.keeps(0x2026):
+                text = re.sub(r'…+', '...', text)
         text = re.sub(r'。+(?!\d)', ' ', text)
         text = text.replace('——', ' ').replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')

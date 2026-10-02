@@ -1057,6 +1057,21 @@ def test_a_terse_reply_is_content_and_template_residue_is_not() -> None:
     check("the validator honours terse_ok=False", not ok)
 
 
+def test_a_reply_that_only_trails_off_is_delivered() -> None:
+    """'……' is the commonest terse Chinese reply, and the ellipsis glyph is
+    stripped for a persona that did not opt into it, which left nothing."""
+    for raw, want in (("…", "..."), ("……", "..."), ("。。。", "..."), ("…?", "...?")):
+        for lang in ("en", "zh"):
+            check(f"{raw!r} is delivered ({lang})",
+                  TP._sanitize_reply_with_reason(raw, lang) == (want, ""),
+                  repr(TP._sanitize_reply_with_reason(raw, lang)))
+    keeps = ReplyStyle(charsets=frozenset({"ellipsis"}))
+    check("a persona that keeps the glyph keeps it",
+          TP._sanitize_reply("……", "zh", keeps) == "……")
+    check("in a sentence the glyph is still stripped",
+          TP._sanitize_reply("sure… ok", "en") == "sure ok")
+
+
 def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -> None:
     """THE RULE THAT HAD TO ARRIVE WITH THE SCRIPTS.
 
