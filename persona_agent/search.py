@@ -176,12 +176,7 @@ class WebSearch:
             # In the endpoint's own dialect — the judge model is often the
             # fallback, on another vendor.
             self._thinking_off(payload, url)
-            async with self._http(timeout=20) as client:
-                resp = await client.post(
-                    url,
-                    headers={"Authorization": f"Bearer {key}"},
-                    json=payload,
-                )
+            resp = await self._post_chat(url, key, payload, timeout=20)
             if resp.status_code != 200:
                 logger.warning("[Agent] search-decide HTTP %d: %s", resp.status_code, resp.text[:200])
                 return ""

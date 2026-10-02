@@ -203,34 +203,6 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     return findings
 
 
-def _base_url_needs_full_path(base: str) -> bool:
-    """Does this base URL hit the gap `chat_completions_url` documents?
-
-    `endpoints.chat_completions_url` accepts a provider root or a `/v1` base
-    and asks callers on a custom version path (`/api/paas/v4`, say) to
-    supply the complete endpoint themselves. Nothing enforces that: give it a
-    `/v4` base and it silently returns `.../v4/v1/chat/completions`, which no
-    provider serves, and the first sign is a 404 on every reply.
-
-    Checked here rather than in `chat_completions_url` because that function
-    is on the per-turn hot path, where a warning per call would flood the log.
-    A startup finding says it once, before the first turn.
-
-    Deliberately narrow: only a trailing `/vN` segment that is not `/v1`. The
-    general fallback branch exists to serve multi-segment provider roots
-    behind a reverse proxy (`https://proxy.corp/llm-proxy`), so segment
-    counting would report those as broken when they are fine.
-    """
-    if not base:
-        return False
-    path = urlsplit(base.strip().rstrip("/")).path.rstrip("/")
-    if not path or path.endswith("/chat/completions"):
-        return False
-    last = path.rsplit("/", 1)[-1]
-    return (len(last) > 1 and last[0] == "v" and last[1:].isdigit()
-            and last != "v1")
-
-
 class Finding:
     """One problem, at one level, about one key."""
 
@@ -394,16 +366,6 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "is empty while the rest of the QQ configuration is set — the bot "
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
-
-    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL"):
-        url = str(configured.get(key) or "").strip()
-        if _base_url_needs_full_path(url):
-            findings.append(Finding(
-                "WARN", key,
-                f"ends in a custom version path ({url}) — `chat_completions_url`"
-                " only recognises a bare root or a /v1 base, so it will append"
-                " /v1/chat/completions and produce a URL the provider does not"
-                " serve. Give the complete /chat/completions endpoint instead"))
 
     # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
     # so both of its failure modes are silent: configured for a fallback that

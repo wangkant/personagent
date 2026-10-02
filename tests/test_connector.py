@@ -4039,13 +4039,16 @@ async def test_disabled_thinking_speaks_openrouters_dialect_too(tmp: Path) -> No
         return payloads[-1]
 
     p = await call("https://openrouter.ai/api/v1", True)
-    check("openrouter: thinking off in the generic dialect",
-          p.get("thinking") == {"type": "disabled"}, repr(p))
-    check("openrouter: ...and in OpenRouter's own",
+    check("openrouter: thinking off in OpenRouter's own dialect",
           p.get("reasoning") == {"enabled": False}, repr(p))
-    p = await call("https://llm.example/api/v4/chat/completions", True)
-    check("another vendor: thinking off, and no OpenRouter field leaks to it",
+    check("openrouter: ...and not in DeepSeek's, which it does not need",
+          "thinking" not in p, repr(p))
+    p = await call("https://api.deepseek.com", True)
+    check("deepseek: thinking off in its dialect, and no OpenRouter field leaks to it",
           p.get("thinking") == {"type": "disabled"} and "reasoning" not in p, repr(p))
+    p = await call("https://llm.example/api/v4/chat/completions", True)
+    check("a vendor of unknown dialect is sent neither until it is known to take it",
+          "thinking" not in p and "reasoning" not in p, repr(p))
     p = await call("https://openrouter.ai/api/v1", False)
     check("openrouter: a call that keeps its reasoning is not changed",
           "thinking" not in p and "reasoning" not in p, repr(p))
@@ -4055,8 +4058,7 @@ async def test_disabled_thinking_speaks_openrouters_dialect_too(tmp: Path) -> No
     await agent._decide_and_search([], hint="what is the price of gold today")
     p = payloads[-1]
     check("openrouter: the search decision turns reasoning off in its dialect too",
-          p.get("reasoning") == {"enabled": False}
-          and p.get("thinking") == {"type": "disabled"}, repr(p))
+          p.get("reasoning") == {"enabled": False} and "thinking" not in p, repr(p))
 
 
 async def test_a_vision_verdict_on_openrouter_does_not_think(tmp: Path) -> None:
@@ -5098,11 +5100,11 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
     turn: the gate had no rung left to fail over to and the bot never spoke
     up in a group, the search never fired, and no sticker was tagged."""
     agent = _two_model_agent(tmp)
-    agent.base_url, agent.api_key = "https://primary.example", "primary-key"
+    agent.base_url, agent.api_key = "https://api.deepseek.com", "primary-key"
     agent.llm_fallback_base_url = "https://groq.example/openai/v1"
     agent.llm_fallback_api_key = "fallback-key"
     agent.llm_judge_model = "fallback"  # what a blank LLM_JUDGE_MODEL resolves to
-    primary = "https://primary.example/v1/chat/completions"
+    primary = "https://api.deepseek.com/v1/chat/completions"
     fallback = "https://groq.example/openai/v1/chat/completions"
     seen: list = []
     agent._http = lambda **kw: _ThinkingSpy(seen, rejects="groq.example")
@@ -5129,11 +5131,25 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
           repr((found, seen)))
     seen.clear()
     await thinking_off("primary")
-    check("the primary's endpoint is still sent `thinking`",
+    check("a vendor known to take it is sent `thinking`",
           seen == [(primary, "primary", True)], repr(seen))
 
-    agent._http = lambda **kw: _ThinkingSpy(seen)
+    # Told it takes it, and wrong: the 400 that names the field is retried
+    # without it once, and the endpoint is remembered.
     agent.llm_fallback_thinking = True
+    seen.clear()
+    out = await thinking_off("fallback")
+    check("a 400 naming `thinking` is retried without it",
+          out == "ok" and seen == [(fallback, "fallback", True),
+                                   (fallback, "fallback", False)], repr((out, seen)))
+    seen.clear()
+    await thinking_off("fallback")
+    await agent._decide_and_search([], hint="what is the price of gold today")
+    check("...and that endpoint is not sent it again",
+          seen == [(fallback, "fallback", False)] * 2, repr(seen))
+
+    agent._api_quirks.clear()
+    agent._http = lambda **kw: _ThinkingSpy(seen)
     seen.clear()
     await thinking_off("fallback")
     await agent._decide_and_search([], hint="what is the price of gold today")
@@ -5141,12 +5157,154 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
           seen == [(fallback, "fallback", True)] * 2, repr(seen))
 
     agent.llm_fallback_thinking = False
-    for base in ("https://primary.example/beta", ""):
+    for base in ("https://api.deepseek.com/beta", ""):
         agent.llm_fallback_base_url = base
         seen.clear()
         await thinking_off("fallback")
-        check(f"a fallback on the primary's host is sent what it is ({base or 'unset'})",
+        check(f"a fallback on the primary's known host is sent it ({base or 'unset'})",
               [t for _u, _m, t in seen] == [True], repr(seen))
+
+
+async def test_the_startup_probe_learns_whether_an_endpoint_takes_thinking(tmp: Path) -> None:
+    """A host of unknown dialect is asked once, by the startup probe, rather
+    than by every gate call: if it takes `thinking` the gate gets it from then
+    on, and if it 400s the probe is retried without it and nothing else is
+    ever sent it."""
+    for rejects, want in (("", True), ("custom.example", False)):
+        agent = make_agent(tmp)
+        agent.base_url = "https://custom.example/v1"
+        agent.model = agent.llm_fallback_model = agent.llm_judge_model = "m"
+        seen: list = []
+        agent._http = lambda **kw: _ThinkingSpy(seen, rejects=rejects)
+        await agent.probe_models()
+        url = "https://custom.example/v1/chat/completions"
+        check(f"the probe asked about `thinking` (rejects={bool(rejects)})",
+              seen[0] == (url, "m", True), repr(seen))
+        check("...and answered, retried without it when refused",
+              [t for _u, _m, t in seen] == ([True] if want else [True, False]),
+              repr(seen))
+        seen.clear()
+        await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model="m",
+                              max_tokens=100, enable_search=False,
+                              disable_thinking=True)
+        check(f"a gate call afterwards sends it only if it was taken ({want})",
+              seen == [(url, "m", want)], repr(seen))
+    agent.base_url = "https://api.openai.com"
+    agent._api_quirks.clear()
+    seen.clear()
+    await agent.probe_models()
+    check("a vendor known to refuse it is not asked",
+          [t for _u, _m, t in seen] == [False], repr(seen))
+
+
+async def test_a_reasoning_model_gets_the_spelling_it_takes(tmp: Path) -> None:
+    """OpenAI's reasoning models 400 `max_tokens` and any non-default
+    `temperature`. The call is retried once with `max_completion_tokens` and
+    without the temperature, and the endpoint and model are remembered."""
+    agent = make_agent(tmp)
+    agent.base_url = "https://api.openai.com"
+    agent.model = agent.llm_fallback_model = agent.llm_judge_model = "gpt-5-mini"
+    sent: list = []
+
+    class _Resp:
+        def __init__(self, status: int, text: str = "") -> None:
+            self.status_code, self.text = status, text
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"{self.status_code} bad request")
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    class _OpenAI:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            sent.append(sorted(k for k in json if k not in ("model", "messages")))
+            if "max_tokens" in json:
+                return _Resp(400, "Unsupported parameter: 'max_tokens' is not "
+                                  "supported with this model. Use "
+                                  "'max_completion_tokens' instead.")
+            if "temperature" in json:
+                return _Resp(400, "Unsupported value: 'temperature' does not "
+                                  "support 0.3 with this model. Only the default "
+                                  "(1) value is supported.")
+            return _Resp(200)
+
+    agent._http = lambda **kw: _OpenAI()
+
+    async def gate() -> str:
+        return await agent._call_llm(
+            "sys", [{"role": "user", "content": "hi"}], model="gpt-5-mini",
+            max_tokens=1500, enable_search=False, disable_thinking=True,
+            temperature=0.3)
+
+    check("the gate answers on a reasoning model", await gate() == "ok")
+    check("...after one retry per refused field",
+          sent == [["max_tokens", "temperature"],
+                   ["max_completion_tokens", "temperature"],
+                   ["max_completion_tokens"]], repr(sent))
+    sent.clear()
+    check("the next call is spelled right the first time", await gate() == "ok")
+    check("...with no 400 at all", sent == [["max_completion_tokens"]], repr(sent))
+
+
+async def test_an_exhausted_balance_is_fatal_and_said_once(tmp: Path, caplog) -> None:
+    """A 402 is the account, not the network: no retries, no failover to a
+    model on the same account, and one operator line naming the host and the
+    settings that fix it."""
+    import logging
+
+    import httpx
+
+    agent = _two_model_agent(tmp)
+    agent.api_max_retries = 2
+    agent.base_url = "https://api.deepseek.com"
+    posts: list = []
+
+    class _Pay:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            posts.append(json["model"])
+            request = httpx.Request("POST", url)
+            return httpx.Response(402, request=request,
+                                  json={"error": {"message": "Insufficient Balance"}})
+
+    agent._http = lambda **kw: _Pay()
+    check("402 classifies as fatal", agent._classify_api_error(httpx.HTTPStatusError(
+        "402", request=httpx.Request("POST", "https://x"),
+        response=httpx.Response(402))) == "fatal_auth")
+    check("an exhausted OpenAI quota (a 429) is fatal too",
+          agent._classify_api_error(httpx.HTTPStatusError(
+              "429", request=httpx.Request("POST", "https://x"),
+              response=httpx.Response(429, json={"error": {
+                  "type": "insufficient_quota",
+                  "message": "You exceeded your current quota"}}))) == "fatal_auth")
+    with caplog.at_level(logging.ERROR, logger="agent"):
+        for _ in range(2):
+            try:
+                await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                                      model="primary", max_tokens=10,
+                                      enable_search=False)
+            except Exception:
+                pass
+    check("no retry and no failover on a 402", posts == ["primary", "primary"],
+          repr(posts))
+    lines = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    check("one operator line, naming the host and the settings",
+          len(lines) == 1 and "api.deepseek.com" in lines[0]
+          and "balance or quota" in lines[0] and "LLM_API_KEY" in lines[0]
+          and "LLM_BASE_URL" in lines[0], repr(lines))
 
 
 async def test_a_separate_fallback_endpoint_is_probed_at_startup(tmp: Path) -> None:
