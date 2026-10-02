@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 
 from persona_agent import evolution  # noqa: E402
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
+from persona_agent.endpoints import chat_completions_url  # noqa: E402
 from persona_agent.evals import NAME_UID, strip_pass_sentinel  # noqa: E402
 from persona_agent.paths import seed_file  # noqa: E402
 
@@ -198,7 +199,7 @@ def _promote_pending(agent) -> int:
     its own — one unwitnessed automatic signal must not change behaviour (see
     persona_agent/promotion.py). A benchmark of the learning loop needs the loop
     to close, so this arm promotes what the tick proposed, the way an operator
-    would with `tools/candidates_admin.py promote`. Every promotion is a
+    would with `personagent learned promote`. Every promotion is a
     lifecycle event in the ledger with actor="benchmark", so a run's state says
     plainly that the corroboration requirement was bypassed by the harness and
     the numbers are not evidence about the automatic path."""
@@ -586,8 +587,7 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
     key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
     if not key:
         sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or LLM_API_KEY")
-    url = base + ("" if base.endswith("/chat/completions") else "/v1/chat/completions"
-                  if not base.endswith("/v1") else "/chat/completions")
+    url = chat_completions_url(base)
 
     scores: dict = {}
     failures: list[str] = []

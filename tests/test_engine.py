@@ -369,3 +369,39 @@ def test_the_history_bootstrap_needs_a_napcat_url() -> None:
     check("a blank QQ_ONEBOT_URL stops it with one sentence",
           done.returncode == 1 and "QQ_ONEBOT_URL is blank" in out
           and "Traceback" not in out, out)
+
+
+async def test_the_offline_tools_post_where_the_agent_does(monkeypatch) -> None:
+    """A version base such as Zhipu's /api/paas/v4 gets /chat/completions,
+    never a second /v1."""
+    import httpx
+
+    from tools import auto_reviewer, evolution_benchmark
+
+    posted: list = []
+
+    class _Client:
+        def __init__(self, *a, **kw) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, **kw):
+            posted.append(url)
+            return httpx.Response(200, request=httpx.Request("POST", url), json={
+                "choices": [{"message": {"content": '{"score": 4}'}, "finish_reason": "stop"}]})
+
+    base = "https://open.bigmodel.cn/api/paas/v4"
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(auto_reviewer, "BASE_URL", base)
+    await auto_reviewer.call_llm("hi")
+    monkeypatch.setenv("BENCH_JUDGE_BASE_URL", base)
+    monkeypatch.setenv("BENCH_JUDGE_API_KEY", "k")
+    await evolution_benchmark.judge_openai_compatible(
+        [{"item_id": "1", "reply": "hi"}], "glm")
+    check("both post to the version base's own endpoint",
+          posted == [base + "/chat/completions"] * 2, repr(posted))
