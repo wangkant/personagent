@@ -410,11 +410,6 @@ async def test_retry_provides_supporting_evidence(tmp: Path) -> None:
     check("7: a topic change alone promotes nothing", view_pairs(a) == [],
           str(view_pairs(a)))
 
-    # NOTE: the "explicit positive also promotes" path is not asserted here.
-    # It runs into the pre-existing counter-evidence rule (the original
-    # rejection is related evidence about the same reply and reads as
-    # disagreement), which is orthogonal to what this test pins down and is
-    # covered by test 6.
     check("7: the retry chain is linked back to the complaint",
           any(e.get("parent_event_id") for e in a.evidence_log.all()))
     pair = [c for c in a.candidate_ledger.all()
@@ -422,6 +417,19 @@ async def test_retry_provides_supporting_evidence(tmp: Path) -> None:
     check("7: the proposal still cites both events",
           bool(pair) and len(pair[0].get("evidence") or []) == 2,
           str([c.get("evidence") for c in pair]))
+
+    # The same retry, explicitly accepted, is the second agreeing signal.
+    b = make_agent(tmp / "accepted")
+    await react(b, REJECTION, text="thats not what i asked", pending=entry())
+    b.pending_reactions.record(
+        "g1", reply="check the logs first", ctx_lines=["alex: server is down"],
+        mode="called", target_uid="42", mids=["m2"], ts=time.time())
+    await react(b, POSITIVE, text="ah yes that's it, thanks",
+                pending=b.pending_reactions.match("g1", sender_uid="42",
+                                                  at_bot=True, now=time.time()))
+    check("7: an explicit acceptance of the retry promotes it",
+          [(r["reply"], r["better"]) for r in view_pairs(b)]
+          == [("just restart it lol", "check the logs first")], str(view_pairs(b)))
 
 
 # ---------------------------------------------------------------------------

@@ -123,9 +123,9 @@ class PendingReplies:
                  state_file: str | Path | None = None):
         self.max_per_conv = max_per_conv
         self.ttl_sec = ttl_sec
-        # Retry-completion (Alexa-style): after an accepted rejection, the
-        # bot's next reply in that conversation is a candidate FIX for the
-        # rejected one; if the user then reacts positively (or just moves on),
+        # Retry-completion (Alexa-style): after an accepted rejection or
+        # correction, the bot's next reply TO THE COMPLAINANT is a candidate
+        # FIX for the rejected one; if they then react positively,
         # (rejected -> fix) becomes a preference pair with zero user effort.
         self.fix_window_sec = fix_window_sec
         # Elicitation (self-feeding-chatbot-style): when the bot just asked
@@ -137,6 +137,12 @@ class PendingReplies:
         self._by_conv: dict[str, deque] = {}
         self._awaiting_fix: dict[str, dict] = {}
         self._conversation_order: dict[str, None] = {}
+        # Order of record() calls. A counter, not the clock: a coarse clock
+        # gives a reply and the match of its complaint the same timestamp.
+        self._seq = 0
+        # conv -> {target uid: seq of the bot's last reply to them}. Outlives
+        # the queue: a retry someone already reacted to is gone from it.
+        self._last_reply_to: dict[str, dict[str, int]] = {}
         self._load()
 
     def _touch(self, conv_id: str) -> None:
@@ -165,6 +171,10 @@ class PendingReplies:
                 rows = pending.get(key) or []
                 if isinstance(rows, list):
                     valid = [dict(row) for row in rows if isinstance(row, dict)]
+                    for row in valid:
+                        seq = row.get("seq")
+                        if isinstance(seq, int) and seq > self._seq:
+                            self._seq = seq
                     if valid:
                         self._by_conv[key] = deque(
                             valid[-self.max_per_conv:],
@@ -214,8 +224,31 @@ class PendingReplies:
         self._by_conv.pop(conv_id, None)
         self._awaiting_fix.pop(conv_id, None)
         self._conversation_order.pop(conv_id, None)
+        self._last_reply_to.pop(conv_id, None)
         if persist:
             self._save()
+
+    def _note_reply_to(self, conv_id: str, target_uid: str, seq: int) -> None:
+        if not target_uid:
+            return
+        seen = self._last_reply_to.pop(conv_id, None) or {}
+        seen.pop(target_uid, None)
+        seen[target_uid] = seq
+        while len(seen) > 64:
+            seen.pop(next(iter(seen)))
+        self._last_reply_to[conv_id] = seen
+        while len(self._last_reply_to) > self.max_conversations:
+            self._last_reply_to.pop(next(iter(self._last_reply_to)))
+
+    @staticmethod
+    def _fix_of(bad: dict) -> dict:
+        """What a retry carries about the reply it may be fixing. `target_uid`
+        is who that reply was for: only they can accept the fix strongly."""
+        return {"reply": bad["reply"],
+                "ctx_lines": bad.get("ctx_lines", []),
+                "mode": bad.get("mode", "called"),
+                "evidence_id": str(bad.get("evidence_id") or ""),
+                "target_uid": str(bad.get("target_uid") or "")}
 
     def flush(self) -> None:
         self._save()
@@ -246,32 +279,69 @@ class PendingReplies:
             "mids": [str(m) for m in (mids or [])],
             "elicited_uid": str(elicited_uid or ""),
             "ts": ts,
+            "seq": self._seq + 1,
             # Evidence event this reply descends from — the rejection that an
             # elicitation is chasing. Carried so the answer can be recorded as
             # a child of the complaint rather than as an unrelated remark.
             "parent_evidence_id": str(parent_evidence_id or ""),
         }
-        # Attach the rejected reply this one may be fixing (retry-completion).
-        bad = self._awaiting_fix.pop(conv_id, None)
-        if bad is not None and ts - bad.get("rejected_ts", 0.0) <= self.fix_window_sec:
-            entry["fixes"] = {"reply": bad["reply"],
-                              "ctx_lines": bad.get("ctx_lines", []),
-                              "mode": bad.get("mode", "called"),
-                              "evidence_id": str(bad.get("evidence_id") or "")}
+        # Attach the rejected reply this one may be fixing (retry-completion):
+        # only a reply to the person who complained is their retry. A reply
+        # to anyone else leaves the complaint armed. A row without a
+        # complainant (an older state file) never links and simply expires.
+        bad = self._awaiting_fix.get(conv_id)
+        if bad is not None:
+            if ts - bad.get("rejected_ts", 0.0) > self.fix_window_sec:
+                self._awaiting_fix.pop(conv_id, None)
+            elif (not entry["elicited_uid"]
+                  and bad.get("complainant_uid")
+                  and entry["target_uid"] == str(bad["complainant_uid"])):
+                self._awaiting_fix.pop(conv_id, None)
+                entry["fixes"] = self._fix_of(bad)
+        self._seq = entry["seq"]
+        # A re-registered rejected reply was not sent again: not a retry.
+        if not entry["elicited_uid"]:
+            self._note_reply_to(conv_id, entry["target_uid"], self._seq)
         self._touch(conv_id)
         self._by_conv.setdefault(
             conv_id, deque(maxlen=self.max_per_conv)).append(entry)
         self._save()
 
     def note_rejection(self, conv_id: str, entry: dict, ts: float,
-                       evidence_id: str = "") -> None:
-        """Remember that `entry`'s reply was rejected: the bot's NEXT reply in
-        this conversation becomes a candidate fix for it (latest wins).
+                       evidence_id: str = "",
+                       complainant_uid: str = "") -> None:
+        """Remember that `entry`'s reply was rejected or corrected by
+        `complainant_uid`: the bot's next reply TO THEM is a candidate fix.
 
-        `evidence_id` is the rejection's evidence event, so the retry that
+        The adjudication runs beside the reply turn, so the retry may already
+        be queued by the time this is called: the first reply to the
+        complainant recorded after the complaint was matched (``match_seq``)
+        is the one linked. One already sent and reacted to leaves nothing to
+        link. An entry with no ``match_seq`` waits for the next reply.
+
+        `evidence_id` is the complaint's evidence event, so the retry that
         follows can be linked back to the complaint it answers."""
-        self._awaiting_fix[conv_id] = {**entry, "rejected_ts": ts,
-                                       "evidence_id": str(evidence_id or "")}
+        complainant = str(complainant_uid or "")
+        bad = {**entry, "rejected_ts": ts, "evidence_id": str(evidence_id or ""),
+               "complainant_uid": complainant}
+        after = entry.get("match_seq")
+        if complainant and isinstance(after, int):
+            retry = next((
+                queued for queued in self._by_conv.get(conv_id) or ()
+                if queued.get("target_uid") == complainant
+                and not queued.get("elicited_uid") and "fixes" not in queued
+                and int(queued.get("seq") or 0) > after), None)
+            replied = self._last_reply_to.get(conv_id, {}).get(complainant, 0) > after
+            if retry is not None or replied:
+                # This complaint supersedes an older one from the same person.
+                if (self._awaiting_fix.get(conv_id) or {}).get(
+                        "complainant_uid") == complainant:
+                    self._awaiting_fix.pop(conv_id, None)
+                if retry is not None:
+                    retry["fixes"] = self._fix_of(bad)
+                self._save()
+                return
+        self._awaiting_fix[conv_id] = bad
         self._touch(conv_id)
         self._save()
 
@@ -301,11 +371,15 @@ class PendingReplies:
         if changed:
             self._save()
 
-    def _take(self, conv_id: str, q: deque, i: int, how: str) -> dict:
-        """Pop ``q[i]`` as a one-shot match attributed by ``how``."""
+    def _take(self, conv_id: str, q: deque, i: int, how: str,
+              now: float) -> dict:
+        """Pop ``q[i]`` as a one-shot match attributed by ``how``, stamped
+        with when it matched (see note_rejection)."""
         entry = q[i]
         del q[i]
         entry["matched_by"] = how
+        entry["matched_at"] = now
+        entry["match_seq"] = self._seq
         self._drop_empty_pending(conv_id)
         self._save()
         return entry
@@ -331,20 +405,22 @@ class PendingReplies:
             qm = str(quote_mid)
             for i in range(len(q) - 1, -1, -1):
                 if qm in q[i]["mids"]:
-                    return self._take(conv_id, q, i, "quote")
-            # A quote of a non-pending (older / foreign) message is not a
-            # reaction to anything we track — do NOT fall through to @-logic:
-            # the quote already names its target.
-            return None
+                    return self._take(conv_id, q, i, "quote", now)
+            # A quote of a message we can resolve but do not track names its
+            # own target. Behind a connector the bot's own message ids are
+            # never known, so there the quote proves nothing either way and
+            # the address decides, as for any other message.
+            if any(e.get("mids") for e in q):
+                return None
         if at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
-            return self._take(conv_id, q, -1, "at" if at_bot else "dm")
+            return self._take(conv_id, q, -1, "at" if at_bot else "dm", now)
         # Elicited exception: the bot just asked THIS user what they meant, so
         # their next message counts even without an @ (short window).
         for i in range(len(q) - 1, -1, -1):
             e = q[i]
             if (e.get("elicited_uid") == str(sender_uid)
                     and now - e["ts"] <= self.elicit_window_sec):
-                return self._take(conv_id, q, i, "elicited")
+                return self._take(conv_id, q, i, "elicited", now)
         return None
 
 
@@ -446,7 +522,10 @@ def to_example(entry: dict, adj: dict, ts: str) -> dict | None:
 
 def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
     """Retry-completion pair: the rejected reply -> the bot's own retry that
-    the user then accepted. Zero user effort (Alexa-self-learning style)."""
+    the user then accepted. Zero user effort (Alexa-self-learning style).
+
+    `answers` names the complaint's evidence event: that complaint argues for
+    this retry even though its adjudicator drafted a different rewrite."""
     reply = str(bad.get("reply") or "").strip()
     better = (good_reply or "").strip()
     if not reply or not better or reply == better:
@@ -461,6 +540,7 @@ def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
         "better": better,
         "src": "user_reaction",
         "via": "retry-completion",
+        "answers": str(bad.get("evidence_id") or ""),
     }
 
 

@@ -6,7 +6,9 @@ import logging
 import re
 from pathlib import Path
 
+from . import candidates as candidates_mod
 from . import evidence as evidence_mod
+from . import promotion as promotion_mod
 from .paths import (
     read_jsonl,
 )
@@ -17,6 +19,17 @@ from .pools import (
 from .storage import atomic_write_text
 
 logger = logging.getLogger("agent")
+
+# Refused outright by the reply's character policy, or rewritten by it.
+_UNSAFE = str.maketrans({c: " " for c in "[]<>{}|*`·→…"}
+                        | {";": ",", "；": "，", "。": " ", "—": " "})
+
+
+def _clip(text, limit: int = 30) -> str:
+    """Chat text for one summary line: one line, policy-safe, at most
+    `limit` characters."""
+    s = " ".join(str(text or "").translate(_UNSAFE).split())
+    return s if len(s) <= limit else s[:limit - 3].rstrip() + "..."
 
 
 class DataViews:
@@ -108,13 +121,16 @@ class DataViews:
         Persona is compared through its lineage, everything else exactly."""
         if not isinstance(scope, dict):
             return False
+        # Read first: reading it registers the lineage the lookup below uses.
+        identity = self.persona_identity
         return (all(str(scope.get(key) or "") == str(value or "")
                     for key, value in current_scope.items() if key != "persona_hash")
-                and evidence_mod.persona_identity(scope) == self.persona_identity)
+                and evidence_mod.persona_identity(scope) == identity)
 
     def _learned_summary(self, group_id: str) -> str:
         """What this room has taught the bot, in chat-sized form: memories,
-        promoted material, proposals still waiting for a second voice, and the
+        promoted material, proposals still waiting (for a second voice, or
+        for the admin), the latest promotion and why it passed, and the
         recent self-scores. Reads state only; no model call."""
         zh = self.agent_lang == "zh"
         current_scope = self._live_scope(group_id)
@@ -123,42 +139,120 @@ class DataViews:
                     if self._scope_authorizes(r.get("scope"), current_scope)]
         pairs = [r for r in self._view_pairs_cache
                  if self._scope_authorizes(r.get("scope"), current_scope)]
-        try:
-            pending = [c for c in self.candidate_ledger.pending()
-                       if (c.get("scope") or {}).get("conv_id") == group_id]
-        except Exception as e:
-            logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
-            pending = []
+        voice, admin, latest = self._learning_status(group_id, current_scope)
         scores = []
         if self.eval_enabled:
             scores = [int(r["score"]) for r in read_jsonl((self.eval_file,))
                       if r.get("group_id") == group_id and isinstance(r.get("score"), int)][-10:]
         memories = len(self.memories.get(group_id, []))
 
-        def clip(s: str) -> str:
-            s = " ".join(str(s or "").split())
-            return s if len(s) <= 30 else s[:27] + "..."
-
         # Plain lines, ASCII separators: the reply crosses the character policy
         # like any other, which strips middle dots, arrows, the ellipsis and
-        # list markers.
-        n_ex, n_pr, n_pd = len(examples), len(pairs), len(pending)
+        # list markers, and refuses brackets and pipes outright.
+        n_ex, n_pr = len(examples), len(pairs)
         if zh:
-            head = f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，待佐证 {n_pd} 条"
+            head = (f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，"
+                    f"{voice} 条等第二个人佐证，{admin} 条等管理员处理")
         else:
             head = (f"{memories} memor{'y' if memories == 1 else 'ies'}, "
                     f"{n_ex} repl{'y' if n_ex == 1 else 'ies'} and {n_pr} fix{'' if n_pr == 1 else 'es'} learned, "
-                    f"{n_pd} awaiting a second voice")
+                    f"{voice} awaiting a second voice, {admin} awaiting the admin")
         if scores:
             head += ("，最近自评 {:.1f}/5" if zh else ", recent self-score {:.1f}/5").format(
                 sum(scores) / len(scores))
+
+        def pair_line(r: dict) -> str:
+            was, better = _clip(r.get("reply")), _clip(r.get("better"))
+            return f"原来：{was}，改成：{better}" if zh else f"was: {was}, better: {better}"
+
         lines = [head]
-        for r in pairs[-1:]:
-            lines.append((f"原来：{clip(r.get('reply'))}，改成：{clip(r.get('better'))}" if zh
-                          else f"was: {clip(r.get('reply'))}, better: {clip(r.get('better'))}"))
-        for r in examples[-1:]:
-            lines.append(f"{clip(r.get('reply'))}")
+        shown = ""
+        if latest is not None:
+            shown = str(latest.get("type") or "")
+            row = latest.get("payload") or {}
+            lines.append(pair_line(row) if shown == "preference_pair"
+                         else _clip(row.get("reply")))
+            chain = self._promotion_chain(latest, zh)
+            if chain:
+                lines.append(chain)
+        if shown != "preference_pair":
+            lines.extend(pair_line(r) for r in pairs[-1:])
+        if shown != "positive_example":
+            lines.extend(_clip(r.get("reply")) for r in examples[-1:])
         return "\n".join(lines)
+
+    def _learning_status(self, group_id: str, current_scope: dict):
+        """(waiting for a second voice, waiting for the admin, latest active
+        candidate) for this conversation. A proposal no further event can
+        promote (a positive example, or one blocked by a conflict or by
+        disagreeing evidence) waits for the admin, not for a voice."""
+        try:
+            cands = self.candidate_ledger.all()
+            events = self.evidence_log.all()
+        except Exception as e:
+            logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
+            return 0, 0, None
+        voice = admin = 0
+        for c in cands:
+            if (c.get("state") != candidates_mod.STATE_PROPOSED
+                    or (c.get("scope") or {}).get("conv_id") != group_id):
+                continue
+            decision = self._decide_promotion(c["candidate_id"], events=events,
+                                              peers=cands)
+            if (decision.blocked_by or not self.promotion_policy.auto_promote
+                    or not evidence_mod.can_be_strong(str(c.get("type") or ""))):
+                admin += 1
+            else:
+                voice += 1
+        active = [c for c in cands
+                  if c.get("state") == candidates_mod.STATE_PROMOTED
+                  and self._scope_authorizes(c.get("scope"), current_scope)]
+
+        def promoted_at(c: dict) -> str:
+            return max((str(h.get("ts") or "") for h in c.get("history") or ()
+                        if h.get("state") == candidates_mod.STATE_PROMOTED),
+                       default="")
+
+        latest = max(active, key=promoted_at) if active else None
+        return voice, admin, latest
+
+    def _promotion_chain(self, cand: dict, zh: bool) -> str:
+        """One line: who argued for `cand`, how, and why it passed."""
+        try:
+            linked = self.evidence_log.many(cand.get("evidence") or [])
+        except Exception:
+            return ""
+        steps: list[str] = []
+        strong = 0
+        supporting = [e for e in linked if promotion_mod.supports_candidate(
+            e, cand, policy=self.promotion_policy)]
+        for e in supporting:
+            who = _clip(e.get("speaker_name"), 16) or ("有人" if zh else "someone")
+            kind, rtype = e.get("kind"), e.get("reaction_type")
+            if kind == evidence_mod.KIND_RETRY_ACCEPTANCE:
+                step = f"{who} 接受了重答" if zh else f"{who} accepted the retry"
+            elif kind == evidence_mod.KIND_SELF_REVIEW:
+                step = "自我复盘" if zh else "a self-review"
+            elif kind == evidence_mod.KIND_SELF_EVAL:
+                step = "自评满分" if zh else "a top self-score"
+            elif rtype == "correction":
+                step = f"{who} 纠正了" if zh else f"{who} corrected it"
+            elif rtype == "rejection":
+                step = f"{who} 说没答对" if zh else f"{who} said it missed"
+            else:
+                step = f"{who} 觉得好" if zh else f"{who} liked it"
+            steps.append(step)
+            if promotion_mod.anchors(e, cand):
+                strong += 1
+        history = [h for h in cand.get("history") or ()
+                   if h.get("state") == candidates_mod.STATE_PROMOTED]
+        if history and history[-1].get("actor") != "auto":
+            steps.append("管理员通过" if zh else "promoted by the admin")
+        elif zh:
+            steps.append(f"{len(supporting)} 条证据其中 {strong} 条强，通过")
+        else:
+            steps.append(f"passed with {len(supporting)} events, {strong} strong")
+        return ("原因：" + "，".join(steps)) if zh else ("why: " + ", ".join(steps))
 
     def _reload_views_if_stale(self) -> None:
         """Hot-reload the materialized views of promoted candidates.
