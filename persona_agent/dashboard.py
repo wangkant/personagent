@@ -83,6 +83,8 @@ def install(app: FastAPI, *, enabled: bool | None = None) -> bool:
         enabled = env_bool("DASHBOARD_ENABLED", True)
     if enabled:
         app.include_router(router)
+    # Newer FastAPI nests included routers, so app.routes cannot answer this.
+    app.state.dashboard = bool(enabled)
     return bool(enabled)
 
 

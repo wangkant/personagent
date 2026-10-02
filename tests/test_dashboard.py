@@ -613,9 +613,7 @@ def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_ENABLED", "false")
     app = FastAPI()
     check("disabled: install says so", dashboard.install(app) is False)
-    paths = {getattr(r, "path", "") for r in app.routes}
-    check("disabled: no dashboard route", not any(
-        p == "/" or p.startswith(("/api/dashboard", "/dashboard")) for p in paths), repr(paths))
+    check("disabled: the app records it", app.state.dashboard is False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         check("disabled: the page is a 404",
@@ -623,10 +621,13 @@ def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_ENABLED", "true")
     enabled = FastAPI()
     check("enabled: install says so", dashboard.install(enabled) is True)
-    check("enabled: routes present", "/api/dashboard/status" in {
-        getattr(r, "path", "") for r in enabled.routes})
-    check("the service includes it by default", "/api/dashboard/status" in {
-        getattr(r, "path", "") for r in server.app.routes})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        status = TestClient(enabled, base_url=LOCAL, client=("127.0.0.1", 1)).get(
+            "/api/dashboard/status").status_code
+    check("enabled: the route answers (asking for its token)", status == 401, str(status))
+    check("the service includes it by default", server.app.state.dashboard is True
+          and server._dashboard_served())
 
 
 # ---------------------------------------------------------- decision log ----

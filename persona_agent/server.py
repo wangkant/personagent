@@ -729,7 +729,7 @@ def _url_host(host: str) -> str:
 
 
 def _dashboard_served() -> bool:
-    return any(getattr(route, "path", None) == "/" for route in app.routes)
+    return bool(getattr(app.state, "dashboard", False))
 
 
 def _command(sub: str) -> str:
