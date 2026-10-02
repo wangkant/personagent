@@ -64,6 +64,16 @@ def _response_text(e: BaseException) -> str:
     except Exception:
         return ""
 
+
+def _error_text(e: BaseException, status) -> str:
+    """The error's message, lowercased, with its body only on a status about
+    the account: a 5xx body describes an outage and a 400 body may echo the
+    request."""
+    text = str(e).lower()
+    if status in (None, 401, 402, 403, 429):
+        text += " " + _response_text(e).lower()
+    return text
+
 # httpx expires an idle keep-alive connection after 5s, and the gap between a
 # person's turns is always longer, so the pool emptied between every turn and
 # each one paid a fresh TCP+TLS handshake to the provider. The other two
@@ -266,7 +276,7 @@ class ModelCalls:
         url, _key = self._endpoint_for(model)
         host = _host(url) or url
         status = _status_of(e)
-        text = (str(e) + " " + _response_text(e)).lower()
+        text = _error_text(e, status)
         billing = status == 402 or any(w in text for w in _BILLING_WORDS)
         kind = "billing" if billing else "auth"
         reported = self._fatal_reported_hosts()
@@ -300,10 +310,10 @@ class ModelCalls:
           fatal_request — 4xx request-level: don't retry, but a fallback model may work
         Unknown errors are treated as transient (retryable).
         """
-        msg = (str(e) + " " + _response_text(e)).lower()
         # A structured status first, so a number inside a request id or a
         # token count is not read as one.
         status = _status_of(e)
+        msg = _error_text(e, status)
         # Before the 429 check: OpenAI answers an exhausted quota with a 429.
         if status == 402 or any(k in msg for k in (
                 "payment required", "insufficient_quota", "insufficient balance",
