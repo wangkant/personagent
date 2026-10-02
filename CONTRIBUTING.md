@@ -252,11 +252,13 @@ A release is a tag. Only the maintainer does this.
 1. Put the version in `pyproject.toml`, `persona_agent/__init__.py`
    (`__version__`) and the plugin's `metadata.yaml`. A test fails if the three
    differ.
-2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
-   and add a fresh `## [Unreleased]` above it. The section under the version
+2. In `CHANGELOG.md`, give the changes a section headed the way the others
+   are, `## [X.Y.Z] — YYYY-MM-DD` (an em dash), and add its link line,
+   `[X.Y.Z]: https://github.com/wangkant/personagent/compare/vA.B.C...vX.Y.Z`,
+   at the top of the link list at the end. The section under the version
    becomes the release notes.
 3. Merge to `main` and wait for CI to pass.
-4. Tag and push:
+4. Tag `main` and push the tag:
 
    ```bash
    git tag vX.Y.Z
@@ -266,7 +268,8 @@ A release is a tag. Only the maintainer does this.
 The `Release` workflow (`.github/workflows/release.yml`) then runs three jobs in
 order, so a release page never advertises a version PyPI lacks:
 
-1. **build** runs `tools/release_notes.py`, which fails the release when the tag
+1. **build** first refuses a tag whose commit is not on `main`, then runs the
+   test suite. Next, `tools/release_notes.py` fails the release when the tag
    is not `v` plus the version in `pyproject.toml`, or when `CHANGELOG.md` has
    no non-empty `## [X.Y.Z]` section. It then builds the sdist and the wheel,
    runs `twine check --strict`, and smoke-tests the wheel with

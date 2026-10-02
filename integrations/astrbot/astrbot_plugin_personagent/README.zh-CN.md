@@ -8,7 +8,7 @@
 
 - 把白名单里的群和私聊的每条消息，转发给 personagent 的 `POST /v1/events`，再把回复发回聊天里（文字、图片，群里按需 @ 对方）。
 - 读懂各平台的差异：谁被 @ 了、引用了哪条消息、表情和图片、语音、消息真正的发送时间。
-- 接收 personagent 主动说的话（定时开场、追问、模型挂了时的道歉），靠的是拉取它的 outbox。
+- 接收 personagent 主动说的话（定时开场、追问、群里模型挂了时的道歉），靠的是拉取它的 outbox。
 - personagent 接管某个会话时，让 AstrBot 自带的模型闭嘴（`block_default`），避免两个声音同时回答。
 
 人设、记忆、防抖和「打字」节奏都在 personagent 里，插件只负责翻译，不决定说什么。
@@ -37,7 +37,7 @@ personagent connect astrbot
 | --- | --- | --- |
 | `personagent_url` | `http://127.0.0.1:8080` | personagent 的地址，插件会自己加 `/v1/events` 和 `/v1/outbox`。只能是本机地址，或者设了 `connector_token` 的 HTTPS 地址。 |
 | `connector_token` | 空 | 共享密钥，必须和 personagent 的 `CONNECTOR_TOKEN` 一致。地址不是本机时必填。 |
-| `timeout_s` | `180` | 每次请求最多等多少秒。要大于 personagent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`，见下文。 |
+| `timeout_s` | `420` | 每次请求最多等多少秒。要大于 personagent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`，见下文。 |
 | `excluded_platforms` | `["aiocqhttp"]` | 不转发的适配器。要接 QQ，就把 `aiocqhttp` 从里面删掉。 |
 | `groups` | 空 | 要转发的群 ID。空 = 一个都不转发；`*` = 全部转发，交给 personagent 的 `ACCESS_GROUPS` 决定。 |
 | `dm_users` | 空 | 允许私聊的发送者 ID。空 = 不转发私聊；`*` = 全部转发。 |
@@ -69,13 +69,13 @@ AstrBot 在很繁忙的 QQ 群里使用前，先看两个 AstrBot 自己的设�
 - 给 AstrBot 用主机网络（compose 里写 `network_mode: host`，或 `docker run --network host`；Docker Desktop 需要 4.34 以上并打开 host networking）。同一个文件里的 NapCat 也要用主机网络。
 - 给 personagent 一个 HTTPS 地址（反向代理或隧道），用 `personagent connect astrbot <data 文件夹> --url https://你的地址` 写进插件。
 
-personagent 在另一台机器上时，也是 HTTPS 地址加两边相同的 token。
+personagent 在另一台机器上时，也是 HTTPS 地址加两边相同的 token。加反向代理或隧道之前，先在两边设好 token。
 
 ## 超时
 
 一次请求要等 personagent 完成一整个回合：一小段防抖，加上每次模型调用和重试。`timeout_s` 到了，personagent 仍会把回合做完、记住学到的东西，但没人会看到那条回复，而且 AstrBot 自带的模型会用另一种口气回答同一条消息。
 
-personagent 默认 `LLM_TIMEOUT_S=120`、`LLM_MAX_RETRIES=2`，最坏要 360 秒，超过插件默认的 180 秒。用的模型很慢，就调大 `timeout_s`，或者调小那两个设置。
+personagent 默认 `LLM_TIMEOUT_S=120`、`LLM_MAX_RETRIES=2`，最坏要 360 秒，插件默认的 420 秒够用。如果在 personagent 那边调大了这两个设置，`timeout_s` 也要跟着调大。
 
 ## 出了问题
 
@@ -93,6 +93,6 @@ AstrBot 日志里，插件的消息都以 `personagent:` 开头。
 | `agent request failed ...` | 多半 personagent 没在运行，或者 `personagent_url` 写错了（它是基础地址，不要带 `/v1/events`）。 |
 | `outbox: agent has no outbox ...` | personagent 把 `CONNECTOR_OUTBOX_ENABLED` 关了。不影响别的功能。 |
 
-AstrBot 自带的模型突然用另一种口气回话，说明插件没连上 personagent，或者 personagent 没接管这个会话：先看上表，再打开 `http://127.0.0.1:8080/`（personagent 的控制面板）和 `personagent doctor`。更多排查步骤见 [docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#机器人不说话)。
+AstrBot 自带的模型突然用另一种口气回话，说明插件没连上 personagent，或者 personagent 没接管这个会话：先看上表，再运行 `personagent doctor`，并用它最后一行打印的链接打开 personagent 的控制面板。更多排查步骤见 [docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#机器人不说话)。
 
 完整的英文说明（各平台的支持情况、outbox、请求签名）见 [README.md](README.md)。

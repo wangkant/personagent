@@ -108,11 +108,13 @@ platform's own rules. The agent separately notices its name in the text.
 Behind a connector, `addressed` is also how the agent knows a message is
 aimed at its reply: a quote of the bot's message, or an @ of it, is read as a
 reaction it may learn from, so a connector that leaves it false for a reply to
-the bot costs the agent that signal.
+the bot costs the agent that signal. A quote of another member's message is
+not a reaction to the bot, even when the message also addresses the bot.
 
 An event whose `sender_id` equals its `bot_id` is the bot's own message echoed
-back. The agent ignores it and answers `{"handled": false, "owned": true,
-"replies": []}`, but a connector should not send it at all.
+back. The agent drops it unread and answers `{"handled": false, "owned": true,
+"replies": []}`, so the connector's own bot logic stays quiet too; better
+still, a connector does not send it at all.
 
 Segments, in order:
 
@@ -160,7 +162,7 @@ The response:
 ## Outbox: `POST /v1/outbox`
 
 Some messages are not an answer to a request: a scheduled opener, the follow-up
-question after a rejection, the excuse when the model is down. The agent
+question after a rejection, the excuse when the model is down in a group. The agent
 queues those per conversation, and a connector that declared `outbox` pulls
 them. Pull rather than push means the agent never needs to reach the
 connector, so a connector behind NAT or a firewall works the same.
@@ -263,7 +265,7 @@ agent's own openers, and not as the person's activity.
 
 | Missing | Effect |
 |---|---|
-| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `QQ_ONEBOT_URL` is set and reaches it) |
+| `outbox` | no scheduled openers, no follow-up question, and no excuse for a failed model call in a group (QQ ids still get them through NapCat when `QQ_ONEBOT_URL` is set and reaches it). A DM's excuse needs no outbox: it is sent while the request is open, so it comes back in that response's `replies` |
 | `quote_text` | a quoted message is understood only if the agent saw it itself |
 | `reply_handle` | same as no `outbox` |
 | `addressed` wrong | the persona treats addressed messages as background chatter |

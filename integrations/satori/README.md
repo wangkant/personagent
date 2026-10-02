@@ -35,7 +35,8 @@ for signing and the outbox loop.
 
 2. **The agent.** Run personagent (`personagent run`, see its README). If the
    connector and the agent are on different hosts, set `CONNECTOR_TOKEN` in the
-   agent's `.env` and put the agent behind HTTPS.
+   agent's `.env` and put the agent behind HTTPS. Set the token before you add
+   any proxy or tunnel, even on one host.
 
 3. **The connector.** It is a script in this repository, so it needs a copy of
    the repository (a clone, or the ZIP from GitHub) and a Python environment
