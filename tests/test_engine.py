@@ -353,3 +353,19 @@ def test_a_direct_qq_setup_without_a_napcat_url_is_named() -> None:
     check("not when QQ comes through AstrBot",
           not named(QQ_BOT_ID="10001", CONNECTOR_QQ_PLATFORMS="aiocqhttp"))
     check("not without QQ at all", not named())
+
+
+def test_the_history_bootstrap_needs_a_napcat_url() -> None:
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "QQ_ONEBOT_URL": " ", "ADMIN_IDS": "42", "ACCESS_GROUPS": "123"}
+    done = subprocess.run([sys.executable, str(root / "tools" / "bootstrap_from_history.py")],
+                          cwd=root, env=env, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=60)
+    out = done.stdout + done.stderr
+    check("a blank QQ_ONEBOT_URL stops it with one sentence",
+          done.returncode == 1 and "QQ_ONEBOT_URL is blank" in out
+          and "Traceback" not in out, out)
