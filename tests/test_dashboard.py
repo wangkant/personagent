@@ -724,10 +724,19 @@ def test_the_decision_log_is_bounded_and_coalesces_silence() -> None:
     log.record("g3", "judge", False, "passed", now=21)
     check("bounded in conversations, oldest dropped",
           set(log.last_seen()) == {"g2", "g3"}, repr(log.last_seen()))
-    log.record("g3", "called", True, "addressed", "x" * 500 + "\x02secret\x03", now=22)
-    excerpt = log.recent("g3")[0]["excerpt"]
-    check("excerpt: short and printable",
-          len(excerpt) <= decision_log.EXCERPT_CHARS and "\x02" not in excerpt, repr(excerpt))
+    log.record("g3", "called", True, "addressed", "x" * 500 + "\x02secret\x03",
+               answered="y" * 500 + "\x02page\x03", sender="z" * 100 + "\n", now=22)
+    row = log.recent("g3")[0]
+    for field, limit in (("excerpt", decision_log.EXCERPT_CHARS),
+                         ("answered", decision_log.EXCERPT_CHARS),
+                         ("sender", decision_log.NAME_CHARS)):
+        check(f"{field}: short and printable",
+              len(row[field]) <= limit and "\x02" not in row[field]
+              and "\n" not in row[field], repr(row[field]))
+    log.record("g3", "judge", False, "passed", "lol", answered="ignored", sender="Sam", now=23)
+    quiet = log.recent("g3")[0]
+    check("a silence names who wrote what it let pass, and answered nothing",
+          quiet["sender"] == "Sam" and quiet["answered"] == "", repr(quiet))
     decision_log.record(None, "called", True, "addressed")  # must not raise
 
 
@@ -761,10 +770,36 @@ async def test_a_group_turn_records_why_it_spoke_or_stayed_quiet(tmp, monkeypatc
     quiet_followup, spoke, below = rows
     check("below the trigger count: quiet with the reason",
           below["spoke"] is False and below["reason"] == "below the trigger count"
-          and below["excerpt"] == "anyone around this evening", repr(below))
-    check("called: spoke, with what it said",
+          and below["excerpt"] == "anyone around this evening"
+          and below["sender"] == "Sam" and below["answered"] == "", repr(below))
+    check("called: spoke, with what it said and the message it answered",
           spoke["spoke"] is True and spoke["mode"] == "called"
-          and spoke["reason"] == "addressed" and spoke["excerpt"] == "sure, on it", repr(spoke))
+          and spoke["reason"] == "addressed" and spoke["excerpt"] == "sure, on it"
+          and spoke["answered"] == "Nova can you take a look"
+          and spoke["sender"] == "Sam", repr(spoke))
     check("a pass is recorded as a choice to stay quiet",
           quiet_followup["spoke"] is False and quiet_followup["reason"] == "passed"
-          and quiet_followup["mode"] == "followup", repr(quiet_followup))
+          and quiet_followup["mode"] == "followup"
+          and quiet_followup["sender"] == "Sam", repr(quiet_followup))
+
+
+def test_the_chat_carries_the_message_each_reply_answered(live) -> None:
+    decision_log.record("telegram:c1", "", False, "below the trigger count",
+                        "which match?", sender="Priya")
+    decision_log.record("telegram:c1", "called", True, "addressed", "count me in",
+                        answered=f"Nova, the key is {SECRET_KEY}", sender="Sam")
+    server.CONNECTOR_TOKEN = SECRET_TOKEN
+    rows = client().get("/api/dashboard/conversation",
+                        params={"id": "telegram:c1"}).json()["decisions"]
+    check("newest first, both lines", len(rows) == 2, repr(rows))
+    spoke, quiet = rows
+    check("a reply carries the start of the message it answered and its sender",
+          spoke["answered"].startswith("Nova, the key is") and spoke["sender"] == "Sam"
+          and spoke["excerpt"] == "count me in", repr(spoke))
+    check("the excerpt is masked like every other field", SECRET_KEY not in spoke["answered"],
+          spoke["answered"])
+    check("a silence carries the sender of the message it let pass",
+          quiet["sender"] == "Priya" and quiet["answered"] == ""
+          and quiet["excerpt"] == "which match?", repr(quiet))
+    check("the line keeps its earlier fields",
+          set(quiet) >= {"ts", "mode", "spoke", "reason", "excerpt", "count"}, repr(quiet))
