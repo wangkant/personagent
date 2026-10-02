@@ -7,14 +7,24 @@ produced** is worth far more than a feature request.
 ## Getting set up
 
 ```bash
-python quickstart.py            # creates .venv, installs dependencies, runs the .env wizard
-.venv/bin/python try_chat.py    # Windows: .venv\Scripts\python.exe try_chat.py
+git clone https://github.com/wangkant/personagent.git
+cd personagent
+python quickstart.py            # creates .venv, installs dependencies, runs `personagent init`
+.venv/bin/python -m persona_agent chat    # Windows: .venv\Scripts\python.exe -m persona_agent chat
 ```
 
-`try_chat.py` runs the persona, example retrieval, generation and the
-character check, the same path a live reply takes, so it is the fastest way to
-reproduce a persona bug. It skips the allowlists, reply triggers, output
-filters, self-evaluation and vision.
+In a clone the home folder is the clone itself: `.env`, `persona.txt` and
+`runtime/` sit next to `persona_agent/` and are gitignored. `pip install -e .`
+inside the venv also gives you the `personagent` command.
+
+`personagent chat` is a simulated group chat. It runs the persona, the reply
+triggers, the speak-or-stay-quiet gate, example retrieval, generation, the
+character check, the output filters, memory commands and learning from
+reactions, in the order a live turn does. It skips the allowlists, the
+debounce and real delivery, and turns self-evaluation and vision off. It is
+the fastest way to reproduce a persona bug, and `/why` prints why it spoke or
+stayed quiet. `personagent demo` plays the same machinery with a scripted
+model and needs no key.
 
 ## Running the tests
 
@@ -27,13 +37,16 @@ ruff check . --select F401,F811,F821,F841
 python -m compileall -q persona_agent main.py try_chat.py quickstart.py tools tests integrations
 ```
 
-Run these before opening a PR.
+The suite takes about a minute and needs no network or API key: the tests
+stub the model and the transport. Run these before opening a PR.
 
 The ruff line catches dead and undefined names. It is not a style gate. CI
-also runs the suite on Python 3.10, 3.11 and 3.12 on Linux and 3.12 on
-Windows, checks `start.sh` for syntax and its executable bit, and builds the
-wheel and sdist and imports each from a clean venv. CI compiles `.`; locally,
-name the directories so compileall skips `.venv`.
+runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, checks
+`start.sh` for syntax and its executable bit, and has a `package` job on Linux
+and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
+installs each into a clean venv outside the checkout, and runs
+`tools/package_smoke.py` against the installed command. CI compiles `.`;
+locally, name the directories so compileall skips `.venv`.
 
 One file, or one test, for a fast loop:
 
@@ -42,12 +55,30 @@ python -m pytest tests/test_outbox.py
 python -m pytest tests/test_outbox.py -k long_poll
 ```
 
+### The package smoke test
+
+`tools/package_smoke.py` checks that an installed `personagent` command works
+with no checkout around it, offline: `--version`, `init --no-input`, `chat`
+against a stand-in model, `run` plus `GET /health`, and `doctor --json`, each
+in a throwaway home. Run it after a change to packaging, the CLI or the files
+a wheel ships:
+
+```bash
+python -m pip install build
+python -m build
+python -m venv /tmp/smoke-env
+/tmp/smoke-env/bin/python -m pip install dist/*.whl     # Windows: Scripts\python.exe
+python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.0.0
+```
+
+`--skip init` (or another step) leaves a step out.
+
 ### Writing a test
 
 - A test is a module-level `test_*` function in `tests/test_*.py`. pytest
   finds it; nothing needs registering.
 - `pytest.ini` puts the repo root and `tools/` on the import path, so tests
-  import `persona_agent`, `main`, `quickstart` and the CLI tools the way a
+  import `persona_agent`, the root shims and the CLI tools the way a
   deployment does.
 - `tests/conftest.py` provides the `tmp` fixture (a per-test scratch
   directory) and runs each `async def` test on its own event loop. pytest is
@@ -106,6 +137,22 @@ one per concern; it calls the pure modules below by name. Deciding whether to
 speak, building the prompt and retrieving what goes into it are separate
 modules, so each can be read, tested and replaced on its own:
 
+The entry points. Each root file is a shim over the package, kept so older
+commands keep working:
+
+| Entry | What it is |
+|---|---|
+| `personagent` (`persona_agent/cli.py`) | The command: `init`, `connect`, `chat`, `demo`, `run`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
+| `persona_agent/home.py` | Where a deployment lives (`AGENT_HOME`, the checkout, the working folder, `~/personagent`) and where shipped files are found. Stdlib only |
+| `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `main.py` starts it |
+| `persona_agent/setup_wizard.py` | `init` and `connect`: bilingual questions, the key test, the AstrBot handshake. Stdlib only. `quickstart.py` makes the venv, then calls it |
+| `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo. `try_chat.py` runs the chat |
+| `persona_agent/dashboard.py`, `static/` | The local page at `/`, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
+| `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval`. `tools/healthcheck.py`, `tools/candidates_admin.py` and `tools/behavior_eval.py` are shims over them |
+| `quickstart.py`, `start.sh`, `start.ps1`, `start.bat` | The clone route: set up, then start |
+
+The rest of the package:
+
 | Module | Owns |
 |---|---|
 | `persona_agent/agent.py` | `Agent`: construction, runtime state, the ledgers and views it holds, shutdown |
@@ -118,6 +165,7 @@ modules, so each can be read, tested and replaced on its own:
 | `persona_agent/thinking.py` | One group turn's model work: prompt, gate, reply (`_think`) |
 | `persona_agent/dm.py` | The one-on-one turn |
 | `persona_agent/messages.py` | Reading a message: its text, quotes, buffer lines, @-mentions |
+| `persona_agent/addressing.py` | Whether a message names the persona: the one rule the group turn, the missed-mention sweep and the memory commands share |
 | `persona_agent/llm.py` | Model calls: clients, endpoints, retries, fallback, probes, model routing |
 | `persona_agent/search.py` | Web search when a turn needs it |
 | `persona_agent/proactive.py` | Speaking first: the proactive loops |
@@ -146,6 +194,7 @@ modules, so each can be read, tested and replaced on its own:
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
 | `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup |
 | `persona_agent/health.py`, `preflight.py` | Dependency probes; startup config check (missing or misspelled keys) |
+| `tools/` | Offline scripts that are not part of the package; [docs/tools.md](docs/tools.md) lists them |
 
 New behaviour goes in the module that owns the concern. If a change needs
 state from two mixins, it probably belongs in `agent.py`.
@@ -157,7 +206,7 @@ Reaching for `self` in such a module undoes the split.
 
 To add a setting, add it to `AgentSettings` in `settings.py` and read it with
 the `config_env` helpers (settings of the HTTP layer, such as `SERVER_HOST`, are read
-in `main.py`). Then document it in `.env.example`: preflight reports any
+in `server.py`). Then document it in `.env.example`: preflight reports any
 `.env` key that is not in `.env.example` as a misspelling, and
 `tests/test_http.py` fails if a setting the code reads is missing from
 `.env.example`.
@@ -176,7 +225,7 @@ in `main.py`). Then document it in `.env.example`: preflight reports any
 
 ## Reporting a persona bug
 
-Send three things:
+Use the "Persona report" issue form. It asks for three things:
 
 1. The last few context lines (redact names and IDs).
 2. What the bot replied.
@@ -184,7 +233,53 @@ Send three things:
 
 That is the BAD/OK pair the learning loop uses, and it often becomes the fix
 directly: a row in `data/feedback.<lang>.jsonl`. Copy the shape of an existing
-row (`context`, `reply`, `better`, and `"rating": "better"`).
+row (`context`, `reply`, `better`, and `"rating": "better"`). The form also asks
+for the persona excerpt and the model, because both change what a reply looks
+like.
+
+## Documentation
+
+The English page is the source of truth. A page with a `*.zh-CN.md` twin
+(`README`, `docs/deploy`, `DISCLAIMER`, the AstrBot plugin README) is
+written in natural Chinese for Chinese readers, not translated line by line:
+when you change a fact in one, change it in the other. Images in a README use
+absolute `raw.githubusercontent.com` URLs so they render on PyPI.
+
+## Releasing
+
+A release is a tag. Only the maintainer does this.
+
+1. Put the version in `pyproject.toml`, `persona_agent/__init__.py`
+   (`__version__`) and the plugin's `metadata.yaml`. A test fails if the three
+   differ.
+2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
+   and add a fresh `## [Unreleased]` above it. The section under the version
+   becomes the release notes.
+3. Merge to `main` and wait for CI to pass.
+4. Tag and push:
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+The `Release` workflow (`.github/workflows/release.yml`) then runs three jobs in
+order, so a release page never advertises a version PyPI lacks:
+
+1. **build** runs `tools/release_notes.py`, which fails the release when the tag
+   is not `v` plus the version in `pyproject.toml`, or when `CHANGELOG.md` has
+   no non-empty `## [X.Y.Z]` section. It then builds the sdist and the wheel,
+   runs `twine check --strict`, and smoke-tests the wheel with
+   `tools/package_smoke.py` before anything is published.
+2. **pypi** publishes that build to PyPI by trusted publishing (no token is
+   stored), through the GitHub environment named `pypi`.
+3. **github-release** creates the GitHub Release for the tag, attaches the
+   sdist and the wheel, and uses the changelog section as its notes.
+
+Running the workflow by hand from a branch only builds the files and uploads
+them as an artifact; run it from a tag to release. PyPI must have a trusted
+publisher for this repository (owner `wangkant`, repository `personagent`,
+workflow `release.yml`, environment `pypi`); that is set up once, on pypi.org.
 
 ## Privacy
 
