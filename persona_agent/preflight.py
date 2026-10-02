@@ -24,7 +24,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import access, channels, endpoints
-from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
+from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, TZ_OFFSET_RANGE,
+                         parse_tz_offset)
 from .home import resource
 from .paths import ROOT
 
@@ -424,16 +425,13 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             " English and Chinese. Set AGENT_LANG=en or AGENT_LANG=zh"))
 
     tz = str(configured.get("PERSONA_TZ_OFFSET_HOURS") or "").strip()
-    if tz:
-        try:
-            hours = float(tz)
-        except ValueError:
-            hours = float("nan")
-        if not -24 < hours < 24:
-            findings.append(Finding(
-                "WARN", "PERSONA_TZ_OFFSET_HOURS",
-                f"is {tz!r}, which is not a UTC offset. Use hours between -23 and"
-                " 23, such as 8 or -5, or leave it blank for this machine's offset"))
+    if tz and parse_tz_offset(tz) is None:
+        low, high = TZ_OFFSET_RANGE
+        findings.append(Finding(
+            "WARN", "PERSONA_TZ_OFFSET_HOURS",
+            f"is {tz!r}, which is not a UTC offset. Use hours from {low:g} to"
+            f" {high:g}, such as 8 or -5, or leave it blank for UTC+8 with"
+            " AGENT_LANG=zh and this machine's offset otherwise"))
 
     # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
     # so both of its failure modes are silent: configured for a fallback that

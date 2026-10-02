@@ -759,10 +759,10 @@ def test_preflight_names_a_language_or_time_zone_it_cannot_use() -> None:
     check("a comment read as a value is named, without echoing it",
           [(f.level, f.key) for f in found] == [("WARN", "REACT_MODEL")]
           and "LLM_JUDGE_MODEL" not in found[0].detail, repr(found))
-    for tz in ("", "8", "-5", "5.5", "-23"):
+    for tz in ("", "8", "-5", "5.5", "-12", "14"):
         check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is an offset",
               not levels(PERSONA_TZ_OFFSET_HOURS=tz))
-    for tz in ("24", "-30", "UTC+8", "nan"):
+    for tz in ("24", "-30", "UTC+8", "nan", "-23", "15"):
         check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is named",
               ("WARN", "PERSONA_TZ_OFFSET_HOURS") in levels(PERSONA_TZ_OFFSET_HOURS=tz))
 

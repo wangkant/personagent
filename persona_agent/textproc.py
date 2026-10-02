@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
 
+from .config_env import TZ_OFFSET_RANGE, parse_tz_offset
+
 
 logger = logging.getLogger("agent")
 
@@ -574,25 +576,31 @@ def _local_tz_offset() -> float:
     return offset.total_seconds() / 3600 if offset is not None else 0.0
 
 
-def _env_tz_offset() -> float:
-    """PERSONA_TZ_OFFSET_HOURS as hours; blank or unset is this machine's
-    offset. Read on every call, never cached, so a reload or a test can change
-    it between turns. Outside (-24, 24), where `timezone()` raises and every
-    turn would fail, it falls back to the machine's offset and says so once."""
-    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
-    if not str(raw).strip():
-        return _local_tz_offset()
-    try:
-        hours = float(str(raw).strip())
-    except ValueError:
-        hours = None
-    if hours is not None and -24 < hours < 24:
-        return hours
-    if raw not in _TZ_WARNED:
-        _TZ_WARNED.add(raw)
-        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours between -24 "
-                       "and 24, e.g. 8 or -5); using this machine's offset", raw)
+def default_tz_offset() -> float:
+    """The persona's offset when PERSONA_TZ_OFFSET_HOURS is blank: UTC+8 for
+    AGENT_LANG=zh, whose personas live in China time, else this machine's."""
+    from .settings import normalize_lang
+
+    if normalize_lang(os.environ.get("AGENT_LANG", "")) == "zh":
+        return 8.0
     return _local_tz_offset()
+
+
+def _env_tz_offset() -> float:
+    """PERSONA_TZ_OFFSET_HOURS as hours, or `default_tz_offset()` when it is
+    blank or not an offset (saying so once). Read on every call, never
+    cached, so a reload or a test can change it between turns."""
+    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
+    hours = parse_tz_offset(raw)
+    if hours is not None:
+        return hours
+    default = default_tz_offset()
+    if str(raw).strip() and raw not in _TZ_WARNED:
+        _TZ_WARNED.add(raw)
+        low, high = TZ_OFFSET_RANGE
+        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours from %g to %g, "
+                       "e.g. 8 or -5); using %g", raw, low, high, default)
+    return default
 
 
 # ===========================================================================
@@ -2579,7 +2587,7 @@ class TextProcessing:
         deployment — it tells every user what time it is where the server
         happens to be running.
 
-        PERSONA_TZ_OFFSET_HOURS (blank = this machine's offset) remains the
+        PERSONA_TZ_OFFSET_HOURS (blank = `default_tz_offset()`) remains the
         fallback for callers with no per-user notion of "local"."""
         from .connector import current_tz_offset_h
         tz_hours = current_tz_offset_h.get()

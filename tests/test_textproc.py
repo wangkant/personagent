@@ -2751,28 +2751,43 @@ def test_nothing_in_this_module_can_read_agent_state() -> None:
           not reads, ", ".join(reads))
 
 
-def test_the_persona_clock_defaults_to_this_machine(monkeypatch) -> None:
-    """Blank or unset PERSONA_TZ_OFFSET_HOURS is the machine's own offset, not
-    China time; a value `timezone()` cannot take falls back rather than
-    failing every turn that asks the time."""
+def test_the_persona_clock_defaults_to_china_time_or_this_machine(monkeypatch) -> None:
+    """Blank or unset PERSONA_TZ_OFFSET_HOURS is UTC+8 for AGENT_LANG=zh and
+    the machine's own offset otherwise, here a UTC server; a value that is
+    not an offset falls back the same way rather than failing every turn
+    that asks the time."""
     from persona_agent import textproc
 
-    local = textproc._local_tz_offset()
+    monkeypatch.setattr(textproc, "_local_tz_offset", lambda: 0.0)
+    monkeypatch.setenv("AGENT_LANG", "en")
     monkeypatch.delenv("PERSONA_TZ_OFFSET_HOURS", raising=False)
-    check("unset is this machine's offset", textproc._env_tz_offset() == local)
+    check("unset is this machine's offset", textproc._env_tz_offset() == 0.0)
     monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", " ")
-    check("blank is too", textproc._env_tz_offset() == local)
+    check("blank is too", textproc._env_tz_offset() == 0.0)
+    for lang in ("zh", "zh-CN"):
+        monkeypatch.setenv("AGENT_LANG", lang)
+        check(f"blank with AGENT_LANG={lang} is UTC+8", textproc._env_tz_offset() == 8.0)
     monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", "-5")
     check("a set offset is used", textproc._env_tz_offset() == -5.0)
     monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", "5.5")
     check("a half-hour offset is used", textproc._env_tz_offset() == 5.5)
-    for bad in ("30", "480", "-24", "24", "eight"):
-        monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", bad)
-        check(f"PERSONA_TZ_OFFSET_HOURS={bad} falls back to this machine",
-              textproc._env_tz_offset() == local)
-        TP._is_sleep_hour()
-        check(f"...and the prompt clock still renders ({bad})",
-              len(TP._current_time_str()) > 10)
+    for lang, default in (("zh", 8.0), ("en", 0.0)):
+        monkeypatch.setenv("AGENT_LANG", lang)
+        for bad in ("30", "480", "-24", "24", "15", "-13", "eight", "UTC+8"):
+            monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", bad)
+            check(f"PERSONA_TZ_OFFSET_HOURS={bad} falls back to {default} ({lang})",
+                  textproc._env_tz_offset() == default)
+            TP._is_sleep_hour()
+            check(f"...and the prompt clock still renders ({bad})",
+                  len(TP._current_time_str()) > 10)
+    from persona_agent import preflight
+
+    for value in ("-12", "14", "5.5", "-12.5", "14.5", "-23", "23"):
+        monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", value)
+        used = textproc._env_tz_offset() == float(value)
+        named = any(f.key == "PERSONA_TZ_OFFSET_HOURS" for f in preflight.check_config(
+            env={"LLM_API_KEY": "k", "PERSONA_TZ_OFFSET_HOURS": value}))
+        check(f"preflight and the clock agree on {value}", used != named, repr((used, named)))
 
 
 def test_the_parser_reads_past_keys_a_model_adds() -> None:
