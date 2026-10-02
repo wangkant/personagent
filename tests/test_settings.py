@@ -1,23 +1,22 @@
 """Tests for the one record the agent is configured from.
 
 What matters here is not that a field round-trips — a dataclass does that on
-its own — but the three promises `settings.py` makes, each of which was a real
-failure mode while the configuration lived in three places:
+its own — but the promises `settings.py` makes:
 
 1. `AgentSettings()` reads the environment for the OPERATIONAL knobs and
    nothing else. An embedder, a benchmark arm or a test suite that passes its
    own `model=` must not have the surrounding `.env`'s `LLM_MODEL` applied
-   behind its back — the benchmark tool in particular exists to compare two
-   configurations, and a leaked deployment setting would silently be in both.
-2. `from_env()` reproduces exactly what `main.py` used to spell by hand,
-   bounds included, down to the defaults that differ from the constructor's
-   (`LLM_RATE_WINDOW_S`, `EVAL_ENABLED`) because `.env.example` says so.
+   behind its back.
+2. `from_env()` reads the deployment, bounds included, and starts from the
+   same defaults as the constructor and `.env.example`.
 3. The empty-model fallbacks resolve in dependency order. Each of these ships
    blank and has to end up as a name the endpoint actually serves; one of them
    resolving before its source is set means `{"model": ""}` on a live call.
 """
 from __future__ import annotations
 
+import dataclasses
+import re
 from pathlib import Path
 
 from persona_agent.config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL,
@@ -115,12 +114,14 @@ def test_plain_construction_ignores_deployment_settings() -> None:
     check("plain: literal endpoint default",
           plain.model == DEFAULT_LLM_MODEL and plain.base_url == DEFAULT_LLM_BASE_URL,
           repr((plain.model, plain.base_url)))
-    check("plain: constructor's rate window, not .env.example's",
+    check("plain: the same rate window .env.example documents",
           (plain.llm_rate_window_s, plain.llm_rate_threshold, plain.llm_fallback_duration_s)
-          == (60, 5, 300))
+          == (120, 30, 180))
     check("plain: a 429 cools for seconds, not the failure window",
           plain.llm_rate_limit_cooldown_s == 20, repr(plain.llm_rate_limit_cooldown_s))
-    check("plain: self-eval on by default in-process", plain.eval_enabled is True)
+    check("plain: self-eval off by default, as in a deployment",
+          plain.eval_enabled is False)
+    check("plain: no NapCat HTTP server unless one is named", plain.qq_onebot_url == "")
     check("plain: no deployment identity", not plain.qq_bot_id and not plain.admin_ids)
     empty = AgentSettings.from_env(env={}, api_key="k")
     check("an empty environment gives the documented knob defaults",
@@ -183,6 +184,67 @@ def test_an_out_of_range_setting_falls_back_rather_than_raising() -> None:
     check("bad values: out-of-range timeout falls back", s.llm_timeout_s == 120.0)
     check("bad values: out-of-range 429 cooldown falls back",
           s.llm_rate_limit_cooldown_s == 20, repr(s.llm_rate_limit_cooldown_s))
+
+
+def _template_values() -> dict[str, str]:
+    """`KEY=value` lines of `.env.example`, an inline `# comment` cut off."""
+    text = (Path(__file__).resolve().parent.parent / ".env.example").read_text(
+        encoding="utf-8")
+    values = {}
+    for m in re.finditer(r"^([A-Z][A-Z0-9_]*)=(.*)$", text, re.MULTILINE):
+        values[m.group(1)] = re.sub(r"\s+#.*$", "", m.group(2)).strip()
+    return values
+
+
+#: Fields the comparison below cannot hold equal by construction: `lang` is
+#: the raw input `agent_lang` is resolved from, and the policy belongs to
+#: promotion.py.
+_NOT_DEFAULTS = {"lang", "promotion_policy"}
+
+
+def test_one_source_of_defaults(monkeypatch) -> None:
+    """The constructor, `from_env()` and `.env.example` agree on every default,
+    so a setting left out means the same thing to an embedder, to the bot
+    process and to someone reading the template. Compared by value through
+    the parser, not by line, so the template can be reordered."""
+    template = _template_values()
+    for name in template:
+        monkeypatch.delenv(name, raising=False)
+    plain = AgentSettings(api_key="k")
+    env_defaults = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
+    documented = AgentSettings.from_env(env={**template, "LLM_API_KEY": "k"})
+    for f in dataclasses.fields(AgentSettings):
+        if f.name in _NOT_DEFAULTS:
+            continue
+        a, b, c = (getattr(s, f.name) for s in (plain, env_defaults, documented))
+        check(f"constructor and from_env agree on {f.name}", a == b, repr((a, b)))
+        check(f".env.example documents the default of {f.name}", b == c, repr((b, c)))
+    check("...and the comparison covered the settings it is about",
+          {"LLM_RATE_WINDOW_S", "EVAL_ENABLED", "QQ_ONEBOT_URL",
+           "REACT_TTL_S"} <= set(template), repr(sorted(template)[:8]))
+
+
+def test_agent_lang_spellings_are_normalised() -> None:
+    from persona_agent.settings import normalize_lang
+
+    for raw, want in (("zh-CN", "zh"), ("zh_cn", "zh"), ("cn", "zh"),
+                      ("Chinese", "zh"), (" ZH ", "zh"), ("en-US", "en"),
+                      ("english", "en"), ("", "en"), ("ja", "ja")):
+        check(f"AGENT_LANG={raw!r} reads as {want}", normalize_lang(raw) == want,
+              normalize_lang(raw))
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "AGENT_LANG": "zh_CN"})
+    check("from_env: the ledgers and prompts see zh",
+          s.agent_lang == "zh", s.agent_lang)
+    check("constructor: lang is normalised too",
+          AgentSettings(api_key="k", lang="en-GB").agent_lang == "en")
+
+
+def test_an_evolve_interval_of_zero_does_not_spin() -> None:
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k", "EVOLVE_INTERVAL_HOURS": "0"})
+    check("EVOLVE_INTERVAL_HOURS=0 is floored, not a busy loop",
+          s.evolve_interval >= 360, repr(s.evolve_interval))
+    check("...and the floor survives a re-resolve",
+          dataclasses.replace(s).evolve_interval == s.evolve_interval)
 
 
 def test_the_outbox_settings() -> None:

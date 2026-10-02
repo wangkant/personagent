@@ -1,21 +1,8 @@
 """Everything the agent is configured with, as one object.
 
-WHY THIS MODULE EXISTS. The agent's configuration used to live in three places
-that had to be kept in step by hand:
-
-* ``Agent.__init__`` took 34 keyword parameters and read a further two dozen
-  settings straight out of ``os.environ`` in its own body, interleaved with the
-  runtime state it was also building;
-* ``main.py`` read the same deployment settings into module globals at import
-  time, each through its own bounds check, then copied roughly thirty of them
-  back out as keyword arguments;
-* every other entry point (``try_chat.py``, the two tools, the test suites)
-  spelled its own subset of those keywords again.
-
-Adding one knob meant touching all three, and forgetting the third was silent:
-the setting simply never reached the agent. So the rule here is **one record,
-built once, passed in.** ``Agent`` holds no parsing logic and no defaults of
-its own; it copies this object's fields onto itself.
+The rule here is **one record, built once, passed in.** ``Agent`` holds no
+parsing logic and no defaults of its own; it copies this object's fields onto
+itself.
 
 Two ways in, and the difference between them is deliberate:
 
@@ -24,12 +11,14 @@ Two ways in, and the difference between them is deliberate:
   test suite wants: an agent it configured, not one the surrounding ``.env``
   configured behind its back.
 * ``AgentSettings.from_env()`` — additionally reads the deployment settings
-  (``LLM_API_KEY``, ``PERSONA_NAME``, ``ADMIN_IDS``, …) out of the environment. This
-  is the bot process, and nothing but ``main.py`` should want it.
+  (``LLM_API_KEY``, ``PERSONA_NAME``, ``ADMIN_IDS``, …) out of the environment.
+  This is the bot process.
+
+Both start from the same defaults, and those are the values ``.env.example``
+documents, so a setting left out behaves the same everywhere.
 
 The operational knobs — the proactive loop, the evolution loop, reaction
-learning, the retrieval caps — read the environment in BOTH, because that is
-where they have always been read from and no call site has ever passed them.
+learning, the retrieval caps — read the environment in BOTH.
 
 Every read goes through :mod:`persona_agent.config_env`, so a typo in one
 setting behaves like a typo in any other: the declared default, and a warning
@@ -37,12 +26,41 @@ that says so.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
 from . import access, channels, promotion
 from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool,
                          env_float, env_int, env_str, vision_endpoint_from_env)
+
+logger = logging.getLogger("agent")
+
+#: Spellings of the two supported languages that mean one of them.
+_LANG_ALIASES = {"cn": "zh", "chinese": "zh", "中文": "zh", "english": "en"}
+
+#: The shortest EVOLVE_INTERVAL_HOURS the loop runs at; 0 would run it back
+#: to back.
+MIN_EVOLVE_INTERVAL_HOURS = 0.1
+
+_warned_langs: set[str] = set()
+
+
+def normalize_lang(value: object) -> str:
+    """AGENT_LANG as the agent uses it: "zh" for zh-CN, zh_cn, cn, chinese;
+    "en" for en-US and blank. Anything else is kept (lowercased) with a
+    warning, since it names data files and ledgers that may already exist."""
+    raw = str(value or "").strip().lower().replace("_", "-")
+    if not raw:
+        return "en"
+    lang = _LANG_ALIASES.get(raw) or raw.split("-", 1)[0]
+    if lang in ("zh", "en"):
+        return lang
+    if raw not in _warned_langs:
+        _warned_langs.add(raw)
+        logger.warning("AGENT_LANG=%r is neither en nor zh; the prompts and "
+                       "the shipped data are English and Chinese only", value)
+    return raw
 
 
 @dataclass
@@ -100,7 +118,9 @@ class AgentSettings:
     # ---- identity ---------------------------------------------------------
     qq_bot_id: str = ""
     persona_name: str = ""
-    qq_onebot_url: str = "http://127.0.0.1:3000"
+    #: NapCat's HTTP server. Blank = none: no missed-mention sweep, and QQ
+    #: messages nobody asked for go out only through a connector's outbox.
+    qq_onebot_url: str = ""
     admin_name: str = ""
     admin_relationship: str = ""
     #: Process-wide language. 'en' (default) is the primary build; 'zh' selects
@@ -158,7 +178,7 @@ class AgentSettings:
         default_factory=lambda: env_bool("CONNECTOR_OUTBOX_ENABLED", True))
 
     # ---- self-evaluation --------------------------------------------------
-    eval_enabled: bool = True
+    eval_enabled: bool = False
     eval_model: str = ""
     eval_file: str = "eval.jsonl"
 
@@ -185,14 +205,13 @@ class AgentSettings:
     #: ``llm_fallback_duration_s``, or ``llm_rate_limit_cooldown_s`` after a
     #: 429) and the frequency-driven self-throttle (self-initiated modes only;
     #: called/admin are exempt).
-    llm_rate_window_s: int = 60
-    llm_rate_threshold: int = 5
-    llm_fallback_duration_s: int = 300
+    llm_rate_window_s: int = 120
+    llm_rate_threshold: int = 30
+    llm_fallback_duration_s: int = 180
     #: How long a model that answered 429 is skipped. Its own clock because a
-    #: throttled model is metered, not broken: one 429 under the 300s window
-    #: routed every turn for five minutes to the fallback, though the primary
-    #: answered most calls. The call that hit the 429 has already failed over;
-    #: this only has to keep the next few turns off the same wall.
+    #: throttled model is metered, not broken: the call that hit the 429 has
+    #: already failed over; this only has to keep the next few turns off the
+    #: same wall.
     llm_rate_limit_cooldown_s: int = 20
 
     # ---- the proactive loop -----------------------------------------------
@@ -202,7 +221,7 @@ class AgentSettings:
     #: gated: only chats it has already seen activity in, only outside sleep
     #: hours, only after a quiet stretch, with per-target cooldowns and a low
     #: per-tick probability, and the model is told to PASS unless it genuinely
-    #: has something to say. DMs go to the admin + the private whitelist only.
+    #: has something to say. DMs go to the admin + the DM allowlist only.
     proactive_enabled: bool = field(
         default_factory=lambda: env_bool("PROACTIVE_ENABLED", False))
     proactive_interval_s: int = field(  # tick: 25 min
@@ -314,7 +333,13 @@ class AgentSettings:
         self.message_debounce_sec = max(0.0, self.message_debounce_sec)
         if not self.agent_lang:
             self.agent_lang = self.lang or env_str("AGENT_LANG", "")
-        self.agent_lang = (self.agent_lang or "en").strip().lower()
+        self.agent_lang = normalize_lang(self.agent_lang)
+        if self.evolve_interval_hours < MIN_EVOLVE_INTERVAL_HOURS:
+            logger.warning(
+                "EVOLVE_INTERVAL_HOURS=%s would run the evolve loop back to "
+                "back; using %s", self.evolve_interval_hours,
+                MIN_EVOLVE_INTERVAL_HOURS)
+            self.evolve_interval_hours = MIN_EVOLVE_INTERVAL_HOURS
         # Empty-model fallbacks, in dependency order: each of these is a model
         # name that ships blank and has to resolve to something the endpoint
         # actually serves, or the call it gates 400s.
@@ -359,13 +384,12 @@ class AgentSettings:
     def from_env(cls, env=None, **overrides) -> "AgentSettings":
         """The bot process's configuration: deployment settings included.
 
-        Every bound here was previously spelled in ``main.py``, one
-        ``_parse_int_config`` call per setting. They are floors and ceilings on
-        what a deployment may ask for, not the defaults — an out-of-range value
-        falls back to the default and warns, like any other bad setting.
+        The bounds are floors and ceilings on what a deployment may ask for,
+        not the defaults — an out-of-range value falls back to the default and
+        warns, like any other bad setting.
 
-        Defaults match ``.env.example`` exactly, so behaviour is identical
-        whether or not a ``.env`` is present.
+        Defaults match the dataclass's and ``.env.example``'s, so behaviour is
+        identical whether or not a ``.env`` is present.
         """
         def _str(name: str, default: str = "", *, strip: bool = False) -> str:
             return env_str(name, default, strip=strip, env=env)
@@ -379,7 +403,7 @@ class AgentSettings:
             qq_bot_id=_str("QQ_BOT_ID"),
             persona_name=_str("PERSONA_NAME"),
             llm_dm_model=_str("LLM_DM_MODEL"),
-            qq_onebot_url=_str("QQ_ONEBOT_URL", "http://127.0.0.1:3000"),
+            qq_onebot_url=_str("QQ_ONEBOT_URL", strip=True),
             chat_trigger_count=env_int(
                 "CHAT_TRIGGER_COUNT", 30, minimum=1, maximum=10_000, env=env),
             chat_context_messages=env_int(
@@ -414,7 +438,7 @@ class AgentSettings:
             embedding_model=_str("EMBEDDING_MODEL"),
             embedding_base_url=_str("EMBEDDING_BASE_URL"),
             embedding_api_key=_str("EMBEDDING_API_KEY"),
-            lang=_str("AGENT_LANG", "en", strip=True).lower(),
+            lang=normalize_lang(_str("AGENT_LANG", "en", strip=True)),
             connector_qq_platforms=identity.native_platforms,
         )
         # The operational knobs are read by the field defaults, which go
