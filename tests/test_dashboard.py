@@ -6,6 +6,10 @@ Run from the repo root:
 """
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 import time
 import warnings
 from datetime import datetime
@@ -15,7 +19,7 @@ import pytest
 from fastapi import FastAPI
 
 from persona_agent import (candidates, dashboard, decision_log, evidence,
-                           promotion, reactions)
+                           preflight, promotion, reactions)
 from persona_agent import server
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
@@ -32,6 +36,7 @@ PAGES = ("/", "/dashboard/app.js", "/dashboard/app.css")
 WRITE = {"content-type": "application/json", "x-personagent-dashboard": "1"}
 SECRET_KEY = "sk-live-SECRET-0123456789abcdef"
 SECRET_TOKEN = "connector-SECRET-token-987654"
+DASH_TOKEN = "dashTOKEN-0123456789abcdefghijklmnopqrstuv"
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
@@ -114,21 +119,25 @@ def seed_candidate(agent: Agent, ev: dict, *, ctype: str = candidates.TYPE_PAIR,
 @pytest.fixture
 def live(tmp: Path):
     """The server module wired to a real agent, restored afterwards."""
-    saved = (server.agent, server.CONNECTOR_TOKEN)
+    saved = (server.agent, server.CONNECTOR_TOKEN, dashboard._token)
     agent = make_agent(tmp)
     server.agent = agent
     server.CONNECTOR_TOKEN = ""
+    dashboard._token = DASH_TOKEN
     decision_log.LOG.clear()
     try:
         yield agent
     finally:
-        server.agent, server.CONNECTOR_TOKEN = saved
+        server.agent, server.CONNECTOR_TOKEN, dashboard._token = saved
         decision_log.LOG.clear()
 
 
-def client(peer: str = "127.0.0.1", base: str = LOCAL, **headers) -> TestClient:
+def client(peer: str = "127.0.0.1", base: str = LOCAL, signed_in: bool = True,
+           **headers) -> TestClient:
+    """A browser that has opened the dashboard's link, unless `signed_in` is off."""
+    cookies = {dashboard.cookie_name(DASH_TOKEN): DASH_TOKEN} if signed_in else None
     return TestClient(server.app, base_url=base, client=(peer, 50000),
-                      headers=headers or None)
+                      headers=headers or None, cookies=cookies)
 
 
 # ---------------------------------------------------------------- access ----
@@ -157,40 +166,110 @@ def test_a_local_browser_gets_the_page_and_the_data(live) -> None:
           c.get("/dashboard/app.js").headers["content-type"].startswith("text/javascript"))
 
 
-def test_a_non_local_client_is_refused_without_the_token(live) -> None:
-    cases = {
-        "remote peer": client(peer="203.0.113.9"),
-        "rebound host name": client(base="http://evil.example:8080"),
-        "a tunnel": client(**{"x-forwarded-for": "203.0.113.9"}),
-    }
-    for name, c in cases.items():
-        for path in PAGES + API:
-            r = c.get(path)
-            check(f"{name}: {path} refused",
-                  r.status_code == 403 and r.json().get("code") == "non_local_request",
-                  repr((r.status_code, r.text[:120])))
+def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
+    cid = seed_candidate(live, seed_event(live))
+    write = f"/api/dashboard/candidates/{cid}/reject"
+    # What a same-host proxy (nginx's default proxy_pass, an ssh -R or frp
+    # tunnel) forwards: a loopback peer, a local Host, no forwarding header.
+    looks_local = client(signed_in=False)
+    for path in PAGES + API:
+        r = looks_local.get(path)
+        check(f"no token: {path} refused", r.status_code == 401, repr((r.status_code, r.text[:120])))
+    r = looks_local.post(write, json={}, headers=WRITE)
+    check("no token: a write is refused", r.status_code == 401, r.text)
+    check("no token: nothing reached the ledger",
+          live.candidate_ledger.get(cid)["state"] == candidates.STATE_PROPOSED)
+    page = looks_local.get("/")
+    check("no token: the page says where the link is",
+          page.headers["content-type"].startswith("text/plain")
+          and "doctor" in page.text and "面板" in page.text, page.text)
+
+    server.CONNECTOR_TOKEN = SECRET_TOKEN
+    r = looks_local.get("/api/dashboard/status", headers={"x-personagent-token": SECRET_TOKEN})
+    check("CONNECTOR_TOKEN opens nothing here", r.status_code == 401, r.text)
+
+    remote = client(peer="203.0.113.9", base="https://bot.example.com", signed_in=False)
+    ok = remote.get("/api/dashboard/status", headers={dashboard.TOKEN_HEADER: DASH_TOKEN})
+    check("the dashboard token in its header admits any client", ok.status_code == 200, ok.text)
+    bad = remote.get("/api/dashboard/status", headers={dashboard.TOKEN_HEADER: "nope"})
+    check("a wrong one is refused", bad.status_code == 403, bad.text)
+    wrong_cookie = TestClient(server.app, base_url=LOCAL, client=("127.0.0.1", 1),
+                              cookies={dashboard.cookie_name(DASH_TOKEN): "nope"})
+    check("a forged cookie is refused", wrong_cookie.get("/api/dashboard/status").status_code == 401)
     r = client(**{"sec-fetch-site": "cross-site"}).get("/api/dashboard/status")
     check("a cross-site fetch of the data is refused", r.status_code == 403, r.text)
 
 
-def test_the_token_admits_a_remote_operator(live) -> None:
-    server.CONNECTOR_TOKEN = SECRET_TOKEN
-    remote = client(peer="203.0.113.9", base="https://bot.example.com")
-    ok = remote.get("/api/dashboard/status",
-                    headers={"x-personagent-token": SECRET_TOKEN})
-    check("token: a remote operator with it is answered", ok.status_code == 200, ok.text)
-    bad = remote.get("/api/dashboard/status",
-                     headers={"x-personagent-token": "nope"})
-    check("token: a wrong one is refused", bad.status_code == 403, bad.text)
-    local = client().get("/api/dashboard/status",
-                         headers={"x-personagent-token": "nope"})
-    check("token: a wrong one is refused locally too", local.status_code == 403)
-    check("token: a local browser needs none", client().get("/").status_code == 200)
-    server.CONNECTOR_TOKEN = ""
-    ignored = remote.get("/api/dashboard/status",
-                         headers={"x-personagent-token": SECRET_TOKEN})
-    check("token: with none configured a remote client stays refused",
-          ignored.status_code == 403, ignored.text)
+def test_the_link_signs_the_browser_in_and_drops_the_token_from_the_address(live) -> None:
+    browser = client(signed_in=False)
+    browser.follow_redirects = False
+    r = browser.get("/", params={"token": DASH_TOKEN, "lang": "zh"})
+    check("link: redirected", r.status_code == 303 and r.headers["location"] == "./?lang=zh",
+          repr((r.status_code, r.headers.get("location"))))
+    cookie = r.headers.get("set-cookie", "")
+    check("link: the cookie is HttpOnly, SameSite=Strict, site-wide",
+          cookie.startswith(dashboard.cookie_name(DASH_TOKEN) + "=")
+          and "httponly" in cookie.lower() and "samesite=strict" in cookie.lower()
+          and "path=/" in cookie.lower(), cookie)
+    page = browser.get("/")
+    check("link: the page then opens on the cookie alone", page.status_code == 200, page.text[:200])
+    check("link: and so does its data", browser.get("/api/dashboard/status").status_code == 200)
+
+    other = client(signed_in=False)
+    other.follow_redirects = False
+    wrong = other.get("/", params={"token": "x" * 43})
+    check("a wrong link sets nothing", wrong.status_code == 403
+          and "set-cookie" not in wrong.headers, wrong.text)
+    started_elsewhere = other.get("/", params={"token": DASH_TOKEN},
+                                  headers={"sec-fetch-site": "cross-site"})
+    check("a link opened from another site still signs in, by a page that reloads",
+          started_elsewhere.status_code == 200 and "set-cookie" in started_elsewhere.headers
+          and 'http-equiv="refresh"' in started_elsewhere.text, started_elsewhere.text)
+
+
+def test_a_browser_must_name_a_host_no_rebinding_page_can(live) -> None:
+    rebound = client(base="http://evil.example:8080")
+    for path in PAGES + API:
+        r = rebound.get(path)
+        check(f"rebound name: {path} refused", r.status_code == 403, repr((r.status_code, r.text[:120])))
+    sign_in = client(base="http://evil.example:8080", signed_in=False)
+    sign_in.follow_redirects = False
+    r = sign_in.get("/", params={"token": DASH_TOKEN})
+    check("rebound name: the link signs nothing in", r.status_code == 403
+          and "set-cookie" not in r.headers, r.text)
+    for host in ("100.64.1.5:8080", "[::1]:8080", "localhost:8080"):
+        r = client(peer="100.64.1.5").get("/api/dashboard/status", headers={"host": host})
+        check(f"{host} is answered", r.status_code == 200, r.text)
+    saved = dict(server._LISTEN)
+    server._LISTEN["host"] = "mybox.lan"
+    try:
+        r = client(peer="192.168.1.9", base="http://mybox.lan:8080").get("/api/dashboard/status")
+    finally:
+        server._LISTEN.clear()
+        server._LISTEN.update(saved)
+    check("the name SERVER_HOST gives is answered", r.status_code == 200, r.text)
+
+
+def test_the_token_file_is_made_once_and_kept(tmp, monkeypatch) -> None:
+    monkeypatch.setattr(dashboard, "_token", "")
+    monkeypatch.setattr(dashboard, "runtime_dir", lambda: tmp / "runtime")
+    check("no file: no token unless asked to make one", dashboard.load_token() == "")
+    made = dashboard.load_token(create=True)
+    path = tmp / "runtime" / dashboard.TOKEN_FILE
+    check("made: long and on disk", len(made) >= 32
+          and path.read_text(encoding="utf-8").strip() == made)
+    if os.name == "posix":
+        check("made: owner-only", (path.stat().st_mode & 0o777) == 0o600, oct(path.stat().st_mode))
+    monkeypatch.setattr(dashboard, "_token", "")
+    check("kept: a restart reads the same one", dashboard.load_token(create=True) == made)
+    check("link: names it", dashboard.link("0.0.0.0", 8080)
+          == f"http://127.0.0.1:8080/?token={made}")
+    check("link: a specific address stays that address",
+          dashboard.link("100.64.1.5", 9000).startswith("http://100.64.1.5:9000/?token="))
+    path.write_text("short\n", encoding="utf-8")
+    monkeypatch.setattr(dashboard, "_token", "")
+    fresh = dashboard.load_token(create=True)
+    check("an unusable file is replaced", fresh != made and len(fresh) >= 32)
 
 
 def test_state_changes_need_the_header_and_the_same_origin(live) -> None:
@@ -205,10 +284,11 @@ def test_state_changes_need_the_header_and_the_same_origin(live) -> None:
         "a form post": c.post(url, content=b"reason=x", headers={
             "x-personagent-dashboard": "1",
             "content-type": "application/x-www-form-urlencoded"}),
-        "a remote peer": client(peer="203.0.113.9").post(url, json={}, headers=WRITE),
+        "a browser not signed in": client(signed_in=False).post(url, json={}, headers=WRITE),
     }
     for name, r in refused.items():
-        check(f"write: {name} refused", r.status_code in (403, 415), repr((r.status_code, r.text)))
+        check(f"write: {name} refused", r.status_code in (401, 403, 415),
+              repr((r.status_code, r.text)))
     check("write: GET cannot change anything", c.get(url).status_code == 405)
     check("write: nothing reached the ledger",
           live.candidate_ledger.get(cid)["state"] == candidates.STATE_PROPOSED)
@@ -326,6 +406,121 @@ def test_no_secret_reaches_any_response(live, monkeypatch) -> None:
           [k["id"] for k in status["connectors"]] == ["astrbot-home"], repr(status["connectors"]))
 
 
+def test_a_credential_inside_a_configured_url_is_not_shown(live, monkeypatch) -> None:
+    real = preflight.check_config
+    url = "https://kant:pw-0000@gw.example.com/openai?api-key=qk-1234"
+    monkeypatch.setattr(preflight, "check_config",
+                        lambda: real(env={"LLM_BASE_URL": url, "LLM_API_KEY": "x"}))
+    status = client().get("/api/dashboard/status").json()
+    finding = [f for f in status["preflight"] if f["key"] == "LLM_BASE_URL"]
+    check("the misjoined URL is still reported", len(finding) == 1, repr(status["preflight"]))
+    detail = finding[0]["detail"]
+    check("its user:password and query are masked",
+          "pw-0000" not in detail and "qk-1234" not in detail and "kant" not in detail
+          and "gw.example.com/openai/v1/chat/completions" in detail, detail)
+
+
+# ---------------------------------------------------- one active rewrite ----
+
+def _pair(live, better: str, *, state: str = candidates.STATE_PROPOSED,
+          speaker: str = "u1") -> str:
+    ev = seed_event(live, reaction_type="correction", better=better, speaker=speaker,
+                    text=f"just say {better}")
+    cid = seed_candidate(live, ev, better=better)
+    if state == candidates.STATE_PROMOTED:
+        live.candidate_ledger.promote(cid, ts=now_iso(), actor="auto", reason="seed")
+    return cid
+
+
+def test_promote_never_leaves_one_reply_two_active_rewrites(live) -> None:
+    active = _pair(live, "ugh, that sounds rough", state=candidates.STATE_PROMOTED)
+    other = _pair(live, "want me to look at it?", speaker="u2")
+    c = client()
+    detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    view = {cand["id"]: cand for cand in detail["pending"]}[other]
+    check("the page offers Replace, not Promote",
+          view["actions"] == ["replace", "reject"]
+          and [r["id"] for r in view["replaces"]] == [active], repr(view))
+
+    r = c.post(f"/api/dashboard/candidates/{other}/promote", json={}, headers=WRITE)
+    check("promote: refused while the other is in use",
+          r.status_code == 409 and r.json()["code"] == "active_rival"
+          and r.json()["rivals"] == [active], r.text)
+    ledger = live.candidate_ledger
+    check("promote: nothing changed",
+          ledger.get(other)["state"] == candidates.STATE_PROPOSED
+          and ledger.get(active)["state"] == candidates.STATE_PROMOTED)
+
+    r = c.post(f"/api/dashboard/candidates/{other}/replace", json={}, headers=WRITE)
+    check("replace: accepted", r.status_code == 200 and r.json()["after"] == "promoted", r.text)
+    check("replace: the old one is superseded by the new",
+          ledger.get(active)["state"] == candidates.STATE_SUPERSEDED
+          and ledger.get(active)["superseded_by"] == other)
+    live._reload_views_if_stale()
+    check("replace: one rewrite of the reply in the view",
+          [row.get("candidate_id") for row in live._view_pairs_cache] == [other],
+          repr(live._view_pairs_cache))
+
+    r = c.post(f"/api/dashboard/candidates/{other}/rollback", json={}, headers=WRITE)
+    check("rollback: accepted", r.status_code == 200, r.text)
+    third = _pair(live, "that sounds like a long day", state=candidates.STATE_PROMOTED,
+                  speaker="u3")
+    r = c.post(f"/api/dashboard/candidates/{other}/promote", json={}, headers=WRITE)
+    check("re-promoting a rolled-back rewrite is held to the same rule",
+          r.status_code == 409 and r.json()["rivals"] == [third], r.text)
+
+
+def test_a_dashboard_promote_retires_the_drafts_it_answered(live) -> None:
+    complaint = seed_event(live, reaction_type="correction", better="want me to look?",
+                           text="that is not helpful")
+    draft = seed_candidate(live, complaint, better="want me to look?")
+    retry = seed_event(live, reaction_type="correction", better="ugh, that sounds rough",
+                       text="yes that")
+    answer = seed_candidate(live, retry, better="ugh, that sounds rough")
+    live.candidate_ledger.link_evidence(answer, [complaint["event_id"]], ts=now_iso())
+    r = client().post(f"/api/dashboard/candidates/{answer}/promote", json={}, headers=WRITE)
+    check("promote: accepted", r.status_code == 200, r.text)
+    cand = live.candidate_ledger.get(draft)
+    check("the draft only its evidence argued for is rejected, as the dashboard",
+          cand["state"] == candidates.STATE_REJECTED
+          and cand["history"][-1]["actor"] == "dashboard", repr(cand["history"]))
+
+
+# ------------------------------------------------------------- big chats ----
+
+def test_a_busy_chat_reads_the_log_once_and_sends_the_newest(live, monkeypatch) -> None:
+    n = dashboard.LIST_LIMIT + 30
+    for i in range(n):
+        seed_candidate(live, seed_event(live, reply=f"reply {i}", reaction_type="correction",
+                                        better=f"better {i}"), better=f"better {i}")
+    scanned = []
+    real = promotion.related_events
+
+    def counting(cand, events):
+        events = list(events)
+        scanned.append(len(events))
+        return real(cand, events)
+
+    monkeypatch.setattr(promotion, "related_events", counting)
+    detail = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    check("newest first, cut to the limit, with the total",
+          len(detail["pending"]) == dashboard.LIST_LIMIT
+          and detail["totals"]["pending"] == n
+          and detail["pending"][0]["created"] >= detail["pending"][-1]["created"],
+          repr(detail["totals"]))
+    check("each proposal reads only the events about its own reply",
+          sum(scanned) <= 2 * len(scanned), repr(scanned[:5]))
+    shown = live.candidate_ledger.get(detail["pending"][0]["id"])
+    events = live.evidence_log.all()
+    expected = promotion.decide(
+        shown, linked_events=live.evidence_log.many(shown["evidence"]),
+        related_events=real(shown, events), peers=live.candidate_ledger.all(),
+        now=time.time(), policy=live.promotion_policy)
+    check("the verdict is the one the whole log gives",
+          detail["pending"][0]["checklist"]["verdict"] == expected.reason,
+          repr((detail["pending"][0]["checklist"]["verdict"], expected.reason)))
+
+
 def test_a_fresh_install_has_empty_lists_not_errors(live, tmp) -> None:
     c = client()
     status = c.get("/api/dashboard/status").json()
@@ -363,6 +558,51 @@ def test_the_page_never_parses_server_text_as_html() -> None:
     check("page: no inline style", "style=" not in html and "<style" not in html)
     check("page: nothing loaded from elsewhere", "http" not in html.replace(
         'http-equiv', ''))
+
+
+_PAGE_PROBE = r"""
+const fs = require("fs"), vm = require("vm");
+const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
+                        matchMedia: () => ({ matches: false }) },
+              document: { addEventListener() {}, hidden: false }, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
+ctx.render = () => {};
+const answer = (status, body) => async () => ({ ok: false, status, statusText: "",
+                                                json: async () => body });
+(async () => {
+  const out = {};
+  for (const [name, fetch] of [
+    ["unreachable", async () => { throw new TypeError("Failed to fetch"); }],
+    ["server error", answer(500, { error: "boom", code: "internal" })],
+    ["signed out", answer(401, { error: "no token", code: "dashboard_token" })],
+  ]) {
+    ctx.fetch = fetch;
+    await vm.runInContext("refresh()", ctx);
+    out[name] = vm.runInContext("({ down: view.down, hints: hintList() })", ctx);
+  }
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_page_tells_an_error_answer_from_an_unreachable_service() -> None:
+    script = Path(dashboard.STATIC_DIR) / "app.js"
+    run = subprocess.run(["node", "-e", _PAGE_PROBE, str(script)], capture_output=True,
+                         text=True, encoding="utf-8", timeout=60)
+    check("probe ran", run.returncode == 0, run.stderr)
+    out = json.loads(run.stdout)
+    down = out["unreachable"]
+    check("nothing answered: unreachable", down["down"] is True
+          and "run` still running" in down["hints"][0]["items"][0], repr(down))
+    error = out["server error"]
+    check("an error answer is not 'unreachable'", error["down"] is False
+          and "500" in error["hints"][0]["title"]
+          and error["hints"][0]["items"] == ["boom (internal)"], repr(error))
+    signed_out = out["signed out"]
+    check("signed out: says to open the link again", signed_out["down"] is False
+          and "doctor" in signed_out["hints"][0]["items"][0], repr(signed_out))
 
 
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
