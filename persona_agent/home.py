@@ -16,6 +16,17 @@ def is_checkout(path: Path = CHECKOUT) -> bool:
     return (path / "data").is_dir() and (path / "persona_agent").is_dir()
 
 
+def resource(*parts: str) -> Path:
+    """A file shipped with personagent: data/, .env.example, the AstrBot plugin.
+
+    In a checkout it is the tracked file; an installed copy carries the same
+    tree under persona_agent/_bundled.
+    """
+    if is_checkout():
+        return CHECKOUT.joinpath(*parts)
+    return PACKAGE_DIR.joinpath("_bundled", *parts)
+
+
 def default_home() -> Path:
     return Path.home() / "personagent"
 
