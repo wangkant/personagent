@@ -180,18 +180,26 @@ class Turns:
             self._refusals_logged.pop(next(iter(self._refusals_logged)))
         logger.info("[Agent] not answering %s: %s", conv_key, reason)
 
-    def _excuse_due(self, conv_key: str) -> bool:
+    def _excuse_begin(self, conv_key: str) -> bool:
         """Whether this conversation may be told the model is not answering
         now: once per `_EXCUSE_COOLDOWN_S`, so an outage is one line, not an
-        excuse for every message."""
-        now = time.monotonic()
-        last = self._last_excuse_at.get(conv_key)
-        if last is not None and now - last < _EXCUSE_COOLDOWN_S:
+        excuse for every message. The cooldown starts only in `_excuse_end`,
+        once the excuse is delivered."""
+        if conv_key in self._excuse_inflight:
             return False
-        self._last_excuse_at[conv_key] = now
+        last = self._last_excuse_at.get(conv_key)
+        if last is not None and time.monotonic() - last < _EXCUSE_COOLDOWN_S:
+            return False
+        self._excuse_inflight.add(conv_key)
+        return True
+
+    def _excuse_end(self, conv_key: str, delivered: bool) -> None:
+        self._excuse_inflight.discard(conv_key)
+        if not delivered:
+            return
+        self._last_excuse_at[conv_key] = time.monotonic()
         if len(self._last_excuse_at) > _MAX_REFUSALS_LOGGED:
             self._last_excuse_at.pop(next(iter(self._last_excuse_at)))
-        return True
 
     def _model_failure_excuse(self) -> str:
         return random.choice(MODEL_FAILURE_EXCUSES.get(
@@ -473,12 +481,13 @@ class Turns:
                 # stalls Phase-1 message absorption for the whole group;
                 # skipping send_locks would let this chunk interleave with an
                 # in-flight reply.
-                if mode in ("called", access.ADMIN_MODE) and self._excuse_due(group_id):
+                if mode in ("called", access.ADMIN_MODE) and self._excuse_begin(group_id):
                     fallback = self._model_failure_excuse()
 
                     # The task outlives a connector turn's response, so it goes
                     # out the way unprompted messages do (_send_background).
                     async def _send_fallback() -> None:
+                        delivered = False
                         try:
                             async with self.send_locks[group_id]:
                                 result = await self._send_background(
@@ -487,6 +496,7 @@ class Turns:
                                         group_id, fallback, user_id),
                                     reason="excuse")
                             if result.success:
+                                delivered = True
                                 async with self.locks[group_id]:
                                     self.last_reply_at[group_id] = time.time()
                                     self._append_buffer(
@@ -497,6 +507,8 @@ class Turns:
                                     group_id)
                         except Exception:
                             logger.exception("[Agent] fallback send failed")
+                        finally:
+                            self._excuse_end(group_id, delivered)
 
                     self._spawn(_send_fallback())
                 return False

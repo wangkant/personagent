@@ -105,8 +105,13 @@ class DirectMessages:
                     logger.warning("[Agent] DM model call failed: %s", e)
                     # Someone wrote to it and is waiting; say why it is quiet.
                     # Not committed to the history, which stays the reader's.
-                    if not proactive and self._excuse_due(pkey):
-                        await self._send_dm(user_id, self._model_failure_excuse())
+                    if not proactive and self._excuse_begin(pkey):
+                        delivered = False
+                        try:
+                            delivered = (await self._send_dm(
+                                user_id, self._model_failure_excuse())).success
+                        finally:
+                            self._excuse_end(pkey, delivered)
                     return False
                 if not reply:
                     return False
