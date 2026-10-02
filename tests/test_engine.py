@@ -189,6 +189,42 @@ async def test_a_dm_gets_an_excuse_in_the_agents_language(tmp: Path) -> None:
     check("the cooldown holds in DMs too", len(dms) == 1, repr(dms))
 
 
+async def test_an_undelivered_excuse_does_not_spend_the_cooldown(tmp: Path) -> None:
+    agent = make_agent(tmp, qq_onebot_url="")
+    sent = await _failing_turn(agent, _group("you there?", user="42", mid="u1"))
+    check("no route: nothing goes out", sent == [], repr(sent))
+    check("and the cooldown is not started", "555" not in agent._last_excuse_at,
+          repr(agent._last_excuse_at))
+    agent.qq_onebot_url = "http://127.0.0.1:9"
+    sent = await _failing_turn(agent, _group("you there?", user="42", mid="u2"))
+    check("once a route exists the next failure gets its excuse", len(sent) == 1,
+          repr(sent))
+    check("and that delivery starts the cooldown", "555" in agent._last_excuse_at)
+
+    dm_agent = make_agent(tmp, qq_onebot_url="http://127.0.0.1:9")
+    outcomes = [SendResult(success=False), SendResult(success=True)]
+    dms: list = []
+
+    async def failing_chat(*a, **k):
+        raise RuntimeError("402 Payment Required")
+
+    async def fake_send_dm(user_id, text):
+        dms.append(text)
+        return outcomes.pop(0)
+
+    dm_agent._chat_dm = failing_chat
+    dm_agent._send_dm = fake_send_dm
+    payload = {"post_type": "message", "message_type": "private", "user_id": "42",
+               "message_id": "e1", "sender": {"nickname": "K"},
+               "message": [{"type": "text", "data": {"text": "hi"}}],
+               "raw_message": "hi"}
+    await dm_agent.handle_onebot(payload)
+    await dm_agent.handle_onebot({**payload, "message_id": "e2"})
+    await dm_agent.handle_onebot({**payload, "message_id": "e3"})
+    check("a failed DM excuse is retried on the next message, then held",
+          len(dms) == 2, repr(dms))
+
+
 # ---- no NapCat HTTP server ---------------------------------------------------
 
 async def test_a_blank_onebot_url_means_no_napcat_calls(tmp: Path, caplog) -> None:

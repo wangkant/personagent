@@ -323,6 +323,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._no_route_logged: dict[str, None] = {}
         # When each conversation was last told the model is not answering.
         self._last_excuse_at: dict[str, float] = {}
+        # Conversations with an excuse being sent right now.
+        self._excuse_inflight: set[str] = set()
 
         # Bound at construction, like the rest of the buffer's shape: a later
         # change to self.chat_context_messages must not silently give new
