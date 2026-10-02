@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -558,6 +559,81 @@ def test_the_page_never_parses_server_text_as_html() -> None:
     check("page: no inline style", "style=" not in html and "<style" not in html)
     check("page: nothing loaded from elsewhere", "http" not in html.replace(
         'http-equiv', ''))
+
+
+def test_the_page_only_names_assets_that_ship_and_stays_small() -> None:
+    static = Path(dashboard.STATIC_DIR)
+    for name in dashboard._ASSETS:
+        check(f"asset {name} ships", (static / name).is_file())
+    text = (static / "index.html").read_text(encoding="utf-8") + \
+        (static / "app.js").read_text(encoding="utf-8")
+    named = set(re.findall(r"dashboard/([\w.-]+\.(?:js|css|svg|webp|png))", text))
+    check("every file the page names is served", named <= set(dashboard._ASSETS),
+          repr(named - set(dashboard._ASSETS)))
+    check("the favicon is the mark", 'rel="icon" href="dashboard/mark.svg"' in text)
+    total = sum(p.stat().st_size for p in static.rglob("*") if p.is_file())
+    check("static/ stays under 600 KB", total <= 600 * 1024, f"{total} bytes")
+
+
+def test_images_are_served_with_their_types(live) -> None:
+    c = client()
+    for name, kind in (("mark.svg", "image/svg+xml"), ("empty-chats.webp", "image/webp"),
+                       ("listening.webp", "image/webp"),
+                       ("learned-notebook.webp", "image/webp")):
+        r = c.get("/dashboard/" + name)
+        check(f"{name}: served", r.status_code == 200, r.text[:100])
+        check(f"{name}: type", r.headers["content-type"].startswith(kind),
+              r.headers["content-type"])
+        check(f"{name}: hardened", r.headers.get("x-content-type-options") == "nosniff")
+    check("images need the sign-in too",
+          client(signed_in=False).get("/dashboard/mark.svg").status_code in (401, 403))
+
+
+_CHAT_PROBE = r"""
+const fs = require("fs"), vm = require("vm");
+const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
+                        matchMedia: () => ({ matches: false }) },
+              document: { addEventListener() {}, hidden: false }, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
+const cand = (id, state, reply, created) => ({ id, state, reply, created, type: "preference_pair",
+  better: "b", evidence: [], context: [], history: [], actions: [] });
+const long = "did you check the logs? roll back first, then diff the configs and the env";
+const d = {
+  decisions: [
+    { ts: 300, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
+    { ts: 200, spoke: true, excerpt: long.slice(0, 59) + "…", mode: "called", reason: "addressed", count: 1 },
+    { ts: 100, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
+    { ts: 50, spoke: false, excerpt: "anytime", mode: "", reason: "passed", count: 1 },
+  ],
+  learned: [cand("L", "promoted", long, 210)],
+  pending: [cand("P", "proposed", "anytime", 301)],
+  past: [cand("X", "rejected", "said before the log began", 10)],
+};
+ctx.d = d;
+const out = vm.runInContext(`(() => {
+  const s = buildStream(d);
+  return { order: s.items.map((i) => i.row ? i.row.ts : "ledger"), bubbleOf: s.bubbleOf,
+           initials: [initial("小美"), initial("小林"), initial("alex")] };
+})()`, ctx);
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_learning_attaches_to_the_reply_it_changed() -> None:
+    script = Path(dashboard.STATIC_DIR) / "app.js"
+    run = subprocess.run(["node", "-e", _CHAT_PROBE, str(script)], capture_output=True,
+                         text=True, encoding="utf-8", timeout=60)
+    check("probe ran", run.returncode == 0, run.stderr)
+    out = json.loads(run.stdout)
+    order, at = out["order"], out["bubbleOf"]
+    check("oldest first, a ledger-only reply in its place", order == ["ledger", 50, 100, 200, 300],
+          repr(order))
+    check("a clipped log line still finds its proposal", at["L"] == "3", repr(at))
+    check("a repeated reply attaches to the one just before the proposal", at["P"] == "4", repr(at))
+    check("a reply older than the log gets its own bubble", at["X"] == "0", repr(at))
+    check("CJK initials tell 小美 from 小林", out["initials"] == ["美", "林", "A"], repr(out))
 
 
 _PAGE_PROBE = r"""

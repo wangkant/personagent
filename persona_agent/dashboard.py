@@ -47,6 +47,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 _ASSETS = {
     "app.js": "text/javascript; charset=utf-8",
     "app.css": "text/css; charset=utf-8",
+    "mark.svg": "image/svg+xml",
+    "empty-chats.webp": "image/webp",
+    "listening.webp": "image/webp",
+    "learned-notebook.webp": "image/webp",
 }
 WRITE_HEADER = "x-personagent-dashboard"
 TOKEN_HEADER = "x-personagent-dashboard-token"

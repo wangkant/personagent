@@ -197,6 +197,27 @@ const STRINGS = {
     dur_m: "{m} min",
     dur_hm: "{h} h {m} min",
     dur_dh: "{d} d {h} h",
+    status_details: "Service details",
+    up: "up {t}",
+    roles_n: "{n} roles",
+    roles_n_1: "1 role",
+    no_connector_short: "no connector yet",
+    chk_n: "{n} config notes",
+    chk_n_1: "1 config note",
+    chk_ok: "config OK",
+    outbox_on: "outbox on",
+    outbox_off: "outbox off",
+    spoke_n: "{n} spoke",
+    quiet_n: "{n} quiet",
+    show_in_chat: "Show in chat",
+    from_ledger: "earlier reply, from the learning ledger",
+    today: "Today",
+    more_detail: "Evidence and history",
+    why_detail: "Checklist, evidence and context",
+    listening: "Listening",
+    next_step: "Next step",
+    rules_passed: "{have} of {n} passed",
+    back: "All conversations",
   },
   zh: {
     title: "personagent 面板",
@@ -388,6 +409,25 @@ const STRINGS = {
     dur_m: "{m} 分钟",
     dur_hm: "{h} 小时 {m} 分钟",
     dur_dh: "{d} 天 {h} 小时",
+    status_details: "服务详情",
+    up: "已运行 {t}",
+    roles_n: "{n} 个用途",
+    no_connector_short: "还没有连接器",
+    chk_n: "{n} 条配置提示",
+    chk_ok: "配置正常",
+    outbox_on: "发件箱开",
+    outbox_off: "发件箱关",
+    spoke_n: "发言 {n}",
+    quiet_n: "沉默 {n}",
+    show_in_chat: "在聊天里看",
+    from_ledger: "更早的回复，来自学习账本",
+    today: "今天",
+    more_detail: "证据和经过",
+    why_detail: "检查项、证据和上下文",
+    listening: "在听",
+    next_step: "下一步",
+    rules_passed: "已满足 {have}/{n}",
+    back: "全部会话",
   },
 };
 
@@ -414,7 +454,11 @@ const view = {
   detail: null,
   selected: null,
   clockSkew: 0,
-  shown: { hints: "", status: "", convs: "", detail: "" },
+  shown: { hints: "", status: "", convs: "", detail: "", welcome: "" },
+  // Disclosures a redraw must not close again.
+  open: new Set(),
+  // Set when someone goes back to the list on a phone: no auto-reopen.
+  closed: false,
   armed: null,
   busy: false,
   down: false,
@@ -487,15 +531,6 @@ function stamp(ts) {
   });
 }
 
-function clock(ts) {
-  const d = new Date(ts * 1000);
-  const today = new Date(nowS() * 1000);
-  if (d.toDateString() === today.toDateString()) {
-    return d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", hour12: false });
-  }
-  return d.toLocaleDateString(locale(), { month: "numeric", day: "numeric" });
-}
-
 function duration(s) {
   s = Math.max(0, Math.floor(s));
   const d = Math.floor(s / 86400), hr = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
@@ -542,7 +577,7 @@ async function refresh() {
     view.status = status;
     view.convs = convs.conversations || [];
     // On a wide screen the newest chat opens by itself; a phone starts at the list.
-    if (!view.selected && view.convs.length
+    if (!view.selected && !view.closed && view.convs.length
         && (view.convs.length === 1 || window.matchMedia("(min-width: 901px)").matches)) {
       select(view.convs[0].id, false);
     }
@@ -572,12 +607,21 @@ function render() {
   document.documentElement.lang = view.lang === "zh" ? "zh-CN" : "en";
   document.title = t("title");
   renderTop();
+  // A first visit with no chat yet: the setup steps live in the welcome card.
+  let hints = hintList();
+  const fresh = Array.isArray(view.convs) && !view.convs.length && !view.down && !view.failure;
+  const steps = fresh ? hints.find((x) => x.id === "none") || null : null;
+  if (steps) hints = hints.filter((x) => x !== steps);
   // Hints are alerts: redrawn only when what they say changes.
-  const hints = hintList();
   const hintKey = JSON.stringify(hints);
   if (hintKey !== view.shown.hints) {
     view.shown.hints = hintKey;
     renderHints(hints);
+  }
+  const welcomeKey = JSON.stringify([view.lang, fresh, steps]);
+  if (welcomeKey !== view.shown.welcome) {
+    view.shown.welcome = welcomeKey;
+    renderWelcome(fresh, steps);
   }
   const statusKey = JSON.stringify([view.lang, view.down, view.failure, view.status]);
   if (statusKey !== view.shown.status) {
@@ -609,7 +653,13 @@ function renderTop() {
   }
   document.getElementById("persona-name").textContent = st && st.persona ? st.persona.name || "" : "";
   document.getElementById("lang-toggle").textContent = t("other_lang");
-  document.getElementById("theme-toggle").textContent = t("theme_" + view.theme);
+  const theme = document.getElementById("theme-toggle");
+  const themeName = t("theme_" + view.theme);
+  if (theme.textContent !== themeName) {
+    replace(theme, icon(view.theme === "auto" ? "auto" : view.theme === "dark" ? "moon" : "sun"),
+      h("span", { class: "btn-label", text: themeName }));
+    theme.title = themeName;
+  }
   document.getElementById("conv-title").textContent = t("conversations");
 }
 
@@ -634,6 +684,7 @@ function hintList() {
   if (st.agent === "off") return out;
   if (!a.received) {
     out.push({
+      id: "none",
       level: "warn",
       title: t("h_none_t"),
       ordered: true,
@@ -664,9 +715,66 @@ function hintList() {
 function renderHints(hints) {
   const box = document.getElementById("hints");
   replace(box, hints.map((hint) => h("div", { class: "hint " + hint.level, role: hint.level === "info" ? null : "alert" },
-    h("h3", { text: hint.title }),
-    h(hint.ordered ? "ol" : "ul", null, hint.items.map((item) => h("li", { text: item }))))));
+    h("span", { class: "hint-mark", "aria-hidden": "true" }, icon(hint.level === "info" ? "info" : "alert")),
+    h("div", { class: "hint-body" },
+      h("h3", { text: hint.title }),
+      h(hint.ordered ? "ol" : "ul", null, hint.items.map((item) => h("li", { text: item })))))));
 }
+
+function renderWelcome(fresh, steps) {
+  const box = document.getElementById("welcome");
+  box.hidden = !fresh;
+  if (!fresh) { replace(box); return; }
+  replace(box, h("div", { class: "welcome-card" },
+    h("figure", { class: "frame" },
+      h("img", { src: "dashboard/empty-chats.webp", alt: "", width: 640, height: 384 })),
+    h("div", { class: "welcome-text" },
+      h("h2", { text: t("no_convs_t") }),
+      h("p", { class: "lede", text: t("no_convs") }),
+      steps ? h("div", { class: "steps" },
+        h("p", { class: "eyebrow", text: t("next_step") }),
+        h("h3", { text: steps.title }),
+        h("ol", null, steps.items.map((item) => h("li", { text: item })))) : null)));
+}
+
+// ------------------------------------------------------------- icons ----
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const ICONS = {
+  person: "M12 11.5a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6zM4.8 20c.9-3.5 3.8-5.4 7.2-5.4s6.3 1.9 7.2 5.4",
+  group: "M9 11a3.4 3.4 0 1 0 0-6.8A3.4 3.4 0 0 0 9 11zM2.8 19.5c.7-3.1 3.1-4.9 6.2-4.9s5.5 1.8 6.2 4.9M15.6 4.5a3.3 3.3 0 0 1 0 6.3M17.6 14.7c1.9.6 3.2 2.2 3.6 4.6",
+  pin: "M9.5 3.8h5l-.8 5 3 3.2H7.3l3-3.2-.8-5zM12 12v8.2",
+  leaf: "M5.5 18.5C5.5 10.8 10 6 18.8 5.2 18.2 13.6 13.4 18.5 5.5 18.5zM5.5 18.5l7.2-7.2",
+  up: "M12 19V5.5M6.5 11 12 5.5l5.5 5.5",
+  down: "M12 5v13.5M6.5 13l5.5 5.5 5.5-5.5",
+  chev: "M9.5 6l6 6-6 6",
+  back: "M14.5 6l-6 6 6 6",
+  check: "M5.5 12.5l4.2 4.2 8.8-9.2",
+  clock: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM12 7.5V12l3 2",
+  turn: "M6 5v6.5A4.5 4.5 0 0 0 10.5 16H19M15 12l4 4-4 4",
+  next: "M4.5 12h15M14 6.5l5.5 5.5-5.5 5.5",
+  star: "M12 4.5l2.2 4.8 5.2.6-3.9 3.5 1.1 5.1-4.6-2.6-4.6 2.6 1.1-5.1-3.9-3.5 5.2-.6z",
+  cross: "M7 7l10 10M17 7 7 17",
+  alert: "M12 4.2 20.5 19H3.5zM12 10v4M12 16.6v.2",
+  info: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM12 11v5.5M12 7.8v.2",
+  sun: "M12 15.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6zM12 3v1.8M12 19.2V21M5.6 5.6l1.3 1.3M17.1 17.1l1.3 1.3M3 12h1.8M19.2 12H21M5.6 18.4l1.3-1.3M17.1 6.9l1.3-1.3",
+  moon: "M19.8 14.6A8 8 0 0 1 9.4 4.2a8 8 0 1 0 10.4 10.4z",
+  auto: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM12 3.5v17M12 7h4.5M12 11h7.5M12 15h6",
+};
+
+function icon(name, cls) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("class", "icon" + (cls ? " " + cls : ""));
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", ICONS[name] || "");
+  svg.append(path);
+  return svg;
+}
+
+// ------------------------------------------------------------ status ----
 
 function card(title, extraClass, ...body) {
   return h("article", { class: "card" + (extraClass ? " " + extraClass : "") },
@@ -678,9 +786,10 @@ function kv(pairs) {
 }
 
 function renderOverview() {
-  const box = document.getElementById("overview");
+  const bar = document.getElementById("statusbar");
   const st = view.status;
-  if (!st) { replace(box); return; }
+  bar.hidden = !st;
+  if (!st) return;
   const persona = st.persona || {};
 
   const service = card(t("service"), "",
@@ -738,26 +847,56 @@ function renderOverview() {
   const checksCard = card(t("checks"), "",
     findings.length
       ? h("ul", { class: "rows" }, findings.map((f) => h("li", { class: "finding" },
-        h("span", { class: "chip " + (f.level === "ERROR" ? "err" : f.level === "WARN" ? "warn" : ""), text: f.level }),
+        h("span", { class: "chip " + levelClass(f.level), text: f.level }),
         h("span", { class: "mono", text: f.key }),
         h("span", { class: "detail", text: f.detail }))))
       : h("p", { class: "empty", text: t("no_findings") }));
 
-  replace(box, service, personaCard, modelsCard, connectorsCard, checksCard);
+  // The one-line summary; the cards open under it.
+  const names = [...byModel.keys()];
+  const roles = (st.models || []).length;
+  const worst = findings.some((f) => f.level === "ERROR") ? "err"
+    : findings.some((f) => f.level === "WARN") ? "warn" : "";
+  const first = connectors[0];
+  const facts = [
+    names.length ? h("span", { class: "fact" },
+      h("span", { class: "mono", text: names.join(", ") }),
+      h("span", { class: "soft", text: " · " + t("roles_n", { n: roles }) })) : null,
+    first ? h("span", { class: "fact" },
+      h("span", { class: "dot " + (first.pulling ? "on" : "off"), "aria-hidden": "true" }),
+      h("span", { class: "mono", title: first.id || null, text: first.id ? shortId(first.id, 22) : t("unnamed_connector") }),
+      h("span", { class: "soft", text: " · " + first.platforms.join(", ")
+        + (connectors.length > 1 ? " +" + (connectors.length - 1) : "") }))
+      : h("span", { class: "fact" }, h("span", { class: "dot off", "aria-hidden": "true" }), t("no_connector_short")),
+    h("span", { class: "fact", text: t(st.outbox ? "outbox_on" : "outbox_off") }),
+    h("span", { class: "fact", text: t("up", { t: duration(st.uptime_s) }) }),
+    h("span", { class: "fact mono", text: "v" + st.version }),
+    h("span", { class: "fact" + (worst ? " " + worst : "") },
+      findings.length ? t("chk_n", { n: findings.length }) : t("chk_ok")),
+  ];
+  replace(document.getElementById("facts"), facts);
+  replace(document.getElementById("status-more"), t("status_details"), icon("chev", "chev"));
+  replace(document.getElementById("overview"), service, personaCard, modelsCard, connectorsCard, checksCard);
+}
+
+function levelClass(level) {
+  return level === "ERROR" ? "err" : level === "WARN" ? "warn" : "";
 }
 
 function shortId(id, n) {
   return id.length > n ? id.slice(0, n - 1) + "…" : id;
 }
 
+// ----------------------------------------------------- conversations ----
+
 function renderConversations() {
   const list = document.getElementById("conv-list");
   const convs = view.convs || [];
-  document.querySelector(".convs").classList.toggle("none", view.convs != null && !convs.length);
+  const section = document.querySelector(".convs");
+  section.classList.toggle("none", !convs.length);
+  section.classList.toggle("chat-open", !!view.selected);
   if (!convs.length) {
-    replace(list, view.convs == null ? null : h("div", { class: "card placeholder" },
-      h("strong", { text: t("no_convs_t") }),
-      h("span", { text: t("no_convs") })));
+    replace(list);
     return;
   }
   replace(list, convs.map((c) => h("button", {
@@ -766,18 +905,23 @@ function renderConversations() {
     "aria-current": c.id === view.selected ? "true" : "false",
     onclick: () => select(c.id, true),
   },
-  h("span", { class: "name" },
-    h("span", { class: "chip accent", text: c.platform }),
-    h("span", { class: "chip", text: c.kind === "dm" ? t("dm") : t("group") }),
-    h("span", { class: "id", title: c.id, text: label(c) })),
-  h("span", { class: "meta" },
-    h("span", { text: c.last_activity ? t("last_activity", { t: ago(c.last_activity) }) : t("never") }),
-    c.memories ? h("span", { text: t("notes_n", { n: c.memories }) }) : null,
-    c.learned ? h("span", { text: t("learned_n", { n: c.learned }) }) : null,
-    c.pending ? h("span", { class: "hot", text: t("pending_n", { n: c.pending }) }) : null))));
+  h("span", { class: "avatar " + (c.kind === "dm" ? "dm" : "group"), "aria-hidden": "true" },
+    icon(c.kind === "dm" ? "person" : "group")),
+  h("span", { class: "conv-main" },
+    h("span", { class: "conv-top" },
+      h("span", { class: "id", title: c.id, text: label(c) }),
+      h("span", { class: "ago", text: c.last_activity ? t("last_activity", { t: ago(c.last_activity) }) : t("never") })),
+    h("span", { class: "conv-sub" },
+      h("span", { class: "plat", text: c.platform }),
+      h("span", { text: c.kind === "dm" ? t("dm") : t("group") }),
+      c.memories ? h("span", { text: t("notes_n", { n: c.memories }) }) : null),
+    c.pending || c.learned ? h("span", { class: "badges" },
+      c.pending ? h("span", { class: "badge wait", text: t("pending_n", { n: c.pending }) }) : null,
+      c.learned ? h("span", { class: "badge learned" }, icon("leaf"), t("learned_n", { n: c.learned })) : null) : null))));
 }
 
 function select(id, scroll) {
+  view.closed = false;
   if (view.selected === id) return;
   view.selected = id;
   view.detail = null;
@@ -785,17 +929,42 @@ function select(id, scroll) {
   try { history.replaceState(null, "", "#c=" + encodeURIComponent(id)); } catch (e) { /* ignore */ }
   refreshDetail().then(() => {
     render();
-    if (scroll && window.matchMedia("(max-width: 900px)").matches) {
-      document.getElementById("detail").scrollIntoView({ block: "start" });
+    if (scroll && narrow()) {
+      const pane = document.getElementById("detail");
+      pane.scrollIntoView({ block: "start" });
+      const head = pane.querySelector("h2");
+      if (head) head.focus({ preventScroll: true });
     }
   });
   render();
 }
 
-function block(title, count, ...body) {
-  return h("section", { class: "block" },
-    h("h3", null, title, count ? h("span", { class: "count", text: String(count) }) : null), body);
+// On a phone the list and the chat take turns; this goes back to the list.
+function back() {
+  const was = view.selected;
+  view.selected = null;
+  view.detail = null;
+  view.armed = null;
+  view.closed = true;
+  try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
+  render();
+  window.scrollTo(0, 0);
+  const item = [...document.querySelectorAll(".conv .id")].find((el) => el.title === was);
+  if (item) item.closest(".conv").focus();
 }
+
+function narrow() {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
+
+function label(conv) {
+  let id = conv.id;
+  if (id.startsWith("private:")) id = id.slice(8);
+  if (id.startsWith(conv.platform + ":")) id = id.slice(conv.platform.length + 1);
+  return id || conv.id;
+}
+
+// -------------------------------------------------------------- chat ----
 
 function renderDetail() {
   const box = document.getElementById("detail");
@@ -803,99 +972,204 @@ function renderDetail() {
   if (!view.selected || !d) {
     const none = view.convs && !view.convs.length;
     replace(box, h("div", { class: "placeholder" },
+      h("figure", { class: "frame small" },
+        h("img", { src: "dashboard/listening.webp", alt: "", width: 560, height: 373 })),
       h("strong", { text: none ? t("no_convs_t") : t("pick_t") }),
       h("span", { text: none ? t("no_convs") : t("pick") })));
     return;
   }
   const conv = (view.convs || []).find((c) => c.id === d.id) || {};
-  const head = h("div", { class: "detail-head" },
-    h("h2", { text: d.id }),
-    h("div", { class: "line" },
-      h("span", { class: "chip accent", text: d.platform }),
-      h("span", { class: "chip", text: d.kind === "dm" ? t("dm") : t("group") }),
-      h("span", { text: conv.last_activity ? t("last_activity", { t: ago(conv.last_activity) }) : "" })),
-    d.kind === "group" && d.trigger_count
-      ? h("div", { class: "note", text: t("trigger_progress", { n: d.trigger_count, c: d.counter }) })
-      : null);
-
-  const totals = d.totals || {};
-  const total = (group) => totals[group] || d[group].length;
-  // Long lists arrive cut to the newest; say so instead of hiding the rest.
-  const more = (group) => total(group) > d[group].length
-    ? h("p", { class: "empty", text: t("shown_of", { shown: d[group].length, n: total(group) }) }) : null;
+  const stream = buildStream(d);
   replace(box,
-    head,
-    block(t("decisions"), d.decisions.length, renderDecisions(d.decisions)),
-    block(t("pending"), total("pending"),
-      d.pending.length ? h("div", { class: "cands" }, d.pending.map(renderCandidate))
-        : h("p", { class: "empty", text: t("no_pending") }), more("pending")),
-    block(t("learned"), total("learned"),
-      d.learned.length ? h("div", { class: "cands" }, d.learned.map(renderCandidate))
-        : h("p", { class: "empty", text: t("no_learned") }), more("learned")),
-    block(t("memories"), d.memories.length, renderMemories(d)),
-    d.past.length ? block(t("past"), total("past"),
-      h("details", null, h("summary", { text: t("show") }),
-        h("div", { class: "cands" }, d.past.map(renderCandidate)), more("past"))) : null);
+    chatHead(d, conv),
+    notesStrip(d),
+    approvals(d, stream.bubbleOf),
+    chatStream(d, stream),
+    composer(d));
 }
 
-function renderDecisions(rows) {
-  if (!rows.length) return h("p", { class: "empty", text: t("no_decisions") });
-  return h("ul", { class: "decisions" }, rows.map((r) => {
-    const reasonKey = REASONS[r.reason];
-    return h("li", { class: "decision " + (r.spoke ? "spoke" : "quiet") },
-      h("time", { title: stamp(r.ts), text: clock(r.ts) }),
-      h("span", { class: "dot " + (r.spoke ? "on" : "off"), "aria-hidden": "true" }),
-      h("div", { class: "what" },
-        h("span", { class: "verb", text: r.spoke ? t("spoke") : t("quiet") }),
-        r.mode ? h("span", { class: "chip", text: t("m_" + r.mode, null, r.mode) }) : null,
-        h("span", { class: "reason", text: reasonKey ? t(reasonKey) : r.reason }),
-        r.count > 1 ? h("span", { class: "chip", text: t("times", { n: r.count }) }) : null),
-      r.excerpt ? h("div", { class: "excerpt", text: (r.spoke ? t("said") : t("after")) + " " + r.excerpt }) : null);
+function chatHead(d, conv) {
+  const quiet = d.decisions.filter((r) => !r.spoke).reduce((n, r) => n + (r.count || 1), 0);
+  const spoke = d.decisions.filter((r) => r.spoke).length;
+  const totals = d.totals || {};
+  const learnedN = totals.learned || d.learned.length;
+  const waitingN = totals.pending || d.pending.length;
+  const stat = (cls, n, text) => h("li", { class: "stat" + (n ? " " + cls : ""), text });
+  return h("div", { class: "chat-head" },
+    h("button", { type: "button", class: "back ghost", onclick: back },
+      icon("back"), h("span", { text: t("back") })),
+    h("div", { class: "chat-id" },
+      h("span", { class: "avatar big " + (d.kind === "dm" ? "dm" : "group"), "aria-hidden": "true" },
+        icon(d.kind === "dm" ? "person" : "group")),
+      h("div", { class: "chat-name" },
+        h("h2", { tabindex: "-1", title: d.id, text: label(d) }),
+        h("div", { class: "line" },
+          h("span", { class: "chip accent", text: d.platform }),
+          h("span", { class: "chip", text: d.kind === "dm" ? t("dm") : t("group") }),
+          h("span", { class: "mono full-id", text: d.id }),
+          conv.last_activity ? h("span", { text: t("last_activity", { t: ago(conv.last_activity) }) }) : null))),
+    h("ul", { class: "stats", "aria-label": t("decisions") },
+      stat("spoke", spoke, t("spoke_n", { n: spoke })),
+      stat("quiet", quiet, t("quiet_n", { n: quiet })),
+      stat("learned", learnedN, t("learned_n", { n: learnedN })),
+      stat("wait", waitingN, t("pending_n", { n: waitingN }))));
+}
+
+function notesStrip(d) {
+  const items = [];
+  if (d.core_note) {
+    items.push(h("li", { class: "memo core" },
+      h("span", { class: "by", text: t("core_note") }),
+      h("span", { class: "text", text: d.core_note })));
+  }
+  for (const m of d.memories) {
+    items.push(h("li", { class: "memo" },
+      h("span", { class: "text", text: m.text }),
+      h("span", { class: "by" },
+        (m.auto ? t("by_auto") : (m.by || t("by_admin"))) + " · ", when(m.time))));
+  }
+  return h("section", { class: "pinned" },
+    h("h3", { class: "strip-title" }, icon("pin"), t("memories"),
+      d.memories.length ? h("span", { class: "count", text: String(d.memories.length) }) : null),
+    items.length ? h("ul", { class: "memos" }, items) : h("p", { class: "empty", text: t("no_memories") }));
+}
+
+function more(d, group, title) {
+  const total = (d.totals || {})[group] || d[group].length;
+  if (total <= d[group].length) return null;
+  const text = t("shown_of", { shown: d[group].length, n: total });
+  return h("p", { class: "empty" }, title ? h("strong", { text: title + ": " }) : null, text);
+}
+
+function approvals(d, bubbleOf) {
+  const total = (d.totals || {}).pending || d.pending.length;
+  if (!d.pending.length) {
+    return h("p", { class: "all-clear" }, icon("check"), t("no_pending"));
+  }
+  return h("section", { class: "approvals", "aria-labelledby": "approvals-title" },
+    h("div", { class: "approvals-head" },
+      h("h3", { id: "approvals-title" },
+        h("span", { class: "pulse", "aria-hidden": "true" }), t("pending"),
+        h("span", { class: "count", text: String(total) })),
+      h("img", { class: "vignette", src: "dashboard/learned-notebook.webp", alt: "", width: 320, height: 210 })),
+    d.pending.map((c) => pendingItem(c, bubbleOf[c.id])),
+    more(d, "pending"));
+}
+
+function pendingItem(c, bubbleId) {
+  const isPair = c.type === "preference_pair" && c.better;
+  const cl = c.checklist;
+  // At a glance: the swap, how far it is, who reacted, the buttons; the rest opens.
+  return h("article", { class: "proposal", id: "p-" + c.id, tabindex: "-1" },
+    candHead(c, bubbleId ? h("button", {
+      type: "button", class: "link", onclick: () => jump("b-" + bubbleId),
+    }, t("show_in_chat"), icon("down")) : null),
+    h("div", { class: "swap" },
+      sayBubble(isPair ? t("it_said") : t("reply"), c.reply, isPair ? "x-said" : "x-keep"),
+      isPair ? h("span", { class: "swap-arrow", "aria-hidden": "true" }, icon("next")) : null,
+      isPair ? sayBubble(t("better"), c.better, "x-better") : null),
+    cl ? checkSummary(cl) : null,
+    voices(c),
+    rivals(c),
+    h("div", { class: "proposal-foot" },
+      c.actions.length ? renderActions(c) : null,
+      disclosure(c.id + ":why", h("span", { text: t("why_detail") }),
+        h("div", { class: "proposal-grid" },
+          h("div", { class: "exchange" }, contextBlock(c), evidenceBlock(c)),
+          h("div", { class: "why" }, cl ? renderChecklist(cl) : null, historyBlock(c))))));
+}
+
+function checkBar(cl) {
+  const scored = cl.rules.filter((rule) => rule.id !== "same_chat");
+  const passed = scored.filter((rule) => rule.ok).length;
+  return [
+    h("span", { class: "bar", "aria-hidden": "true" },
+      scored.map((rule) => h("span", { class: "seg" + (rule.ok ? " on" : "") }))),
+    h("span", { class: "tally", text: t("rules_passed", { have: passed, n: scored.length }) }),
+  ];
+}
+
+function waitingText(cl) {
+  return cl.waiting_for.length
+    ? cl.waiting_for.map((w) => t("w_" + w, null, w)).join("; ")
+    : (cl.promote ? t("w_ready") : "");
+}
+
+function checkSummary(cl) {
+  const waiting = waitingText(cl);
+  return h("div", { class: "glance" },
+    h("span", { class: "glance-bar" }, h("span", { class: "sr-only", text: t("checklist") + ": " }), checkBar(cl)),
+    waiting ? h("span", { class: "glance-wait" }, h("strong", { text: t("waiting_for") + " " }), waiting) : null);
+}
+
+function voices(c) {
+  if (!c.evidence.length) return null;
+  return h("ul", { class: "voices", "aria-label": t("evidence") }, c.evidence.map((e) => {
+    const who = e.speaker || "?";
+    return h("li", { class: "voice" + (e.counts ? "" : " not-counted") },
+      h("span", { class: "face small " + tone(who), "aria-hidden": "true", text: initial(who) }),
+      h("span", { class: "who", text: who }),
+      h("span", { class: "kind", text: e.reaction_type && e.kind === "reaction"
+        ? t("rt_" + e.reaction_type, null, e.reaction_type) : t("k_" + e.kind, null, e.kind) }),
+      h("span", { class: "chip " + (e.strength === "strong" ? "strong" : "weak"), text: t("st_" + e.strength, null, e.strength) }));
   }));
 }
 
-function textRow(cls, label, text) {
-  return h("div", { class: "text-row " + cls },
-    h("span", { class: "label", text: label }),
-    h("span", { class: "body", text }));
-}
-
-function renderCandidate(c) {
-  const isPair = c.type === "preference_pair";
-  const head = h("div", { class: "cand-head" },
+function candHead(c, extra) {
+  return h("div", { class: "cand-head" },
     h("span", { class: "title", text: t("t_" + c.type, null, c.type) }),
     h("span", { class: "chip " + stateClass(c.state), text: t("s_" + c.state, null, c.state) }),
     h("span", { class: "when" }, when(c.created)),
     h("span", { class: "spacer" }),
+    extra,
     h("span", { class: "mono when", title: c.id, text: c.id.slice(0, 12) }));
+}
 
-  const texts = h("div", { class: "texts" },
-    isPair ? textRow("before", t("it_said"), c.reply) : textRow("after", t("reply"), c.reply),
-    isPair && c.better ? textRow("after", t("better"), c.better) : null,
-    c.context.length ? h("div", { class: "context", text: t("context") + ": " + c.context.join(" / ") }) : null);
+function sayBubble(caption, text, cls) {
+  return h("div", { class: "say " + cls },
+    h("span", { class: "caption" }, cls === "x-better" ? icon("turn") : null, caption),
+    h("p", { class: "bubble", text }));
+}
 
-  const evidenceBlock = h("div", null,
-    h("p", { class: "sub", text: t("evidence") }),
-    c.evidence.length ? h("ul", { class: "evidence" }, c.evidence.map(renderEvent))
+function contextBlock(c) {
+  if (!c.context.length) return null;
+  const me = personaName();
+  return h("div", { class: "context" },
+    h("p", { class: "sub", text: t("context") }),
+    h("ol", { class: "transcript" }, c.context.map((line) => {
+      const m = /^([^:：]{1,40})[:：]\s?(.*)$/.exec(line);
+      const who = m ? m[1].trim() : "";
+      return h("li", { class: who && who === me ? "me" : null },
+        who ? h("span", { class: "who", text: who }) : null,
+        h("span", { class: "text", text: m ? m[2] : line }));
+    })));
+}
+
+function personaName() {
+  return (view.status && view.status.persona && view.status.persona.name) || "";
+}
+
+function rivals(c) {
+  return (c.replaces || []).map((rival) => h("div", { class: "waiting", text: t("rival", { text: rival.better }) }));
+}
+
+function evidenceBlock(c) {
+  return h("div", { class: "evidence-block" },
+    h("p", { class: "sub" }, t("evidence"),
+      c.evidence.length ? h("span", { class: "count", text: String(c.evidence.length) }) : null),
+    c.evidence.length ? h("ol", { class: "evidence" }, c.evidence.map(renderEvent))
       : h("p", { class: "empty", text: t("no_evidence") }),
     c.missing_evidence ? h("p", { class: "empty", text: t("missing_evidence", { n: c.missing_evidence }) }) : null);
+}
 
-  const parts = [head, texts];
-  for (const rival of c.replaces || []) {
-    parts.push(h("div", { class: "waiting", text: t("rival", { text: rival.better }) }));
-  }
-  if (c.checklist) parts.push(renderChecklist(c.checklist));
-  parts.push(evidenceBlock);
-  if (c.history.length) {
-    parts.push(h("div", null,
-      h("p", { class: "sub", text: t("history") }),
-      h("ul", { class: "history" }, c.history.map((row) => h("li", null,
-        h("time", { title: stamp(row.ts), text: ago(row.ts) }), " · ",
-        historyLine(row),
-        row.reason ? " · " + row.reason : "")))));
-  }
-  if (c.actions.length) parts.push(renderActions(c));
-  return h("article", { class: "cand " + c.state }, parts);
+function historyBlock(c) {
+  if (!c.history.length) return null;
+  return h("div", { class: "history-block" },
+    h("p", { class: "sub", text: t("history") }),
+    h("ul", { class: "history" }, c.history.map((row) => h("li", null,
+      h("time", { title: stamp(row.ts), text: ago(row.ts) }), " · ",
+      historyLine(row),
+      row.reason ? " · " + row.reason : ""))));
 }
 
 function historyLine(row) {
@@ -906,53 +1180,67 @@ function historyLine(row) {
   return view.lang === "zh" ? who + what : what + " " + who;
 }
 
-function label(conv) {
-  let id = conv.id;
-  if (id.startsWith("private:")) id = id.slice(8);
-  if (id.startsWith(conv.platform + ":")) id = id.slice(conv.platform.length + 1);
-  return id || conv.id;
-}
-
 function stateClass(state) {
   return state === "promoted" ? "ok" : state === "proposed" ? "warn" : "";
 }
 
+const TONES = 4;
+
+// A CJK nickname shares its first character (小美, 小林): its last one tells them apart.
+function initial(name) {
+  const chars = [...String(name || "?")];
+  const last = chars[chars.length - 1];
+  return /[\u3400-\u9fff]/.test(chars[0]) ? last : chars[0].toUpperCase();
+}
+
+function tone(name) {
+  let n = 0;
+  for (const ch of String(name || "")) n = (n * 31 + ch.codePointAt(0)) % 997;
+  return "tone-" + (n % TONES);
+}
+
 function renderEvent(e) {
-  const head = h("div", { class: "ev-head" },
-    h("span", { class: "who", text: e.speaker || "?" }),
-    h("span", { text: t("k_" + e.kind, null, e.kind) + (e.reaction_type && e.kind === "reaction" ? " · " + t("rt_" + e.reaction_type, null, e.reaction_type) : "") }),
-    h("span", { class: "chip " + (e.strength === "strong" ? "ok" : ""), text: t("st_" + e.strength, null, e.strength) }),
-    h("span", { class: "when" }, when(e.ts)));
+  const who = e.speaker || "?";
   return h("li", { class: "ev" + (e.counts ? "" : " not-counted") },
-    head,
-    e.said ? h("div", { class: "said", text: e.said }) : null,
-    e.verdict ? h("div", { class: "verdict", text: t("judge") + " " + e.verdict }) : null,
-    h("div", { class: "verdict", text: [
-      e.speaker_is_recipient ? t("aimed_at_them") : null,
-      e.accepted ? null : t("dismissed"),
-      e.counts ? null : t("not_counted"),
-    ].filter(Boolean).join(" · ") }));
+    h("span", { class: "face " + tone(who), "aria-hidden": "true", text: initial(who) }),
+    h("div", { class: "ev-body" },
+      h("div", { class: "ev-head" },
+        h("span", { class: "who", text: who }),
+        h("span", { class: "kind", text: t("k_" + e.kind, null, e.kind) + (e.reaction_type && e.kind === "reaction" ? " · " + t("rt_" + e.reaction_type, null, e.reaction_type) : "") }),
+        h("span", { class: "chip " + (e.strength === "strong" ? "strong" : "weak"), text: t("st_" + e.strength, null, e.strength) }),
+        h("span", { class: "when" }, when(e.ts))),
+      e.said ? h("p", { class: "said", text: e.said }) : null,
+      e.verdict ? h("div", { class: "verdict", text: t("judge") + " " + e.verdict }) : null,
+      h("div", { class: "verdict flags", text: [
+        e.speaker_is_recipient ? t("aimed_at_them") : null,
+        e.accepted ? null : t("dismissed"),
+        e.counts ? null : t("not_counted"),
+      ].filter(Boolean).join(" · ") })));
 }
 
 function renderChecklist(cl) {
   const items = cl.rules.map((rule) => {
-    let label;
-    if (rule.id === "same_chat") label = rule.on ? t("c_same_chat") : t("c_any_chat");
-    else label = t("c_" + rule.id, { have: rule.have, need: rule.need }, rule.id);
+    let text;
+    if (rule.id === "same_chat") text = rule.on ? t("c_same_chat") : t("c_any_chat");
+    else text = t("c_" + rule.id, { have: rule.have, need: rule.need }, rule.id);
     const info = rule.id === "same_chat";
-    return h("li", { class: "check" },
-      h("span", { class: info ? "mark-info" : rule.ok ? "mark-ok" : "mark-no", "aria-hidden": "true",
-        text: info ? "•" : rule.ok ? "✓" : "✕" }),
-      h("span", null, info ? null : h("span", { class: "sr-only", text: (rule.ok ? t("passed") : t("not_yet")) + ": " }), label));
+    return h("li", { class: "check " + (info ? "info" : rule.ok ? "ok" : "no") },
+      h("span", { class: "mark", "aria-hidden": "true" }, info ? null : icon(rule.ok ? "check" : "clock")),
+      h("span", { class: "label" },
+        info ? null : h("span", { class: "sr-only", text: (rule.ok ? t("passed") : t("not_yet")) + ": " }), text),
+      rule.need ? meter(rule.have, rule.need) : null);
   });
-  const waiting = cl.waiting_for.length
-    ? cl.waiting_for.map((w) => t("w_" + w, null, w)).join("; ")
-    : (cl.promote ? t("w_ready") : "");
-  return h("div", null,
-    h("p", { class: "sub", text: t("checklist") }),
+  return h("div", { class: "checklist-block" },
+    h("div", { class: "sub row" }, h("span", { text: t("checklist") }), checkBar(cl)),
     h("ul", { class: "checklist" }, items),
-    waiting ? h("div", { class: "waiting" }, h("strong", { text: t("waiting_for") + " " }), waiting) : null,
     h("div", { class: "verdict-line", text: t("policy") + " " + cl.verdict }));
+}
+
+function meter(have, need) {
+  const n = Math.min(Math.max(need, Math.min(have, 6)), 8);
+  const dots = [];
+  for (let i = 0; i < n; i++) dots.push(h("span", { class: "pip" + (i < have ? " on" : "") }));
+  return h("span", { class: "meter", "aria-hidden": "true" }, dots);
 }
 
 function renderActions(c) {
@@ -961,11 +1249,224 @@ function renderActions(c) {
     return h("button", {
       type: "button",
       class: "btn " + (armed ? "armed" : action === "promote" || action === "replace" ? "primary" : "danger"),
+      "data-act": c.id + ":" + action,
       disabled: view.busy || null,
       onclick: () => act(c.id, action),
     }, armed ? t("confirm") : t("a_" + action));
   }));
 }
+
+// ----------------------------------------------------------- stream ----
+
+function norm(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+// The log keeps 60 characters of what it said; a proposal keeps the reply.
+function sameReply(excerpt, reply) {
+  const e = norm(excerpt), r = norm(reply);
+  if (!e || !r) return false;
+  if (e === r) return true;
+  if (e.endsWith("…")) {
+    const head = e.slice(0, -1);
+    return head.length > 0 && r.startsWith(head);
+  }
+  return false;
+}
+
+function matchDecision(c, rows) {
+  let best = null, score = Infinity;
+  for (const r of rows) {
+    if (!r.spoke || !sameReply(r.excerpt, c.reply)) continue;
+    // Said before the proposal about it, as close to it as possible.
+    const s = c.created ? Math.abs(c.created - r.ts) + (r.ts > c.created + 120 ? 1e9 : 0) : -r.ts;
+    if (s < score) { best = r; score = s; }
+  }
+  return best;
+}
+
+const ORDER = { promoted: 0, proposed: 1 };
+
+function buildStream(d) {
+  const all = [...d.learned, ...d.pending, ...d.past]
+    .sort((a, b) => (ORDER[a.state] ?? 2) - (ORDER[b.state] ?? 2));
+  const onRow = new Map();
+  const loose = new Map();
+  for (const c of all) {
+    const row = matchDecision(c, d.decisions);
+    if (row) {
+      if (!onRow.has(row)) onRow.set(row, []);
+      onRow.get(row).push(c);
+      continue;
+    }
+    // Said before the log began (or before a restart): its own bubble.
+    const key = norm(c.reply);
+    const said = Math.min(c.created || Infinity, ...c.evidence.map((e) => e.ts || Infinity));
+    const entry = loose.get(key) || { ts: Infinity, reply: c.reply, cands: [] };
+    entry.ts = Math.min(entry.ts, Number.isFinite(said) ? said - 0.001 : 0);
+    entry.cands.push(c);
+    loose.set(key, entry);
+  }
+  const items = d.decisions.map((r) => ({ ts: r.ts, row: r, cands: onRow.get(r) || [] }));
+  for (const entry of loose.values()) items.push({ ts: entry.ts, ledger: true, reply: entry.reply, cands: entry.cands });
+  items.sort((a, b) => a.ts - b.ts);
+  const bubbleOf = {};
+  items.forEach((item, i) => {
+    item.key = String(i);
+    for (const c of item.cands) bubbleOf[c.id] = item.key;
+  });
+  return { items, bubbleOf };
+}
+
+function dayOf(ts) {
+  return new Date(ts * 1000).toDateString();
+}
+
+function dayLabel(ts) {
+  if (dayOf(ts) === dayOf(nowS())) return t("today");
+  return new Date(ts * 1000).toLocaleDateString(locale(), { month: "short", day: "numeric", weekday: "short" });
+}
+
+function hm(ts) {
+  return h("time", { title: stamp(ts), datetime: new Date(ts * 1000).toISOString() },
+    new Date(ts * 1000).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", hour12: false }));
+}
+
+function chatStream(d, stream) {
+  const learnedShown = more(d, "learned", t("learned")), pastShown = more(d, "past", t("past"));
+  if (!stream.items.length) {
+    return h("div", { class: "stream empty-stream" },
+      h("figure", { class: "frame small" },
+        h("img", { src: "dashboard/listening.webp", alt: "", width: 560, height: 373 })),
+      h("strong", { text: t("listening") }),
+      h("span", { text: t("no_decisions") }),
+      learnedShown, pastShown);
+  }
+  const rows = [];
+  let day = "";
+  for (const item of stream.items) {
+    if (item.ts && dayOf(item.ts) !== day) {
+      day = dayOf(item.ts);
+      rows.push(h("li", { class: "day" }, h("span", { text: dayLabel(item.ts) })));
+    }
+    rows.push(item.row && !item.row.spoke ? quietRow(item.row) : botRow(item));
+  }
+  return h("section", { class: "stream", "aria-labelledby": "stream-title" },
+    h("h3", { id: "stream-title", class: "sr-only", text: t("decisions") }),
+    learnedShown, pastShown,
+    h("ol", { class: "msgs" }, rows));
+}
+
+function modeChip(r) {
+  return r.mode ? h("span", { class: "chip mode", text: t("m_" + r.mode, null, r.mode) }) : null;
+}
+
+function reasonText(r) {
+  const key = REASONS[r.reason];
+  return key ? t(key) : r.reason;
+}
+
+function quietRow(r) {
+  return h("li", { class: "msg quiet" },
+    r.excerpt ? h("p", { class: "heard" },
+      h("span", { class: "sr-only", text: t("after") + " " }), r.excerpt) : null,
+    h("p", { class: "aside" },
+      h("span", { class: "ring", "aria-hidden": "true" }),
+      h("strong", { text: t("quiet") }),
+      modeChip(r),
+      h("span", { class: "reason", text: reasonText(r) }),
+      r.count > 1 ? h("span", { class: "chip", text: t("times", { n: r.count }) }) : null,
+      hm(r.ts)));
+}
+
+function botRow(item) {
+  const r = item.row;
+  const cands = item.cands;
+  // A proposal holds the whole reply; the log only its start.
+  let text = r ? r.excerpt : item.reply;
+  for (const c of cands) if (norm(c.reply).length > norm(text).length) text = c.reply;
+  const live = cands.find((c) => c.state === "promoted");
+  const pending = cands.find((c) => c.state === "proposed");
+  const mark = live ? (live.type === "preference_pair" ? " corrected" : " kept")
+    : pending ? (pending.type === "preference_pair" ? " questioned" : " nominated") : "";
+  return h("li", { class: "msg bot" + mark, id: "b-" + item.key, tabindex: cands.length ? "-1" : null },
+    h("p", { class: "bubble" },
+      h("span", { class: "sr-only", text: t("spoke") + ", " + t("said") + " " }), text,
+      live && live.type !== "preference_pair" ? icon("star", "kept-star") : null),
+    h("p", { class: "meta" },
+      r ? [hm(r.ts), modeChip(r), h("span", { class: "reason", text: reasonText(r) })]
+        : [icon("clock"), h("span", { text: t("from_ledger") })]),
+    cands.map((c) => annotation(c)));
+}
+
+function annotation(c) {
+  const isPair = c.type === "preference_pair";
+  const tag = c.state === "promoted" ? "learned" : c.state === "proposed" ? "waiting" : "past";
+  if (tag === "waiting") {
+    return h("div", { class: "note-card waiting-card" },
+      h("button", { type: "button", class: "tag", onclick: () => jump("p-" + c.id) },
+        icon("up"), t("pending") + " · " + t("t_" + c.type, null, c.type)),
+      isPair && c.better ? h("p", { class: "bubble better proposed" }, icon("turn"), h("span", { text: c.better })) : null);
+  }
+  const key = c.id + ":ann";
+  const label = [
+    icon(tag === "learned" ? "leaf" : "cross"),
+    h("span", { class: "tag-text", text: (tag === "learned" ? t("learned") + " · " : "") + t("t_" + c.type, null, c.type) }),
+    h("span", { class: "chip " + stateClass(c.state), text: t("s_" + c.state, null, c.state) }),
+    h("span", { class: "when" }, when(c.created)),
+  ];
+  const better = isPair && c.better ? h("p", { class: "bubble better" + (tag === "past" ? " faded" : "") },
+    icon("turn"), h("span", { text: c.better })) : null;
+  const detail = h("div", { class: "note-detail" },
+    h("p", { class: "mono when", title: c.id, text: c.id.slice(0, 12) }),
+    tag === "past" ? better : null,
+    contextBlock(c),
+    rivals(c),
+    c.checklist ? renderChecklist(c.checklist) : null,
+    evidenceBlock(c),
+    historyBlock(c));
+  if (tag === "past") {
+    // Retired: one quiet line until opened.
+    return h("div", { class: "note-card past" },
+      disclosure(key, h("span", { class: "tag-line" }, label), detail),
+      c.actions.length ? renderActions(c) : null);
+  }
+  return h("div", { class: "note-card learned" },
+    h("div", { class: "tag-line" }, label, h("span", { class: "spacer" }),
+      c.actions.length ? renderActions(c) : null),
+    better,
+    disclosure(key, h("span", null, t("more_detail"),
+      c.evidence.length ? h("span", { class: "count", text: String(c.evidence.length) }) : null), detail));
+}
+
+function disclosure(key, summary, ...body) {
+  return h("details", {
+    class: "more",
+    open: view.open.has(key) || null,
+    ontoggle: (e) => { if (e.currentTarget.open) view.open.add(key); else view.open.delete(key); },
+  }, h("summary", null, icon("chev", "chev"), summary), body);
+}
+
+function composer(d) {
+  if (d.kind !== "group" || !d.trigger_count) return null;
+  return h("div", { class: "composer" },
+    meter(d.counter, d.trigger_count),
+    h("p", { class: "note", text: t("trigger_progress", { n: d.trigger_count, c: d.counter }) }));
+}
+
+function jump(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+  el.classList.remove("flash");
+  void el.offsetWidth;
+  el.classList.add("flash");
+  el.addEventListener("blur", () => el.classList.remove("flash"), { once: true });
+  el.focus({ preventScroll: true });
+}
+
+// ----------------------------------------------------------- actions ----
 
 let disarmTimer = null;
 
@@ -974,8 +1475,9 @@ async function act(id, action) {
   if (!view.armed || view.armed.id !== id || view.armed.action !== action) {
     view.armed = { id, action };
     clearTimeout(disarmTimer);
-    disarmTimer = setTimeout(() => { view.armed = null; view.shown.detail = ""; render(); }, 5000);
+    disarmTimer = setTimeout(() => { view.armed = null; view.shown.detail = ""; render(); refocus(id, action); }, 5000);
     renderDetailNow();
+    refocus(id, action);
     return;
   }
   clearTimeout(disarmTimer);
@@ -997,26 +1499,15 @@ async function act(id, action) {
   await refresh();
 }
 
+// A redraw replaces the buttons; keep the keyboard where it was.
+function refocus(id, action) {
+  const btn = document.querySelector('[data-act="' + id + ":" + action + '"]');
+  if (btn && document.activeElement === document.body) btn.focus({ preventScroll: true });
+}
+
 function renderDetailNow() {
   view.shown.detail = "";
   renderDetail();
-}
-
-function renderMemories(d) {
-  const items = [];
-  if (d.core_note) {
-    items.push(h("li", { class: "memory" },
-      h("span", { class: "by", text: t("core_note") }),
-      h("span", { class: "text", text: d.core_note })));
-  }
-  for (const m of d.memories) {
-    items.push(h("li", { class: "memory" },
-      h("span", { class: "text", text: m.text }),
-      h("span", { class: "by" },
-        (m.auto ? t("by_auto") : (m.by || t("by_admin"))) + " · ", when(m.time))));
-  }
-  if (!items.length) return h("p", { class: "empty", text: t("no_memories") });
-  return h("ul", { class: "memories" }, items);
 }
 
 function renderFooter() {
