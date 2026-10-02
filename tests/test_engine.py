@@ -335,3 +335,21 @@ async def test_a_crashed_background_task_is_logged_with_its_name(tmp: Path, capl
     check("named and explained", any("tag_the_sticker" in m and "bad sticker" in m
                                      for m in lines), repr(lines))
     check("and released", task not in agent._bg_tasks)
+
+
+def test_a_direct_qq_setup_without_a_napcat_url_is_named() -> None:
+    """On the direct route every reply goes out through QQ_ONEBOT_URL, which
+    is blank by default; through AstrBot it is optional."""
+    from persona_agent import preflight
+
+    def named(**env) -> bool:
+        return any(f.key == "QQ_ONEBOT_URL" and f.level == "WARN"
+                   for f in preflight.check_config(env={"LLM_API_KEY": "k", **env}))
+
+    check("QQ_BOT_ID with no URL", named(QQ_BOT_ID="10001"))
+    check("a OneBot secret with no URL", named(QQ_ONEBOT_SECRET="s"))
+    check("not with the URL set",
+          not named(QQ_BOT_ID="10001", QQ_ONEBOT_URL="http://127.0.0.1:3000"))
+    check("not when QQ comes through AstrBot",
+          not named(QQ_BOT_ID="10001", CONNECTOR_QQ_PLATFORMS="aiocqhttp"))
+    check("not without QQ at all", not named())

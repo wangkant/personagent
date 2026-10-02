@@ -398,6 +398,15 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "is empty while the rest of the QQ configuration is set — the bot "
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
+    direct_qq = (qq_bot_id or str(configured.get("QQ_ONEBOT_SECRET") or "").strip())
+    if (direct_qq and not onebot_url
+            and not str(configured.get("CONNECTOR_QQ_PLATFORMS") or "").strip()):
+        findings.append(Finding(
+            "WARN", "QQ_ONEBOT_URL",
+            "is blank while QQ is set up without AstrBot (CONNECTOR_QQ_PLATFORMS"
+            " is empty), so replies on the direct NapCat route are dropped. Set"
+            " it to NapCat's HTTP server, such as http://127.0.0.1:3000, or set"
+            " CONNECTOR_QQ_PLATFORMS=aiocqhttp if QQ comes through AstrBot"))
 
     for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL", "VISION_BASE_URL",
                 "EMBEDDING_BASE_URL"):
