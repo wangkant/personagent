@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from . import access, channels
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
-from .paths import ROOT
+from .paths import ROOT, resource
 
 logger = logging.getLogger("agent")
 
@@ -291,6 +291,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     an explicit `env` that is searched for them too."""
     base = Path(root) if root is not None else ROOT
     template = _parse(base / ".env.example", strip_bom=True)
+    if template is None and root is None:
+        template = _parse(resource(".env.example"), strip_bom=True)
     configured = _parse(base / ".env") if env is None else dict(env)
     if configured is None:
         configured = {}

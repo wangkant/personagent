@@ -79,7 +79,7 @@ def _load_persona(lang: str = "en") -> str:
             return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
         except Exception:
             logger.warning("read persona file failed, falling back to bundled example")
-    example = ROOT / "data" / f"persona.example.{lang}.txt"
+    example = resolve_seed_lang_file("persona.example", "txt", lang)
     if example.is_file():
         try:
             return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA

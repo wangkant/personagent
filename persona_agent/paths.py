@@ -1,19 +1,11 @@
 """Single anchor for on-disk locations.
 
-ROOT is the repository / deployment root, NOT the package directory. Read-only
-seed data and sticker binaries live there. Mutable text state belongs under
-``runtime_dir()``; Agent migrates legacy root-level JSON/JSONL files on first
-use so older deployments keep working.
-
-**personagent is an application you deploy from a checkout, not a library you
-install and forget.** ``pip install -e .`` exists so the pipeline can be
-imported and tested; a plain wheel install puts the package under
-site-packages, where the parent directory is not a deployment root and holds
-no data/ seeds. _detect_root below therefore refuses to guess: it takes
-AGENT_HOME if set, otherwise the package parent when that looks like a real
-checkout, otherwise the current working directory — so a wheel-installed copy
-reads and writes where you actually launched it instead of scribbling next to
-site-packages.
+ROOT is the deployment folder (home.find_home(): AGENT_HOME, a checkout, or
+~/personagent), never the package directory. It holds .env, persona.txt and
+stickers; mutable state goes under ``runtime_dir()``, where a root-level file
+from an older layout is copied on first use. Read-only seed data comes from
+``seed_file()``: ``<ROOT>/data/...`` when present (a user's override, and how
+a checkout reads its tracked data), else the copy shipped in the package.
 """
 from __future__ import annotations
 
@@ -23,25 +15,29 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
+from .home import find_home, resource
+
 logger = logging.getLogger("agent")
 
-
-def _detect_root() -> Path:
-    from .home import find_home
-
-    return find_home()
+ROOT = find_home()
 
 
-ROOT = _detect_root()
+def seed_file(*parts: str) -> Path:
+    """A read-only file under data/: the home's own copy first, else the shipped one."""
+    own = ROOT.joinpath("data", *parts)
+    if own.exists():
+        return own
+    return resource("data", *parts)
 
 
 def resolve_seed_lang_file(stem: str, ext: str, lang: str) -> Path:
     """Resolve a read-only seed file, preferring the language suffix."""
-    base_dir = ROOT / "data"
-    suffixed = base_dir / f"{stem}.{lang}.{ext}"
-    if suffixed.is_file():
-        return suffixed
-    return base_dir / f"{stem}.{ext}"
+    names = (f"{stem}.{lang}.{ext}", f"{stem}.{ext}")
+    for base in (ROOT / "data", resource("data")):
+        for name in names:
+            if (base / name).is_file():
+                return base / name
+    return ROOT / "data" / names[-1]
 
 
 def runtime_dir() -> Path:
