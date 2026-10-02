@@ -31,6 +31,7 @@ from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import RuntimeInstanceLock, atomic_write_text
+from persona_agent import dashboard
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
@@ -666,6 +667,7 @@ async def lifespan(app: FastAPI):
             runtime_lock.release()
 
 app = FastAPI(title="personagent", version=__version__, lifespan=lifespan)
+dashboard.install(app)
 
 
 # /health caches its probe results briefly so monitoring polls don't spam the

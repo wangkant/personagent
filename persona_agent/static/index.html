@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>personagent</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="dashboard/app.css">
+<script src="dashboard/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="app">personagent</span>
+    <span id="persona-name" class="persona"></span>
+    <span id="state-pill" class="pill"></span>
+  </div>
+  <div class="controls">
+    <button id="lang-toggle" type="button" class="ghost"></button>
+    <button id="theme-toggle" type="button" class="ghost"></button>
+  </div>
+</header>
+<main>
+  <div id="hints"></div>
+  <section id="overview" class="overview"></section>
+  <section class="convs">
+    <div class="list-pane">
+      <h2 id="conv-title" class="section-title"></h2>
+      <div id="conv-list" class="conv-list"></div>
+    </div>
+    <div id="detail" class="detail-pane"></div>
+  </section>
+</main>
+<footer id="footer" class="footer"></footer>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<noscript><p class="noscript">This page needs JavaScript. 此页面需要启用 JavaScript。</p></noscript>
+</body>
+</html>
