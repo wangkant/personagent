@@ -34,14 +34,16 @@ from persona_agent import home
 
 home.load_env()
 
-from persona_agent import access, candidates, evidence, lineage, promotion
-from persona_agent.paths import resolve_runtime_lang_file
+from persona_agent import access, candidates, evidence, lineage, promotion  # noqa: E402
+from persona_agent.config_env import env_int  # noqa: E402
+from persona_agent.paths import resolve_runtime_lang_file  # noqa: E402
+from persona_agent.settings import normalize_lang  # noqa: E402
 
-AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+AGENT_LANG = normalize_lang(os.getenv("AGENT_LANG", "en"))
 # Same caps the agent applies when it rebuilds a view (see
 # candidates.rebuild_views), so both writers converge on one pool size.
-PROMOTE_MAX_EXAMPLES = int(os.getenv("PROMOTE_MAX_EXAMPLES", 500) or 0)
-PROMOTE_MAX_FEEDBACK = int(os.getenv("PROMOTE_MAX_FEEDBACK", 500) or 0)
+PROMOTE_MAX_EXAMPLES = env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0)
+PROMOTE_MAX_FEEDBACK = env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0)
 
 for _stream in (sys.stdout, sys.stderr):
     try:

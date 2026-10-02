@@ -348,7 +348,7 @@ def _awaiting_fix(agent: Agent, conv: str) -> dict | None:
 
 def _names_bot(agent: Agent, text: str) -> bool:
     """The live name-call test (turns.py), so the trial calls when it would."""
-    return bool(agent.persona_name) and agent.persona_name in text
+    return agent._names_me(text)
 
 
 # ---------------------------------------------------------------------------

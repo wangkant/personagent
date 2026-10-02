@@ -440,18 +440,11 @@ class Learning:
                 "response_format": {"type": "json_object"},
             }
             apply_k2_quirks(eval_payload, em, eval_url)
-            async with self._http(timeout=15) as client:
-                r = await client.post(
-                    eval_url,
-                    headers={"Authorization": f"Bearer {eval_auth}"},
-                    json=eval_payload,
-                )
-                r.raise_for_status()
-                # Some reasoning models on OpenAI-compatible endpoints route
-                # output into `reasoning_content` and leave `content` empty.
-                # Fall back to either so we don't drop eval samples.
-                _msg = r.json()["choices"][0]["message"]
-                raw = (_msg.get("content") or _msg.get("reasoning_content") or "")
+            r = await self._post_chat(eval_url, eval_auth, eval_payload, timeout=15)
+            r.raise_for_status()
+            # Some reasoning models route output into `reasoning_content`.
+            _msg = r.json()["choices"][0]["message"]
+            raw = (_msg.get("content") or _msg.get("reasoning_content") or "")
 
             data = salvage_json_object(raw)
             if not isinstance(data, dict):

@@ -169,6 +169,12 @@ def _check_learning(c: dict) -> None:
           "the reply answers the person's own line")
     _need(c, BOT in c["correction"] and BOT in c["acceptance"],
           "the correction and the acceptance are addressed to the bot")
+    reactor = c.get("reactor")
+    _need(c, reactor is None or (isinstance(reactor, str) and reactor.strip()
+                                 and reactor != c["person"]),
+          "reactor, when given, is someone other than the person")
+    _need(c, c.get("expect") in (None, "promoted", "held"),
+          "expect is promoted or held")
     probe = c.get("probe")
     _need(c, isinstance(probe, dict) and _is_lines(probe.get("history"))
           and _is_line(probe.get("latest")) and BOT in probe["latest"],
@@ -647,9 +653,18 @@ def learning_metrics(rows: list[dict]) -> dict:
                                  ("learned", "regressed", "stayed", "unscored")}}
 
     promoted = [r for r in done if r["promoted"]]
+    expected = [r for r in done if r.get("expect")]
     return {
         **counts(done), "n": len(rows), "errors": len(rows) - len(done),
         "promoted": len(promoted),
+        "expected": {
+            "n": len(expected),
+            "ok": sum(1 for r in expected if r["policy_ok"]),
+            "promoted_but_should_hold": sum(
+                1 for r in expected if r["promoted"] and r["expect"] == "held"),
+            "held_but_should_promote": sum(
+                1 for r in expected if not r["promoted"] and r["expect"] == "promoted"),
+        },
         "by_promotion": {
             "promoted": counts(promoted),
             "not_promoted": counts([r for r in done if not r["promoted"]]),
@@ -794,7 +809,10 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     conv = f"eval-learn-{case['id']}"
     person = case["person"]
     uid = NAME_UID[person]
-    row = {"id": case["id"], "target": case["target"]}
+    # A bystander may react instead of the person the reply was for.
+    reactor = case.get("reactor") or person
+    ruid = NAME_UID[reactor]
+    row = {"id": case["id"], "target": case["target"], "expect": case.get("expect")}
     row["before"] = await _probe(agent, judge, case, conv, name)
 
     # The reply being corrected, sent to the person.
@@ -804,16 +822,17 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     # The correction: adjudicated first (the live turn spawns it), then the
     # addressed message gets the ordinary called turn, which is the retry.
     correction = _fill(case["correction"], name)
-    row["correction"] = await _react(agent, conv, person, uid, correction)
-    agent._append_buffer(conv, person, correction, uid)
-    raw, intent, _mem = await agent._think(conv, "called", correction)
+    row["correction"] = await _react(agent, conv, reactor, ruid, correction)
+    agent._append_buffer(conv, reactor, correction, ruid)
+    raw, intent, _mem = await agent._think(conv, "called", correction,
+                                           caller_override=(reactor, ruid))
     retry = sent_text(agent, raw)
     row["retry"] = {"reply": retry, "raw_reply": raw or ""}
     if retry:
-        _record_sent(agent, conv, retry, intent=intent, uid=uid, person=person,
+        _record_sent(agent, conv, retry, intent=intent, uid=ruid, person=reactor,
                      mid=f"{conv}-2")
     acceptance = _fill(case["acceptance"], name)
-    row["acceptance"] = await _react(agent, conv, person, uid, acceptance)
+    row["acceptance"] = await _react(agent, conv, reactor, ruid, acceptance)
 
     row["candidates"] = []
     for cand in agent.candidate_ledger.all():
@@ -824,6 +843,8 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
                 cand["candidate_id"]).reason
         row["candidates"].append(item)
     row["promoted"] = any(c["state"] == "promoted" for c in row["candidates"])
+    if row["expect"]:
+        row["policy_ok"] = row["promoted"] == (row["expect"] == "promoted")
 
     row["after"] = await _probe(agent, judge, case, conv, name)
     row["outcome"] = learning_outcome(row["before"]["follows"],
@@ -902,6 +923,11 @@ def print_table(report: dict) -> None:
               f"{m['stayed']}, unscored {m['unscored']}, errors {m['errors']}")
         print(f"  without promotion (noise): learned {np_['learned']}, "
               f"regressed {np_['regressed']} of {np_['n']}")
+        ex = m.get("expected") or {}
+        if ex.get("n"):
+            print(f"  policy as expected: {ex['ok']}/{ex['n']} (promoted but should "
+                  f"hold {ex['promoted_but_should_hold']}, held but should promote "
+                  f"{ex['held_but_should_promote']})")
         print(f"  {POLICY_NOTE}")
 
 

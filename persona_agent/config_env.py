@@ -1,31 +1,11 @@
 """One way to read a setting out of the environment.
 
-WHY THIS MODULE EXISTS. Two correct implementations of this already lived in
-the tree, each written after the failure it prevents was hit in production:
+A typo in one setting behaves the same as a typo in any other, and it is
+always visible: a bad value falls back to the declared default and says so in
+the log; it never takes the process down, and it never silently means the
+opposite of what was written.
 
-* ``main.py._parse_int_config`` — "Parse one integer setting without crashing
-  module import." Every setting main.py reads goes through it.
-* ``promotion.Policy.from_env._bool`` — written after ``PROMOTE_AUTO_ENABLED=1``
-  silently disabled promotion entirely, because ``raw == "true"`` reads every
-  other spelling of yes as False.
-
-Neither reached the rest of the package. ``Agent.__init__`` read twenty-odd
-numbers with a bare ``int()``/``float()``, so ``REACT_TTL_S=15m`` — a
-plausible typo, and the ``.env.example`` comment beside it literally says
-``900  # ... (15 min)`` — raised ValueError out of the constructor one line
-after ``preflight.check_config()`` had reported the configuration fine. Six
-booleans still compared against the literal ``"true"``, among them
-``AGENT_ENABLED``, which decides whether the agent works at all.
-
-So the rule this module exists to enforce is: **a typo in one setting behaves
-the same as a typo in any other setting, and it is always visible.** A bad
-value falls back to the declared default and says so in the log; it never
-takes the process down, and it never silently means the opposite of what was
-written.
-
-Kept dependency-free on purpose — ``agent.py``, ``main.py``, ``textproc.py``
-and ``ingestion.py`` all import it at module scope, so anything it imported
-from this package would be a new import cycle.
+Dependency-free on purpose: most of the package imports it at module scope.
 """
 from __future__ import annotations
 
