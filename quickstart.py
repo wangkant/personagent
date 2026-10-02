@@ -1,56 +1,40 @@
-"""One-shot bootstrap: virtualenv + deps + config templates + setup wizard.
+"""Checkout bootstrap: a virtualenv, the dependencies, then the setup questions.
 
     python quickstart.py
 
-After installing the environment it walks you through first-time
-configuration interactively (API provider, key, bot name, language), writes
-the answers into `.env`, can connect the agent to an AstrBot install (copies
-the connector plugin, generates the shared token, writes the allowlists), and
-can drop you straight into a terminal chat. No manual editing needed.
-
-Idempotent - re-running reports what's already in place and only offers the
-wizard again if you want to reconfigure. Non-interactive environments (CI,
-piped stdin) or `--no-input` skip the wizard and behave like the classic
-bootstrap.
+Creates .venv, installs requirements.txt, and runs the same setup as
+`personagent init`: the AI service and key, the character, and optionally
+AstrBot. `--astrbot DATA_DIR` connects AstrBot without questions. Safe to
+re-run: existing files are kept, and the questions start from your answers.
 """
 from __future__ import annotations
 
-import json
-import os
-import re
-import secrets
-import shutil
-import subprocess
 import sys
-import urllib.parse
-from pathlib import Path
+
+if sys.version_info < (3, 10):
+    sys.exit("personagent needs Python 3.10 or newer; this is Python "
+             + sys.version.split()[0] + ". Get one at https://www.python.org/downloads/")
+
+import argparse  # noqa: E402
+import os  # noqa: E402
+import subprocess  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from persona_agent import home as homes  # noqa: E402
+from persona_agent import setup_wizard  # noqa: E402
+from persona_agent.setup_wizard import (  # noqa: E402
+    PLATFORMS, PLUGIN_NAME, astrbot_platform_entry, astrbot_plugin_config,
+    connect_astrbot, install_astrbot_plugin, read_astrbot_config, secure_env_file,
+    set_env_values, write_astrbot_config, write_astrbot_platform, write_env)
+
+# Kept importable from here for scripts written against this file.
+__all__ = ["PLATFORMS", "PLUGIN_NAME", "astrbot_platform_entry", "astrbot_plugin_config",
+           "connect_astrbot", "install_astrbot_plugin", "read_astrbot_config",
+           "secure_env_file", "set_env_values", "write_astrbot_config",
+           "write_astrbot_platform", "write_env", "main"]
 
 ROOT = Path(__file__).resolve().parent
-
-# Provider presets for the wizard. base_url is the OpenAI-compatible root the
-# agent appends /v1/chat/completions to; model is the suggested default.
-PROVIDERS = [
-    ("DeepSeek", "https://api.deepseek.com", "deepseek-chat"),
-    ("Moonshot / Kimi", "https://api.moonshot.cn", "kimi-k2-turbo-preview"),
-    ("OpenAI", "https://api.openai.com", "gpt-4o-mini"),
-    ("Ollama (local)", "http://localhost:11434", "qwen3"),
-    ("Other OpenAI-compatible", "", ""),
-]
-
-PLUGIN_NAME = "astrbot_plugin_personagent"
-PLUGIN_SRC = ROOT / "integrations" / "astrbot" / PLUGIN_NAME
-# What earlier versions installed the plugin as; left beside the new one, it
-# would forward every message a second time.
-RETIRED_PLUGIN_NAME = "astrbot_plugin_llm_persona_gateway"
-# Its config keys that kept their names; renamed ones are not carried over.
-RETIRED_CONFIG_KEPT = ("excluded_platforms", "timeout_s", "block_default",
-                       "forward_quoted_text", "quote_max_chars",
-                       "max_inline_image_bytes", "outbox_enabled", "outbox_wait_s")
-
-# Readable by its user only, matching `persona_agent.storage.PRIVATE_FILE_MODE`,
-# which this script cannot import: quickstart runs before the dependencies it
-# installs.
-SECRET_FILE_MODE = 0o600
+PROG = "python quickstart.py"
 
 
 def _info(msg: str) -> None:
@@ -76,788 +60,69 @@ def ensure_venv() -> Path:
 
 
 def ensure_deps(venv: Path) -> None:
-    # `python -m pip` rather than the pip.exe shim: venvs created by some
-    # tools (e.g. uv) ship pip as a module without the console script.
+    # `python -m pip`: venvs made by some tools (uv) have no pip.exe shim.
     py = str(_venv_python(venv))
     _info("installing dependencies (pip install -r requirements.txt) ...")
     try:
-        # Best-effort: an old-but-working pip must not abort the bootstrap.
+        # Best effort: an old pip that works must not stop the bootstrap.
         subprocess.check_call([py, "-m", "pip", "install", "--upgrade", "pip", "--quiet"])
     except subprocess.CalledProcessError:
         _info("pip self-upgrade failed - continuing with the bundled pip")
     subprocess.check_call([py, "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")])
 
 
-def _copy_template(template: str, target: str) -> None:
-    src = ROOT / template
-    dst = ROOT / target
-    if dst.exists():
-        _info(f"{target} already exists - skipping")
-        return
-    if not src.exists():
-        _info(f"{template} missing - skipping (nothing to copy)")
-        return
-    shutil.copy(src, dst)
-    _info(f"copied {template} -> {target}")
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog=PROG, parents=[setup_wizard.init_parser(PROG, add_help=False)],
+        description="Set up a checkout: create .venv, install requirements.txt, then "
+                    "ask for the AI service, key and character (as `personagent init`). "
+                    "Without a terminal, or with --no-input, nothing is asked.",
+        epilog="Re-running is safe: existing files are kept, and the questions offer "
+               "your current answers.")
+    p.add_argument("--astrbot", metavar="DATA_DIR",
+                   help="connect AstrBot without questions: copy the plugin, share a token "
+                        "(a first run leaves the allowlists empty; later runs keep them)")
+    qq = p.add_mutually_exclusive_group()
+    qq.add_argument("--qq", dest="qq", action="store_const", const=True,
+                    help="with --astrbot: route QQ through AstrBot too")
+    qq.add_argument("--no-qq", dest="qq", action="store_const", const=False,
+                    help="with --astrbot: stop routing QQ through AstrBot "
+                         "(without either, QQ routing is left as it is)")
+    p.add_argument("--platform", choices=tuple(PLATFORMS),
+                   help="with --astrbot: switch on that adapter in AstrBot's own config, "
+                        "using --token (and --app-token for slack, or --app-id and "
+                        "--app-secret for lark)")
+    p.add_argument("--token", default="", help=argparse.SUPPRESS)
+    p.add_argument("--app-token", default="", help=argparse.SUPPRESS)
+    p.add_argument("--app-id", default="", help=argparse.SUPPRESS)
+    p.add_argument("--app-secret", default="", help=argparse.SUPPRESS)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Every flag is checked before anything is installed.
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if (args.qq is not None or args.platform) and not args.astrbot:
+        parser.error("--qq, --no-qq and --platform only make sense with --astrbot")
 
-
-def copy_persona_template(lang: str) -> None:
-    persona_src = f"data/persona.example.{lang}.txt"
-    if not (ROOT / persona_src).exists():
-        persona_src = "data/persona.example.en.txt"
-    _copy_template(persona_src, "persona.txt")
-
-
-# ---------------------------------------------------------------------------
-# .env editing
-# ---------------------------------------------------------------------------
-
-def set_env_values(env_text: str, values: dict) -> str:
-    """Return env_text with each KEY=... line replaced by KEY=<value>.
-
-    Every uncommented occurrence of a key is rewritten, so a key written twice
-    cannot keep an old value in the line dotenv reads (the last); comments and
-    everything else are preserved so .env keeps doubling as the annotated
-    reference. Keys that don't exist yet are appended at the end.
-    """
-    lines = env_text.splitlines()
-    found = set()
-    for i, line in enumerate(lines):
-        m = re.match(r"^([A-Z][A-Z0-9_]*)=", line)
-        if m and m.group(1) in values:
-            key = m.group(1)
-            lines[i] = f"{key}={values[key]}"
-            found.add(key)
-    for key, value in values.items():
-        if key not in found:
-            lines.append(f"{key}={value}")
-    out = "\n".join(lines)
-    if env_text.endswith("\n") and not out.endswith("\n"):
-        out += "\n"
-    return out
-
-
-def write_env(env_path: Path, values: dict) -> None:
-    text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    updated = set_env_values(text, values)
-    # Temp file then replace, because this is the file holding live API keys
-    # and a raw write_text truncates before it writes: a Ctrl-C in the wizard
-    # left an empty .env. `persona_agent.storage.atomic_write_text` does
-    # exactly this, but quickstart runs BEFORE the dependencies it installs,
-    # which is the whole point of quickstart, so it cannot import it.
-    # `.env.tmp` is in .gitignore and in the test suite's PII watch list. It
-    # holds the same API keys `.env` does, and an interruption between these
-    # two lines — the exact interruption this atomicity exists for — leaves it
-    # on disk for `git add -A` to stage.
-    tmp = env_path.with_name(env_path.name + ".tmp")
-    # 0600 at CREATION, before a single key is written: `write_text` opens at
-    # the umask default, so chmod'ing afterwards still leaves a window where
-    # the live API keys are world-readable.
-    # The mode applies only at creation, so a leftover .env.tmp would keep its
-    # old one: remove it and create the file fresh.
-    tmp.unlink(missing_ok=True)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, SECRET_FILE_MODE)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(updated)
-    try:
-        # Carry the original's permissions across so a deliberate `chmod 400`
-        # survives os.replace — but NEVER widen. `.env` starts life as a copy
-        # of `.env.example`, a repo file at 0644, so carrying that mode across
-        # unchanged is how the first wizard run published LLM_API_KEY,
-        # CONNECTOR_TOKEN and QQ_ONEBOT_SECRET to every local account.
-        if env_path.exists():
-            os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
-    except OSError:
-        pass  # Windows ACLs do not map onto POSIX mode bits
-    os.replace(tmp, env_path)
-
-
-def secure_env_file(env_path: Path) -> None:
-    """Narrow `.env` to its user only (0600); it holds live API keys.
-
-    `shutil.copy` from `.env.example` brings that repo file's 0644 with it,
-    and the non-interactive bootstrap never calls `write_env` at all — the
-    operator just edits the copied file by hand. So the copy itself has to be
-    narrowed, or the keys they paste in land world-readable.
-    """
-    try:
-        os.chmod(env_path, SECRET_FILE_MODE)
-    except OSError:
-        pass  # Windows ACLs do not map onto POSIX mode bits
-
-
-def _env_get(env_path: Path, key: str) -> str:
-    """The current value of ``key`` in .env ('' if blank/missing), read the
-    way dotenv reads it: the last line for the key, one pair of quotes, or an
-    unquoted value up to an inline `` #`` comment."""
-    if not env_path.exists():
-        return ""
-    found = re.findall(rf"^{key}=(.*)$", env_path.read_text(encoding="utf-8"), re.MULTILINE)
-    if not found:
-        return ""
-    raw = found[-1].strip()
-    quoted = re.match(r"""^(["'])(.*?)\1""", raw)
-    if quoted:
-        return quoted.group(2)
-    return re.split(r"\s+#", raw, maxsplit=1)[0].strip()
-
-
-def _env_current_key(env_path: Path) -> str:
-    return _env_get(env_path, "LLM_API_KEY")
-
-
-def _configured_agent_home(env_path: Path) -> str:
-    """AGENT_HOME as the agent will actually see it.
-
-    ``main.py``/``try_chat.py`` call ``load_dotenv(override=False)``, so an
-    AGENT_HOME already exported in the shell wins; otherwise whatever this
-    run's .env already has (written by a *previous* wizard run) takes effect
-    the moment it's loaded. Either way it happened before this run touches
-    anything, so both have to be checked here.
-    """
-    return os.environ.get("AGENT_HOME", "").strip() or _env_get(env_path, "AGENT_HOME")
-
-
-def _warn_if_agent_home_diverges(env_path: Path) -> None:
-    """Flag an AGENT_HOME that points away from this checkout.
-
-    quickstart always writes .env and persona.txt under ROOT (this checkout),
-    but persona_agent.paths honours AGENT_HOME when resolving where it reads
-    them from. Left unchecked, the wizard reports success while the agent is
-    reading a persona.txt that doesn't exist where it's looking - most often
-    because AGENT_HOME was written into .env by an earlier wizard run and
-    quietly carries forward, not because anyone exported it deliberately.
-    """
-    configured = _configured_agent_home(env_path)
-    if not configured:
-        return
-    try:
-        resolved = Path(configured).expanduser().resolve()
-    except (OSError, RuntimeError):
-        # `expanduser()` on `~/...` RAISES when no home directory can be
-        # determined. preflight.py guards the same call for the same reason;
-        # here it would take down the wizard over a diagnostic.
-        _info(f"AGENT_HOME is set to {configured}, which cannot be resolved - "
-              "check it before starting the agent.")
-        return
-    if resolved != ROOT:
-        _info(f"AGENT_HOME is set to {resolved} - that is where persona.txt and "
-              f".env need to live for the agent to read them, not this checkout "
-              f"({ROOT}). This wizard only writes into the checkout; move the "
-              "files there yourself, or unset AGENT_HOME, once setup is done.")
-
-
-# ---------------------------------------------------------------------------
-# AstrBot: the plugin, its config file, the shared token
-# ---------------------------------------------------------------------------
-
-def find_astrbot_data() -> Path | None:
-    """A likely AstrBot data directory next to this checkout or under $HOME."""
-    home = Path.home()
-    for cand in (ROOT.parent / "astrbot" / "data", ROOT.parent / "AstrBot" / "data",
-                 home / "AstrBot" / "data", home / "astrbot" / "data"):
-        if (cand / "plugins").is_dir():
-            return cand
-    return None
-
-
-def install_astrbot_plugin(data_dir: Path) -> Path:
-    """Copy the plugin into ``<data>/plugins/``; safe to repeat. The plugin
-    under its retired name is removed."""
-    dest = data_dir / "plugins" / PLUGIN_NAME
-    shutil.copytree(PLUGIN_SRC, dest, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    retired = data_dir / "plugins" / RETIRED_PLUGIN_NAME
-    if retired.is_dir():
-        shutil.rmtree(retired)
-        _info(f"removed {retired}: it is this plugin under an older name, "
-              "and both would forward every message")
-    return dest
-
-
-def personagent_url_accepted(url: str, token: str) -> bool:
-    """The plugin's own rule (``_endpoint_is_allowed`` in the plugin): a
-    loopback URL, tunnels included, or HTTPS elsewhere with a token."""
-    try:
-        parsed = urllib.parse.urlsplit(url)
-    except ValueError:
-        return False
-    host = (parsed.hostname or "").lower()
-    if not host or parsed.scheme not in ("http", "https"):
-        return False
-    if host in ("localhost", "127.0.0.1", "::1"):
-        return True
-    return parsed.scheme == "https" and bool(token)
-
-
-def _clean_ids(ids) -> list[str]:
-    return [str(i).strip() for i in ids if str(i).strip()]
-
-
-def _excluded_as_plugin_reads_it(value) -> list[str]:
-    # The plugin iterates whatever is stored, so a string is a list of letters.
-    return [str(p) for p in (value or [])]
-
-
-def astrbot_qq_routed(cfg: dict) -> bool:
-    """Whether a plugin config forwards QQ (aiocqhttp) to the agent."""
-    return "aiocqhttp" not in _excluded_as_plugin_reads_it(cfg.get("excluded_platforms"))
-
-
-def astrbot_plugin_config(existing: dict | None, *, personagent_url: str, token: str,
-                          qq: bool | None, groups: list[str] | None,
-                          dm_users: list[str] | None) -> dict:
-    """The plugin's config document. A value passed as None keeps what the
-    operator set (in AstrBot's WebUI, or on an earlier run), and so do keys we
-    do not manage: re-running must not undo a setup."""
-    cfg = dict(existing or {})
-    # Only a URL the plugin would refuse is replaced; any other was chosen
-    # by the operator, an SSH tunnel on another loopback port included.
-    if not personagent_url_accepted(str(cfg.get("personagent_url") or "").strip(), token):
-        cfg["personagent_url"] = personagent_url
-    cfg["connector_token"] = token
-    if "excluded_platforms" not in cfg:
-        cfg["excluded_platforms"] = [] if qq else ["aiocqhttp"]
-    elif qq is not None:
-        excluded = cfg["excluded_platforms"]
-        excluded = (_clean_ids(excluded) if isinstance(excluded, list)
-                    else _split_ids(str(excluded or "")))
-        excluded = [p for p in excluded if p != "aiocqhttp"]
-        cfg["excluded_platforms"] = excluded if qq else excluded + ["aiocqhttp"]
-    if groups is not None:
-        cfg["groups"] = _clean_ids(groups)
-    cfg.setdefault("groups", [])
-    if dm_users is not None:
-        cfg["dm_users"] = _clean_ids(dm_users)
-    cfg.setdefault("dm_users", [])
-    cfg.setdefault("timeout_s", 180)
-    cfg.setdefault("block_default", True)
-    return cfg
-
-
-def astrbot_config_path(data_dir: Path) -> Path:
-    return data_dir / "config" / f"{PLUGIN_NAME}_config.json"
-
-
-def write_astrbot_config(data_dir: Path, cfg: dict) -> Path:
-    path = astrbot_config_path(data_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
-    return path
-
-
-def _read_json(path: Path) -> dict:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8-sig"))  # AstrBot writes a BOM
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def retired_astrbot_config_path(data_dir: Path) -> Path:
-    return data_dir / "config" / f"{RETIRED_PLUGIN_NAME}_config.json"
-
-
-def read_astrbot_config(data_dir: Path) -> dict:
-    """The plugin's config; before its first run under the new name, the keys
-    of the retired plugin's config that kept their names, so an upgrade does
-    not switch QQ routing off."""
-    path = astrbot_config_path(data_dir)
-    if path.exists():
-        return _read_json(path)
-    retired = _read_json(retired_astrbot_config_path(data_dir))
-    return {k: retired[k] for k in RETIRED_CONFIG_KEPT if k in retired}
-
-
-def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | None,
-                    groups: list[str] | None, dm_users: list[str] | None) -> Path:
-    """Install the plugin and write both halves of the handshake: the shared
-    token into .env (via ``values``) and the plugin config into AstrBot.
-    ``qq``, ``groups`` and ``dm_users`` left as None keep their current values."""
-    existing = read_astrbot_config(data_dir)
-    plugin_token = str(existing.get("connector_token") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", plugin_token):
-        plugin_token = ""     # would not survive a round trip through .env
-    token = (values.get("CONNECTOR_TOKEN") or _env_get(env_path, "CONNECTOR_TOKEN")
-             or plugin_token or secrets.token_urlsafe(32))
-    values["CONNECTOR_TOKEN"] = token
-    port = _env_get(env_path, "SERVER_PORT") or "8080"
-    local_url = f"http://127.0.0.1:{port}"
-    install_astrbot_plugin(data_dir)
-    cfg = astrbot_plugin_config(existing, personagent_url=local_url, token=token,
-                                qq=qq, groups=groups, dm_users=dm_users)
-    old_url = str(existing.get("personagent_url") or "").strip()
-    if old_url and old_url != cfg["personagent_url"]:
-        _info(f"personagent_url {old_url} would be refused by the plugin; "
-              f"now {cfg['personagent_url']}")
-    elif cfg["personagent_url"] != local_url:
-        _info(f"keeping personagent_url {cfg['personagent_url']} "
-              f"(this agent listens on port {port})")
-    # .env follows the plugin: QQ forwarded without native ids would file every
-    # QQ conversation under a new name.
-    current = _env_get(env_path, "CONNECTOR_QQ_PLATFORMS")
-    native = [p for p in _clean_ids(current.split(",")) if p != "aiocqhttp"]
-    if astrbot_qq_routed(cfg):
-        native = ["aiocqhttp"] + native
-    if ",".join(native) != ",".join(_clean_ids(current.split(","))):
-        values["CONNECTOR_QQ_PLATFORMS"] = ",".join(native)
-    path = write_astrbot_config(data_dir, cfg)
-    retired = retired_astrbot_config_path(data_dir)
-    if retired.exists():
-        retired.unlink()
-        _info(f"removed {retired}, the older plugin's settings. QQ routing came "
-              "across; set groups and dm_users again in AstrBot's WebUI")
-    return path
-
-
-def _split_ids(raw: str) -> list[str]:
-    return [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
-
-
-def _ask_ids(label: str, empty_hint: str, current) -> list[str]:
-    """A comma-separated id list; Enter keeps ``current``, "-" empties it."""
-    current = _clean_ids(current) if isinstance(current, list) else []
-    hint = "Enter keeps these, '-' clears" if current else empty_hint
-    raw = _ask(f"{label} ({hint})", default=",".join(current))
-    return [] if raw.strip() == "-" else _split_ids(raw)
-
-
-# AstrBot platform adapters the wizard can switch on. The shapes are AstrBot's
-# own (its config template, 4.25); we only fill the credential fields.
-PLATFORMS = {
-    "telegram": (("telegram_token", "Telegram bot token (from @BotFather)"),),
-    "discord": (("discord_token", "Discord bot token"),),
-    "slack": (("bot_token", "Slack bot token (xoxb-...)"),
-              ("app_token", "Slack app-level token (xapp-..., Socket Mode)")),
-    "kook": (("kook_bot_token", "KOOK bot token"),),
-    "lark": (("app_id", "Lark / Feishu app id"), ("app_secret", "Lark / Feishu app secret")),
-}
-_PLATFORM_DEFAULTS = {
-    "telegram": {"start_message": "", "telegram_api_base_url": "https://api.telegram.org/bot",
-                 "telegram_file_base_url": "https://api.telegram.org/file/bot",
-                 "telegram_command_register": False, "telegram_command_auto_refresh": False,
-                 "telegram_command_register_interval": 300, "telegram_polling_restart_delay": 5.0},
-    "discord": {"discord_proxy": "", "discord_command_register": False,
-                "discord_activity_name": "", "discord_allow_bot_messages": False},
-    "slack": {"signing_secret": "", "slack_connection_mode": "socket", "unified_webhook_mode": True,
-              "webhook_uuid": "", "slack_webhook_host": "0.0.0.0", "slack_webhook_port": 6197,
-              "slack_webhook_path": "/astrbot-slack-webhook/callback"},
-    "kook": {"kook_reconnect_delay": 1, "kook_max_reconnect_delay": 60, "kook_max_retry_delay": 60,
-             "kook_heartbeat_interval": 30, "kook_heartbeat_timeout": 6,
-             "kook_max_heartbeat_failures": 3, "kook_max_consecutive_failures": 5},
-    "lark": {"domain": "https://open.feishu.cn", "lark_connection_mode": "socket",
-             "webhook_uuid": "", "lark_encrypt_key": "", "lark_verification_token": ""},
-}
-
-
-def astrbot_platform_entry(kind: str, creds: dict) -> dict:
-    """One entry for AstrBot's `platform` list."""
-    if kind not in PLATFORMS:
-        raise ValueError(f"unknown platform {kind!r}; one of {', '.join(PLATFORMS)}")
-    missing = [key for key, _ in PLATFORMS[kind] if not creds.get(key)]
-    if missing:
-        raise ValueError(f"{kind} needs {', '.join(missing)}")
-    entry = {"id": kind, "type": kind, "enable": True}
-    entry.update(_PLATFORM_DEFAULTS[kind])
-    entry.update({key: creds[key] for key, _ in PLATFORMS[kind]})
-    return entry
-
-
-def astrbot_main_config_path(data_dir: Path) -> Path:
-    return data_dir / "cmd_config.json"
-
-
-def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
-    """Add or replace the entry with the same id in AstrBot's cmd_config.json.
-    AstrBot must have started once (the file is its), and reads it on start."""
-    path = astrbot_main_config_path(data_dir)
-    cfg = json.loads(path.read_text(encoding="utf-8-sig"))
-    platforms = cfg.get("platform")
-    if not isinstance(platforms, list):
-        platforms = []
-    platforms = [p for p in platforms if not (isinstance(p, dict) and p.get("id") == entry["id"])]
-    platforms.append(entry)
-    cfg["platform"] = platforms
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
-    return path
-
-
-# ---------------------------------------------------------------------------
-# Wizard
-# ---------------------------------------------------------------------------
-
-def _ask(prompt: str, default: str = "", required: bool = False,
-         shown_default: str | None = None) -> str:
-    """input() with a shown default; re-asks while a required answer is empty.
-
-    ``shown_default`` is what the prompt displays in place of ``default``, so
-    a secret can be kept on Enter without ever being printed."""
-    shown = default if shown_default is None else shown_default
-    suffix = f" [{shown}]" if shown else ""
-    while True:
-        answer = input(f"  {prompt}{suffix}: ").strip()
-        if not answer:
-            answer = default
-        if answer or not required:
-            return answer
-        print("    (required - please enter a value)")
-
-
-def _mask_secret(value: str) -> str:
-    """Enough of a key to recognise it, never enough to use it."""
-    if len(value) >= 12:
-        return f"{value[:3]}…{value[-4:]}"
-    return "…"
-
-
-def _ask_yn(prompt: str, default_yes: bool = True) -> bool:
-    d = "Y/n" if default_yes else "y/N"
-    answer = input(f"  {prompt} [{d}]: ").strip().lower()
-    if not answer:
-        return default_yes
-    return answer.startswith("y")
-
-
-def _probe_key(venv: Path, base_url: str, api_key: str, model: str) -> bool:
-    """Fire a 1-token test call through the venv's python (httpx lives there,
-    not necessarily in the interpreter running this script)."""
-    code = (
-        "import sys, httpx\n"
-        "from persona_agent.endpoints import chat_completions_url\n"
-        "base, key, model = sys.argv[1:4]\n"
-        "r = httpx.post(chat_completions_url(base),\n"
-        "    headers={'Authorization': 'Bearer ' + key},\n"
-        "    json={'model': model, 'max_tokens': 1,\n"
-        "          'messages': [{'role': 'user', 'content': 'hi'}]},\n"
-        "    timeout=30)\n"
-        "print('    HTTP', r.status_code, '' if r.status_code == 200 else r.text[:200])\n"
-        "sys.exit(0 if r.status_code == 200 else 1)\n"
-    )
-    try:
-        return subprocess.call(
-            [str(_venv_python(venv)), "-c", code, base_url, api_key, model],
-            cwd=str(ROOT),
-        ) == 0
-    except OSError as e:
-        print(f"    probe could not run ({e}); skipping")
-        return True
-
-
-def run_wizard(venv: Path, env_path: Path) -> None:
-    print()
-    print("-- First-time setup ------------------------------------------")
-    print("  Answers are written to .env (which stays your annotated")
-    print("  reference - only the relevant lines are filled in).")
-    print()
-    _warn_if_agent_home_diverges(env_path)
-
-    # A re-run (main() offers one when .env already holds a key, and the
-    # README sends existing users back here to connect AstrBot) starts from
-    # what .env says, not from the first-run presets: Enter-through used to
-    # swap the provider for DeepSeek while keeping another provider's key,
-    # rename the bot to Nova and flip every data file to English.
-    rerun = bool(_env_current_key(env_path))
-    current = {key: _env_get(env_path, key) if rerun else "" for key in (
-        "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "PERSONA_NAME", "AGENT_LANG",
-        "QQ_BOT_ID", "ADMIN_IDS", "ADMIN_NAME", "ACCESS_GROUPS")}
-    current_base = current["LLM_BASE_URL"].rstrip("/")
-    default_choice = "1"
-    if current_base:
-        default_choice = next(
-            (str(i) for i, (_n, base, _m) in enumerate(PROVIDERS, 1)
-             if base and base.rstrip("/") == current_base),
-            str(len(PROVIDERS)))
-
-    # 1. Provider
-    print("  Which chat API will the bot use?")
-    for i, (name, base, _model) in enumerate(PROVIDERS, 1):
-        hint = f" ({base})" if base else ""
-        print(f"    {i}. {name}{hint}")
-    while True:
-        choice = _ask("Choose 1-5", default=default_choice)
-        if choice in {"1", "2", "3", "4", "5"}:
-            break
-        print("    (enter a number 1-5)")
-    name, base_url, model = PROVIDERS[int(choice) - 1]
-    if not base_url:
-        base_url = _ask("Base URL (provider root or /v1 URL)",
-                        default=current["LLM_BASE_URL"], required=True)
-    same_provider = bool(current_base) and base_url.rstrip("/") == current_base
-    if same_provider and current["LLM_MODEL"]:
-        model = current["LLM_MODEL"]
-    model = _ask("Model name", default=model, required=True)
-
-    # 2. Key (local providers like ollama don't need a real one). The current
-    # key is offered only for the provider it belongs to, and never printed.
-    if same_provider and current["LLM_API_KEY"]:
-        api_key = _ask("API key (Enter keeps the current one)",
-                       default=current["LLM_API_KEY"], required=True,
-                       shown_default=_mask_secret(current["LLM_API_KEY"]))
-    else:
-        api_key = _ask("API key", default="ollama" if "localhost" in base_url else "",
-                       required=True)
-
-    # 3. Bot identity + language
-    persona_name = _ask("Bot display name (what group members call it)",
-                    default=current["PERSONA_NAME"] or "Nova", required=True)
-    if current["PERSONA_NAME"] and persona_name != current["PERSONA_NAME"]:
-        print(f"    (renaming {current['PERSONA_NAME']} to {persona_name} starts a new "
-              "learning scope: nothing learned under the old name reaches its prompts)")
-    lang = ""
-    current_lang = current["AGENT_LANG"].lower()
-    while lang not in ("en", "zh"):
-        lang = _ask("Language - en or zh",
-                    default=current_lang if current_lang in ("en", "zh") else "en").lower()
-    if current_lang in ("en", "zh") and lang != current_lang:
-        print(f"    (switching {current_lang} to {lang} switches the language of "
-              "every data file and of the reply validator)")
-
-    values = {
-        "LLM_API_KEY": api_key,
-        "LLM_BASE_URL": base_url,
-        "LLM_MODEL": model,
-        "PERSONA_NAME": persona_name,
-        "AGENT_LANG": lang,
-    }
-
-    # 4. Connect to AstrBot (optional): the plugin, the token, the allowlists.
-    print()
-    astrbot_data = None
-    live = _ask_yn("Connect to an AstrBot install now (its plugin gets copied "
-                   "and configured for you)? Choosing no still lets you chat "
-                   "in the terminal", default_yes=False)
-    if live:
-        guess = find_astrbot_data()
-        while True:
-            raw = _ask("AstrBot data directory (the one holding plugins/ and config/)",
-                       default=str(guess) if guess else "", required=True)
-            astrbot_data = Path(raw).expanduser()
-            if (astrbot_data / "plugins").is_dir():
-                break
-            print(f"    no plugins/ folder under {astrbot_data}; start AstrBot once, "
-                  "or give the path to its data directory")
-        existing = read_astrbot_config(astrbot_data)
-        qq = _ask_yn("Include QQ through AstrBot's aiocqhttp adapter?",
-                     default_yes=astrbot_qq_routed(existing) if existing else True)
-        if qq:
-            values["QQ_BOT_ID"] = _ask("Bot account's QQ number",
-                                    default=current["QQ_BOT_ID"], required=True)
-        admins = _ask_ids(
-            "Admin accounts - the person who runs the bot; it is closest to them "
-            "and they can manage what it remembers. Comma-separated "
-            "<platform>:<id> such as telegram:12345, a QQ number alone being QQ",
-            "empty = no admin",
-            _split_ids(current["ADMIN_IDS"]))
-        values["ADMIN_IDS"] = ",".join(admins)
-        if admins:
-            values["ADMIN_NAME"] = _ask(
-                "Admin display name",
-                default=current["ADMIN_NAME"], required=True)
-        groups = _ask_ids("Group / channel IDs the persona should join, comma-separated, "
-                          "as AstrBot shows them", "empty = none yet",
-                          existing.get("groups"))
-        dm_users = _ask_ids("Sender IDs allowed to DM it, comma-separated",
-                            "empty = no DMs", existing.get("dm_users"))
-        if qq:
-            # QQ entries follow the plugin's groups; other platforms' are kept.
-            others = [g for g in _split_ids(current["ACCESS_GROUPS"])
-                      if ":" in g and not g.startswith("qq:")]
-            values["ACCESS_GROUPS"] = ",".join(
-                others + [g for g in groups if g.isdigit()])
-        cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_data,
-                                   qq=qq, groups=groups, dm_users=dm_users)
-        # Written now, not after the platform question: a Ctrl-C there must
-        # not leave the plugin forwarding QQ to an agent that expects none.
-        write_env(env_path, values)
-        _info(f"plugin installed under {astrbot_data / 'plugins' / PLUGIN_NAME}")
-        _info(f"plugin config written to {cfg_path}")
-        if astrbot_main_config_path(astrbot_data).exists():
-            kind = _ask("Also switch on a platform in AstrBot now - "
-                        + " / ".join(PLATFORMS) + " (Enter to skip)").lower()
-            if kind in PLATFORMS:
-                creds = {key: _ask(prompt, required=True) for key, prompt in PLATFORMS[kind]}
-                write_astrbot_platform(astrbot_data, astrbot_platform_entry(kind, creds))
-                _info(f"{kind} adapter written to AstrBot's config; it comes up on the next restart")
-            elif kind:
-                print(f"    (unknown platform {kind!r}; skipped - add it in AstrBot's WebUI)")
-
-    write_env(env_path, values)
-    copy_persona_template(lang)
-    _info("wrote your answers to .env")
-
-    # 5. Optional key probe
-    if _ask_yn("Test the API key now (one 1-token call)?", default_yes=True):
-        if _probe_key(venv, base_url, api_key, model):
-            print("    key works: OK")
-        else:
-            print("    the test call FAILED - double-check the key/base URL in")
-            print("    .env later; everything else is already saved.")
-
-    # 6. Next steps / hand-off
-    print()
-    print("-- Setup complete --------------------------------------------")
-    print(f"  persona:  edit persona.txt to shape who {persona_name} is")
-    if live:
-        print()
-        print("  AstrBot: restart it (or reload plugins in its WebUI) so it picks")
-        print("  up the plugin; the shared token is already in both places.")
-        print("  Platforms (QQ, Telegram, ...) are configured in AstrBot itself.")
-        print("  then start the agent with:")
-        print(f"    {_venv_python(venv)} main.py")
-        print()
-    if _ask_yn("Chat with the bot in this terminal right now?", default_yes=True):
-        cmd = [str(_venv_python(venv)), "try_chat.py"]
-        if lang == "zh":
-            cmd += ["--lang", "zh"]
-        print()
-        subprocess.call(cmd, cwd=str(ROOT))
-    else:
-        print(f"  try it any time:  {_venv_python(venv)} try_chat.py")
-
-
-USAGE = """\
-usage: python quickstart.py [--no-input] [--astrbot DATA_DIR [--qq | --no-qq] [--platform KIND --token T ...]]
-
-Sets the project up: creates .venv, installs requirements.txt, copies
-.env.example to .env and persona.example to persona.txt, then runs a short
-wizard to fill in the API key and bot name and, if you want, to connect the
-agent to an AstrBot install (plugin copied, shared token generated and
-written to both sides, allowlists written).
-
-  --no-input          skip the wizard (classic bootstrap; also implied by a
-                      non-interactive stdin, e.g. CI or a pipe)
-  --astrbot DATA_DIR  without the wizard: install and configure the AstrBot
-                      plugin against that data directory (a first run leaves
-                      the allowlists empty; fill them in the plugin config or
-                      the WebUI, and later runs keep them)
-  --qq                with --astrbot: route QQ through AstrBot too (adds
-                      aiocqhttp to CONNECTOR_QQ_PLATFORMS)
-  --no-qq             with --astrbot: stop routing QQ through AstrBot
-                      (without either flag, QQ routing is left as it is)
-  --platform KIND     with --astrbot: switch on that adapter in AstrBot's own
-                      config (telegram, discord, slack, kook, lark), using
-                      --token T (and --app-token T for slack, or
-                      --app-id ID --app-secret S for lark)
-
-Re-running is safe: existing files are kept, and the wizard asks before
-reconfiguring anything already set.
-"""
-
-
-def main() -> None:
-    # ARGV IS PARSED BEFORE ANYTHING HAPPENS. The only argv handling used to
-    # be `"--no-input" in sys.argv`, so `python quickstart.py --help` fell
-    # straight through to ensure_venv() -> `pip install -r requirements.txt`.
-    # A command someone types to find out what a script does must not install
-    # packages, and an unrecognised flag must not silently mean "yes, run the
-    # whole bootstrap".
-    argv = sys.argv[1:]
-    if {"-h", "--help"} & set(argv):
-        print(USAGE)
-        return
-    astrbot_dir: Path | None = None
-    if "--astrbot" in argv:
-        i = argv.index("--astrbot")
-        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
-            print(USAGE)
-            sys.exit("--astrbot needs the AstrBot data directory")
-        astrbot_dir = Path(argv[i + 1]).expanduser()
-        del argv[i:i + 2]
-    if "--qq" in argv and "--no-qq" in argv:
-        print(USAGE)
-        sys.exit("--qq and --no-qq contradict each other")
-    qq_choice = True if "--qq" in argv else False if "--no-qq" in argv else None
-
-    def take(flag: str) -> str:
-        if flag not in argv:
-            return ""
-        i = argv.index(flag)
-        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
-            print(USAGE)
-            sys.exit(f"{flag} needs a value")
-        value = argv[i + 1]
-        del argv[i:i + 2]
-        return value
-
-    platform_kind = take("--platform").lower()
-    platform_creds = {"token": take("--token"), "app_token": take("--app-token"),
-                      "app_id": take("--app-id"), "app_secret": take("--app-secret")}
-    unknown = [arg for arg in argv if arg not in ("--no-input", "--qq", "--no-qq")]
-    if unknown:
-        print(USAGE)
-        sys.exit(f"unrecognised argument(s): {' '.join(unknown)}")
-    if (qq_choice is not None or platform_kind) and astrbot_dir is None:
-        print(USAGE)
-        sys.exit("--qq, --no-qq and --platform only make sense with --astrbot")
-
-    no_input = "--no-input" in argv or astrbot_dir is not None
     venv = ensure_venv()
     ensure_deps(venv)
-    _copy_template(".env.example", ".env")
-    env_path = ROOT / ".env"
-    secure_env_file(env_path)
-
-    interactive = not no_input and sys.stdin.isatty()
-    if interactive:
-        if _env_current_key(env_path):
-            _info(".env already has an API key configured")
-            if not _ask_yn("Run the setup wizard again anyway?", default_yes=False):
-                _info("keeping the existing configuration. done.")
-                return
-        run_wizard(venv, env_path)
-        return
-
-    # Classic non-interactive bootstrap (CI / piped stdin / --no-input).
-    lang = (os.getenv("AGENT_LANG") or "en").strip().lower()
-    copy_persona_template(lang)
-    if astrbot_dir is not None:
-        if not (astrbot_dir / "plugins").is_dir():
-            sys.exit(f"no plugins/ folder under {astrbot_dir}; is that AstrBot's data directory?")
-        values: dict = {}
-        cfg_path = connect_astrbot(env_path, values, data_dir=astrbot_dir,
-                                   qq=qq_choice, groups=None, dm_users=None)
-        write_env(env_path, values)
-        _info(f"AstrBot plugin installed and configured: {cfg_path}")
-        cfg = read_astrbot_config(astrbot_dir)
-        if not cfg.get("groups") and not cfg.get("dm_users"):
-            _info("allowlists are empty: add groups / dm_users there "
-                  "or in AstrBot's WebUI, then restart AstrBot")
-        else:
-            _info("kept the existing allowlists; restart AstrBot to load the plugin")
-        if platform_kind:
-            token = platform_creds["token"]
-            creds = {"telegram": {"telegram_token": token}, "discord": {"discord_token": token},
-                     "slack": {"bot_token": token, "app_token": platform_creds["app_token"]},
-                     "kook": {"kook_bot_token": token},
-                     "lark": {"app_id": platform_creds["app_id"],
-                              "app_secret": platform_creds["app_secret"]}}.get(platform_kind, {})
-            try:
-                path = write_astrbot_platform(
-                    astrbot_dir, astrbot_platform_entry(platform_kind, creds))
-            except (ValueError, OSError) as exc:
-                sys.exit(f"platform not written: {exc}")
-            _info(f"{platform_kind} adapter written to {path}; restart AstrBot to bring it up")
-    print()
-    _info("done. next steps:")
-    activate = (
-        ".venv\\Scripts\\activate"
-        if os.name == "nt"
-        else "source .venv/bin/activate"
-    )
-    print("  1. edit .env (at minimum: LLM_API_KEY, PERSONA_NAME)")
-    print("  2. edit persona.txt (your bot's personality)")
-    print(f"  3. activate venv: {activate}")
-    print("  4. try it now, no account needed:  python try_chat.py")
-    print("  5. for live chats, run:            python main.py")
-    print()
-    if astrbot_dir is None:
-        _info("to go live, connect an AstrBot install: "
-              "python quickstart.py --astrbot <AstrBot data dir> [--qq]")
+    python = str(_venv_python(venv))
+    if args.astrbot:
+        home = homes.find_home()
+        setup_wizard.apply_flags(home, args)
+        creds = setup_wizard.flag_platform_creds(args.platform or "", args.token,
+                                                 args.app_token, args.app_id, args.app_secret)
+        return setup_wizard.connect_without_questions(
+            home, Path(args.astrbot), qq=args.qq, platform=args.platform or "", creds=creds,
+            launcher=setup_wizard.Launcher(python=python, home=home))
+    try:
+        return setup_wizard.run(None, PROG, python=python, confirm_rerun=True, args=args)
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return 130
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
