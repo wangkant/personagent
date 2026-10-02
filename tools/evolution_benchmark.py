@@ -129,10 +129,10 @@ def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_ena
     from persona_agent.config_env import vision_endpoint_from_env
     # Absolute, always: the Agent ctor re-anchors RELATIVE state paths under
     # the repo's runtime/ dir (paths.resolve_runtime_state_file), so a relative
-    # --outdir silently split one arm's state across two trees -- ctor-resolved
-    # files under runtime/<outdir>/, post-ctor assignments under <outdir>/.
-    # Reads and writes stayed consistent per file, which is why nothing
-    # crashed: the isolation promise was broken quietly.
+    # --outdir would silently split one arm's state across two trees --
+    # ctor-resolved files under runtime/<outdir>/, post-ctor assignments under
+    # <outdir>/. Reads and writes would stay consistent per file, so nothing
+    # would crash while the isolation promise was broken quietly.
     state_dir = state_dir.resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
@@ -267,9 +267,9 @@ async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_
         # (same scenario), so exposing it leaks nothing about which arm wrote
         # the reply -- while withholding it blinds the judge to exactly the
         # tells that matter: a drafted letter answering a casual ask, a
-        # tutorial where a quip was expected. Measured on a 30-scenario probe:
-        # a reply-only judge rated a "Here you go: [drafted apology]" reply
-        # 5/5 ("like a friend offering a script").
+        # tutorial where a quip was expected. A reply-only judge rates a
+        # "Here you go: [drafted apology]" reply 5/5 ("like a friend offering
+        # a script").
         ctx = [ln.replace("<bot-name>", persona_name) for ln in scn["context"]]
         out.append({"scenario_id": scn["id"], "family": scn["family"],
                     "reply": reply, "context": ctx})
@@ -282,9 +282,9 @@ _STATE_MARKER = ".benchmark-state"
 def _reset_state_dir(state_dir: Path) -> None:
     """Empty a benchmark arm's state directory — only if we created it.
 
-    `--outdir` is free-form and this used to be a bare
-    `if state_dir.exists(): shutil.rmtree(state_dir)`, so
-    `run --outdir <anything>` recursively deleted two subdirectories of
+    `--outdir` is free-form, so a bare
+    `if state_dir.exists(): shutil.rmtree(state_dir)` would let
+    `run --outdir <anything>` recursively delete two subdirectories of
     `<anything>` with no confirmation and no flag. A marker file is the
     cheapest thing that distinguishes "the last run's scratch state" from
     "a directory that happened to be named state-on"."""
@@ -334,11 +334,10 @@ def build_inbox(arms: list[dict], votes: int = 1):
       the position tells the judge which arm produced a reply.
     - votes copies per reply with distinct opaque ids.
 
-    The blinding has to live in the identifier itself.  An earlier version
-    emitted "evolve-on|0|ho001#v1" as the item_id and relied on shuffling the
-    order for blindness, which meant every reply was handed to the judge with
-    its arm spelled out beside it -- the scores it produced could not be
-    evidence of anything.
+    The blinding has to live in the identifier itself.  An item_id like
+    "evolve-on|0|ho001#v1" would hand the judge every reply with its arm
+    spelled out beside it, however the order is shuffled, and the scores it
+    produced could not be evidence of anything.
     """
     inbox: list[dict] = []
     key_map: dict[str, dict] = {}
@@ -749,8 +748,7 @@ def _style_warnings(meta_path: Path, existing: list[str]) -> list[str]:
     design -- the model already has every anti-AI-tell rule, so there is
     nothing to learn and nothing for the judge to penalize. That output is
     byte-for-byte indistinguishable from "the ablation does not work"; only
-    meta.json can tell them apart, and a whole diagnosis was once built on
-    not looking at it.
+    meta.json can tell them apart.
     """
     if not existing:
         return []

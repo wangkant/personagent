@@ -92,9 +92,9 @@ def _url_for_log(url: str) -> str:
 
     The path and query are not ours to log. Telegram's file URLs carry the
     bot token in the path (https://api.telegram.org/file/bot<TOKEN>/...),
-    AstrBot forwards them unchanged, and a URL slice put the token, or most
-    of it, into every caption line and the whole of it into every refused
-    hop. The host is what an operator needs to see which fetch misbehaved.
+    AstrBot forwards them unchanged, so a URL slice would put the token into
+    every caption line and every refused hop. The host is what an operator
+    needs to see which fetch misbehaved.
     """
     try:
         parts = urlsplit(str(url))
@@ -400,12 +400,9 @@ async def safe_fetch_url(
 def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
     """Resolve a ``file://`` image URL, or None if it escapes the jail.
 
-    The http(s) half of this defence graduated into a module-level function
-    long ago (``safe_fetch_url``), and not only for testing —
-    ``tools/bootstrap_from_history.py`` imports it as a CLI primitive. The
-    file:// half stayed inlined in an async method, so the parts most worth
-    isolating could only be reached by standing up an Agent: the Windows
-    drive-letter strip below, UNC paths, and ``..`` segments.
+    A module-level function, like the http(s) half (``safe_fetch_url``), so
+    the Windows drive-letter strip below, UNC paths and ``..`` segments can be
+    tested without standing up an Agent.
 
     Returns the resolved path only when QQ_ONEBOT_IMAGE_DIR is set, the target
     resolves inside it, it is a regular file, and it is within
@@ -935,15 +932,15 @@ class ContentIngestion:
         internal, then pin the connection to that exact address. Every fetch
         goes through it, and every redirect hop is re-validated by it.
 
-        It deliberately does NOT resolve hostnames. Doing so cost two things
-        and bought nothing. `socket.getaddrinfo` is synchronous, so one posted
-        URL whose nameserver blackholes froze the whole event loop — every
-        group, the connector round-trip, all background loops — for the resolver
-        timeout. And a name resolved *here* says nothing about the address
-        connected to later; that gap is precisely the DNS-rebinding window
-        that _resolve_public_target's pinning closes. A public name pointing
-        at an internal address is still refused — at connect time, by the
-        layer that can actually make the refusal stick."""
+        It deliberately does NOT resolve hostnames, which would cost two
+        things and buy nothing. `socket.getaddrinfo` is synchronous, so one
+        posted URL whose nameserver blackholes would freeze the whole event
+        loop (every group, the connector round-trip, all background loops) for
+        the resolver timeout. And a name resolved *here* says nothing about the
+        address connected to later; that gap is precisely the DNS-rebinding
+        window that _resolve_public_target's pinning closes. A public name
+        pointing at an internal address is still refused, at connect time, by
+        the layer that can actually make the refusal stick."""
         try:
             host = (urlsplit(url).hostname or "").strip("[]").rstrip(".")
         except Exception:
@@ -986,8 +983,8 @@ class ContentIngestion:
         # the transfer-framing headers now describe something that is no longer
         # true. Passing content-encoding: gzip alongside plaintext makes httpx
         # re-run its decompressor over it and raise DecodingError from the
-        # constructor — swallowed upstream, which silently degraded every
-        # shared link from a gzip-serving site (i.e. most of them) to "[link]".
+        # constructor, which is swallowed upstream and would silently degrade
+        # every link on a gzip-serving site (i.e. most of them) to "[link]".
         headers = {
             k: v for k, v in (result.headers or {}).items()
             if k.lower() not in ("content-encoding", "content-length",
@@ -1188,9 +1185,9 @@ class ContentIngestion:
         ).hexdigest()
 
     def _accept_vision_caption(self, url: str, text: str, provider: str) -> str:
-        # Truncated to 150 chars (a long caption is still useful); no longer
-        # discard the whole caption for being "too long" — the old >80 reject
-        # silently threw away many valid descriptions of complex images.
+        # Truncated to 150 chars (a long caption is still useful), not
+        # rejected for length: a length reject would silently throw away many
+        # valid descriptions of complex images.
         text = (text or "").strip()[:150]
         hit = next((t for t in self._VISION_REJECT_TOKENS if t in text), "")
         if text and len(text) >= 4 and not hit:
@@ -1256,9 +1253,8 @@ class ContentIngestion:
                 close_image()
 
     def _vision_configured(self) -> bool:
-        """Whether the operator set up a vision model. vision_base_url can carry
-        the pre-rename default, so it alone says nothing about consent to
-        upload images."""
+        """Whether the operator set up a vision model: model, key and base URL
+        must all be set, so no image is uploaded by default."""
         return bool(self.vision_model and self.vision_api_key and self.vision_base_url)
 
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
@@ -1376,9 +1372,9 @@ class ContentIngestion:
             await asyncio.sleep(5.0)
         # Forced, like recheck_persona_fit_all: the version stamps record a
         # paid vision call per sticker. When nothing was banned no purge
-        # follows to save them, and a write the throttle skipped left them in
-        # memory only, so a crash before the next save paid for the whole
-        # library again.
+        # follows to save them, and a write the throttle skipped would leave
+        # them in memory only, so a crash before the next save would pay for
+        # the whole library again.
         self.stickers._save(force=True)
         logger.info("[Agent] visual aesthetic recheck: scanned=%d banned=%d",
                     len(todo), marked)
@@ -1460,8 +1456,8 @@ class ContentIngestion:
                         )
                     except Exception as e:
                         # Connect/read timeouts are the most common transient
-                        # failure; previously they fell straight through to the
-                        # outer except (no retry) — back off and retry instead.
+                        # failure: back off and retry rather than falling
+                        # through to the outer except.
                         last_exc = e
                         r = None
                         if attempt == 2:
@@ -1542,8 +1538,8 @@ class ContentIngestion:
         reached precisely when the direct fetch failed, and for an internal URL
         that failure is *guaranteed* (safe_fetch_url refuses it, the vision
         caption comes back empty, and this is the fallback). Ungated, the SSRF
-        refusal was therefore converted into an SSRF *success* by proxy, with
-        the fetched text reflected back into the group buffer and the prompt.
+        refusal would be converted into an SSRF *success* by proxy, with the
+        fetched text reflected back into the group buffer and the prompt.
         file:// is refused for the same reason the direct image path keeps a
         QQ_ONEBOT_IMAGE_DIR jail: those URLs really do arrive here."""
         if not url or not self.qq_onebot_url:

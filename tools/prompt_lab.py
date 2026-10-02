@@ -44,9 +44,9 @@ EXAMPLES_FILE = resolve_runtime_lang_file("examples", "jsonl", AGENT_LANG)
 
 # NOT `LLM_MODEL`. This lab generates through the Anthropic SDK on
 # purpose — the point is to tune against a DIFFERENT vendor than the one under
-# test — and it was handing that SDK the chat model's id, so every generation
-# 404'd. The `except Exception` in the fixture loop printed `failed:` and moved
-# on, so the tool's whole loop was dead and said so once per fixture.
+# test — and handing that SDK the chat model's id would make every generation
+# 404. The `except Exception` in the fixture loop prints `failed:` and moves
+# on, so the tool's whole loop would be dead and say so once per fixture.
 MODEL = os.getenv("LAB_MODEL", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
@@ -296,16 +296,16 @@ Takes no flags; everything is chosen from the menu.
 
 async def main():
     # The same argv front door `quickstart.py` and `tools/healthcheck.py`
-    # already carry, and this file was missed when they got it: `--help` fell
-    # through to the interactive menu and then died on `input()` with an
-    # unhandled EOFError traceback on any non-tty.
+    # carry: without it `--help` falls through to the interactive menu and
+    # then dies on `input()` with an unhandled EOFError traceback on any
+    # non-tty.
     argv = sys.argv[1:]
     if argv:
         print(USAGE)
         return 0 if {"-h", "--help"} & set(argv) else 2
     if not ANTHROPIC_API_KEY:
-        # Up front, not on the first generation: the menu used to render in
-        # full and only fail once you picked an option that calls the model.
+        # Up front, not on the first generation: otherwise the menu renders in
+        # full and only fails once you pick an option that calls the model.
         print(USAGE)
         sys.exit("prompt_lab needs ANTHROPIC_API_KEY in .env")
 
@@ -358,5 +358,5 @@ if __name__ == "__main__":
         sys.exit(asyncio.run(main()) or 0)
     except (KeyboardInterrupt, EOFError):
         # EOFError as well as KeyboardInterrupt: a piped or redirected stdin
-        # reaches the menu's `input()` and used to produce a traceback.
+        # reaches the menu's `input()` and would otherwise produce a traceback.
         print("\nbye")

@@ -160,9 +160,9 @@ async def main():
     p.add_argument("--limit", type=int, default=0, help="import first N only (0 = all)")
     p.add_argument("--no-tag", action="store_true", help="copy only; skip tagging")
     # Mirrors auto_reviewer.py's --dry-run: "calls no model and writes
-    # nothing". Every accepted file used to hit disk immediately and, unless
-    # --no-tag, cost one paid vision call, with no way to preview counts
-    # first.
+    # nothing". Without it every accepted file hits disk immediately and,
+    # unless --no-tag, costs one paid vision call, with no way to preview
+    # counts first.
     p.add_argument("--dry-run", action="store_true",
                    help="show what would be imported; calls no model and "
                         "writes nothing")

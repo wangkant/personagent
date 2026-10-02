@@ -33,10 +33,9 @@ def choose_group_mode(*, addressed: bool, is_admin: bool,
     """A group turn's mode and why, or ("", why not). `sticky_admin` is None
     without a recent call still pending, else whether its caller is the admin."""
     if addressed:
-        # The admin @/naming the bot still gets the warmer admin persona;
-        # anyone else goes through called. But the admin is no longer "always
-        # replied to": un-addressed admin chatter takes the same gates as
-        # everyone else's.
+        # The admin @/naming the bot gets the warmer admin persona; anyone
+        # else goes through called. Un-addressed admin chatter takes the same
+        # gates as everyone else's.
         return (ADMIN_MODE if is_admin else "called"), "addressed"
     if sticky_admin is not None:
         # A call whose own message lost the debounce race (e.g. "BOT" then an

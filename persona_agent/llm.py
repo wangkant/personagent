@@ -76,21 +76,20 @@ def _error_text(e: BaseException, status) -> str:
     return text
 
 # httpx expires an idle keep-alive connection after 5s, and the gap between a
-# person's turns is always longer, so the pool emptied between every turn and
-# each one paid a fresh TCP+TLS handshake to the provider. The other two
-# numbers are httpx's own defaults, spelled out because `Limits` resets any it
-# is not given to "unlimited".
+# person's turns is always longer, so the pool would empty between every turn
+# and each one would pay a fresh TCP+TLS handshake to the provider. The other
+# two numbers are httpx's own defaults, spelled out because `Limits` resets
+# any it is not given to "unlimited".
 _HTTP_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20,
                             keepalive_expiry=300.0)
 
 class _PooledHTTP:
     """An ``async with``-compatible handle over a shared, long-lived httpx client.
 
-    Entering returns the pooled client; exiting does NOT close it. This swaps the
-    "new AsyncClient per call (pays a fresh TCP+TLS handshake every time)" pattern
-    for a config-keyed connection pool. Call sites
-    keep their ``async with`` form unchanged; only ``httpx.AsyncClient(`` becomes
-    ``self._http(``.
+    Entering returns the pooled client; exiting does NOT close it. A
+    config-keyed connection pool avoids paying a fresh TCP+TLS handshake on
+    every call, and call sites keep the ``async with`` form of a plain
+    ``httpx.AsyncClient``.
     """
 
     __slots__ = ("_client",)
@@ -146,13 +145,13 @@ class ModelCalls:
         way `requests` does: with an `HTTP_PROXY` in the launching shell — the
         normal state of affairs for anyone who needs a proxy to reach a model
         endpoint at all — every reply, every history poll and every OCR
-        delegation to `127.0.0.1` was being relayed through that proxy, so
-        restarting it took the bot's outbound chat down with it.
+        delegation to `127.0.0.1` would be relayed through that proxy, so
+        restarting it would take the bot's outbound chat down with it.
 
         A separate entry point rather than `trust_env=False` repeated at each
         call site: the kwargs are the pool key, so this also keeps the bridge's
-        connections in their own pool, and the next NapCat call added does not
-        have to remember. Outbound calls to the wider internet keep
+        connections in their own pool, and a new NapCat call does not have to
+        remember. Outbound calls to the wider internet keep
         `trust_env=True` — a deployment that needs a proxy to reach its model
         still gets one."""
         return self._http(trust_env=False, **kwargs)
@@ -401,9 +400,8 @@ class ModelCalls:
 
         # Web search: let the model decide (OpenAI-compatible /v1
         # function-calling), fetch real results (Tavily if keyed, else
-        # DuckDuckGo), and inject them into the last user turn. Replaces the old
-        # server-side web_search tool, which never fired on the chat endpoint.
-        # Failures never block the reply.
+        # DuckDuckGo), and inject them into the last user turn. Failures never
+        # block the reply.
         if enable_search:
             messages = await self._ground_with_search(messages, hint=search_hint)
 
@@ -499,7 +497,7 @@ class ModelCalls:
             # text at all (budget died mid-thought), or — in json_object mode —
             # a half-emitted object like '{\n  "' that the fail-closed parser
             # would silently drop. Both are the same defect: the answer did
-            # not fit. Measured: the empty-only condition let every truncated
+            # not fit. An empty-only condition would let every truncated
             # non-empty JSON skip the retry and vanish with no length warning.
             if fin != "length":
                 return False
@@ -515,10 +513,10 @@ class ModelCalls:
         if _budget_starved(text, finish):
             # A reasoning model spends the budget on its chain of thought and
             # can hit the cap before emitting a single visible token. The
-            # symptom is an empty reply on every turn, and the only clue used
-            # to be "finish_reason=length" in a warning — which does not tell
-            # an operator that their model choice is the cause. Retry once with
-            # a materially larger budget, then say plainly what happened.
+            # symptom is an empty reply on every turn, and "finish_reason=length"
+            # alone does not tell an operator that their model choice is the
+            # cause. Retry once with a materially larger budget, then say
+            # plainly what happened.
             retry_tokens = max_tokens * 4
             logger.warning(
                 "[Agent] empty reply, finish_reason=length (model=%s, "
@@ -543,7 +541,7 @@ class ModelCalls:
             # A thinking model occasionally puts the ENTIRE answer in
             # reasoning_content and leaves `content` whitespace while finishing
             # normally — "stop", so _budget_starved never sees it, and the
-            # turn went silent. Intermittent and prompt-dependent. The same
+            # turn would go silent. Intermittent and prompt-dependent. The same
             # request with thinking off answers in `content`; ask once more.
             logger.warning(
                 "[Agent] blank content with %d chars of reasoning_content "
@@ -593,7 +591,7 @@ class ModelCalls:
         # Providers auto prefix-cache and report it in usage, in two spellings:
         # DeepSeek's prompt_cache_hit/miss_tokens, and the OpenAI-style
         # prompt_tokens_details.cached_tokens (OpenAI, OpenRouter, Zhipu).
-        # Reading only the first meant the line never fired on the others.
+        # Reading only the first would leave the line silent on the others.
         usage = data.get("usage") or {}
         _hit = usage.get("prompt_cache_hit_tokens")
         _miss = usage.get("prompt_cache_miss_tokens")

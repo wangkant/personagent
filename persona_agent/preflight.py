@@ -41,8 +41,8 @@ WANTED = {
     # Emptied rather than unset is the whole point: `os.getenv` only applies
     # its default when the key is ABSENT, so `LLM_MODEL=` in a hand-edited
     # `.env` sends `{"model": ""}` on every completion — a guaranteed 400 that
-    # also arms the fallback cooldown. `LLM_DM_MODEL` was given a runtime
-    # fallback for exactly this (see settings.py); the primary model has none.
+    # also arms the fallback cooldown. `LLM_DM_MODEL` has a runtime fallback
+    # for exactly this (see settings.py); the primary model has none.
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
@@ -54,8 +54,8 @@ TEMPLATE_EXEMPT = frozenset({
     "PYTHONUTF8", "PYTHONPATH", "TZ",
     # Proxy configuration. `load_dotenv` puts these in `os.environ` and httpx
     # honours them — the suite has a whole test built around an `HTTP_PROXY`
-    # in the launching shell — so reporting them as typos was telling an
-    # operator their working proxy setting was being ignored.
+    # in the launching shell — so reporting them as typos would tell an
+    # operator their working proxy setting is being ignored.
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 })
@@ -243,17 +243,15 @@ class Finding:
 def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:
     """Key -> value for one dotenv file; **None** when it is absent.
 
-    `None` and `{}` are different answers and conflating them was a bug: a
-    missing `.env.example` came back empty, the unknown-key check read that as
-    "the authority lists nothing", and every configured key was reported as a
-    typo. Any layout that ships `.env` without the template — including the
-    multi-persona `AGENT_HOME` arrangement the template itself recommends —
-    got one ERROR per setting, which is how a checker teaches people to ignore
-    it.
+    `None` and `{}` are different answers: a missing `.env.example` read as
+    empty would make the unknown-key check conclude "the authority lists
+    nothing" and report every configured key as a typo. Any layout that ships
+    `.env` without the template, including the multi-persona `AGENT_HOME`
+    arrangement the template itself recommends, would get one ERROR per
+    setting, which teaches people to ignore the checker.
 
     Uses python-dotenv's own parser rather than a local one: the agent loads
-    these files through it, so anything this disagreed with the agent about
-    would be a second bug wearing the first one's clothes."""
+    these files through it, so the two must not disagree."""
     try:
         if not path.is_file():
             return None
@@ -302,8 +300,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     for key in REQUIRED:
         # `.env` OR the process environment. A container, a systemd unit and a
         # CI runner all pass configuration in the environment and ship no
-        # `.env` at all — reading only the file told a correctly-running
-        # deployment that every turn would fail.
+        # `.env` at all — reading only the file would tell a correctly-running
+        # deployment that every turn will fail.
         if not (str(configured.get(key) or "").strip()
                 or os.environ.get(key, "").strip()):
             findings.append(Finding(
@@ -359,7 +357,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             # `expanduser()` on `~/...` RAISES when no home directory can be
             # determined, and this function's contract is that it never does:
             # `main.lifespan` calls it unguarded, so a `~` in AGENT_HOME on a
-            # host without HOME set took the whole process down at startup.
+            # host without HOME set would take the whole process down at startup.
             resolved, bad = home, True
             findings.append(Finding(
                 "ERROR", "AGENT_HOME",

@@ -165,8 +165,8 @@ class Transport:
         self._dm_send_tasks.pop(key, None)
         self._last_excuse_at.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
-        # Through `channels`, not spelled here: this was the third independent
-        # copy of the private: -> dm: step and the other two had drifted.
+        # Through `channels`, not spelled here: one copy of the private: -> dm:
+        # step.
         reaction_key = channels.learning_key(key)
         if channels.is_dm(key):
             uid = key.split(":", 1)[1]
@@ -174,8 +174,7 @@ class Transport:
             self._dm_unanswered.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(reaction_key, None)
-        # `reaction_key` IS `key` for a room, so the branch these two used to
-        # sit in was spelling the same mapping twice more.
+        # `reaction_key` IS `key` for a room, so these two need no branch.
         self._last_elicit_at.pop(reaction_key, None)
         self.pending_reactions.drop_conversation(reaction_key)
         logger.info("[Agent] connector conversation evicted (over the %d cap): %s",
@@ -198,9 +197,8 @@ class Transport:
         through here (the sink branch returns earlier).
 
         Holds only self._send_gate (and only while waiting) — never acquires a
-        group lock or send_lock, so it can't reintroduce the old
-        "group lock held across a send" bug. send_locks stay the upper
-        per-conversation ordering layer."""
+        group lock or send_lock, so a group lock is never held across a send.
+        send_locks stay the upper per-conversation ordering layer."""
         async with self._send_gate:
             now = time.monotonic()
             wait = self._last_send_mono + _SEND_MIN_INTERVAL + random.uniform(0, _SEND_JITTER) - now
@@ -322,9 +320,9 @@ class Transport:
         collected = current_sink.get() is not None
         # The per-target throttle refuses the 21st send in a minute, and a
         # refusal ends the reply: under the plain cap of 24, a runaway reply
-        # of short lines lost its 21st-24th messages, the folded overflow
-        # among them. Fold where the throttle will still let the message
-        # through. Taken once up front, the budget only grows while the
+        # of short lines would lose its 21st-24th messages, the folded
+        # overflow among them. Fold where the throttle will still let the
+        # message through. Taken once up front, the budget only grows while the
         # reply goes out (old stamps age out), and send_locks keep any other
         # reply to this target from spending it in the meantime.
         cap = MAX_REPLY_MESSAGES
@@ -471,8 +469,8 @@ class Transport:
         """How a message no request is waiting for reaches routing key `key`.
 
         The stored handle when a live connector pulls the outbox for it; for
-        a QQ key without one, "onebot" (NapCat, as it always has been); None
-        when nothing can deliver there unprompted."""
+        a QQ key without one, "onebot" (NapCat); None when nothing can deliver
+        there unprompted."""
         route = self.outbox.route(key) if self.connector_outbox_enabled else None
         if route is None and channels.is_native(key) and self.qq_onebot_url:
             # QQ through AstrBot may have no NapCat HTTP server at all, so
@@ -551,14 +549,14 @@ class Transport:
         holds the last 2000 ids across every conversation, so busy groups
         push a quiet group's old @ out of it. The age bound is what stops that
         @ from being answered again on every sweep; a message without a
-        timestamp is replayed as before.
+        timestamp is always replayed.
 
         Needs NapCat's HTTP server (QQ_ONEBOT_URL) and the bot's own QQ number
         (QQ_BOT_ID) to tell an @ of the bot from any other."""
         if not self._missed_mention_sweep_on():
             return
         # Both, not `buffers or access_groups`: buffers gains a key for ANY
-        # conversation with traffic — a DM included — so the `or` stopped
+        # conversation with traffic — a DM included — so the `or` would stop
         # consulting the whitelist the moment one message arrived anywhere.
         # A missed @ is by definition in a group with no traffic this run,
         # which is exactly the group that fell out of the poll.

@@ -115,9 +115,10 @@ def metric_factory(judge_model: str):
 
     # Same shape as the primary LM in cmd_tune: the provider prefix and the
     # credentials are not optional. A bare dspy.LM(name) has no api_key and no
-    # base_url, so every judge call raises — and since the call sat outside the
-    # try below, that exception left `metric` entirely and killed the whole
-    # optimizer run instead of degrading to the 0.0 the try was written for.
+    # base_url, so every judge call would raise — and since the call is made
+    # outside the try below, that exception would leave `metric` entirely and
+    # kill the whole optimizer run instead of degrading to the 0.0 the try is
+    # written for.
     judge_lm = dspy.LM(
         model=f"openai/{judge_model}",
         api_key=os.getenv("LLM_API_KEY", ""),

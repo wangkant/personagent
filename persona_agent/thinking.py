@@ -53,8 +53,9 @@ class Thinking:
             messages=[{"role": "user", "content": prompt.user}],
             model=model_to_use,
             # 3000, not 1200: on a reasoning model the hidden thinking tokens
-            # bill against this cap; 1200 sat under the measured tail (~940
-            # visible completion alone) and truncated about 1 turn in 10.
+            # bill against this cap, and 1200 sits under the measured tail
+            # (~940 for the visible completion alone), truncating about 1 turn
+            # in 10.
             max_tokens=3000,
             enable_search=enable_search,
             disable_thinking=False,

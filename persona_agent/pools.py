@@ -25,9 +25,9 @@ _JSONL_SIG_BYTES = 64
 def _parse_jsonl(blob: bytes) -> list[dict]:
     """Parse newline-delimited JSON objects, skipping blank and malformed lines.
 
-    Skip-the-bad-line (rather than abandoning the whole file) matches what the
-    feedback loader already did, and keeps one corrupted append from freezing
-    the few-shot pool at its pre-corruption state."""
+    Skip-the-bad-line (rather than abandoning the whole file) keeps one
+    corrupted append from freezing the few-shot pool at its pre-corruption
+    state."""
     out: list[dict] = []
     for ln in blob.decode("utf-8", "replace").splitlines():
         ln = ln.strip()
@@ -115,10 +115,9 @@ def _retrieval_fields(rec: dict) -> tuple[str, str, float, str]:
     entry's timestamp as an epoch float for the recency decay, and the key
     its embedding is cached under.
 
-    ts_epoch is 0.0 when there is no parsable timestamp — same as the old
-    inline parse, which simply skipped the recency bonus on failure. Naive
-    timestamps keep being read as local time (``.timestamp()`` and the old
-    ``datetime.now(None) - ts`` agree on that), aware ones as absolute."""
+    ts_epoch is 0.0 when there is no parsable timestamp, which skips the
+    recency bonus. Naive timestamps are read as local time, aware ones as
+    absolute."""
     ts_epoch = epoch(rec.get("ts"))
     ctx = rec.get("context") or []
     if not isinstance(ctx, list):

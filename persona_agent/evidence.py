@@ -155,12 +155,6 @@ def classify_strength(event: dict) -> str:
     return WEAK
 
 
-# The six fields promotion compares, and the length each is STORED at. One
-# table, because the producer and the comparator have to agree and they live
-# in different modules: `make_event` writes through it, and
-# `agent._examples_for_prompt` reads a live scope through `normalize_scope`
-# before comparing. They did not agree, and the failure was silent — see
-# `normalize_scope`.
 # Persona lineage: (persona_version, persona_hash) -> lineage root. Registered
 # from persona_lineage.json by the agent and the CLI; every hash in one lineage
 # is the same character for scope purposes, so editing the document does not
@@ -182,6 +176,11 @@ def persona_identity(scope: dict) -> str:
     return _PERSONA_LINEAGE.get((str(scope.get("persona_version") or ""), phash), phash)
 
 
+# The six fields promotion compares, and the length each is STORED at. One
+# table, because the producer and the comparator live in different modules and
+# must agree: `make_event` writes through it, and
+# `agent._examples_for_prompt` reads a live scope through `normalize_scope`
+# before comparing; a mismatch fails silently (see `normalize_scope`).
 SCOPE_LIMITS = {
     "lang": 16,
     "platform": 32,
@@ -207,18 +206,16 @@ def normalize_scope(scope: dict) -> dict:
 def _scope_text(value, limit: int) -> str:
     """Bounded like everything else here, but still DISTINCT.
 
-    Normalising both sides through a plain truncation fixed the comparison and
-    introduced a quieter version of the same bug: two values differing only
-    past the limit became EQUAL, so material promoted in a room whose id
-    shared a 128-character prefix with another was authorized into that other
-    room's prompt, and `PROMOTE_REQUIRE_SAME_CONVERSATION` could not stop it
-    because the two ids really were the same string by then. Two release
-    labels sharing a 32-character prefix were likewise one agent.
+    A plain truncation would make two values differing only past the limit
+    EQUAL: material promoted in a room whose id shares a 128-character prefix
+    with another would be authorized into that other room's prompt, and
+    `PROMOTE_REQUIRE_SAME_CONVERSATION` could not stop it because the two ids
+    would be the same string by then. Two release labels sharing a
+    32-character prefix would likewise be one agent.
 
     An over-length value keeps a readable prefix and carries a digest of the
     WHOLE original, so the field stays bounded and the comparison stays
-    injective. Short values — every real id — are untouched, so this changes
-    nothing for anyone it was not already broken for."""
+    injective. Short values, which is every real id, are untouched."""
     text = str(value or "").strip()
     if len(text) <= limit:
         return text
@@ -326,9 +323,9 @@ def supports(event: dict, candidate_type: str) -> bool:
         # REJECTED and its `better` is the retry — so admitting it here makes
         # "the user accepted the fix" argue that the text they rejected is a
         # good example to imitate. It is STRONG, so one of them would clear
-        # `min_strong` on its own. Nothing stopped that today except
-        # `promotion.supports_candidate`'s reply-equality check happening to
-        # disagree, which is a guard by accident and not by intent.
+        # `min_strong` on its own. `promotion.supports_candidate`'s
+        # reply-equality check would disagree, but that is a guard by
+        # accident and not by intent.
         if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
             return False
         if kind == KIND_SELF_EVAL:
@@ -357,9 +354,9 @@ def can_be_strong(candidate_type: str) -> bool:
     promotable — by a person, through `personagent learned promote`.
     It is waiting for a human, not for more events.
 
-    Promotion asks this so its refusal can say WHICH of those two it is. The
-    reason read "0/1 strong events (4 supporting)", which describes a
-    threshold you could reach by waiting, and no amount of waiting reaches it.
+    Promotion asks this so its refusal can say WHICH of those two it is: "0/1
+    strong events (4 supporting)" describes a threshold you could reach by
+    waiting, and no amount of waiting reaches this one.
     """
     return candidate_type in STRONG_CAPABLE_TYPES
 
@@ -368,15 +365,15 @@ def opposes_rewrite(event: dict) -> bool:
     """True when this event argues against a pair's PROPOSED replacement.
 
     `opposes` below asks about the reply a candidate would replace. This asks
-    about the text it would replace it WITH, which is a different question and
-    had no answer: a user rejecting or correcting the bot's `better` text is
-    saying the fix itself is wrong.
+    about the text it would replace it WITH, which is a different question: a
+    user rejecting or correcting the bot's `better` text is saying the fix
+    itself is wrong.
 
     Without it, a pair still sitting in `proposed` when its rewrite was
     rejected could be promoted afterwards by an unrelated second event about
-    the original — and go on to teach the exact text the user refused.
-    `_rollback_promoted_for` covered only candidates that were already
-    PROMOTED, so the window between proposal and promotion was open."""
+    the original, and go on to teach the exact text the user refused.
+    `_rollback_promoted_for` covers only candidates already PROMOTED, so the
+    window between proposal and promotion needs this."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
     # A PERSON has to have refused it (`promotion.witnessed_rewrites` excludes
@@ -393,16 +390,15 @@ def opposes(event: dict, candidate_type: str) -> bool:
         return False
     kind = event.get("kind")
     if candidate_type == "preference_pair":
-        # NOT a retry acceptance, and this one was live. `reaction_type` on
-        # that event is "positive" because the user accepted the RETRY —
-        # the opposite of liking the reply the pair replaces, which is what a
-        # positive reaction means on every other kind. Reading the field
-        # without the kind turned the STRONG event a retry-completion pair is
-        # BUILT FROM into counter-evidence against that same pair:
-        # `supports` and `opposes` both answered True for one event, and
-        # `decide` returned "compatible evidence disagrees". The
-        # zero-user-effort retry loop — a documented feature — could never
-        # promote anything, in any deployment.
+        # NOT a retry acceptance. `reaction_type` on that event is "positive"
+        # because the user accepted the RETRY — the opposite of liking the
+        # reply the pair replaces, which is what a positive reaction means on
+        # every other kind. Reading the field without the kind would turn the
+        # STRONG event a retry-completion pair is BUILT FROM into
+        # counter-evidence against that same pair: `supports` and `opposes`
+        # would both answer True for one event, `decide` would return
+        # "compatible evidence disagrees", and the zero-user-effort retry
+        # loop could never promote anything.
         if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
             return False
         return event.get("reaction_type") == "positive"

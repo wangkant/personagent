@@ -125,7 +125,7 @@ def make_candidate(*, ctype: str, scope: dict, payload: dict,
     ``payload`` is the row the pools already understand — what
     ``reactions.to_feedback_pair`` / ``reactions.to_example`` produce. Storing
     it verbatim means a promoted candidate materializes into exactly the row
-    shape retrieval has always read, with no second format to keep in sync.
+    shape retrieval reads, with no second format to keep in sync.
     """
     reply = str(payload.get("reply") or "").strip()
     better = str(payload.get("better") or "").strip()

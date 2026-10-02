@@ -150,9 +150,9 @@ class Retrieval:
         # Concatenated only when a view is non-empty: on a fresh deployment
         # that is two list copies per turn saved on the hot path.
         # Normalised, because the rows being compared against were written
-        # through the same table: the ledger stores a TRUNCATED scope and this
-        # side used to build a raw one, so any field over its limit — a
-        # `persona_version` of 45 characters, say — made every promoted row
+        # through the same table: the ledger stores a TRUNCATED scope, so a raw
+        # live scope would mismatch on any field over its limit — a
+        # `persona_version` of 45 characters, say — making every promoted row
         # unretrievable on every turn, with nothing logged anywhere.
         current_scope = self._live_scope(conv_id)
 
@@ -332,7 +332,7 @@ class Retrieval:
                 # negative lookahead keeps 我们 intact; per-user memories are
                 # all self-bound ("记住我…"), so 我 always means the speaker.
                 # A function, not the name: a nickname is not a regex
-                # template, and "\o/" as one raised on every turn.
+                # template, and "\o/" as one would raise on every turn.
                 texts = [re.sub(r"我(?!们)", lambda _m: name, it["text"])
                          for it in lst]
             else:

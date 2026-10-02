@@ -18,7 +18,7 @@ global reach from one room's correction, so if you want a room- or
 persona-scoped correction instead, use `personagent learned`.
 
 Usage:
-    python tools/auto_reviewer.py                     # review only (as before)
+    python tools/auto_reviewer.py                     # review only
     python tools/auto_reviewer.py --apply             # review, then y/n/e gate
     python tools/auto_reviewer.py --yes               # refused: unsafe legacy mode
     python tools/auto_reviewer.py --dry-run           # list what would be
@@ -160,8 +160,8 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
         else:
             # One locked, fsynced append per record instead of a bare
             # long-lived handle. The running agent appends to this same
-            # file throughout — that is the documented workflow — and the
-            # unlocked handle lost ~25-30% of this run's own diagnoses.
+            # file throughout — that is the documented workflow — and an
+            # unlocked handle would lose a share of this run's own diagnoses.
             # Worse, a torn line lands mid-multibyte on Chinese payloads,
             # after which every reader of candidates.jsonl raises
             # UnicodeDecodeError and the negative half of the learning
@@ -282,10 +282,9 @@ async def main() -> int:
                    help="treat score <= threshold as a low-score entry (default 3)")
     p.add_argument("--limit", type=int, default=20,
                    help="max entries to review per run (default 20)")
-    # `--dry-run` used to suppress only the WRITE: it still made one reviewer
-    # call per pending eval, so reaching for it to see what the tool would do
-    # got you billed for it. It means what everyone assumes it means now, and
-    # the old behaviour has its own flag.
+    # `--dry-run` must not spend anything: reaching for it to see what the
+    # tool would do cannot bill a reviewer call per pending eval. The narrower
+    # "review for real, don't write" is `--no-write`.
     p.add_argument("--dry-run", action="store_true",
                    help="show what would be reviewed; calls no model and "
                         "writes nothing")

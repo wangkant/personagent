@@ -84,9 +84,9 @@ FEEDBACK_MAX_BYTES = 5_000_000
 # candidates.jsonl has no rotation, unlike eval.jsonl, so reaching this is
 # terminal rather than a wrap. It lives HERE because that file has TWO writers —
 # the running agent (learning._append_audit_row) and tools/auto_reviewer.py —
-# and they had drifted: the tool took the FEEDBACK default, so it went blind at
-# 5 MB while the agent was still appending happily up to 20 MB, and the agent's
-# own "has hit its cap" error could never fire to explain the silence.
+# which must share one cap: with different caps the tool goes blind while the
+# agent keeps appending, and the agent's own "has hit its cap" error cannot
+# fire to explain the silence.
 CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
 
 
@@ -233,11 +233,11 @@ def append_jsonl(path: Path, records: list[dict],
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     # One lock for the whole batch. The agent (learning.py) and
-    # tools/auto_reviewer.py both append to candidates.jsonl, and the previous
-    # bare open("a") lost records outright: on Windows O_APPEND is
+    # tools/auto_reviewer.py both append to candidates.jsonl, and a bare
+    # open("a") would lose records: on Windows O_APPEND is
     # seek-to-end-then-write rather than an atomic append, so two writers
     # silently overwrite each other. append_jsonl_unlocked also fsyncs and
-    # repairs a missing trailing newline, which this used to do by hand.
+    # repairs a missing trailing newline.
     with append_lock(path):
         try:
             size = path.stat().st_size if path.exists() else 0
@@ -264,14 +264,10 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
     `max_auto` machine entries makes retrieval track the persona as it is now.
 
     Hand-curated entries are NEVER dropped: `is_auto` is what tells them apart
-    — which is why its default says NOTHING is auto. The default used to be
-    the opposite, so a caller that omitted the predicate got the exact reverse
-    of the guarantee above: on a fresh checkout the oldest rows are the
-    curated seed pool, and they were the first thing overwritten. Both real
-    callers pass a predicate, so this changes no existing behaviour; it makes
-    the omission safe instead of destructive.
-    (examples carry a "score", machine feedback pairs carry a "src"), and the
-    curated head is the bootstrap pool a fresh checkout retrieves from.
+    (examples carry a "score", machine feedback pairs carry a "src"), and its
+    default says NOTHING is auto, so a caller that omits the predicate cannot
+    delete the curated head, which is the bootstrap pool a fresh checkout
+    retrieves from.
 
     Rewrites only once the overshoot exceeds `slack` (default 10% of the cap),
     so a pool sitting at the cap doesn't rewrite the whole file on every single
