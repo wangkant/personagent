@@ -1,8 +1,10 @@
 """Recent speak decisions per conversation, kept in memory for the dashboard.
 
 Bounded twice (entries per conversation, conversations per process) and never
-written to disk. A record holds the mode, whether it spoke, a short reason and
-a short excerpt of the message: no prompt text and no whole message bodies.
+written to disk. A record holds the mode, whether it spoke, a short reason, a
+short excerpt (its reply, or the message it let pass), the start of the message
+it answered and that sender's display name: no prompt text and no whole
+message bodies.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ from collections import OrderedDict, deque
 MAX_PER_CONVERSATION = 50
 MAX_CONVERSATIONS = 256
 EXCERPT_CHARS = 60
+NAME_CHARS = 32
 _REASON_CHARS = 80
 
 
@@ -31,14 +34,17 @@ class DecisionLog:
         self._lock = threading.Lock()
 
     def record(self, conv_id: str, mode: str, spoke: bool, reason: str,
-               excerpt: str = "", *, now: float | None = None) -> None:
+               excerpt: str = "", *, answered: str = "", sender: str = "",
+               now: float | None = None) -> None:
         key = str(conv_id or "")
         if not key:
             return
         row = {"ts": time.time() if now is None else float(now),
                "mode": _clip(mode, 16), "spoke": bool(spoke),
                "reason": _clip(reason, _REASON_CHARS),
-               "excerpt": _clip(excerpt, EXCERPT_CHARS), "count": 1}
+               "excerpt": _clip(excerpt, EXCERPT_CHARS),
+               "answered": _clip(answered, EXCERPT_CHARS) if spoke else "",
+               "sender": _clip(sender, NAME_CHARS), "count": 1}
         with self._lock:
             rows = self._rows.pop(key, None)
             if rows is None:
@@ -76,9 +82,13 @@ LOG = DecisionLog()
 
 
 def record(conv_id: str, mode: str, spoke: bool, reason: str,
-           excerpt: str = "") -> None:
-    """Note a final speak or stay-quiet decision. Never raises into a turn."""
+           excerpt: str = "", *, answered: str = "", sender: str = "") -> None:
+    """Note a final speak or stay-quiet decision. Never raises into a turn.
+
+    `answered` is the message a reply answered; `sender` wrote that message,
+    or the one it let pass."""
     try:
-        LOG.record(conv_id, mode, spoke, reason, excerpt)
+        LOG.record(conv_id, mode, spoke, reason, excerpt,
+                   answered=answered, sender=sender)
     except Exception:
         pass

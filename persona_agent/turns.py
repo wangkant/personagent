@@ -451,9 +451,11 @@ class Turns:
                 trigger_count=self.chat_trigger_count,
                 never_replied=never_replied)
             if not mode:
-                decision_log.record(group_id, mode, False, why, ctrl_text)
+                decision_log.record(group_id, mode, False, why, ctrl_text,
+                                    sender=nickname)
                 return False
             caller_override = None
+            sender_name = nickname  # before a sticky call swaps in its caller
             if why == STICKY_CALL:
                 user_id = sticky["user_id"]
                 nickname = sticky["nickname"]
@@ -471,11 +473,13 @@ class Turns:
             if skip == SLEEP_WINDOW:
                 logger.info("[Agent] PASS via sleep window (mode=%s, hour=%d, group=%s)",
                             mode, time.localtime().tm_hour, group_id)
-                decision_log.record(group_id, mode, False, skip, ctrl_text)
+                decision_log.record(group_id, mode, False, skip, ctrl_text,
+                                    sender=sender_name)
                 return False
             if skip:
                 logger.info("[Agent] PASS via spontaneous skip (mode=judge, group=%s)", group_id)
-                decision_log.record(group_id, mode, False, skip, ctrl_text)
+                decision_log.record(group_id, mode, False, skip, ctrl_text,
+                                    sender=sender_name)
                 return False
 
             try:
@@ -535,7 +539,8 @@ class Turns:
                 return False
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
-                decision_log.record(group_id, mode, False, "passed", ctrl_text)
+                decision_log.record(group_id, mode, False, "passed", ctrl_text,
+                                    sender=sender_name)
                 if mode == "followup":
                     self.last_reply_at[group_id] = (
                         time.time() - self.chat_followup_window_s - 1)
@@ -589,7 +594,8 @@ class Turns:
                 self._pending_outbound.pop(group_id, None)
                 outbound_done.set()
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
-        decision_log.record(group_id, mode, True, why, committed)
+        decision_log.record(group_id, mode, True, why, committed,
+                            answered=ctrl_text, sender=sender_name)
 
         # Reaction learning tracks what was actually said: a reaction to a
         # truncated reply is a reaction to the truncation, and adjudicating it

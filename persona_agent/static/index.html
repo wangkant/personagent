@@ -6,14 +6,14 @@
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <title>personagent</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="dashboard/mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="dashboard/app.css">
 <script src="dashboard/app.js" defer></script>
 </head>
 <body>
 <header class="top">
   <div class="brand">
-    <span class="mark" aria-hidden="true"></span>
+    <img class="mark" src="dashboard/mark.svg" alt="" width="30" height="30">
     <span class="app">personagent</span>
     <span id="persona-name" class="persona"></span>
     <span id="state-pill" class="pill"></span>
@@ -23,14 +23,20 @@
     <button id="theme-toggle" type="button" class="ghost"></button>
   </div>
 </header>
+<div id="statusbar" class="statusbar" hidden>
+  <details class="status">
+    <summary><span id="facts" class="facts"></span><span id="status-more" class="more"></span></summary>
+    <div id="overview" class="overview"></div>
+  </details>
+</div>
 <main>
   <div id="hints"></div>
-  <section id="overview" class="overview"></section>
+  <section id="welcome" class="welcome" hidden></section>
   <section class="convs">
-    <div class="list-pane">
-      <h2 id="conv-title" class="section-title"></h2>
+    <nav class="list-pane" aria-labelledby="conv-title">
+      <h2 id="conv-title" class="list-title"></h2>
       <div id="conv-list" class="conv-list"></div>
-    </div>
+    </nav>
     <div id="detail" class="detail-pane"></div>
   </section>
 </main>

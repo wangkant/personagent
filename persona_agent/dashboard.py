@@ -47,6 +47,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 _ASSETS = {
     "app.js": "text/javascript; charset=utf-8",
     "app.css": "text/css; charset=utf-8",
+    "mark.svg": "image/svg+xml",
+    "empty-chats.webp": "image/webp",
+    "listening.webp": "image/webp",
+    "learned-notebook.webp": "image/webp",
 }
 WRITE_HEADER = "x-personagent-dashboard"
 TOKEN_HEADER = "x-personagent-dashboard-token"
@@ -798,6 +802,16 @@ def _candidate_view(cand: dict, learning: _Learning, index: _Index,
     return view
 
 
+def _decision_view(row: dict) -> dict:
+    """One speak-or-stay-quiet line. `excerpt` is the reply, or the message it
+    let pass; `answered` is the start of the message a reply answered, and
+    `sender` the display name of whoever wrote the message either refers to."""
+    return {"ts": row.get("ts", 0.0), "mode": row.get("mode", ""),
+            "spoke": bool(row.get("spoke")), "reason": row.get("reason", ""),
+            "excerpt": row.get("excerpt", ""), "count": int(row.get("count") or 1),
+            "answered": row.get("answered", ""), "sender": row.get("sender", "")}
+
+
 def conversation_payload(agent, conv_id: str) -> dict:
     learning = _Learning(agent)
     learning_key = channels.learning_key(conv_id)
@@ -832,7 +846,7 @@ def conversation_payload(agent, conv_id: str) -> dict:
         "kind": "dm" if channels.is_dm(conv_id) else "group",
         "counter": counter,
         "trigger_count": trigger,
-        "decisions": decision_log.LOG.recent(conv_id),
+        "decisions": [_decision_view(row) for row in decision_log.LOG.recent(conv_id)],
         "memories": memories,
         "core_note": core,
         **groups,

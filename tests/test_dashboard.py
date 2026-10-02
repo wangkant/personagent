@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -560,6 +561,81 @@ def test_the_page_never_parses_server_text_as_html() -> None:
         'http-equiv', ''))
 
 
+def test_the_page_only_names_assets_that_ship_and_stays_small() -> None:
+    static = Path(dashboard.STATIC_DIR)
+    for name in dashboard._ASSETS:
+        check(f"asset {name} ships", (static / name).is_file())
+    text = (static / "index.html").read_text(encoding="utf-8") + \
+        (static / "app.js").read_text(encoding="utf-8")
+    named = set(re.findall(r"dashboard/([\w.-]+\.(?:js|css|svg|webp|png))", text))
+    check("every file the page names is served", named <= set(dashboard._ASSETS),
+          repr(named - set(dashboard._ASSETS)))
+    check("the favicon is the mark", 'rel="icon" href="dashboard/mark.svg"' in text)
+    total = sum(p.stat().st_size for p in static.rglob("*") if p.is_file())
+    check("static/ stays under 600 KB", total <= 600 * 1024, f"{total} bytes")
+
+
+def test_images_are_served_with_their_types(live) -> None:
+    c = client()
+    for name, kind in (("mark.svg", "image/svg+xml"), ("empty-chats.webp", "image/webp"),
+                       ("listening.webp", "image/webp"),
+                       ("learned-notebook.webp", "image/webp")):
+        r = c.get("/dashboard/" + name)
+        check(f"{name}: served", r.status_code == 200, r.text[:100])
+        check(f"{name}: type", r.headers["content-type"].startswith(kind),
+              r.headers["content-type"])
+        check(f"{name}: hardened", r.headers.get("x-content-type-options") == "nosniff")
+    check("images need the sign-in too",
+          client(signed_in=False).get("/dashboard/mark.svg").status_code in (401, 403))
+
+
+_CHAT_PROBE = r"""
+const fs = require("fs"), vm = require("vm");
+const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
+                        matchMedia: () => ({ matches: false }) },
+              document: { addEventListener() {}, hidden: false }, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
+const cand = (id, state, reply, created) => ({ id, state, reply, created, type: "preference_pair",
+  better: "b", evidence: [], context: [], history: [], actions: [] });
+const long = "did you check the logs? roll back first, then diff the configs and the env";
+const d = {
+  decisions: [
+    { ts: 300, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
+    { ts: 200, spoke: true, excerpt: long.slice(0, 59) + "…", mode: "called", reason: "addressed", count: 1 },
+    { ts: 100, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
+    { ts: 50, spoke: false, excerpt: "anytime", mode: "", reason: "passed", count: 1 },
+  ],
+  learned: [cand("L", "promoted", long, 210)],
+  pending: [cand("P", "proposed", "anytime", 301)],
+  past: [cand("X", "rejected", "said before the log began", 10)],
+};
+ctx.d = d;
+const out = vm.runInContext(`(() => {
+  const s = buildStream(d);
+  return { order: s.items.map((i) => i.row ? i.row.ts : "ledger"), bubbleOf: s.bubbleOf,
+           initials: [initial("小美"), initial("小林"), initial("alex")] };
+})()`, ctx);
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_learning_attaches_to_the_reply_it_changed() -> None:
+    script = Path(dashboard.STATIC_DIR) / "app.js"
+    run = subprocess.run(["node", "-e", _CHAT_PROBE, str(script)], capture_output=True,
+                         text=True, encoding="utf-8", timeout=60)
+    check("probe ran", run.returncode == 0, run.stderr)
+    out = json.loads(run.stdout)
+    order, at = out["order"], out["bubbleOf"]
+    check("oldest first, a ledger-only reply in its place", order == ["ledger", 50, 100, 200, 300],
+          repr(order))
+    check("a clipped log line still finds its proposal", at["L"] == "3", repr(at))
+    check("a repeated reply attaches to the one just before the proposal", at["P"] == "4", repr(at))
+    check("a reply older than the log gets its own bubble", at["X"] == "0", repr(at))
+    check("CJK initials tell 小美 from 小林", out["initials"] == ["美", "林", "A"], repr(out))
+
+
 _PAGE_PROBE = r"""
 const fs = require("fs"), vm = require("vm");
 const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
@@ -609,6 +685,73 @@ def test_the_page_tells_an_error_answer_from_an_unreachable_service() -> None:
           repr(out["counts"]))
 
 
+_TEXT_PROBE = r"""
+const fs = require("fs"), vm = require("vm");
+const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
+                        matchMedia: () => ({ matches: false }) },
+              document: { addEventListener() {}, hidden: false }, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
+const out = vm.runInContext(`(() => {
+  view.status = { persona: { name: "Nova" } };
+  const row = { ts: 5, spoke: true, excerpt: "count me in", answered: "@Nova Nova, the final?",
+                sender: "Sam", mode: "called", reason: "addressed", count: 1 };
+  const ledger = { ledger: true, reply: "old reply", cands: [{ context: ["Sam: hi", "Nova: hey",
+                   "Priya: which film tonight?"] }] };
+  const mine = { ledger: true, reply: "x", cands: [{ context: ["Priya: hi", "Nova: hey"] }] };
+  const en = { asked: askedOf({ row, cands: [] }), ledger: askedOf(ledger), mine: askedOf(mine),
+               quiet: askedOf({ row: { spoke: false, excerpt: "lol", sender: "Sam" }, cands: [] }),
+               doubled: memberText("@Nova Nova, the final?"), plain: memberText("which match?"),
+               lead: lead("waiting_for"), list: joined(["a", "b"], true) + "|" + joined(["a", "b"]),
+               verdict: serverText("0/1 strong events (1 supporting)") };
+  view.lang = "zh";
+  const zh = { lead: lead("waiting_for"), list: joined(["甲", "乙"], true) + "|" + joined(["甲", "乙"]),
+               verdict: serverText("0/1 strong events (1 supporting)"),
+               ready: serverText("2 compatible events, 1 strong"),
+               history: serverText("the person accepted the retry instead"),
+               refusal: serverText("not in ACCESS_GROUPS, which lists telegram groups"),
+               model: serverText("Alex was venting, not asking for a fix"),
+               judge: t("m_judge"), quiet: t("m_judge_quiet") };
+  return { en, zh, judge: STRINGS.en.m_judge };
+})()`, ctx);
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_chat_shows_both_sides_and_reads_as_chinese() -> None:
+    script = Path(dashboard.STATIC_DIR) / "app.js"
+    run = subprocess.run(["node", "-e", _TEXT_PROBE, str(script)], capture_output=True,
+                         text=True, encoding="utf-8", timeout=60)
+    check("probe ran", run.returncode == 0, run.stderr)
+    out = json.loads(run.stdout)
+    en, zh = out["en"], out["zh"]
+    check("a reply shows the message it answered, by its sender",
+          en["asked"] == {"who": "Sam", "text": "@Nova Nova, the final?"}, repr(en["asked"]))
+    check("a reply older than the log answers its context's last line",
+          en["ledger"] == {"who": "Priya", "text": "which film tonight?"}, repr(en["ledger"]))
+    check("not when that line is its own", en["mine"] is None, repr(en["mine"]))
+    check("a silence has no reply to precede", en["quiet"] is None, repr(en["quiet"]))
+    check("a connector's mention in front of the name is left out",
+          en["doubled"] == "Nova, the final?" and en["plain"] == "which match?", repr(en))
+    check("English: a label, a space, ASCII separators",
+          en["lead"] == "Waiting for: " and en["list"] == "a; b|a, b"
+          and en["verdict"] == "0/1 strong events (1 supporting)", repr(en))
+    check("Chinese: no space after the full-width colon, full-width separators",
+          zh["lead"] == "还在等：" and zh["list"] == "甲；乙|甲，乙", repr(zh))
+    check("Chinese: the fixed server phrases are translated",
+          zh["verdict"] == "强证据 0/1（1 条支持）"
+          and zh["ready"] == "2 条一致的证据，其中 1 条是强证据"
+          and zh["history"] == "对方接受了它的重说"
+          and "ACCESS_GROUPS" in zh["refusal"] and "telegram" in zh["refusal"]
+          and "which lists" not in zh["refusal"], repr(zh))
+    check("Chinese: model-written text stays as it is",
+          zh["model"] == "Alex was venting, not asking for a fix", repr(zh["model"]))
+    check("plain words for joining in on its own",
+          out["judge"] == "joined in on its own" and zh["judge"] == "自己决定插话"
+          and zh["quiet"] == "可以插话", repr(out))
+
+
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_ENABLED", "false")
     app = FastAPI()
@@ -648,10 +791,19 @@ def test_the_decision_log_is_bounded_and_coalesces_silence() -> None:
     log.record("g3", "judge", False, "passed", now=21)
     check("bounded in conversations, oldest dropped",
           set(log.last_seen()) == {"g2", "g3"}, repr(log.last_seen()))
-    log.record("g3", "called", True, "addressed", "x" * 500 + "\x02secret\x03", now=22)
-    excerpt = log.recent("g3")[0]["excerpt"]
-    check("excerpt: short and printable",
-          len(excerpt) <= decision_log.EXCERPT_CHARS and "\x02" not in excerpt, repr(excerpt))
+    log.record("g3", "called", True, "addressed", "x" * 500 + "\x02secret\x03",
+               answered="y" * 500 + "\x02page\x03", sender="z" * 100 + "\n", now=22)
+    row = log.recent("g3")[0]
+    for field, limit in (("excerpt", decision_log.EXCERPT_CHARS),
+                         ("answered", decision_log.EXCERPT_CHARS),
+                         ("sender", decision_log.NAME_CHARS)):
+        check(f"{field}: short and printable",
+              len(row[field]) <= limit and "\x02" not in row[field]
+              and "\n" not in row[field], repr(row[field]))
+    log.record("g3", "judge", False, "passed", "lol", answered="ignored", sender="Sam", now=23)
+    quiet = log.recent("g3")[0]
+    check("a silence names who wrote what it let pass, and answered nothing",
+          quiet["sender"] == "Sam" and quiet["answered"] == "", repr(quiet))
     decision_log.record(None, "called", True, "addressed")  # must not raise
 
 
@@ -685,10 +837,36 @@ async def test_a_group_turn_records_why_it_spoke_or_stayed_quiet(tmp, monkeypatc
     quiet_followup, spoke, below = rows
     check("below the trigger count: quiet with the reason",
           below["spoke"] is False and below["reason"] == "below the trigger count"
-          and below["excerpt"] == "anyone around this evening", repr(below))
-    check("called: spoke, with what it said",
+          and below["excerpt"] == "anyone around this evening"
+          and below["sender"] == "Sam" and below["answered"] == "", repr(below))
+    check("called: spoke, with what it said and the message it answered",
           spoke["spoke"] is True and spoke["mode"] == "called"
-          and spoke["reason"] == "addressed" and spoke["excerpt"] == "sure, on it", repr(spoke))
+          and spoke["reason"] == "addressed" and spoke["excerpt"] == "sure, on it"
+          and spoke["answered"] == "Nova can you take a look"
+          and spoke["sender"] == "Sam", repr(spoke))
     check("a pass is recorded as a choice to stay quiet",
           quiet_followup["spoke"] is False and quiet_followup["reason"] == "passed"
-          and quiet_followup["mode"] == "followup", repr(quiet_followup))
+          and quiet_followup["mode"] == "followup"
+          and quiet_followup["sender"] == "Sam", repr(quiet_followup))
+
+
+def test_the_chat_carries_the_message_each_reply_answered(live) -> None:
+    decision_log.record("telegram:c1", "", False, "below the trigger count",
+                        "which match?", sender="Priya")
+    decision_log.record("telegram:c1", "called", True, "addressed", "count me in",
+                        answered=f"Nova, the key is {SECRET_KEY}", sender="Sam")
+    server.CONNECTOR_TOKEN = SECRET_TOKEN
+    rows = client().get("/api/dashboard/conversation",
+                        params={"id": "telegram:c1"}).json()["decisions"]
+    check("newest first, both lines", len(rows) == 2, repr(rows))
+    spoke, quiet = rows
+    check("a reply carries the start of the message it answered and its sender",
+          spoke["answered"].startswith("Nova, the key is") and spoke["sender"] == "Sam"
+          and spoke["excerpt"] == "count me in", repr(spoke))
+    check("the excerpt is masked like every other field", SECRET_KEY not in spoke["answered"],
+          spoke["answered"])
+    check("a silence carries the sender of the message it let pass",
+          quiet["sender"] == "Priya" and quiet["answered"] == ""
+          and quiet["excerpt"] == "which match?", repr(quiet))
+    check("the line keeps its earlier fields",
+          set(quiet) >= {"ts", "mode", "spoke", "reason", "excerpt", "count"}, repr(quiet))
