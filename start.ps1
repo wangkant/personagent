@@ -1,4 +1,4 @@
-# personagent — one-click start (Windows)
+# personagent - start the service from a checkout (Windows)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
@@ -14,26 +14,42 @@ $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
     '.venv/bin/python'
 }
 $venvPy = Join-Path $PSScriptRoot $venvRelative
-if (Test-Path $venvPy) {
-    $pySource = $venvPy
-} else {
+$basePy = $null
+if (-not (Test-Path $venvPy)) {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
     if (-not $py) {
-        Write-Host "error: python / python3 not found. Run 'python quickstart.py' first." -ForegroundColor Red
+        Write-Host "error: python / python3 not found. Install Python 3.10 or newer, then run 'python quickstart.py'." -ForegroundColor Red
         exit 1
     }
     if (Test-Path (Join-Path $PSScriptRoot '.venv')) {
         Write-Error "Incomplete .venv. Repair it with quickstart.py or move it aside."
         exit 1
     }
-    & $py.Source -m venv (Join-Path $PSScriptRoot '.venv')
+    $basePy = $py.Source
+}
+
+# Not set up yet: run the setup wizard instead of a server that cannot answer.
+if (-not (Test-Path (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
+    if ([Console]::IsInputRedirected) {
+        Write-Host "error: personagent is not set up here yet (no .env). Run 'python quickstart.py' first." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "No .env yet: starting the setup wizard (quickstart.py)." -ForegroundColor Yellow
+    $setupPy = if (Test-Path $venvPy) { $venvPy } else { $basePy }
+    & $setupPy quickstart.py
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if (-not (Test-Path (Join-Path $PSScriptRoot '.env'))) { exit 1 }
+}
+
+if (-not (Test-Path $venvPy)) {
+    & $basePy -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if (-not (Test-Path $venvPy)) {
         throw "Virtual environment creation did not produce $venvRelative"
     }
-    $pySource = $venvPy
 }
+$pySource = $venvPy
 
 # Dependency check. PS 5.1 traps: `2>$null` on a native command becomes a
 # terminating error under Stop, and `$?` goes false on any stderr output, so

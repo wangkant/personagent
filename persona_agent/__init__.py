@@ -36,11 +36,11 @@ Supporting modules, all pure logic with no agent state:
 - health     startup / runtime environment checks
 - config_env the one way to read a setting out of the environment
 
-Entry points: the `personagent` command (persona_agent.cli, also
-`python -m persona_agent`), persona_agent.server (the HTTP service) and
-persona_agent.chat (the terminal trial); main.py and try_chat.py at the repo
-root are shims for them. Read-only seed datasets live in data/; everything
-the agent learns at runtime goes to runtime/ — see paths.ROOT.
+Entry points are the `personagent` command (cli.py): init, chat, demo, run,
+connect, doctor, learned, eval; main.py and try_chat.py at the repo root
+are shims. Read-only seed datasets ship with the package
+(paths.seed_file); everything the agent learns at runtime goes to
+<home>/runtime/ (paths.ROOT is the home).
 """
 
-__version__ = "0.4.0"
+__version__ = "1.0.0"

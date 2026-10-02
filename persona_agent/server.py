@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import errno
 import hashlib
 import hmac
 import ipaddress
 import json
 import logging
 import os
+import socket
+import sys
 import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -30,7 +34,8 @@ from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
-from persona_agent.storage import RuntimeInstanceLock, atomic_write_text
+from persona_agent.storage import (
+    LockUnavailable, RuntimeInstanceLock, atomic_write_text)
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
@@ -86,19 +91,21 @@ def _validate_exposure_config(
     onebot_secret: str,
     connector_token: str,
 ) -> None:
-    """Refuse a network bind whose two event endpoints are not authenticated."""
+    """Refuse a network bind whose connector endpoints are not authenticated.
+
+    QQ_ONEBOT_SECRET is not required: without it /v1/onebot refuses every
+    peer that is not on this host, whatever the bind (_request_peer_is_allowed).
+    """
     if _is_loopback_host(host):
         return
-    missing = []
-    if not onebot_secret:
-        missing.append("QQ_ONEBOT_SECRET")
     if not connector_token:
-        missing.append("CONNECTOR_TOKEN")
-    if missing:
         raise ValueError(
-            f"SERVER_HOST={host!r} is not loopback; set {', '.join(missing)} "
-            "before exposing the event endpoints"
-        )
+            f"listening on {host} exposes personagent to the network, so set "
+            "CONNECTOR_TOKEN (the token your connector sends) in .env first, "
+            "or listen on 127.0.0.1")
+    if not onebot_secret:
+        logger.info("[main] QQ_ONEBOT_SECRET is blank, so /v1/onebot accepts "
+                    "only programs on this host")
 
 
 def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
@@ -182,15 +189,13 @@ def _ct_equal(supplied: str, expected: str) -> bool:
 
 # ========== Config ==========
 # The HTTP layer's own settings. Everything the AGENT is configured with lives
-# in `AgentSettings` and is read once, in `lifespan` — this file no longer
-# copies thirty settings from a module global into a keyword argument, which is
-# where a new knob used to get lost.
+# in `AgentSettings` and is read once, in `lifespan`.
 #
-# Bind loopback by default: NapCat posts events from localhost
-# (QQ_ONEBOT_URL=http://127.0.0.1:3000), so the webhook never needs to be
-# world-exposed. Set SERVER_HOST=0.0.0.0 only for a split deployment, and then set
-# QQ_ONEBOT_SECRET so forged OneBot payloads (impersonating the admin, poisoning
-# memory, burning tokens) can't reach /v1/onebot.
+# Bind loopback by default: connectors and NapCat on this machine post from
+# localhost, so nothing needs to be world-exposed. A network bind
+# (SERVER_HOST=0.0.0.0, for a split deployment) requires CONNECTOR_TOKEN, and a
+# NapCat on another host also needs QQ_ONEBOT_SECRET: without it /v1/onebot
+# refuses every peer that is not local.
 SERVER_HOST = env_str("SERVER_HOST", "127.0.0.1")
 SERVER_PORT = env_int("SERVER_PORT", 8080, minimum=1, maximum=65535)
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
@@ -302,73 +307,99 @@ class AdmissionLimiter:
 
 
 class ReplayGuard:
-    """Bounded timestamped nonce cache for authenticated connector envelopes."""
+    """Bounded timestamped nonce cache for authenticated connector envelopes.
+
+    Persisted as an append-only log, one JSON line per accepted nonce and no
+    fsync, so a restart inside the freshness window still refuses a replay
+    while each request costs one small append, not a rewrite of the cache.
+    The log is compacted to the live nonces once stale lines dominate it.
+    """
 
     def __init__(
         self,
         ttl_seconds: int = 300,
-        max_entries: int = 4096,
+        max_entries: int = 16_384,
         state_file: str | Path | None = None,
     ) -> None:
         self.ttl_seconds = max(1, int(ttl_seconds))
         self.max_entries = max(1, int(max_entries))
         self.state_file = Path(state_file) if state_file is not None else None
+        self._log_lines = 0
         self._seen: dict[str, int] = self._load()
+        self._pruned_at = 0
 
     def _load(self) -> dict[str, int]:
         if self.state_file is None:
             return {}
         try:
-            raw = json.loads(self.state_file.read_text(encoding="utf-8"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError):
-            return {}
-        if not isinstance(raw, dict):
+            text = self.state_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
             return {}
         loaded: dict[str, int] = {}
-        for nonce, timestamp in raw.items():
-            if not isinstance(nonce, str) or not nonce or len(nonce) > 128:
-                continue
+        for line in text.splitlines():
             try:
-                loaded[nonce] = int(timestamp)
-            except (TypeError, ValueError, OverflowError):
+                row = json.loads(line)
+            except (json.JSONDecodeError, TypeError):
                 continue
+            self._log_lines += 1
+            # One [nonce, timestamp] per line; an object line is the 0.x file.
+            pairs = row.items() if isinstance(row, dict) else (
+                [row] if isinstance(row, list) and len(row) == 2 else [])
+            for nonce, timestamp in pairs:
+                if not isinstance(nonce, str) or not nonce or len(nonce) > 128:
+                    continue
+                try:
+                    loaded[nonce] = int(timestamp)
+                except (TypeError, ValueError, OverflowError):
+                    continue
         return loaded
 
-    def _persist(self) -> None:
+    def _append(self, nonce: str, timestamp: int) -> None:
         if self.state_file is None:
             return
-        atomic_write_text(
-            self.state_file,
-            json.dumps(
-                self._seen, ensure_ascii=False, sort_keys=True,
-                separators=(",", ":"),
-            ) + "\n",
-        )
+        if self._log_lines > max(1024, 2 * len(self._seen)):
+            self._compact()
+            return
+        line = json.dumps([nonce, timestamp], ensure_ascii=False) + "\n"
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.state_file,
+                     os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
+                     0o600)
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
+        self._log_lines += 1
+
+    def _compact(self) -> None:
+        lines = "".join(json.dumps([nonce, stamp], ensure_ascii=False) + "\n"
+                        for nonce, stamp in self._seen.items())
+        atomic_write_text(self.state_file, lines, fsync=False)
+        self._log_lines = len(self._seen)
+
+    def _prune(self, now: int) -> None:
+        cutoff = now - self.ttl_seconds
+        self._seen = {key: stamp for key, stamp in self._seen.items()
+                      if stamp >= cutoff}
+        self._pruned_at = now
 
     def accept(self, nonce: str, timestamp: int, now: int) -> bool:
-        cutoff = now - self.ttl_seconds
-        pruned = {
-            key: stamp for key, stamp in self._seen.items()
-            if stamp >= cutoff
-        }
-        changed = len(pruned) != len(self._seen)
-        self._seen = pruned
-        if abs(now - timestamp) > self.ttl_seconds or nonce in self._seen:
-            if changed:
-                self._persist()
+        if now != self._pruned_at or len(self._seen) >= self.max_entries:
+            self._prune(now)
+        if abs(now - timestamp) > self.ttl_seconds:
+            return False
+        seen_at = self._seen.get(nonce)
+        if seen_at is not None and seen_at >= now - self.ttl_seconds:
             return False
         if len(self._seen) >= self.max_entries:
             # Evicting a still-fresh nonce re-opens its replay window, so the
-            # cap is a hard refusal — which means a busy connector can hit a
-            # cliff where EVERY connector request 403s as "replayed", and that
-            # is indistinguishable from a bad token unless it is said out loud.
+            # cap is a hard refusal, and it is logged because it otherwise
+            # looks exactly like a bad token.
             logger.error(
                 "[main] connector replay guard full (%d nonces live within %ds) "
                 "— rejecting all connector requests until the window drains; "
                 "raise the cap if this is legitimate traffic",
                 len(self._seen), self.ttl_seconds)
-            if changed:
-                self._persist()
             return False
         if len(self._seen) >= self.max_entries * 4 // 5:
             logger.warning(
@@ -376,13 +407,10 @@ class ReplayGuard:
                 len(self._seen), self.max_entries)
         self._seen[nonce] = timestamp
         try:
-            self._persist()
+            self._append(nonce, timestamp)
         except Exception:
-            # Un-burn it. The caller is about to get a 500 and retry with the
-            # SAME nonce (correct client behaviour), and a nonce left burned
-            # by a failed write turns one transient disk error — on Windows,
-            # an AV or indexer holding the destination across os.replace —
-            # into a message that can never be delivered at all.
+            # Un-burn it: the caller gets a 500 and retries with the SAME
+            # nonce, which a nonce left burned would refuse forever.
             self._seen.pop(nonce, None)
             raise
         return True
@@ -523,9 +551,8 @@ def _mark_deprecated(response: JSONResponse) -> JSONResponse:
     """Stamp a response from the deprecated `/v1/onebot` ingress.
 
     Applied at every return point rather than only the success one, so a
-    branch added later cannot silently omit it. No `Sunset`: the CHANGELOG
-    and the startup warning both say "a later release" and no date has been
-    chosen — emitting one would invent a deadline the project has not set.
+    branch added later cannot silently omit it. No `Sunset`: the route stays
+    for all of 1.x, so there is no date to announce.
     """
     response.headers["Deprecation"] = "true"
     return response
@@ -602,13 +629,16 @@ async def lifespan(app: FastAPI):
     # Reported, never fatal: a deployment that is 90% configured should start
     # and tell you about the other 10%.
     preflight.log_findings(preflight.check_config())
-    _validate_exposure_config(SERVER_HOST, QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
+    _validate_exposure_config(_LISTEN["host"], QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
     runtime_lock = None
     if AGENT_ENABLED:
         # Agent construction reads legacy root-level state as well as runtime
         # projections, so claim the deployment before touching either.
         runtime_lock = RuntimeInstanceLock(ROOT)
-        runtime_lock.acquire()
+        try:
+            runtime_lock.acquire()
+        except LockUnavailable:
+            raise RuntimeError(_ALREADY_RUNNING.format(home=ROOT)) from None
         try:
             agent = Agent(AgentSettings.from_env())
             # The append-only ledger is authoritative. Repair stale derived
@@ -640,9 +670,7 @@ async def lifespan(app: FastAPI):
             if m:
                 agent.stickers.purge_unfit()
         _spawn(_recheck_then_purge())
-    logger.info("bot started on %s:%d (agent=%s, lang=%s)", SERVER_HOST, SERVER_PORT,
-                agent.enabled if agent else False,
-                agent.agent_lang if agent else "-")
+    logger.info("%s", _banner(_LISTEN["host"], _LISTEN["port"]))
     try:
         yield
     finally:
@@ -666,6 +694,41 @@ async def lifespan(app: FastAPI):
             runtime_lock.release()
 
 app = FastAPI(title="personagent", version=__version__, lifespan=lifespan)
+
+#: Where this process listens: SERVER_HOST / SERVER_PORT unless main() was given others.
+_LISTEN: dict = {"host": SERVER_HOST, "port": SERVER_PORT}
+_ALREADY_RUNNING = (
+    "another personagent is already running from {home}; stop that one first, "
+    "or give this one its own folder with --home DIR (or AGENT_HOME)")
+
+
+def _url_host(host: str, *, local: bool = False) -> str:
+    """`host` as it goes in a URL; `local` swaps a wildcard bind for loopback."""
+    value = str(host or "").strip().strip("[]")
+    if local and value in ("0.0.0.0", ""):
+        value = "127.0.0.1"
+    elif local and value == "::":
+        value = "::1"
+    return f"[{value}]" if ":" in value else value
+
+
+def _dashboard_served() -> bool:
+    return any(getattr(route, "path", None) == "/" for route in app.routes)
+
+
+def _banner(host: str, port: int) -> str:
+    if agent is not None and agent.enabled:
+        state = f"on (model {agent.model}, lang {agent.agent_lang})"
+    else:
+        state = (f"OFF: {_agent_off_reason()}, so nothing gets answered; "
+                 "run `personagent init`")
+    lines = [f"personagent {__version__}",
+             f"  listening:  http://{_url_host(host)}:{port}",
+             f"  home:       {ROOT}"]
+    if _dashboard_served():
+        lines.append(f"  dashboard:  http://{_url_host(host, local=True)}:{port}/")
+    lines.append(f"  agent:      {state}")
+    return "\n".join(lines)
 
 
 # /health caches its probe results briefly so monitoring polls don't spam the
@@ -728,9 +791,9 @@ def _warn_direct_route_once() -> None:
     if not _DIRECT_ROUTE_WARNED:
         _DIRECT_ROUTE_WARNED = True
         logger.warning(
-            "[Agent] /v1/onebot (direct OneBot ingress) is deprecated since 0.3.0 and "
-            "will be removed in a later release; route QQ through AstrBot with "
-            "CONNECTOR_QQ_PLATFORMS=aiocqhttp. Nothing changes for this deployment yet.")
+            "[Agent] /v1/onebot (direct OneBot ingress) is deprecated; it keeps "
+            "working throughout 1.x. The supported route for QQ is AstrBot with "
+            "CONNECTOR_QQ_PLATFORMS=aiocqhttp.")
 
 
 @app.post("/v1/onebot")
@@ -743,7 +806,7 @@ async def onebot_webhook(request: Request):
     ``{"ok": true}`` and never carries it. That is the opposite of
     ``/v1/events``, which answers synchronously.
 
-    Deprecated since 0.3.0, removed in a later release; every response carries
+    Deprecated, and kept throughout 1.x; every response carries
     ``Deprecation: true``. The supported path is AstrBot with
     ``CONNECTOR_QQ_PLATFORMS=aiocqhttp``. Set ``QQ_ONEBOT_SECRET`` so NapCat
     signs the body as ``x-signature: sha1=...`` — without it, anyone who can
@@ -803,6 +866,8 @@ async def _onebot_webhook_admitted(request: Request):
         return _error(403, "stale_event", "stale or missing event timestamp")
     if isinstance(payload, dict) and payload.get("message_id") not in (None, ""):
         payload["message_id"] = str(payload["message_id"])
+    if agent is None or not agent.enabled:
+        _warn_agent_off_once()
     if agent:
         # Non-blocking: don't make NapCat wait for the LLM round-trip.
         # Wrap in a guard so a raised exception is logged instead of vanishing
@@ -822,6 +887,26 @@ async def _onebot_webhook_admitted(request: Request):
 
 
 _IGNORED_TOKEN_WARNED = False
+_AGENT_OFF_WARNED = False
+
+
+def _agent_off_reason() -> str:
+    if not AGENT_ENABLED:
+        return "AGENT_ENABLED=false"
+    return f"LLM_API_KEY is not set (in {ROOT / '.env'} or the environment)"
+
+
+def _warn_agent_off_once() -> None:
+    """An event reached an agent that cannot answer: say why, once, loudly."""
+    global _AGENT_OFF_WARNED
+    if _AGENT_OFF_WARNED:
+        return
+    _AGENT_OFF_WARNED = True
+    logger.error(
+        "[main] an event arrived but personagent cannot answer: %s. It replies "
+        "owned=false, so the connector's own model may answer instead. Run "
+        "`personagent init` (or set LLM_API_KEY) and restart.",
+        _agent_off_reason())
 
 
 def _warn_ignored_connector_token_once(request: Request) -> None:
@@ -920,8 +1005,10 @@ async def _connector_events_admitted(request: Request):
     if not _connector_event_is_fresh(event):
         return _error(403, "stale_event", "stale or invalid sent_at")
     event["message_id"] = str(event["message_id"])
+    if agent is None or not agent.enabled:
+        _warn_agent_off_once()
     if agent is None:
-        return {"handled": False, "replies": []}
+        return {"handled": False, "owned": False, "replies": []}
     return await agent.handle_event(event)
 
 
@@ -981,8 +1068,66 @@ async def _connector_outbox_admitted(request: Request):
     return await agent.outbox.pull(**pull, disconnected=request.is_disconnected)
 
 
+def _bind_problem(host: str, port: int) -> str | None:
+    """Why uvicorn could not listen on host:port, or None. Binds the way
+    asyncio's create_server does, then lets go."""
+    try:
+        infos = socket.getaddrinfo(host or None, port, type=socket.SOCK_STREAM,
+                                   flags=socket.AI_PASSIVE)
+    except socket.gaierror:
+        return (f"SERVER_HOST={host} is not an address of this machine; use "
+                "127.0.0.1 (this machine only) or 0.0.0.0 (the network)")
+    with contextlib.ExitStack() as stack:
+        for family, kind, proto, _name, address in infos:
+            sock = stack.enter_context(socket.socket(family, kind, proto))
+            if os.name == "posix":
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if family == getattr(socket, "AF_INET6", None):
+                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            try:
+                sock.bind(address)
+            except OSError as exc:
+                if exc.errno in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", None)):
+                    return (f"port {port} is already in use on {host}: another "
+                            "personagent or another program has it. Stop it, or "
+                            "pick a free port with --port or SERVER_PORT")
+                if exc.errno in (errno.EACCES, getattr(errno, "WSAEACCES", None)):
+                    return (f"this system does not allow listening on {host}:{port}; "
+                            "pick another port with --port or SERVER_PORT")
+                return f"cannot listen on {host}:{port}: {exc.strerror or exc}"
+    return None
+
+
+def startup_problem(host: str, port: int) -> str | None:
+    """The one sentence that explains why this start cannot work, or None."""
+    if not ROOT.is_dir():
+        return (f"the home folder {ROOT} does not exist; run `personagent init` "
+                "to create it, or pass --home DIR")
+    try:
+        _validate_exposure_config(host, QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
+    except ValueError as exc:
+        return str(exc)
+    if AGENT_ENABLED:
+        lock = RuntimeInstanceLock(ROOT)
+        try:
+            lock.acquire()
+        except LockUnavailable:
+            return _ALREADY_RUNNING.format(home=ROOT)
+        lock.release()
+    return _bind_problem(host, port)
+
+
 def main(host: str | None = None, port: int | None = None) -> None:
     import uvicorn
+
+    host = host or SERVER_HOST
+    port = port or SERVER_PORT
+    problem = startup_problem(host, port)
+    if problem:
+        print(f"personagent: {problem}", file=sys.stderr)
+        raise SystemExit(2)
+    from persona_agent import server as served  # not __main__ under -m
+    served._LISTEN.update(host=host, port=port)
 
     class _Server(uvicorn.Server):
         # uvicorn lets open requests finish before the lifespan shutdown, so
@@ -993,8 +1138,8 @@ def main(host: str | None = None, port: int | None = None) -> None:
                 await served.agent.outbox.aclose()
             await super().shutdown(sockets=sockets)
 
-    _Server(uvicorn.Config("persona_agent.server:app", host=host or SERVER_HOST,
-                           port=port or SERVER_PORT, reload=False)).run()
+    _Server(uvicorn.Config("persona_agent.server:app", host=host, port=port,
+                           reload=False)).run()
 
 
 if __name__ == "__main__":

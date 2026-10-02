@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77,<82", "wheel>=0.42,<1"]
+requires = ["setuptools>=77,<82"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "personagent"
-version = "0.4.0"
+version = "1.0.0"
 description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,41 +12,34 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
-    "llm", "agent", "persona", "chatbot", "group-chat", "onebot",
+    "llm", "agent", "persona", "chatbot", "group-chat", "astrbot", "onebot",
     "prompt-engineering", "self-evolution", "few-shot", "rag",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Framework :: FastAPI",
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Communications :: Chat",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
-dependencies = [
-    "fastapi>=0.115,<1",
-    "uvicorn[standard]>=0.34,<1",
-    "python-dotenv>=1.0,<2",
-    "httpx>=0.27,<1",
-    # Direct: ingestion.py imports the private `httpcore._backends.auto` for
-    # the SSRF guard's per-hop DNS pinning. See requirements.txt.
-    "httpcore>=1.0,<2",
-    "Pillow>=10,<13",
-    "ddgs>=9,<10",
-]
+# requirements.txt is the one dependency list; a checkout installs it directly.
+dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-# The agent speaks only the OpenAI-compatible /v1 endpoint over httpx and needs no
-# vendor SDK. This extra exists for the two optional dev tools that deliberately
-# reach a DIFFERENT vendor than the one under test — tools/prompt_lab.py and
-# `tools/evolution_benchmark.py --judge anthropic` — so the learning signal and
-# the measurement never share a model.
+# Only for tools/prompt_lab.py and `evolution_benchmark.py --judge anthropic`, which score with another vendor.
 judge = ["anthropic>=0.103,<1"]
-# What CI installs on top of the runtime deps. The gate is
-# `ruff --select F401,F811,F821,F841`: the split that produced this package
-# left 114 dead imports behind across six modules, and nothing was watching.
+# What CI installs on top of the runtime dependencies.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 
 [project.scripts]
@@ -57,13 +50,14 @@ Homepage = "https://github.com/wangkant/personagent"
 Issues = "https://github.com/wangkant/personagent/issues"
 Changelog = "https://github.com/wangkant/personagent/blob/main/CHANGELOG.md"
 
-[tool.setuptools]
-# personagent is an application you deploy from a checkout, not a PyPI library:
-# main.py / try_chat.py / quickstart.py are repo-root entry points, the seed
-# datasets live in data/, and runtime state is written next to them (paths.ROOT,
-# overridable with AGENT_HOME). `pip install -e .` is for importing and testing
-# the pipeline; to run a bot, clone the repo.
-packages = ["persona_agent"]
+# setup.py ships data/, .env.example and the AstrBot plugin as persona_agent/_bundled.
+[tool.setuptools.packages.find]
+include = ["persona_agent", "persona_agent.*"]
+exclude = ["*.__pycache__"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.package-data]
-persona_agent = ["py.typed"]
+persona_agent = ["py.typed", "static/**/*"]

@@ -38,10 +38,12 @@ from dotenv import load_dotenv
 
 from persona_agent import evolution  # noqa: E402
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
+from persona_agent.evals import NAME_UID, strip_pass_sentinel  # noqa: E402
+from persona_agent.paths import seed_file  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
 
-DATA = ROOT / "data" / "benchmark"
+DATA = seed_file("benchmark")
 
 # Stored mode names; "owner" is the admin's.
 VALID_MODES = {"owner", "called", "followup", "judge"}
@@ -80,22 +82,6 @@ def scenario_families(scns: list[dict]) -> set[str]:
     return {s["family"] for s in scns}
 
 
-def _fake_uid(name: str) -> str:
-    # Deterministic fake user id so caller_override / dedup are stable across runs.
-    h = hashlib.md5(name.encode("utf-8")).hexdigest()
-    return str(1_000_000 + int(h[:6], 16) % 9_000_000)
-
-
-class _NameUid(dict):
-    def __missing__(self, name):  # type: ignore[override]
-        v = _fake_uid(name)
-        self[name] = v
-        return v
-
-
-NAME_UID = _NameUid()
-
-
 def _parse_line(line: str, persona_name: str) -> dict:
     line = line.replace("<bot-name>", persona_name)
     if ": " in line:
@@ -120,22 +106,6 @@ def seed_buffer(agent, group_id: str, scenario: dict, persona_name: str):
             caller = (m["name"], m["user_id"])
             break
     return latest_text, caller
-
-
-def strip_pass_sentinel(reply: str) -> str:
-    """Collapse the model's PASS sentinel to an empty reply.
-
-    The production pipeline swallows ``PASS``-prefixed replies before they are
-    sent or evaluated (agent.py, the ``re.match(r"PASS\\b", ...)`` gate) -- the
-    sentinel is the JSON protocol's "I choose not to speak", not an utterance.
-    The harness calls _think directly and used to hand the raw string onward,
-    so the self-eval graded the literal word PASS ("too terse and robotic",
-    2/5), the evolve tick drafted learning material from protocol noise, and
-    the blind judge was asked to rate "PASS" as if someone had typed it."""
-    reply = (reply or "").strip()
-    if re.match(r"PASS\b", reply, re.IGNORECASE):
-        return ""
-    return reply
 
 
 async def drive_scenario(agent, scenario: dict, persona_name: str, group_id: str = "g1") -> str:
@@ -670,7 +640,7 @@ def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
     if mode != "synthetic":
         return
     for kind in ("examples", "feedback"):
-        src = ROOT / "data" / f"{kind}.{lang}.jsonl"
+        src = seed_file(f"{kind}.{lang}.jsonl")
         if src.exists():
             (state_dir / f"{kind}.{lang}.jsonl").write_text(
                 src.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")

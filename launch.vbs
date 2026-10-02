@@ -1,8 +1,8 @@
 ' Optional one-click launcher for Windows.
 '
-' DEPRECATED since 0.3.0 together with the direct OneBot ingress it starts
-' (/v1/onebot). It still works; the supported path is AstrBot, which manages
-' the QQ client itself. See docs/deploy.md.
+' DEPRECATED, like the direct OneBot ingress it starts (/v1/onebot); both keep
+' working throughout 1.x. The supported path is AstrBot, which manages the QQ
+' client itself, with personagent started by start.bat. See docs/deploy.md.
 '
 ' What it does:
 '   1. Starts NapCat (your OneBot v11 client) in a minimized cmd window

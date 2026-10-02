@@ -12,8 +12,9 @@ CHECKOUT = PACKAGE_DIR.parent
 
 
 def is_checkout(path: Path = CHECKOUT) -> bool:
-    """A git checkout carries the seed data beside the package."""
-    return (path / "data").is_dir() and (path / "persona_agent").is_dir()
+    """A source checkout carries pyproject.toml and the seed data beside the package."""
+    return ((path / "pyproject.toml").is_file() and (path / "data").is_dir()
+            and (path / "persona_agent").is_dir())
 
 
 def resource(*parts: str) -> Path:
@@ -32,7 +33,8 @@ def default_home() -> Path:
 
 
 def looks_like_home(path: Path) -> bool:
-    return (path / "data").is_dir() or (
+    # A stray data/ folder is not enough: that would claim most project folders.
+    return is_checkout(path) or (
         (path / ".env").is_file() and (path / "persona.txt").is_file())
 
 
