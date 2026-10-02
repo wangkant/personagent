@@ -16,10 +16,10 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-import main as main_module
+from persona_agent import server as main_module
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 import httpx
-from main import RequestBodyTooLarge, _read_body_limited
+from persona_agent.server import RequestBodyTooLarge, _read_body_limited
 from persona_agent import learning as learning_module
 
 

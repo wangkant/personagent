@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-import main as main_module
+from persona_agent import server as main_module
 from persona_agent import outbox as outbox_mod
 from persona_agent import promotion
 from persona_agent.agent import Agent

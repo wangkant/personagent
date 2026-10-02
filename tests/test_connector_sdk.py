@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-import main as main_module
+from persona_agent import server as main_module
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "integrations" / "sdk"))
 import personagent_connector as sdk  # noqa: E402

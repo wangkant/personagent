@@ -26,26 +26,10 @@ from pathlib import Path
 logger = logging.getLogger("agent")
 
 
-def _looks_like_root(path: Path) -> bool:
-    """A deployment root carries the read-only seed datasets."""
-    return (path / "data").is_dir()
-
-
 def _detect_root() -> Path:
-    configured = os.getenv("AGENT_HOME", "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
-    pkg_parent = Path(__file__).resolve().parent.parent
-    if _looks_like_root(pkg_parent):
-        return pkg_parent
-    cwd = Path.cwd().resolve()
-    if _looks_like_root(cwd):
-        return cwd
-    # Neither looks like a checkout (bare wheel install, no data/). Anchor on
-    # the cwd so state lands somewhere the operator can see, not in
-    # site-packages; the seed lookups will simply find nothing and the agent
-    # falls back to its bundled defaults.
-    return cwd
+    from .home import find_home
+
+    return find_home()
 
 
 ROOT = _detect_root()

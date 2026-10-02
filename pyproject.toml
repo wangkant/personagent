@@ -49,6 +49,9 @@ judge = ["anthropic>=0.103,<1"]
 # left 114 dead imports behind across six modules, and nothing was watching.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 
+[project.scripts]
+personagent = "persona_agent.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/wangkant/personagent"
 Issues = "https://github.com/wangkant/personagent/issues"

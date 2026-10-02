@@ -869,7 +869,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_admins(
     Both read ADMIN_IDS through access.identity_from_env; the CLI used to
     read the QQ admin alone, so a Telegram admin's candidate showed a speaker
     shortfall there that the agent itself did not see."""
-    import candidates_admin
+    from persona_agent import ledger_admin as candidates_admin
 
     a = make_agent(tmp)
     a.admin_ids = {"telegram:1"}
