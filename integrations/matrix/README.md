@@ -4,7 +4,9 @@ Puts [personagent](https://github.com/wangkant/personagent) in Matrix rooms,
 and through [mautrix bridges](https://docs.mau.fi/bridges/) on WhatsApp,
 Signal, Messenger, Instagram, Google Messages and other networks.
 
-The connector is a small standalone process. It logs in to a homeserver as an
+The connector is a small standalone process built on
+[matrix-nio](https://github.com/matrix-nio/matrix-nio), which does end-to-end
+encryption without libolm. It logs in to a homeserver as an
 ordinary Matrix user, forwards every allowed room message to the agent's
 `POST /v1/events` as a platform-neutral event
 ([docs/connectors.md](../../docs/connectors.md)), and posts the agent's
@@ -62,8 +64,27 @@ Outbound:
 You need a running personagent and a Matrix account for the bot. Create a
 dedicated account; the persona should not share one with a person.
 
+The connector is a script in this repository, so it needs a copy of the
+repository (a clone, or the ZIP from GitHub) and a Python environment of its
+own: `matrix-nio` is not one of personagent's dependencies. In a clone that
+already has personagent's `.venv`, install into it:
+
 ```bash
-pip install -r integrations/matrix/requirements.txt
+.venv/bin/python -m pip install -r integrations/matrix/requirements.txt
+```
+
+With personagent installed by `uv tool` or `pipx`, make a venv beside the copy
+instead:
+
+```bash
+python -m venv connector-venv
+connector-venv/bin/python -m pip install -r integrations/matrix/requirements.txt
+```
+
+(On Windows the interpreter is `.venv\Scripts\python.exe` or
+`connector-venv\Scripts\python.exe`.) Then copy the settings file:
+
+```bash
 cp integrations/matrix/.env.example integrations/matrix/.env
 ```
 
@@ -78,11 +99,11 @@ MATRIX_DM_USERS=@alex:example.org
 PERSONAGENT_URL=http://127.0.0.1:8080
 ```
 
-Then run it next to the agent:
+Then run it next to the agent, with the same interpreter:
 
 ```bash
-python integrations/matrix/matrix_connector.py
-# or: python integrations/matrix/matrix_connector.py --config /path/to/matrix.env
+.venv/bin/python integrations/matrix/matrix_connector.py
+# or: .venv/bin/python integrations/matrix/matrix_connector.py --config /path/to/matrix.env
 ```
 
 Invite the bot to a room listed in `MATRIX_GROUPS` and it joins. Room ids are
@@ -237,28 +258,6 @@ With `MATRIX_E2EE_ENABLED=true`:
   The bridge holds those keys on your server, so the protection ends there and
   the other network carries the message under its own encryption. If your
   bridge encrypts portals, turn `MATRIX_E2EE_ENABLED` on.
-
-## Why matrix-nio
-
-The connector uses [matrix-nio](https://github.com/matrix-nio/matrix-nio)
-0.26 rather than [mautrix-python](https://github.com/mautrix/python). Both are
-maintained (releases in July 2026) and asyncio-based.
-
-- **Encryption.** matrix-nio 0.26 does end-to-end encryption with
-  [vodozemac](https://github.com/matrix-org/vodozemac), the Rust implementation
-  that replaced libolm; it installs from wheels on Linux, macOS and Windows.
-  mautrix-python's encryption still goes through python-olm and libolm, which
-  the Matrix.org Foundation
-  [deprecated in 2024](https://matrix.org/blog/2024/08/libolm-deprecation/)
-  and which has to be compiled where no wheel exists.
-- **License.** matrix-nio is ISC, a permissive license like this project's
-  MIT. mautrix-python is MPL-2.0, fine as a dependency but file-level copyleft
-  if copied.
-- **Fit.** matrix-nio is a client library for one account, which is what a
-  connector is. mautrix-python is a framework for bridges and application
-  services; its maintainer's bridges are now mostly written in Go.
-- **Media.** matrix-nio has used authenticated media since 0.25.1, which
-  matrix.org and other homeservers require for downloads.
 
 ## Tests
 
