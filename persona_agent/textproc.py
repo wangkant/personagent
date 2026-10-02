@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -448,8 +449,18 @@ def _is_protocol_dict(value) -> bool:
     return isinstance(value, dict) and any(_protocol_key(k) for k in value)
 
 
-# (model, drift) pairs already logged, so a model's habit is said once.
+# (model, drift kind) pairs already logged, so a model's habit is said once;
+# capped, since the model chooses what it sends.
 _PROTOCOL_DRIFT_LOGGED: set[tuple[str, str]] = set()
+_PROTOCOL_DRIFT_LOG_CAP = 256
+# model -> when an object with no reply was last reported.
+_NO_REPLY_WARNED: dict[str, float] = {}
+_NO_REPLY_WARN_EVERY_S = 300.0
+
+
+def _short_repr(value, limit: int = 40) -> str:
+    text = repr(value)
+    return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
 def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
@@ -460,18 +471,21 @@ def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
     ("Intent") or send `"mem": []`. None of that is a leak, so unknown keys
     are ignored, a miscased key is read as ours (the exact spelling wins when
     both are there), a list `mem` means no memory and non-text metadata is
-    blank. Each habit is logged once per model."""
+    blank. Each kind of habit is logged once per model, and an object with
+    no reply at all is reported every few minutes, naming the keys it had."""
     fields: dict = {}
-    drift: list[str] = []
+    drift: list[tuple[str, str]] = []
+    extras: list[str] = []
     for key, value in data.items():
         name = _protocol_key(key)
         if not name:
-            drift.append(f"extra key {key!r}")
+            extras.append(_short_repr(key))
+            drift.append(("extra key", extras[-1]))
             continue
         if key != name:
             if name in data:
                 continue
-            drift.append(f"key spelled {key!r}")
+            drift.append(("key spelled", _short_repr(key)))
         fields[name] = value
     if fields.get("reply") is not None and not isinstance(fields["reply"], str):
         return None
@@ -479,17 +493,28 @@ def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
     if mem is not None and not isinstance(mem, str):
         if not isinstance(mem, list):
             return None
-        drift.append("mem as a list")
+        drift.append(("mem as a list", ""))
         fields["mem"] = ""
     for name in ("reasoning", "intent"):
         if fields.get(name) is not None and not isinstance(fields[name], str):
-            drift.append(f"{name} as {type(fields[name]).__name__}")
+            drift.append((f"{name} as {type(fields[name]).__name__}", ""))
             fields[name] = ""
-    for item in drift:
-        if (model, item) not in _PROTOCOL_DRIFT_LOGGED:
-            _PROTOCOL_DRIFT_LOGGED.add((model, item))
-            logger.warning("[Agent] parser: model %s's JSON has %s; read past "
-                           "it (said once per model)", model or "?", item)
+    for kind, example in drift:
+        if ((model, kind) in _PROTOCOL_DRIFT_LOGGED
+                or len(_PROTOCOL_DRIFT_LOGGED) >= _PROTOCOL_DRIFT_LOG_CAP):
+            continue
+        _PROTOCOL_DRIFT_LOGGED.add((model, kind))
+        logger.warning("[Agent] parser: model %s's JSON has %s%s; read past "
+                       "it (said once per model)", model or "?", kind,
+                       f" {example}" if example else "")
+    if fields.get("reply") is None:
+        now = time.monotonic()
+        if now - _NO_REPLY_WARNED.get(model, -_NO_REPLY_WARN_EVERY_S) >= _NO_REPLY_WARN_EVERY_S:
+            _NO_REPLY_WARNED[model] = now
+            logger.warning("[Agent] parser: model %s's JSON has no \"reply\"%s, so "
+                           "there is nothing to send", model or "?",
+                           f" (its keys of its own: {', '.join(extras[:5])})"
+                           if extras else "")
     return fields
 
 

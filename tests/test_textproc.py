@@ -2824,3 +2824,27 @@ def test_the_parser_reads_past_keys_a_model_adds() -> None:
     check("the plain-text wrapper passes a drifted protocol object through",
           _as_protocol_object('{"reply":"hey","emotion":"x"}')
           == '{"reply":"hey","emotion":"x"}')
+
+
+def test_drift_logging_is_bounded_and_a_missing_reply_is_said(caplog) -> None:
+    import logging
+
+    from persona_agent import textproc
+
+    model = "drift-model"
+    with caplog.at_level(logging.WARNING, logger="agent"):
+        for i in range(300):
+            TP._parse_model_output(f'{{"reply":"hi","key{i}{"x" * 200}":1}}', model)
+    lines = [r.getMessage() for r in caplog.records if model in r.getMessage()]
+    check("one line for a model's extra keys, however many it invents",
+          len(lines) == 1 and len(lines[0]) < 160, repr(lines))
+    check("the dedupe set does not grow with the model's key names",
+          sum(1 for m, _k in textproc._PROTOCOL_DRIFT_LOGGED if m == model) == 1)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="agent"):
+        for _ in range(3):
+            out = TP._parse_model_output('{"intent":"chat","response":"hi"}', "open-model-2")
+    said = [r.getMessage() for r in caplog.records if '"reply"' in r.getMessage()]
+    check("an object with no reply yields nothing", out[0] == "")
+    check("...and says so once, naming the key the text went to",
+          len(said) == 1 and "'response'" in said[0], repr(said))
