@@ -73,6 +73,66 @@ def test_pending_replies() -> None:
           p2.match("g4", sender_uid="7", quote_mid="x0", now=110) is None)
 
 
+def test_a_connector_quote_falls_through_to_the_address() -> None:
+    """Behind a connector the bot's own message ids are never known, so a
+    quote of its reply cannot be resolved; the address decides instead."""
+    p = reactions.PendingReplies(ttl_sec=60)
+    p.record("tg", **_entry_kwargs(mids=[]))
+    check("connector: an unresolvable quote without an address is no reaction",
+          p.match("tg", sender_uid="7", quote_mid="telegram:c1:77", now=110) is None)
+    hit = p.match("tg", sender_uid="7", quote_mid="telegram:c1:77", at_bot=True,
+                  now=110)
+    check("connector: a quote-reply to the bot counts",
+          hit is not None and hit["matched_by"] == "at", repr(hit))
+    p.record("qq", **_entry_kwargs(mids=["m1"]))
+    check("native: a quote of an id we could resolve but do not track still "
+          "names its own target",
+          p.match("qq", sender_uid="7", quote_mid="m999", at_bot=True, now=110)
+          is None)
+
+
+def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
+    p = reactions.PendingReplies(fix_window_sec=100)
+    bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called",
+               target_uid="42")
+    p.note_rejection("g1", bad, ts=100.0, evidence_id="ev1", complainant_uid="42")
+    p.record("g1", **_entry_kwargs(reply="pizza", target_uid="7", ts=110.0))
+    check("a reply to someone else leaves the complaint armed",
+          p._awaiting_fix.get("g1", {}).get("complainant_uid") == "42")
+    p.record("g1", **_entry_kwargs(reply="the fix", target_uid="42", ts=120.0,
+                                   elicited_uid="42"))
+    check("re-asking the rejector is not their retry either", "g1" in p._awaiting_fix)
+    p.record("g1", **_entry_kwargs(reply="check the logs first", ts=130.0))
+    fixed = p.match("g1", sender_uid="42", at_bot=True, now=131.0)
+    check("the next reply to the complainant carries the fix and who it was for",
+          fixed["fixes"] == {"reply": "just restart it", "ctx_lines": ["a: down"],
+                             "mode": "called", "evidence_id": "ev1",
+                             "target_uid": "42"}, repr(fixed))
+
+    legacy = reactions.PendingReplies(fix_window_sec=100)
+    legacy._awaiting_fix["g1"] = {**bad, "rejected_ts": 100.0, "evidence_id": "ev"}
+    legacy.record("g1", **_entry_kwargs(target_uid="42", ts=110.0))
+    check("a row from an older state file, with no complainant, never links",
+          "fixes" not in legacy.match("g1", sender_uid="42", at_bot=True, now=111.0))
+    legacy.record("g1", **_entry_kwargs(target_uid="42", ts=300.0))
+    check("...and expires", "g1" not in legacy._awaiting_fix)
+
+
+def test_a_retry_queued_before_the_verdict_is_linked() -> None:
+    p = reactions.PendingReplies()
+    p.record("g1", **_entry_kwargs(reply="just restart it", mids=["m1"], ts=100.0))
+    complaint = p.match("g1", sender_uid="42", quote_mid="m1", now=100.0)
+    # Same timestamp on purpose: order is by record(), not by a coarse clock.
+    p.record("g1", **_entry_kwargs(reply="check the logs first", mids=["m2"],
+                                   ts=100.0))
+    p.note_rejection("g1", complaint, ts=100.0, evidence_id="ev1",
+                     complainant_uid="42")
+    check("the queued retry is linked", "g1" not in p._awaiting_fix)
+    retry = p.match("g1", sender_uid="42", quote_mid="m2", now=101.0)
+    check("...to the complaint", (retry.get("fixes") or {}).get("evidence_id") == "ev1",
+          repr(retry))
+
+
 def test_pending_replies_survive_restart_bounded() -> None:
     with tempfile.TemporaryDirectory() as d:
         state = Path(d) / "pending.json"
@@ -90,7 +150,7 @@ def test_pending_replies_survive_restart_bounded() -> None:
         p.note_rejection(
             "kept",
             {"reply": "bad", "ctx_lines": ["ctx"], "mode": "called"},
-            ts=100.0,
+            ts=100.0, complainant_uid="42",
         )
         p.record("new", **_entry_kwargs(mids=["new-mid"]))
 
@@ -176,13 +236,13 @@ def test_retry_and_elicited() -> None:
     p = reactions.PendingReplies(max_per_conv=4, ttl_sec=600,
                                  fix_window_sec=100, elicit_window_sec=50)
     bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called")
-    p.note_rejection("g1", bad, ts=100.0)
+    p.note_rejection("g1", bad, ts=100.0, complainant_uid="42")
     p.record("g1", **_entry_kwargs(reply="check the logs first", ts=150.0))
     e = p.match("g1", sender_uid="7", at_bot=True, now=160.0)
     check("retry entry carries fixes",
           e is not None and e.get("fixes", {}).get("reply") == "just restart it")
 
-    p.note_rejection("g2", bad, ts=100.0)
+    p.note_rejection("g2", bad, ts=100.0, complainant_uid="42")
     p.record("g2", **_entry_kwargs(reply="late retry", ts=300.0))
     e = p.match("g2", sender_uid="7", at_bot=True, now=310.0)
     check("fix window expiry drops the link",

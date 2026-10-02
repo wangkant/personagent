@@ -305,11 +305,20 @@ LEARN = [
      "acceptance": "<bot-name> THANKS",
      "probe": {"history": [], "latest": "alex: <bot-name> PROBE laptop died"},
      "target": "One line of sympathy, no advice."},
-    # One strong correction and nothing linked to it: held, not promoted.
+    # A correction carrying the judge's own draft, then the retry accepted:
+    # the retry answers the correction, so the pair that promotes teaches
+    # the retry the person accepted, not the draft.
     {"id": "le-b", "person": "sam", "context": ["sam: <bot-name> what to watch"],
      "reply": "options: 1. a 2. b", "correction": "<bot-name> CORRECT just name one",
      "acceptance": "<bot-name> THANKS",
      "probe": {"history": [], "latest": "sam: <bot-name> PROBE what to eat"},
+     "target": "One line of sympathy, no advice."},
+    # A correction, then the person moves on without taking the retry: one
+    # strong event, held.
+    {"id": "le-c", "person": "kim", "context": ["kim: <bot-name> any podcast tips"],
+     "reply": "here are five podcasts: 1. a 2. b", "correction": "<bot-name> CORRECT one is enough",
+     "acceptance": "<bot-name> MOVEON anyway lunch?",
+     "probe": {"history": [], "latest": "kim: <bot-name> PROBE any book tips"},
      "target": "One line of sympathy, no advice."},
 ]
 RETRY = "oof that is rough"
@@ -323,6 +332,9 @@ async def test_learning_counts_learned_only_through_the_policy(tmp, monkeypatch,
     monkeypatch.setattr(be, "EVAL_DATA", data)
 
     def adjudicate(prompt: str) -> dict:
+        if "MOVEON" in prompt:
+            return {"reaction": "neutral", "accept": False, "reason": "moved on",
+                    "better": "", "ask": "", "scenario": ""}
         if "THANKS" in prompt:
             return {"reaction": "positive", "accept": True, "reason": "thanked",
                     "better": "", "ask": "", "scenario": "accepted"}
@@ -345,14 +357,15 @@ async def test_learning_counts_learned_only_through_the_policy(tmp, monkeypatch,
     s = report["suites"]["learning"]
     m = s["metrics"]
     rows = {r["id"]: r for r in s["cases"]}
-    check("two scenarios, one promoted", m["n"] == 2 and m["promoted"] == 1, str(m))
-    check("the promoted scenario counts as learned",
-          rows["le-a"]["outcome"] == "learned" and m["learned"] == 1)
-    check("the held one stayed", rows["le-b"]["outcome"] == "stayed"
+    check("three scenarios, two promoted", m["n"] == 3 and m["promoted"] == 2, str(m))
+    check("the promoted scenarios count as learned",
+          rows["le-a"]["outcome"] == rows["le-b"]["outcome"] == "learned"
+          and m["learned"] == 2)
+    check("the held one stayed", rows["le-c"]["outcome"] == "stayed"
           and m["stayed"] == 1 and m["regressed"] == 0)
-    check("by promotion", m["by_promotion"]["promoted"]["learned"] == 1
+    check("by promotion", m["by_promotion"]["promoted"]["learned"] == 2
           and m["by_promotion"]["not_promoted"]["stayed"] == 1, str(m["by_promotion"]))
-    a, b = rows["le-a"], rows["le-b"]
+    a, b, c = rows["le-a"], rows["le-b"], rows["le-c"]
     check("a: the retry was linked to the rejected reply",
           a["acceptance"]["retry_of"] == "check the logs and roll back")
     check("a: the accepted retry is strong evidence",
@@ -361,14 +374,22 @@ async def test_learning_counts_learned_only_through_the_policy(tmp, monkeypatch,
     check("a: the pair the policy promoted teaches the retry",
           [c["better"] for c in a["candidates"]
            if c["state"] == "promoted"] == [RETRY], str(a["candidates"]))
-    check("b: one strong correction alone is held, and says why",
-          any(c["type"] == "preference_pair" and c["state"] == "proposed"
-              and "1/2" in c["held_because"] for c in b["candidates"]),
-          str(b["candidates"]))
-    check("b: nothing promoted", not b["promoted"])
+    check("b: a correction links the retry too",
+          b["acceptance"]["retry_of"] == "options: 1. a 2. b", str(b["acceptance"]))
+    check("b: the promoted pair teaches the accepted retry, not the draft",
+          [x["better"] for x in b["candidates"]
+           if x["state"] == "promoted"] == [RETRY], str(b["candidates"]))
+    check("b: the correction's own draft is retired, not left waiting",
+          [x["state"] for x in b["candidates"]
+           if x["better"] == "just pick one"] == ["rejected"], str(b["candidates"]))
+    check("c: moving on is not acceptance, so it is held and says why",
+          not c["promoted"]
+          and any(x["type"] == "preference_pair" and x["state"] == "proposed"
+                  and "1/2" in x["held_because"] for x in c["candidates"]),
+          str(c["candidates"]))
     check("the reaction model judged every reaction",
-          Counter(k for k, _ in calls)["adjudicate"] == 4)
+          Counter(k for k, _ in calls)["adjudicate"] == 6)
     check("the policy is stated in the report", "two agreeing signals" in s["policy"])
     check("one throwaway root per scenario",
-          [h.name for h in homes] == ["le-a", "le-b"], str(homes))
+          [h.name for h in homes] == ["le-a", "le-b", "le-c"], str(homes))
     _isolated("learning", calls, homes)

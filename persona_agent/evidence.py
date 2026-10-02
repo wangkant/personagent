@@ -112,14 +112,14 @@ def classify_strength(event: dict) -> str:
     """How much this single event may authorize on its own.
 
     - ``STRONG`` — an explicit directed correction from the person the reply
-      was aimed at, carrying a concrete replacement; or a retry the user then
-      accepted. Someone told the agent it was wrong *about them* and said what
-      right looks like.
-    - ``NEGATIVE_ONLY`` — a rejection with nothing concrete in it, or a
-      correction from a bystander. Real evidence that something was off, but
-      not a mandate to rewrite: **admin status does not make someone the
-      affected recipient**, so a third party's correction — however trusted —
-      lands here rather than in STRONG.
+      was aimed at, carrying a concrete replacement; or a retry that same
+      person then accepted. Someone told the agent it was wrong *about them*
+      and said what right looks like.
+    - ``NEGATIVE_ONLY`` — a rejection (any rewrite on it is the adjudicator's
+      guess), or a correction from a bystander. Real evidence that something
+      was off, but not a mandate to rewrite: **admin status does not make
+      someone the affected recipient**, so a third party's correction —
+      however trusted — lands here rather than in STRONG.
     - ``WEAK`` — laughter, agreement, banter, the agent's own score. Never
       sufficient to promote anything, at any quantity.
 
@@ -128,8 +128,9 @@ def classify_strength(event: dict) -> str:
     """
     kind = event.get("kind")
     if kind == KIND_RETRY_ACCEPTANCE:
-        # Acceptance only counts from the person the retry was for. A bystander
-        # laughing at the second attempt is not the complainant being satisfied.
+        # Acceptance only counts from the person the REJECTED reply was for
+        # (its recipient_id). A bystander laughing at the second attempt, or
+        # accepting a retry of someone else's reply, is not them satisfied.
         if not _same_person(event):
             return NEGATIVE_ONLY
         # Silence is not acceptance. `neutral` means the person simply moved

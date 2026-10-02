@@ -9,11 +9,47 @@ from typing import Optional
 
 from . import access
 from . import channels
+from .addressing import mentions_name, name_regex
 from .textproc import (
     _focus_tokens,
 )
 
 logger = logging.getLogger("agent")
+
+# What the memory commands answer, per AGENT_LANG. Plain text with ASCII or
+# full-width separators: the reply crosses the character policy like any other.
+_COMMAND_REPLIES = {
+    "en": {
+        "remember_what": ("remember what? you didn't say anything", "spill it",
+                          "remember what lol"),
+        "not_instructions": ("I can remember facts, not instructions",),
+        "noted": ("noted", "got it, written down", "remembered", "mhm", "ok"),
+        "forget_what": ("forget what? be specific", "which one? say more"),
+        "nothing_to_forget": ("uh, never recorded that", "no recollection of that",
+                              "nothing matching to forget"),
+        "forgotten": ("forgotten", "dropped", "gone", "bye"),
+        "empty": ("head's empty", "nothing in there", "blank slate"),
+        "recall_head": ("Here's what I remember:",),
+        "about": ("about {name}: ",),
+    },
+    "zh": {
+        "remember_what": ("记什么？你啥也没说", "说呀，记啥", "要我记啥"),
+        "not_instructions": ("我只记事实，不记指令",),
+        "noted": ("记下了", "好，记住了", "嗯，记着呢", "收到"),
+        "forget_what": ("忘掉什么？说具体点", "哪条？再说清楚点"),
+        "nothing_to_forget": ("呃，没记过这个", "没这印象啊", "没有对得上的可以忘"),
+        "forgotten": ("忘掉了", "删了", "没了"),
+        "empty": ("脑子里空空的", "啥也没记", "一片空白"),
+        "recall_head": ("我记得这些：",),
+        "about": ("关于{name}：",),
+    },
+}
+
+# "remember when we...", "remember how...": reminiscing, not a note to keep.
+_NOT_A_NOTE = (r"(?!\s*(?:when|how|what|who|why|where|whether|if|me|"
+               r"the\s+time|that\s+time)\b)")
+# "forget it" / "forget about it" means never mind.
+_NOT_A_DELETE = r"(?!\s*(?:about\s+)?it\b)"
 
 # When a new auto-memory is a fuller telling of one already written down
 # (`Agent._restated_memory`). The rule that does the work is the dropped
@@ -100,39 +136,37 @@ class Memory:
     ) -> Optional[str]:
         remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
         is_admin = access.is_admin(user_id, self._admins())
+        say = self._memory_reply
         if learned_pat.search(text):
             return self._learned_summary(group_id)
         m = remember_pat.search(text)
-        if m:
-            content = m.group(1).strip()
+        # A question is reminiscing ("Luna remember the party?"), not a note.
+        if m and not m.group(1).rstrip().endswith(("?", "？")):
+            content = re.sub(r"^that\s+", "", m.group(1).strip(), flags=re.IGNORECASE)
             if not content:
-                return random.choice([
-                    "remember what? you didn't say anything",
-                    "spill it",
-                    "remember what lol",
-                ])
+                return say("remember_what")
             content = self._validate_memory_candidate(content)
             if not content:
-                return "I can remember facts, not instructions"
+                return say("not_instructions")
             item: dict = {"text": content, "time": time.time()}
             if user_id and not is_admin:
                 item["user_id"] = user_id
                 if user_name:
                     item["user_name"] = user_name
             self._append_memory(group_id, item)
-            return random.choice(["noted", "got it, written down", "remembered", "mhm", "ok"])
+            return say("noted")
 
         m = forget_pat.search(text)
         if m:
-            query = m.group(1).strip()
+            query = re.sub(r"^(?:about|that)\s+", "", m.group(1).strip(),
+                           flags=re.IGNORECASE)
             # A too-short query over-deletes, and the admin's reaches every
             # member's rows. An English query must be 3+ characters and match
-            # whole words ("drop it" hit "kitty", "with" and "writes"; "tea"
-            # hit "steak"); CJK has no spaces to find words by, so it keeps a
-            # substring match at 2+ characters.
+            # whole words ("tea" must not hit "steak"); CJK has no spaces to
+            # find words by, so it keeps a substring match at 2+ characters.
             by_word = query.isascii()
             if len(query) < (3 if by_word else 2):
-                return random.choice(["forget what? be specific", "which one? say more"])
+                return say("forget_what")
             word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(query)}(?![A-Za-z0-9_])",
                               re.IGNORECASE)
             items = self.memories.get(group_id, [])
@@ -151,14 +185,10 @@ class Memory:
                 )
             ]
             if len(kept) == before:
-                return random.choice([
-                    "uh, never recorded that",
-                    "no recollection of that",
-                    "nothing matching to forget",
-                ])
+                return say("nothing_to_forget")
             self.memories[group_id] = kept
             self._save_memories()
-            return random.choice(["forgotten", "dropped", "gone", "bye"])
+            return say("forgotten")
 
         if recall_pat.search(text):
             items = self.memories.get(group_id, [])
@@ -168,47 +198,54 @@ class Memory:
                     if not it.get("user_id") or it.get("user_id") == user_id
                 ]
             if not items:
-                return random.choice([
-                    "head's empty",
-                    "nothing in there",
-                    "blank slate",
-                ])
+                return say("empty")
             # No brackets, no list markers: the reply crosses the character
-            # policy, which hard-refuses `[` and strips leading `- `, so the
-            # tagged form was never delivered.
+            # policy, which hard-refuses `[` and strips leading `- `.
             lines: list[str] = []
             for it in items:
-                tag = f"about {it.get('user_name')}: " if it.get("user_name") else ""
+                tag = (say("about").format(name=it.get("user_name"))
+                       if it.get("user_name") else "")
                 lines.append(f"{tag}{it['text']}")
-            return "Here's what I remember:\n" + "\n".join(lines)
+            return say("recall_head") + "\n" + "\n".join(lines)
 
         return None
+
+    def _memory_reply(self, key: str) -> str:
+        table = _COMMAND_REPLIES.get(self.agent_lang, _COMMAND_REPLIES["en"])
+        return random.choice(table[key])
+
+    def _names_me(self, text: str) -> bool:
+        """Is this persona named in `text`: one rule for name calls, the
+        missed-mention catch-up and the memory commands."""
+        return mentions_name(text, self.persona_name)
 
     def _memory_cmd_patterns(self) -> tuple:
         """remember / forget / recall / learned regexes, cached per
         persona_name (tests reassign persona_name after init). English +
-        legacy Chinese forms."""
+        Chinese forms."""
         cached = getattr(self, "_mem_cmd_pats", None)
         if cached and cached[0] == self.persona_name:
             return cached[1]
-        # With no name to follow, the command has to open the message (after
-        # the "@" an at-mention renders as); unanchored, the empty head let
-        # "I don't remember what you said" anywhere in an addressed message
-        # save "what you said" as a memory.
+        # A command opens the message: after a quote placeholder and any
+        # at-mentions, the name (or, with no name, nothing). Anchored so that
+        # "I don't remember what you said" inside an addressed message stays
+        # conversation.
+        lead = r"^\s*(?:\[reply\]\s*)?"
         if self.persona_name:
-            head = rf"{re.escape(self.persona_name)}\s*[，,]?\s*"
+            head = (lead + r"(?:@\S+\s*)*?@?" + name_regex(self.persona_name)
+                    + r"\s*[，,:：]?\s*")
         else:
-            head = r"^\s*(?:@\S*\s*)?[，,]?\s*"
+            head = lead + r"(?:@\S*\s*)?[，,]?\s*"
         # \b after the English keywords: "remembered my birthday" is not a
         # command to save "ed my birthday". CJK needs none (and \b would not
         # work there: Python counts CJK as word characters).
         pats = (
-            re.compile(head + r"(?:(?:remember|memorize)\b|记(?:住|一下|下))"
-                       r"\s*[：:，,]?\s*(.+)", re.IGNORECASE),
-            re.compile(head + r"(?:(?:forget|drop)\b|忘(?:了|记|掉))"
-                       r"\s*[：:，,]?\s*(.+)", re.IGNORECASE),
+            re.compile(head + r"(?:(?:remember|memorize)\b" + _NOT_A_NOTE
+                       + r"|记(?:住|一下|下))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
+            re.compile(head + r"(?:forget\b" + _NOT_A_DELETE
+                       + r"|忘(?:了|记|掉))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
             re.compile(head + r"(?:what do you remember|what'?s in your memory|memory\?|"
-                       r"(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
+                       r"(?:你\s*)?(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))",
                        re.IGNORECASE),
             re.compile(head + r"(?:what (?:have|did) you learn(?:ed)?|what'?ve you learned|"
                        r"learned\?|(?:你)?(?:学到|学会|学了)(?:了)?(?:什么|啥))",

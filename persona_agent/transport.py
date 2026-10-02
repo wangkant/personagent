@@ -573,7 +573,7 @@ class Transport:
                         raw = msg.get("raw_message", "")
                         # @s arrive in raw_message as CQ codes ([CQ:at,qq=...]);
                         # matching only "@<qq>" never hits, so match both forms.
-                        if ((self.persona_name and self.persona_name in raw)
+                        if (self._names_me(raw)
                                 or f"@{self.qq_bot_id}" in raw
                                 or f"[CQ:at,qq={self.qq_bot_id}]" in raw):
                             logger.info("[Agent] missed offline @-mention detected; replaying (group=%s)", group_id)

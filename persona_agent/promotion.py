@@ -32,11 +32,11 @@ Pure logic — no clock reads, no LLM. Callers pass `now`.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import candidates, evidence
+from .config_env import env_bool, env_float, env_int
 from .pools import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
 from .storage import append_lock, atomic_write_text
 
@@ -98,46 +98,27 @@ class Policy:
 
     @classmethod
     def from_env(cls, env=None) -> "Policy":
-        env = os.environ if env is None else env
-
-        def _int(name: str, default: int) -> int:
-            try:
-                return int(str(env.get(name, default)).strip() or default)
-            except (TypeError, ValueError):
-                return default
-
-        def _float(name: str, default: float) -> float:
-            try:
-                return float(str(env.get(name, default)).strip() or default)
-            except (TypeError, ValueError):
-                return default
-
-        def _bool(name: str, default: bool) -> bool:
-            """`raw == "true"` read every other spelling as False, so
-            `PROMOTE_AUTO_ENABLED=1` disabled promotion entirely and said nothing.
-            An unrecognised value keeps the default rather than silently
-            picking the opposite of what was meant."""
-            raw = str(env.get(name, "")).strip().lower()
-            if raw in {"true", "1", "yes", "on"}:
-                return True
-            if raw in {"false", "0", "no", "off"}:
-                return False
-            return default
-
+        """Read through config_env, so a typo or a value under a floor is
+        logged and falls back to the default, like every other setting."""
         return cls(
             # Floors, not suggestions: PROMOTE_MIN_EVENTS=1 would reintroduce
             # exactly the failure this module exists to prevent.
-            min_events=max(2, _int("PROMOTE_MIN_EVENTS", MIN_EVENTS)),
-            min_strong=max(1, _int("PROMOTE_MIN_STRONG", MIN_STRONG)),
+            min_events=env_int("PROMOTE_MIN_EVENTS", MIN_EVENTS,
+                               minimum=MIN_EVENTS, env=env),
+            min_strong=env_int("PROMOTE_MIN_STRONG", MIN_STRONG,
+                               minimum=MIN_STRONG, env=env),
             # Floor of 1, not 2: an operator running a private single-user
             # deployment has nobody to corroborate with, and should be able to
             # say so explicitly rather than have promotion silently never fire.
-            min_speakers=max(1, _int("PROMOTE_MIN_SPEAKERS", MIN_SPEAKERS)),
-            max_evidence_age_days=max(
-                0.0, _float("PROMOTE_EVIDENCE_MAX_AGE_DAYS", MAX_EVIDENCE_AGE_DAYS)),
-            require_same_conversation=_bool(
-                "PROMOTE_REQUIRE_SAME_CONVERSATION", REQUIRE_SAME_CONVERSATION),
-            auto_promote=_bool("PROMOTE_AUTO_ENABLED", AUTO_PROMOTE),
+            min_speakers=env_int("PROMOTE_MIN_SPEAKERS", MIN_SPEAKERS,
+                                 minimum=1, env=env),
+            max_evidence_age_days=env_float(
+                "PROMOTE_EVIDENCE_MAX_AGE_DAYS", MAX_EVIDENCE_AGE_DAYS,
+                minimum=0.0, env=env),
+            require_same_conversation=env_bool(
+                "PROMOTE_REQUIRE_SAME_CONVERSATION", REQUIRE_SAME_CONVERSATION,
+                env=env),
+            auto_promote=env_bool("PROMOTE_AUTO_ENABLED", AUTO_PROMOTE, env=env),
         )
 
 
@@ -207,6 +188,11 @@ def supports_candidate(event: dict, cand: dict, *,
     carrying "replace X with C" is real evidence that X was wrong, but counting
     it as support for "replace X with B" would let one correction authorize a
     rewrite nobody asked for.
+
+    That holds for a person's own words only. A rejection's `better` is the
+    adjudicator's guess at what they wanted, and the complaint a retry answers
+    (the candidate's ``payload.answers``) is the reason the retry exists; a
+    differing draft on either does not stop it arguing that X was wrong.
     """
     ctype = str(cand.get("type") or "")
     if not evidence.supports(event, ctype):
@@ -216,11 +202,29 @@ def supports_candidate(event: dict, cand: dict, *,
     if not scope_compatible(candidates.scope_from_event(event), cand.get("scope") or {},
                             require_same_conversation=policy.require_same_conversation):
         return False
-    if ctype == candidates.TYPE_PAIR:
-        better = str((event.get("adjudication") or {}).get("better") or "").strip()
-        if better and better != str(cand.get("better") or "").strip():
+    if ctype == candidates.TYPE_PAIR and not _vouches_for(event, cand):
+        answers = str((cand.get("payload") or {}).get("answers") or "")
+        guess = (event.get("kind") == evidence.KIND_REACTION
+                 and event.get("reaction_type") == "rejection")
+        if not (guess or (answers and event.get("event_id") == answers)):
             return False
     return True
+
+
+def anchors(event: dict, cand: dict) -> bool:
+    """Can `event` be the strong one `cand` needs: strong, and for a rewrite,
+    naming no rewrite or this one. A correction drafting something else
+    supports a retry it answers, but cannot put the retry's words into the
+    prompt on its own authority."""
+    return (evidence.classify_strength(event) == evidence.STRONG
+            and (cand.get("type") != candidates.TYPE_PAIR
+                 or _vouches_for(event, cand)))
+
+
+def _vouches_for(event: dict, cand: dict) -> bool:
+    """Does `event` name no rewrite, or this candidate's own one."""
+    better = str((event.get("adjudication") or {}).get("better") or "").strip()
+    return not better or better == str(cand.get("better") or "").strip()
 
 
 def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
@@ -230,7 +234,10 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
     Two proposals conflict when they rewrite the same reply, in compatible
     scope, into different things. Only live proposals count: a rejected or
     superseded candidate has already been adjudicated and must not keep
-    blocking its replacement.
+    blocking its replacement. A PROPOSED rewrite that no person argued for
+    (see `witnessed_rewrites`), or that only the complaint `cand` answers
+    argues for, is a draft rather than a rival. A PROMOTED one always
+    conflicts: one reply never has two active rewrites.
     """
     # ONE pass over the events, before the peer loop, not one per peer — see
     # `witnessed_rewrites`. `None` when the caller supplied nothing, which is
@@ -238,6 +245,7 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
     # conflict stands, because the alternative is a veto silently vanishing
     # whenever a caller omits them.
     witnessed = witnessed_rewrites(related_events) if related_events else None
+    answers = str((cand.get("payload") or {}).get("answers") or "")
     out: list[str] = []
     for other in peers or ():
         if other.get("candidate_id") == cand.get("candidate_id"):
@@ -253,16 +261,44 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
                                 require_same_conversation=policy.require_same_conversation):
             continue
         if str(other.get("better") or "") != str(cand.get("better") or ""):
-            # `related_events` is only consulted when we have it: with no
-            # events to read, the conflict stands, because the alternative is
-            # a veto silently disappearing whenever a caller omits them.
-            if witnessed is not None:
-                rewrite = str(other.get("better") or "").strip()
-                # An empty rewrite was never unwitnessed under the old
-                # per-peer check either, so it keeps its veto.
-                if rewrite and rewrite not in witnessed:
+            if other.get("state") == candidates.STATE_PROPOSED:
+                backing = set(other.get("evidence") or ())
+                if answers and backing and backing <= {answers}:
                     continue
+                # `related_events` is only consulted when we have it: with no
+                # events to read, the conflict stands, because the alternative
+                # is a veto silently disappearing whenever a caller omits them.
+                if witnessed is not None:
+                    rewrite = str(other.get("better") or "").strip()
+                    # An empty rewrite keeps its veto.
+                    if rewrite and rewrite not in witnessed:
+                        continue
             out.append(other.get("candidate_id", ""))
+    return [cid for cid in out if cid]
+
+
+def answered_drafts(cand: dict, peers, *,
+                    policy: Policy = DEFAULT_POLICY) -> list[str]:
+    """Proposed rewrites of `cand`'s reply that nothing but `cand`'s own
+    evidence argues for: drafts of the complaint `cand` answered, which can
+    no longer promote once `cand` is active."""
+    if cand.get("type") != candidates.TYPE_PAIR:
+        return []
+    backing = set(cand.get("evidence") or ())
+    out = []
+    for other in peers or ():
+        if (other.get("candidate_id") == cand.get("candidate_id")
+                or other.get("state") != candidates.STATE_PROPOSED
+                or other.get("type") != candidates.TYPE_PAIR
+                or str(other.get("reply") or "") != str(cand.get("reply") or "")
+                or str(other.get("better") or "") == str(cand.get("better") or "")):
+            continue
+        if not scope_compatible(other.get("scope") or {}, cand.get("scope") or {},
+                                require_same_conversation=policy.require_same_conversation):
+            continue
+        ids = set(other.get("evidence") or ())
+        if ids and ids <= backing:
+            out.append(str(other.get("candidate_id") or ""))
     return [cid for cid in out if cid]
 
 
@@ -274,6 +310,10 @@ _UNWITNESSED_KINDS = (evidence.KIND_SELF_REVIEW, evidence.KIND_SELF_EVAL)
 def witnessed_rewrites(events) -> frozenset:
     """Every rewrite a PERSON has argued for, in one pass over the events.
 
+    A rejection's draft is not one: the person said the reply was wrong, and
+    the adjudicator guessed the rest. Nor is a dismissed event's, or a retry
+    the person merely moved on from.
+
     Computed once before the peer loop in `find_conflicts`, not once per peer:
     a per-peer scan was O(peers x events) and candidates sharing a reply text
     make that quadratic in practice."""
@@ -281,6 +321,9 @@ def witnessed_rewrites(events) -> frozenset:
         str((event.get("adjudication") or {}).get("better") or "").strip()
         for event in events or ()
         if event.get("kind") not in _UNWITNESSED_KINDS
+        and (event.get("adjudication") or {}).get("accept")
+        and not (event.get("kind") == evidence.KIND_REACTION
+                 and event.get("reaction_type") == "rejection")
     ) - {""}
 
 
@@ -393,8 +436,8 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     # change without breaking event_id. Hand-editing a bystander's correction to
     # "strong" would otherwise buy a rewrite that classify_strength exists to
     # refuse. For untampered rows this is the same value make_event wrote.
-    strong = [e for e in supporting
-              if evidence.classify_strength(e) == evidence.STRONG]
+    # `anchors` also requires a strong event to vouch for this very rewrite.
+    strong = [e for e in supporting if anchors(e, cand)]
     against = counter_evidence(cand, related_events, now=now, policy=policy)
     if against:
         return Decision(False, "compatible evidence disagrees — left for review",

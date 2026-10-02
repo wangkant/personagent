@@ -84,6 +84,9 @@ class Learning:
             events = self.evidence_log.all()
             peers = ledger.all()
             for cand in ledger.pending():
+                # An earlier promotion in this loop may have retired it.
+                if cand.get("state") != candidates.STATE_PROPOSED:
+                    continue
                 if not promotion.supports_candidate(event, cand,
                                                    policy=self.promotion_policy):
                     continue
@@ -98,6 +101,7 @@ class Learning:
                     promoted.append(cid)
                     logger.info("[Agent] candidate PROMOTED %s (corroborated): "
                                 "%s", cid, decision.reason)
+                    self._retire_answered_drafts(cid, ts)
             if promoted:
                 self._rebuild_promoted_views()
         except Exception as e:
@@ -192,6 +196,7 @@ class Learning:
                 if ledger.promote(cid, ts=ts, actor="auto",
                                   reason=decision.reason,
                                   evidence=[event["event_id"]]):
+                    self._retire_answered_drafts(cid, ts)
                     self._rebuild_promoted_views()
                     logger.info("[Agent] candidate PROMOTED %s (%s): %s — %r",
                                 cid, ctype, decision.reason,
@@ -209,6 +214,24 @@ class Learning:
             logger.warning("[Agent] candidate proposal failed: %s: %s",
                            type(e).__name__, e)
             return "error"
+
+    def _retire_answered_drafts(self, cid: str, ts: str) -> None:
+        """Reject the proposed rewrites `cid` just answered for good.
+
+        A complaint's adjudicator drafts a rewrite of its own; once the
+        person accepts the bot's retry instead, that draft has nothing left
+        arguing for it and would otherwise wait in `proposed` forever."""
+        ledger = self.candidate_ledger
+        cand = ledger.get(cid)
+        if cand is None:
+            return
+        reason = ("the person accepted the retry instead"
+                  if (cand.get("payload") or {}).get("via") == "retry-completion"
+                  else f"answered by {cid}")
+        for other in promotion.answered_drafts(cand, ledger.all(),
+                                               policy=self.promotion_policy):
+            if ledger.reject(other, ts=ts, actor="auto", reason=reason):
+                logger.info("[Agent] candidate %s REJECTED: %s", other, reason)
 
     def _decide_promotion(self, cid: str, *, events: list | None = None,
                           peers: list | None = None) -> promotion.Decision:
@@ -590,9 +613,10 @@ class Learning:
         the promotion policy finds a second compatible event with at least one
         strong among them.
 
-        Accepted rejections still arm both recovery paths (retry-completion and
-        the delayed elicitation ask), and an accepted rejection or correction
-        rolls back whatever the reply had previously been promoted for.
+        An accepted rejection or correction arms retry-completion (the bot's
+        next reply to that person is its retry), a rejection also the delayed
+        elicitation ask, and either rolls back whatever the reply had
+        previously been promoted for.
 
         Every adjudication is audited in candidates.jsonl. Never raises."""
         try:
@@ -704,7 +728,10 @@ class Learning:
                 if fpair is not None and _fresh_pair(fpair):
                     retry_ev = evidence.make_event(
                         kind=evidence.KIND_RETRY_ACCEPTANCE, ts=now,
-                        **{**base, "context": fix.get("ctx_lines")},
+                        # The recipient is whoever the REJECTED reply was for:
+                        # only their acceptance of the fix is strong.
+                        **{**base, "context": fix.get("ctx_lines"),
+                           "recipient_id": str(fix.get("target_uid") or "")},
                         reply=fpair["reply"],
                         reaction_type=adj["reaction"],
                         adjudication={
@@ -745,12 +772,15 @@ class Learning:
                     self._retract_reply(str(entry.get("reply") or ""), ts=now,
                                         event_id=reaction_ev["event_id"])
 
-                # Accepted rejection with nothing concrete learned: arm both
-                # recovery paths.
-                if adj["reaction"] == "rejection" and conv_id:
+                # Accepted complaint: the bot's next reply to this person is
+                # its retry, and their acceptance of it is what can promote.
+                # A rejection also asks what they meant.
+                if adj["reaction"] in ("rejection", "correction") and conv_id:
                     self.pending_reactions.note_rejection(
                         conv_id, entry, time.time(),
-                        evidence_id=reaction_ev["event_id"])
+                        evidence_id=reaction_ev["event_id"],
+                        complainant_uid=str(reactor_uid or ""))
+                if adj["reaction"] == "rejection" and conv_id:
                     if self.react_elicit_enabled and adj.get("ask"):
                         self._spawn(self._maybe_elicit(
                             conv_id, entry, adj.get("ask", ""),
@@ -784,15 +814,17 @@ class Learning:
                             reactor_uid: str, is_dm: bool,
                             parent_evidence_id: str = "") -> None:
         """Delayed elicitation: wait out the bot's own normal reply to the
-        rejection, then — if the user still hasn't supplied a correction and
-        the per-conversation cooldown allows — ask in the bot's voice what
-        they actually meant. The rejector's next message (even without an @)
-        is then attributed to the ORIGINAL rejected reply, so their answer
-        adjudicates as a proper correction. Never raises."""
+        rejection, then — unless the person has already accepted that retry,
+        and if the per-conversation cooldown allows — ask in the bot's voice
+        what they actually meant. The rejector's next message (even without
+        an @) is then attributed to the ORIGINAL rejected reply, so their
+        answer adjudicates as a proper correction. Never raises."""
         try:
             if not ask:
                 return
             await asyncio.sleep(max(0.0, self.react_elicit_delay_s))
+            if self._complaint_answered(parent_evidence_id):
+                return
             now_mono = time.time()
             if now_mono - self._last_elicit_at[conv_id] < self.react_elicit_cooldown_s:
                 return
@@ -844,6 +876,21 @@ class Learning:
         except Exception as e:
             logger.warning("[Agent] elicitation failed: %s: %s",
                            type(e).__name__, e)
+
+    def _complaint_answered(self, complaint_id: str) -> bool:
+        """Has the person accepted the retry that answers this complaint."""
+        if not complaint_id:
+            return False
+        try:
+            return any(
+                e.get("kind") == evidence.KIND_RETRY_ACCEPTANCE
+                and e.get("parent_event_id") == complaint_id
+                and (e.get("adjudication") or {}).get("accept")
+                for e in self.evidence_log.all())
+        except Exception as e:
+            logger.warning("[Agent] evidence read failed: %s: %s",
+                           type(e).__name__, e)
+            return False
 
     # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:
