@@ -181,6 +181,8 @@ To connect through AstrBot:
 3. Run `personagent run` and keep it running, then restart AstrBot or reload its plugins.
 4. Say the bot's name in one of those groups.
 
+The plugin also has its own repository, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent), so it can be installed from AstrBot's WebUI by that address; then set its `connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`.
+
 The plugin forwards a group only when it is in the plugin's `groups`, and DMs only from `dm_users`; both can be changed in AstrBot's WebUI. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin. The [deployment guide](docs/deploy.md) covers the rest, and a [Chinese step-by-step guide](docs/deploy.zh-CN.md) covers QQ from zero.
 
 With AstrBot's folder given, nothing is asked, and a platform can be switched on from its token:

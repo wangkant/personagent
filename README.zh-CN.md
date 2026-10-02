@@ -178,6 +178,8 @@ QQ  ⇄  NapCat  ⇄  AstrBot（装了 personagent 插件）  ⇄  personagent  
 5. 运行 `personagent run` 并保持开着，然后重启 AstrBot，或在它的 WebUI 里重载插件。
 6. 在其中一个群里说「小夏，你好」（换成你起的名字）。
 
+插件也有独立仓库 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent)，可以在 AstrBot 的 WebUI 里填这个地址安装；这样装的话，要把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。
+
 插件只转发 `groups` 里列出的群，私聊只转发 `dm_users` 里的人，两项都可以在 AstrBot 的 WebUI 里改；管理员随时可以私聊它。改了 `.env` 要重启 personagent，改了平台或插件要重启 AstrBot。
 
 <details>

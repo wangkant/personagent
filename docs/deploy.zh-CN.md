@@ -120,6 +120,8 @@ AstrBot 第一次启动时会生成 `data` 文件夹，里面有 `cmd_config.jso
 
 ## 第五部分：把 personagent 接上 AstrBot
 
+> 也可以在 AstrBot 的 WebUI 里，用插件仓库地址 `https://github.com/wangkant/astrbot_plugin_personagent` 安装插件，再把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。下面的命令会把这些全部自动做好，推荐用它。
+
 回到 PowerShell：
 
 ```powershell
