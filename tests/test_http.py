@@ -321,7 +321,7 @@ async def test_asgi_webhook_auth_and_schema() -> None:
         check("ASGI auth: valid QQ envelope accepted", good.status_code == 200)
         check("ASGI auth: valid connector envelope accepted",
               gw.status_code == 200 and gw.json() == {
-                  "handled": False, "replies": []}, repr(gw.text))
+                  "handled": False, "owned": False, "replies": []}, repr(gw.text))
         check("ASGI: an old sent_at is refused as stale_event",
               old.status_code == 403 and old.json()["code"] == "stale_event",
               repr(old.text))
