@@ -1,7 +1,7 @@
 """tools/sticker_holdout_eval.py — measure the visual aesthetic gate's
 stability and accuracy against a human-labeled holdout set.
 
-Why this exists: the VISION_AESTHETIC_PROMPT in agent.py is hand-tuned. If
+Why this exists: the VISION_AESTHETIC_PROMPT in persona_agent/ingestion.py is hand-tuned. If
 you only iterate the prompt against the same handful of failure examples
 you have on hand, "the next version" is fitting that handful — not
 improving real performance on borderline images. A holdout set you don't
