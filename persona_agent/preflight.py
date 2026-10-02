@@ -23,7 +23,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import access, channels
+from . import access, channels, endpoints
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from .home import resource
 from .paths import ROOT
@@ -208,22 +208,6 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
             f"which is how QQ numbers are stored, so they are compared against "
             f"the QQ admins and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
     return findings
-
-
-def _misjoined_chat_url(base: str) -> str:
-    """The chat URL `base` turns into when a version root such as /api/paas/v4
-    gets /v1 appended, which no provider serves; '' when it is fine.
-
-    Asked of `chat_completions_url` itself, so this reports what the agent
-    will really call, once at startup rather than on every turn."""
-    if not base:
-        return ""
-    from .endpoints import chat_completions_url
-
-    url = chat_completions_url(base)
-    if re.search(r"/(v\d+|openai)/v1/chat/completions$", urlsplit(url).path):
-        return url
-    return ""
 
 
 def _lang_family(value: str) -> str:
@@ -414,14 +398,23 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
 
-    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL"):
+    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL", "VISION_BASE_URL",
+                "EMBEDDING_BASE_URL"):
         url = str(configured.get(key) or "").strip()
-        wrong = _misjoined_chat_url(url)
+        if url and not endpoints.has_scheme(url):
+            findings.append(Finding(
+                "ERROR" if key == "LLM_BASE_URL" else "WARN", key,
+                f"({url}) does not start with https:// or http://, so no request"
+                f" can reach it. Write it with one, such as https://{url}"))
+            continue
+        wrong = endpoints.misjoined_chat_url(url) if key.startswith("LLM_") else ""
         if wrong:
+            gemini = ("; Gemini's OpenAI-compatible base is " + url.rstrip("/") + "/openai"
+                      if re.search(r"/v\d+beta/?$", url) else "")
             findings.append(Finding(
                 "WARN", key,
                 f"({url}) is turned into {wrong}, which no provider serves."
-                " Give the complete /chat/completions endpoint instead"))
+                f" Give the complete /chat/completions endpoint instead{gemini}"))
 
     lang = str(configured.get("AGENT_LANG") or "").strip()
     if lang and not _lang_family(lang):

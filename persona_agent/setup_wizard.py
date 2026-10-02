@@ -107,6 +107,8 @@ _TEXT: dict[str, tuple[str, str]] = {
         "Base URL = the API address on your provider's page, such as https://api.deepseek.com",
         "Base URL = 服务商文档里写的 API 地址，例如 https://api.deepseek.com"),
     "base_url": ("Base URL", "Base URL（API 地址）"),
+    "base_url_scheme": ("Start the address with https:// (or http:// for a server on this computer).",
+                        "地址要以 https:// 开头（本机上的服务用 http://）。"),
     "model_explain": ("Model = the model's id at that service, such as {example}",
                       "模型名 = 这家服务里模型的 ID，例如 {example}"),
     "model": ("Model", "模型名"),
@@ -708,6 +710,10 @@ def _is_loopback(url: str) -> bool:
     return (urllib.parse.urlsplit(url).hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
 
 
+def has_scheme(url: str) -> bool:
+    return url.strip().lower().startswith(("http://", "https://"))
+
+
 def _post(url: str, api_key: str, payload: dict, timeout: float) -> tuple[int, str]:
     request = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"), method="POST",
@@ -1184,6 +1190,9 @@ def step_model(current: dict, retry: bool = False) -> dict:
     if not base_url or retry:
         _say(t("base_url_explain"))
         base_url = ask(t("base_url"), default=base_url, required=True)
+        while not has_scheme(base_url):
+            _say(t("base_url_scheme"))
+            base_url = ask(t("base_url"), required=True)
     if provider.key == "ollama":
         _say(t("ollama_model"))
     elif not provider.model:
@@ -1466,6 +1475,8 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     --persona; an edited one is never touched."""
     if args.provider == "other" and not args.base_url:
         raise SystemExit("--provider other needs --base-url")
+    if args.base_url and not has_scheme(args.base_url):
+        raise SystemExit("--base-url needs https:// or http:// in front, such as https://api.deepseek.com")
     existed = (home / ".env").exists()
     env_path = copy_env_template(home)
     lang = (args.lang or os.environ.get("AGENT_LANG", "").strip().lower()

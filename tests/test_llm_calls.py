@@ -155,3 +155,29 @@ async def test_an_unknown_endpoint_is_asked_by_its_first_gate_call(tmp: Path) ->
         await _gate(agent)
         check(f"the next gate call sends it only if it was taken ({want})",
               http.sent == [("m", want)], repr(http.sent))
+
+
+def test_a_base_url_is_judged_by_the_resolver_that_uses_it() -> None:
+    from persona_agent import preflight
+    from persona_agent.endpoints import chat_completions_url
+
+    check("an uppercase version is a version root",
+          chat_completions_url("https://llm.example/V1") == "https://llm.example/V1/chat/completions")
+
+    def found(**env):
+        return {(f.level, f.key): f.detail for f in preflight.check_config(
+            env={"LLM_API_KEY": "sk-x", **env})}
+
+    for base in ("https://api.groq.com/openai/v1", "https://api.groq.com/openai",
+                 "https://generativelanguage.googleapis.com/v1beta/openai"):
+        check(f"{base} is fine", not found(LLM_BASE_URL=base), repr(found(LLM_BASE_URL=base)))
+    gemini = found(LLM_BASE_URL="https://generativelanguage.googleapis.com/v1beta")
+    check("Gemini's native /v1beta is named, with the address to use",
+          "https://generativelanguage.googleapis.com/v1beta/openai"
+          in gemini.get(("WARN", "LLM_BASE_URL"), ""), repr(gemini))
+    for key, level in (("LLM_BASE_URL", "ERROR"), ("LLM_FALLBACK_BASE_URL", "WARN"),
+                       ("EMBEDDING_BASE_URL", "WARN")):
+        got = found(**{key: "api.deepseek.com", "LLM_FALLBACK_MODEL": "f",
+                       "LLM_FALLBACK_API_KEY": "k", "EMBEDDING_MODEL": "e"})
+        check(f"{key} without a scheme is named", "https://api.deepseek.com"
+              in got.get((level, key), ""), repr(got))

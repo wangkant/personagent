@@ -26,9 +26,27 @@ def endpoint_for(model: str, *, primary_model: str, fallback_model: str,
 _VERSION_ROOT_RE = re.compile(r"/v\d+$|/v\d+[a-z]*\d*/openai$")
 
 
+# A version segment followed by another, as /v1 appended after Gemini's
+# native /v1beta leaves it: no provider serves that.
+_DOUBLED_VERSION_RE = re.compile(r"/v\d+[^/]*/v\d+/chat/completions$")
+
+
 def _is_version_root(path: str) -> bool:
     """Does `path` already end at the API's version root?"""
-    return bool(_VERSION_ROOT_RE.search(path))
+    return bool(_VERSION_ROOT_RE.search(path.lower()))
+
+
+def has_scheme(url: str) -> bool:
+    """Does `url` start with http:// or https://? Without it httpx cannot
+    send anything."""
+    return url.strip().lower().startswith(("http://", "https://"))
+
+
+def misjoined_chat_url(base: str) -> str:
+    """The chat URL `base` turns into when that URL has two version segments in
+    a row (/v1beta/v1, /v4/v1), which no provider serves; '' when it is fine."""
+    url = chat_completions_url(base) if base else ""
+    return url if _DOUBLED_VERSION_RE.search(urlsplit(url).path.lower()) else ""
 
 
 def _split_base(base: str):

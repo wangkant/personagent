@@ -592,3 +592,15 @@ def test_the_next_steps_fit_this_machine(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("AGENT_HOME", str(tmp_path))
     check("--home is carried into the commands", "--home" in " ".join(elsewhere.shown("chat"))
           and elsewhere.argv("chat")[-3:] == ["--home", str(tmp_path), "chat"])
+
+
+def test_a_base_url_without_its_scheme_is_asked_again(monkeypatch) -> None:
+    answers = iter([str(len(sw.PROVIDERS)), "api.example.com", "https://api.example.com",
+                    "some-model", "sk-test-123456"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    current = dict.fromkeys(("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"), "")
+    values = sw.step_model(current)
+    check("asked again until the address has a scheme",
+          values["LLM_BASE_URL"] == "https://api.example.com", repr(values))
+    with pytest.raises(SystemExit):
+        sw.main(["--no-input", "--provider", "other", "--base-url", "api.example.com"])
