@@ -1,4 +1,5 @@
-"""QQ-group persona agent."""
+"""The Agent: one persona, wired from one settings record. Its behaviour lives
+in one mixin per concern; this module builds its state."""
 from __future__ import annotations
 
 import asyncio
@@ -35,7 +36,8 @@ from .memory import Memory
 from .messages import MessageParsing
 from .proactive import Proactive
 from .prompt import PromptBuilder
-from .prompts import DEFAULT_PERSONA, parse_persona_style
+from .prompts import (DEFAULT_PERSONA, parse_persona_style,
+                      render_persona_template)
 from .retrieval import Retrieval
 from .search import WebSearch
 from .settings import AgentSettings
@@ -68,6 +70,16 @@ def _load_persona_card() -> Optional[dict]:
     return data if isinstance(data, dict) else None
 
 
+_persona_sources_logged: set[str] = set()
+
+
+def _note_persona_source(source: str) -> None:
+    """Say once per process which persona document the agent runs on."""
+    if source not in _persona_sources_logged:
+        _persona_sources_logged.add(source)
+        logger.info("[Agent] persona: %s", source)
+
+
 def _load_persona(lang: str = "en") -> str:
     """Load persona text from PERSONA_FILE (default persona.txt); fall back to
     the bundled persona.example.<lang>.txt, then DEFAULT_PERSONA. Falling back
@@ -76,27 +88,22 @@ def _load_persona(lang: str = "en") -> str:
     persona_path = ROOT / os.getenv("PERSONA_FILE", "persona.txt")
     if persona_path.is_file():
         try:
-            return persona_path.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
+            text = persona_path.read_text(encoding="utf-8").strip()
+            _note_persona_source(str(persona_path) if text
+                                 else f"{persona_path} is empty, using the built-in one")
+            return text or DEFAULT_PERSONA
         except Exception:
             logger.warning("read persona file failed, falling back to bundled example")
     example = ROOT / "data" / f"persona.example.{lang}.txt"
     if example.is_file():
         try:
-            return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
+            text = example.read_text(encoding="utf-8").strip()
+            _note_persona_source(f"{example} (no {persona_path.name} yet)")
+            return text or DEFAULT_PERSONA
         except Exception:
             pass
+    _note_persona_source("the built-in default")
     return DEFAULT_PERSONA
-
-
-
-
-
-
-
-
-
-
-
 
 
 class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
@@ -139,8 +146,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
         self.enabled = bool(self.api_key)
         if not self.enabled:
-            logger.warning("[Agent] LLM_API_KEY not configured; %s disabled",
-                           self.persona_name)
+            logger.warning("[Agent] LLM_API_KEY is not set, so the agent answers "
+                           "nothing; `personagent init` sets it up")
         if self.enabled and not self.persona_name:
             logger.warning("[Agent] PERSONA_NAME is empty; the bot will only respond to "
                            "explicit @-mentions (set PERSONA_NAME so it answers to its name)")
@@ -187,8 +194,19 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.chat_followup_window_s = s.chat_followup_window_s
         self.message_debounce_sec = s.message_debounce_sec
 
-        raw_persona = (
-            s.persona if s.persona is not None else _load_persona(self.agent_lang))
+        if s.persona is not None:
+            raw_persona = s.persona
+        else:
+            # A persona.txt copied from the shipped template still carries
+            # its placeholders and its note to the reader.
+            loaded = _load_persona(self.agent_lang)
+            raw_persona = render_persona_template(
+                loaded, bot_name=s.persona_name, admin_name=s.admin_name,
+                admin_relationship=s.admin_relationship, lang=self.agent_lang)
+            if raw_persona != loaded:
+                _note_persona_source(
+                    "filled in the template's {placeholders} and dropped its "
+                    "note to the reader")
         # A persona document may end with a [style] declaration block. Parsing
         # strips it from the prose (so the model never reads raw knob config as
         # persona text) and keeps the knobs for prompt variants that use them.
@@ -257,7 +275,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # the views retrieval reads. Nothing here writes examples_file or
         # feedback_file: those hold the seed-era and hand-approved rows, which
         # stay exactly as they are. See evidence.py / candidates.py /
-        # promotion.py, and tools/candidates_admin.py for the human controls.
+        # promotion.py, and `personagent learned` for the human controls.
         self.promotion_policy = s.promotion_policy
 
     def _init_runtime_state(self) -> None:
@@ -282,8 +300,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
         self._http_pool: dict = {}
         # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
-        # tasks, so a detached create_task() can be GC'd mid-flight; mirror the
-        # _spawn pattern main.py already uses for webhook tasks.
+        # tasks, so a detached create_task() can be GC'd mid-flight.
         self._bg_tasks: set[asyncio.Task] = set()
         # Set by aclose(); read by _http so a use-after-close is visible
         # rather than silently leaking a fresh, never-closed pool.
@@ -304,6 +321,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._refusals_logged: dict[str, None] = {}
         # Conversations already reported as unreachable; see _log_no_route.
         self._no_route_logged: dict[str, None] = {}
+        # When each conversation was last told the model is not answering.
+        self._last_excuse_at: dict[str, float] = {}
 
         # Bound at construction, like the rest of the buffer's shape: a later
         # change to self.chat_context_messages must not silently give new
@@ -607,63 +626,27 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
     def _spawn(self, coro) -> asyncio.Task:
         """Launch a background task and keep a strong reference to it until it
-        finishes, so it can't be garbage-collected mid-flight."""
-        t = asyncio.create_task(coro)
+        finishes, so it can't be garbage-collected mid-flight. A crash is
+        logged with the task's name when it ends, not left for the GC."""
+        t = asyncio.create_task(coro, name=getattr(coro, "__qualname__", None))
         self._bg_tasks.add(t)
-        t.add_done_callback(self._bg_tasks.discard)
+        t.add_done_callback(self._on_bg_task_done)
         return t
 
-
+    def _on_bg_task_done(self, task: asyncio.Task) -> None:
+        self._bg_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("[Agent] background task %s crashed: %s: %s",
+                         task.get_name(), type(exc).__name__, exc, exc_info=exc)
 
     def _validator_lang(self) -> str:
-        """The language `_validate_reply_safe` reads its rules in.
-
-        The only language-dependent rule in that validator is the zh one: a
-        reply with no CJK and no marker is REJECTED, because a Chinese bot
-        emitting pure ASCII is a suspected template or token leak. That rule
-        is safe here because this deployment has a single language for both
-        the persona and its readers — `agent_lang` — so ASCII from a zh agent
-        really is anomalous. A deployment that ever grows a per-reader
-        language must stop passing `agent_lang` unconditionally and apply the
-        zh rule only where persona and reader language agree."""
+        """The language `_validate_reply_safe` is handed. Its rules are the
+        same for every language today; the argument stays so a per-reader
+        language has one place to come in."""
         return self.agent_lang
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # Every LLM call in this file goes through the provider's OpenAI-compatible
-    # endpoint (/v1/chat/completions) over plain httpx — no vendor SDK. That is
-    # what keeps every OpenAI-compatible provider interchangeable.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def _remember_msg_id(self, mid) -> None:
         """Bank a message_id in the dedup ring and persist (throttled), so a
@@ -737,51 +720,5 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                 return_exceptions=True)
         self.flush_state()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # -------- Core memory (letta style) --------
     CORE_MEMORY_MAX_CHARS = 400
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

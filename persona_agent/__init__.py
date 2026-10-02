@@ -1,11 +1,14 @@
 """persona_agent — the application package.
 
 ``Agent`` is configured by one record and composed from one mixin per concern,
-so the orchestration in agent.py stays readable and each layer is testable on
-its own:
+so each layer is testable on its own:
 
 - settings   everything the agent is configured with, built once and passed in
-- agent      orchestration: intake, modes, debounce, _think, prompt assembly
+- agent      wiring: applies the settings and builds the runtime state
+- turns      intake, admission, modes and debounce for one message
+- thinking   one group turn's model work: the gate, then the reply
+- dm         the one-on-one turn
+- llm        model calls: endpoints, retries, fallback, probes
 - prompts    the persona contract (style guide, output protocol, intent rules)
 - textproc   pure text: tokenising, sanitising, whitelist validator, splitting,
              the prompt's data frames
@@ -33,9 +36,11 @@ Supporting modules, all pure logic with no agent state:
 - health     startup / runtime environment checks
 - config_env the one way to read a setting out of the environment
 
-Entry points live at the repo root (main.py, try_chat.py, quickstart.py).
-Read-only seed datasets live in data/; everything the agent learns at runtime
-goes to runtime/ (gitignored) — see paths.ROOT.
+Entry points: the `personagent` command (persona_agent.cli, also
+`python -m persona_agent`), persona_agent.server (the HTTP service) and
+persona_agent.chat (the terminal trial); main.py and try_chat.py at the repo
+root are shims for them. Read-only seed datasets live in data/; everything
+the agent learns at runtime goes to runtime/ — see paths.ROOT.
 """
 
 __version__ = "0.4.0"
