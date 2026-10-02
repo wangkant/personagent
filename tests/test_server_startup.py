@@ -7,13 +7,18 @@ import json
 import logging
 import socket
 import time
+import warnings
 from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from persona_agent import server
+from persona_agent import dashboard, server
 from persona_agent.storage import RuntimeInstanceLock
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    from fastapi.testclient import TestClient
 
 
 # --- refusals ---------------------------------------------------------------
@@ -68,22 +73,153 @@ def test_an_open_network_bind_is_refused_before_uvicorn(monkeypatch, tmp_path) -
 
 # --- banner ------------------------------------------------------------------
 
+TOKEN = "t" * 43
+
+
 def test_the_banner_names_version_address_home_and_agent_state(monkeypatch) -> None:
     monkeypatch.setattr(server, "agent", SimpleNamespace(
         enabled=True, model="m-1", agent_lang="zh"))
     monkeypatch.setattr(server, "_dashboard_served", lambda: True)
+    monkeypatch.setattr(dashboard, "_token", TOKEN)
     banner = server._banner("0.0.0.0", 8080)
     assert f"personagent {server.__version__}" in banner
     assert "listening:  http://0.0.0.0:8080" in banner
     assert f"home:       {server.ROOT}" in banner
-    assert "dashboard:  http://127.0.0.1:8080/" in banner
+    assert f"dashboard:  http://127.0.0.1:8080/?token={TOKEN}" in banner
     assert "on (model m-1, lang zh)" in banner
 
     monkeypatch.setattr(server, "agent", SimpleNamespace(enabled=False))
     monkeypatch.setattr(server, "_dashboard_served", lambda: False)
     banner = server._banner("::1", 9000)
     assert "http://[::1]:9000" in banner and "dashboard" not in banner
-    assert "OFF" in banner and "LLM_API_KEY" in banner
+    assert "OFF" in banner and "LLM_API_KEY" in banner and " init`" in banner
+
+
+def test_a_specific_address_gets_a_dashboard_link_that_opens(monkeypatch) -> None:
+    monkeypatch.setattr(server, "agent", None)
+    monkeypatch.setattr(server, "_dashboard_served", lambda: True)
+    monkeypatch.setattr(dashboard, "_token", TOKEN)
+    banner = server._banner("100.64.1.5", 8080)
+    assert f"dashboard:  http://100.64.1.5:8080/?token={TOKEN}" in banner, banner
+    browser = TestClient(server.app, base_url="http://100.64.1.5:8080",
+                         client=("100.64.1.5", 50000))
+    assert browser.get(f"/?token={TOKEN}").status_code == 200
+    assert browser.get("/api/dashboard/status").status_code == 200
+
+
+def test_a_turned_off_agent_is_told_how_to_turn_it_on(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(server, "agent", None)
+    monkeypatch.setattr(server, "AGENT_ENABLED", False)
+    monkeypatch.setattr(server, "_dashboard_served", lambda: False)
+    banner = server._banner("127.0.0.1", 8080)
+    assert "AGENT_ENABLED=true" in banner and "init`" not in banner, banner
+    monkeypatch.setattr(server, "_AGENT_OFF_WARNED", False)
+    caplog.set_level(logging.ERROR, logger="bot")
+    server._warn_agent_off_once()
+    said = " ".join(r.getMessage() for r in caplog.records)
+    assert "AGENT_ENABLED=true" in said and "init`" not in said, said
+
+
+def test_doctor_prints_the_dashboard_link(monkeypatch, capsys, tmp_path) -> None:
+    from persona_agent import doctor
+    monkeypatch.setattr(dashboard, "_token", "")
+    monkeypatch.setattr(dashboard, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(doctor, "check_config", lambda: [])
+    monkeypatch.setattr(doctor, "run_checks", lambda: [])
+    monkeypatch.delenv("SERVER_HOST", raising=False)
+    monkeypatch.setenv("SERVER_PORT", "8123")
+    monkeypatch.setenv("DASHBOARD_ENABLED", "true")
+    doctor.main([])
+    token = (tmp_path / dashboard.TOKEN_FILE).read_text(encoding="utf-8").strip()
+    assert f"dashboard: http://127.0.0.1:8123/?token={token}" in capsys.readouterr().out
+    doctor.main(["--json"])
+    assert json.loads(capsys.readouterr().out)["dashboard"].endswith(f"?token={token}")
+    monkeypatch.setenv("DASHBOARD_ENABLED", "false")
+    doctor.main([])
+    assert "dashboard:" not in capsys.readouterr().out
+
+
+# --- where it listens ------------------------------------------------------------
+
+def test_a_blank_server_host_means_loopback(monkeypatch, tmp_path) -> None:
+    assert server._listen_host("") == "127.0.0.1"
+    assert server._listen_host("  ") == "127.0.0.1"
+    assert server._listen_host(None) == "127.0.0.1"
+    assert server._listen_host(" 0.0.0.0 ") == "0.0.0.0"
+    started = []
+    monkeypatch.setattr(server, "ROOT", tmp_path)
+    monkeypatch.setattr(server, "SERVER_HOST", "")
+    monkeypatch.setattr(server, "_LISTEN", dict(server._LISTEN))
+    monkeypatch.setattr(server, "_bind_problem", lambda host, port: None)
+    import uvicorn
+    monkeypatch.setattr(uvicorn.Server, "run", lambda self: started.append(self))
+    server.main(port=5)
+    assert started[0].config.host == "127.0.0.1"
+
+
+def _fake_addresses(monkeypatch, *addresses) -> None:
+    infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (a, 0)) for a in addresses]
+    monkeypatch.setattr(server.socket, "getaddrinfo", lambda *a, **k: infos)
+
+
+def test_an_address_the_system_cannot_offer_is_skipped_like_uvicorn_does(monkeypatch) -> None:
+    # 192.0.2.1 (TEST-NET-1) is on no interface: binding it fails with EADDRNOTAVAIL.
+    _fake_addresses(monkeypatch, "192.0.2.1", "127.0.0.1")
+    assert server._bind_problem("localhost", 0) is None
+    _fake_addresses(monkeypatch, "192.0.2.1")
+    problem = server._bind_problem("192.0.2.1", 0)
+    assert problem and "not an address of this machine" in problem, problem
+
+
+# --- /v1/onebot on a network bind --------------------------------------------------
+
+def _qq_body(message_id: str) -> bytes:
+    return json.dumps({
+        "post_type": "message", "message_type": "group", "group_id": "g",
+        "user_id": "u", "message_id": message_id, "message": [],
+        "time": int(time.time())}, separators=(",", ":")).encode()
+
+
+async def test_a_network_bind_without_the_onebot_secret_turns_the_route_off(
+        monkeypatch, caplog) -> None:
+    monkeypatch.setattr(server, "agent", None)
+    monkeypatch.setattr(server, "QQ_ONEBOT_SECRET", "")
+    monkeypatch.setattr(server, "_LISTEN", {"host": "0.0.0.0", "port": 8080})
+    monkeypatch.setattr(server, "_ONEBOT_OFF_WARNED", False)
+    caplog.set_level(logging.WARNING, logger="bot")
+    transport = httpx.ASGITransport(app=server.app, client=("127.0.0.1", 1234))
+    # Exactly what a same-host nginx forwards by default: loopback, local Host.
+    async with httpx.AsyncClient(transport=transport,
+                                 base_url="http://127.0.0.1:8080") as client:
+        first = await client.post("/v1/onebot", content=_qq_body("n1"))
+        second = await client.post("/v1/onebot", content=_qq_body("n2"))
+        monkeypatch.setattr(server, "_LISTEN", {"host": "127.0.0.1", "port": 8080})
+        local = await client.post("/v1/onebot", content=_qq_body("n3"))
+        monkeypatch.setattr(server, "_LISTEN", {"host": "0.0.0.0", "port": 8080})
+        monkeypatch.setattr(server, "QQ_ONEBOT_SECRET", "qq-secret")
+        body = _qq_body("n4")
+        sig = "sha1=" + hmac.new(b"qq-secret", body, hashlib.sha1).hexdigest()
+        signed = await client.post("/v1/onebot", content=body, headers={"x-signature": sig})
+    for r in (first, second):
+        assert r.status_code == 403 and r.json()["code"] == "onebot_disabled", r.text
+        assert r.headers.get("deprecation") == "true"
+    said = [r.getMessage() for r in caplog.records if "QQ_ONEBOT_SECRET" in r.getMessage()]
+    assert len(said) == 1 and "0.0.0.0" in said[0], said
+    assert local.status_code == 200, "a loopback bind keeps the local-only rule"
+    assert signed.status_code == 200, "a signed event is accepted on a network bind"
+
+
+async def test_proxy_markers_beyond_x_forwarded_for_are_not_local(monkeypatch) -> None:
+    monkeypatch.setattr(server, "agent", None)
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "")
+    transport = httpx.ASGITransport(app=server.app, client=("127.0.0.1", 1234))
+    async with httpx.AsyncClient(transport=transport,
+                                 base_url="http://127.0.0.1:8080") as client:
+        for header in ("via", "x-forwarded-host", "x-forwarded-proto",
+                       "x-forwarded-port", "true-client-ip", "x-client-ip",
+                       "x-original-forwarded-for"):
+            r = await client.get("/health/details", headers={header: "x"})
+            assert r.status_code == 403 and r.json()["code"] == "non_local_request", header
 
 
 # --- the replay log ----------------------------------------------------------
@@ -125,6 +261,35 @@ def test_the_replay_log_reads_a_whole_file_json_object(tmp_path) -> None:
     guard = server.ReplayGuard(state_file=state)
     assert guard.accept("a", now, now) is False
     assert guard.accept("c", now, now) is True
+
+
+def test_one_bad_byte_costs_its_own_line_not_every_nonce(tmp_path) -> None:
+    now = int(time.time())
+    state = tmp_path / "gateway_nonces.json"
+    guard = server.ReplayGuard(state_file=state)
+    assert guard.accept("victim", now, now)
+    with open(state, "ab") as handle:
+        handle.write(b'["bad\xff", 1]\n')
+    restarted = server.ReplayGuard(state_file=state)
+    assert restarted.accept("victim", now, now) is False
+
+
+def test_a_torn_last_line_does_not_swallow_the_next_nonce(tmp_path) -> None:
+    now = int(time.time())
+    state = tmp_path / "gateway_nonces.json"
+    state.write_bytes(b'["torn", ')  # a crash in the middle of an append
+    guard = server.ReplayGuard(state_file=state)
+    assert guard.accept("next", now, now)
+    restarted = server.ReplayGuard(state_file=state)
+    assert restarted.accept("next", now, now) is False
+
+
+def test_a_clock_stepped_back_does_not_readmit_a_pruned_nonce(tmp_path) -> None:
+    now = int(time.time())
+    guard = server.ReplayGuard(ttl_seconds=300, state_file=tmp_path / "n.json")
+    assert guard.accept("old", now - 290, now)
+    assert guard.accept("later", now + 20, now + 20)  # prunes by the clock
+    assert guard.accept("old", now - 290, now - 230) is False
 
 
 def test_a_failed_append_does_not_burn_the_nonce(tmp_path) -> None:

@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
                 for f in findings
             ],
             "services": results,
+            "dashboard": dashboard_link(),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     print("=" * 64)
@@ -80,7 +81,23 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 64)
     ok = all_critical_ok(results)
     print("RESULT:", "all critical services OK." if ok else "a CRITICAL service is DOWN.")
+    link = dashboard_link()
+    if link:
+        print(f"dashboard: {link}")
     return 0 if ok else 1
+
+
+def dashboard_link() -> str:
+    """The dashboard's URL with its token, '' when the dashboard is off."""
+    from persona_agent import dashboard
+    from persona_agent.config_env import env_bool, env_int, env_str
+
+    if not env_bool("DASHBOARD_ENABLED", True):
+        return ""
+    # Created here too, so the link works from the service's first start on.
+    dashboard.load_token(create=True)
+    return dashboard.link(env_str("SERVER_HOST", "127.0.0.1"),
+                          env_int("SERVER_PORT", 8080, minimum=1, maximum=65535))
 
 
 if __name__ == "__main__":

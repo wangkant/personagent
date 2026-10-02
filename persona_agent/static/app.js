@@ -10,6 +10,7 @@ const STRINGS = {
     state_no_key: "No model key",
     state_off: "Agent off",
     state_down: "Unreachable",
+    state_error: "Error",
     other_lang: "中文",
     theme_auto: "Theme: auto",
     theme_light: "Theme: light",
@@ -39,6 +40,7 @@ const STRINGS = {
     last_event: "last message {t}",
     no_event: "no message yet",
     convs_n: "{n} chats",
+    convs_n_1: "1 chat",
     pulling: "pulling the outbox",
     not_pulling: "not pulling the outbox",
     checks: "Configuration checks",
@@ -60,6 +62,7 @@ const STRINGS = {
     group: "group",
     dm: "DM",
     notes_n: "{n} notes",
+    notes_n_1: "1 note",
     learned_n: "{n} learned",
     pending_n: "{n} waiting",
     last_activity: "active {t}",
@@ -111,6 +114,7 @@ const STRINGS = {
     evidence: "Evidence chain",
     no_evidence: "No evidence linked.",
     missing_evidence: "{n} linked events are no longer in the evidence log.",
+    missing_evidence_1: "1 linked event is no longer in the evidence log.",
     k_reaction: "reacted",
     k_retry_acceptance: "accepted the retry",
     k_self_eval: "self-score",
@@ -157,28 +161,35 @@ const STRINGS = {
     a_promote: "Promote",
     a_reject: "Reject",
     a_rollback: "Roll back",
+    a_replace: "Replace",
     confirm: "Click again to confirm",
     done_promote: "Promoted. It shapes replies from the next turn.",
     done_reject: "Rejected. It will not be used.",
     done_rollback: "Rolled back. It stops shaping replies from the next turn.",
-    views_failed: "Saved in the ledger, but the views could not be rebuilt; run `personagent learned rebuild`.",
+    done_replace: "Replaced. The new wording shapes replies from the next turn; the old one stays in the history.",
+    rival: "Another rewrite of this reply is in use: “{text}”. Replace puts this one in its place.",
+    shown_of: "Showing the newest {shown} of {n}.",
+    views_failed: "Saved in the ledger, but the views could not be rebuilt; run `{cli} learned rebuild`.",
     refused: "Refused: {msg}",
     h_off_t: "The agent is turned off",
     h_off: "AGENT_ENABLED is false in .env. Set it to true and restart.",
     h_nokey_t: "No model key",
-    h_nokey: "LLM_API_KEY is empty, so it cannot reply. Run `personagent init`.",
+    h_nokey: "LLM_API_KEY is empty, so it cannot reply. Run `{cli} init`.",
     h_none_t: "No message has arrived since the service started",
     h_none_url: "Your chat connector (for example the AstrBot plugin) must send to {url}",
     h_none_token_set: "CONNECTOR_TOKEN is set here, so the connector needs the same token.",
     h_none_token_blank: "CONNECTOR_TOKEN is blank here: leave the connector's token blank too, or set the same one on both sides.",
     h_none_access: "If ACCESS_GROUPS or ACCESS_DM_USERS is set, the chat has to be listed there.",
-    h_none_doctor: "`personagent doctor` checks the whole path.",
+    h_none_doctor: "`{cli} doctor` checks the whole path.",
     h_refused_t: "Messages arrived but were turned away",
     h_quiet_t: "Messages are arriving; it has not spoken yet",
     h_quiet: "It answers when called by name ({name}) or @-mentioned. Otherwise it may join in after {n} messages, and it can decide to stay quiet.",
-    footer: "Local page: only this computer can open it. Changes go into the append-only ledger as “dashboard”.",
+    footer: "Private page: it opens only through its link with the token. Changes go into the append-only ledger as “dashboard”.",
     updated: "Updated {t}",
-    down: "Cannot reach the service. Is `personagent run` still running?",
+    down: "Cannot reach the service. Is `{cli} run` still running?",
+    h_auth_t: "This page needs its link again",
+    h_auth: "The service no longer accepts this page's sign-in. Run `{cli} doctor` and open the dashboard link it prints.",
+    h_error_t: "The service answered with an error ({status})",
     just_now: "just now",
     min_ago: "{n} min ago",
     h_ago: "{n} h ago",
@@ -193,6 +204,7 @@ const STRINGS = {
     state_no_key: "缺少模型密钥",
     state_off: "代理已关闭",
     state_down: "连不上",
+    state_error: "出错",
     other_lang: "English",
     theme_auto: "主题：自动",
     theme_light: "主题：浅色",
@@ -340,28 +352,35 @@ const STRINGS = {
     a_promote: "采纳",
     a_reject: "拒绝",
     a_rollback: "撤回",
+    a_replace: "替换",
     confirm: "再点一次确认",
     done_promote: "已采纳，从下一轮回复开始生效。",
     done_reject: "已拒绝，不会被使用。",
     done_rollback: "已撤回，从下一轮回复开始不再生效。",
-    views_failed: "已写进账本，但检索视图没能重建；请运行 `personagent learned rebuild`。",
+    done_replace: "已替换，新的说法从下一轮回复开始生效；旧的留在经过里。",
+    rival: "这条回复已经有一个生效中的改写：“{text}”。点“替换”会用这一条换掉它。",
+    shown_of: "显示最新的 {shown} 条，共 {n} 条。",
+    views_failed: "已写进账本，但检索视图没能重建；请运行 `{cli} learned rebuild`。",
     refused: "被拒绝：{msg}",
     h_off_t: "代理被关闭了",
     h_off: ".env 里 AGENT_ENABLED 是 false。改成 true 后重启。",
     h_nokey_t: "缺少模型密钥",
-    h_nokey: "LLM_API_KEY 是空的，它没法回复。运行 `personagent init`。",
+    h_nokey: "LLM_API_KEY 是空的，它没法回复。运行 `{cli} init`。",
     h_none_t: "服务启动以来还没收到任何消息",
     h_none_url: "聊天连接器（比如 AstrBot 插件）要发到 {url}",
     h_none_token_set: "这里设置了 CONNECTOR_TOKEN，连接器那边要填同一个。",
     h_none_token_blank: "这里的 CONNECTOR_TOKEN 是空的：连接器那边也留空，或者两边设成同一个。",
     h_none_access: "如果设置了 ACCESS_GROUPS 或 ACCESS_DM_USERS，这个会话必须在名单里。",
-    h_none_doctor: "运行 `personagent doctor` 可以检查整条链路。",
+    h_none_doctor: "运行 `{cli} doctor` 可以检查整条链路。",
     h_refused_t: "收到了消息，但被拒之门外",
     h_quiet_t: "消息在进来，它还没开口",
     h_quiet: "被点名（{name}）或 @ 时它会回答；否则大约 {n} 条消息后才考虑插话，而且可能决定不说。",
-    footer: "本地页面：只有这台电脑能打开。修改会以 “dashboard” 的身份写进只增不删的账本。",
+    footer: "私密页面：只能通过带令牌的链接打开。修改会以 “dashboard” 的身份写进只增不删的账本。",
     updated: "更新于 {t}",
-    down: "连不上服务。`personagent run` 还在运行吗？",
+    down: "连不上服务。`{cli} run` 还在运行吗？",
+    h_auth_t: "需要重新用链接打开这个页面",
+    h_auth: "服务不再认这个页面的登录。运行 `{cli} doctor`，打开它打印的面板链接。",
+    h_error_t: "服务返回了错误（{status}）",
     just_now: "刚刚",
     min_ago: "{n} 分钟前",
     h_ago: "{n} 小时前",
@@ -399,6 +418,7 @@ const view = {
   armed: null,
   busy: false,
   down: false,
+  failure: null,
   updatedAt: 0,
 };
 
@@ -415,9 +435,12 @@ function save(key, value) {
 
 function t(key, params, fallback) {
   const table = STRINGS[view.lang] || STRINGS.en;
-  let text = key in table ? table[key] : key in STRINGS.en ? STRINGS.en[key] : fallback != null ? fallback : key;
-  if (params) text = text.replace(/\{(\w+)\}/g, (_, name) => (name in params ? String(params[name]) : ""));
-  return text;
+  // "1 note", not "1 notes": a language with a singular gives it as key_1.
+  if (params && params.n === 1 && (key + "_1") in table) key += "_1";
+  const text = key in table ? table[key] : key in STRINGS.en ? STRINGS.en[key] : fallback != null ? fallback : key;
+  // Commands are spelled the way this install runs them (`personagent`, `python -m persona_agent`, ...).
+  const all = Object.assign({ cli: (view.status && view.status.cli) || "personagent" }, params || {});
+  return text.replace(/\{(\w+)\}/g, (_, name) => (name in all ? String(all[name]) : ""));
 }
 
 function h(tag, props, ...kids) {
@@ -488,6 +511,7 @@ function when(ts) {
 
 // -------------------------------------------------------------- api ----
 
+// A thrown error with a `status` is the service answering; without one, nothing answered.
 async function api(path, options) {
   const res = await fetch(path, Object.assign({ credentials: "same-origin", cache: "no-store" }, options || {}));
   let body = {};
@@ -495,9 +519,15 @@ async function api(path, options) {
   if (!res.ok) {
     const err = new Error(body.error || res.statusText || String(res.status));
     err.status = res.status;
+    err.code = body.code || "";
     throw err;
   }
   return body;
+}
+
+function failureOf(err) {
+  if (err && err.status) return { status: err.status, code: err.code || "", message: err.message || "" };
+  return null;
 }
 
 async function refresh() {
@@ -507,6 +537,7 @@ async function refresh() {
       api("api/dashboard/conversations"),
     ]);
     view.down = false;
+    view.failure = null;
     view.clockSkew = status.now - Date.now() / 1000;
     view.status = status;
     view.convs = convs.conversations || [];
@@ -518,7 +549,8 @@ async function refresh() {
     if (view.selected) await refreshDetail();
     view.updatedAt = Date.now();
   } catch (e) {
-    view.down = true;
+    view.failure = failureOf(e);
+    view.down = !view.failure;
   }
   render();
 }
@@ -547,7 +579,7 @@ function render() {
     view.shown.hints = hintKey;
     renderHints(hints);
   }
-  const statusKey = JSON.stringify([view.lang, view.down, view.status]);
+  const statusKey = JSON.stringify([view.lang, view.down, view.failure, view.status]);
   if (statusKey !== view.shown.status) {
     view.shown.status = statusKey;
     renderOverview();
@@ -568,9 +600,9 @@ function render() {
 function renderTop() {
   const st = view.status;
   const pill = document.getElementById("state-pill");
-  if (view.down) {
+  if (view.down || view.failure) {
     pill.className = "pill err";
-    pill.textContent = t("state_down");
+    pill.textContent = t(view.down ? "state_down" : "state_error");
   } else if (st) {
     pill.className = "pill " + (st.agent === "ready" ? "ok" : st.agent === "off" ? "off" : "err");
     pill.textContent = t("state_" + st.agent);
@@ -585,6 +617,13 @@ function hintList() {
   const out = [];
   if (view.down) {
     out.push({ level: "error", title: t("state_down"), items: [t("down")] });
+    return out;
+  }
+  const f = view.failure;
+  if (f) {
+    out.push(f.status === 401
+      ? { level: "error", title: t("h_auth_t"), items: [t("h_auth")] }
+      : { level: "error", title: t("h_error_t", { status: f.status }), items: [f.message + (f.code ? " (" + f.code + ")" : "")] });
     return out;
   }
   const st = view.status;
@@ -779,19 +818,24 @@ function renderDetail() {
       ? h("div", { class: "note", text: t("trigger_progress", { n: d.trigger_count, c: d.counter }) })
       : null);
 
+  const totals = d.totals || {};
+  const total = (group) => totals[group] || d[group].length;
+  // Long lists arrive cut to the newest; say so instead of hiding the rest.
+  const more = (group) => total(group) > d[group].length
+    ? h("p", { class: "empty", text: t("shown_of", { shown: d[group].length, n: total(group) }) }) : null;
   replace(box,
     head,
     block(t("decisions"), d.decisions.length, renderDecisions(d.decisions)),
-    block(t("pending"), d.pending.length,
+    block(t("pending"), total("pending"),
       d.pending.length ? h("div", { class: "cands" }, d.pending.map(renderCandidate))
-        : h("p", { class: "empty", text: t("no_pending") })),
-    block(t("learned"), d.learned.length,
+        : h("p", { class: "empty", text: t("no_pending") }), more("pending")),
+    block(t("learned"), total("learned"),
       d.learned.length ? h("div", { class: "cands" }, d.learned.map(renderCandidate))
-        : h("p", { class: "empty", text: t("no_learned") })),
+        : h("p", { class: "empty", text: t("no_learned") }), more("learned")),
     block(t("memories"), d.memories.length, renderMemories(d)),
-    d.past.length ? block(t("past"), d.past.length,
+    d.past.length ? block(t("past"), total("past"),
       h("details", null, h("summary", { text: t("show") }),
-        h("div", { class: "cands" }, d.past.map(renderCandidate)))) : null);
+        h("div", { class: "cands" }, d.past.map(renderCandidate)), more("past"))) : null);
 }
 
 function renderDecisions(rows) {
@@ -837,6 +881,9 @@ function renderCandidate(c) {
     c.missing_evidence ? h("p", { class: "empty", text: t("missing_evidence", { n: c.missing_evidence }) }) : null);
 
   const parts = [head, texts];
+  for (const rival of c.replaces || []) {
+    parts.push(h("div", { class: "waiting", text: t("rival", { text: rival.better }) }));
+  }
   if (c.checklist) parts.push(renderChecklist(c.checklist));
   parts.push(evidenceBlock);
   if (c.history.length) {
@@ -913,7 +960,7 @@ function renderActions(c) {
     const armed = view.armed && view.armed.id === c.id && view.armed.action === action;
     return h("button", {
       type: "button",
-      class: "btn " + (armed ? "armed" : action === "promote" ? "primary" : "danger"),
+      class: "btn " + (armed ? "armed" : action === "promote" || action === "replace" ? "primary" : "danger"),
       disabled: view.busy || null,
       onclick: () => act(c.id, action),
     }, armed ? t("confirm") : t("a_" + action));

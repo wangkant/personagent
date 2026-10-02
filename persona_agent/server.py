@@ -87,6 +87,11 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def _listen_host(value) -> str:
+    """SERVER_HOST / --host as given; blank means loopback, never every interface."""
+    return str(value or "").strip() or "127.0.0.1"
+
+
 def _validate_exposure_config(
     host: str,
     onebot_secret: str,
@@ -94,8 +99,8 @@ def _validate_exposure_config(
 ) -> None:
     """Refuse a network bind whose connector endpoints are not authenticated.
 
-    QQ_ONEBOT_SECRET is not required: without it /v1/onebot refuses every
-    peer that is not on this host, whatever the bind (_request_peer_is_allowed).
+    QQ_ONEBOT_SECRET is not required: without it a network bind turns
+    /v1/onebot off (_onebot_disabled).
     """
     if _is_loopback_host(host):
         return
@@ -105,8 +110,8 @@ def _validate_exposure_config(
             "CONNECTOR_TOKEN (the token your connector sends) in .env first, "
             "or listen on 127.0.0.1")
     if not onebot_secret:
-        logger.info("[main] QQ_ONEBOT_SECRET is blank, so /v1/onebot accepts "
-                    "only programs on this host")
+        logger.info("[main] QQ_ONEBOT_SECRET is blank, so /v1/onebot is off "
+                    "while personagent listens on %s", host)
 
 
 def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
@@ -116,7 +121,9 @@ def _request_peer_is_allowed(peer_host: str | None, credential: str) -> bool:
 
 _LOCAL_HOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 _PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip",
-                  "cf-connecting-ip")
+                  "cf-connecting-ip", "via", "x-forwarded-host",
+                  "x-forwarded-proto", "x-forwarded-port", "true-client-ip",
+                  "x-client-ip", "x-original-forwarded-for")
 _NON_LOCAL_WARNED: set[str] = set()
 
 
@@ -194,10 +201,9 @@ def _ct_equal(supplied: str, expected: str) -> bool:
 #
 # Bind loopback by default: connectors and NapCat on this machine post from
 # localhost, so nothing needs to be world-exposed. A network bind
-# (SERVER_HOST=0.0.0.0, for a split deployment) requires CONNECTOR_TOKEN, and a
-# NapCat on another host also needs QQ_ONEBOT_SECRET: without it /v1/onebot
-# refuses every peer that is not local.
-SERVER_HOST = env_str("SERVER_HOST", "127.0.0.1")
+# (SERVER_HOST=0.0.0.0, for a split deployment) requires CONNECTOR_TOKEN, and
+# /v1/onebot answers on it only when QQ_ONEBOT_SECRET is set.
+SERVER_HOST = _listen_host(env_str("SERVER_HOST", "127.0.0.1"))
 SERVER_PORT = env_int("SERVER_PORT", 8080, minimum=1, maximum=65535)
 # Optional OneBot HMAC secret (NapCat httpClient `secret`). When set, every
 # /v1/onebot body must carry a matching `x-signature: sha1=<hex>` header.
@@ -326,6 +332,8 @@ class ReplayGuard:
         self.max_entries = max(1, int(max_entries))
         self.state_file = Path(state_file) if state_file is not None else None
         self._log_lines = 0
+        # A torn last line (crash mid-append) must not swallow the next append.
+        self._torn_tail = False
         self._seen: dict[str, int] = self._load()
         self._pruned_at = 0
 
@@ -333,13 +341,15 @@ class ReplayGuard:
         if self.state_file is None:
             return {}
         try:
-            text = self.state_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            data = self.state_file.read_bytes()
+        except OSError:
             return {}
+        self._torn_tail = bool(data) and not data.endswith(b"\n")
         loaded: dict[str, int] = {}
-        for line in text.splitlines():
+        # Decoded per line: one bad byte costs its own line, not every nonce.
+        for raw in data.splitlines():
             try:
-                row = json.loads(line)
+                row = json.loads(raw.decode("utf-8", errors="replace"))
             except (json.JSONDecodeError, TypeError):
                 continue
             self._log_lines += 1
@@ -362,6 +372,8 @@ class ReplayGuard:
             self._compact()
             return
         line = json.dumps([nonce, timestamp], ensure_ascii=False) + "\n"
+        if self._torn_tail:
+            line = "\n" + line
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(self.state_file,
                      os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0),
@@ -370,12 +382,14 @@ class ReplayGuard:
             os.write(fd, line.encode("utf-8"))
         finally:
             os.close(fd)
+        self._torn_tail = False
         self._log_lines += 1
 
     def _compact(self) -> None:
         lines = "".join(json.dumps([nonce, stamp], ensure_ascii=False) + "\n"
                         for nonce, stamp in self._seen.items())
         atomic_write_text(self.state_file, lines, fsync=False)
+        self._torn_tail = False
         self._log_lines = len(self._seen)
 
     def _prune(self, now: int) -> None:
@@ -406,9 +420,12 @@ class ReplayGuard:
             logger.warning(
                 "[main] connector replay guard at %d/%d nonces",
                 len(self._seen), self.max_entries)
-        self._seen[nonce] = timestamp
+        # Kept a full window past its arrival too, so a clock stepped back
+        # inside the window cannot re-admit a nonce already pruned.
+        stamp = max(timestamp, now)
+        self._seen[nonce] = stamp
         try:
-            self._append(nonce, timestamp)
+            self._append(nonce, stamp)
         except Exception:
             # Un-burn it: the caller gets a 500 and retries with the SAME
             # nonce, which a nonce left burned would refuse forever.
@@ -671,6 +688,8 @@ async def lifespan(app: FastAPI):
             if m:
                 agent.stickers.purge_unfit()
         _spawn(_recheck_then_purge())
+    if _dashboard_served():
+        dashboard.load_token(create=True)
     logger.info("%s", _banner(_LISTEN["host"], _LISTEN["port"]))
     try:
         yield
@@ -704,13 +723,9 @@ _ALREADY_RUNNING = (
     "or give this one its own folder with --home DIR (or AGENT_HOME)")
 
 
-def _url_host(host: str, *, local: bool = False) -> str:
-    """`host` as it goes in a URL; `local` swaps a wildcard bind for loopback."""
+def _url_host(host: str) -> str:
+    """`host` as it goes in a URL."""
     value = str(host or "").strip().strip("[]")
-    if local and value in ("0.0.0.0", ""):
-        value = "127.0.0.1"
-    elif local and value == "::":
-        value = "::1"
     return f"[{value}]" if ":" in value else value
 
 
@@ -718,17 +733,25 @@ def _dashboard_served() -> bool:
     return any(getattr(route, "path", None) == "/" for route in app.routes)
 
 
+def _command(sub: str) -> str:
+    """`sub` spelled the way this install runs personagent."""
+    return f"{dashboard._cli()} {sub}"
+
+
 def _banner(host: str, port: int) -> str:
     if agent is not None and agent.enabled:
         state = f"on (model {agent.model}, lang {agent.agent_lang})"
     else:
         state = (f"OFF: {_agent_off_reason()}, so nothing gets answered; "
-                 "run `personagent init`")
+                 f"{_agent_off_fix()}")
     lines = [f"personagent {__version__}",
              f"  listening:  http://{_url_host(host)}:{port}",
              f"  home:       {ROOT}"]
     if _dashboard_served():
-        lines.append(f"  dashboard:  http://{_url_host(host, local=True)}:{port}/")
+        link = dashboard.link(host, port)
+        lines.append(f"  dashboard:  {link}" if link else
+                     f"  dashboard:  unavailable (could not create "
+                     f"{dashboard.token_path()})")
     lines.append(f"  agent:      {state}")
     return "\n".join(lines)
 
@@ -786,6 +809,23 @@ async def health_details(request: Request):
     )
 
 _DIRECT_ROUTE_WARNED = False
+_ONEBOT_OFF_WARNED = False
+
+
+def _onebot_disabled() -> bool:
+    """A network bind with no QQ_ONEBOT_SECRET: no way to tell a forged event
+    from NapCat's, since a proxy on this host makes any peer look local."""
+    global _ONEBOT_OFF_WARNED
+    if QQ_ONEBOT_SECRET or _is_loopback_host(_LISTEN["host"]):
+        return False
+    if not _ONEBOT_OFF_WARNED:
+        _ONEBOT_OFF_WARNED = True
+        logger.warning(
+            "[main] /v1/onebot refuses every request: personagent listens on "
+            "%s and QQ_ONEBOT_SECRET is blank. Set QQ_ONEBOT_SECRET here and "
+            "the same `secret` in NapCat's HTTP client, or forward QQ through "
+            "AstrBot with CONNECTOR_QQ_PLATFORMS=aiocqhttp.", _LISTEN["host"])
+    return True
 
 
 def _warn_direct_route_once() -> None:
@@ -811,12 +851,18 @@ async def onebot_webhook(request: Request):
     Deprecated, and kept throughout 1.x; every response carries
     ``Deprecation: true``. The supported path is AstrBot with
     ``CONNECTOR_QQ_PLATFORMS=aiocqhttp``. Set ``QQ_ONEBOT_SECRET`` so NapCat
-    signs the body as ``x-signature: sha1=...`` — without it, anyone who can
-    reach this port can forge an event.
+    signs the body as ``x-signature: sha1=...``: without it the route accepts
+    only local programs, and on a network bind it is off (403
+    ``onebot_disabled``).
     """
     _warn_direct_route_once()
     # Refuse before admission, so a peer that may not call this at all cannot
     # hold a slot. The signature covers the body and has to wait for it.
+    if _onebot_disabled():
+        return _mark_deprecated(_error(
+            403, "onebot_disabled",
+            "/v1/onebot is off: this service listens on the network and "
+            "QQ_ONEBOT_SECRET is not set"))
     peer = request.client.host if request.client is not None else ""
     if not _request_peer_is_allowed(peer, QQ_ONEBOT_SECRET):
         return _mark_deprecated(_error(
@@ -840,11 +886,11 @@ async def _onebot_webhook_admitted(request: Request):
     body = await _read_webhook_body(request)
     if isinstance(body, JSONResponse):
         return body
-    # OneBot HMAC verification (opt-in via QQ_ONEBOT_SECRET). Without it, anyone
-    # who can reach this port can POST a forged event — impersonate the admin,
-    # poison memory, drive sends. NapCat signs the body as `x-signature: sha1=…`
-    # when its httpClient `secret` is set; configure both or leave unset (and
-    # keep SERVER_HOST=127.0.0.1).
+    # OneBot HMAC verification (opt-in via QQ_ONEBOT_SECRET). Without it, only
+    # the locality check stands between a forged event and the admin's
+    # identity. NapCat signs the body as `x-signature: sha1=…` when its
+    # httpClient `secret` is set; configure both or leave unset (and keep
+    # SERVER_HOST=127.0.0.1).
     if QQ_ONEBOT_SECRET:
         sig = request.headers.get("x-signature", "")
         expected = "sha1=" + hmac.new(QQ_ONEBOT_SECRET.encode(), body, hashlib.sha1).hexdigest()
@@ -898,6 +944,12 @@ def _agent_off_reason() -> str:
     return f"LLM_API_KEY is not set (in {ROOT / '.env'} or the environment)"
 
 
+def _agent_off_fix() -> str:
+    if not AGENT_ENABLED:
+        return f"set AGENT_ENABLED=true in {ROOT / '.env'} and restart"
+    return f"run `{_command('init')}` (or set LLM_API_KEY) and restart"
+
+
 def _warn_agent_off_once() -> None:
     """An event reached an agent that cannot answer: say why, once, loudly."""
     global _AGENT_OFF_WARNED
@@ -906,9 +958,8 @@ def _warn_agent_off_once() -> None:
     _AGENT_OFF_WARNED = True
     logger.error(
         "[main] an event arrived but personagent cannot answer: %s. It replies "
-        "owned=false, so the connector's own model may answer instead. Run "
-        "`personagent init` (or set LLM_API_KEY) and restart.",
-        _agent_off_reason())
+        "owned=false, so the connector's own model may answer instead; %s.",
+        _agent_off_reason(), _agent_off_fix())
 
 
 def _warn_ignored_connector_token_once(request: Request) -> None:
@@ -1077,11 +1128,14 @@ def _bind_problem(host: str, port: int) -> str | None:
         infos = socket.getaddrinfo(host or None, port, type=socket.SOCK_STREAM,
                                    flags=socket.AI_PASSIVE)
     except socket.gaierror:
-        return (f"SERVER_HOST={host} is not an address of this machine; use "
-                "127.0.0.1 (this machine only) or 0.0.0.0 (the network)")
+        return _not_an_address(host)
+    bound = 0
     with contextlib.ExitStack() as stack:
         for family, kind, proto, _name, address in infos:
-            sock = stack.enter_context(socket.socket(family, kind, proto))
+            try:
+                sock = stack.enter_context(socket.socket(family, kind, proto))
+            except OSError:
+                continue  # a family this system does not offer; asyncio skips it too
             if os.name == "posix":
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             if family == getattr(socket, "AF_INET6", None):
@@ -1096,8 +1150,17 @@ def _bind_problem(host: str, port: int) -> str | None:
                 if exc.errno in (errno.EACCES, getattr(errno, "WSAEACCES", None)):
                     return (f"this system does not allow listening on {host}:{port}; "
                             "pick another port with --port or SERVER_PORT")
+                if exc.errno in (errno.EADDRNOTAVAIL,
+                                 getattr(errno, "WSAEADDRNOTAVAIL", None)):
+                    continue  # e.g. ::1 with IPv6 off; uvicorn serves the rest
                 return f"cannot listen on {host}:{port}: {exc.strerror or exc}"
-    return None
+            bound += 1
+    return None if bound else _not_an_address(host)
+
+
+def _not_an_address(host: str) -> str:
+    return (f"SERVER_HOST={host} is not an address of this machine; use "
+            "127.0.0.1 (this machine only) or 0.0.0.0 (the network)")
 
 
 def startup_problem(host: str, port: int) -> str | None:
@@ -1122,7 +1185,7 @@ def startup_problem(host: str, port: int) -> str | None:
 def main(host: str | None = None, port: int | None = None) -> None:
     import uvicorn
 
-    host = host or SERVER_HOST
+    host = _listen_host(host or SERVER_HOST)
     port = port or SERVER_PORT
     problem = startup_problem(host, port)
     if problem:
