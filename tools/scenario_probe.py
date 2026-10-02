@@ -11,7 +11,7 @@ the rest were dropped.
 For every candidate scenario this probe reports two numbers:
 
 - self_eval: the agent's own 1-5 quality score for its weak-style reply. This
-  is the learning trigger — only scores <= EVOLVE_THRESHOLD (default 2)
+  is the learning trigger — only scores <= EVOLVE_THRESHOLD (default 3)
   become material the evolve tick can turn into feedback pairs. A family
   whose replies never dip that low gives the evolve-on arm nothing to learn.
 - judge: the blind judge's 1-5 AI-tell score (via --judge-model, an
@@ -20,7 +20,7 @@ For every candidate scenario this probe reports two numbers:
   curve.
 
 Usage:
-    python tools/scenario_probe.py --candidates data/benchmark/candidates.jsonl \
+    python tools/scenario_probe.py --candidates my_candidates.jsonl \
         --judge-model <a model other than LLM_MODEL> --outdir benchmark_runs/probe
 
 Writes probe_results.jsonl (one row per scenario: reply + both scores) and a

@@ -13,18 +13,10 @@ The connector forwards each allowed message to the agent's
 and sends the replies back through Satori. It also pulls the agent's outbox, so
 scheduled openers, follow-up questions and excuses reach the chat.
 
-## Why satori-python
-
-The Satori side runs on [satori-python](https://github.com/RF-Tar-Railt/satori-python)
-(MIT, maintained, used by the Entari framework). Its client already does
-everything protocol-shaped this connector needs: the websocket with IDENTIFY,
-heartbeat, resume and reconnect; the login list; parsing message content into
-elements; and the HTTP API (`message.create`, resource downloads through the
-server's proxy). The alternatives were writing the protocol by hand, or
-`nonebot-adapter-satori`, which only runs inside NoneBot. What is left here is
-the mapping between Satori and personagent's event format.
-
-The agent side uses [`integrations/sdk/personagent_connector.py`](../sdk/personagent_connector.py)
+The Satori side runs on [satori-python](https://github.com/RF-Tar-Railt/satori-python),
+which handles the websocket, the login list and the HTTP API. This connector
+maps between Satori and personagent's event format, and uses
+[`integrations/sdk/personagent_connector.py`](../sdk/personagent_connector.py)
 for signing and the outbox loop.
 
 ## Setup, with Koishi
@@ -41,23 +33,40 @@ for signing and the outbox loop.
    the connector cannot silence it. Disable it, or scope it away from the
    conversations you forward.
 
-2. **The agent.** Run personagent as its README describes. If the connector
-   and the agent are on different hosts, set `CONNECTOR_TOKEN` in the agent's
-   `.env` and put the agent behind HTTPS.
+2. **The agent.** Run personagent (`personagent run`, see its README). If the
+   connector and the agent are on different hosts, set `CONNECTOR_TOKEN` in the
+   agent's `.env` and put the agent behind HTTPS.
 
-3. **The connector.** From the personagent checkout:
+3. **The connector.** It is a script in this repository, so it needs a copy of
+   the repository (a clone, or the ZIP from GitHub) and a Python environment
+   of its own: `satori-python` is not one of personagent's dependencies. In a
+   clone that already has personagent's `.venv`, install into it:
 
    ```bash
-   pip install -r integrations/satori/requirements.txt
+   .venv/bin/python -m pip install -r integrations/satori/requirements.txt
+   ```
+
+   With personagent installed by `uv tool` or `pipx`, make a venv beside the
+   copy instead:
+
+   ```bash
+   python -m venv connector-venv
+   connector-venv/bin/python -m pip install -r integrations/satori/requirements.txt
+   ```
+
+   (On Windows the interpreter is `.venv\Scripts\python.exe` or
+   `connector-venv\Scripts\python.exe`.) Then copy the settings file:
+
+   ```bash
    cp integrations/satori/.env.example integrations/satori/.env
    ```
 
    Edit `integrations/satori/.env`: the Satori server's URL and token, the
    agent's base URL and `CONNECTOR_TOKEN`, and the conversations to forward (see
-   [Allowlists](#allowlists)). Then:
+   [Allowlists](#allowlists)). Then run it with the same interpreter:
 
    ```bash
-   python integrations/satori/satori_connector.py
+   .venv/bin/python integrations/satori/satori_connector.py
    ```
 
    `--config FILE` reads another settings file. Every setting can also be an

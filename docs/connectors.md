@@ -16,7 +16,8 @@ Connectors in this repository:
 
 A new connector needs only this page and an HTTP client. The Python helper in
 `integrations/sdk/personagent_connector.py` signs requests and runs the outbox
-loop for you; it takes the base URL below and the connector's `connector_id`.
+loop for you; it takes the base URL, the token and the connector's
+`connector_id`, and needs `httpx`.
 
 ## Configuration
 
@@ -104,6 +105,14 @@ agent adds the prefix.
 `addressed` is the connector's job: true when the message mentions the bot,
 replies to one of its messages, or is otherwise addressed to it by the
 platform's own rules. The agent separately notices its name in the text.
+Behind a connector, `addressed` is also how the agent knows a message is
+aimed at its reply: a quote of the bot's message, or an @ of it, is read as a
+reaction it may learn from, so a connector that leaves it false for a reply to
+the bot costs the agent that signal.
+
+An event whose `sender_id` equals its `bot_id` is the bot's own message echoed
+back. The agent ignores it and answers `{"handled": false, "owned": true,
+"replies": []}`, but a connector should not send it at all.
 
 Segments, in order:
 
@@ -141,7 +150,10 @@ The response:
   when present, is the prefixed id to mention; render it the platform's way.
 - `owned`: the agent has taken this conversation. When it is true, stop any
   other bot logic from answering, even with an empty `replies`: the persona
-  chose to stay quiet. When it is false, the message is yours to handle.
+  chose to stay quiet. When it is false, the message is yours to handle: the
+  conversation is not on the agent's allowlists, or the agent cannot answer at
+  all (no `LLM_API_KEY`, or `AGENT_ENABLED=false`; its log then carries one
+  ERROR line naming the cause).
 - The request lasts as long as the turn: a short debounce plus every model
   call. Allow at least `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` seconds.
 
@@ -153,8 +165,8 @@ queues those per conversation, and a connector that declared `outbox` pulls
 them. Pull rather than push means the agent never needs to reach the
 connector, so a connector behind NAT or a firewall works the same.
 Conversations stored under bare QQ ids (see Addressing) use the outbox too
-while their connector is pulling, and NapCat's HTTP API (`QQ_ONEBOT_URL`)
-otherwise, as they always have.
+while their connector is pulling, and NapCat's HTTP API (`QQ_ONEBOT_URL`,
+when set) otherwise.
 
 Request:
 
@@ -251,7 +263,7 @@ agent's own openers, and not as the person's activity.
 
 | Missing | Effect |
 |---|---|
-| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `QQ_ONEBOT_URL` reaches it) |
+| `outbox` | no scheduled openers, no follow-up question, no excuse for a failed model call in that conversation (QQ ids still get them through NapCat when `QQ_ONEBOT_URL` is set and reaches it) |
 | `quote_text` | a quoted message is understood only if the agent saw it itself |
 | `reply_handle` | same as no `outbox` |
 | `addressed` wrong | the persona treats addressed messages as background chatter |

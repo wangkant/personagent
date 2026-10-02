@@ -1,0 +1,71 @@
+name: Persona report
+description: It said X, and it should have said Y
+labels: ["persona"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A reply the bot really produced, with what a person would have said instead, is the most useful report there is. It is also the pair the learning loop uses, and it often becomes the fix directly.
+
+        Redact names and IDs. Never paste API keys or real chat logs beyond the few lines needed.
+  - type: textarea
+    id: context
+    attributes:
+      label: The context
+      description: "The last few messages before the reply, one per line as `Name: text`. Say who the reply was for."
+      placeholder: |
+        Alex: the deploy failed again
+        Nova: did you check the logs? roll back first, then diff the configs
+    validations:
+      required: true
+  - type: textarea
+    id: said
+    attributes:
+      label: What it said (X)
+      description: Copy the reply exactly.
+    validations:
+      required: true
+  - type: textarea
+    id: should
+    attributes:
+      label: What it should have said (Y)
+      description: What a real person in that chat would have said, or "nothing, it should have stayed quiet".
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How it was called
+      options:
+        - Someone used its name or @-mentioned it
+        - It joined in on its own
+        - A one-to-one chat (DM)
+        - It spoke first (proactive)
+        - I do not know
+  - type: textarea
+    id: persona
+    attributes:
+      label: The persona
+      description: The part of `persona.txt` that bears on this, or say you use one of the ready characters from `personagent init`.
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The provider and `LLM_MODEL`, and `AGENT_LANG`.
+      placeholder: DeepSeek, deepseek-flash, zh
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `personagent --version`.
+      placeholder: personagent 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What `/why` or the dashboard said (optional)
+      description: In `personagent chat`, `/why` explains the last reply. The dashboard shows why it spoke or stayed quiet.
+      render: shell

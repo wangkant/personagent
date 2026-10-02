@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/wangkant/personagent#readme
+    about: The README, with the quick start and what each part does.
+  - name: Deploying, and when the bot goes quiet
+    url: https://github.com/wangkant/personagent/blob/main/docs/deploy.md
+    about: Install routes, settings, and an ordered checklist for a bot that does not answer.
+  - name: 中文部署指南（QQ + NapCat + AstrBot）
+    url: https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md
+    about: 从零开始的中文步骤，以及「机器人不说话」的排查清单。
+  - name: Report a security vulnerability
+    url: https://github.com/wangkant/personagent/security/advisories/new
+    about: Report it privately, not in a public issue. See SECURITY.md.

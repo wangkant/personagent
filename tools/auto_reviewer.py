@@ -15,7 +15,7 @@ scope authorization before they apply beyond the conversation that produced
 them. This is intentional: --apply is a human looking at each pair before it
 lands, which is exactly what the promotion scope rules exempt. It is also
 global reach from one room's correction, so if you want a room- or
-persona-scoped correction instead, use tools/candidates_admin.py.
+persona-scoped correction instead, use `personagent learned`.
 
 Usage:
     python tools/auto_reviewer.py                     # review only (as before)
@@ -294,7 +294,7 @@ async def main() -> int:
     p.add_argument("--apply", action="store_true",
                    help="after reviewing, interactively approve pairs into "
                         "feedback -- the shared auto-pool every room and "
-                        "persona draws from; see tools/candidates_admin.py "
+                        "persona draws from; see `personagent learned` "
                         "for room/persona-scoped promotion instead")
     p.add_argument("--yes", action="store_true",
                    help="deprecated unsafe mode; refused without writing feedback")

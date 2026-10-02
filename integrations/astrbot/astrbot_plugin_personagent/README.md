@@ -26,59 +26,51 @@ agent's replies back.
 The persona, memory, debounce and typing simulation all run in the agent. This
 plugin is a connector in the sense of the agent's
 [`docs/connectors.md`](https://github.com/wangkant/personagent/blob/main/docs/connectors.md): it translates, and
-decides nothing about what the persona says.
+decides nothing about what the persona says. A Chinese version of this page is
+[README.zh-CN.md](README.zh-CN.md).
 
 ## Install
 
-You need AstrBot, started at least once so its data directory exists, and a
-personagent checkout (see its README).
+You need AstrBot, started at least once so its data directory exists, and
+personagent (`uv tool install personagent`, or a clone; see its README).
 
-### With the setup wizard
-
-From the personagent checkout, run:
+### With personagent's setup
 
 ```bash
-python quickstart.py
+personagent connect astrbot
 ```
 
-Answer yes to connecting AstrBot and give it AstrBot's data directory (the
-folder holding `plugins/` and `config/`). The wizard copies this plugin,
-generates a shared token and writes it to both sides, and asks which group and
-sender IDs to allow. If AstrBot still has this plugin under the name an
-earlier version installed it as (see the CHANGELOG), the wizard removes that
-copy and says so: both would forward every message. Its settings are not
-carried over; set the allowlists again.
+It asks for AstrBot's data directory (the folder holding `cmd_config.json`,
+`plugins/` and `config/`, which it looks for itself), whether AstrBot runs in
+Docker, and which chat app the bot joins. For QQ it also asks the bot account's
+number and the groups. It copies this plugin, generates a shared token and
+writes it to both sides, and writes the allowlists. `personagent init` offers
+the same step at its end; in a clone, `python quickstart.py` does too.
 
-To skip all the wizard's questions, including the API key and bot name (set
-`LLM_API_KEY` and `PERSONA_NAME` in `.env` yourself):
+To skip all questions:
 
 ```bash
-python quickstart.py --astrbot <AstrBot data dir>        # add --qq to route QQ as well
+personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ as well
 ```
 
-The first run leaves the allowlists **empty**: add them in the plugin
-settings. Run `python quickstart.py --help` for the flags that also switch on
-a platform in AstrBot.
+Without questions the first run leaves the allowlists **empty**: add them in
+the plugin settings. `personagent connect astrbot --help` lists the flags that
+also switch on a platform in AstrBot.
 
 Running it again is safe. The allowlists, any `personagent_url`
 this plugin accepts (see [Where the agent can run](#where-the-agent-can-run)),
 and other excluded platforms are kept; a `personagent_url` it would refuse is
 replaced with the loopback default. QQ routing changes only when you pass
 `--qq` or `--no-qq`, and the agent's `CONNECTOR_QQ_PLATFORMS` is kept in
-step with it. The wizard's AstrBot step offers the current allowlists as
-defaults, so Enter keeps them and `-` clears one. The first run after this
-plugin was renamed (see the CHANGELOG) carries across QQ routing and the
-settings that kept their names, but starts `groups`, `dm_users` and a
-non-local `personagent_url` empty.
+step with it. The questions offer the current allowlists as defaults, so
+Enter keeps them and `-` clears one.
 
 Then restart AstrBot and start the agent (see [Check it works](#check-it-works)).
 
 ### By hand
 
 1. Copy this folder to
-   `<AstrBot data dir>/plugins/astrbot_plugin_personagent/`. Remove any copy
-   of this plugin under an earlier name (see the CHANGELOG): both would
-   forward every message.
+   `<AstrBot data dir>/plugins/astrbot_plugin_personagent/`.
 2. Restart AstrBot, or reload plugins in its WebUI. AstrBot installs
    `requirements.txt` (only `httpx`).
 3. Open the plugin's settings in the WebUI. They are saved to
@@ -92,20 +84,21 @@ Then restart AstrBot and start the agent (see [Check it works](#check-it-works))
 
 The plugin is **default-deny**. With empty allowlists it forwards nothing, and
 AstrBot behaves as if the plugin were not installed. Use IDs as AstrBot shows
-them, without a platform prefix. `*` in `groups` or `dm_users` forwards every
-conversation of that kind and marks it `prefiltered: false`, so the agent's
-own `ACCESS_GROUPS` / `ACCESS_DM_USERS` decide alone: a platform with no
-entries there is refused (QQ groups excepted, which the agent answers
-unless `ACCESS_GROUPS` lists some).
+them, without a platform prefix (`/sid` in a chat shows them). `*` in `groups`
+or `dm_users` forwards every conversation of that kind and marks it
+`prefiltered: false`, so the agent's own `ACCESS_GROUPS` / `ACCESS_DM_USERS`
+decide alone: a platform with no entries there is refused (QQ groups excepted,
+which the agent answers unless `ACCESS_GROUPS` lists some).
 
 ### Check it works
 
-1. Start the agent from the personagent checkout: `.venv/bin/python main.py`
-   (Windows: `.venv\Scripts\python.exe main.py`).
+1. Start the agent: `personagent run` (from a clone: `start.bat`, `start.sh`,
+   or `.venv/bin/python main.py`). Its banner says `agent: on`.
 2. Say the bot's name (the agent's `PERSONA_NAME`) in an allowed group.
 
-If nothing comes back, look for `personagent:` lines in AstrBot's log
-and see [Troubleshooting](#troubleshooting).
+If nothing comes back, look for `personagent:` lines in AstrBot's log, open the
+agent's dashboard at `http://127.0.0.1:8080/`, and see
+[Troubleshooting](#troubleshooting).
 
 ## Configuration
 
@@ -139,9 +132,16 @@ Plain `http://` to anything but loopback, such as
 `http://host.docker.internal:8080`, is refused even with a token. Each message
 then logs `refusing unsafe personagent_url` and AstrBot's own model answers instead.
 
+**AstrBot in Docker.** Inside a container, `127.0.0.1` is the container itself,
+so the default `personagent_url` reaches nothing. Either give AstrBot host
+networking (`network_mode: host` in its compose file, or `docker run
+--network host`; Docker Desktop needs 4.34 or later with host networking
+enabled), or put the agent behind HTTPS and set that address as
+`personagent_url` (`personagent connect astrbot <dir> --url https://...`). A
+NapCat container in the same compose file needs host networking too.
+
 The agent listens on `127.0.0.1:8080` by default. If you set its `SERVER_HOST` to a
-non-loopback address, it refuses to start unless both `CONNECTOR_TOKEN` and
-`QQ_ONEBOT_SECRET` are set.
+non-loopback address, it refuses to start unless `CONNECTOR_TOKEN` is set.
 
 ### Timeouts
 
@@ -180,18 +180,18 @@ QQ goes through this plugin like any other platform, using AstrBot's
    `groups`.
 2. In the agent's `.env`, set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` and
    `QQ_BOT_ID` (the bot account's number).
-3. Keep NapCat's HTTP API reachable at the agent's `QQ_ONEBOT_URL` for the
-   catch-up sweep for missed mentions. Proactive messages, the follow-up
-   question after a rejection and the excuse when the model fails go through
-   this plugin's [outbox](#outbox) while it is pulling, and through NapCat
-   directly otherwise.
+3. Optional: set the agent's `QQ_ONEBOT_URL` to NapCat's HTTP server for the
+   catch-up sweep for missed mentions (it also needs `QQ_BOT_ID`). Proactive
+   messages, the follow-up question after a rejection and the excuse when the
+   model fails go through this plugin's [outbox](#outbox) while it is pulling,
+   and through NapCat directly otherwise, when that URL is set.
 4. If NapCat also posts to the agent's `/v1/onebot`, turn that off. That
-   route is deprecated since 0.3.0, and running both delivers every message
-   twice.
+   route is deprecated, and running both delivers every message twice.
 
-`quickstart.py --astrbot <data dir> --qq` removes `aiocqhttp` from
-`excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS`; the wizard also asks
-for `QQ_BOT_ID`.
+`personagent connect astrbot <data dir> --qq` removes `aiocqhttp` from
+`excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS`; run without a folder, it
+also asks for `QQ_BOT_ID`. A step-by-step guide in Chinese is
+[docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 Do not skip `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Without it the agent files QQ
 chats under `aiocqhttp:`-prefixed ids. Its QQ-side actions then target groups
@@ -339,11 +339,10 @@ If the agent's own log says the connector sends `X-Personagent-Token` but
 `CONNECTOR_TOKEN` is blank, the token is being ignored. Set the same value in
 the agent's `.env`.
 
-Since 0.5.0 the message's time is the platform's own on QQ, Telegram,
-Discord, KOOK, QQ official and Misskey, not when AstrBot received it. A
-backlog AstrBot delivers after being down longer than the agent's
-`CONNECTOR_MAX_EVENT_AGE_S` is therefore refused as stale, as it
-should be.
+The message's time is the platform's own on QQ, Telegram, Discord, KOOK, QQ
+official and Misskey, not when AstrBot received it. A backlog AstrBot delivers
+after being down longer than the agent's `CONNECTOR_MAX_EVENT_AGE_S` is
+therefore refused as stale, as it should be.
 
 ## Known limitation: Telegram mentions
 
