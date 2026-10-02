@@ -536,7 +536,9 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
           ("ERROR", "DEEPSEK_API_KEY") in levels(env={"DEEPSEK_API_KEY": "x"}))
     check("preflight: an empty QQ_BOT_ID on a QQ config is a warning",
           ("WARN", "QQ_BOT_ID") in levels(env={
-              "LLM_API_KEY": "x", "QQ_ONEBOT_URL": "http://127.0.0.1:3000"}))
+              "LLM_API_KEY": "x", "QQ_ONEBOT_URL": "http://napcat:3000"}))
+    check("preflight: the former template's NapCat address alone is not QQ",
+          not levels(env={"LLM_API_KEY": "x", "QQ_ONEBOT_URL": "http://127.0.0.1:3000"}))
 
     # --- and it must never raise, which is its own docstring's promise -----
     for hostile in ({"AGENT_HOME": "~nosuchuser/x"}, {"AGENT_HOME": "\x00"},
@@ -552,13 +554,29 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
         home = Path(d)
         (home / ".env").write_text("LLM_API_KEY=x\nPERSONA_NAME=Mira\n",
                                    encoding="utf-8")
-        # The multi-persona layout `.env.example` itself recommends: a home
-        # with its own `.env` and no template. This used to report EVERY
-        # configured key as unknown, including `AGENT_HOME`, by the code that
-        # reads `AGENT_HOME`.
+        # A home with its own `.env` and no template, as `personagent init`
+        # and the multi-persona layout make: checked against the shipped one.
         found = levels(root=home)
-        check("preflight: a missing template warns once, it does not accuse",
+        check("preflight: a home without a template is checked against the shipped one",
+              not found, repr(found))
+        (home / ".env").write_text("LLM_API_KEY=x\nPERSONA_NAM=Mira\n", encoding="utf-8")
+        check("preflight: ...which still names a misspelling",
+              ("ERROR", "PERSONA_NAM") in levels(root=home), repr(levels(root=home)))
+        with monkeypatch.context() as m:
+            m.setattr(preflight, "resource", lambda *parts: home / "missing")
+            found = levels(root=home)
+        check("preflight: with no template anywhere it warns once, it does not accuse",
               found == {("WARN", ".env.example")}, repr(found))
+
+        # A .env exactly as a fresh template copy, key and name filled in:
+        # nothing to report, whatever platform it will serve.
+        shipped = (Path(__file__).resolve().parents[1] / ".env.example").read_text(
+            encoding="utf-8")
+        (home / ".env").write_text(shipped.replace("LLM_API_KEY=\n", "LLM_API_KEY=x\n")
+                                   .replace("PERSONA_NAME=\n", "PERSONA_NAME=Mira\n"),
+                                   encoding="utf-8")
+        check("preflight: a fresh template copy is silent", not levels(root=home),
+              repr(levels(root=home)))
 
         # A BOM on `.env`. Whether it survives the dotenv parser is a property
         # of that parser and the platform — measured: it does on Windows and
@@ -583,7 +601,7 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
 
 def test_preflight_names_what_a_retired_setting_became(
         monkeypatch, tmp_path) -> None:
-    """0.5 renamed most settings and reads none of the old names. One left in
+    """1.0 renamed most settings and reads none of the old names. One left in
     `.env` or the environment would otherwise be silently ignored, or called a
     typo when it is a setting that moved: it is a WARN naming its new name."""
     from persona_agent import preflight
@@ -597,9 +615,9 @@ def test_preflight_names_what_a_retired_setting_became(
     check("retired: a WARN naming the new name, and nothing else",
           {(f.level, f.key, f.detail) for f in found}
           == {("WARN", "PORT",
-               "was renamed to SERVER_PORT in 0.5 and is no longer read"),
+               "was renamed to SERVER_PORT in 1.0 and is no longer read"),
               ("WARN", "OWNER_QQ",
-               "was renamed to ADMIN_IDS in 0.5 and is no longer read")},
+               "was renamed to ADMIN_IDS in 1.0 and is no longer read")},
           repr(found))
     every = preflight.check_config(
         env={"LLM_API_KEY": "x", **{old: "1" for old in preflight.RENAMED}})
@@ -714,10 +732,34 @@ def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None
                    LLM_FALLBACK_API_KEY="sk-o")
     check("fallback endpoint: without a distinct LLM_FALLBACK_MODEL it says it does nothing",
           found == {("WARN", "LLM_FALLBACK_BASE_URL")}, repr(found))
-    check("fallback endpoint: a custom version path is named like the primary's",
-          ("WARN", "LLM_FALLBACK_BASE_URL") in levels(
-              LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="k",
-              LLM_FALLBACK_BASE_URL="https://llm.example/api/v4"))
+    # Named exactly when the resolver turns the version root into .../v4/v1/...
+    from persona_agent.endpoints import chat_completions_url
+    for base in ("https://llm.example/api/v4", "https://llm.example/v1beta/openai"):
+        doubled = "/v1/chat/completions" in chat_completions_url(base)
+        check(f"fallback endpoint: {base} is named iff it would be misjoined",
+              (("WARN", "LLM_FALLBACK_BASE_URL") in levels(
+                  LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="k",
+                  LLM_FALLBACK_BASE_URL=base)) == doubled)
+        check(f"primary endpoint: {base} the same way",
+              (("WARN", "LLM_BASE_URL") in levels(LLM_BASE_URL=base)) == doubled)
+
+
+def test_preflight_names_a_language_or_time_zone_it_cannot_use() -> None:
+    from persona_agent import preflight
+
+    def levels(**env):
+        return {(f.level, f.key) for f in preflight.check_config(
+            env={"LLM_API_KEY": "sk-x", **env})}
+
+    for lang in ("en", "zh", "zh-CN", "zh_cn", "en-US", "cn"):
+        check(f"AGENT_LANG={lang} is read", not levels(AGENT_LANG=lang))
+    check("AGENT_LANG=fr is named", ("WARN", "AGENT_LANG") in levels(AGENT_LANG="fr"))
+    for tz in ("", "8", "-5", "5.5", "-23"):
+        check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is an offset",
+              not levels(PERSONA_TZ_OFFSET_HOURS=tz))
+    for tz in ("24", "-30", "UTC+8", "nan"):
+        check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is named",
+              ("WARN", "PERSONA_TZ_OFFSET_HOURS") in levels(PERSONA_TZ_OFFSET_HOURS=tz))
 
 
 def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:

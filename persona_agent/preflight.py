@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import access, channels
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
+from .home import resource
 from .paths import ROOT
 
 logger = logging.getLogger("agent")
@@ -56,7 +58,7 @@ TEMPLATE_EXEMPT = frozenset({
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 })
 
-#: Every setting name retired in 0.5 -> the name that replaced it. A hint and
+#: Every setting name retired in 1.0 -> the name that replaced it. A hint and
 #: nothing more: none of these is read, so a value under one is ignored.
 RENAMED = {
     "LLM_TIMEOUT": "LLM_TIMEOUT_S",
@@ -116,7 +118,7 @@ RENAMED = {
     "AGENT_CANDIDATE_LEDGER_WARN_BYTES": "LEDGER_CANDIDATES_WARN_BYTES",
     "PROMPT_LAB_MODEL": "LAB_MODEL",
     "BENCH_EVAL_DELAY": "BENCH_EVAL_DELAY_S",
-    # Aliases that kept even older names working until 0.5.
+    # Older aliases of the same settings.
     "GLM_API_KEY": "VISION_API_KEY",
     "GLM_BASE_URL": "VISION_BASE_URL",
     "ANTHROPIC_PRIVATE_MODEL": "LLM_DM_MODEL",
@@ -131,6 +133,10 @@ RENAMED = {
 #: The one connector platform whose ids are QQ numbers (AstrBot's OneBot
 #: adapter). Any other native platform mints bare ids the agent reads as QQ.
 _QQ_ADAPTER = "aiocqhttp"
+
+#: What older templates shipped as QQ_ONEBOT_URL; left in a copied .env it
+#: says nothing about whether QQ is in use.
+_FORMER_ONEBOT_URL = "http://127.0.0.1:3000"
 
 
 def _shown(entries) -> str:
@@ -203,32 +209,30 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     return findings
 
 
-def _base_url_needs_full_path(base: str) -> bool:
-    """Does this base URL hit the gap `chat_completions_url` documents?
+def _misjoined_chat_url(base: str) -> str:
+    """The chat URL `base` turns into when a version root such as /api/paas/v4
+    gets /v1 appended, which no provider serves; '' when it is fine.
 
-    `endpoints.chat_completions_url` accepts a provider root or a `/v1` base
-    and asks callers on a custom version path (`/api/paas/v4`, say) to
-    supply the complete endpoint themselves. Nothing enforces that: give it a
-    `/v4` base and it silently returns `.../v4/v1/chat/completions`, which no
-    provider serves, and the first sign is a 404 on every reply.
-
-    Checked here rather than in `chat_completions_url` because that function
-    is on the per-turn hot path, where a warning per call would flood the log.
-    A startup finding says it once, before the first turn.
-
-    Deliberately narrow: only a trailing `/vN` segment that is not `/v1`. The
-    general fallback branch exists to serve multi-segment provider roots
-    behind a reverse proxy (`https://proxy.corp/llm-proxy`), so segment
-    counting would report those as broken when they are fine.
-    """
+    Asked of `chat_completions_url` itself, so this reports what the agent
+    will really call, once at startup rather than on every turn."""
     if not base:
-        return False
-    path = urlsplit(base.strip().rstrip("/")).path.rstrip("/")
-    if not path or path.endswith("/chat/completions"):
-        return False
-    last = path.rsplit("/", 1)[-1]
-    return (len(last) > 1 and last[0] == "v" and last[1:].isdigit()
-            and last != "v1")
+        return ""
+    from .endpoints import chat_completions_url
+
+    url = chat_completions_url(base)
+    if re.search(r"/(v\d+|openai)/v1/chat/completions$", urlsplit(url).path):
+        return url
+    return ""
+
+
+def _lang_family(value: str) -> str:
+    """en or zh for a language the agent reads (zh-CN, en_US, ...), else ''."""
+    tag = value.strip().lower().replace("_", "-")
+    if tag in ("zh", "cn", "chinese") or tag.startswith("zh-"):
+        return "zh"
+    if tag == "en" or tag.startswith("en-"):
+        return "en"
+    return ""
 
 
 class Finding:
@@ -291,6 +295,9 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     an explicit `env` that is searched for them too."""
     base = Path(root) if root is not None else ROOT
     template = _parse(base / ".env.example", strip_bom=True)
+    if template is None:
+        # A home made by `personagent init` has no template of its own.
+        template = _parse(resource(".env.example"), strip_bom=True)
     configured = _parse(base / ".env") if env is None else dict(env)
     if configured is None:
         configured = {}
@@ -342,7 +349,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     for old in sorted(retired & RENAMED.keys()):
         findings.append(Finding(
             "WARN", old,
-            f"was renamed to {RENAMED[old]} in 0.5 and is no longer read"))
+            f"was renamed to {RENAMED[old]} in 1.0 and is no longer read"))
 
     for key, why in WANTED.items():
         if key in configured and not str(configured.get(key) or "").strip():
@@ -382,12 +389,14 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "is unset, so the bot listens in every QQ group it is a member of"))
     # QQ_BOT_ID is silently load-bearing on QQ: a QQ @ carries the account's
     # number and `_is_at_me` has nothing else to match it against, so a QQ
-    # deployment that is otherwise complete starts cleanly, logs nothing, and
-    # never answers a mention. Exactly the failure class this module exists
-    # for — and only a warning, because `try_chat.py` supplies its own
-    # placeholder and needs none of this.
-    looks_like_qq = (bool(str(configured.get("QQ_ONEBOT_URL") or "").strip())
-                     or bool(qq_ids))
+    # deployment that is otherwise complete never answers a mention. Only QQ
+    # intent counts: QQ ids, or a OneBot setting the operator wrote. The
+    # template's former QQ_ONEBOT_URL default is not intent.
+    onebot_url = str(configured.get("QQ_ONEBOT_URL") or "").strip().rstrip("/")
+    looks_like_qq = (bool(qq_ids)
+                     or (bool(onebot_url) and onebot_url != _FORMER_ONEBOT_URL)
+                     or any(str(configured.get(k) or "").strip()
+                            for k in ("QQ_ONEBOT_SECRET", "QQ_ONEBOT_IMAGE_DIR")))
     if looks_like_qq and not qq_bot_id:
         findings.append(Finding(
             "WARN", "QQ_BOT_ID",
@@ -397,13 +406,31 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
     for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL"):
         url = str(configured.get(key) or "").strip()
-        if _base_url_needs_full_path(url):
+        wrong = _misjoined_chat_url(url)
+        if wrong:
             findings.append(Finding(
                 "WARN", key,
-                f"ends in a custom version path ({url}) — `chat_completions_url`"
-                " only recognises a bare root or a /v1 base, so it will append"
-                " /v1/chat/completions and produce a URL the provider does not"
-                " serve. Give the complete /chat/completions endpoint instead"))
+                f"({url}) is turned into {wrong}, which no provider serves."
+                " Give the complete /chat/completions endpoint instead"))
+
+    lang = str(configured.get("AGENT_LANG") or "").strip()
+    if lang and not _lang_family(lang):
+        findings.append(Finding(
+            "WARN", "AGENT_LANG",
+            f"is {lang!r}, but the examples, filters and checks exist only in"
+            " English and Chinese. Set AGENT_LANG=en or AGENT_LANG=zh"))
+
+    tz = str(configured.get("PERSONA_TZ_OFFSET_HOURS") or "").strip()
+    if tz:
+        try:
+            hours = float(tz)
+        except ValueError:
+            hours = float("nan")
+        if not -24 < hours < 24:
+            findings.append(Finding(
+                "WARN", "PERSONA_TZ_OFFSET_HOURS",
+                f"is {tz!r}, which is not a UTC offset. Use hours between -23 and"
+                " 23, such as 8 or -5, or leave it blank for this machine's offset"))
 
     # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
     # so both of its failure modes are silent: configured for a fallback that
