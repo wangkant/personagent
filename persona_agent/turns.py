@@ -12,6 +12,7 @@ from . import access
 from .decision import (SLEEP_WINDOW, STICKY_CALL, choose_group_mode,
                        pacing_skip)
 from . import channels
+from . import decision_log
 from .connector import (ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
@@ -434,6 +435,7 @@ class Turns:
                 trigger_count=self.chat_trigger_count,
                 never_replied=never_replied)
             if not mode:
+                decision_log.record(group_id, mode, False, why, ctrl_text)
                 return False
             caller_override = None
             if why == STICKY_CALL:
@@ -453,9 +455,11 @@ class Turns:
             if skip == SLEEP_WINDOW:
                 logger.info("[Agent] PASS via sleep window (mode=%s, hour=%d, group=%s)",
                             mode, time.localtime().tm_hour, group_id)
+                decision_log.record(group_id, mode, False, skip, ctrl_text)
                 return False
             if skip:
                 logger.info("[Agent] PASS via spontaneous skip (mode=judge, group=%s)", group_id)
+                decision_log.record(group_id, mode, False, skip, ctrl_text)
                 return False
 
             try:
@@ -511,6 +515,7 @@ class Turns:
                 return False
             if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
+                decision_log.record(group_id, mode, False, "passed", ctrl_text)
                 if mode == "followup":
                     self.last_reply_at[group_id] = (
                         time.time() - self.chat_followup_window_s - 1)
@@ -563,6 +568,7 @@ class Turns:
                 self._pending_outbound.pop(group_id, None)
                 outbound_done.set()
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
+        decision_log.record(group_id, mode, True, why, committed)
 
         # Reaction learning tracks what was actually said: a reaction to a
         # truncated reply is a reaction to the truncation, and adjudicating it
