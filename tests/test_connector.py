@@ -1313,7 +1313,7 @@ async def test_memory_commands_need_the_whole_keyword(tmp: Path) -> None:
         {"text": "went with Bob", "time": 2.0, "user_id": "b"},
         {"text": "writes poems", "time": 3.0, "user_id": "c"},
     ]
-    agent._handle_memory_command(g, "TestBot drop it", "admin", "Admin")
+    agent._handle_memory_command(g, "TestBot forget wi", "admin", "Admin")
     check("a two-letter word deletes nothing", len(agent.memories[g]) == 3,
           repr(agent.memories[g]))
 

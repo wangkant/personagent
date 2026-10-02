@@ -272,12 +272,9 @@ class Turns:
             sender.get("card") or sender.get("nickname")) or "?")[:8]
 
         is_at = self._is_at_me(payload)
-        # Guard the substring test: an empty persona_name (the shipped default
-        # when PERSONA_NAME is unset) would make `"" in text` always True and the
-        # bot would treat every message as a named call, replying to everything.
         # ctrl_text: a linked page's og:title containing the bot name must not
         # force called mode — only the member's own words count.
-        is_called = bool(self.persona_name) and self.persona_name in ctrl_text
+        is_called = self._names_me(ctrl_text)
         addressed = is_at or is_called
         is_noise = len(text.strip()) < 4 and not addressed
 
