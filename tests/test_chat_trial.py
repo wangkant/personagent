@@ -468,6 +468,8 @@ def test_hint_spells_the_command_for_this_install(monkeypatch) -> None:
     real_hint = chat.hint.__wrapped__
     monkeypatch.delenv("AGENT_HOME", raising=False)
     monkeypatch.setattr(homes, "is_checkout", lambda path=None: False)
+    # Installed, with the home where a bare command finds it.
+    monkeypatch.setattr(homes, "default_home", lambda: chat.paths.ROOT)
     monkeypatch.setattr(setup_wizard.shutil, "which", lambda name: "/bin/personagent")
     assert real_hint("init") == "`personagent init`"
     monkeypatch.setattr(homes, "is_checkout", lambda path=None: True)
