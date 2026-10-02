@@ -203,7 +203,11 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             raw_persona = render_persona_template(
                 loaded, bot_name=s.persona_name, admin_name=s.admin_name,
                 admin_relationship=s.admin_relationship, lang=self.agent_lang)
-            if raw_persona != loaded:
+            if not raw_persona:
+                raw_persona = DEFAULT_PERSONA
+                _note_persona_source("the persona file holds only a template's "
+                                     "note, using the built-in one")
+            elif raw_persona != loaded:
                 _note_persona_source(
                     "filled in the template's {placeholders} and dropped its "
                     "note to the reader")

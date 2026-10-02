@@ -87,6 +87,40 @@ def test_a_persona_file_copied_from_the_template_reaches_the_model_filled(
           and agent.persona.startswith("You're Luna"), agent.persona)
 
 
+def test_a_users_persona_is_cut_only_at_a_template_note(tmp: Path, monkeypatch) -> None:
+    from persona_agent import setup_wizard as sw
+    from persona_agent.prompts import DEFAULT_PERSONA
+
+    for own in ("I'm Mira.\n===\nMy notes live in persona.txt, my diary elsewhere.",
+                "I'm Mira.\n---\nThe template I started from is long gone.\n\n"
+                "persona.txt is mine now."):
+        check(f"a section of the user's own is kept: {own!r}",
+              render_persona_template(own, bot_name="Luna") == own,
+              render_persona_template(own, bot_name="Luna"))
+    note = "————\nThis is the persona template. Copy it to persona.txt."
+    persona = tmp / "persona.txt"
+    persona.write_text(note, encoding="utf-8")
+    monkeypatch.setenv("PERSONA_FILE", str(persona))
+    agent = make_agent(tmp, persona=None)
+    check("a file that is only a note gets the built-in persona",
+          agent.persona == DEFAULT_PERSONA, agent.persona)
+    out = render_persona_template("Hi.\n- {admin_name}, your {admin_relationship}\nBye.",
+                                  bot_name="Luna", admin_name="Kai")
+    check("a line that cannot lose its relationship cleanly is dropped",
+          out == "Hi.\nBye.", out)
+    for lang, text, want in (("en", "Your name is {bot_name}. You are a regular.",
+                              "You are a regular."),
+                             ("zh", "你叫{bot_name}，是老群友。", "是老群友。")):
+        out = render_persona_template(text, bot_name="", lang=lang)
+        check(f"no name, no sentence naming nobody ({lang})", out == want, out)
+    template = _TEMPLATE.replace("{bot_name}", "Your name is {bot_name}. Hi")
+    for admin in ("", "Kai"):
+        agent_side = render_persona_template(template, bot_name="Luna", admin_name=admin)
+        wizard_side = sw.render_persona(template, name="Luna", lang="en", admin_name=admin)
+        check(f"the wizard renders as the agent does (admin={admin!r})",
+              wizard_side == agent_side + "\n", repr((wizard_side, agent_side)))
+
+
 # ---- the connector's own echo and the synthesized mention -------------------
 
 async def test_the_bots_own_message_is_owned_and_not_answered(tmp: Path) -> None:

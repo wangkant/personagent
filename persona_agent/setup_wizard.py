@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from persona_agent import home as homes
+from persona_agent.prompts import render_persona_template
 
 LANGS = ("en", "zh")
 DEFAULT_NAMES = {"en": "Nova", "zh": "小夏"}
@@ -585,7 +586,6 @@ _LEGACY_PERSONA_SHA256 = frozenset({
     "85383ff3974a7c57ae6474ff482f342ad746457a3903367c0c8d30aebdb52bad",
     "c357d226d8daf47583942be31e70cbce77d6efb2a592dc78ae703f3934aebca2",
 })
-_NOTE_RULE = re.compile(r"\n[ \t]*[—-]{2,}[ \t]*\n")
 
 
 def _normal(text: str) -> str:
@@ -600,24 +600,11 @@ def persona_source(key: str, lang: str) -> Path:
 
 def render_persona(text: str, *, name: str, lang: str, admin_name: str = "",
                    admin_relationship: str = "") -> str:
-    """A persona document ready for the model: placeholders filled, the admin
-    line dropped when there is no admin, notes after a rule line removed, and
-    a name line added when the text never names the character."""
-    body = _NOTE_RULE.split(_normal(text), maxsplit=1)[0]
-    lines = []
-    for line in body.split("\n"):
-        if "{admin_name}" in line or "{admin_relationship}" in line:
-            if not admin_name:
-                continue
-            if not admin_relationship:
-                line = re.sub(r"\s*[(（]\{admin_relationship\}[)）]", "", line)
-            line = (line.replace("{admin_name}", admin_name)
-                    .replace("{admin_relationship}", admin_relationship))
-        lines.append(line)
-    out = "\n".join(lines).strip()
-    if "{bot_name}" in out:
-        out = out.replace("{bot_name}", name)
-    else:
+    """A persona document ready for the model, rendered as the agent renders
+    it, plus a name line when the text never names the character."""
+    out = render_persona_template(_normal(text), bot_name=name, admin_name=admin_name,
+                                  admin_relationship=admin_relationship, lang=lang)
+    if "{bot_name}" not in text:
         out = NAME_LINE.get(lang, NAME_LINE["en"]).format(name=name) + "\n" + out
     return out + "\n"
 

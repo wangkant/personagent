@@ -32,36 +32,60 @@ MODEL_FAILURE_EXCUSES = {
            "卡住了，等会儿再聊"),
 }
 
-# A line made only of a rule (———, ---, ===); the shipped persona templates put
+# A line made only of a rule (———, ---, ===); earlier persona templates put
 # their note to the reader after one.
 _TEMPLATE_RULE_RE = re.compile(r"^[ \t]*[—\-_=~*]{3,}[ \t]*$", re.MULTILINE)
+# The sentence that names the persona in the shipped templates, which reads
+# wrong with no name in it.
+_NAME_SENTENCE_RE = re.compile(r"Your name is \{bot_name\}\.[ \t]*|你叫\{bot_name\}[，,。]?")
+
+
+def _without_reader_note(text: str) -> str:
+    """`text` without a template's note to the reader: the last block, one
+    paragraph after a rule line, that names persona.txt and the template."""
+    rules = list(_TEMPLATE_RULE_RE.finditer(text))
+    if not rules:
+        return text
+    note = text[rules[-1].end():].strip()
+    if ("\n\n" not in note and "persona.txt" in note
+            and ("template" in note.lower() or "模板" in note)):
+        return text[:rules[-1].start()]
+    return text
 
 
 def render_persona_template(text: str, *, bot_name: str, admin_name: str = "",
                             admin_relationship: str = "",
                             lang: str = "en") -> str:
-    """A persona document with the shipped template's leftovers resolved.
+    """A persona document with a template's leftovers resolved; the agent and
+    `personagent init` both render with this.
 
     `{bot_name}`, `{admin_name}` and `{admin_relationship}` are filled from the
-    settings; a line about the admin is dropped when there is no ADMIN_NAME,
-    and a trailing note to the reader (after a rule line, naming persona.txt)
-    is cut. A document without any of these comes back unchanged."""
-    rules = list(_TEMPLATE_RULE_RE.finditer(text))
-    if rules and "persona.txt" in text[rules[-1].end():]:
-        text = text[:rules[-1].start()]
+    settings. A line about the admin is dropped when there is no ADMIN_NAME,
+    and so is one that cannot lose its relationship without a gap; a
+    template's note to the reader is cut. A document without any of these
+    comes back unchanged; one with nothing else comes back empty."""
+    text = _without_reader_note(text.replace("\r\n", "\n"))
     admin = (admin_name or "").strip()
     relationship = (admin_relationship or "").strip()
-    if not admin:
-        text = "\n".join(line for line in text.split("\n")
-                         if "{admin_name}" not in line
-                         and "{admin_relationship}" not in line)
-    elif not relationship:
-        text = re.sub(r"[ \t]*[(（]\{admin_relationship\}[)）]", "", text)
+    lines = []
+    for line in text.split("\n"):
+        if "{admin_name}" in line or "{admin_relationship}" in line:
+            if not admin:
+                continue
+            if not relationship:
+                line = re.sub(r"[ \t]*[(（]\{admin_relationship\}[)）]", "", line)
+                if "{admin_relationship}" in line:
+                    continue
+        lines.append(line)
+    text = "\n".join(lines)
+    name = (bot_name or "").strip()
+    if not name:
+        text = _NAME_SENTENCE_RE.sub("", text)
     text = (text.replace("{admin_name}", admin)
             .replace("{admin_relationship}", relationship)
-            .replace("{bot_name}", (bot_name or "").strip()
-                     or ("这个角色" if lang == "zh" else "the persona")))
+            .replace("{bot_name}", name or ("这个角色" if lang == "zh" else "the persona")))
     return text.strip()
+
 
 TOOL_GUIDE = (
     "<tools>\n"
