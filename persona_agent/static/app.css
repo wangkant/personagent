@@ -510,7 +510,7 @@ main {
 
 /* pinned memory notes */
 .pinned {
-  display: flex; flex-wrap: wrap; align-items: center;
+  display: flex; flex-wrap: wrap; align-items: flex-start;
   gap: 6px 14px;
   padding: 9px 22px;
   background: var(--bg-2);
@@ -519,6 +519,7 @@ main {
 }
 .strip-title {
   display: inline-flex; align-items: center; gap: 6px;
+  min-height: 28px;
   margin: 0;
   font-size: 11.5px; font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase;
@@ -1047,6 +1048,8 @@ details.more > summary .count { margin-left: 4px; }
 }
 
 @media (max-width: 900px) {
+  .facts { column-gap: 14px; }
+  .fact + .fact::before { content: none; }
   .convs { grid-template-columns: minmax(0, 1fr); }
   .list-pane { position: static; max-height: none; overflow: visible; }
   /* a phone shows the list or one chat, like a messenger */
@@ -1072,8 +1075,6 @@ details.more > summary .count { margin-left: 4px; }
   .mark { width: 26px; height: 26px; }
   .status > summary { padding: 6px 16px; min-height: 40px; align-items: flex-start; }
   .status .more { padding-top: 1px; }
-  .facts { column-gap: 14px; }
-  .fact + .fact::before { content: none; }
   .swap-arrow { display: none; }
   .overview { grid-template-columns: minmax(0, 1fr); padding: 6px 16px 16px; }
   .card.wide { grid-column: auto; }
