@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
 from . import candidates as candidates_mod
@@ -17,6 +18,7 @@ from .pools import (
     _retrieval_fields,
 )
 from .storage import atomic_write_text
+from .textproc import _TYPOGRAPHY_MAP, TextProcessing
 
 logger = logging.getLogger("agent")
 
@@ -28,7 +30,7 @@ _UNSAFE = str.maketrans({c: " " for c in "[]<>{}|*`·→…"}
 def _clip(text, limit: int = 30) -> str:
     """Chat text for one summary line: one line, policy-safe, at most
     `limit` characters."""
-    s = " ".join(str(text or "").translate(_UNSAFE).split())
+    s = " ".join(str(text or "").translate(_TYPOGRAPHY_MAP).translate(_UNSAFE).split())
     return s if len(s) <= limit else s[:limit - 3].rstrip() + "..."
 
 
@@ -165,45 +167,81 @@ class DataViews:
             was, better = _clip(r.get("reply")), _clip(r.get("better"))
             return f"原来：{was}，改成：{better}" if zh else f"was: {was}, better: {better}"
 
-        lines = [head]
+        lines = []
         shown = ""
         if latest is not None:
             shown = str(latest.get("type") or "")
             row = latest.get("payload") or {}
             lines.append(pair_line(row) if shown == "preference_pair"
                          else _clip(row.get("reply")))
-            chain = self._promotion_chain(latest, zh)
+            chain = self._promotion_chain(latest, zh, current_scope["conv_id"])
             if chain:
                 lines.append(chain)
         if shown != "preference_pair":
             lines.extend(pair_line(r) for r in pairs[-1:])
         if shown != "positive_example":
             lines.extend(_clip(r.get("reply")) for r in examples[-1:])
-        return "\n".join(lines)
+        return self._policy_safe(head, lines)
+
+    def _policy_safe(self, head: str, lines: list[str]) -> str:
+        """`head` plus every line of learned text the character policy lets
+        through whole. Learned text is chat text: a meta phrase in one
+        drafted rewrite would otherwise refuse the entire summary."""
+        def passes(text: str) -> bool:
+            return TextProcessing._sanitize_reply(
+                text, self.agent_lang, self.reply_style) == text
+
+        kept = [head]
+        for line in lines:
+            if passes("\n".join(kept + [line])):
+                kept.append(line)
+        return "\n".join(kept)
 
     def _learning_status(self, group_id: str, current_scope: dict):
         """(waiting for a second voice, waiting for the admin, latest active
-        candidate) for this conversation. A proposal no further event can
-        promote (a positive example, or one blocked by a conflict or by
-        disagreeing evidence) waits for the admin, not for a voice."""
+        candidate) for this conversation. A rewrite blocked by a conflict or
+        by disagreeing evidence waits for the admin, not for a voice. Liked
+        replies are not counted: only a person can promote one, and they pile
+        up with every laugh.
+
+        One pass over the ledger and the log, not one per candidate: anyone
+        in the room can ask, and this runs on the event loop."""
         try:
             cands = self.candidate_ledger.all()
             events = self.evidence_log.all()
         except Exception as e:
             logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
             return 0, 0, None
+        waiting = [c for c in cands
+                   if c.get("state") == candidates_mod.STATE_PROPOSED
+                   and evidence_mod.can_be_strong(str(c.get("type") or ""))
+                   and self._scope_authorizes(c.get("scope"), current_scope)]
         voice = admin = 0
-        for c in cands:
-            if (c.get("state") != candidates_mod.STATE_PROPOSED
-                    or (c.get("scope") or {}).get("conv_id") != group_id):
-                continue
-            decision = self._decide_promotion(c["candidate_id"], events=events,
-                                              peers=cands)
-            if (decision.blocked_by or not self.promotion_policy.auto_promote
-                    or not evidence_mod.can_be_strong(str(c.get("type") or ""))):
-                admin += 1
-            else:
-                voice += 1
+        if waiting and not self.promotion_policy.auto_promote:
+            admin = len(waiting)
+        elif waiting:
+            by_id = {e.get("event_id"): e for e in events}
+            by_reply: dict[str, list] = {}
+            for e in events:
+                by_reply.setdefault(str(e.get("reply") or "").strip(), []).append(e)
+            peers: dict[str, list] = {}
+            for c in cands:
+                peers.setdefault(str(c.get("reply") or ""), []).append(c)
+            now, admins = time.time(), self._admins()
+            for c in waiting:
+                reply = str(c.get("reply") or "").strip()
+                better = str(c.get("better") or "").strip()
+                decision = promotion_mod.decide(
+                    c, linked_events=[by_id[i] for i in c.get("evidence") or ()
+                                      if i in by_id],
+                    related_events=by_reply.get(reply, []) + (
+                        by_reply.get(better, []) if better and better != reply else []),
+                    peers=peers.get(str(c.get("reply") or ""), []), now=now,
+                    policy=self.promotion_policy, admin_ids=admins)
+                if decision.blocked_by:
+                    admin += 1
+                else:
+                    voice += 1
         active = [c for c in cands
                   if c.get("state") == candidates_mod.STATE_PROMOTED
                   and self._scope_authorizes(c.get("scope"), current_scope)]
@@ -216,8 +254,10 @@ class DataViews:
         latest = max(active, key=promoted_at) if active else None
         return voice, admin, latest
 
-    def _promotion_chain(self, cand: dict, zh: bool) -> str:
-        """One line: who argued for `cand`, how, and why it passed."""
+    def _promotion_chain(self, cand: dict, zh: bool, conv_id: str) -> str:
+        """One line: who argued for `cand`, how, and why it passed. Only
+        people in `conv_id` are named; who argued in another chat stays
+        there."""
         try:
             linked = self.evidence_log.many(cand.get("evidence") or [])
         except Exception:
@@ -227,7 +267,10 @@ class DataViews:
         supporting = [e for e in linked if promotion_mod.supports_candidate(
             e, cand, policy=self.promotion_policy)]
         for e in supporting:
-            who = _clip(e.get("speaker_name"), 16) or ("有人" if zh else "someone")
+            if str(e.get("conv_id") or "") != conv_id:
+                who = "另一个聊天里有人" if zh else "someone in another chat"
+            else:
+                who = _clip(e.get("speaker_name"), 16) or ("有人" if zh else "someone")
             kind, rtype = e.get("kind"), e.get("reaction_type")
             if kind == evidence_mod.KIND_RETRY_ACCEPTANCE:
                 step = f"{who} 接受了重答" if zh else f"{who} accepted the retry"

@@ -343,7 +343,7 @@ class Turn:
 
 def _awaiting_fix(agent: Agent, conv: str) -> dict | None:
     """The rejected reply the bot's next reply in `conv` will be a retry for."""
-    return getattr(agent.pending_reactions, "_awaiting_fix", {}).get(conv)
+    return agent.pending_reactions.awaiting(conv)
 
 
 def _names_bot(agent: Agent, text: str) -> bool:
@@ -552,7 +552,8 @@ class Trial:
         if agent.react_learn_enabled:
             agent.pending_reactions.record(
                 conv, reply=sent, ctx_lines=context, mode=turn.mode,
-                intent=intent, target_uid=at_uid or turn.uid,
+                intent=intent,
+                target_uid=agent._reaction_recipient(conv, turn.mode, at_uid, turn.uid),
                 target_name=turn.speaker, mids=[self.last_mid], ts=time.time())
             if awaiting and _awaiting_fix(agent, conv) is None:
                 turn.retry_of = str(awaiting.get("reply") or "")

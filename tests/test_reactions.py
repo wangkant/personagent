@@ -98,10 +98,11 @@ def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
     p.note_rejection("g1", bad, ts=100.0, evidence_id="ev1", complainant_uid="42")
     p.record("g1", **_entry_kwargs(reply="pizza", target_uid="7", ts=110.0))
     check("a reply to someone else leaves the complaint armed",
-          p._awaiting_fix.get("g1", {}).get("complainant_uid") == "42")
+          (p.awaiting("g1") or {}).get("complainant_uid") == "42")
     p.record("g1", **_entry_kwargs(reply="the fix", target_uid="42", ts=120.0,
                                    elicited_uid="42"))
-    check("re-asking the rejector is not their retry either", "g1" in p._awaiting_fix)
+    check("re-asking the rejector is not their retry either",
+          p.awaiting("g1", "42") is not None)
     p.record("g1", **_entry_kwargs(reply="check the logs first", ts=130.0))
     fixed = p.match("g1", sender_uid="42", at_bot=True, now=131.0)
     check("the next reply to the complainant carries the fix and who it was for",
@@ -109,13 +110,78 @@ def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
                              "mode": "called", "evidence_id": "ev1",
                              "target_uid": "42"}, repr(fixed))
 
-    legacy = reactions.PendingReplies(fix_window_sec=100)
-    legacy._awaiting_fix["g1"] = {**bad, "rejected_ts": 100.0, "evidence_id": "ev"}
-    legacy.record("g1", **_entry_kwargs(target_uid="42", ts=110.0))
-    check("a row from an older state file, with no complainant, never links",
-          "fixes" not in legacy.match("g1", sender_uid="42", at_bot=True, now=111.0))
-    legacy.record("g1", **_entry_kwargs(target_uid="42", ts=300.0))
-    check("...and expires", "g1" not in legacy._awaiting_fix)
+    with tempfile.TemporaryDirectory() as d:
+        state = Path(d) / "pending.json"
+        for conv, row in (("g1", {**bad, "rejected_ts": 100.0, "evidence_id": "ev"}),
+                          ("g2", {**bad, "rejected_ts": 100.0, "evidence_id": "ev",
+                                  "complainant_uid": "42"})):
+            state.write_text(json.dumps({"version": 1, "order": [conv], "pending": {},
+                                         "awaiting_fix": {conv: row}}),
+                             encoding="utf-8")
+            legacy = reactions.PendingReplies(fix_window_sec=100, state_file=state)
+            legacy.record(conv, **_entry_kwargs(target_uid="42", ts=110.0))
+            linked = "fixes" in legacy.match(conv, sender_uid="42", at_bot=True,
+                                             now=111.0)
+            check(f"{conv}: a one-slot row links only when it names its complainant",
+                  linked is (conv == "g2"))
+            check(f"{conv}: and is spent either way", legacy.awaiting(conv) is None)
+
+
+def test_one_complaint_does_not_disarm_another() -> None:
+    p = reactions.PendingReplies(fix_window_sec=100)
+    alice = dict(reply="just restart it", ctx_lines=[], mode="called", target_uid="55")
+    bob = dict(reply="pizza", ctx_lines=[], mode="called", target_uid="42")
+    p.note_rejection("g1", alice, ts=100.0, evidence_id="ev-a", complainant_uid="55")
+    p.note_rejection("g1", bob, ts=101.0, evidence_id="ev-b", complainant_uid="42")
+    p.record("g1", **_entry_kwargs(reply="oof, sorry", target_uid="55", ts=110.0))
+    fixed = p.match("g1", sender_uid="55", at_bot=True, now=111.0)
+    check("alice's retry still links after bob complained",
+          (fixed.get("fixes") or {}).get("evidence_id") == "ev-a", repr(fixed))
+    check("bob's stays armed", (p.awaiting("g1", "42") or {}).get("evidence_id") == "ev-b")
+    for i in range(reactions.MAX_ARMED_PER_CONV + 3):
+        p.note_rejection("g1", bob, ts=102.0, complainant_uid=f"u{i}")
+    check("a busy room keeps a bounded number armed",
+          len(p._awaiting_fix["g1"]) == reactions.MAX_ARMED_PER_CONV)
+
+
+def test_a_malformed_state_row_cannot_wedge_a_conversation() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        state = Path(d) / "pending.json"
+        good = {"reply": "hi", "ts": 100.0, "mids": ["m1"], "target_uid": "1", "seq": 1}
+        state.write_text(json.dumps({
+            "version": 1, "order": ["777", "778"],
+            "pending": {"777": [{"reply": "hi", "ts": None, "mids": [], "target_uid": "1"},
+                                {"reply": "yo", "ts": 100.0},
+                                {"reply": "hey", "ts": 100.0, "mids": "m2"},
+                                good],
+                        "778": [{"reply": "x", "ts": 100.0, "mids": [], "seq": "3"}]},
+            "awaiting_fix": {"778": {"42": {"reply": "x", "rejected_ts": "soon",
+                                            "complainant_uid": "42"}}},
+        }), encoding="utf-8")
+        p = reactions.PendingReplies(ttl_sec=60, state_file=state)
+        check("a row with no timestamp is dropped, a row with no ids is read",
+              [e["reply"] for e in p._by_conv["777"]] == ["yo", "hi"],
+              repr(list(p._by_conv["777"])))
+        check("the conversation still matches",
+              (p.match("777", sender_uid="1", at_bot=True, now=110.0) or {}).get(
+                  "reply") == "hi")
+        check("unreadable rows arm nothing", p.awaiting("778") is None
+              and "778" not in p._by_conv)
+        p._by_conv["777"].appendleft({"reply": "late", "ts": None, "mids": []})
+        check("a row that breaks at match time is dropped, not raised",
+              p.match("777", sender_uid="1", at_bot=True, now=110.0) is None
+              and "777" not in p._by_conv)
+
+
+def test_a_quote_of_another_member_is_not_a_reaction() -> None:
+    p = reactions.PendingReplies(ttl_sec=60)
+    p.record("tg", **_entry_kwargs(mids=[]))
+    check("quoting someone else while addressing the bot",
+          p.match("tg", sender_uid="7", quote_mid="telegram:c1:77", at_bot=True,
+                  now=110, quote_by_bot=False) is None)
+    check("the reply stays pending for a real reaction",
+          p.match("tg", sender_uid="7", quote_mid="telegram:c1:78", at_bot=True,
+                  now=110, quote_by_bot=True) is not None)
 
 
 def test_a_retry_queued_before_the_verdict_is_linked() -> None:

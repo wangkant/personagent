@@ -1380,7 +1380,7 @@ async def test_memory_commands_are_caller_scoped(tmp: Path) -> None:
         user_name="Alice")
     rows = agent.memories[g]
     check("memory auth: non-admin write is bound to caller",
-          rows[0].get("user_id") == "alice", repr(rows))
+          rows[0].get("saved_by") == "alice", repr(rows))
 
     agent.memories[g].append({
         "text": "Bob private detail", "time": time.time(),
@@ -1392,7 +1392,7 @@ async def test_memory_commands_are_caller_scoped(tmp: Path) -> None:
     check("memory auth: caller cannot enumerate another user's memory",
           "Bob private detail" not in recalled, recalled)
     check("recall: a tagged memory survives the character policy verbatim",
-          "about Alice: Bob likes chess" in recalled
+          "from Alice: Bob likes chess" in recalled
           and TextProcessing._sanitize_reply(recalled, agent.agent_lang, agent.reply_style) == recalled,
           recalled)
     agent._handle_memory_command(

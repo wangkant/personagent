@@ -313,17 +313,25 @@ class Turns:
         # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
         # off the hot path; the message still flows through the normal reply
         # pipeline below.
-        if self.react_learn_enabled:
-            _quote_mid = ""
+        # A memory command is not a reaction: it costs no model call and
+        # must not consume the reply a real reaction is waiting for.
+        if self.react_learn_enabled and not (
+                addressed and self._is_memory_command(ctrl_text)):
+            _quote_mid, _quote_by_bot = "", None
             for _seg in payload.get("message", []) or []:
                 if isinstance(_seg, dict) and _seg.get("type") == "reply":
-                    _qid = (_seg.get("data") or {}).get("id")
+                    _qdata = _seg.get("data") or {}
+                    _qid = _qdata.get("id")
                     if _qid is not None:
                         _quote_mid = str(_qid)
+                    if _qdata.get("quote_self"):
+                        _quote_by_bot = True
+                    elif _qdata.get("quote_name") not in (None, "", self.persona_name):
+                        _quote_by_bot = False
                     break
             _r_entry = self.pending_reactions.match(
                 group_id, sender_uid=user_id, quote_mid=_quote_mid,
-                at_bot=addressed, now=time.time())
+                at_bot=addressed, now=time.time(), quote_by_bot=_quote_by_bot)
             if _r_entry:
                 self._spawn(self._process_reaction(
                     _r_entry, text, nickname, user_id, is_admin_msg,
@@ -576,7 +584,8 @@ class Turns:
         if self.react_learn_enabled and committed:
             self.pending_reactions.record(
                 group_id, reply=committed, ctx_lines=eval_ctx, mode=mode,
-                intent=_intent, target_uid=at_uid or user_id,
+                intent=_intent,
+                target_uid=self._reaction_recipient(group_id, mode, at_uid, user_id),
                 target_name=nickname, mids=send_result.message_ids,
                 ts=time.time(),
             )
