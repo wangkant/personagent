@@ -75,6 +75,22 @@ def env_float(
     return value
 
 
+#: The UTC offsets in use, in hours: PERSONA_TZ_OFFSET_HOURS outside this is
+#: refused by preflight and replaced by the default at run time.
+TZ_OFFSET_RANGE = (-12.0, 14.0)
+
+
+def parse_tz_offset(raw) -> float | None:
+    """A PERSONA_TZ_OFFSET_HOURS value as hours; None when it is blank or not
+    a UTC offset."""
+    try:
+        hours = float(str(raw or "").strip())
+    except ValueError:
+        return None
+    low, high = TZ_OFFSET_RANGE
+    return hours if low <= hours <= high else None
+
+
 def env_bool(name: str, default: bool, *, env=None) -> bool:
     """One boolean setting, never raising.
 

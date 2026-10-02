@@ -16,6 +16,7 @@ import pytest
 from persona_agent import home as homes
 from persona_agent import setup_wizard as sw
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
+from persona_agent.prompts import _TEMPLATE_RULE_RE
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -125,7 +126,7 @@ def test_every_character_ships_in_both_languages_ready_to_use() -> None:
             check(f"persona {lang}/{character.key}: no alternatives to pick from",
                   not re.search(r"\b(e\.g\.|or:)|比如：|或者：", raw), raw)
             check(f"persona {lang}/{character.key}: no notes to the reader",
-                  not sw._NOTE_RULE.search(raw) and "persona.txt" not in raw, raw)
+                  not _TEMPLATE_RULE_RE.search(raw) and "persona.txt" not in raw, raw)
             check(f"persona {lang}/{character.key}: names the character", "Mika" in text, text)
             check(f"persona {lang}/{character.key}: short", len(text) < 1200, str(len(text)))
     shipped = {p.stem for p in (ROOT / "data" / "personas" / "en").glob("*.txt")}
@@ -136,7 +137,8 @@ def test_every_character_ships_in_both_languages_ready_to_use() -> None:
 def test_a_template_is_filled_and_its_notes_dropped() -> None:
     template = ("You're {bot_name}.\n"
                 "- The person you're closest to is {admin_name} ({admin_relationship}).\n"
-                "- Everyone else: read the room\n\n————\nThis is the persona template.")
+                "- Everyone else: read the room\n\n————\n"
+                "This is the persona template. Copy it to persona.txt.")
     alone = sw.render_persona(template, name="Nova", lang="en")
     check("render: name filled", alone.startswith("You're Nova."), alone)
     check("render: no admin, no admin line", "closest" not in alone, alone)
@@ -592,3 +594,15 @@ def test_the_next_steps_fit_this_machine(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("AGENT_HOME", str(tmp_path))
     check("--home is carried into the commands", "--home" in " ".join(elsewhere.shown("chat"))
           and elsewhere.argv("chat")[-3:] == ["--home", str(tmp_path), "chat"])
+
+
+def test_a_base_url_without_its_scheme_is_asked_again(monkeypatch) -> None:
+    answers = iter([str(len(sw.PROVIDERS)), "api.example.com", "https://api.example.com",
+                    "some-model", "sk-test-123456"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    current = dict.fromkeys(("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"), "")
+    values = sw.step_model(current)
+    check("asked again until the address has a scheme",
+          values["LLM_BASE_URL"] == "https://api.example.com", repr(values))
+    with pytest.raises(SystemExit):
+        sw.main(["--no-input", "--provider", "other", "--base-url", "api.example.com"])

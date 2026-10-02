@@ -4047,8 +4047,8 @@ async def test_disabled_thinking_speaks_openrouters_dialect_too(tmp: Path) -> No
     check("deepseek: thinking off in its dialect, and no OpenRouter field leaks to it",
           p.get("thinking") == {"type": "disabled"} and "reasoning" not in p, repr(p))
     p = await call("https://llm.example/api/v4/chat/completions", True)
-    check("a vendor of unknown dialect is sent neither until it is known to take it",
-          "thinking" not in p and "reasoning" not in p, repr(p))
+    check("a vendor of unknown dialect is asked in DeepSeek's dialect, not OpenRouter's",
+          p.get("thinking") == {"type": "disabled"} and "reasoning" not in p, repr(p))
     p = await call("https://openrouter.ai/api/v1", False)
     check("openrouter: a call that keeps its reasoning is not changed",
           "thinking" not in p and "reasoning" not in p, repr(p))
@@ -5101,13 +5101,13 @@ async def test_a_fallback_on_another_vendor_is_not_sent_thinking(tmp: Path) -> N
     up in a group, the search never fired, and no sticker was tagged."""
     agent = _two_model_agent(tmp)
     agent.base_url, agent.api_key = "https://api.deepseek.com", "primary-key"
-    agent.llm_fallback_base_url = "https://groq.example/openai/v1"
+    agent.llm_fallback_base_url = "https://api.groq.com/openai/v1"
     agent.llm_fallback_api_key = "fallback-key"
     agent.llm_judge_model = "fallback"  # what a blank LLM_JUDGE_MODEL resolves to
     primary = "https://api.deepseek.com/v1/chat/completions"
-    fallback = "https://groq.example/openai/v1/chat/completions"
+    fallback = "https://api.groq.com/openai/v1/chat/completions"
     seen: list = []
-    agent._http = lambda **kw: _ThinkingSpy(seen, rejects="groq.example")
+    agent._http = lambda **kw: _ThinkingSpy(seen, rejects="groq.com")
 
     async def fake_search(query: str, max_results: int = 4) -> str:
         return f"results for {query}"

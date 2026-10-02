@@ -39,7 +39,7 @@ from persona_agent.stickers import _IMAGE_EXT
 from persona_agent.storage import atomic_write_text
 from persona_agent.textproc import _detect_image_mime
 
-QQ_ONEBOT_URL = os.getenv("QQ_ONEBOT_URL", "http://127.0.0.1:3000").rstrip("/")
+QQ_ONEBOT_URL = (os.getenv("QQ_ONEBOT_URL") or "").strip().rstrip("/")
 QQ_BOT_ID = os.getenv("QQ_BOT_ID", "")
 # NapCat history is QQ's, so only the QQ entries of the shared settings apply.
 _IDENTITY = access.identity_from_env()
@@ -343,6 +343,10 @@ async def main():
                    help="download stickers only, skip profile")
     args = p.parse_args()
 
+    if not QQ_ONEBOT_URL:
+        logger.error("QQ_ONEBOT_URL is blank: set it to NapCat's HTTP server, "
+                     "such as http://127.0.0.1:3000, to read the group history")
+        return 1
     if not ADMIN_QQ_IDS:
         logger.error("no QQ admin: set ADMIN_IDS=qq:<number>")
         return 1

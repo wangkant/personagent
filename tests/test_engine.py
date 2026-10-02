@@ -87,6 +87,40 @@ def test_a_persona_file_copied_from_the_template_reaches_the_model_filled(
           and agent.persona.startswith("You're Luna"), agent.persona)
 
 
+def test_a_users_persona_is_cut_only_at_a_template_note(tmp: Path, monkeypatch) -> None:
+    from persona_agent import setup_wizard as sw
+    from persona_agent.prompts import DEFAULT_PERSONA
+
+    for own in ("I'm Mira.\n===\nMy notes live in persona.txt, my diary elsewhere.",
+                "I'm Mira.\n---\nThe template I started from is long gone.\n\n"
+                "persona.txt is mine now."):
+        check(f"a section of the user's own is kept: {own!r}",
+              render_persona_template(own, bot_name="Luna") == own,
+              render_persona_template(own, bot_name="Luna"))
+    note = "————\nThis is the persona template. Copy it to persona.txt."
+    persona = tmp / "persona.txt"
+    persona.write_text(note, encoding="utf-8")
+    monkeypatch.setenv("PERSONA_FILE", str(persona))
+    agent = make_agent(tmp, persona=None)
+    check("a file that is only a note gets the built-in persona",
+          agent.persona == DEFAULT_PERSONA, agent.persona)
+    out = render_persona_template("Hi.\n- {admin_name}, your {admin_relationship}\nBye.",
+                                  bot_name="Luna", admin_name="Kai")
+    check("a line that cannot lose its relationship cleanly is dropped",
+          out == "Hi.\nBye.", out)
+    for lang, text, want in (("en", "Your name is {bot_name}. You are a regular.",
+                              "You are a regular."),
+                             ("zh", "你叫{bot_name}，是老群友。", "是老群友。")):
+        out = render_persona_template(text, bot_name="", lang=lang)
+        check(f"no name, no sentence naming nobody ({lang})", out == want, out)
+    template = _TEMPLATE.replace("{bot_name}", "Your name is {bot_name}. Hi")
+    for admin in ("", "Kai"):
+        agent_side = render_persona_template(template, bot_name="Luna", admin_name=admin)
+        wizard_side = sw.render_persona(template, name="Luna", lang="en", admin_name=admin)
+        check(f"the wizard renders as the agent does (admin={admin!r})",
+              wizard_side == agent_side + "\n", repr((wizard_side, agent_side)))
+
+
 # ---- the connector's own echo and the synthesized mention -------------------
 
 async def test_the_bots_own_message_is_owned_and_not_answered(tmp: Path) -> None:
@@ -335,3 +369,73 @@ async def test_a_crashed_background_task_is_logged_with_its_name(tmp: Path, capl
     check("named and explained", any("tag_the_sticker" in m and "bad sticker" in m
                                      for m in lines), repr(lines))
     check("and released", task not in agent._bg_tasks)
+
+
+def test_a_direct_qq_setup_without_a_napcat_url_is_named() -> None:
+    """On the direct route every reply goes out through QQ_ONEBOT_URL, which
+    is blank by default; through AstrBot it is optional."""
+    from persona_agent import preflight
+
+    def named(**env) -> bool:
+        return any(f.key == "QQ_ONEBOT_URL" and f.level == "WARN"
+                   for f in preflight.check_config(env={"LLM_API_KEY": "k", **env}))
+
+    check("QQ_BOT_ID with no URL", named(QQ_BOT_ID="10001"))
+    check("a OneBot secret with no URL", named(QQ_ONEBOT_SECRET="s"))
+    check("not with the URL set",
+          not named(QQ_BOT_ID="10001", QQ_ONEBOT_URL="http://127.0.0.1:3000"))
+    check("not when QQ comes through AstrBot",
+          not named(QQ_BOT_ID="10001", CONNECTOR_QQ_PLATFORMS="aiocqhttp"))
+    check("not without QQ at all", not named())
+
+
+def test_the_history_bootstrap_needs_a_napcat_url() -> None:
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "QQ_ONEBOT_URL": " ", "ADMIN_IDS": "42", "ACCESS_GROUPS": "123"}
+    done = subprocess.run([sys.executable, str(root / "tools" / "bootstrap_from_history.py")],
+                          cwd=root, env=env, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=60)
+    out = done.stdout + done.stderr
+    check("a blank QQ_ONEBOT_URL stops it with one sentence",
+          done.returncode == 1 and "QQ_ONEBOT_URL is blank" in out
+          and "Traceback" not in out, out)
+
+
+async def test_the_offline_tools_post_where_the_agent_does(monkeypatch) -> None:
+    """A version base such as Zhipu's /api/paas/v4 gets /chat/completions,
+    never a second /v1."""
+    import httpx
+
+    from tools import auto_reviewer, evolution_benchmark
+
+    posted: list = []
+
+    class _Client:
+        def __init__(self, *a, **kw) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, **kw):
+            posted.append(url)
+            return httpx.Response(200, request=httpx.Request("POST", url), json={
+                "choices": [{"message": {"content": '{"score": 4}'}, "finish_reason": "stop"}]})
+
+    base = "https://open.bigmodel.cn/api/paas/v4"
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(auto_reviewer, "BASE_URL", base)
+    await auto_reviewer.call_llm("hi")
+    monkeypatch.setenv("BENCH_JUDGE_BASE_URL", base)
+    monkeypatch.setenv("BENCH_JUDGE_API_KEY", "k")
+    await evolution_benchmark.judge_openai_compatible(
+        [{"item_id": "1", "reply": "hi"}], "glm")
+    check("both post to the version base's own endpoint",
+          posted == [base + "/chat/completions"] * 2, repr(posted))

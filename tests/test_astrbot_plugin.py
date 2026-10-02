@@ -1692,3 +1692,25 @@ def test_split_text_prefers_boundaries_and_never_loses_text():
     assert platforms.split_text("", 40) == [] and platforms.split_text("ok", 0) == ["ok"]
     assert module.rules_for("nope") is platforms.DEFAULT_RULES
 
+
+
+def test_the_default_timeout_outlasts_the_agents_default_turn():
+    """Every connector's default waits out a turn whose model calls all time
+    out and retry under the agent's own defaults."""
+    import importlib
+
+    from persona_agent.settings import AgentSettings
+
+    agent = AgentSettings.from_env(env={})
+    turn = agent.llm_timeout_s * (1 + agent.api_max_retries) + agent.message_debounce_sec
+    schema = json.loads((PLUGIN_DIR / "_conf_schema.json").read_text(encoding="utf-8"))
+    sys.path.insert(0, str(ROOT / "integrations" / "matrix"))
+    try:
+        matrix = importlib.import_module("matrix_connector").Settings.timeout_s
+    finally:
+        sys.path.remove(str(ROOT / "integrations" / "matrix"))
+    defaults = {"schema": schema["timeout_s"]["default"],
+                "plugin": _import_plugin().DEFAULT_TIMEOUT_S, "matrix": matrix}
+    for name, value in defaults.items():
+        assert value > turn + 30, (name, value, turn)
+    assert len(set(defaults.values())) == 1, defaults

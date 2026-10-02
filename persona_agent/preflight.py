@@ -23,8 +23,9 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import access, channels
-from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
+from . import access, channels, endpoints
+from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, TZ_OFFSET_RANGE,
+                         parse_tz_offset)
 from .home import resource
 from .paths import ROOT
 
@@ -208,22 +209,6 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
             f"which is how QQ numbers are stored, so they are compared against "
             f"the QQ admins and allowlists. Only {_QQ_ADAPTER} carries QQ ids"))
     return findings
-
-
-def _misjoined_chat_url(base: str) -> str:
-    """The chat URL `base` turns into when a version root such as /api/paas/v4
-    gets /v1 appended, which no provider serves; '' when it is fine.
-
-    Asked of `chat_completions_url` itself, so this reports what the agent
-    will really call, once at startup rather than on every turn."""
-    if not base:
-        return ""
-    from .endpoints import chat_completions_url
-
-    url = chat_completions_url(base)
-    if re.search(r"/(v\d+|openai)/v1/chat/completions$", urlsplit(url).path):
-        return url
-    return ""
 
 
 def _lang_family(value: str) -> str:
@@ -413,15 +398,33 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "is empty while the rest of the QQ configuration is set — the bot "
             "cannot recognise being @-mentioned and will never reply in a "
             "group, without logging anything"))
+    direct_qq = qq_bot_id or str(configured.get("QQ_ONEBOT_SECRET") or "").strip()
+    if (direct_qq and not onebot_url
+            and not str(configured.get("CONNECTOR_QQ_PLATFORMS") or "").strip()):
+        findings.append(Finding(
+            "WARN", "QQ_ONEBOT_URL",
+            "is blank while QQ is set up without AstrBot (CONNECTOR_QQ_PLATFORMS"
+            " is empty), so replies on the direct NapCat route are dropped. Set"
+            " it to NapCat's HTTP server, such as http://127.0.0.1:3000, or set"
+            " CONNECTOR_QQ_PLATFORMS=aiocqhttp if QQ comes through AstrBot"))
 
-    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL"):
+    for key in ("LLM_BASE_URL", "LLM_FALLBACK_BASE_URL", "VISION_BASE_URL",
+                "EMBEDDING_BASE_URL"):
         url = str(configured.get(key) or "").strip()
-        wrong = _misjoined_chat_url(url)
+        if url and not endpoints.has_scheme(url):
+            findings.append(Finding(
+                "ERROR" if key == "LLM_BASE_URL" else "WARN", key,
+                f"({url}) does not start with https:// or http://, so no request"
+                f" can reach it. Write it with one, such as https://{url}"))
+            continue
+        wrong = endpoints.misjoined_chat_url(url) if key.startswith("LLM_") else ""
         if wrong:
+            gemini = ("; Gemini's OpenAI-compatible base is " + url.rstrip("/") + "/openai"
+                      if re.search(r"/v\d+beta/?$", url) else "")
             findings.append(Finding(
                 "WARN", key,
                 f"({url}) is turned into {wrong}, which no provider serves."
-                " Give the complete /chat/completions endpoint instead"))
+                f" Give the complete /chat/completions endpoint instead{gemini}"))
 
     lang = str(configured.get("AGENT_LANG") or "").strip()
     if lang and not _lang_family(lang):
@@ -431,16 +434,13 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             " English and Chinese. Set AGENT_LANG=en or AGENT_LANG=zh"))
 
     tz = str(configured.get("PERSONA_TZ_OFFSET_HOURS") or "").strip()
-    if tz:
-        try:
-            hours = float(tz)
-        except ValueError:
-            hours = float("nan")
-        if not -24 < hours < 24:
-            findings.append(Finding(
-                "WARN", "PERSONA_TZ_OFFSET_HOURS",
-                f"is {tz!r}, which is not a UTC offset. Use hours between -23 and"
-                " 23, such as 8 or -5, or leave it blank for this machine's offset"))
+    if tz and parse_tz_offset(tz) is None:
+        low, high = TZ_OFFSET_RANGE
+        findings.append(Finding(
+            "WARN", "PERSONA_TZ_OFFSET_HOURS",
+            f"is {tz!r}, which is not a UTC offset. Use hours from {low:g} to"
+            f" {high:g}, such as 8 or -5, or leave it blank for UTC+8 with"
+            " AGENT_LANG=zh and this machine's offset otherwise"))
 
     # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
     # so both of its failure modes are silent: configured for a fallback that

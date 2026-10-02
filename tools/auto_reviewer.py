@@ -50,6 +50,7 @@ import httpx
 
 from persona_agent import evolution
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
+from persona_agent.endpoints import chat_completions_url
 from persona_agent.paths import (
     resolve_runtime_lang_file,
     resolve_runtime_state_file,
@@ -98,7 +99,7 @@ def _feedback_files() -> tuple[Path, Path]:
 async def call_llm(prompt: str) -> str:
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            f"{BASE_URL}/v1/chat/completions",
+            chat_completions_url(BASE_URL),
             headers={"Authorization": f"Bearer {API_KEY}",
                      "Content-Type": "application/json"},
             json={"model": REVIEWER_MODEL, "max_tokens": 600,

@@ -12,10 +12,13 @@ import json
 import logging
 import os
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
+
+from .config_env import TZ_OFFSET_RANGE, parse_tz_offset
 
 
 logger = logging.getLogger("agent")
@@ -446,8 +449,18 @@ def _is_protocol_dict(value) -> bool:
     return isinstance(value, dict) and any(_protocol_key(k) for k in value)
 
 
-# (model, drift) pairs already logged, so a model's habit is said once.
+# (model, drift kind) pairs already logged, so a model's habit is said once;
+# capped, since the model chooses what it sends.
 _PROTOCOL_DRIFT_LOGGED: set[tuple[str, str]] = set()
+_PROTOCOL_DRIFT_LOG_CAP = 256
+# model -> when an object with no reply was last reported.
+_NO_REPLY_WARNED: dict[str, float] = {}
+_NO_REPLY_WARN_EVERY_S = 300.0
+
+
+def _short_repr(value, limit: int = 40) -> str:
+    text = repr(value)
+    return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
 def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
@@ -458,18 +471,21 @@ def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
     ("Intent") or send `"mem": []`. None of that is a leak, so unknown keys
     are ignored, a miscased key is read as ours (the exact spelling wins when
     both are there), a list `mem` means no memory and non-text metadata is
-    blank. Each habit is logged once per model."""
+    blank. Each kind of habit is logged once per model, and an object with
+    no reply at all is reported every few minutes, naming the keys it had."""
     fields: dict = {}
-    drift: list[str] = []
+    drift: list[tuple[str, str]] = []
+    extras: list[str] = []
     for key, value in data.items():
         name = _protocol_key(key)
         if not name:
-            drift.append(f"extra key {key!r}")
+            extras.append(_short_repr(key))
+            drift.append(("extra key", extras[-1]))
             continue
         if key != name:
             if name in data:
                 continue
-            drift.append(f"key spelled {key!r}")
+            drift.append(("key spelled", _short_repr(key)))
         fields[name] = value
     if fields.get("reply") is not None and not isinstance(fields["reply"], str):
         return None
@@ -477,17 +493,28 @@ def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
     if mem is not None and not isinstance(mem, str):
         if not isinstance(mem, list):
             return None
-        drift.append("mem as a list")
+        drift.append(("mem as a list", ""))
         fields["mem"] = ""
     for name in ("reasoning", "intent"):
         if fields.get(name) is not None and not isinstance(fields[name], str):
-            drift.append(f"{name} as {type(fields[name]).__name__}")
+            drift.append((f"{name} as {type(fields[name]).__name__}", ""))
             fields[name] = ""
-    for item in drift:
-        if (model, item) not in _PROTOCOL_DRIFT_LOGGED:
-            _PROTOCOL_DRIFT_LOGGED.add((model, item))
-            logger.warning("[Agent] parser: model %s's JSON has %s; read past "
-                           "it (said once per model)", model or "?", item)
+    for kind, example in drift:
+        if ((model, kind) in _PROTOCOL_DRIFT_LOGGED
+                or len(_PROTOCOL_DRIFT_LOGGED) >= _PROTOCOL_DRIFT_LOG_CAP):
+            continue
+        _PROTOCOL_DRIFT_LOGGED.add((model, kind))
+        logger.warning("[Agent] parser: model %s's JSON has %s%s; read past "
+                       "it (said once per model)", model or "?", kind,
+                       f" {example}" if example else "")
+    if fields.get("reply") is None:
+        now = time.monotonic()
+        if now - _NO_REPLY_WARNED.get(model, -_NO_REPLY_WARN_EVERY_S) >= _NO_REPLY_WARN_EVERY_S:
+            _NO_REPLY_WARNED[model] = now
+            logger.warning("[Agent] parser: model %s's JSON has no \"reply\"%s, so "
+                           "there is nothing to send", model or "?",
+                           f" (its keys of its own: {', '.join(extras[:5])})"
+                           if extras else "")
     return fields
 
 
@@ -574,25 +601,31 @@ def _local_tz_offset() -> float:
     return offset.total_seconds() / 3600 if offset is not None else 0.0
 
 
-def _env_tz_offset() -> float:
-    """PERSONA_TZ_OFFSET_HOURS as hours; blank or unset is this machine's
-    offset. Read on every call, never cached, so a reload or a test can change
-    it between turns. Outside (-24, 24), where `timezone()` raises and every
-    turn would fail, it falls back to the machine's offset and says so once."""
-    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
-    if not str(raw).strip():
-        return _local_tz_offset()
-    try:
-        hours = float(str(raw).strip())
-    except ValueError:
-        hours = None
-    if hours is not None and -24 < hours < 24:
-        return hours
-    if raw not in _TZ_WARNED:
-        _TZ_WARNED.add(raw)
-        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours between -24 "
-                       "and 24, e.g. 8 or -5); using this machine's offset", raw)
+def default_tz_offset() -> float:
+    """The persona's offset when PERSONA_TZ_OFFSET_HOURS is blank: UTC+8 for
+    AGENT_LANG=zh, whose personas live in China time, else this machine's."""
+    from .settings import normalize_lang
+
+    if normalize_lang(os.environ.get("AGENT_LANG", "")) == "zh":
+        return 8.0
     return _local_tz_offset()
+
+
+def _env_tz_offset() -> float:
+    """PERSONA_TZ_OFFSET_HOURS as hours, or `default_tz_offset()` when it is
+    blank or not an offset (saying so once). Read on every call, never
+    cached, so a reload or a test can change it between turns."""
+    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
+    hours = parse_tz_offset(raw)
+    if hours is not None:
+        return hours
+    default = default_tz_offset()
+    if str(raw).strip() and raw not in _TZ_WARNED:
+        _TZ_WARNED.add(raw)
+        low, high = TZ_OFFSET_RANGE
+        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours from %g to %g, "
+                       "e.g. 8 or -5); using %g", raw, low, high, default)
+    return default
 
 
 # ===========================================================================
@@ -1138,7 +1171,8 @@ _SCRIPT_LETTER_RANGES: Ranges = (
     # -- Hebrew -----------------------------------------------------------
     # Vav and final nun are tall strokes; carving them out would make Hebrew
     # unwritable, so a Hebrew letter spliced into a Latin token is refused by
-    # the mixed-script rule instead (`_CONFUSABLE_SCRIPT_RANGES`).
+    # the mixed-script rule instead (`_CONFUSABLE_SCRIPT_RANGES`), and one
+    # standing alone beside Latin text by `_HEBREW_BAR_TOKEN_RE`.
     (0x05D0, 0x05EA, "Hebrew letters alef through tav, final forms included"),
     (0x05EF, 0x05F2, "Hebrew yod triangle and the Yiddish ligatures"),
     # -- Devanagari (Hindi, Marathi, Nepali) ------------------------------
@@ -1484,6 +1518,8 @@ _ASCII_ADMITTED = frozenset(
 # whitespace removed; anything else without a letter is still read as template
 # residue. Numbers stop at four digits a group: a leaked token id is longer.
 _TERSE_REPLY_MAX = 12
+# A reply that is nothing but trailing off, with at least one '…' or '。'.
+_TRAILING_OFF_RE = re.compile(r"(?=.*[…。])[…。.?!？！~～]{1,8}")
 _TERSE_REPLY_RE = re.compile(
     r"[?!.~？！～…]{1,8}"                                # ? ... !!! ?! ~
     r"|[+-]?\d{1,4}(?:[.,:/-]\d{1,4}){0,2}%?[?!.~]{0,3}"  # 1 233 10/10 +1 100% 3:00
@@ -1632,6 +1668,12 @@ _CONFUSABLE_SCRIPT_RANGES: Ranges = (
 
 _CONFUSABLE_SCAN_RE = re.compile(
     "[" + _char_class(_CONFUSABLE_SCRIPT_RANGES) + "]")
+
+# Vav, final nun and the double-vav ligature render as vertical bars. Hebrew
+# never writes one as a word of its own (a numeral takes a geresh), so one
+# standing alone beside Latin text is a role frame: 'ן system ן'.
+_HEBREW_BAR_TOKEN_RE = re.compile(
+    r"(?<![\w\u0591-\u05C7])[\u05D5\u05DF\u05F0][\u0591-\u05C7]*(?![\w'\"])")
 
 
 def _letter_script(codepoint: int, ch: str) -> str:
@@ -1977,6 +2019,13 @@ class TextProcessing:
         text = re.sub(r'(?m)^>\s+', '', text)
         text = re.sub(r'(?m)^---+\s*$', '', text)
         text = text.translate(_STRUCTURE_STRIP_TABLE)
+        # A reply that only trails off ('……', '。。。', '…?') is a terse
+        # answer the strips below would empty; spell it '...' unless the
+        # persona keeps the glyph.
+        if _TRAILING_OFF_RE.fullmatch(re.sub(r'\s+', '', text)):
+            text = re.sub(r'。+', '...', text)
+            if not style.keeps(0x2026):
+                text = re.sub(r'…+', '...', text)
         text = re.sub(r'。+(?!\d)', ' ', text)
         text = text.replace('——', ' ').replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')
@@ -2143,6 +2192,18 @@ class TextProcessing:
                         ord(probe[end]), probe[end]):
                     end += 1
                 return probe[run_start:end]
+        return ""
+
+    @staticmethod
+    def _hebrew_bar_token(text: str) -> str:
+        """A Hebrew bar-shaped letter standing alone in a reply with Latin
+        letters, or `""`. Style-independent, like the arrow and mixed-script
+        rules."""
+        probe = "".join(ch for ch in text
+                        if ord(ch) not in _INVISIBLE_CODEPOINTS)
+        m = _HEBREW_BAR_TOKEN_RE.search(probe)
+        if m and any(_letter_script(ord(ch), ch) == "latin" for ch in probe):
+            return m.group(0)
         return ""
 
     @staticmethod
@@ -2579,7 +2640,7 @@ class TextProcessing:
         deployment — it tells every user what time it is where the server
         happens to be running.
 
-        PERSONA_TZ_OFFSET_HOURS (blank = this machine's offset) remains the
+        PERSONA_TZ_OFFSET_HOURS (blank = `default_tz_offset()`) remains the
         fallback for callers with no per-user notion of "local"."""
         from .connector import current_tz_offset_h
         tz_hours = current_tz_offset_h.get()
@@ -2750,6 +2811,9 @@ class TextProcessing:
         spliced = TextProcessing._mixed_script_token(residual)
         if spliced:
             return False, f"mixed-script token {spliced!r}"
+        bar = TextProcessing._hebrew_bar_token(residual)
+        if bar:
+            return False, f"Hebrew bar letter standing alone {bar!r}"
         cjk_count = 0
         letter_count = 0
         emoji_count = 0

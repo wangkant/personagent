@@ -668,11 +668,12 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
     def levels(**env):
         return {(f.level, f.key) for f in findings(**env)}
 
+    napcat = "http://127.0.0.1:3000"
     check("identity: the new names are settings",
           not levels(ADMIN_IDS="telegram:1,10000", ACCESS_GROUPS="123",
-                     ACCESS_DM_USERS="456", QQ_BOT_ID="9"),
+                     ACCESS_DM_USERS="456", QQ_BOT_ID="9", QQ_ONEBOT_URL=napcat),
           repr(levels(ADMIN_IDS="telegram:1,10000", ACCESS_GROUPS="123",
-                      ACCESS_DM_USERS="456", QQ_BOT_ID="9")))
+                      ACCESS_DM_USERS="456", QQ_BOT_ID="9", QQ_ONEBOT_URL=napcat)))
     pasted = findings(ACCESS_GROUPS="-1001234,telegram:-100")
     check("identity: an id pasted without its prefix is a warning",
           any(f.level == "WARN" and f.key == "ACCESS_GROUPS"
@@ -682,7 +683,7 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
           ("WARN", "ADMIN_IDS") in levels(ADMIN_IDS="U0ABC")
           and ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS="alice"))
     check("identity: qq: and bare QQ numbers are fine",
-          not levels(ACCESS_GROUPS="qq:123,456", QQ_BOT_ID="9"))
+          not levels(ACCESS_GROUPS="qq:123,456", QQ_BOT_ID="9", QQ_ONEBOT_URL=napcat))
     check("identity: an entry naming no platform or no id is a warning",
           ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS=":42")
           and ("WARN", "ACCESS_DM_USERS") in levels(ACCESS_DM_USERS="slack:"))
@@ -695,7 +696,7 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
           == {("INFO", "ACCESS_GROUPS"), ("INFO", "ACCESS_DM_USERS")},
           repr(opted))
     check("identity: ...and only when a forwarded platform has entries",
-          not levels(ACCESS_GROUPS="123", QQ_BOT_ID="9"))
+          not levels(ACCESS_GROUPS="123", QQ_BOT_ID="9", QQ_ONEBOT_URL=napcat))
 
     check("identity: a bare QQ admin is a QQ config that needs QQ_BOT_ID",
           ("WARN", "QQ_BOT_ID") in levels(ADMIN_IDS="42"))
@@ -759,10 +760,10 @@ def test_preflight_names_a_language_or_time_zone_it_cannot_use() -> None:
     check("a comment read as a value is named, without echoing it",
           [(f.level, f.key) for f in found] == [("WARN", "REACT_MODEL")]
           and "LLM_JUDGE_MODEL" not in found[0].detail, repr(found))
-    for tz in ("", "8", "-5", "5.5", "-23"):
+    for tz in ("", "8", "-5", "5.5", "-12", "14"):
         check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is an offset",
               not levels(PERSONA_TZ_OFFSET_HOURS=tz))
-    for tz in ("24", "-30", "UTC+8", "nan"):
+    for tz in ("24", "-30", "UTC+8", "nan", "-23", "15"):
         check(f"PERSONA_TZ_OFFSET_HOURS={tz!r} is named",
               ("WARN", "PERSONA_TZ_OFFSET_HOURS") in levels(PERSONA_TZ_OFFSET_HOURS=tz))
 

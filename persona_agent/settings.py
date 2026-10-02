@@ -94,12 +94,10 @@ class AgentSettings:
     #: distinct from ``model`` is sent there (see ``endpoints.endpoint_for``).
     llm_fallback_base_url: str = ""
     llm_fallback_api_key: str = ""
-    #: Whether a ``llm_fallback_base_url`` on another host than ``base_url``
-    #: accepts DeepSeek's ``thinking`` field. Off by default because the
-    #: field is not ignored elsewhere — Groq answers ``400 property
-    #: 'thinking' is unsupported``, OpenAI rejects unknown arguments — and the
-    #: gate, search decision and sticker tagger run on the judge model, which
-    #: defaults to the fallback, so a 400 there silences them on every turn.
+    #: Send DeepSeek's ``thinking`` field to the fallback's host without
+    #: asking first. Off by default: listed vendors get it, vendors known to
+    #: refuse it do not, and any other endpoint is asked by its first call
+    #: that turns thinking off (see ``llm.ModelCalls._thinking_verdict``).
     llm_fallback_thinking: bool = False
     #: The "judgment" model: cheapest available, used only to gate
     #: self-initiated modes (judge / followup / proactive) — decide PASS vs

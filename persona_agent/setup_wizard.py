@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from persona_agent import home as homes
+from persona_agent.prompts import render_persona_template
 
 LANGS = ("en", "zh")
 DEFAULT_NAMES = {"en": "Nova", "zh": "小夏"}
@@ -107,6 +108,8 @@ _TEXT: dict[str, tuple[str, str]] = {
         "Base URL = the API address on your provider's page, such as https://api.deepseek.com",
         "Base URL = 服务商文档里写的 API 地址，例如 https://api.deepseek.com"),
     "base_url": ("Base URL", "Base URL（API 地址）"),
+    "base_url_scheme": ("Start the address with https:// (or http:// for a server on this computer).",
+                        "地址要以 https:// 开头（本机上的服务用 http://）。"),
     "model_explain": ("Model = the model's id at that service, such as {example}",
                       "模型名 = 这家服务里模型的 ID，例如 {example}"),
     "model": ("Model", "模型名"),
@@ -583,7 +586,6 @@ _LEGACY_PERSONA_SHA256 = frozenset({
     "85383ff3974a7c57ae6474ff482f342ad746457a3903367c0c8d30aebdb52bad",
     "c357d226d8daf47583942be31e70cbce77d6efb2a592dc78ae703f3934aebca2",
 })
-_NOTE_RULE = re.compile(r"\n[ \t]*[—-]{2,}[ \t]*\n")
 
 
 def _normal(text: str) -> str:
@@ -598,24 +600,11 @@ def persona_source(key: str, lang: str) -> Path:
 
 def render_persona(text: str, *, name: str, lang: str, admin_name: str = "",
                    admin_relationship: str = "") -> str:
-    """A persona document ready for the model: placeholders filled, the admin
-    line dropped when there is no admin, notes after a rule line removed, and
-    a name line added when the text never names the character."""
-    body = _NOTE_RULE.split(_normal(text), maxsplit=1)[0]
-    lines = []
-    for line in body.split("\n"):
-        if "{admin_name}" in line or "{admin_relationship}" in line:
-            if not admin_name:
-                continue
-            if not admin_relationship:
-                line = re.sub(r"\s*[(（]\{admin_relationship\}[)）]", "", line)
-            line = (line.replace("{admin_name}", admin_name)
-                    .replace("{admin_relationship}", admin_relationship))
-        lines.append(line)
-    out = "\n".join(lines).strip()
-    if "{bot_name}" in out:
-        out = out.replace("{bot_name}", name)
-    else:
+    """A persona document ready for the model, rendered as the agent renders
+    it, plus a name line when the text never names the character."""
+    out = render_persona_template(_normal(text), bot_name=name, admin_name=admin_name,
+                                  admin_relationship=admin_relationship, lang=lang)
+    if "{bot_name}" not in text:
         out = NAME_LINE.get(lang, NAME_LINE["en"]).format(name=name) + "\n" + out
     return out + "\n"
 
@@ -706,6 +695,10 @@ def completions_url(base_url: str) -> str:
 
 def _is_loopback(url: str) -> bool:
     return (urllib.parse.urlsplit(url).hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
+
+
+def has_scheme(url: str) -> bool:
+    return url.strip().lower().startswith(("http://", "https://"))
 
 
 def _post(url: str, api_key: str, payload: dict, timeout: float) -> tuple[int, str]:
@@ -1184,6 +1177,9 @@ def step_model(current: dict, retry: bool = False) -> dict:
     if not base_url or retry:
         _say(t("base_url_explain"))
         base_url = ask(t("base_url"), default=base_url, required=True)
+        while not has_scheme(base_url):
+            _say(t("base_url_scheme"))
+            base_url = ask(t("base_url"), required=True)
     if provider.key == "ollama":
         _say(t("ollama_model"))
     elif not provider.model:
@@ -1466,6 +1462,8 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     --persona; an edited one is never touched."""
     if args.provider == "other" and not args.base_url:
         raise SystemExit("--provider other needs --base-url")
+    if args.base_url and not has_scheme(args.base_url):
+        raise SystemExit("--base-url needs https:// or http:// in front, such as https://api.deepseek.com")
     existed = (home / ".env").exists()
     env_path = copy_env_template(home)
     lang = (args.lang or os.environ.get("AGENT_LANG", "").strip().lower()

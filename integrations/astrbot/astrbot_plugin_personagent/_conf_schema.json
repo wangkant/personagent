@@ -12,7 +12,7 @@
   "timeout_s": {
     "type": "int",
     "description": "HTTP timeout in seconds for one agent round-trip. A turn includes a short debounce and every model call and retry, so keep this generous: above LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) on the agent.",
-    "default": 180
+    "default": 420
   },
   "excluded_platforms": {
     "type": "list",

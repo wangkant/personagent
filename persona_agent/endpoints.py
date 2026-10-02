@@ -26,9 +26,27 @@ def endpoint_for(model: str, *, primary_model: str, fallback_model: str,
 _VERSION_ROOT_RE = re.compile(r"/v\d+$|/v\d+[a-z]*\d*/openai$")
 
 
+# A version segment followed by another, as /v1 appended after Gemini's
+# native /v1beta leaves it: no provider serves that.
+_DOUBLED_VERSION_RE = re.compile(r"/v\d+[^/]*/v\d+/chat/completions$")
+
+
 def _is_version_root(path: str) -> bool:
     """Does `path` already end at the API's version root?"""
-    return bool(_VERSION_ROOT_RE.search(path))
+    return bool(_VERSION_ROOT_RE.search(path.lower()))
+
+
+def has_scheme(url: str) -> bool:
+    """Does `url` start with http:// or https://? Without it httpx cannot
+    send anything."""
+    return url.strip().lower().startswith(("http://", "https://"))
+
+
+def misjoined_chat_url(base: str) -> str:
+    """The chat URL `base` turns into when that URL has two version segments in
+    a row (/v1beta/v1, /v4/v1), which no provider serves; '' when it is fine."""
+    url = chat_completions_url(base) if base else ""
+    return url if _DOUBLED_VERSION_RE.search(urlsplit(url).path.lower()) else ""
 
 
 def _split_base(base: str):
@@ -70,31 +88,42 @@ def embedding_endpoint(*, base_url: str, api_key: str, embedding_base_url: str,
     return embeddings_url(base_url), embedding_api_key or api_key
 
 
-# Request fields a provider may refuse by name, and the words that show a 400
-# is about the field being unsupported rather than about its value.
-_UNSUPPORTED_WORDS = ("unsupported", "not supported", "does not support",
-                      "unrecognized", "unknown", "only the default",
-                      "max_completion_tokens")
+# Words that show a 400 is about a field being unsupported rather than about
+# its value ("temperature: unknown value" is about the value).
+_REFUSAL_RE = re.compile(
+    r"unsupported|not supported|does not support|unrecogni[sz]ed"
+    r"|unknown (?:parameter|field|name|argument|key|property)"
+    r"|extra (?:inputs?|fields?|properties)|extra_forbidden|not permitted"
+    r"|cannot find field|only the default|max_completion_tokens")
+
+
+def _refuses_field(text: str, field: str) -> bool:
+    """Does `text` refuse `field` as a parameter? The name must stand alone (not
+    inside a model id such as kimi-k2-thinking) next to a refusal word."""
+    for m in re.finditer(rf"(?<![\w\-/]){field}(?![\w\-/])", text):
+        if _REFUSAL_RE.search(text[max(0, m.start() - 80):m.end() + 80]):
+            return True
+    return False
 
 
 def adapt_rejected_payload(payload: dict, error_text: str) -> str:
     """Rewrite `payload` for the field a 400 refused; return its name, or "".
 
-    `thinking` (DeepSeek's switch) is dropped wherever a 400 names it.
-    `max_tokens` becomes `max_completion_tokens` and `temperature` is dropped
-    only when the error says the field is unsupported (OpenAI's reasoning
-    models), not when it objects to the value."""
+    `thinking` (DeepSeek's switch) and `temperature` are dropped, and
+    `max_tokens` becomes `max_completion_tokens` (OpenAI's reasoning models),
+    only when the error refuses the field itself, not its value, and not a
+    model whose name contains it."""
     text = (error_text or "").lower()
-    if "thinking" in payload and re.search(r"\bthinking\b", text):
+    model = str(payload.get("model") or "").lower()
+    if model:
+        text = re.sub(rf"(?<!\w){re.escape(model)}(?!\w)", " ", text)
+    if "thinking" in payload and _refuses_field(text, "thinking"):
         payload.pop("thinking")
         return "thinking"
-    unsupported = any(word in text for word in _UNSUPPORTED_WORDS)
-    if ("max_tokens" in payload and unsupported
-            and re.search(r"\bmax_tokens\b", text)):
+    if "max_tokens" in payload and _refuses_field(text, "max_tokens"):
         payload["max_completion_tokens"] = payload.pop("max_tokens")
         return "max_tokens"
-    if ("temperature" in payload and unsupported
-            and re.search(r"\btemperature\b", text)):
+    if "temperature" in payload and _refuses_field(text, "temperature"):
         payload.pop("temperature")
         return "temperature"
     return ""

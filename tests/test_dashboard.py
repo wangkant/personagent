@@ -408,7 +408,7 @@ def test_no_secret_reaches_any_response(live, monkeypatch) -> None:
 
 def test_a_credential_inside_a_configured_url_is_not_shown(live, monkeypatch) -> None:
     real = preflight.check_config
-    url = "https://kant:pw-0000@gw.example.com/openai?api-key=qk-1234"
+    url = "https://kant:pw-0000@gw.example.com/v1beta?api-key=qk-1234"
     monkeypatch.setattr(preflight, "check_config",
                         lambda: real(env={"LLM_BASE_URL": url, "LLM_API_KEY": "x"}))
     status = client().get("/api/dashboard/status").json()
@@ -417,7 +417,7 @@ def test_a_credential_inside_a_configured_url_is_not_shown(live, monkeypatch) ->
     detail = finding[0]["detail"]
     check("its user:password and query are masked",
           "pw-0000" not in detail and "qk-1234" not in detail and "kant" not in detail
-          and "gw.example.com/openai/v1/chat/completions" in detail, detail)
+          and "gw.example.com/v1beta/v1/chat/completions" in detail, detail)
 
 
 # ---------------------------------------------------- one active rewrite ----

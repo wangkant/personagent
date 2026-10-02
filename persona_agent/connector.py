@@ -186,9 +186,8 @@ current_sink: contextvars.ContextVar[Optional["ConnectorSink"]] = contextvars.Co
 # `current_sink` is one: per-turn state on an Agent instance shared by every
 # conversation, where asyncio hands each Task its own copy so two turns in
 # flight cannot see each other's value. None means "not supplied" and the
-# PERSONA_TZ_OFFSET_HOURS env default still applies, so a deployment that never sets
-# it is behaviorally unchanged. A connector embedder with a per-user notion of
-# "local time" may set it for the duration of a turn.
+# PERSONA_TZ_OFFSET_HOURS setting applies. A connector embedder with a
+# per-user notion of "local time" may set it for the duration of a turn.
 current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
     "current_tz_offset_h", default=None,
 )
