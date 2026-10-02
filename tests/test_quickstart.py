@@ -56,7 +56,7 @@ def test_plugin_config_is_merged_not_replaced() -> None:
     check("config: no qq keeps aiocqhttp excluded", cfg2["excluded_platforms"] == ["aiocqhttp"])
     check("config: DM senders and a wildcard written as given",
           cfg2["dm_users"] == ["telegram:9"] and cfg2["groups"] == ["*"], repr(cfg2))
-    check("config: defaults filled", cfg2["timeout_s"] == 180 and cfg2["block_default"] is True)
+    check("config: defaults filled", cfg2["timeout_s"] == 420 and cfg2["block_default"] is True)
 
 
 def test_connect_writes_both_sides() -> None:

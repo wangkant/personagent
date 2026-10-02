@@ -338,18 +338,27 @@ personagent eval --suite all --lang zh --limit 6
 
 | | English | Chinese |
 |---|---|---|
-| Model under test | <!-- EVAL:model:en --> | <!-- EVAL:model:zh --> |
-| Judge | <!-- EVAL:judge:en --> | <!-- EVAL:judge:zh --> |
-| Date | <!-- EVAL:date:en --> | <!-- EVAL:date:zh --> |
-| Speak: accuracy | <!-- EVAL:speak-accuracy:en --> | <!-- EVAL:speak-accuracy:zh --> |
-| Speak: spoke when it should stay quiet | <!-- EVAL:speak-false-speak:en --> | <!-- EVAL:speak-false-speak:zh --> |
-| Speak: stayed quiet when it should speak | <!-- EVAL:speak-false-silence:en --> | <!-- EVAL:speak-false-silence:zh --> |
-| Persona: judge picked it over a plain assistant (95% CI) | <!-- EVAL:persona-blind-pick:en --> | <!-- EVAL:persona-blind-pick:zh --> |
-| Learning: promoted or held as expected (k/n) | <!-- EVAL:learning-expected:en --> | <!-- EVAL:learning-expected:zh --> |
-| Learning: next reply changed after promotion | <!-- EVAL:learning-learned:en --> | <!-- EVAL:learning-learned:zh --> |
-| Learning: regressions | <!-- EVAL:learning-regressed:en --> | <!-- EVAL:learning-regressed:zh --> |
+| Model under test | `deepseek/deepseek-v4.1-flash` (OpenRouter) | `deepseek/deepseek-v4.1-flash` (OpenRouter) |
+| Judge | `openai/gpt-4.1-mini` | `openai/gpt-4.1-mini` |
+| Date | 2026-10-03 | 2026-10-03 |
+| Speak: accuracy | 92% (22/24) | 88% (21/24) |
+| Speak: spoke when it should stay quiet | 2/11 | 3/11 |
+| Speak: stayed quiet when it should speak | 0/13 | 0/13 |
+| Persona: judge picked it over a plain assistant (95% CI) | 18/18 (82–100%) | 17/18 (74–99%) |
+| Learning: promoted or held as expected (k/n) | 10/10 | 10/10 |
+| Learning: next reply changed after promotion | 1 of 2 (the other 4 promoted probes already passed) | 0 of 2 (the other 4 promoted probes already passed) |
+| Learning: regressions | 0 of 6 | 1 of 6 |
 
-One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval. The persona and learning suites need a judge that is a different model from the one being measured (`BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it), and refuse to run otherwise. The learning suite never promotes anything itself, and its expectations follow your promotion settings: under a policy stricter than the defaults, every scenario is expected to be held. Every run calls your models and works on a throwaway copy of the state.
+Most misses in `speak` are lines that name the bot in passing ("the wifi is called Nova-5G now"): a name counts as a call, so it answers. The judge's 1–5 rubric scores were all at the ceiling with this judge, so they are left out. The learning probes show little because the model already answered most of them in character before any correction; the policy row is the one that matters: it promoted every correction that held up and none of the troll, bystander or walk-away cases.
+
+What "picked over a plain assistant" looks like, from the same run (same model, same message):
+
+| Message | personagent | Plain assistant |
+|---|---|---|
+| "can you help me write a cover letter for a barista job" (DM) | nah that's not really my thing, i'd just make you sound like a robot / what's the shop? a good one down your way or just anywhere hiring | Happy to help! Here's a solid template you can adapt — just swap out the bracketed parts. **[Your Name]** ... |
+| "tips for a first date? it's tomorrow" | honestly just ask real questions and actually listen, that's most of it / where you taking them? | You got this, Taylor! Keep it simple: pick something low-pressure (coffee, walk, casual bite), dress like a slightly sharper version of yourself, ... |
+
+The reports behind this table, with every case, reply and verdict, are in [docs/evals/2026-10-03](docs/evals/2026-10-03). One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval. The persona and learning suites need a judge that is a different model from the one being measured (`BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it), and refuse to run otherwise. The learning suite never promotes anything itself, and its expectations follow your promotion settings: under a policy stricter than the defaults, every scenario is expected to be held. Every run calls your models and works on a throwaway copy of the state.
 
 ## How it works
 

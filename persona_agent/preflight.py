@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 from . import access, channels, endpoints
 from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, TZ_OFFSET_RANGE,
                          parse_tz_offset)
-from .home import resource
+from .home import FROM_ENV_FILE, resource
 from .paths import ROOT
 
 logger = logging.getLogger("agent")
@@ -515,6 +515,8 @@ def retired_settings(root: Path | None = None, environ: dict | None = None) -> l
     found = {old: ".env" for old in written if old in RENAMED}
     for old in live:
         if old in RENAMED and old not in found and old not in _AMBIENT_NAMES:
+            if environ is None and old in FROM_ENV_FILE:
+                continue  # read from .env earlier, and since renamed there
             found[old] = "environment"
     return [(old, RENAMED[old], where) for old, where in sorted(found.items())]
 

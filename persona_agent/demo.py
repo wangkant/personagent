@@ -80,6 +80,11 @@ UIDS = {"alex": "1001", "sam": "1002", "priya": "1003", "jordan": "1004",
         "mallory": "1005"}
 
 
+_ZH_LEDGER_REASONS = {
+    "the person accepted the retry instead": "对方接受了它的重试，没用这个改法",
+}
+
+
 @dataclass
 class Beat:
     """One message in a scene, and what the scripted model answers to it."""
@@ -321,7 +326,7 @@ _TEXT = {
         "no_fix": "没有提出改写：判定模型没有采信任何反应",
         "no_fix_unused": "没有提出改写：有反应被采信了，但没有产生对那条回复的改写",
         "rule_events": "一致的反应 {n}/{need} 条",
-        "rule_strong": "强证据 {n}/{need} 条",
+        "rule_strong": "强反应 {n}/{need} 条",
         "rule_chat": "同一个聊天",
         "rule_chat_off": "不要求同一个聊天（PROMOTE_REQUIRE_SAME_CONVERSATION）",
         "rule_people": "不同的人 {n}/{need}{people}（PROMOTE_MIN_SPEAKERS）",
@@ -700,11 +705,13 @@ class Demo:
             status = state_label(self.lang, state)
             if state == candidates.STATE_PROPOSED:
                 status += t["colon"] + held_reason(self.lang, checklist(self.agent, cand))
-            elif self.lang == "en":
+            else:
                 # The ledger keeps its reasons in English.
-                reason_text = ((cand.get("history") or [{}])[-1]).get("reason")
+                reason_text = str(((cand.get("history") or [{}])[-1]).get("reason") or "")
+                if self.lang != "en":
+                    reason_text = _ZH_LEDGER_REASONS.get(reason_text, "")
                 if reason_text:
-                    status += t["colon"] + str(reason_text)
+                    status += t["colon"] + reason_text
             self.out("    " + t["other"].format(better=clip(cand.get("better"), 44)))
             self.out("      " + status)
 

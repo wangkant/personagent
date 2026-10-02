@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         Path(args.out).write_text(notes, encoding="utf-8")
     else:
-        sys.stdout.write(notes)
+        sys.stdout.buffer.write(notes.encode("utf-8"))
     return 0
 
 

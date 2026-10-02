@@ -51,12 +51,19 @@ def find_home() -> Path:
     return default_home()
 
 
+#: Settings this process took from <home>/.env rather than from the shell.
+FROM_ENV_FILE: set[str] = set()
+
+
 def load_env() -> Path:
     """Load <home>/.env without overriding the shell, and return the home."""
     home = find_home()
     try:
-        from dotenv import load_dotenv
+        from dotenv import dotenv_values
     except ImportError:
         return home
-    load_dotenv(home / ".env", override=False)
+    for key, value in dotenv_values(home / ".env").items():
+        if value is not None and key not in os.environ:
+            os.environ[key] = value
+            FROM_ENV_FILE.add(key)
     return home

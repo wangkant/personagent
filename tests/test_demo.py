@@ -65,7 +65,7 @@ async def test_teach_scene_promotes_the_accepted_retry(tmp: Path, lang: str) -> 
     else:
         assert "判定：否定，采信" in out
         assert "账本：小林接受了第二次尝试：强" in out
-        assert "已生效：2 条证据，1 条强证据，同一个聊天" in out
+        assert "已生效：2 条一致的反应，其中 1 条强，同一个聊天" in out
         assert "提示词里的学习结果：这个聊天里学到的 1 条改写" in out
         assert "小夏会说：啊，演示到一半？太惨了" in out
 

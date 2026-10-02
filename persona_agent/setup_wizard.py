@@ -895,7 +895,7 @@ def astrbot_plugin_config(existing: dict | None, *, personagent_url: str, token:
     if dm_users is not None:
         cfg["dm_users"] = _clean_ids(dm_users)
     cfg.setdefault("dm_users", [])
-    cfg.setdefault("timeout_s", 180)
+    cfg.setdefault("timeout_s", 420)
     cfg.setdefault("block_default", True)
     return cfg
 
