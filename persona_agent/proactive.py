@@ -168,7 +168,7 @@ class Proactive:
             # every tick.
             self.last_proactive_at[key] = now
 
-            final = self._finalize_reply(reply, log_ctx=f"proactive private user={uid}")
+            final = self._finalize_reply(reply, log_ctx=f"proactive DM user={uid}")
             if final is None:
                 continue
             reply, _, pending_core, _ = final

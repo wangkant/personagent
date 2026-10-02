@@ -37,6 +37,9 @@ class MessageParsing:
         # Each slot is (index in parts, how many of `msg_urls` it holds).
         msg_urls: list[str] = []
         link_slots: list[tuple[int, int]] = []
+        # Where a rendered mention sits, so the text after it is not glued
+        # to it: QQ clients type that space themselves, connectors may not.
+        at_slots: set[int] = set()
         for seg in payload.get("message", []):
             if not isinstance(seg, dict):
                 continue
@@ -58,6 +61,7 @@ class MessageParsing:
                     msg_urls.extend(urls)
             elif t == "at":
                 qq = _clean_prompt_source(d.get("qq", ""))
+                at_slots.add(len(parts))
                 parts.append(f"@{self.persona_name}"
                              if qq == self._self_mention_id() else f"@{qq}")
             elif t == "image":
@@ -145,7 +149,13 @@ class MessageParsing:
                 parts[slot] = "".join(
                     " " + _fence(d) for d in itertools.islice(descs, n) if d)
         if parts:
-            return "".join(parts).strip()
+            joined = ""
+            for i, part in enumerate(parts):
+                if (i - 1 in at_slots and part and not part[0].isspace()
+                        and joined and not joined[-1].isspace()):
+                    joined += " "
+                joined += part
+            return joined.strip()
         return _clean_prompt_source(payload.get("raw_message")).strip()
 
     def _index_msg(self, mid, rendered: str) -> None:
@@ -189,7 +199,7 @@ class MessageParsing:
                 self._index_msg(key, hint)
             return hint
         # Connector path has no NapCat to query; skip the API call.
-        if not key or current_sink.get() is not None:
+        if not key or current_sink.get() is not None or not self.qq_onebot_url:
             return ""
         try:
             async with self._local_http(timeout=4) as client:

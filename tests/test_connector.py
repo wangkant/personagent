@@ -2708,7 +2708,7 @@ async def test_group_outbound_orders_buffer(tmp: Path) -> None:
     rendered = [(m["name"], m["text"]) for m in agent.buffers["g-order"]]
     check("group ordering: buffer preserves reply-before-next-message",
           rendered[:3] == [
-              ("Alice", "@TestBotquestion one"),
+              ("Alice", "@TestBot question one"),
               ("TestBot", "answer one"),
               ("Bob", "question two"),
           ],

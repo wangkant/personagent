@@ -60,9 +60,12 @@ a connector may assert it (access.py).
 moment the connector sent it on: the two ages are checked separately, so a
 connector that retries for a minute is not mistaken for a replayed event. It
 is rejected when it differs from now by more than CONNECTOR_MAX_EVENT_AGE_S
-(`_connector_event_is_fresh` in main.py), and it is required — an event
-without it is a 400, which is why it appears in `main._validate_event_payload`'s
-required tuple.
+(`_connector_event_is_fresh` in server.py), and it is required — an event
+without it is a 400, which is why it appears in
+`server._validate_event_payload`'s required tuple.
+
+An event whose `sender_id` equals its `bot_id` is the bot's own message
+echoed back: it is owned and not answered.
 
 `proactive` marks a turn NOBODY SENT. It says the text on this event is a cue
 the CALLER wrote to brief the persona — "they have been quiet a while, say

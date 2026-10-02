@@ -163,6 +163,7 @@ class Transport:
         if pending is not None:
             pending.set()
         self._dm_send_tasks.pop(key, None)
+        self._last_excuse_at.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
         # Through `channels`, not spelled here: this was the third independent
         # copy of the private: -> dm: step and the other two had drifted.
@@ -236,6 +237,13 @@ class Transport:
             # Connector capture: hand the reply back over HTTP instead of
             # posting to NapCat (connector ids aren't ints anyway).
             return sink.add(message)
+        if not self.qq_onebot_url:
+            if "\x00onebot" not in self._no_route_logged:
+                self._no_route_logged["\x00onebot"] = None
+                logger.warning("[Agent] cannot send a %s message to QQ: "
+                               "QQ_ONEBOT_URL (NapCat's HTTP server) is not set",
+                               label)
+            return False
         if not await self._throttle_send(throttle_key):
             return False
         attempts = 3  # 1 initial + 2 retries
@@ -298,7 +306,7 @@ class Transport:
         key = channels.dm_routing_key(user_id)
         return await self._onebot_send(
             "send_private_msg", "user_id", user_id, message,
-            throttle_key=key, mids_key=key, label="private")
+            throttle_key=key, mids_key=key, label="DM")
 
     async def _deliver_segments(self, segments, send, *, target_key: str,
                                 at_user_id: str = "", label: str = "",
@@ -456,7 +464,7 @@ class Transport:
         return await self._deliver_segments(
             TextProcessing._parse_sticker_markers(text),
             partial(self._onebot_send_dm, user_id),
-            target_key=target_key, label=" (private)",
+            target_key=target_key, label=" (DM)",
             throttle_key=target_key)
 
     def _background_route(self, key: str):
@@ -466,7 +474,7 @@ class Transport:
         a QQ key without one, "onebot" (NapCat, as it always has been); None
         when nothing can deliver there unprompted."""
         route = self.outbox.route(key) if self.connector_outbox_enabled else None
-        if route is None and channels.is_native(key):
+        if route is None and channels.is_native(key) and self.qq_onebot_url:
             # QQ through AstrBot may have no NapCat HTTP server at all, so
             # its own connector is preferred while it is pulling.
             return "onebot"
@@ -485,7 +493,10 @@ class Transport:
         excuse."""
         route = self._background_route(key)
         if route is None:
-            self._log_no_route(key, reason)
+            why = ("QQ_ONEBOT_URL is not set and no connector pulls the outbox "
+                   "for it" if channels.is_native(key) and not self.qq_onebot_url
+                   else "its connector does not pull the outbox, or has stopped")
+            self._log_no_route(key, reason, why=why)
             return SendResult()
         if route == "onebot":
             tok = current_sink.set(None)
@@ -508,16 +519,28 @@ class Transport:
             key, route, collector.items, reason=reason)
         return _acked_result(collector.items, outcome, collected)
 
-    def _log_no_route(self, key: str, reason: str) -> None:
+    def _log_no_route(self, key: str, reason: str, *,
+                      why: str = "its connector does not pull the outbox, "
+                                 "or has stopped") -> None:
         marker = f"{key}\x00{reason}"
         if marker in self._no_route_logged:
             return
         self._no_route_logged[marker] = None
         if len(self._no_route_logged) > 1024:
             self._no_route_logged.pop(next(iter(self._no_route_logged)))
-        logger.info("[Agent] no way to send the %s to %s unprompted: its "
-                    "connector does not pull the outbox, or has stopped",
-                    reason.replace("_", "-"), key)
+        logger.info("[Agent] no way to send the %s to %s unprompted: %s",
+                    reason.replace("_", "-"), key, why)
+
+    def _missed_mention_sweep_on(self) -> bool:
+        if not (self.enabled and self.qq_onebot_url):
+            return False
+        if not self.qq_bot_id:
+            if not getattr(self, "_sweep_off_logged", False):
+                self._sweep_off_logged = True
+                logger.info("[Agent] missed-mention sweep is off: QQ_BOT_ID "
+                            "is not set")
+            return False
+        return True
 
     async def check_missed_mentions(self) -> None:
         """On startup, pull the most recent ~10 group messages; if any of them
@@ -528,8 +551,11 @@ class Transport:
         holds the last 2000 ids across every conversation, so busy groups
         push a quiet group's old @ out of it. The age bound is what stops that
         @ from being answered again on every sweep; a message without a
-        timestamp is replayed as before."""
-        if not self.enabled:
+        timestamp is replayed as before.
+
+        Needs NapCat's HTTP server (QQ_ONEBOT_URL) and the bot's own QQ number
+        (QQ_BOT_ID) to tell an @ of the bot from any other."""
+        if not self._missed_mention_sweep_on():
             return
         # Both, not `buffers or access_groups`: buffers gains a key for ANY
         # conversation with traffic — a DM included — so the `or` stopped
@@ -589,7 +615,7 @@ class Transport:
         replay idempotent while the id is still in the ring; an @ older than
         MISSED_MENTION_MAX_AGE_SEC is not replayed at all, so one the ring has
         forgotten is not answered on every later sweep."""
-        if not self.enabled:
+        if not self._missed_mention_sweep_on():
             return
         while True:
             try:
