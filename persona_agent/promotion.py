@@ -20,10 +20,10 @@ promotion requires corroboration:
   is left for a human, because guessing which contradiction wins is how a
   feedback loop entrenches a mistake.
 
-Weak evidence never promotes anything at any quantity, so laughter alone can no
-longer grow the example pool; it accrues on a candidate and waits for an anchor.
+Weak evidence never promotes anything at any quantity, so laughter alone cannot
+grow the example pool; it accrues on a candidate and waits for an anchor.
 
-Also here, the pre-ledger leftovers: ``CandidatePool``, now read-and-withdraw
+Also here, the pre-ledger leftovers: ``CandidatePool``, read-and-withdraw
 only, and ``retract_example`` — how a human disagreement pulls a row out of a
 pool that was learned before the ledger existed. Neither promotes anything.
 
@@ -59,14 +59,14 @@ MIN_STRONG = 1
 # elicitation even has the agent *solicit* that second event from the same
 # person. So "two distinct compatible events" is not "two people agreed".
 #
-# The default is 1 — today's behaviour — because the attack path and the
-# honest path are structurally identical. "that's not what I asked" followed by
+# The default is 1 because the attack path and the honest path are
+# structurally identical. "that's not what I asked" followed by
 # "I meant check the logs" is one person, two events, and it is exactly how a
 # real clarification looks; requiring a second voice would refuse it too, and
 # solo clarification is the flagship zero-effort loop. What is closed by
-# default instead is the part that was unambiguously wrong: a topic change no
-# longer counts as acceptance, and an adjudicator verdict of accept=false is no
-# longer overridden (see evidence.classify_strength).
+# default instead is the unambiguous part: a topic change does not count as
+# acceptance, and an adjudicator verdict of accept=false is never overridden
+# (see evidence.classify_strength).
 #
 # Set PROMOTE_MIN_SPEAKERS=2 for a room where strangers should not be able to
 # teach the agent unaided. Nothing is lost when it blocks: the candidate is
@@ -388,10 +388,10 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
         ev_reply = str(ev.get("reply") or "")
         about_reply = ev_reply == reply
         # A rejection of the REWRITE argues against the pair as directly as a
-        # laugh at the reply it would replace. Only rollback covered this, and
-        # only for candidates already promoted, so a pair could be rejected
-        # while `proposed` and then promoted anyway on a later event about the
-        # original — teaching the text the user had just refused.
+        # laugh at the reply it would replace. Rollback covers only candidates
+        # already promoted, so without this a pair could be rejected while
+        # `proposed` and then promoted anyway on a later event about the
+        # original, teaching the text the user had just refused.
         about_rewrite = (ctype == candidates.TYPE_PAIR and better
                          and ev_reply.strip() == better)
         if not (about_reply or about_rewrite):
@@ -404,11 +404,11 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
         #
         # A rejection of the REWRITE is a different statement: this person
         # refused this exact text, and that does not stop being true because a
-        # month passed. Expiring it meant the protection could simply be
-        # outwaited — measured: rejection on day 0, two fresh corroborating
-        # corrections on days 40 and 41, and the refused text promoted into
-        # the prompt. A promoted pair rolled back for the same reason never
-        # comes back; a proposed one only had to wait.
+        # month passed. Expiring it would let the protection be outwaited
+        # (rejection on day 0, two fresh corroborating corrections on days 40
+        # and 41, and the refused text promoted into the prompt). A promoted
+        # pair rolled back for the same reason never comes back; a proposed
+        # one must not be able to wait it out.
         if (about_reply and now and max_age > 0
                 and now - epoch(ev.get("ts")) > max_age):
             continue
@@ -472,8 +472,8 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     if len(strong) < policy.min_strong:
         # Say which kind of "not yet" this is. A positive_example cannot
         # reach `min_strong` from any quantity of the events that support it
-        # (see evidence.can_be_strong), so reporting it as a count made the
-        # audit log read like a threshold the next reaction might cross.
+        # (see evidence.can_be_strong), so reporting it as a count would make
+        # the audit log read like a threshold the next reaction might cross.
         if not evidence.can_be_strong(ctype):
             return Decision(
                 False,
@@ -518,13 +518,11 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
 # ---------------------------------------------------------------------------
 # Legacy pre-ledger pool — read and retract only
 # ---------------------------------------------------------------------------
-# The weight-based gate that used to live here (WEIGHTS / PROMOTE_AT / decay /
-# prune, and CandidatePool.record driving them) is gone: nothing had called
-# `record` since the ledger took over promotion, so it was a second, divergent
-# set of promotion rules that only its own tests still exercised — which read
-# as coverage of the live gate while protecting nothing.
+# This pool has no promotion gate of its own: promotion goes through the
+# ledger and `decide` above, so a second set of rules here would diverge from
+# the live gate.
 #
-# What remains is what a deployment that learned before the ledger still needs:
+# What it keeps is what a deployment that learned before the ledger still needs:
 # load `example_candidates.json` as written, and let a human disagreement pull
 # a reply back out of it.
 

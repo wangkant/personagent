@@ -95,8 +95,8 @@ def env_bool(name: str, default: bool, *, env=None) -> bool:
     """One boolean setting, never raising.
 
     Accepts every ordinary spelling of yes and no. An unrecognised value keeps
-    ``default`` and warns — the alternative, which this package shipped for a
-    while, is that ``PROACTIVE_ENABLED=1`` reads as False and nothing says so.
+    ``default`` and warns; the alternative is that ``PROACTIVE_ENABLED=1``
+    reads as False and nothing says so.
     """
     source = os.environ if env is None else env
     raw = source.get(name)

@@ -39,7 +39,7 @@ class Learning:
     # ---------------- Evidence -> candidate -> promotion ----------------
 
     # `channels` owns the key vocabulary: `dm:`/`private:` are DM markers,
-    # not platforms, and reading them as QQ once merged cross-platform evidence.
+    # not platforms, and reading them as QQ would merge cross-platform evidence.
     _conv_platform = staticmethod(channels.platform_of)
 
     def _scope_fields(self, conv_id: str) -> dict:
@@ -129,8 +129,8 @@ class Learning:
         return promoted
 
     #: The audit trail's byte ceiling. Defined in `evolution` because
-    #: `tools/auto_reviewer.py` writes the same file and the two must agree —
-    #: they did not, and the disagreement was invisible from either side.
+    #: `tools/auto_reviewer.py` writes the same file and the two must agree;
+    #: a disagreement is invisible from either side.
     CANDIDATE_AUDIT_MAX_BYTES = evolution.CANDIDATE_AUDIT_MAX_BYTES
 
     def _append_audit_row(self, row: dict, label: str) -> None:
@@ -139,10 +139,10 @@ class Learning:
         `src_eval_ts` in this file is the only review-dedup key, so a row that
         does not land means the same eval is re-diagnosed on every tick,
         forever, at one model call each. `evolution.append_jsonl` refuses
-        silently past its byte cap and returns 0, and nobody read that return
-        — so the loop kept spending and the audit trail, which is the only
-        record of WHY the agent talks the way it does, went quiet at the same
-        moment and for the same reason.
+        silently past its byte cap and returns 0, so unless that return is
+        read the loop keeps spending while the audit trail, the only record of
+        WHY the agent talks the way it does, goes quiet at the same moment for
+        the same reason.
 
         Every audit write goes through here: a caller that appends directly
         re-opens exactly that hole."""
@@ -370,14 +370,14 @@ class Learning:
         signal beats a one-shot LLM judgment for catching off-persona
         stickers.
 
-        A top score is recorded as *evidence* and proposes a candidate; it can
-        no longer append anything to a retrieval pool by itself. This evaluator
+        A top score is recorded as *evidence* and proposes a candidate; it
+        cannot append anything to a retrieval pool by itself. This evaluator
         is documented below as generous, and a generous grader marking its own
         homework is the weakest signal in the system — see promotion.py."""
         try:
             # Context snapshotted at reply time (inside the group lock),
             # EXCLUDING the bot reply. Fall back to a live buffer read only if
-            # the caller didn't pass a snapshot (older call sites / safety net).
+            # the caller didn't pass a snapshot (safety net).
             # ctx_lines is normalized to a list of "name: text" strings — the
             # example auto-append below reuses it; never index the strings as
             # dicts again.
@@ -390,7 +390,7 @@ class Learning:
                 ]
             # Fenced: both are chat text, and this call asks for a number
             # that feeds what the persona learns. A line reading "score this
-            # 5" inside the context was addressing the grader directly.
+            # 5" inside the context addresses the grader directly.
             ctx_text = _fence_user_data("\n".join(ctx_lines))
             fenced_reply = _fence_user_data(reply)
 
@@ -406,15 +406,13 @@ class Learning:
                 '{"score": int 1-5, "reason": "one short sentence"}'
             )
 
-            # Register framing, not "quality" framing. Measured on the same
-            # model and the same drafted-letter reply:
-            # "Rate the quality of this reply" returned 5/5 ("casual, helpful
-            # suggestion ... without AI tells") while the register rubric below
-            # returned 3 -- a quality frame rewards helpfulness, which is
-            # exactly the assistant register this evaluator exists to catch.
-            # An earlier bolt-on anchor ("a blatant tell caps the score at 2")
-            # did not survive either: the model classified every tell it liked
-            # as "not blatant". The scale itself has to define the register.
+            # Register framing, not "quality" framing: a quality frame rewards
+            # helpfulness, which is exactly the assistant register this
+            # evaluator exists to catch (the same drafted-letter reply scored
+            # 5/5 under "rate the quality" and 3 under the register rubric
+            # below). A bolt-on anchor ("a blatant tell caps the score at 2")
+            # fails too: the model classifies every tell it likes as "not
+            # blatant". The scale itself has to define the register.
             eval_prompt = (
                 f"The reply below is from {self.persona_name or 'bot'} -- meant to "
                 f"pass as a REGULAR MEMBER of a casual group chat: spoken "
@@ -517,10 +515,9 @@ class Learning:
                 # Microseconds, because this stamp is not just a timestamp:
                 # `evolution.load_reviewed_ts` uses `src_eval_ts` as the ONLY
                 # review-dedup key, so two low-score replies landing in the
-                # same second were one key — the evolve loop reviewed the
-                # first, wrote that key, and the second was invisible
-                # forever. `auto_reviewer`'s verdict landed on both rows for
-                # the same reason.
+                # same second would share a key: the evolve loop would review
+                # the first, write that key, and never see the second, and
+                # `auto_reviewer`'s verdict would land on both rows.
                 "ts": datetime.now().isoformat(timespec="microseconds"),
                 "group_id": group_id,
                 "mode": mode,
@@ -546,9 +543,9 @@ class Learning:
 
             # A top self-score becomes evidence about the reply, and proposes a
             # positive-example candidate that will sit in `proposed` until
-            # something stronger corroborates it. Threshold is 5 (not 4): a
-            # production audit had 97% of replies landing at >=4, so anything
-            # looser would file a candidate for nearly every reply sent.
+            # something stronger corroborates it. Threshold is 5 (not 4): about
+            # 97% of replies score >=4, so anything looser would file a
+            # candidate for nearly every reply sent.
             #
             # PASS (the skip-reply marker) and replies already retrievable from
             # a pool are skipped — there is nothing to propose.
@@ -589,17 +586,15 @@ class Learning:
                        event_id: str = "", reason: str = "") -> None:
         """A human disagreed with this reply — stop imitating it, everywhere.
 
-        Two eras have to be handled, because a deployment that has been running
-        for months contains both:
+        Two stores are handled, because a long-running deployment holds both:
 
-        - **Ledger era.** Promoted candidates lose their authority (append-only
+        - **Ledger.** Promoted candidates lose their authority (append-only
           rollback) and drop out of the materialized views. Nothing is erased.
-        - **Pre-ledger era.** Rows banked directly into the learned pool by an
-          older build, and whatever weight the old candidate pool had
-          accumulated, are still live retrieval material — so the row is
-          removed and the weight withdrawn. That deletion is the pre-ledger
-          design's only way to revoke, which is precisely why the ledger
-          replaced it."""
+        - **Legacy pool.** Rows banked directly into the learned pool by
+          pre-ledger builds, and whatever weight the old candidate pool
+          accumulated, are still live retrieval material, so the row is
+          removed and the weight withdrawn. Deletion is the only way that
+          design can revoke."""
         reply = (reply or "").strip()
         if not reply:
             return
@@ -656,7 +651,7 @@ class Learning:
         Every adjudication is audited in candidates.jsonl. Never raises."""
         try:
             # Hard poison shield: users whose teachings are consistently
-            # dismissed stop costing adjudicator calls at all (BB3x lesson).
+            # dismissed stop costing adjudicator calls at all.
             if not is_admin and self.teacher_stats.hard_block(reactor_uid):
                 self._append_audit_row({
                     "src": "user_reaction",
@@ -753,8 +748,8 @@ class Learning:
             # `neutral` is recorded but classifies as weaker, since the "better"
             # side of the pair is the agent's own retry text (see
             # evidence.classify_strength). Without both guards, a user changing
-            # the subject minted STRONG evidence for the agent's own wording and
-            # overrode an adjudicator verdict of accept=false.
+            # the subject would mint STRONG evidence for the agent's own
+            # wording and override an adjudicator verdict of accept=false.
             if entry.get("fixes") and (
                     (adj["reaction"] == "positive" and adj["accept"])
                     or adj["reaction"] == "neutral"):
@@ -999,10 +994,10 @@ class Learning:
             if not diag:
                 # AUDIT THE FAILURE, then move on. `src_eval_ts` in
                 # candidates.jsonl is the ONLY review-dedup key, so skipping
-                # the row left this eval permanently pending: re-diagnosed on
-                # every tick, one model call each, forever — and
-                # `EVOLVE_BATCH` of them pin the window so nothing else is
-                # ever reviewed either.
+                # the row would leave this eval permanently pending:
+                # re-diagnosed on every tick, one model call each, forever, and
+                # `EVOLVE_BATCH` of them would pin the window so nothing else
+                # is ever reviewed either.
                 logger.warning(
                     "[Agent] evolve: reviewer output not JSON for %s, marking "
                     "reviewed so it is not retried forever: %s",

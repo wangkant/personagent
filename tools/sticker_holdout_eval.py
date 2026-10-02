@@ -57,15 +57,14 @@ def is_unstable(true_count: int, false_count: int) -> bool:
     """Did the judge flip on this image, over the verdicts it actually gave.
 
     Counted over the VALID verdicts only. Measured against the run count, a
-    None folds in as "the judge said False", so the metric is wrong in both
-    directions exactly when the endpoint partially fails — the condition it
-    exists to survive. Its own module returns None on a 429 that outlasts the
-    backoff, so partial failure is the expected shape, not the exotic one.
+    None folds in as "the judge said False", so the metric would be wrong in
+    both directions exactly when the endpoint partially fails — the condition
+    it exists to survive. Its own module returns None on a 429 that outlasts
+    the backoff, so partial failure is the expected shape, not the exotic one.
 
     A module-level predicate rather than an expression inside the scoring
-    loop so the two cases that used to be wrong stay checkable without an
-    API key: (1, 0) with three Nones is stable, (3, 0) with two Nones is not
-    a flip.
+    loop so the partial-failure cases are checkable without an API key: (1, 0)
+    with three Nones is stable, (3, 0) with two Nones is not a flip.
     """
     valid = true_count + false_count
     if valid >= 4:

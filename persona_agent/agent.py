@@ -294,8 +294,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # _fallback_until = error-driven (real 429/5xx), applies to every mode
         # (provider throttling leaves no choice). Keyed by MODEL NAME, so a
         # failing judge or private model cools only itself instead of sending
-        # every group reply to the fallback; with one configured model it is
-        # a single entry and behaves like the scalar clock it replaced.
+        # every group reply to the fallback.
         # _freq_fallback_until = frequency-driven self-throttle, applies only
         # to self-initiated modes — called/admin are exempt. One per agent:
         # it throttles the persona's own chatter, not a model.

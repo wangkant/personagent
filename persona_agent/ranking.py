@@ -42,7 +42,6 @@ EXAMPLE_WEIGHTS = Weights(lexical=1.0, embedding=2.0, recency=0.3,
                           half_life_days=14.0, fields=(1.0, 0.3),
                           scope=(0.0, 0.2, 0.4), mode=0.5)
 #: Memories all belong to one conversation, so scope and mode say nothing.
-#: A 7-day half-life meets the old linear 14-day ramp at 0 and 7 days.
 MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=1.0,
                          half_life_days=7.0)
 
@@ -50,11 +49,11 @@ MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=1.0,
 class Lexicon:
     """BM25 over one pool for one query.
 
-    A term occurs in a field when it is a substring of it, as before, so the
+    A term occurs in a field when it is a substring of it, so the
     two-character CJK windows of `_focus_tokens` need no segmenter. IDF is
     rescaled so the query's matching terms average 1.0: a term of average
-    rarity in a field of average length scores what one hit always scored,
-    and the other signals keep their weight against it."""
+    rarity in a field of average length scores one hit's worth, and the other
+    signals keep their weight against it."""
 
     def __init__(self, tokens: Iterable[str], docs: Sequence[Sequence[str]]):
         df = dict.fromkeys(tokens, 0)

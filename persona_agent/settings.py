@@ -67,13 +67,12 @@ def normalize_lang(value: object) -> str:
 class AgentSettings:
     """One agent's configuration, fully resolved.
 
-    Field order follows the constructor this replaced, so a call site that used
-    to pass keywords to ``Agent`` passes the same keywords here.
+    The fields are the keywords ``Agent(...)`` accepts.
 
-    ``__post_init__`` resolves every setting that used to be resolved inside
-    the constructor — the empty-model fallbacks, the URL trimming, the string
-    coercions — so the object handed to ``Agent`` is what ``Agent`` will use.
-    It is idempotent: re-running it (``dataclasses.replace``) changes nothing.
+    ``__post_init__`` resolves every setting — the empty-model fallbacks, the
+    URL trimming, the string coercions — so the object handed to ``Agent`` is
+    what ``Agent`` will use. It is idempotent: re-running it
+    (``dataclasses.replace``) changes nothing.
     """
 
     # ---- the LLM endpoint -------------------------------------------------
@@ -171,7 +170,7 @@ class AgentSettings:
     #: Whether a connector that pulls the outbox may be sent messages nobody
     #: asked for: openers, the follow-up question, the excuse for a failed
     #: model call (``CONNECTOR_OUTBOX_ENABLED``). Off, the outbox endpoint answers 404
-    #: and those stay QQ-only, as they were before the outbox existed.
+    #: and those stay QQ-only.
     connector_outbox_enabled: bool = field(
         default_factory=lambda: env_bool("CONNECTOR_OUTBOX_ENABLED", True))
 

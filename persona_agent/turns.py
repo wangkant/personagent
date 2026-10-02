@@ -563,12 +563,13 @@ class Turns:
                 return False
 
             # A partial send still put text in front of everyone. Returning
-            # early here left last_reply_at, the buffer and pending_reactions
-            # untouched for words the group had already read — so the followup
-            # window never opened and the next _think could re-emit the same
-            # line verbatim. Commit what was actually delivered; withhold only
-            # what belongs to the reply as a whole (core memory, auto-memory
-            # and the self-eval below all describe the complete answer).
+            # early here would leave last_reply_at, the buffer and
+            # pending_reactions untouched for words the group has already
+            # read — the followup window would never open and the next _think
+            # could re-emit the same line verbatim. Commit what was actually
+            # delivered; withhold only what belongs to the reply as a whole
+            # (core memory, auto-memory and the self-eval below all describe
+            # the complete answer).
             committed = reply if send_result.success else send_result.delivered
             async with self.locks[group_id]:
                 self.last_reply_at[group_id] = time.time()

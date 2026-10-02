@@ -88,7 +88,7 @@ class WebSearch:
         folded into the last turn, as a new list. A caller making two model
         calls off one turn's research grounds up front and passes
         `enable_search=False`; left inside `_call_llm`, the grounded list
-        died with the call. Failures never block the reply."""
+        would die with the call. Failures never block the reply."""
         if not messages:
             return messages
         try:
@@ -113,8 +113,9 @@ class WebSearch:
         `messages[-1]` in the group flow is the *fully rendered* user_prompt
         (metadata header + dozens of history lines + instructions), whose first
         800 chars are the OLDEST background — the real trigger sits at the end
-        and never reaches the judge. Passing the trigger directly both fixes
-        the decision and stops _might_need_search firing on almost every call."""
+        and never reaches the judge. Passing the trigger directly keeps the
+        decision on what was actually said and stops _might_need_search firing
+        on almost every call."""
         if not (self.base_url and self.api_key):
             return ""
         latest = (hint or "").strip()

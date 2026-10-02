@@ -222,8 +222,8 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
         return None
 
 def guess_ext(b: bytes) -> str:
-    # Through the shared detector instead of a fourth private copy of the
-    # magic-byte table — the pair StickerLibrary._guess_ext already uses.
+    # Through the shared detector, not a private copy of the magic-byte
+    # table — the pair StickerLibrary._guess_ext uses.
     return _IMAGE_EXT.get(_detect_image_mime(b), "bin")
 
 def format_ctx_line(msg: dict) -> str:

@@ -646,8 +646,8 @@ class StickerLibrary:
             # path would be returned, _deliver_segments' .exists() would trip,
             # and same-tag valid stickers would never get chosen. Checked HERE
             # rather than at the top of the loop so only an entry that actually
-            # beats the running best is stat'ed — the guard is unchanged, the
-            # syscall count drops from one per library entry to a handful.
+            # beats the running best is stat'ed, a handful of syscalls instead
+            # of one per library entry.
             last = self._last_used.get(filename, 0)
             if now - last < RECENT_USE_COOLDOWN_SEC:
                 if score > cd_score and (self.dir / filename).exists():

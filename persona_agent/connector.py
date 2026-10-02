@@ -121,9 +121,9 @@ logger = logging.getLogger("agent.connector")
 
 #: The id a forwarded mention of the bot itself is rewritten to when QQ_BOT_ID is
 #: blank, which it is on every install without QQ: QQ_BOT_ID is the bot's QQ
-#: account and nothing else. Without it the self mention became an @ of "" and
-#: _is_at_me could not recognise it. No namespaced id (those always contain
-#: ':') and no QQ number (digits) can equal it.
+#: account and nothing else. Without it the self mention would be an @ of ""
+#: and _is_at_me could not recognise it. No namespaced id (those always
+#: contain ':') and no QQ number (digits) can equal it.
 CONNECTOR_BOT_ID = "persona-self"
 
 #: The platform an event is filed under when it names none, or names QQ
@@ -156,13 +156,13 @@ def _ns(platform: str, native: bool, raw: object) -> str:
     """Namespace a USER or GROUP id — unless the platform is native.
 
     A key with NO namespace is QQ (`channels.NATIVE_PLATFORM`), and every store
-    on disk has been keyed that way since QQ was the only channel. So a QQ
-    message that reaches the agent through a connector rather than from NapCat
-    has to mint exactly the ids NapCat would have: prefix it and it addresses a
-    different conversation than the one it came from, orphaning everything
-    already learned about that room and everyone in it. Worse, the ledgers
-    content-address their rows over `conv_id`, so the rename cannot be repaired
-    by rewriting a field — every id derived from it changes too.
+    on disk is keyed that way. So a QQ message that reaches the agent through
+    a connector rather than from NapCat has to mint exactly the ids NapCat
+    would: prefix it and it addresses a different conversation than the one it
+    came from, orphaning everything learned about that room and everyone in
+    it. The ledgers content-address their rows over `conv_id`, so such a
+    rename cannot be repaired by rewriting a field; every derived id changes
+    too.
 
     `native` is NOT the connector's decision. It is the operator's, via
     CONNECTOR_QQ_PLATFORMS, because minting a bare id claims QQ authority:
@@ -204,12 +204,11 @@ def message_to_reply_item(
     `platform`/`native` re-namespace an outbound mention. Inbound, `_ns` mints
     ids for a native platform BARE, because every store on disk is keyed that
     way — but `mention_user_id` is read by the connector, not by a store, and
-    the connector resolves "<platform>:<raw>". So a mention that came in bare goes
-    back out bare, and the reference client drops it on the floor: on the
-    supported QQ path (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group
-    @-mention silently disappeared. Restoring the prefix here keeps the two
-    spellings where they each belong — bare for the ledgers, namespaced on the
-    wire — and leaves `_ns` and every id in every store untouched.
+    the connector resolves "<platform>:<raw>". A mention that came in bare
+    would go back out bare, and the reference client would drop it: on the
+    supported QQ path (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group @-mention
+    would disappear. Restoring the prefix here keeps the two spellings where
+    they belong: bare for the ledgers, namespaced on the wire.
 
     `bot_id` is never prefixed: it is the agent's own id on the native side,
     and addressing it would make the connector @ the bot itself."""
@@ -255,8 +254,7 @@ class ConnectorSink:
         # authorized it to mint bare (native-spelled) ids. Both are needed to
         # put an outbound mention back into the "<platform>:<raw>" form the
         # connector resolves — see message_to_reply_item. The defaults
-        # reproduce the previous behaviour exactly, so a bare ConnectorSink()
-        # is unchanged.
+        # leave mentions as they are.
         self.platform = str(platform or "")
         self.native = bool(native)
         self.bot_id = str(bot_id or "")

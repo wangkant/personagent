@@ -148,8 +148,8 @@ class Memory:
     def _commit_core_memory(self, group_id: str, new_note: str) -> None:
         """Persist a note extracted by _extract_core_update. Empty notes skip."""
         # Judged at the core note's own cap (plus the "..." a capped note
-        # carries): the memory default of 200 cut every rewrite mid-word and
-        # dropped the members past the cut each time.
+        # carries): the memory default of 200 would cut every rewrite
+        # mid-word and drop the members past the cut each time.
         note = self._validate_memory_candidate(
             new_note, max_chars=self.CORE_MEMORY_MAX_CHARS + 3)
         if note:

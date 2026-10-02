@@ -65,9 +65,9 @@ class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
 
     def _open(self):
         # A rollover recreates the base file through _open, which uses the
-        # process umask: the one-time chmod at setup left bot.log and every
-        # backup world-readable after the first rotation. These lines hold
-        # message excerpts and user ids, so every file this opens is 0600.
+        # process umask: a one-time chmod at setup would leave bot.log and
+        # every backup world-readable after the first rotation. These lines
+        # hold message excerpts and user ids, so every file this opens is 0600.
         stream = super()._open()
         if os.name != "nt":
             try:
@@ -185,7 +185,7 @@ def _ct_equal(supplied: str, expected: str) -> bool:
     """Constant-time compare of a header value against a configured secret.
 
     `hmac.compare_digest` raises TypeError on a non-ASCII str, and Starlette
-    decodes header bytes as latin-1, so one `\\xff` in a header turned an
+    decodes header bytes as latin-1, so one `\\xff` in a header would turn an
     unauthenticated request into a 500 with a traceback. Comparing bytes
     also lets a non-ASCII secret work: latin-1 gives back the exact bytes the
     client sent, which are the UTF-8 of the secret it was configured with.
@@ -220,11 +220,10 @@ QQ_ONEBOT_MAX_INFLIGHT = env_int(
 # A SEPARATE budget, because the two endpoints hold their slot for wildly
 # different spans. /v1/onebot hands its slot to a background task within
 # milliseconds; /v1/events answers synchronously and holds one for the
-# entire turn (~12s, see transport.py). Sharing one counter meant a burst of
-# connector turns 429'd the cheap, non-blocking OneBot webhooks alongside them.
-# Defaults to QQ_ONEBOT_MAX_INFLIGHT, so an existing deployment keeps its
-# capacity and a blank line in .env means "same as above" — what changes is
-# that the two can no longer starve each other.
+# entire turn (~12s, see transport.py). Sharing one counter would let a burst
+# of connector turns 429 the cheap, non-blocking OneBot webhooks alongside
+# them. Defaults to QQ_ONEBOT_MAX_INFLIGHT, so a blank line in .env means
+# "same as above" while the two still cannot starve each other.
 CONNECTOR_MAX_INFLIGHT = env_int(
     "CONNECTOR_MAX_INFLIGHT", QQ_ONEBOT_MAX_INFLIGHT, minimum=1, maximum=4096)
 # The outbox's own budget: a long-poll holds its slot for up to 30 s while
@@ -549,7 +548,7 @@ def _error(status: int, code: str, message: str, *,
            retry_after: int | None = None) -> JSONResponse:
     """One shape for every error this service returns.
 
-    `error` stays exactly what it was — a sentence for a human reading a log.
+    `error` is a sentence for a human reading a log.
     `code` is the stable half, and it exists because the prose is not
     actionable: `/v1/events` alone answers 403 for a peer that is not
     allowed, an envelope that failed verification, and an event that is
@@ -596,7 +595,7 @@ async def _read_webhook_body(request: Request) -> bytes | JSONResponse:
     """The body under both the size cap and a deadline, or the error to send.
 
     A client that hangs up mid-body is not a server fault: Starlette raises
-    ClientDisconnect, which used to escape as an ASGI traceback per
+    ClientDisconnect, which would otherwise escape as an ASGI traceback per
     connection. Nobody is left to read the 400; it only keeps the log quiet.
     """
     try:
@@ -614,12 +613,12 @@ async def _read_webhook_body(request: Request) -> bytes | JSONResponse:
 def _on_bg_task_done(task: asyncio.Task) -> None:
     """Discard the strong ref AND retrieve the exception.
 
-    `_bg_tasks.discard` alone never touched `.exception()`, so a crash in one
+    `_bg_tasks.discard` alone never touches `.exception()`, so a crash in one
     of the lifespan one-shots (`probe_models`, `bootstrap_tag_all`,
     `_recheck_then_purge` — the last has no internal guard of its own)
-    surfaced only as a context-free "Task exception was never retrieved" at
-    GC time, if at all. `_safe_handle` already logs its own; this is the same
-    courtesy for everything else that goes through `_spawn`."""
+    would surface only as a context-free "Task exception was never
+    retrieved" at GC time, if at all. `_safe_handle` logs its own; this is
+    the same courtesy for everything else that goes through `_spawn`."""
     _bg_tasks.discard(task)
     if task.cancelled():
         return
@@ -1035,10 +1034,9 @@ async def _connector_events_admitted(request: Request):
     if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
         # One code for four causes (bad token, bad signature, timestamp
         # outside the window, replayed nonce): _verify_envelope folds
-        # them into a bool before this sees them, and splitting that return is
-        # a bigger change than this one — its True/False contract is pinned by
-        # tests. `invalid_envelope` at least separates these from the other
-        # two 403s this route can answer.
+        # them into a bool before this sees them, and its True/False contract
+        # is pinned by tests. `invalid_envelope` at least separates these from
+        # the other two 403s this route can answer.
         return _error(403, "invalid_envelope",
                       "invalid, stale, or replayed request envelope")
     try:

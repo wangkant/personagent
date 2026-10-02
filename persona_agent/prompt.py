@@ -152,9 +152,9 @@ class PromptBuilder:
             )
 
         # NOTE: memory extraction is carried by the JSON `mem` field defined in
-        # REASONING_PROTOCOL, parsed in _parse_model_output. A separate plaintext
-        # "MEM:" instruction used to be appended here, but nothing ever parsed it
-        # and it contradicted the JSON-only output contract, so it was removed.
+        # REASONING_PROTOCOL, parsed in _parse_model_output. No separate
+        # plaintext "MEM:" instruction is added: nothing parses it and it
+        # would contradict the JSON-only output contract.
 
         signals = self._compute_chat_signals(group_id, history)
 
@@ -187,7 +187,7 @@ class PromptBuilder:
             )
         elif mode == ADMIN_MODE:
             # ADMIN_NAME is optional and ships empty, while admin mode needs
-            # only an admin id: unguarded, both lines lost their subject
+            # only an admin id: unguarded, both lines would lose their subject
             # ("latest line is from , the admin").
             admin_ref = self.admin_name or "the owner"
             admin_from = f"{admin_ref}, the owner" if self.admin_name else admin_ref
@@ -366,7 +366,7 @@ class PromptBuilder:
         frequency as the target.
         Otherwise return a placeholder telling model to use moderate frequency."""
         # ADMIN_NAME is optional and ships empty, and this block reaches EVERY
-        # group and private prompt: unguarded concatenation put "haven't
+        # group and private prompt: unguarded concatenation would put "haven't
         # analyzed 's chat style yet" in front of the model on every turn.
         admin_ref = self.admin_name or "the owner"
         profile_file = resolve_runtime_state_file("owner_profile.json")  # stored name
@@ -377,9 +377,9 @@ class PromptBuilder:
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
         # Parse AND read inside the try. A file that parses to a list or a
-        # string made `.get()` raise an AttributeError out of a helper called
-        # from `_think`, where the catch-all turns it into a silent no-reply —
-        # every message, not just this block.
+        # string would make `.get()` raise an AttributeError out of a helper
+        # called from `_think`, where the catch-all turns it into a silent
+        # no-reply — every message, not just this block.
         try:
             profile = json.loads(profile_file.read_text(encoding="utf-8"))
             if not isinstance(profile, dict):
@@ -405,8 +405,8 @@ class PromptBuilder:
     def _at_example(group_id: str) -> str:
         """An [AT:...] example spelled the way this conversation's ids are.
 
-        A bare QQ number taught the model on Telegram to write [AT:42], which
-        the connector cannot resolve. The platform name is connector-supplied,
+        A bare QQ number would teach the model on Telegram to write [AT:42],
+        which the connector cannot resolve. The platform name is connector-supplied,
         so it reaches this engine-written line only if it looks like one."""
         platform = channels.platform_of(group_id)
         if channels.is_native(group_id) or not _PLATFORM_NAME_RE.fullmatch(platform):
@@ -508,11 +508,11 @@ class PromptBuilder:
             f"{DM_TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
             f"{HONEST_DISCLOSURE}\n\n"
-            # No AI-identity rule in here, on purpose. This block used to
-            # open with "Don't reveal you're an AI", an instruction to deceive
-            # whoever sincerely asked, and the output filter then dropped the
-            # admission it failed to prevent, so the honest answer reached
-            # nobody at all. HONEST_DISCLOSURE above says what to do instead.
+            # No AI-identity rule in here, on purpose. "Don't reveal you're an
+            # AI" would be an instruction to deceive whoever sincerely asked,
+            # and the output filter would then drop the admission it failed to
+            # prevent, so the honest answer would reach nobody at all.
+            # HONEST_DISCLOSURE above says what to do instead.
             f"<rules>\n"
             # The register, restated: the reader is meant to be inside a
             # character, not fooled by somebody texting, and that wants room

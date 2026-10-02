@@ -17,23 +17,18 @@ The table, in full:
     connector room "telegram:c1"         "telegram:c1"         "telegram:c1"
     connector DM   "private:telegram:1"  "private:telegram:1"  "dm:telegram:1"
 
-WHY THIS MODULE EXISTS. Three call sites derived that mapping independently
-and two of them got it wrong:
+The mapping lives here alone; call sites must not re-derive it:
 
-* retrieval read promoted examples under the MEMORY key while every writer
-  used the LEARNING one. `_authorized_view` compares all six scope fields and
-  these disagree on two of them, so nothing a DM ever taught the bot could be
-  authorized back into a DM prompt — silently, on every turn.
-* `_conv_platform` read the whole `dm:` prefix as QQ, so every Telegram and
-  Discord DM was stamped `platform="qq"`. With
-  `PROMOTE_REQUIRE_SAME_CONVERSATION=false` a Telegram DM scope and a QQ DM
-  scope then compared compatible — the exact cross-platform combination that
-  function's docstring promises never happens.
-* `transport._evict_conversation` spells the same `private:` -> `dm:` step by
-  hand a third time.
-
-Each was a small, reasonable line of code. The defect was that there were
-three of them.
+* retrieval must look promoted examples up under the LEARNING key, the one
+  every writer uses. `_authorized_view` compares all six scope fields and the
+  MEMORY key differs on two of them, so nothing a DM taught the bot would be
+  authorized back into a DM prompt, silently, on every turn.
+* `platform_of` must not read the whole `dm:` prefix as QQ. A Telegram DM
+  scope would compare compatible with a QQ DM scope under
+  `PROMOTE_REQUIRE_SAME_CONVERSATION=false`, the cross-platform combination
+  the evidence rules forbid.
+* `transport._evict_conversation` uses `learning_key` for the same
+  `private:` -> `dm:` step rather than spelling it by hand.
 """
 from __future__ import annotations
 
@@ -41,8 +36,8 @@ from __future__ import annotations
 DM_ROUTING_PREFIX = "private:"
 
 #: Prefix the LEARNING scope uses for the same thing. Different on purpose and
-#: load-bearing: `dm:` is what every evidence writer has always spelled, and
-#: changing it would orphan every DM candidate already in a live ledger.
+#: load-bearing: `dm:` is what every evidence writer spells, and changing it
+#: would orphan every DM candidate already in a live ledger.
 DM_LEARNING_PREFIX = "dm:"
 
 #: The platform a bare key belongs to. QQ ids carry no namespace because QQ
@@ -71,9 +66,7 @@ def learning_key(routing_key: str) -> str:
 def platform_of(key: str) -> str:
     """Which platform a conversation belongs to, from either spelling.
 
-    Accepts a routing key or a learning key, because callers hold both and
-    asking them to remember which is which is how the two prefixes drifted
-    apart in the first place.
+    Accepts a routing key or a learning key, because callers hold both.
 
     Evidence from two platforms is never combined, so this has to be right
     rather than merely plausible: `dm:` and `private:` are DM MARKERS, not

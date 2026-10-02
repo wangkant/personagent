@@ -104,8 +104,8 @@ def entries_on(platform: str, ids: Iterable[str]) -> frozenset[str]:
 def admin_on(platform: str, admins: Iterable[str]) -> str:
     """The admin's account on `platform`, else their QQ one, else "".
 
-    The QQ fallback is what every conversation used before admins had more
-    than one account, so memories keep the attribution they always had."""
+    The QQ fallback keeps memories attributed to the admin's QQ account on
+    platforms where they have no account of their own."""
     admins = tuple(admins)
     for wanted in (platform, channels.NATIVE_PLATFORM):
         found = sorted(entries_on(wanted, admins))

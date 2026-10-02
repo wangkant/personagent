@@ -648,12 +648,11 @@ def fix_pair(bad: dict, good_reply: str, ts: str) -> dict | None:
 # A window, not a half-life, and the difference is the whole point. Decaying
 # the counts continuously sounds gentler and behaves worse: the gate fires on
 # `total >= 5`, so discounting the total walks it back under the threshold
-# almost immediately — a fresh block measured 4.56 days, and a teacher
-# dismissed once every five days was never blocked at all, because each
-# dismissal landed on counts the decay had already eaten. Forgiveness keyed on
-# SILENCE has neither failure: someone still teaching keeps refreshing `ts`
-# and stays blocked for as long as they keep it up, and someone who stops is
-# clear a month later.
+# almost immediately, and a teacher dismissed once every five days is never
+# blocked at all, because each dismissal lands on counts the decay has already
+# eaten. Forgiveness keyed on SILENCE has neither failure: someone still
+# teaching keeps refreshing `ts` and stays blocked for as long as they keep it
+# up, and someone who stops is clear a month later.
 TEACHER_FORGIVENESS_DAYS = 30.0
 
 
@@ -724,13 +723,13 @@ class TeacherStats:
     def hard_block(self, uid: str) -> bool:
         """Persistently bad teachers stop costing adjudicator calls at all.
 
-        DECAYING, because without it this is an ABSORBING state and that is a
-        bug rather than a policy: `learning.py` consults this gate and returns
-        BEFORE `update()` runs, so `accepted` — whose only writer is that
-        `update()` — can never rise again for a blocked user. Five dismissals
-        during a prompt-tuning session muted someone for the life of the file.
-        A teacher who is still bad keeps refreshing `ts` and stays blocked; a
-        quiet one is eventually let back in to try."""
+        DECAYING, because without it this would be an ABSORBING state, which
+        is a bug rather than a policy: `learning.py` consults this gate and
+        returns BEFORE `update()` runs, so `accepted` — whose only writer is
+        that `update()` — could never rise again for a blocked user, and five
+        dismissals would mute someone for the life of the file. A teacher who
+        is still bad keeps refreshing `ts` and stays blocked; a quiet one is
+        eventually let back in to try."""
         acc, dis = self._counts(uid)
         total = acc + dis
         return total >= 5 and acc / total <= 0.1
