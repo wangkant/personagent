@@ -118,7 +118,7 @@ def env_bool(name: str, default: bool, *, env=None) -> bool:
 #: What a deployment talks to when LLM_MODEL / LLM_BASE_URL are unset. Named
 #: once, here, so the agent, the health probes, preflight and the offline
 #: tools all fall back to the same thing.
-DEFAULT_LLM_MODEL = "deepseek-chat"
+DEFAULT_LLM_MODEL = "deepseek-flash"
 DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
 
 
