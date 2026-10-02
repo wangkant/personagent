@@ -1171,7 +1171,8 @@ _SCRIPT_LETTER_RANGES: Ranges = (
     # -- Hebrew -----------------------------------------------------------
     # Vav and final nun are tall strokes; carving them out would make Hebrew
     # unwritable, so a Hebrew letter spliced into a Latin token is refused by
-    # the mixed-script rule instead (`_CONFUSABLE_SCRIPT_RANGES`).
+    # the mixed-script rule instead (`_CONFUSABLE_SCRIPT_RANGES`), and one
+    # standing alone beside Latin text by `_HEBREW_BAR_TOKEN_RE`.
     (0x05D0, 0x05EA, "Hebrew letters alef through tav, final forms included"),
     (0x05EF, 0x05F2, "Hebrew yod triangle and the Yiddish ligatures"),
     # -- Devanagari (Hindi, Marathi, Nepali) ------------------------------
@@ -1667,6 +1668,12 @@ _CONFUSABLE_SCRIPT_RANGES: Ranges = (
 
 _CONFUSABLE_SCAN_RE = re.compile(
     "[" + _char_class(_CONFUSABLE_SCRIPT_RANGES) + "]")
+
+# Vav, final nun and the double-vav ligature render as vertical bars. Hebrew
+# never writes one as a word of its own (a numeral takes a geresh), so one
+# standing alone beside Latin text is a role frame: 'ן system ן'.
+_HEBREW_BAR_TOKEN_RE = re.compile(
+    r"(?<![\w\u0591-\u05C7])[\u05D5\u05DF\u05F0][\u0591-\u05C7]*(?![\w'\"])")
 
 
 def _letter_script(codepoint: int, ch: str) -> str:
@@ -2185,6 +2192,18 @@ class TextProcessing:
                         ord(probe[end]), probe[end]):
                     end += 1
                 return probe[run_start:end]
+        return ""
+
+    @staticmethod
+    def _hebrew_bar_token(text: str) -> str:
+        """A Hebrew bar-shaped letter standing alone in a reply with Latin
+        letters, or `""`. Style-independent, like the arrow and mixed-script
+        rules."""
+        probe = "".join(ch for ch in text
+                        if ord(ch) not in _INVISIBLE_CODEPOINTS)
+        m = _HEBREW_BAR_TOKEN_RE.search(probe)
+        if m and any(_letter_script(ord(ch), ch) == "latin" for ch in probe):
+            return m.group(0)
         return ""
 
     @staticmethod
@@ -2792,6 +2811,9 @@ class TextProcessing:
         spliced = TextProcessing._mixed_script_token(residual)
         if spliced:
             return False, f"mixed-script token {spliced!r}"
+        bar = TextProcessing._hebrew_bar_token(residual)
+        if bar:
+            return False, f"Hebrew bar letter standing alone {bar!r}"
         cjk_count = 0
         letter_count = 0
         emoji_count = 0
