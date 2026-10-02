@@ -1,34 +1,72 @@
 """Shared API health probes for the agent's external dependencies.
 
-Used by tools/healthcheck.py (CLI) and /health/details in main.py. Service
-probes are tiny but not free: each POSTs a few-token completion (or 1 test
-image / 1 search credit) to the configured provider. The environment must
-already be loaded (main.py and the CLI call load_dotenv); this module only
-reads os.getenv and has no import-time side effects.
+Used by `personagent doctor` and /health/details. Service probes are tiny but
+not free: each POSTs a few-token completion (or 1 test image / 1 search
+credit) to the configured provider. The environment must already be loaded
+(the server and the CLI load .env first); this module only reads os.getenv
+and has no import-time side effects.
 """
 import base64
 import io
+import ipaddress
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit
 
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, vision_endpoint_from_env
-from .endpoints import chat_completions_url, embedding_endpoint, endpoint_for
+from .endpoints import (adapt_rejected_payload, chat_completions_url,
+                        embedding_endpoint, endpoint_for)
 from .textproc import apply_k2_quirks
+
+# A loopback service (NapCat, a local model) must not be reached through the
+# HTTP(S)_PROXY the shell may set for the internet.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _is_loopback(url: str) -> bool:
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _open(req, timeout):
+    if _is_loopback(req.full_url):
+        return _DIRECT.open(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 def _post_json(url, payload, headers, timeout=30):
-    data = json.dumps(payload).encode()
+    """POST and parse JSON. A 400 naming a field the endpoint does not take
+    (`max_tokens` / `temperature` on a reasoning model) is retried without it,
+    as the agent's own calls are."""
     h = {"Content-Type": "application/json", **headers}
-    req = urllib.request.Request(url, data=data, headers=h)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+    payload = dict(payload)
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=h)
+        try:
+            with _open(req, timeout) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 422) or attempt == 2:
+                raise
+            try:
+                body = e.read().decode("utf-8", "replace")
+            except Exception:
+                body = ""
+            if not adapt_rejected_payload(payload, body):
+                raise
 
 
 def _get(url, timeout=10):
-    with urllib.request.urlopen(urllib.request.Request(url), timeout=timeout) as r:
+    with _open(urllib.request.Request(url), timeout) as r:
         return json.load(r)
 
 
@@ -47,7 +85,7 @@ def _llm_endpoint(model: str) -> tuple[str, str]:
 
 
 def check_dm_chat():
-    """Private-chat model probe. LLM_DM_MODEL is an alternate model name
+    """DM model probe. LLM_DM_MODEL is an alternate model name
     (blank = LLM_MODEL) on the primary's endpoint — unless it is also the
     LLM_FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
     Routed like the agent, or the probe would report on an endpoint DMs do
@@ -166,8 +204,11 @@ def check_tavily():
 
 
 def check_onebot():
-    """OneBot / NapCat HTTP bridge to the IM client."""
-    base = (os.getenv("QQ_ONEBOT_URL", "http://127.0.0.1:3000") or "").rstrip("/")
+    """OneBot / NapCat HTTP bridge to the IM client. Blank QQ_ONEBOT_URL
+    means there is no NapCat HTTP server to ask, which is not a failure."""
+    base = (os.getenv("QQ_ONEBOT_URL", "") or "").strip().rstrip("/")
+    if not base:
+        return None, "not configured (QQ_ONEBOT_URL is blank)"
     r = _get(f"{base}/get_login_info")
     d = r.get("data", {}) if isinstance(r, dict) else {}
     return True, f"online as {d.get('nickname', '?')} ({d.get('user_id', '?')})"
@@ -180,8 +221,9 @@ def check_ledger_sizes():
     from .candidates import CandidateLedger
     from .evidence import EvidenceLog
     from .paths import resolve_runtime_lang_file
+    from .settings import normalize_lang
 
-    lang = os.getenv("AGENT_LANG", "en").strip().lower() or "en"
+    lang = normalize_lang(os.getenv("AGENT_LANG", ""))
     watched = (
         ("evidence", "evidence", EvidenceLog),
         ("candidate_ledger", "candidate_ledger", CandidateLedger),
@@ -214,7 +256,7 @@ def check_ledger_sizes():
 # (name, probe, is_critical)
 CHECKS = [
     ("Ledger sizes",            check_ledger_sizes,     False),
-    ("Private chat (openai)",   check_dm_chat,     True),
+    ("DM chat",                 check_dm_chat,            True),
     ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),
@@ -232,7 +274,9 @@ def run_checks() -> list:
         if fn is check_onebot and not os.getenv("QQ_BOT_ID", "").strip():
             return {"name": name, "ok": None, "critical": False,
                     "detail": "not required (QQ_BOT_ID is unset)", "ms": 0}
-        if fn is check_onebot and os.getenv("CONNECTOR_QQ_PLATFORMS", "").strip():
+        if fn is check_onebot and (
+                os.getenv("CONNECTOR_QQ_PLATFORMS", "").strip()
+                or not os.getenv("QQ_ONEBOT_URL", "").strip()):
             # QQ arrives through a connector, which also sends; NapCat's HTTP
             # server only adds the missed-mention sweep and a fallback.
             critical = False

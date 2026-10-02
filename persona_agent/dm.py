@@ -16,7 +16,7 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# What the private-chat retry appends to the system prompt (see
+# What the DM retry appends to the system prompt (see
 # `Agent._chat_dm`). The dominant cause of an empty 1:1 turn is
 # deterministic, an emoji-only draft the sanitizer eats, so the second prompt
 # has to differ from the first. It amends the output contract rather than
@@ -30,12 +30,11 @@ _EMPTY_DRAFT_RETRY_NOTE = (
 )
 
 
-
 class DirectMessages:
     async def _handle_dm(self, user_id: str, payload: dict,
                               is_admin: bool = True,
                               proactive: bool = False) -> bool:
-        """Run one private turn in send/commit order without blocking intake.
+        """Run one DM turn in send/commit order without blocking intake.
 
         `proactive`: the text is the caller's cue, not the reader's words, so
         it must never be appended to history or attributed to them. It
@@ -103,25 +102,29 @@ class DirectMessages:
                     reply, auto_mem = await self._chat_dm(
                         history, is_admin=is_admin, pkey=pkey, **cue)
                 except Exception as e:
-                    logger.warning("[Agent] private-chat LLM failed: %s", e)
+                    logger.warning("[Agent] DM model call failed: %s", e)
+                    # Someone wrote to it and is waiting; say why it is quiet.
+                    # Not committed to the history, which stays the reader's.
+                    if not proactive and self._excuse_due(pkey):
+                        await self._send_dm(user_id, self._model_failure_excuse())
                     return False
                 if not reply:
                     return False
 
-                final = self._finalize_reply(reply, log_ctx=f"private user={user_id}")
+                final = self._finalize_reply(reply, log_ctx=f"DM user={user_id}")
                 if final is None:
                     return False
                 reply, _, pending_core, had_visible_candidate = final
                 if had_visible_candidate and not reply:
                     return False
                 if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
-                    logger.info("[Agent] PASS (private user=%s)", user_id)
+                    logger.info("[Agent] PASS (DM user=%s)", user_id)
                     return False
 
                 send_result = await self._send_dm(user_id, reply)
                 if not send_result.success:
                     logger.warning(
-                        "[Agent] private delivery failed (user=%s, partial=%s)",
+                        "[Agent] DM delivery failed (user=%s, partial=%s)",
                         user_id, send_result.partial)
                     # The reader saw the delivered prefix, so it is committed
                     # the way the group path commits one, or the next turn
@@ -157,7 +160,7 @@ class DirectMessages:
                             mode=ADMIN_MODE if is_admin else "called",
                             target_uid=user_id, mids=send_result.message_ids,
                             ts=time.time())
-                logger.info("[Agent] private (%s): %s", user_id, reply[:80])
+                logger.info("[Agent] DM reply (%s): %s", user_id, reply[:80])
                 return True
             finally:
                 if self._dm_send_tasks.get(pkey) is asyncio.current_task():
@@ -238,9 +241,10 @@ class DirectMessages:
                 # the persona's own assistant turns.
                 plain_text_fallback=True,
             )
-            reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
+            reply, reasoning, intent, mem = TextProcessing._parse_model_output(
+                raw, self.llm_dm_model)
             if reasoning:
-                logger.debug("[Agent] private model metadata parsed (intent=%s, reasoning_chars=%d)",
+                logger.debug("[Agent] DM model metadata parsed (intent=%s, reasoning_chars=%d)",
                              intent or "?", len(reasoning))
             return reply, mem
 
@@ -250,7 +254,7 @@ class DirectMessages:
         # trouble is not the draft. Not on a proactive turn: its cue offers
         # PASS, so an empty draft there is the persona declining to speak.
         if not proactive and self._draft_should_be_retried(reply):
-            logger.info("[Agent] private draft renders empty, retrying once")
+            logger.info("[Agent] DM draft renders empty, retrying once")
             # "\n\n": the protocol block ends without a newline, and the
             # note must not read as the tail of its closing tag.
             retry_reply, retry_mem = await draft(

@@ -240,7 +240,7 @@ def test_a_skipped_critical_probe_is_not_a_pass() -> None:
     # The shape a missing LLM_API_KEY actually produces.
     check("health: an unconfigured LLM does not report healthy",
           health.all_critical_ok([
-              r("Private chat (openai)", None),
+              r("DM chat", None),
               r("Primary chat (/v1 tools)", None),
               r("OneBot bridge", True),
               r("Vision", None, critical=False)]) is False)
@@ -714,10 +714,9 @@ def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None
                    LLM_FALLBACK_API_KEY="sk-o")
     check("fallback endpoint: without a distinct LLM_FALLBACK_MODEL it says it does nothing",
           found == {("WARN", "LLM_FALLBACK_BASE_URL")}, repr(found))
-    check("fallback endpoint: a custom version path is named like the primary's",
-          ("WARN", "LLM_FALLBACK_BASE_URL") in levels(
-              LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="k",
-              LLM_FALLBACK_BASE_URL="https://llm.example/api/v4"))
+    check("fallback endpoint: a vendor's version root is a complete answer",
+          not levels(LLM_FALLBACK_MODEL="cheap", LLM_FALLBACK_API_KEY="k",
+                     LLM_FALLBACK_BASE_URL="https://llm.example/api/v4"))
 
 
 def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:

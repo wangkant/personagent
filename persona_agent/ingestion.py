@@ -397,7 +397,6 @@ async def safe_fetch_url(
     return None
 
 
-
 def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
     """Resolve a ``file://`` image URL, or None if it escapes the jail.
 
@@ -1547,7 +1546,7 @@ class ContentIngestion:
         the fetched text reflected back into the group buffer and the prompt.
         file:// is refused for the same reason the direct image path keeps a
         QQ_ONEBOT_IMAGE_DIR jail: those URLs really do arrive here."""
-        if not url:
+        if not url or not self.qq_onebot_url:
             return ""
         if not url.lower().startswith(("http://", "https://")):
             logger.warning("[Agent] refusing non-HTTP OCR delegation: %s",

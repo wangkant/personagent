@@ -137,7 +137,7 @@ class Retrieval:
         limit_good: int = 4,
         conv_id: str = "",
     ) -> str:
-        """Hermes-style: contrastive pairs first (stronger signal), then chosen-only goods.
+        """Contrastive pairs first (stronger signal), then chosen-only goods.
         Dynamic retrieval: rank by BM25 over scenario and context, embedding
         similarity when EMBEDDING_MODEL is set, scope, recency and mode match
         (ranking.py); with no signal at all, take the newest. Pairs are

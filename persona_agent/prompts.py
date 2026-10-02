@@ -20,6 +20,49 @@ DEFAULT_PERSONA = (
     "persona.txt and edit it to whoever you want the bot to be."
 )
 
+#: What the persona says when someone asks it directly and its model call
+#: fails. Shipped to the chat as they are, so they stay plain text the reply
+#: validator accepts; rewrite them in the persona's voice.
+MODEL_FAILURE_EXCUSES = {
+    "en": ("ugh, hanging here for a sec",
+           "hold on, connection's wonky",
+           "signal weird rn, gimme a min"),
+    "zh": ("等我一下，网有点卡",
+           "信号不太好，稍等",
+           "卡住了，等会儿再聊"),
+}
+
+# A line made only of a rule (———, ---, ===); the shipped persona templates put
+# their note to the reader after one.
+_TEMPLATE_RULE_RE = re.compile(r"^[ \t]*[—\-_=~*]{3,}[ \t]*$", re.MULTILINE)
+
+
+def render_persona_template(text: str, *, bot_name: str, admin_name: str = "",
+                            admin_relationship: str = "",
+                            lang: str = "en") -> str:
+    """A persona document with the shipped template's leftovers resolved.
+
+    `{bot_name}`, `{admin_name}` and `{admin_relationship}` are filled from the
+    settings; a line about the admin is dropped when there is no ADMIN_NAME,
+    and a trailing note to the reader (after a rule line, naming persona.txt)
+    is cut. A document without any of these comes back unchanged."""
+    rules = list(_TEMPLATE_RULE_RE.finditer(text))
+    if rules and "persona.txt" in text[rules[-1].end():]:
+        text = text[:rules[-1].start()]
+    admin = (admin_name or "").strip()
+    relationship = (admin_relationship or "").strip()
+    if not admin:
+        text = "\n".join(line for line in text.split("\n")
+                         if "{admin_name}" not in line
+                         and "{admin_relationship}" not in line)
+    elif not relationship:
+        text = re.sub(r"[ \t]*[(（]\{admin_relationship\}[)）]", "", text)
+    text = (text.replace("{admin_name}", admin)
+            .replace("{admin_relationship}", relationship)
+            .replace("{bot_name}", (bot_name or "").strip()
+                     or ("这个角色" if lang == "zh" else "the persona")))
+    return text.strip()
+
 TOOL_GUIDE = (
     "<tools>\n"
     "When needed, the system **searches the web automatically** and drops the "
@@ -89,7 +132,7 @@ STYLE_GUIDE = (
     "  Bad: 'Alice that memory of yours is goldfish-tier' / 'Bob this is contradictory'  Good: 'goldfish memory fr' / 'this is contradicting itself'\n"
     "- **After @, don't repeat their nickname**: [AT:id] already targets them; don't follow it with their handle\n"
     "  Bad: '[AT:123] Alice can't keep it together huh'  Good: '[AT:123] holding up alright?'\n"
-    "- **Self-reference is 'I', never your own bot name**: others call you BOT_NAME; in your own replies **never use BOT_NAME as the subject for yourself**. Bad: 'BOT_NAME can't save you either' / 'BOT_NAME thinks'  Good: 'I can't save you either' / 'I think'\n"
+    "- **Self-reference is 'I', never your own name**: others call you by name, but in your own replies **never use your own name as the subject for yourself** — third-person self-reference is an instant tell. Bad (from a bot named Mira): 'Mira can't save you either' / 'Mira thinks'  Good: 'I can't save you either' / 'I think'\n"
     "- Honorifics / address tokens (bro / dude / sir) at most 0-1 per conversation as emphasis, not every line\n"
     "\n"
     "[REACT TO IMAGES, DON'T DESCRIBE THEM] When you see [image] / [sticker] in context, **react / joke / continue the bit**. **Never recite what's in the image.**\n"
@@ -203,15 +246,10 @@ HONEST_DISCLOSURE = (
 # The 1:1 style layer
 #
 # WHY THIS EXISTS AT ALL. Everything above this line was written for an IM
-# group and is shipped, unchanged, to a one-on-one chat. Measured on the
-# assembled private prompt before this section existed: `[AT:qq]` 4x,
-# `BOT_NAME` 4x (a placeholder nothing substitutes, so the model read the
-# literal), `BOT_QQ` 1x, eleven lines of multi-party seat rules, a sticker
-# guide opening "You haven't collected any stickers yet — fresh in the
-# group", and then a whole `private_overrides` block partially retracting the
-# group rules it had just finished stating. Roughly 30% of the shared text
-# described a room that does not exist, and the model was reading a rule and
-# its retraction and picking.
+# group: `[AT:qq]` markers, multi-party seat rules, a sticker guide for a
+# room. Shipped unchanged to a one-on-one chat, a large share of it would
+# describe a room that does not exist, and the model would be reading a rule
+# and its retraction and picking.
 #
 # The group constants above are NOT edited for the 1:1 path's sake. The
 # group/QQ path is a live deployment whose prompt changes only on purpose and
@@ -724,10 +762,10 @@ def dm_style_guide(style: PersonaStyle) -> str:
     not an aesthetic one. This block opens the `cache_control: ephemeral`
     prefix, one Agent serves every user of a persona, and the prefix is only
     billed at ~10% for as long as it is byte-identical — so interpolating the
-    persona's own name here (the obvious way to retire the `BOT_NAME`
-    placeholder the group constant ships) would cut the shared prefix from
-    ~17 KB down to the few kilobytes ahead of the interpolation, for every
-    persona in the process. The name is supplied instead in the per-persona
+    persona's own name here would cut the shared prefix down to the few
+    kilobytes ahead of the interpolation, for every persona in the process.
+    The self-reference rule therefore speaks of "your own name", as the group
+    constant does, and the name itself is supplied in the per-persona
     `chat_context` block, which already sits after the persona region and
     therefore after the shared prefix has ended anyway."""
     return (

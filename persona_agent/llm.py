@@ -12,12 +12,57 @@ from urllib.parse import urlsplit
 import httpx
 
 from .access import ADMIN_MODE
-from .endpoints import chat_completions_url, endpoint_for
+from .endpoints import adapt_rejected_payload, chat_completions_url, endpoint_for
 from .textproc import (
     _as_protocol_object,
 )
 
 logger = logging.getLogger("agent")
+
+# Hosts whose chat endpoint takes DeepSeek's `thinking` switch, and hosts
+# known to refuse it; any other host is asked once, by the startup probe.
+_THINKING_HOSTS = ("deepseek.com", "bigmodel.cn", "z.ai", "moonshot.cn",
+                   "moonshot.ai", "volces.com")
+_NO_THINKING_HOSTS = ("openai.com", "groq.com", "googleapis.com",
+                      "openrouter.ai", "mistral.ai", "anthropic.com")
+
+# Words in an error that put the account, not the request, at fault.
+_BILLING_WORDS = ("payment required", "insufficient", "balance", "quota",
+                  "billing", "arrear")
+
+
+def _host(url: str) -> str:
+    return (urlsplit(url or "").hostname or "").lower()
+
+
+def _on_host(host: str, domains: tuple) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def _status_of(e: BaseException):
+    """The HTTP status an exception carries, structured or in its message."""
+    status = getattr(e, "status_code", None)
+    if status is None:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+    try:
+        status = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status = None
+    if status is None:
+        # \b keeps '401' from matching inside '4012345'.
+        m = re.search(r"\b([45]\d\d)\b", str(e))
+        if m:
+            status = int(m.group(1))
+    return status
+
+
+def _response_text(e: BaseException) -> str:
+    """The start of an HTTP error's body: httpx's message omits it, and the
+    body is where a provider says the quota is gone."""
+    try:
+        return str(getattr(getattr(e, "response", None), "text", "") or "")[:500]
+    except Exception:
+        return ""
 
 # httpx expires an idle keep-alive connection after 5s, and the gap between a
 # person's turns is always longer, so the pool emptied between every turn and
@@ -32,7 +77,7 @@ class _PooledHTTP:
 
     Entering returns the pooled client; exiting does NOT close it. This swaps the
     "new AsyncClient per call (pays a fresh TCP+TLS handshake every time)" pattern
-    for a config-keyed connection pool — the same approach Hermes uses. Call sites
+    for a config-keyed connection pool. Call sites
     keep their ``async with`` form unchanged; only ``httpx.AsyncClient(`` becomes
     ``self._http(``.
     """
@@ -117,55 +162,153 @@ class ModelCalls:
             fallback_api_key=self.llm_fallback_api_key)
         return chat_completions_url(base), key
 
+    @property
+    def _api_quirks(self) -> dict:
+        """What each endpoint has shown it refuses or takes, learned per
+        process: ("thinking", url) -> bool, and (field, url, model) -> True
+        for a `max_tokens` or `temperature` it refused."""
+        quirks = self.__dict__.get("_api_quirks_map")
+        if quirks is None:
+            quirks = self.__dict__["_api_quirks_map"] = {}
+        return quirks
+
+    def _takes_thinking(self, url: str) -> bool:
+        """Whether `url` is sent DeepSeek's `thinking` switch.
+
+        Elsewhere it is rejected rather than ignored (Groq answers `400
+        property 'thinking' is unsupported`, OpenAI 400s any unknown
+        argument), and the gate, the search decision and the sticker tagger
+        all ask for it, so only a host known to take it gets it: a listed
+        vendor, one the startup probe saw accept it, or the fallback's host
+        with LLM_FALLBACK_THINKING."""
+        verdict = self._api_quirks.get(("thinking", url))
+        if verdict is not None:
+            return verdict
+        host = _host(url)
+        if _on_host(host, _THINKING_HOSTS):
+            return True
+        if self.llm_fallback_thinking:
+            return host == _host(self.llm_fallback_base_url or self.base_url)
+        return False
+
     def _thinking_off(self, payload: dict, url: str) -> dict:
         """Ask the model behind `url` to skip hidden reasoning, in the
-        spellings that endpoint accepts.
-
-        `thinking` is DeepSeek's field, and elsewhere it is rejected rather
-        than ignored: Groq answers `400 property 'thinking' is unsupported`,
-        OpenAI 400s any unknown argument. The primary's host has always been
-        sent it; a fallback on another host only with LLM_FALLBACK_THINKING. That
-        endpoint is not asked only during an outage — the gate, the search
-        decision and the sticker tagger run on the judge model, which
-        defaults to the fallback, so a 400 there silenced all three on every
-        turn. OpenRouter passes `thinking` through to upstreams that ignore
-        it and has a switch of its own (see textproc.apply_k2_quirks)."""
-        if (self.llm_fallback_thinking
-                or urlsplit(url).hostname == urlsplit(self.base_url).hostname):
+        spellings that endpoint accepts. OpenRouter passes `thinking` through
+        to upstreams that ignore it and has a switch of its own (see
+        textproc.apply_k2_quirks)."""
+        if self._takes_thinking(url):
             payload["thinking"] = {"type": "disabled"}
         if "openrouter.ai" in url:
             payload["reasoning"] = {"enabled": False}
         return payload
 
+    def _apply_quirks(self, url: str, payload: dict) -> None:
+        """Spell `payload` the way `url` has shown it accepts."""
+        quirks = self._api_quirks
+        model = str(payload.get("model") or "")
+        if quirks.get(("thinking", url)) is False:
+            payload.pop("thinking", None)
+        if ("max_tokens", url, model) in quirks and "max_tokens" in payload:
+            payload["max_completion_tokens"] = payload.pop("max_tokens")
+        if ("temperature", url, model) in quirks:
+            payload.pop("temperature", None)
+
+    def _remember_refusal(self, url: str, model: str, field: str) -> None:
+        if field == "thinking":
+            self._api_quirks[("thinking", url)] = False
+        else:
+            self._api_quirks[(field, url, model)] = True
+        instead = ("sending max_completion_tokens instead"
+                   if field == "max_tokens" else "leaving it out")
+        logger.info("[Agent] %s does not take `%s`%s; %s from now on",
+                    _host(url) or url, field,
+                    "" if field == "thinking" else f" for model {model}", instead)
+
+    async def _post_chat(self, url: str, key: str, payload: dict, *,
+                         timeout: float):
+        """POST one chat completion and return the response, unraised.
+
+        A 400 that names a field this endpoint does not take (`thinking`, or
+        `max_tokens` / `temperature` on OpenAI's reasoning models) is retried
+        without it, and the endpoint is remembered so later calls are spelled
+        right the first time."""
+        self._apply_quirks(url, payload)
+        headers = {"Authorization": f"Bearer {key}",
+                   "Content-Type": "application/json"}
+        status = 200
+        async with self._http(timeout=timeout) as client:
+            for _ in range(3):
+                resp = await client.post(url, json=dict(payload), headers=headers)
+                status = getattr(resp, "status_code", 200)
+                if status not in (400, 422):
+                    break
+                field = adapt_rejected_payload(
+                    payload, str(getattr(resp, "text", "") or ""))
+                if not field:
+                    break
+                self._remember_refusal(url, str(payload.get("model") or ""), field)
+        if isinstance(status, int) and 200 <= status < 300:
+            # Working again, so a later failure is worth a line again.
+            reported = self._fatal_reported_hosts()
+            for item in [k for k in reported if k[0] == _host(url)]:
+                reported.discard(item)
+        return resp
+
+    def _fatal_reported_hosts(self) -> set:
+        reported = self.__dict__.get("_fatal_reported")
+        if reported is None:
+            reported = self.__dict__["_fatal_reported"] = set()
+        return reported
+
+    def _report_fatal(self, e: BaseException, model: str) -> None:
+        """One operator line per provider when the key or the account is the
+        problem, naming the settings that fix it."""
+        url, _key = self._endpoint_for(model)
+        host = _host(url) or url
+        status = _status_of(e)
+        text = (str(e) + " " + _response_text(e)).lower()
+        billing = status == 402 or any(w in text for w in _BILLING_WORDS)
+        kind = "billing" if billing else "auth"
+        reported = self._fatal_reported_hosts()
+        if (host, kind) in reported:
+            return
+        reported.add((host, kind))
+        on_fallback = (model == self.llm_fallback_model and model != self.model
+                       and bool(self.llm_fallback_base_url or self.llm_fallback_api_key))
+        key_name, url_name = (("LLM_FALLBACK_API_KEY", "LLM_FALLBACK_BASE_URL")
+                              if on_fallback else ("LLM_API_KEY", "LLM_BASE_URL"))
+        if billing:
+            logger.error(
+                "[Agent] the model provider at %s refused the call: the "
+                "account's balance or quota is used up (HTTP %s). Top it up, "
+                "or set %s / %s to another account.",
+                host, status or "?", key_name, url_name)
+        else:
+            logger.error(
+                "[Agent] the model provider at %s rejected the API key (HTTP "
+                "%s). Check %s, and that %s is that provider's address.",
+                host, status or "?", key_name, url_name)
+
     @staticmethod
     def _classify_api_error(e: BaseException) -> str:
-        """A miniature of Hermes's error_classifier — picks a recovery strategy.
+        """Pick a recovery strategy for one failed call.
 
         Returns:
           rate_limit    — throttle/overload: switch to fallback model now + set cooldown
           transient     — network/timeout/5xx: jittered backoff, retry same model
           fatal_auth    — auth/billing: neither retry nor model swap helps; re-raise
           fatal_request — 4xx request-level: don't retry, but a fallback model may work
-        Unknown errors are treated as transient (Hermes's default: unknown = retryable).
+        Unknown errors are treated as transient (retryable).
         """
-        msg = str(e).lower()
-        # Prefer a structured HTTP status code when the exception exposes one
-        # (httpx.HTTPStatusError.response.status_code, or a bare .status_code) so
-        # a number inside a request id / token count isn't read as a status code.
-        status = getattr(e, "status_code", None)
-        if status is None:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-        try:
-            status = int(status) if status is not None else None
-        except (TypeError, ValueError):
-            status = None
-        # Fallback: a word-boundary 4xx/5xx from the message. \b keeps '401' from
-        # matching inside '4012345' and '504' from matching inside '5040 tokens'.
-        if status is None:
-            m = re.search(r"\b([45]\d\d)\b", msg)
-            if m:
-                status = int(m.group(1))
-
+        msg = (str(e) + " " + _response_text(e)).lower()
+        # A structured status first, so a number inside a request id or a
+        # token count is not read as one.
+        status = _status_of(e)
+        # Before the 429 check: OpenAI answers an exhausted quota with a 429.
+        if status == 402 or any(k in msg for k in (
+                "payment required", "insufficient_quota", "insufficient balance",
+                "exceeded your current quota")):
+            return "fatal_auth"
         if status in (429, 529) or any(k in msg for k in (
                 "rate limit", "rate_limit", "too many requests", "overloaded")):
             return "rate_limit"
@@ -227,11 +370,8 @@ class ModelCalls:
                 payload["response_format"] = {"type": "json_object"}
             if disable_thinking or force_disable_thinking:
                 self._thinking_off(payload, _url)
-            async with self._http(timeout=self.llm_timeout_s) as client:
-                resp = await client.post(
-                    _url, json=payload,
-                    headers={"Authorization": f"Bearer {_key}",
-                             "Content-Type": "application/json"})
+            resp = await self._post_chat(_url, _key, payload,
+                                         timeout=self.llm_timeout_s)
             resp.raise_for_status()
             return resp.json()
 
@@ -246,7 +386,7 @@ class ModelCalls:
         # OpenAI endpoint uses a single system message; provider auto prefix-caches.
         _oai_messages = ([{"role": "system", "content": sys_text}] if sys_text else []) + list(messages)
 
-        # ── Hermes-style call recovery: jittered backoff on transient errors +
+        # ── Call recovery: jittered backoff on transient errors +
         # error-driven model failover ──
         # Network blips / 5xx auto-retry; throttling switches to the fallback model
         # immediately and arms a cooldown window (_pick_group_model then routes
@@ -303,6 +443,8 @@ class ModelCalls:
                             cur_model = self.llm_fallback_model
                             attempt = 0  # give the fallback model its own retry budget
                             continue
+                    if kind == "fatal_auth":
+                        self._report_fatal(e, cur_model)
                     logger.warning("[Agent] LLM call failed (model=%s, %s): %s",
                                    cur_model, kind, e)
                     raise
@@ -445,6 +587,10 @@ class ModelCalls:
         """Lightweight probe at startup to confirm what each endpoint actually returns."""
         if not self.enabled:
             return
+        gate = self.llm_judge_model
+        logger.info("[Agent] models: replies %s, reply gate %s%s", self.model, gate,
+                    " (the reply model; LLM_JUDGE_MODEL can name a cheaper one)"
+                    if gate == self.model else "")
 
         # Private and group chat share the primary endpoint (llm_dm_model is
         # just a model name), so the group probe covers it — or, when it is
@@ -457,22 +603,27 @@ class ModelCalls:
             probes.append(("fallback", self.llm_fallback_model))
         for label, model in probes:
             url, key = self._endpoint_for(model)
+            payload = {"model": model,
+                       "messages": [{"role": "user", "content": "hi"}],
+                       "max_tokens": 1}
+            # A host of unknown dialect is asked about `thinking` here, once,
+            # rather than by every gate call.
+            asking = (self._api_quirks.get(("thinking", url)) is None
+                      and not self._takes_thinking(url)
+                      and not _on_host(_host(url), _NO_THINKING_HOSTS))
+            if asking:
+                payload["thinking"] = {"type": "disabled"}
             try:
-                async with self._http(timeout=15) as client:
-                    r = await client.post(
-                        url,
-                        headers={"Authorization": f"Bearer {key}"},
-                        json={
-                            "model": model,
-                            "messages": [{"role": "user", "content": "hi"}],
-                            "max_tokens": 1,
-                        },
-                    )
-                    r.raise_for_status()
-                    actual = r.json().get("model", "?")
-                    logger.info("[Agent] %s model probe OK: configured=%s actual=%s",
-                                label, model, actual)
+                r = await self._post_chat(url, key, payload, timeout=15)
+                r.raise_for_status()
+                if asking and "thinking" in payload:
+                    self._api_quirks[("thinking", url)] = True
+                actual = r.json().get("model", "?")
+                logger.info("[Agent] %s model probe OK: configured=%s actual=%s",
+                            label, model, actual)
             except Exception as e:
+                if self._classify_api_error(e) == "fatal_auth":
+                    self._report_fatal(e, model)
                 logger.warning("[Agent] %s model probe failed: %s", label, e)
         await self._probe_embeddings()
 

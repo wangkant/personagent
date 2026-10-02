@@ -86,7 +86,7 @@ class ReplyDecision:
             temperature=0.3,
         )
         gate_reply, _gr, gate_intent, _gm = TextProcessing._parse_model_output(
-            gate_raw)
+            gate_raw, self.llm_judge_model)
         speak = bool(gate_reply) and gate_reply.strip().upper() != "PASS"
         return speak, gate_intent
 

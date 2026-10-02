@@ -15,6 +15,7 @@ from . import channels
 from .connector import (ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
+from .prompts import MODEL_FAILURE_EXCUSES
 from .textproc import (
     TextProcessing,
     _clean_prompt_source,
@@ -27,6 +28,9 @@ logger = logging.getLogger("agent")
 # Conversations whose refusal has been logged, kept bounded: forwarded ids are
 # chosen by the connector, so an unbounded set would grow with every room.
 _MAX_REFUSALS_LOGGED = 4096
+
+# How often one conversation may hear that the model is not answering.
+_EXCUSE_COOLDOWN_S = 300.0
 
 
 class Turns:
@@ -71,6 +75,13 @@ class Turns:
         the NapCat send funnels divert their messages into it, then the normal
         pipeline runs to completion and the collected replies go back in the
         HTTP response (the connector relays them to the source platform)."""
+        sender, bot = (str(event.get(k, "") or "") for k in ("sender_id", "bot_id"))
+        if sender and sender == bot:
+            # The bot's own message echoed back: nothing to answer, and the
+            # connector's own model must not answer it either.
+            logger.debug("[Agent] dropped the bot's own message (%s)",
+                         event.get("platform", "?"))
+            return {"handled": False, "owned": True, "replies": []}
         payload = synthesize_onebot_payload(
             event, self._self_mention_id(), self.connector_qq_platforms)
         if payload.get("message_type") == "private":
@@ -167,6 +178,23 @@ class Turns:
         if len(self._refusals_logged) > _MAX_REFUSALS_LOGGED:
             self._refusals_logged.pop(next(iter(self._refusals_logged)))
         logger.info("[Agent] not answering %s: %s", conv_key, reason)
+
+    def _excuse_due(self, conv_key: str) -> bool:
+        """Whether this conversation may be told the model is not answering
+        now: once per `_EXCUSE_COOLDOWN_S`, so an outage is one line, not an
+        excuse for every message."""
+        now = time.monotonic()
+        last = self._last_excuse_at.get(conv_key)
+        if last is not None and now - last < _EXCUSE_COOLDOWN_S:
+            return False
+        self._last_excuse_at[conv_key] = now
+        if len(self._last_excuse_at) > _MAX_REFUSALS_LOGGED:
+            self._last_excuse_at.pop(next(iter(self._last_excuse_at)))
+        return True
+
+    def _model_failure_excuse(self) -> str:
+        return random.choice(MODEL_FAILURE_EXCUSES.get(
+            self.agent_lang, MODEL_FAILURE_EXCUSES["en"]))
 
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
@@ -441,15 +469,8 @@ class Turns:
                 # stalls Phase-1 message absorption for the whole group;
                 # skipping send_locks would let this chunk interleave with an
                 # in-flight reply.
-                if mode == "called":
-                    # Three short, persona-consistent excuses for upstream LLM
-                    # failure. Customize these in your fork to match the bot's
-                    # voice (the strings ARE shipped to the group on failure).
-                    fallback = random.choice([
-                        "ugh, hanging here for a sec",
-                        "hold on, connection's wonky",
-                        "signal weird rn, gimme a min",
-                    ])
+                if mode in ("called", access.ADMIN_MODE) and self._excuse_due(group_id):
+                    fallback = self._model_failure_excuse()
 
                     # The task outlives a connector turn's response, so it goes
                     # out the way unprompted messages do (_send_background).

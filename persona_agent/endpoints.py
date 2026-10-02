@@ -1,4 +1,5 @@
 """Which OpenAI-compatible endpoint a call goes to, and its URL spelling."""
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -20,30 +21,43 @@ def endpoint_for(model: str, *, primary_model: str, fallback_model: str,
     return base_url, api_key
 
 
-def chat_completions_url(base: str) -> str:
-    """Accept a provider root, /v1 base, or complete chat endpoint.
+# A trailing version segment (/v1, /api/paas/v4, /api/v3), or Gemini's
+# /v1beta/openai. A bare /openai is Groq's root, which still needs /v1.
+_VERSION_ROOT_RE = re.compile(r"/v\d+$|/v\d+[a-z]*\d*/openai$")
 
-    Custom version paths (for example /api/paas/v4) remain intact. Callers
-    using those paths should supply the complete /chat/completions endpoint.
-    """
+
+def _is_version_root(path: str) -> bool:
+    """Does `path` already end at the API's version root?"""
+    return bool(_VERSION_ROOT_RE.search(path))
+
+
+def _split_base(base: str):
     parts = urlsplit(base.strip().rstrip("/"))
-    path = parts.path.rstrip("/")
+    return parts, parts.path.rstrip("/")
+
+
+def chat_completions_url(base: str) -> str:
+    """Accept a provider root, a version base or a complete chat endpoint.
+
+    A base ending in a version segment (/v1, Zhipu's /api/paas/v4, Ark's
+    /api/v3) or in Gemini's /v1beta/openai only gets /chat/completions;
+    anything else is a provider root and gets /v1/chat/completions.
+    """
+    parts, path = _split_base(base)
     if not path.endswith("/chat/completions"):
-        path += "/chat/completions" if path.endswith("/v1") else "/v1/chat/completions"
+        path += "/chat/completions" if _is_version_root(path) else "/v1/chat/completions"
     return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
 
 
 def embeddings_url(base: str) -> str:
-    """/embeddings beside a root, a version base (/v1, /api/paas/v4) or a
-    complete /chat/completions endpoint, or a complete /embeddings one."""
-    parts = urlsplit(base.strip().rstrip("/"))
-    path = parts.path.rstrip("/")
-    last = path.rsplit("/", 1)[-1]
+    """/embeddings beside a root, a version base (/v1, /api/paas/v4,
+    /v1beta/openai) or a complete /chat/completions endpoint, or a complete
+    /embeddings one."""
+    parts, path = _split_base(base)
     if path.endswith("/chat/completions"):
         path = path[:-len("/chat/completions")] + "/embeddings"
     elif not path.endswith("/embeddings"):
-        versioned = len(last) > 1 and last[0] == "v" and last[1:].isdigit()
-        path += "/embeddings" if versioned else "/v1/embeddings"
+        path += "/embeddings" if _is_version_root(path) else "/v1/embeddings"
     return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
 
 
@@ -54,3 +68,33 @@ def embedding_endpoint(*, base_url: str, api_key: str, embedding_base_url: str,
     if embedding_base_url:
         return embeddings_url(embedding_base_url), embedding_api_key
     return embeddings_url(base_url), embedding_api_key or api_key
+
+
+# Request fields a provider may refuse by name, and the words that show a 400
+# is about the field being unsupported rather than about its value.
+_UNSUPPORTED_WORDS = ("unsupported", "not supported", "does not support",
+                      "unrecognized", "unknown", "only the default",
+                      "max_completion_tokens")
+
+
+def adapt_rejected_payload(payload: dict, error_text: str) -> str:
+    """Rewrite `payload` for the field a 400 refused; return its name, or "".
+
+    `thinking` (DeepSeek's switch) is dropped wherever a 400 names it.
+    `max_tokens` becomes `max_completion_tokens` and `temperature` is dropped
+    only when the error says the field is unsupported (OpenAI's reasoning
+    models), not when it objects to the value."""
+    text = (error_text or "").lower()
+    if "thinking" in payload and re.search(r"\bthinking\b", text):
+        payload.pop("thinking")
+        return "thinking"
+    unsupported = any(word in text for word in _UNSUPPORTED_WORDS)
+    if ("max_tokens" in payload and unsupported
+            and re.search(r"\bmax_tokens\b", text)):
+        payload["max_completion_tokens"] = payload.pop("max_tokens")
+        return "max_tokens"
+    if ("temperature" in payload and unsupported
+            and re.search(r"\btemperature\b", text)):
+        payload.pop("temperature")
+        return "temperature"
+    return ""
