@@ -40,6 +40,7 @@ const STRINGS = {
     last_event: "last message {t}",
     no_event: "no message yet",
     convs_n: "{n} chats",
+    convs_n_1: "1 chat",
     pulling: "pulling the outbox",
     not_pulling: "not pulling the outbox",
     checks: "Configuration checks",
@@ -61,6 +62,7 @@ const STRINGS = {
     group: "group",
     dm: "DM",
     notes_n: "{n} notes",
+    notes_n_1: "1 note",
     learned_n: "{n} learned",
     pending_n: "{n} waiting",
     last_activity: "active {t}",
@@ -112,6 +114,7 @@ const STRINGS = {
     evidence: "Evidence chain",
     no_evidence: "No evidence linked.",
     missing_evidence: "{n} linked events are no longer in the evidence log.",
+    missing_evidence_1: "1 linked event is no longer in the evidence log.",
     k_reaction: "reacted",
     k_retry_acceptance: "accepted the retry",
     k_self_eval: "self-score",
@@ -432,6 +435,8 @@ function save(key, value) {
 
 function t(key, params, fallback) {
   const table = STRINGS[view.lang] || STRINGS.en;
+  // "1 note", not "1 notes": a language with a singular gives it as key_1.
+  if (params && params.n === 1 && (key + "_1") in table) key += "_1";
   const text = key in table ? table[key] : key in STRINGS.en ? STRINGS.en[key] : fallback != null ? fallback : key;
   // Commands are spelled the way this install runs them (`personagent`, `python -m persona_agent`, ...).
   const all = Object.assign({ cli: (view.status && view.status.cli) || "personagent" }, params || {});

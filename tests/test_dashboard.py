@@ -581,6 +581,8 @@ const answer = (status, body) => async () => ({ ok: false, status, statusText: "
     await vm.runInContext("refresh()", ctx);
     out[name] = vm.runInContext("({ down: view.down, hints: hintList() })", ctx);
   }
+  out.counts = vm.runInContext(
+    '[t("notes_n", { n: 1 }), t("notes_n", { n: 2 }), t("convs_n", { n: 1 })]', ctx);
   console.log(JSON.stringify(out));
 })();
 """
@@ -603,6 +605,8 @@ def test_the_page_tells_an_error_answer_from_an_unreachable_service() -> None:
     signed_out = out["signed out"]
     check("signed out: says to open the link again", signed_out["down"] is False
           and "doctor" in signed_out["hints"][0]["items"][0], repr(signed_out))
+    check("counts read as English", out["counts"] == ["1 note", "2 notes", "1 chat"],
+          repr(out["counts"]))
 
 
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
