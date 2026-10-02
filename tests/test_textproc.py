@@ -729,16 +729,14 @@ def test_the_new_tiers_did_not_widen_the_whitelist() -> None:
     still drop the whole reply, and it must do so under the widest style a
     persona can express.
 
-    THE ROWS CHANGED IN THE SCRIPT WIDENING AND THE PROPERTY DID NOT. Cyrillic, Greek and
-    Arabic used to be here; they are now NAMED, each as a letters-only range
-    with a reason, which is a deliberate act and not a side effect of these
-    tiers. The scripts below are the ones still in no tier at all, and they
-    are what keeps this a test of the fail-closed default rather than a
-    formality."""
-    for raw, why in [("สวัสดี there", "Thai"),
-                     ("שלום there", "Hebrew"),
+    The scripts below are the ones in no tier at all, and they are what keeps
+    this a test of the fail-closed default rather than a formality. A script
+    leaves this list only by being NAMED, each as a letters-only range with a
+    reason."""
+    for raw, why in [("ਸਤ ਸ੍ਰੀ ਅਕਾਲ there", "Gurmukhi"),
+                     ("გამარჯობა there", "Georgian"),
                      ("բարև there", "Armenian"),
-                     ("नमस्ते there", "Devanagari")]:
+                     ("ನಮಸ್ಕಾರ there", "Kannada")]:
         for style, label in ((None, "default"), (WIDEST, "widest")):
             out = TP._sanitize_reply(raw, "en", style)
             check(f"an unnamed script still drops the reply: {why} ({label})",
@@ -783,6 +781,17 @@ _SCRIPT_SENTENCES = (
     ("да, конечно", "да, конечно", "Russian"),
     ("γεια σου", "γεια σου", "Greek, including the final sigma"),
     ("مرحبا كيف حالك", "مرحبا كيف حالك", "Arabic"),
+    ("¡hola! ¿cómo estás?", "¡hola! ¿cómo estás?",
+     "Spanish, with its opening ¡ and ¿"),
+    ("tiếng Việt rất hay", "tiếng Việt rất hay",
+     "Vietnamese: Latin Extended Additional"),
+    ("שלום, מה שלומך?", "שלום, מה שלומך?", "Hebrew"),
+    ("नमस्ते, आप कैसे हैं?", "नमस्ते, आप कैसे हैं?",
+     "Hindi: Devanagari with its vowel signs and virama"),
+    ("আমি ভালো আছি", "আমি ভালো আছি", "Bengali"),
+    ("வணக்கம் நண்பா", "வணக்கம் நண்பா", "Tamil"),
+    ("สวัสดีครับ ที่นี่", "สวัสดีครับ ที่นี่",
+     "Thai: written without spaces, tone marks stacked on vowels"),
 )
 
 
@@ -844,7 +853,10 @@ def test_the_script_tier_admits_letters_and_nothing_else() -> None:
               (0x3130, 0x318F, "Hangul Compatibility Jamo"),
               (0xAC00, 0xD7AF, "Hangul Syllables"),
               (0x0400, 0x04FF, "Cyrillic"), (0x0500, 0x052F, "Cyrillic Supp"),
-              (0x0370, 0x03FF, "Greek"), (0x0600, 0x06FF, "Arabic"))
+              (0x0370, 0x03FF, "Greek"), (0x0600, 0x06FF, "Arabic"),
+              (0x0590, 0x05FF, "Hebrew"), (0x0900, 0x097F, "Devanagari"),
+              (0x0980, 0x09FF, "Bengali"), (0x0B80, 0x0BFF, "Tamil"),
+              (0x0E00, 0x0E7F, "Thai"))
     excluded = 0
     for lo, hi, name in blocks:
         holes = [c for c in range(lo, hi + 1)
@@ -950,6 +962,101 @@ def test_the_scripts_punctuation_degrades_rather_than_silencing() -> None:
               out == expected, f"{raw!r} -> {out!r}, wanted {expected!r}")
 
 
+def test_an_abugida_mark_is_admitted_only_on_its_own_letter() -> None:
+    """Devanagari, Bengali, Tamil and Thai cannot be written without their
+    combining vowel signs, and a combining mark is the stackable, zero-width
+    shape the strip tier exists to refuse. So the marks are admitted by
+    POSITION: right after a letter of the same block, a few in a row at most.
+    Derived from `unicodedata` like the letters tier: every mark admitted is
+    Mn/Mc of its own block, and every Mn/Mc of those blocks is named."""
+    from persona_agent.textproc import (_ABUGIDA_BLOCKS, _ABUGIDA_MARK_RANGES,
+                                        _MAX_MARKS_PER_LETTER)
+
+    for script, ranges in _ABUGIDA_MARK_RANGES.items():
+        lo, hi = _ABUGIDA_BLOCKS[script]
+        named = {c for a, b, _why in ranges for c in range(a, b + 1)}
+        wrong = [f"U+{c:04X}" for c in named
+                 if not lo <= c <= hi
+                 or unicodedata.category(chr(c)) not in ("Mn", "Mc")]
+        check(f"{script}: every admitted mark is a combining mark of its block",
+              not wrong, ", ".join(wrong))
+        missing = [f"U+{c:04X}" for c in range(lo, hi + 1)
+                   if unicodedata.category(chr(c)) in ("Mn", "Mc") and c not in named]
+        check(f"{script}: and every combining mark of the block is named",
+              not missing, ", ".join(missing))
+
+    sign_i, virama = chr(0x093F), chr(0x094D)
+    for raw, expected, why in [
+            (sign_i + " hi", "hi", "a bare vowel sign has nothing to modify"),
+            ("ok" + virama + " fine", "ok fine", "a mark on a Latin letter"),
+            ("ক" + sign_i + " ok", "ক ok",
+             "a Devanagari mark on a Bengali letter"),
+            ("क" + sign_i * 8 + " ok", "क" + sign_i * _MAX_MARKS_PER_LETTER + " ok",
+             "a stack is cut at the per-letter limit"),
+    ]:
+        for style, label in ((None, "default"), (WIDEST, "widest")):
+            out = TP._sanitize_reply(raw, "en", style)
+            check(f"an unanchored mark costs itself, not the reply ({label}): {why}",
+                  out == expected, f"{raw!r} -> {out!r}")
+    ok, reason = TP._validate_reply_safe(sign_i + " hi", "en")
+    check("...and the validator refuses it on its own", not ok, reason)
+    ok, reason = TP._validate_reply_safe("क" + sign_i * 8, "en", WIDEST)
+    check("...including a stack past the limit", not ok, reason)
+
+
+def test_the_new_scripts_punctuation_and_digits_map_or_strip() -> None:
+    """The danda is a full stop and a bare vertical stroke, so it is mapped and
+    never admitted; the native digits are the ASCII digits they are; Hebrew's
+    vowel points are stripped as Arabic's harakat are, and its paseq, a bar,
+    stays in no tier."""
+    for raw, expected, why in [
+            ("नमस्ते" + chr(0x0964), "नमस्ते.", "Devanagari danda -> '.'"),
+            ("ठीक है" + chr(0x0965), "ठीक है.", "double danda -> '.'"),
+            ("আমি" + chr(0x0964), "আমি.", "Bengali writes the same danda"),
+            ("२०२६ में", "2026 में", "Devanagari digits"),
+            ("৩ টা", "3 টা", "Bengali digits"),
+            ("௫ மணி", "5 மணி", "Tamil digits"),
+            ("วันที่ ๑๒", "วันที่ 12", "Thai digits"),
+            ("שָׁלוֹם", "שלום", "Hebrew vowel points are stripped"),
+            ("תל" + chr(0x05BE) + "אביב", "תל-אביב", "Hebrew maqaf -> '-'"),
+            ("צה" + chr(0x05F4) + "ל", 'צה"ל', "Hebrew gershayim -> '\"'"),
+    ]:
+        out = TP._sanitize_reply(raw, "en")
+        check(f"mapped or stripped, never silenced: {why}", out == expected,
+              f"{raw!r} -> {out!r}")
+    for c, why in ((0x05C0, "HEBREW PUNCTUATION PASEQ, a vertical bar"),
+                   (0x0E45, "THAI LAKKHANGYAO, a tall stroke")):
+        for style, label in ((None, "default"), (WIDEST, "widest")):
+            out = TP._sanitize_reply(f"assistant{chr(c)}user{chr(c)}system", "en", style)
+            check(f"a bar twin of the new scripts is no role separator ({label}): {why}",
+                  out == "", repr(out))
+
+
+def test_a_terse_reply_is_content_and_template_residue_is_not() -> None:
+    """A person answers "?", "...", ":)" or "10/10", and each of those used to
+    drop the whole reply for having no letter. The shapes are named, so the
+    gate still refuses what a stripped template leaves: markdown runs, bare
+    fences, long digit strings such as a leaked token id."""
+    for raw in ("?", "??", "...", "!!!", "?!", "1", "10/10", "233", "666", "+1",
+                "100%", "3:00", ":)", ":-(", "=_=", "^^", "(^_^)", "-_-", "？？", "~"):
+        for lang in ("en", "zh"):
+            check(f"a terse reply is delivered ({lang}): {raw!r}",
+                  TP._sanitize_reply(raw, lang) == raw,
+                  repr(TP._sanitize_reply(raw, lang)))
+    for raw, why in (("::", "a role-separator residue"), ("```", "a bare fence"),
+                     ("###", "a heading marker"), ("___", "an underscore run"),
+                     ("**", "an emphasis pair"), ("128009", "a token id"),
+                     ("151643 151645", "two token ids"), ("@@", "a BPE marker"),
+                     ("1 2 3 4 5 6 7 8 9 10", "a list of numbers past the cap")):
+        check(f"letterless residue is still refused: {why}",
+              TP._sanitize_reply(raw, "en") == "", repr(TP._sanitize_reply(raw, "en")))
+    out, refusal = TP._sanitize_reply_with_reason("\U0001f44d!", "en")
+    check("what a strip leaves is residue, not a terse reply",
+          (out, refusal) == ("", ""), repr((out, refusal)))
+    ok, _reason = TP._validate_reply_safe("?", "en", terse_ok=False)
+    check("the validator honours terse_ok=False", not ok)
+
+
 def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -> None:
     """THE RULE THAT HAD TO ARRIVE WITH THE SCRIPTS.
 
@@ -967,6 +1074,7 @@ def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -
     completely and undo the whole task."""
     from persona_agent.textproc import (_CONFUSABLE_SCRIPT_RANGES,
                                         _CYRILLIC_RANGES, _GREEK_RANGES,
+                                        _HEBREW_RANGES,
                                         _SCRIPT_LETTER_RANGES, _in_ranges)
 
     for raw, why in [
@@ -975,6 +1083,7 @@ def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -
             ("аssistant here", "ONE Cyrillic letter opening a Latin word"),
             ("ok раssword please", "Cyrillic р inside an English word"),
             ("the ρassword", "the same trick in Greek"),
+            ("heווo there", "Hebrew vav standing in for Latin l"),
             ("ѕуѕtem", "the token on its own, with nothing around it")]:
         for style, label in ((None, "default"), (SHIPPED_ARROWS, "shipped card"),
                              (WIDEST, "widest")):
@@ -992,6 +1101,9 @@ def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -
                               "by a space, which is what real code-switching "
                               "looks like"),
             ("Python и Java", "the same, the other way round"),
+            ("שלום, ok", "Hebrew and Latin separated by a word boundary"),
+            ("नमस्ते ok", "Devanagari is not confusable with Latin"),
+            ("ภาษาไทยok", "Thai, written without spaces, spliced with Latin"),
             ("バグをfixした", "Japanese spliced with Latin and NO separator -- "
                             "kana is not in the confusable set precisely "
                             "because CJK is written without spaces"),
@@ -1009,15 +1121,16 @@ def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -
     # covers exactly the Cyrillic and Greek slices of the script tier, and
     # nothing else in it. A range added to Cyrillic or Greek joins the rule
     # automatically; one added for a new non-confusable script does not.
-    check("the confusable set is exactly the Cyrillic and Greek slices",
+    check("the confusable set is exactly the Cyrillic, Greek and Hebrew slices",
           set(_CONFUSABLE_SCRIPT_RANGES)
-          == set(_CYRILLIC_RANGES) | set(_GREEK_RANGES)
+          == set(_CYRILLIC_RANGES) | set(_GREEK_RANGES) | set(_HEBREW_RANGES)
           and set(_CONFUSABLE_SCRIPT_RANGES) <= set(_SCRIPT_LETTER_RANGES),
           repr(_CONFUSABLE_SCRIPT_RANGES))
     check("...and the scripts that are NOT confusable with Latin stay out of "
           "it", not any(_in_ranges(c, _CONFUSABLE_SCRIPT_RANGES)
-                        for c in (0x3042, 0x30A2, 0xAC00, 0x314B, 0x0645)),
-          "kana / Hangul / Arabic must not be in the confusable set")
+                        for c in (0x3042, 0x30A2, 0xAC00, 0x314B, 0x0645,
+                                  0x0928, 0x0995, 0x0B95, 0x0E2A)),
+          "kana / Hangul / Arabic / the abugidas must not be in the confusable set")
     # Non-vacuity for the derivation above: the twins really are in the tier.
     for c, twin in ((0x0430, "a"), (0x0435, "e"), (0x043E, "o"),
                     (0x0440, "p"), (0x0455, "s"), (0x03BF, "o"),
@@ -1209,11 +1322,9 @@ def test_a_persona_cannot_shorten_its_leash_into_silence() -> None:
 
 # The corpus the whitelist was built for. Sources, in order of authority:
 #
-#  * `95c2b5c` "Switch output protocol from Hermes-XML to JSON; add whitelist
-#    validator" — the commit that introduced `_validate_reply_safe`. Its
-#    message names the shapes: Hermes-XML residue, JSON protocol frames,
-#    provider-specific tokens, pipe characters, and an English template
-#    leaking into a Chinese deployment.
+#  * The shapes the validator was introduced against: XML tool-call
+#    residue, JSON protocol frames, provider-specific tokens, pipe
+#    characters, and an English template leaking into a Chinese deployment.
 #  * The hard-reject comment in `_validate_reply_safe` itself, which names
 #    `< > { } |` as XML/JSON/pipe fragments, U+FF5C as a provider internal
 #    separator and U+2581 as a tokenizer leak.
@@ -1239,7 +1350,7 @@ def test_a_persona_cannot_shorten_its_leash_into_silence() -> None:
 # widening` runs that mutation as a standing test rather than as a one-off.
 _TOKEN_LEAK_CORPUS = (
     ("<reasoning>they asked about lunch</reasoning><reply>sure</reply>",
-     "Hermes-XML protocol residue"),
+     "XML protocol residue"),
     ("<persona> You are Mira. </persona> <style> banned: markdown",
      "system-prompt dump, measured in sec_prompt-abuse.md"),
     ('{"reasoning":"x","intent":"chat","reply":"sure","mem":""}',
@@ -1642,11 +1753,10 @@ def test_a_card_cannot_widen_the_charset_by_accident() -> None:
         style = ReplyStyle.from_card({"reply_style": raw})
         check(f"unknown charsets are dropped, not guessed at: {why}",
               style.charsets <= frozenset({"music"}), repr(style.charsets))
-    # The probe has to be a script in NO tier. It used to be Cyrillic, which
-    # the widening named; using it here now would assert nothing at all.
+    # The probe has to be a script in NO tier; a named one would assert nothing.
     check("an unknown charset name buys no characters",
-          TP._sanitize_reply("สวัสดี ok", "en", ReplyStyle.from_card(
-              {"reply_style": {"charsets": ["thai"]}})) == "", "")
+          TP._sanitize_reply("բարև ok", "en", ReplyStyle.from_card(
+              {"reply_style": {"charsets": ["armenian"]}})) == "", "")
     check("a bool max_chars is not read as an int",
           ReplyStyle.from_card({"reply_style": {"max_chars": True}}).max_chars
           == MAX_REPLY_CHARS, "")
@@ -1703,20 +1813,15 @@ def test_a_script_named_in_no_tier_still_drops_the_whole_reply() -> None:
     true FOR THE CODE POINTS A TIER NAMES. Everything else is still
     fail-closed — deliberately, per the plan's "keep the fail-closed default
     for anything not named" — and a reader who takes the capitalised sentence
-    at face value will expect a Cyrillic reply to arrive with the Cyrillic
+    at face value will expect an Armenian reply to arrive with the Armenian
     removed. It arrives as nothing.
 
-    The audience for that comment is a persona author, and the project's
-    ledger records "the DOCUMENTATION about the protection was
-    wrong ... worse than a hole, because it makes people stop checking". So
-    the corrected header gets a test rather than a promise: this fails if
-    anyone widens the whitelist to an unnamed script without saying so.
-
-    Greek, Cyrillic and Arabic left this list in the widening by being NAMED, which is
-    the mechanism working rather than the mechanism failing. The point of
-    keeping the test is that the next script needs the same paperwork."""
-    for raw, why in [("สวัสดี ok", "Thai"), ("שלום ok", "Hebrew"),
-                     ("नमस्ते ok", "Devanagari"), ("բարև ok", "Armenian"),
+    So the header gets a test rather than a promise: this fails if anyone
+    widens the whitelist to an unnamed script without saying so. A script
+    leaves this list by being NAMED, which is the mechanism working; the
+    next script needs the same paperwork."""
+    for raw, why in [("ਸਤ ਸ੍ਰੀ ok", "Gurmukhi"), ("ನಮಸ್ಕಾರ ok", "Kannada"),
+                     ("బాగున్నారా ok", "Telugu"), ("բարև ok", "Armenian"),
                      ("გამარჯობა ok", "Georgian"),
                      ("ᚠᚢᚦ ok", "Runic"),
                      ("blk █ ok", "U+2588 block element")]:
@@ -1754,8 +1859,9 @@ def test_the_default_path_widening_admits_letters_and_prices_only() -> None:
 
     admitted = [c for lo, hi, _why in _LATIN_LETTER_RANGES
                 for c in range(lo, hi + 1)]
-    check("the tier is the measured size, minus the carve-out",
-          len(admitted) + len(_SYMBOL_ALLOWED) + 1 == 399,
+    check("the tier is the measured size, minus the carve-out, plus the 256 "
+          "letters of Latin Extended Additional (Vietnamese)",
+          len(admitted) + len(_SYMBOL_ALLOWED) + 1 == 399 + 256,
           str(len(admitted) + len(_SYMBOL_ALLOWED) + 1))
     # `Lu`/`Ll`/`Lt`/`Lm`/`Lo` only. A structural character (Sm, Ps, Pe, Po,
     # Sk) admitted here would be a character that can spell a frame.
@@ -1990,14 +2096,20 @@ def test_the_sanitizer_says_which_kind_of_empty_it_returned() -> None:
                   text == "" and refusal == "", repr((text, refusal)))
         check("the plain wrapper still returns just the text",
               TP._sanitize_reply(raw, "en") == "", repr(raw))
-    # Residue is only an accident when the strip made it. Punctuation the
-    # model wrote itself, or a hard-reject character next to the emoji, is
-    # still the validator's decision, and a retry would only repeat it.
-    for raw, why in (("!!!", "letterless punctuation, nothing stripped"),
-                     ("(^_^)", "a kaomoji, nothing stripped"),
+    # Residue is only an accident when the strip made it. Letterless text the
+    # model wrote itself that is no terse reply shape, or a hard-reject
+    # character next to the emoji, is still the validator's decision, and a
+    # retry would only repeat it.
+    for raw, why in (("::", "letterless template residue, nothing stripped"),
+                     ("```", "a bare code fence"),
                      ("\U0001f44d >", "a hard-reject character")):
         check(f"still a refusal: {why}",
               TP._sanitize_reply_with_reason(raw, "en") == ("", "validator"),
+              repr(TP._sanitize_reply_with_reason(raw, "en")))
+    # The same punctuation written as a reply is one.
+    for raw in ("!!!", "(^_^)", "?"):
+        check(f"a terse reply the model wrote is delivered: {raw!r}",
+              TP._sanitize_reply_with_reason(raw, "en") == (raw, ""),
               repr(TP._sanitize_reply_with_reason(raw, "en")))
     check("a normal reply is untouched and carries no refusal",
           TP._sanitize_reply_with_reason("sure, tell me more", "en")
@@ -2637,3 +2749,48 @@ def test_nothing_in_this_module_can_read_agent_state() -> None:
     })
     check("no helper reaches for agent state through self/cls",
           not reads, ", ".join(reads))
+
+
+def test_the_persona_clock_defaults_to_this_machine(monkeypatch) -> None:
+    """Blank or unset PERSONA_TZ_OFFSET_HOURS is the machine's own offset, not
+    China time; a value `timezone()` cannot take falls back rather than
+    failing every turn that asks the time."""
+    from persona_agent import textproc
+
+    local = textproc._local_tz_offset()
+    monkeypatch.delenv("PERSONA_TZ_OFFSET_HOURS", raising=False)
+    check("unset is this machine's offset", textproc._env_tz_offset() == local)
+    monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", " ")
+    check("blank is too", textproc._env_tz_offset() == local)
+    monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", "-5")
+    check("a set offset is used", textproc._env_tz_offset() == -5.0)
+    monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", "5.5")
+    check("a half-hour offset is used", textproc._env_tz_offset() == 5.5)
+    for bad in ("30", "480", "-24", "24", "eight"):
+        monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", bad)
+        check(f"PERSONA_TZ_OFFSET_HOURS={bad} falls back to this machine",
+              textproc._env_tz_offset() == local)
+        TP._is_sleep_hour()
+        check(f"...and the prompt clock still renders ({bad})",
+              len(TP._current_time_str()) > 10)
+
+
+def test_the_parser_reads_past_keys_a_model_adds() -> None:
+    """Open models add keys of their own, miscase ours or send `mem` as a
+    list. None of that is a leak, and each used to drop the whole reply."""
+    for raw, want in (('{"reply":"hi","thought":"x"}', ("hi", "", "")),
+                      ('{"reply":"hi","emotion":"warm","mem":[]}', ("hi", "", "")),
+                      ('{"Reply":"hi","Intent":"Chat"}', ("hi", "chat", "")),
+                      ('{"reply":"hi","reasoning":{"step":1},"mem":"likes tea"}',
+                       ("hi", "", "likes tea")),
+                      ('{"reply":"yo","Reply":"hi"}', ("yo", "", ""))):
+        reply, _reasoning, intent, mem = TP._parse_model_output(raw, "open-model")
+        check(f"read past the drift: {raw}", (reply, intent, mem) == want,
+              repr((reply, intent, mem)))
+    for raw in ('{"reply":["hi"]}', '{"reply":"hi","mem":{"a":1}}',
+                '{"role":"user","content":"hi"}', '{"thought":"just thinking"}'):
+        check(f"still fails closed: {raw}",
+              TP._parse_model_output(raw, "open-model")[0] == "", raw)
+    check("the plain-text wrapper passes a drifted protocol object through",
+          _as_protocol_object('{"reply":"hey","emotion":"x"}')
+          == '{"reply":"hey","emotion":"x"}')

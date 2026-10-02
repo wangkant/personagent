@@ -238,7 +238,8 @@ class DirectMessages:
                 # the persona's own assistant turns.
                 plain_text_fallback=True,
             )
-            reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
+            reply, reasoning, intent, mem = TextProcessing._parse_model_output(
+                raw, self.llm_dm_model)
             if reasoning:
                 logger.debug("[Agent] private model metadata parsed (intent=%s, reasoning_chars=%d)",
                              intent or "?", len(reasoning))

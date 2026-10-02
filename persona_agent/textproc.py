@@ -10,13 +10,12 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
-
-from .config_env import env_float
 
 
 logger = logging.getLogger("agent")
@@ -426,19 +425,70 @@ def salvage_json_object(raw: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-#: The keys `_parse_model_output` admits. Named once, and tested once in
+#: The keys `_parse_model_output` reads. Named once, and tested once in
 #: `_is_protocol_dict`, so `_as_protocol_object` and the parser's array
 #: unwrap recognise an object that is already in protocol shape by the
 #: parser's own rule, not by a second copy that can drift out of agreement
-#: with it (the wrapper once lacked the array half and nested `[{...}]`).
+#: with it.
 _PROTOCOL_KEYS = frozenset({"reply", "reasoning", "intent", "mem"})
 
 
+def _protocol_key(key) -> str:
+    """The protocol key `key` spells, case aside, or ""."""
+    name = key.lower() if isinstance(key, str) else ""
+    return name if name in _PROTOCOL_KEYS else ""
+
+
 def _is_protocol_dict(value) -> bool:
-    """A non-empty dict whose keys are all protocol keys: the one test both
-    `_as_protocol_object` and the parser's array unwrap apply."""
-    return (isinstance(value, dict) and bool(value)
-            and not (set(value) - _PROTOCOL_KEYS))
+    """A dict carrying at least one protocol key: the one test both
+    `_as_protocol_object` and the parser's array unwrap apply. Other keys
+    beside them are ignored by the parser, so they do not disqualify it."""
+    return isinstance(value, dict) and any(_protocol_key(k) for k in value)
+
+
+# (model, drift) pairs already logged, so a model's habit is said once.
+_PROTOCOL_DRIFT_LOGGED: set[tuple[str, str]] = set()
+
+
+def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
+    """The protocol fields of a model's object, or None when `reply` or `mem`
+    is something no reply can be read from.
+
+    Open models add keys of their own ("thought", "emotion"), miscase ours
+    ("Intent") or send `"mem": []`. None of that is a leak, so unknown keys
+    are ignored, a miscased key is read as ours (the exact spelling wins when
+    both are there), a list `mem` means no memory and non-text metadata is
+    blank. Each habit is logged once per model."""
+    fields: dict = {}
+    drift: list[str] = []
+    for key, value in data.items():
+        name = _protocol_key(key)
+        if not name:
+            drift.append(f"extra key {key!r}")
+            continue
+        if key != name:
+            if name in data:
+                continue
+            drift.append(f"key spelled {key!r}")
+        fields[name] = value
+    if fields.get("reply") is not None and not isinstance(fields["reply"], str):
+        return None
+    mem = fields.get("mem")
+    if mem is not None and not isinstance(mem, str):
+        if not isinstance(mem, list):
+            return None
+        drift.append("mem as a list")
+        fields["mem"] = ""
+    for name in ("reasoning", "intent"):
+        if fields.get(name) is not None and not isinstance(fields[name], str):
+            drift.append(f"{name} as {type(fields[name]).__name__}")
+            fields[name] = ""
+    for item in drift:
+        if (model, item) not in _PROTOCOL_DRIFT_LOGGED:
+            _PROTOCOL_DRIFT_LOGGED.add((model, item))
+            logger.warning("[Agent] parser: model %s's JSON has %s; read past "
+                           "it (said once per model)", model or "?", item)
+    return fields
 
 
 def _as_protocol_object(content: str) -> str:
@@ -515,10 +565,34 @@ SLEEP_PASS_PROB = 0.70        # 70% PASS rate during sleep hours
 SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
 
 
+_TZ_WARNED: set[str] = set()
+
+
+def _local_tz_offset() -> float:
+    """This machine's current UTC offset in hours, daylight saving included."""
+    offset = datetime.now().astimezone().utcoffset()
+    return offset.total_seconds() / 3600 if offset is not None else 0.0
+
+
 def _env_tz_offset() -> float:
-    """PERSONA_TZ_OFFSET_HOURS as hours (default UTC+8). Read on every call, never
-    cached, so a reload or a test can change it between turns."""
-    return env_float("PERSONA_TZ_OFFSET_HOURS", 8.0)
+    """PERSONA_TZ_OFFSET_HOURS as hours; blank or unset is this machine's
+    offset. Read on every call, never cached, so a reload or a test can change
+    it between turns. Outside (-24, 24), where `timezone()` raises and every
+    turn would fail, it falls back to the machine's offset and says so once."""
+    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
+    if not str(raw).strip():
+        return _local_tz_offset()
+    try:
+        hours = float(str(raw).strip())
+    except ValueError:
+        hours = None
+    if hours is not None and -24 < hours < 24:
+        return hours
+    if raw not in _TZ_WARNED:
+        _TZ_WARNED.add(raw)
+        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours between -24 "
+                       "and 24, e.g. 8 or -5); using this machine's offset", raw)
+    return _local_tz_offset()
 
 
 # ===========================================================================
@@ -526,8 +600,8 @@ def _env_tz_offset() -> float:
 # ===========================================================================
 #
 # `_validate_reply_safe` is a fail-closed whitelist and it exists as a
-# TOKEN-LEAK defence: a degraded model that dumps its system prompt, a
-# Hermes-XML remnant, a JSON protocol frame, a SentencePiece `_` run or a
+# TOKEN-LEAK defence: a degraded model that dumps its system prompt, an
+# XML tool-call remnant, a JSON protocol frame, a SentencePiece `_` run or a
 # provider chat template must never reach a human. That is why it is a
 # whitelist and not a blocklist, and it stays one.
 #
@@ -552,7 +626,7 @@ def _env_tz_offset() -> float:
 # The second half of that sentence is not a caveat, it is the design. A code
 # point named in NO tier still drops the WHOLE reply, which is the plan's
 # "keep the fail-closed default for anything not named" and is what the suite
-# asserts: Thai, Hebrew, Devanagari, Armenian and the block-elements range
+# asserts: Armenian, Georgian, Runic and the block-elements range
 # U+2580-259F all silence the reply, and adding a script is a deliberate act,
 # not a side effect. Three ways to make a code point visible, and only three:
 # a new STRIP range if it is decoration, a new MAP entry if it has an exact
@@ -872,6 +946,15 @@ _TYPOGRAPHY_MAP = {
     # every downstream consumer instead of as an unnamed script.
     **{0x0660 + i: str(i) for i in range(10)},            # Arabic-Indic
     **{0x06F0 + i: str(i) for i in range(10)},            # extended Arabic-Indic (Persian/Urdu)
+    0x05BE: "-",                                          # Hebrew maqaf, the hyphen
+    0x05F3: "'", 0x05F4: '"',                             # Hebrew geresh / gershayim
+    # The danda is a full stop, and a bare vertical stroke: mapped, never
+    # admitted. Bengali writes the same two code points.
+    0x0964: ".", 0x0965: ".",                             # Devanagari danda / double danda
+    **{0x0966 + i: str(i) for i in range(10)},            # Devanagari digits
+    **{0x09E6 + i: str(i) for i in range(10)},            # Bengali digits
+    **{0x0BE6 + i: str(i) for i in range(10)},            # Tamil digits
+    **{0x0E50 + i: str(i) for i in range(10)},            # Thai digits
 }
 
 # --- Tier 3: named additions to the whitelist itself -----------------------
@@ -888,7 +971,13 @@ _LATIN_LETTER_RANGES: Ranges = (
     (0x00F8, 0x00FF, "Latin-1 lowercase tail (division sign excluded)"),
     (0x0100, 0x01BF, "Latin Extended-A and -B up to the click letters"),
     (0x01C4, 0x024F, "Latin Extended-B from just past the click letters"),
+    (0x1E00, 0x1EFF, "Latin Extended Additional: Vietnamese's tone-marked "
+                     "vowels (ạ ế ộ ữ ỳ), letters to the last code point"),
 )
+
+# Spanish opens a question and an exclamation upside down. Punctuation, not
+# letters, so they count as no content; neither folds onto anything.
+_INVERTED_PUNCT = frozenset({0x00A1, 0x00BF})
 
 # The carve-outs, named so a test can assert them and a reader can see what
 # each costs. `high` inclusive, same shape as every other table here.
@@ -923,6 +1012,10 @@ _BAR_CONFUSABLES: Ranges = (
     (0xFFDC, 0xFFDC, "HALFWIDTH HANGUL LETTER I - the same bar again, hiding "
                      "inside the full-width blanket; refused on that path by "
                      "_FULLWIDTH_BAR_TWINS"),
+    (0x0E45, 0x0E45, "THAI CHARACTER LAKKHANGYAO - a tall bare stroke. Thai "
+                     "is outside the mixed-script rule, so only this carve-out "
+                     "stops 'assistantๅuser'; modern Thai needs it only after "
+                     "the archaic vowels ฤ and ฦ"),
 )
 
 # The `0xFF00-0xFFEF` blanket in `_validate_reply_safe` predates the script
@@ -974,11 +1067,18 @@ _SYMBOL_ALLOWED = frozenset({0x00A3, 0x00A5, 0x00B0, 0x20AC})
 # katakana punctuation marks) and the ones without are STRIPPED
 # (`_SCRIPT_MARK_RANGES`). The reply survives either way.
 #
-# WHAT IS DELIBERATELY STILL FAIL-CLOSED: Thai, Hebrew, Devanagari, Armenian,
-# Georgian, Greek Extended (polytonic), the Cyrillic extended blocks, the
-# Arabic presentation forms. Adding one is a deliberate act with a stated
-# reason, which is exactly what this table is; nothing about the tier's shape
-# is a claim that these six are the only scripts that will ever be here.
+# THE ABUGIDAS (Devanagari, Bengali, Tamil, Thai) cannot be written with
+# letters alone: a vowel sign or a virama is a combining mark, and stripping it
+# turns a word into a different one. Their marks are admitted by
+# `_ABUGIDA_MARK_RANGES` below, only in the position that gives them a meaning
+# (`_mark_is_anchored`), so the letters-only argument holds for this table and
+# a mark can never stand alone or stack into an invisible run.
+#
+# WHAT IS DELIBERATELY STILL FAIL-CLOSED: Armenian, Georgian, the other Indic
+# scripts (Gurmukhi, Gujarati, Telugu, Kannada, Malayalam, ...), Greek Extended
+# (polytonic), the Cyrillic extended blocks, the Arabic presentation forms.
+# Adding one is a deliberate act with a stated reason, which is exactly what
+# this table is.
 _SCRIPT_LETTER_RANGES: Ranges = (
     # -- Japanese ---------------------------------------------------------
     (0x3041, 0x3096, "hiragana syllables - the script half of ordinary "
@@ -1035,7 +1135,96 @@ _SCRIPT_LETTER_RANGES: Ranges = (
     (0x06EE, 0x06EF, "Arabic dal and reh with inverted v"),
     (0x06FA, 0x06FC, "Arabic sheen/dad/ghain with dot below"),
     (0x06FF, 0x06FF, "Arabic heh with inverted v"),
+    # -- Hebrew -----------------------------------------------------------
+    # Vav and final nun are tall strokes; carving them out would make Hebrew
+    # unwritable, so a Hebrew letter spliced into a Latin token is refused by
+    # the mixed-script rule instead (`_CONFUSABLE_SCRIPT_RANGES`).
+    (0x05D0, 0x05EA, "Hebrew letters alef through tav, final forms included"),
+    (0x05EF, 0x05F2, "Hebrew yod triangle and the Yiddish ligatures"),
+    # -- Devanagari (Hindi, Marathi, Nepali) ------------------------------
+    (0x0904, 0x0939, "Devanagari independent vowels and consonants"),
+    (0x093D, 0x093D, "Devanagari avagraha"),
+    (0x0950, 0x0950, "Devanagari om"),
+    (0x0958, 0x0961, "Devanagari nukta consonants and the vocalic r/l vowels"),
+    (0x0971, 0x097F, "Devanagari high spacing dot and the extra letters"),
+    # -- Bengali (Bangla, Assamese) ----------------------------------------
+    (0x0980, 0x0980, "Bengali anji"),
+    (0x0985, 0x098C, "Bengali vowels"),
+    (0x098F, 0x0990, "Bengali vowels e and ai"),
+    (0x0993, 0x09A8, "Bengali vowels o and au, consonants ka through na"),
+    (0x09AA, 0x09B0, "Bengali consonants pa through ra"),
+    (0x09B2, 0x09B2, "Bengali consonant la"),
+    (0x09B6, 0x09B9, "Bengali consonants sha through ha"),
+    (0x09BD, 0x09BD, "Bengali avagraha"),
+    (0x09CE, 0x09CE, "Bengali khanda ta"),
+    (0x09DC, 0x09DD, "Bengali rra and rha"),
+    (0x09DF, 0x09E1, "Bengali yya and the vocalic r/l vowels"),
+    (0x09F0, 0x09F1, "Assamese ra and wa"),
+    (0x09FC, 0x09FC, "Bengali vedic anusvara"),
+    # -- Tamil --------------------------------------------------------------
+    (0x0B83, 0x0B83, "Tamil aytham"),
+    (0x0B85, 0x0B8A, "Tamil vowels a through uu"),
+    (0x0B8E, 0x0B90, "Tamil vowels e through ai"),
+    (0x0B92, 0x0B95, "Tamil vowels o, oo, au and consonant ka"),
+    (0x0B99, 0x0B9A, "Tamil consonants nga and ca"),
+    (0x0B9C, 0x0B9C, "Tamil consonant ja"),
+    (0x0B9E, 0x0B9F, "Tamil consonants nya and tta"),
+    (0x0BA3, 0x0BA4, "Tamil consonants nna and ta"),
+    (0x0BA8, 0x0BAA, "Tamil consonants na, nnna and pa"),
+    (0x0BAE, 0x0BB9, "Tamil consonants ma through ha"),
+    (0x0BD0, 0x0BD0, "Tamil om"),
+    # -- Thai -----------------------------------------------------------------
+    (0x0E01, 0x0E30, "Thai consonants and the leading vowels up to sara a"),
+    (0x0E32, 0x0E33, "Thai sara aa and sara am"),
+    (0x0E40, 0x0E44, "Thai prefixed vowels"),
+    (0x0E46, 0x0E46, "Thai maiyamok, the repetition mark; U+0E45 LAKKHANGYAO "
+                     "is carved out - see _BAR_CONFUSABLES"),
 )
+
+# --- Tier 3c: the abugidas' vowel signs, kept only on their own letter -----
+# Category Mn/Mc, each block's complete set. Admitted only right after a letter
+# of the same block, at most `_MAX_MARKS_PER_LETTER` in a row: a bare mark,
+# a mark on another script's letter or a stack past that count is stripped by
+# the sanitizer and refused by the validator.
+_ABUGIDA_MARK_RANGES: dict[str, Ranges] = {
+    "devanagari": (
+        (0x0900, 0x0903, "Devanagari candrabindu, anusvara, visarga"),
+        (0x093A, 0x093C, "Devanagari vowel signs oe/ooe and nukta"),
+        (0x093E, 0x094F, "Devanagari vowel signs and virama"),
+        (0x0951, 0x0957, "Devanagari stress signs and the extra vowel signs"),
+        (0x0962, 0x0963, "Devanagari vocalic l/ll vowel signs"),
+    ),
+    "bengali": (
+        (0x0981, 0x0983, "Bengali candrabindu, anusvara, visarga"),
+        (0x09BC, 0x09BC, "Bengali nukta"),
+        (0x09BE, 0x09C4, "Bengali vowel signs aa through vocalic rr"),
+        (0x09C7, 0x09C8, "Bengali vowel signs e and ai"),
+        (0x09CB, 0x09CD, "Bengali vowel signs o, au and virama"),
+        (0x09D7, 0x09D7, "Bengali au length mark"),
+        (0x09E2, 0x09E3, "Bengali vocalic l/ll vowel signs"),
+        (0x09FE, 0x09FE, "Bengali sandhi mark"),
+    ),
+    "tamil": (
+        (0x0B82, 0x0B82, "Tamil anusvara"),
+        (0x0BBE, 0x0BC2, "Tamil vowel signs aa through uu"),
+        (0x0BC6, 0x0BC8, "Tamil vowel signs e through ai"),
+        (0x0BCA, 0x0BCD, "Tamil vowel signs o, oo, au and virama"),
+        (0x0BD7, 0x0BD7, "Tamil au length mark"),
+    ),
+    "thai": (
+        (0x0E31, 0x0E31, "Thai mai han-akat"),
+        (0x0E34, 0x0E3A, "Thai above and below vowels, phinthu"),
+        (0x0E47, 0x0E4E, "Thai tone marks, thanthakhat, nikhahit, yamakkan"),
+    ),
+}
+
+# The block each abugida's letters and marks live in.
+_ABUGIDA_BLOCKS: dict[str, tuple[int, int]] = {
+    "devanagari": (0x0900, 0x097F), "bengali": (0x0980, 0x09FF),
+    "tamil": (0x0B80, 0x0BFF), "thai": (0x0E00, 0x0E7F),
+}
+
+_MAX_MARKS_PER_LETTER = 4
 
 # --- Tier 1e: the marks of those scripts, stripped not rejected ------------
 # Non-spacing marks, spacing accents and decorative signs that belong to the
@@ -1070,6 +1259,12 @@ _SCRIPT_MARK_RANGES: Ranges = (
     (0x06D6, 0x06ED, "Arabic small high/low annotation marks and stop signs"),
     (0x3099, 0x309C, "the Japanese voicing marks: combining dakuten and "
                      "handakuten plus their two spacing forms"),
+    (0x0591, 0x05BD, "Hebrew cantillation and vowel points (Mn), which "
+                     "modern prose leaves off, as Arabic leaves its harakat"),
+    (0x05BF, 0x05BF, "Hebrew point rafe"),
+    (0x05C1, 0x05C2, "Hebrew shin and sin dots"),
+    (0x05C4, 0x05C5, "Hebrew upper and lower dots"),
+    (0x05C7, 0x05C7, "Hebrew qamats qatan"),
 )
 
 # A protocol field label opening a LINE — "Decision:", "style:", "判断：". A
@@ -1284,6 +1479,18 @@ _ASCII_ADMITTED = frozenset(
     "0123456789abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n\t \r" + _ASCII_PUNCT_ALLOWED)
 
+# The letterless replies people actually send: a run of ? ! . ~, a short
+# number or score, a text emoticon. Matched against the reply with its
+# whitespace removed; anything else without a letter is still read as template
+# residue. Numbers stop at four digits a group: a leaked token id is longer.
+_TERSE_REPLY_MAX = 12
+_TERSE_REPLY_RE = re.compile(
+    r"[?!.~？！～…]{1,8}"                                # ? ... !!! ?! ~
+    r"|[+-]?\d{1,4}(?:[.,:/-]\d{1,4}){0,2}%?[?!.~]{0,3}"  # 1 233 10/10 +1 100% 3:00
+    r"|[:=][-']?[)(/*]{1,3}|[)(][-']?[:=]"              # :) :( =) :-/ (:
+    r"|\(?(?:\^[_.]?\^|=[_.]=|-[_.]-)\)?"               # ^^ (^_^) =_= -_-
+)
+
 # --- compatibility twins inherit the fate of what they fold onto -----------
 #
 # Every refusal above is spelled in the ORIGINAL, but the 0xFF00-0xFFEF
@@ -1384,12 +1591,13 @@ _ARROW_FRAME_RE = re.compile(
 #
 # THE RULE IS ABOUT ARRANGEMENT, like `_arrow_frame` and for the same reason:
 # no single character in a homoglyph word is objectionable, the MIXTURE is.
-# Inside one unbroken run of letters, at most one of {Latin, Cyrillic, Greek}
-# may appear. That is Unicode TR39's mixed-script detection narrowed to the
-# three alphabets that are confusable with each other, and it is narrowed on
+# Inside one unbroken run of letters, at most one of {Latin, Cyrillic, Greek,
+# Hebrew} may appear. That is Unicode TR39's mixed-script detection narrowed
+# to the alphabets that are confusable with Latin, and it is narrowed on
 # purpose:
 #
-#   * kana, Hangul, Han and Arabic are NOT in it. None of them looks like a
+#   * kana, Hangul, Han, Arabic, Devanagari, Bengali, Tamil and Thai are NOT
+#     in it. None of them looks like a
 #     Latin letter, and CJK is written without spaces — 'バグをfixした' and
 #     '버그fix했다' are ordinary mixed-script sentences with no separator to
 #     hide behind, so a rule over them would be a false positive generator
@@ -1415,20 +1623,25 @@ _CYRILLIC_RANGES: Ranges = tuple(
 _GREEK_RANGES: Ranges = tuple(
     r for r in _SCRIPT_LETTER_RANGES if 0x0370 <= r[0] <= 0x03FF)
 
-_CONFUSABLE_SCRIPT_RANGES: Ranges = _CYRILLIC_RANGES + _GREEK_RANGES
+# Hebrew joins the three: vav and final nun read as 'l', samekh as 'o'.
+_HEBREW_RANGES: Ranges = tuple(
+    r for r in _SCRIPT_LETTER_RANGES if 0x0590 <= r[0] <= 0x05FF)
+
+_CONFUSABLE_SCRIPT_RANGES: Ranges = (
+    _CYRILLIC_RANGES + _GREEK_RANGES + _HEBREW_RANGES)
 
 _CONFUSABLE_SCAN_RE = re.compile(
     "[" + _char_class(_CONFUSABLE_SCRIPT_RANGES) + "]")
 
 
 def _letter_script(codepoint: int, ch: str) -> str:
-    """`'latin'` / `'cyrillic'` / `'greek'` for a letter in one of the three
-    mutually confusable alphabets, `''` for everything else.
+    """`'latin'` / `'cyrillic'` / `'greek'` / `'hebrew'` for a letter in one
+    of the mutually confusable alphabets, `''` for everything else.
 
-    Everything else INCLUDES kana, Hangul, Han, Arabic, digits, punctuation
-    and whitespace, and that is what makes a run boundary: a Japanese or
-    Korean sentence with an English word spliced into it contains no run that
-    holds two of these three, so it cannot trip the rule."""
+    Everything else INCLUDES kana, Hangul, Han, Arabic, the abugidas, digits,
+    punctuation and whitespace, and that is what makes a run boundary: a
+    Japanese or Korean sentence with an English word spliced into it contains
+    no run that holds two of these, so it cannot trip the rule."""
     if codepoint < 0x80:
         return "latin" if ch.isalpha() else ""
     if _in_ranges(codepoint, _LATIN_LETTER_RANGES):
@@ -1437,6 +1650,8 @@ def _letter_script(codepoint: int, ch: str) -> str:
         return "cyrillic"
     if _in_ranges(codepoint, _GREEK_RANGES):
         return "greek"
+    if _in_ranges(codepoint, _HEBREW_RANGES):
+        return "hebrew"
     return ""
 
 # Derived rather than written down, so it cannot drift out of step with the
@@ -1453,6 +1668,48 @@ def _is_emoji_base(codepoint: int) -> bool:
     only allowed to be invisible when it is modifying something visible."""
     return (_in_ranges(codepoint, _EMOJI_PICTOGRAPH_RANGES)
             or 0x1F1E6 <= codepoint <= 0x1F1FF)
+
+
+_ABUGIDA_MARKS = frozenset().union(
+    *(_expand(ranges) for ranges in _ABUGIDA_MARK_RANGES.values()))
+
+_ABUGIDA_MARK_RE = re.compile("[" + _char_class(tuple(
+    r for ranges in _ABUGIDA_MARK_RANGES.values() for r in ranges)) + "]")
+
+
+def _abugida_block(codepoint: int) -> str:
+    for name, (lo, hi) in _ABUGIDA_BLOCKS.items():
+        if lo <= codepoint <= hi:
+            return name
+    return ""
+
+
+def _mark_is_anchored(text: str, idx: int) -> bool:
+    """True when the abugida mark at `text[idx]` follows a letter of its own
+    script, through at most `_MAX_MARKS_PER_LETTER - 1` marks of that script.
+    Positional like `_modifier_is_anchored`: a mark is only allowed to be
+    there when it is modifying a letter a reader sees."""
+    block = _abugida_block(ord(text[idx]))
+    run = 0
+    j = idx - 1
+    while j >= 0 and ord(text[j]) in _ABUGIDA_MARKS:
+        if _abugida_block(ord(text[j])) != block:
+            return False
+        run += 1
+        j -= 1
+    if j < 0 or run >= _MAX_MARKS_PER_LETTER:
+        return False
+    base = ord(text[j])
+    return (_abugida_block(base) == block
+            and _in_ranges(base, _SCRIPT_LETTER_RANGES))
+
+
+def _strip_unanchored_marks(text: str) -> str:
+    """Drop every abugida mark that is not anchored; a no-op on text with none."""
+    if not _ABUGIDA_MARK_RE.search(text):
+        return text
+    return "".join(ch for i, ch in enumerate(text)
+                   if ord(ch) not in _ABUGIDA_MARKS or _mark_is_anchored(text, i))
 
 
 def _modifier_is_anchored(text: str, idx: int) -> bool:
@@ -1752,6 +2009,7 @@ class TextProcessing:
             return "", "arrow_frame"
         pre_strip = text
         text = TextProcessing._strip_unsupported(text, style)
+        text = _strip_unanchored_marks(text)
         # The compatibility twins of the opt-in charsets, removed alongside
         # what `_strip_unsupported` just removed and for the same reason: a
         # persona that opted into arrows asked for `←`, not for its halfwidth
@@ -1809,8 +2067,10 @@ class TextProcessing:
         # only AFTER every character in the full text has been cleared. Cut
         # first and a leaked template's giveaway character could fall off the
         # end, turning a drop into a released 800-character prefix.
+        # A terse reply ("?", ":)", "10/10") counts as content only when the
+        # model wrote it as it stands: what a strip pass left is residue.
         ok, reason = TextProcessing._validate_reply_safe(
-            text, lang, style, check_length=False)
+            text, lang, style, check_length=False, terse_ok=not stripped)
         if not ok:
             logger.warning("[Agent] validator rejected reply: %s | text=%r",
                            reason, text[:80])
@@ -1820,7 +2080,8 @@ class TextProcessing:
             # emoji draft, and the letterless '!' is refused). Both verdicts
             # report an accident. A hard-reject or invisible character is
             # still the validator's decision, and so is punctuation the model
-            # wrote with nothing stripped from around it.
+            # wrote with nothing stripped from around it that is no terse
+            # reply shape.
             accident = not text or (
                 stripped and reason.startswith("no letter content"))
             return "", ("" if accident else "validator")
@@ -1833,7 +2094,7 @@ class TextProcessing:
             # can remove the last letter and leave punctuation, which the
             # language gate is entitled to refuse.
             ok, reason = TextProcessing._validate_reply_safe(
-                text, lang, style, check_length=False)
+                text, lang, style, check_length=False, terse_ok=False)
             if not ok:
                 logger.warning("[Agent] validator rejected truncated reply: %s "
                                "| text=%r", reason, text[:80])
@@ -2318,8 +2579,8 @@ class TextProcessing:
         deployment — it tells every user what time it is where the server
         happens to be running.
 
-        PERSONA_TZ_OFFSET_HOURS (default UTC+8) remains the fallback for callers with
-        no per-user notion of "local"."""
+        PERSONA_TZ_OFFSET_HOURS (blank = this machine's offset) remains the
+        fallback for callers with no per-user notion of "local"."""
         from .connector import current_tz_offset_h
         tz_hours = current_tz_offset_h.get()
         if tz_hours is None:
@@ -2345,12 +2606,14 @@ class TextProcessing:
         return f"{now.strftime('%Y-%m-%d %H:%M')} {weekdays[now.weekday()]} {part}"
 
     @staticmethod
-    def _parse_model_output(raw: str) -> tuple[str, str, str, str]:
+    def _parse_model_output(raw: str, model: str = "") -> tuple[str, str, str, str]:
         """Parse JSON-structured model output:
             {"reasoning": "...", "intent": "...", "reply": "...", "mem": "..."}
 
-        Returns (reply, reasoning, intent, mem). Fail-closed: a parse failure
-        or missing `reply` key yields ("", raw[:240], "", "") plus a warning.
+        Returns (reply, reasoning, intent, mem). Fail-closed: a parse failure,
+        an object with none of these keys, or a `reply` that is not text
+        yields ("", raw[:240], "", "") plus a warning. Keys of the model's own
+        are ignored (see `_protocol_fields`); `model` names it in that log.
 
         Why JSON instead of XML inline tags: with string-embedded structure
         the parser's fallback branches can leak reasoning text into the reply
@@ -2373,8 +2636,8 @@ class TextProcessing:
            accepting non-JSON text would violate the protocol boundary.
 
         Unwrapping does not loosen the protocol: whatever comes out still
-        has to pass the key and all-strings check below, so an array of some
-        other shape (a message list, a tool payload) fails closed as before.
+        has to carry a protocol key and a text `reply`, so an array of some
+        other shape (a message list, a tool payload) fails closed.
         """
         if not raw or not raw.strip():
             return "", "", "", ""
@@ -2404,16 +2667,14 @@ class TextProcessing:
             logger.warning("[Agent] parser: model output is not JSON, dropping raw=%r",
                            raw[:200])
             return "", raw.strip()[:240], "", ""
-        if set(data) - _PROTOCOL_KEYS or any(
-            value is not None and not isinstance(value, str)
-            for value in data.values()
-        ):
+        fields = _protocol_fields(data, model) if _is_protocol_dict(data) else None
+        if fields is None:
             logger.warning("[Agent] parser: invalid JSON protocol field types/keys")
             return "", raw.strip()[:240], "", ""
-        reply = (data.get("reply") or "").strip()
-        reasoning = (data.get("reasoning") or "").strip()
-        intent = (data.get("intent") or "").strip().lower()
-        mem_raw = data.get("mem")
+        reply = (fields.get("reply") or "").strip()
+        reasoning = (fields.get("reasoning") or "").strip()
+        intent = (fields.get("intent") or "").strip().lower()
+        mem_raw = fields.get("mem")
         mem = mem_raw.strip() if mem_raw is not None else ""
         # Placeholder words count as empty (model occasionally fills "无" / "none" / etc.)
         if mem.lower() in {"无", "none", "n/a", "null", "无内容", "无可记"}:
@@ -2423,7 +2684,8 @@ class TextProcessing:
     @staticmethod
     def _validate_reply_safe(text: str, lang: str = "en",
                              style: Optional[ReplyStyle] = None,
-                             *, check_length: bool = True) -> tuple[bool, str]:
+                             *, check_length: bool = True,
+                             terse_ok: bool = True) -> tuple[bool, str]:
         """Whitelist character-class validator: only release replies that look
         like genuine human chat text for the active language.
 
@@ -2447,12 +2709,11 @@ class TextProcessing:
         and never raise the length cap.
 
         The content gate is ONE RULE FOR EVERY LANGUAGE: a reply with no
-        marker and no letter in any script — not one ASCII letter, Latin
-        letter with a diacritic, CJK ideograph, kana, jamo, Cyrillic, Greek
-        or Arabic letter, and no emoji — is rejected as the residue of a
-        stripped template. `lang` no longer changes any decision here; see
-        the note on the gate itself for what it used to do and why that was
-        wrong.
+        marker and no letter in any script and no emoji is rejected as the
+        residue of a stripped template, unless it is one of the short shapes
+        people actually answer with (`_TERSE_REPLY_RE`: "?", "...", ":)",
+        "10/10") and `terse_ok` says the model wrote it as it stands. `lang`
+        changes no decision here.
 
         This catches every future leak shape — XML residue, JSON fragments,
         provider-specific tokens — without needing a per-shape filter rule.
@@ -2550,16 +2811,19 @@ class TextProcessing:
                 letter_count += 1
                 continue
             # The named scripts, letters only: kana, Hangul, Cyrillic, Greek,
-            # Arabic. A letter in ANY of them is content, which is the same
-            # thing the gate below already says about a letter in any script
-            # — this tier is what makes that sentence true instead of
-            # aspirational. Placed after the ASCII and Latin branches so an
+            # Arabic, Hebrew and the abugidas. A letter in ANY of them is
+            # content. Placed after the ASCII and Latin branches so an
             # English or Chinese reply never pays for the scan.
             if _in_ranges(c, _SCRIPT_LETTER_RANGES):
                 letter_count += 1
                 continue
-            # Currency and degree signs.
-            if c in _SYMBOL_ALLOWED:
+            # An abugida's vowel sign or virama, only on its own letter.
+            if c in _ABUGIDA_MARKS:
+                if not _mark_is_anchored(residual, i):
+                    return False, f"unanchored combining mark (U+{c:04X})"
+                continue
+            # Currency and degree signs, and Spanish's opening ¡ and ¿.
+            if c in _SYMBOL_ALLOWED or c in _INVERTED_PUNCT:
                 continue
             # Common ASCII punctuation used in casual chat ('$' included: a
             # product that charges money must be able to quote a price).
@@ -2568,31 +2832,22 @@ class TextProcessing:
             return False, f"unexpected char {ch!r} (U+{c:04X})"
         if not has_marker:
             # ONE RULE, EVERY LANGUAGE. This gate asks "is there any content
-            # here, or is this the residue of a stripped template?" — and that
-            # question has never had a per-language answer.
+            # here, or is this the residue of a stripped template?", and the
+            # build's language is no evidence about the reply's: a modern
+            # model writes whatever language the conversation is in.
             #
-            # It used to. A `zh` build demanded at least one CJK character, so
-            # a reply in any other script was destroyed whole. With all three
-            # residents authored at lang=zh that fired constantly: an English
-            # sentence, a name, a line of dialogue the model chose to answer in
-            # the reader's language — each one silently became "No reply came
-            # back", which is the intermittent failure the admin was hitting.
-            # It also mistook a MODEL LIMITATION for a policy: a modern model
-            # writes whatever language the conversation is in without being
-            # told, so the build's language is not evidence about the reply's.
-            #
-            # What identity a persona has is carried by its card and its
-            # prompt, not by which alphabet the validator will accept; and
-            # which language the READER wants is a UI choice, not a character
-            # class (see the i18n work, which widens that choice past zh/en).
-            #
-            # The anti-leak intent is untouched and is what the rule still
-            # says: a residual of nothing but digits and punctuation is
-            # suspect, because that is what a stripped chat template leaves
-            # behind. A letter in ANY script is content. An emoji counts too —
-            # no tokenizer artefact is made of emoji.
+            # A residual of nothing but digits and punctuation is suspect,
+            # because that is what a stripped chat template leaves behind. A
+            # letter in ANY script is content, and so is an emoji: no
+            # tokenizer artefact is made of emoji. So is a short reply in one
+            # of the shapes people answer with, named in `_TERSE_REPLY_RE`,
+            # when the model wrote it as it stands; markdown and template
+            # residue ("```", "###", "::", "___") is none of them.
             if letter_count == 0 and cjk_count == 0 and emoji_count == 0:
-                return False, "no letter content (suspect template / token leak)"
+                compact = "".join(residual.split())
+                if not (terse_ok and len(compact) <= _TERSE_REPLY_MAX
+                        and _TERSE_REPLY_RE.fullmatch(compact)):
+                    return False, "no letter content (suspect template / token leak)"
         return True, ""
 
     @staticmethod

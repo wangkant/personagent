@@ -68,7 +68,8 @@ class Thinking:
             # rendered prompt (see _decide_and_search).
             search_hint=latest_text,
         )
-        reply, reasoning, intent, mem = TextProcessing._parse_model_output(raw)
+        reply, reasoning, intent, mem = TextProcessing._parse_model_output(
+            raw, model_to_use)
         if reasoning:
             logger.debug("[Agent] group model metadata parsed (mode=%s intent=%s, reasoning_chars=%d)",
                          mode, intent or "?", len(reasoning))
