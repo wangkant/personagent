@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -492,3 +493,73 @@ def log_findings(findings: list[Finding]) -> None:
             logger.warning("[preflight] %s", finding.line())
         else:
             logger.info("[preflight] %s", finding.line())
+
+
+# ---------------------------------------------------------------------------
+# Retired setting names: refuse to start on them, rewrite them on request
+# ---------------------------------------------------------------------------
+
+#: Names the shell or a hosting platform sets for unrelated reasons; they count
+#: as retired only when they are written in `.env`.
+_AMBIENT_NAMES = frozenset({"HOST", "PORT", "LOG_FILE"})
+
+_ENV_LINE = re.compile(r"^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_.]*)(\s*=)")
+
+
+def retired_settings(root: Path | None = None, environ: dict | None = None) -> list[tuple[str, str, str]]:
+    """(old name, new name, where) for every retired setting that is set;
+    `where` is ".env" or "environment"."""
+    base = Path(root) if root is not None else ROOT
+    written = _parse(base / ".env") or {}
+    live = os.environ if environ is None else environ
+    found = {old: ".env" for old in written if old in RENAMED}
+    for old in live:
+        if old in RENAMED and old not in found and old not in _AMBIENT_NAMES:
+            found[old] = "environment"
+    return [(old, RENAMED[old], where) for old, where in sorted(found.items())]
+
+
+def retired_problem(fix_command: str, root: Path | None = None,
+                    environ: dict | None = None) -> str | None:
+    """One sentence per retired setting, or None. Ignoring them would silently
+    drop allowlists, admins and tokens, so a start with any of them is refused."""
+    found = retired_settings(root, environ)
+    if not found:
+        return None
+    lines = [f"the setting {old} was renamed {old} -> {new} and is no longer read"
+             + ("" if where == ".env" else " (it is set in the environment, not .env)")
+             for old, new, where in found]
+    lines.append(f"Run `{fix_command}` to rename them in .env, then start again.")
+    return "\n".join(lines)
+
+
+def migrate_env_file(path: Path) -> list[tuple[str, str, str]]:
+    """Rewrite retired names in a .env file in place; returns (old, new, action)
+    with action "renamed" or "dropped" (the new name was already set, so the old
+    line is commented out). Keeps values and comments, saves `<path>.bak` first."""
+    path = Path(path)
+    if not path.is_file():
+        return []
+    raw = path.read_bytes().decode("utf-8")
+    from dotenv import dotenv_values
+    taken = {k for k in dotenv_values(path) if k not in RENAMED}
+    changes: list[tuple[str, str, str]] = []
+    out: list[str] = []
+    for line in raw.splitlines(keepends=True):
+        match = _ENV_LINE.match(line)
+        old = match.group(2) if match else None
+        if old not in RENAMED:
+            out.append(line)
+            continue
+        new = RENAMED[old]
+        if new in taken:
+            out.append(f"# retired, {new} is already set: {line.lstrip()}")
+            changes.append((old, new, "dropped"))
+        else:
+            out.append(match.group(1) + new + line[match.end(2):])
+            taken.add(new)
+            changes.append((old, new, "renamed"))
+    if changes:
+        shutil.copy2(path, path.with_name(path.name + ".bak"))
+        path.write_bytes("".join(out).encode("utf-8"))
+    return changes

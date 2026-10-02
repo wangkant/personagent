@@ -47,7 +47,7 @@ def _run_server(argv: list[str], prog: str) -> int:
 def _doctor(argv: list[str], prog: str) -> int:
     from persona_agent import doctor
 
-    return doctor.main(argv)
+    return doctor.main(argv, prog)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -72,6 +72,26 @@ def _usage() -> str:
     return "commands:\n" + "\n".join(lines)
 
 
+def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
+    """Pull `--home DIR` out of the words after the command, so it works there too."""
+    home, rest, i = None, [], 0
+    while i < len(args):
+        word = args[i]
+        if word == "--":
+            rest += args[i:]
+            break
+        if word == "--home":
+            if i + 1 >= len(args):
+                raise SystemExit("personagent: --home needs a folder")
+            home, i = args[i + 1], i + 2
+        elif word.startswith("--home="):
+            home, i = word[len("--home="):], i + 1
+        else:
+            rest.append(word)
+            i += 1
+    return home, rest
+
+
 def main(argv: list[str] | None = None) -> int:
     p = _parser()
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
@@ -80,11 +100,18 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(_usage())
         return 0
-    if args.home:
-        os.environ["AGENT_HOME"] = os.path.abspath(os.path.expanduser(args.home))
+    later_home, rest = _take_home(args.args)
+    chosen = later_home or args.home
+    if chosen:
+        os.environ["AGENT_HOME"] = os.path.abspath(os.path.expanduser(chosen))
     module_name, func_name, _help = COMMANDS[args.command]
     func = getattr(importlib.import_module(module_name), func_name)
-    result = func(args.args, f"personagent {args.command}")
+    try:
+        result = func(rest, f"personagent {args.command}")
+    except SystemExit as stop:
+        if {"-h", "--help"} & set(rest) and not stop.code:
+            print("\nAlso accepted: --home DIR, the folder holding .env, persona.txt and runtime/.")
+        raise
     return int(result or 0)
 
 

@@ -5,14 +5,14 @@ promotion policy would not promote on its own — a single correction, anything
 backed only by laughter, two suggestions that contradict each other — sit in
 `proposed` until someone looks at them here.
 
-    python tools/candidates_admin.py list                 # pending proposals
-    python tools/candidates_admin.py list --state promoted # what is live now
-    python tools/candidates_admin.py show <id>            # with its evidence
-    python tools/candidates_admin.py promote <id>         # grant authority
-    python tools/candidates_admin.py reject <id>          # refuse it
-    python tools/candidates_admin.py rollback <id>        # revoke authority
-    python tools/candidates_admin.py supersede <old> <new>
-    python tools/candidates_admin.py rebuild              # re-derive the views
+    personagent learned list                 # pending proposals
+    personagent learned list --state promoted # what is live now
+    personagent learned show <id>            # with its evidence
+    personagent learned promote <id>         # grant authority
+    personagent learned reject <id>          # refuse it
+    personagent learned rollback <id>        # revoke authority
+    personagent learned supersede <old> <new>
+    personagent learned rebuild              # re-derive the views
 
 Ids may be abbreviated to any unique prefix.
 
