@@ -1,6 +1,6 @@
 """The teach loop end to end: complaint, retry, acceptance, promotion.
 
-What README "Teach it" promises, driven through the real PendingReplies and
+What the user guide's "Teach it" promises, driven through the real PendingReplies and
 Agent._process_reaction with an adjudicator stub that behaves like the real
 prompt asks it to: an accepted rejection or correction CARRIES a drafted
 `better`. Each scenario says what may promote and what must not.

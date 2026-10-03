@@ -11,7 +11,7 @@ desc: |
   Connects a personagent character to every AstrBot platform. Needs the personagent service running
   (`uvx personagent init`, then `uvx personagent run`); `personagent connect astrbot <AstrBot data dir>` installs and
   configures this plugin for you.
-version: 1.0.0
+version: 1.0.1
 author: Qiankang Wang
 repo: https://github.com/wangkant/astrbot_plugin_personagent
 astrbot_version: ">=4.25,<5"

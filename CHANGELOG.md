@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-10-03
+
+The README becomes a landing page, and the PyPI page shows it.
+
+### Changed
+
+- **The README is a landing page.** It shows the dashboard's chat view, three commands to try it, what makes it different, the shortest way into a group, the comparison and the measured results. Everything it used to explain in detail now lives in the user guide, [docs/guide.md](docs/guide.md) and [docs/guide.zh-CN.md](docs/guide.zh-CN.md). Its links are absolute, so they work on PyPI too.
+
+### Fixed
+
+- **Commands suggested under `uvx` say `uvx personagent ...`** even when uv's cache is in a folder of your choosing.
+
 ## [1.0.0] — 2026-10-03
 
 personagent 1.0 installs as a package, sets itself up in English or Chinese, and shows its work: a demo that needs no key, a terminal chat that says why the bot spoke or stayed quiet, and a local dashboard for what it learned and the evidence behind it. Learning from a correction now works end to end, under a rule that one message, a bystander or a stranger cannot get around.
@@ -1768,6 +1780,7 @@ stable enough to build on.
 - Gateway DM whitelisting gates on a context-local sink, not on a payload flag,
   so a crafted webhook body cannot bypass it.
 
+[1.0.1]: https://github.com/wangkant/personagent/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/wangkant/personagent/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/wangkant/personagent/releases/tag/v0.4.0
 [0.3.0]: https://github.com/wangkant/personagent/releases/tag/v0.3.0

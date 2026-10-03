@@ -596,6 +596,18 @@ def test_the_next_steps_fit_this_machine(monkeypatch, tmp_path) -> None:
           and elsewhere.argv("chat")[-3:] == ["--home", str(tmp_path), "chat"])
 
 
+def test_uvx_is_named_whatever_the_cache_folder(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("AGENT_HOME", raising=False)
+    monkeypatch.setattr(homes, "is_checkout", lambda path=None: False)
+    monkeypatch.setattr(homes, "default_home", lambda: tmp_path)
+    launcher = sw.Launcher(python="python", home=tmp_path)
+    for prefix in ("C:/Users/a/AppData/Local/uv/cache/archive-v0/abc",
+                   "D:/claude/uvcache/archive-v0/abc", "/home/a/.cache/uv/archive-v0/x"):
+        monkeypatch.setattr(sw.sys, "prefix", prefix)
+        check(f"uvx from {prefix}", launcher.shown("demo") == ["uvx personagent demo"],
+              repr(launcher.shown("demo")))
+
+
 def test_a_base_url_without_its_scheme_is_asked_again(monkeypatch) -> None:
     answers = iter([str(len(sw.PROVIDERS)), "api.example.com", "https://api.example.com",
                     "some-model", "sk-test-123456"])

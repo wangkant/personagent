@@ -1100,8 +1100,9 @@ class Launcher:
                 pass
             return [f"cd {_quote(str(homes.CHECKOUT))}",
                     f"{_program(str(python))} -m persona_agent {tail}"]
+        # uvx runs from a throwaway environment in uv's cache, under archive-v<N>.
         prefix = sys.prefix.replace("\\", "/").lower()
-        if "/archive-v" in prefix and "/uv/" in prefix:
+        if "/archive-v" in prefix:
             return [f"uvx personagent {tail}"]
         if shutil.which("personagent"):
             return [f"personagent {tail}"]

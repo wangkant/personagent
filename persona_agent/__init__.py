@@ -43,4 +43,4 @@ are shims. Read-only seed datasets ship with the package
 <home>/runtime/ (paths.ROOT is the home).
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"

@@ -105,7 +105,7 @@ def _verdict(reaction: str, accept: bool, why: str, better: str = "",
             "better": better, "ask": ask, "scenario": scenario}
 
 
-# The README's teaching transcript. The judge drafts its own `better` for an
+# The user guide's teaching transcript. The judge drafts its own `better` for an
 # accepted rejection, as real models do when the prompt asks for one.
 _RETRY = {"en": "fair. that's a rough end to the day", "zh": "懂，今天也太倒霉了"}
 
