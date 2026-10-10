@@ -8,19 +8,11 @@ import httpx
 from persona_agent.agent import Agent
 from persona_agent.endpoints import adapt_rejected_payload
 
-from helpers import check
+from helpers import check, isolated_agent
 
 
 def make_agent(tmp: Path, base_url: str) -> Agent:
-    a = Agent(api_key="test-key", qq_bot_id="10001", persona_name="Luna",
-              memory_file=str(tmp / "memory.json"), persona="test persona",
-              eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-              stickers_dir=str(tmp / "stickers"),
-              stickers_file=str(tmp / "stickers.json"), message_debounce_sec=0,
-              lang="en", base_url=base_url)
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.connector_handles.path = tmp / "connector_handles.json"
+    a = isolated_agent(tmp, persona_name="Luna", base_url=base_url)
     a.model = a.llm_fallback_model = a.llm_judge_model = "m"
     a.api_max_retries = 0
     return a

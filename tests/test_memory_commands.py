@@ -12,23 +12,12 @@ from persona_agent.agent import Agent
 from persona_agent.memory import _COMMAND_REPLIES
 from persona_agent.textproc import TextProcessing
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 
 def make_agent(tmp: Path, *, name: str = "Luna", lang: str = "en") -> Agent:
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name=name, lang=lang,
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a._seen_msg_ids.clear()
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.examples_file = tmp / "examples.jsonl"
+    a = isolated_agent(tmp, qq_bot_id="1", persona_name=name, lang=lang,
+                       qq_onebot_url=CLOSED_ONEBOT_URL)
     a.memories.clear()
     return a
 

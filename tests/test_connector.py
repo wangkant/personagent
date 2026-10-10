@@ -27,7 +27,7 @@ from persona_agent.connector import (ConnectorSink, current_sink,
                                    synthesize_onebot_payload)
 from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 QQ_BOT_ID = "10001"
 
@@ -534,36 +534,10 @@ def test_plugin_reply_id_strip() -> None:
 # ---------------------------------------------------------------------------
 
 def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
-    """Lightest viable Agent: real ctor, no network config, all writable
-    state files redirected into a temp directory.
-
-    `persona` is a parameter so a test can hand the ctor a document with a
+    """`persona` is a parameter so a test can hand the ctor a document with a
     `[style]` declaration and check what the real parse does with it."""
-    a = Agent(
-        api_key="test-key",  # non-empty so the agent is enabled
-        qq_bot_id=QQ_BOT_ID,
-        persona_name="TestBot",
-        qq_onebot_url="http://127.0.0.1:9",  # closed port; never reached when the sink is set
-        memory_file=str(tmp / "memory.json"),
-        persona=persona,
-        eval_enabled=False,
-        eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"),
-        stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-        lang="en",
-        admin_ids=("telegram:1",),
-    )
-    # Keep runtime state files out of the repo during tests.
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.connector_handles.path = tmp / "connector_handles.json"
-    # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
-    # into memory BEFORE we redirected the paths above. Clear them so tests run
-    # against clean state (a stray production message_id would flake-dedupe).
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
-    # Skip the typing-simulation sleeps so the round-trip is instant.
+    a = isolated_agent(tmp, qq_bot_id=QQ_BOT_ID, persona=persona,
+                       qq_onebot_url=CLOSED_ONEBOT_URL, admin_ids=("telegram:1",))
     a._typing_delay = lambda chunk: 0.0
     return a
 
@@ -574,7 +548,12 @@ def test_runtime_learning_paths(tmp: Path) -> None:
     agent_paths.ROOT = tmp
     os.environ["AGENT_RUNTIME_DIR"] = str(tmp / "runtime")
     try:
-        agent = make_agent(tmp)
+        # No helper redirects: the default paths are what is under test.
+        agent = Agent(api_key="test-key", persona="test persona", lang="en",
+                      memory_file=str(tmp / "memory.json"),
+                      eval_file=str(tmp / "eval.jsonl"),
+                      stickers_dir=str(tmp / "stickers"),
+                      stickers_file=str(tmp / "stickers.json"))
         check("runtime examples outside data",
               agent.examples_file.parent == tmp / "runtime",
               str(agent.examples_file))
@@ -3029,17 +3008,8 @@ def test_sticker_tagger_uses_judge_model() -> None:
     (llm_judge_model), not a hardcoded model name, which 404s on every other
     provider, so no sticker would ever be tagged."""
     with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = Agent(
-            api_key="k", qq_bot_id="1", persona_name="B",
-            model="main-model-x", llm_fallback_model="cheap-model-x",
-            memory_file=str(tmp / "memory.json"),
-            eval_file=str(tmp / "eval.jsonl"),
-            stickers_dir=str(tmp / "stickers"),
-            stickers_file=str(tmp / "stickers.json"),
-        )
-        a._seen_msg_file = tmp / "seen_msg_ids.json"
-        a.core_memory_file = tmp / "core_memory.json"
+        a = isolated_agent(Path(d), qq_bot_id="1", persona_name="B",
+                           model="main-model-x", llm_fallback_model="cheap-model-x")
         check("tagger model: follows llm_judge_model",
               a.stickers.tagger_model == a.llm_judge_model,
               repr((a.stickers.tagger_model, a.llm_judge_model)))

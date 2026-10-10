@@ -17,7 +17,7 @@ import evolution_benchmark as bench
 from persona_agent.agent import Agent
 from persona_agent import evolution
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 
 def test_scenario_sets() -> None:
@@ -36,19 +36,7 @@ def test_scenario_sets() -> None:
 
 
 def _make_agent(tmp: Path) -> Agent:
-    a = Agent(
-        api_key="test-key", qq_bot_id="10001", persona_name="Robin",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0, lang="en",
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
-    return a
+    return isolated_agent(tmp, persona_name="Robin", qq_onebot_url=CLOSED_ONEBOT_URL)
 
 
 def test_seed_buffer() -> None:

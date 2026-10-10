@@ -21,7 +21,7 @@ from persona_agent.llm import _PooledHTTP
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import _focus_tokens
 
-from helpers import check
+from helpers import check, isolated_agent
 
 
 # ---------------------------------------------------------------------------
@@ -110,23 +110,9 @@ def test_an_embedding_neighbour_with_no_shared_words_needs_embeddings() -> None:
 # ---------------------------------------------------------------------------
 
 def make_agent(tmp: Path, **settings) -> Agent:
-    """An agent whose every state file, the embedding cache included, is in `tmp`."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
-        memory_file=str(tmp / "memory.json"),
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        **settings,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    return a
+    """The embedding cache sits beside the redirected pool, so it is in `tmp` too."""
+    return isolated_agent(tmp, seeds=True, **{"qq_bot_id": "1", "persona_name": "B",
+                                              **settings})
 
 
 def ex(reply: str, scenario: str, context: list[str], **extra) -> dict:

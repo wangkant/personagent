@@ -28,31 +28,16 @@ from pathlib import Path
 from persona_agent.agent import Agent
 from persona_agent.prompts import HONEST_DISCLOSURE
 
-from helpers import check
+from helpers import check, isolated_agent
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def make_agent(tmp: Path, persona: str = "PERSONA-DOCUMENT-MARKER",
                lang: str = "en") -> Agent:
-    """Agent with every state file redirected into `tmp`, and the shipped
-    output filter and lorebook for `lang` live, read in place."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang=lang, persona=persona,
-        memory_file=str(tmp / "memory.json"),
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a._seen_msg_ids.clear()
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
+    """The shipped output filter and lorebook for `lang` live, read in place."""
+    a = isolated_agent(tmp, seeds=True, qq_bot_id="1", persona_name="B",
+                       lang=lang, persona=persona)
     # A redirected deployment could resolve to an operator copy; the
     # property under test is what the repository ships.
     a.output_filter_file = ROOT / "data" / f"output_filter.{lang}.json"

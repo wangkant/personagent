@@ -20,13 +20,13 @@ import pytest
 from fastapi import FastAPI
 
 from persona_agent import (candidates, dashboard, decision_log, evidence,
-                           preflight, promotion, reactions)
+                           preflight, promotion)
 from persona_agent import server
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
 from persona_agent.textproc import TextProcessing
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -56,28 +56,9 @@ def real_runtime_directory_is_untouched():
 
 
 def make_agent(tmp: Path) -> Agent:
-    """A real Agent whose every learned-state path is inside `tmp`."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key=SECRET_KEY, qq_bot_id="1", persona_name="Nova", lang="en",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a._seen_msg_ids.clear()
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.candidates_file = tmp / "candidates.jsonl"
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
-    a.connector_handles.path = tmp / "connector_handles.json"
-    a.react_elicit_enabled = False
+    a = isolated_agent(tmp, seeds=True, api_key=SECRET_KEY, qq_bot_id="1",
+                       persona_name="Nova", qq_onebot_url=CLOSED_ONEBOT_URL,
+                       react_elicit_enabled=False)
     a._typing_delay = lambda chunk: 0.0
     return a
 

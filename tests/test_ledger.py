@@ -20,11 +20,11 @@ from pathlib import Path
 
 import pytest
 
-from persona_agent import candidates, evidence, promotion, reactions
+from persona_agent import candidates, evidence, promotion
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 NOW = 1_800_000_000.0
 
@@ -59,32 +59,12 @@ def real_runtime_directory_is_untouched():
 # ---------------------------------------------------------------------------
 
 def make_agent(tmp: Path) -> Agent:
-    """Agent with every learned-state path inside `tmp`.
-
-    The evidence log, the ledger and both views are sidecars of
+    """The evidence log, the ledger and both views are sidecars of
     examples_file.parent, so redirecting the pools moves the whole learning
     layer with them — see test_paths_never_touch_real_runtime_state."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a._seen_msg_ids.clear()
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.candidates_file = tmp / "candidates.jsonl"
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
-    a.react_elicit_enabled = False          # no elicitation sends in these tests
-    return a
+    return isolated_agent(tmp, seeds=True, qq_bot_id="1", persona_name="B",
+                          qq_onebot_url=CLOSED_ONEBOT_URL,
+                          react_elicit_enabled=False)
 
 
 def entry(reply: str = "just restart it lol", *, target_uid: str = "42",
@@ -764,6 +744,12 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
         "examples": a.examples_file, "feedback": a.feedback_file,
         "teacher stats": a.teacher_stats.path,
         "audit": a.candidates_file, "eval": a.eval_file,
+        "memory": a.memory_file, "core memory": a.core_memory_file,
+        "seen ids": a._seen_msg_file, "handles": a.connector_handles.path,
+        "owner profile": a.owner_profile_file,
+        "unknown stickers": a.stickers.unknown_log,
+        "pending reactions": a.pending_reactions.state_file,
+        "lineage": a.persona_lineage.path, "embeddings": a.embedding_cache.path,
     }
     for label, path in paths.items():
         resolved = Path(path).resolve()

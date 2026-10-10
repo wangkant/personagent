@@ -26,31 +26,14 @@ from persona_agent import evolution
 from persona_agent import lineage as lineage_mod
 from persona_agent.agent import Agent
 
-from helpers import check
+from helpers import check, isolated_agent
 
 
 def make_agent(tmp: Path) -> Agent:
-    """Agent with every state file redirected into `tmp` — never touch the
-    repo's real datasets from a test.
-
-    Retrieval reads a read-only data/ seed plus a learned runtime/ file; both
-    are redirected here, and the seeds are left absent unless a test writes
-    one, so row counts reflect only what the test put there."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
-        memory_file=str(tmp / "memory.json"),
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    return a
+    """Retrieval reads a read-only data/ seed plus a learned runtime/ file; both
+    are redirected, and the seeds are left absent unless a test writes one, so
+    row counts reflect only what the test put there."""
+    return isolated_agent(tmp, seeds=True, qq_bot_id="1", persona_name="B")
 
 
 def ex(reply: str, *, scenario: str = "s", mode: str = "called",

@@ -17,30 +17,14 @@ from persona_agent import outbox as outbox_mod
 from persona_agent.agent import Agent
 from persona_agent.outbox import HandleStore, Outbox
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 QQ_BOT_ID = "10001"
 TOKEN = "outbox-secret"
 
 
 def make_agent(tmp: Path) -> Agent:
-    """A real agent with every state file it may write redirected to `tmp`."""
-    a = Agent(
-        api_key="test-key", qq_bot_id=QQ_BOT_ID, persona_name="TestBot",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"),
-        stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0, lang="en",
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.connector_handles.path = tmp / "connector_handles.json"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
+    a = isolated_agent(tmp, qq_bot_id=QQ_BOT_ID, qq_onebot_url=CLOSED_ONEBOT_URL)
     a._typing_delay = lambda chunk: 0.0
 
     async def fake_think(group_id, mode, text="", caller_override=None):

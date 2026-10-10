@@ -13,7 +13,7 @@ from persona_agent import evolution
 from persona_agent.agent import Agent
 from tools import auto_reviewer
 
-from helpers import check
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -286,33 +286,7 @@ def test_a_capped_feedback_write_leaves_the_rest_pending(tmp: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _make_agent(tmp: Path) -> Agent:
-    a = Agent(
-        api_key="test-key",
-        qq_bot_id="10001",
-        persona_name="TestBot",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"),
-        persona="test persona",
-        eval_enabled=False,
-        eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"),
-        stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-        lang="en",
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
-    # Redirect every evolve-loop file into the temp dir. examples_file matters
-    # even though this loop never writes an example: the evidence log, the
-    # candidate ledger and both promoted views are sidecars of its directory,
-    # and a test must never accumulate evidence into a live deployment's state.
-    a.candidates_file = tmp / "candidates.jsonl"
-    a.feedback_seed_file = tmp / "feedback.seed.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    a.examples_seed_file = tmp / "examples.seed.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
+    a = isolated_agent(tmp, seeds=True, qq_onebot_url=CLOSED_ONEBOT_URL)
     a.evolve_threshold = 2
     a.evolve_batch = 5
     return a
