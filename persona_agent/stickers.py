@@ -21,12 +21,10 @@ logger = logging.getLogger("agent.stickers")
 MAX_STICKERS = 500
 MAX_CONTEXTS_PER_STICKER = 5
 MIN_CONTEXTS_TO_TAG = 2
-SAVE_MIN_INTERVAL_SEC = 5.0  # _save() flush-throttle floor: hot paths call it on every sticker sighting; coalesce writes so the event loop isn't stalled
-RECENT_USE_COOLDOWN_SEC = 300  # min gap before re-sending the same sticker; sending one too often reads as a bot (fallback bucket prevents dropping sticker-only replies)
+SAVE_MIN_INTERVAL_SEC = 5.0  # _save() throttle floor; hot paths call it per sighting
+RECENT_USE_COOLDOWN_SEC = 300  # gap before re-sending a sticker; too often reads as a bot
 
-# Bump this whenever the persona-fit prompt criteria change. On the next
-# startup, recheck_persona_fit_all will re-evaluate every entry whose
-# _persona_version is older than this — no manual JSON surgery needed.
+# Bump when the persona-fit criteria change, so every entry is re-judged.
 PERSONA_PROMPT_VERSION = 2
 
 _IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg",
@@ -50,25 +48,19 @@ class StickerLibrary:
         self.unknown_log = Path(unknown_log)
         self._llm_caller = llm_caller
         self.tagger_model = tagger_model
-        # Optional one-line persona description. When set, the tag prompt
-        # asks the model to also judge persona-fit (false → entry is hidden
-        # from pick_by_tag and purged on next cleanup pass).
+        # Optional; when set, tagging also judges persona fit (false hides the
+        # entry and purges it on the next cleanup).
         self.persona_brief = persona_brief
 
         self.entries: dict[str, dict] = self._load()
         self._md5_index: dict[str, str] = {
             v["md5"]: k for k, v in self.entries.items() if v.get("md5")
         }
-        # _save() flush-throttle state (see _save). The in-memory entries are
-        # always current; a crash loses at most a few seconds of context /
-        # use_count updates (self-healing, non-critical). Important writes use
-        # _save(force=True).
+        # _save() throttle; a crash loses only a few seconds of minor updates.
         self._last_save = 0.0
         self._tagging_inflight: set[str] = set()
         self._last_used: dict[str, float] = {}
-        # Strong refs to fire-and-forget tag tasks: one GC'd before its
-        # finally leaks its _tagging_inflight entry and the sticker is never
-        # retagged.
+        # Strong refs: a tag task GC'd early leaks its _tagging_inflight entry.
         self._bg_tasks: set[asyncio.Task] = set()
 
     def _spawn(self, coro) -> asyncio.Task:
@@ -101,15 +93,9 @@ class StickerLibrary:
             return {}
 
     def _save(self, force: bool = False) -> None:
-        # Atomic write: serialize to a .tmp then replace, so a crash mid-write
-        # can't corrupt stickers.json.
-        # Throttled: hot-path callers (steal re-sighting / context / quality)
-        # fire this on every sticker sighting; rewriting the whole library each
-        # time blocks the event loop, so coalesce to at most once per
-        # SAVE_MIN_INTERVAL_SEC. Pass force=True for writes that must survive
-        # an immediate crash (new sticker / completed tagging / purge).
-        # Compact separators (no indent) keep the potentially-large write
-        # cheaper; the file is machine-managed and gitignored.
+        # Atomic, and throttled to once per SAVE_MIN_INTERVAL_SEC since hot
+        # paths call it per sighting; force=True for writes that must survive a
+        # crash. Compact, as the file is machine-managed.
         now = time.monotonic()
         if not force and (now - self._last_save) < SAVE_MIN_INTERVAL_SEC:
             return
@@ -159,9 +145,8 @@ class StickerLibrary:
         src_group: str,
         context_before: list[str],
     ) -> Optional[str]:
-        """Save new sticker (or update existing). Returns md5 on success.
-        Returns None if image looks like a real photo (size > 800KB) — heuristic
-        to avoid stealing user-uploaded photos."""
+        """Save a new sticker (or update an existing one); its md5, or None for
+        anything over 800KB, which is likely a photo."""
         if not image_bytes or len(image_bytes) < 200:
             return None
         if len(image_bytes) > 800_000:
@@ -203,7 +188,7 @@ class StickerLibrary:
         self.entries[filename] = entry
         self._md5_index[md5] = filename
         self._append_context(filename, src_user, context_before, save=False)
-        self._save(force=True)  # new entry — persist now so the stolen file isn't orphaned on crash
+        self._save(force=True)  # persist now, or a crash orphans the file
         logger.info("[stickers] stole new (%s, %d bytes, group=%s)",
                     md5[:8], len(image_bytes), src_group)
         self._log_unknown(md5, src_user, src_group, url)
@@ -268,8 +253,7 @@ class StickerLibrary:
         logger.info("[stickers] evicted %d entries", cut)
 
     async def maybe_tag(self, md5: str) -> None:
-        """If sticker has enough contexts and isn't tagged, kick off LLM tagging.
-        Fire-and-forget; safe to call from anywhere."""
+        """Start LLM tagging if the sticker has enough contexts; fire-and-forget."""
         if not self._llm_caller:
             return
         filename = self._md5_index.get(md5)
@@ -289,9 +273,8 @@ class StickerLibrary:
             if not entry:
                 return
             ctxs = entry.get("seen_contexts", [])
-            # Fenced: the sender and the lines before the sticker are group
-            # chat, written by whoever posted it, and what this call returns
-            # is rendered into every system prompt's sticker guide.
+            # Fenced: this is group chat, and the result is rendered into every
+            # system prompt's sticker guide.
             ctx_block = "\n\n".join(
                 f"sample {i+1}:\n" + _fence_user_data(
                     f"sender={c.get('sender', '')}\n"
@@ -367,7 +350,7 @@ class StickerLibrary:
             entry["auto_tagged"] = True
             entry["tagged_ts"] = time.time()
             entry["_persona_version"] = PERSONA_PROMPT_VERSION
-            self._save(force=True)  # tagging result — persist now to avoid re-tagging cost on crash
+            self._save(force=True)  # a crash would otherwise pay to re-tag
             fit_mark = " [SKIP-not-fit]" if entry.get("persona_fit") is False else ""
             logger.info("[stickers] tagged %s: meaning=%r tags=%s%s",
                         filename, entry["meaning"], entry["tags"], fit_mark)
@@ -378,11 +361,8 @@ class StickerLibrary:
             self._tagging_inflight.discard(filename)
 
     async def recheck_persona_fit_all(self, limit: int = 50) -> int:
-        """Re-evaluate persona-fit for already-tagged entries whose
-        _persona_version is stale (or unset). Lets you tighten the criteria
-        by editing the prompt and bumping PERSONA_PROMPT_VERSION —
-        existing entries get re-judged on next startup, no JSON surgery.
-        Returns the count rechecked."""
+        """Re-judge persona fit for tagged entries with a stale
+        _persona_version; returns the count rechecked."""
         if not self.persona_brief or not self._llm_caller:
             return 0
         todo = [
@@ -454,9 +434,7 @@ class StickerLibrary:
         return checked
 
     def purge_unfit(self) -> int:
-        """Physically delete entries flagged persona_fit=false (record + file).
-        Mirror of _evict_least_used's delete pattern. Run after a recheck
-        pass so the library only retains in-character stickers on disk."""
+        """Delete entries flagged persona_fit=false, record and file."""
         unfit = [fn for fn, v in self.entries.items() if v.get("persona_fit") is False]
         if not unfit:
             return 0
@@ -466,18 +444,14 @@ class StickerLibrary:
         logger.info("[stickers] purged %d unfit entries", len(unfit))
         return len(unfit)
 
-    # Quality-feedback loop thresholds. After QUALITY_MIN_SAMPLES eval scores,
-    # if the running average drops below QUALITY_FAIL_THRESHOLD, the sticker
-    # gets auto-demoted to persona_fit=false and removed on the next purge.
+    # A sticker whose mean eval score falls below the threshold is demoted.
     QUALITY_HISTORY_LEN = 10
     QUALITY_MIN_SAMPLES = 5
     QUALITY_FAIL_THRESHOLD = 3.0
 
     def record_quality(self, filename: str, score: int) -> None:
-        """Append a 1-5 eval score for a sticker. When enough samples
-        accumulate and the mean falls below threshold the entry is auto
-        demoted (persona_fit=false). Uses real-conversation signal rather
-        than a one-shot LLM judgment."""
+        """Record a 1-5 eval score; enough low scores demote the entry
+        (persona_fit=false), a real-conversation signal."""
         entry = self.entries.get(filename)
         if not entry or not isinstance(score, int) or not (1 <= score <= 5):
             return
@@ -494,8 +468,8 @@ class StickerLibrary:
         self._save()
 
     def available_tags_summary(self, limit: int = 20) -> str:
-        """Prompt-friendly listing of available tagged stickers, ranked by use_count.
-        Returns "" if no tagged stickers yet (so prompt skips the [STICKER:] guide)."""
+        """Tagged stickers for the prompt's guide, by use; "" if none, so the
+        guide is skipped."""
         tagged = [
             (k, v) for k, v in self.entries.items()
             if v.get("auto_tagged") and v.get("tags") and v.get("persona_fit") is not False
@@ -504,12 +478,8 @@ class StickerLibrary:
             return ""
         tagged.sort(key=lambda kv: kv[1].get("use_count", 0), reverse=True)
         top = tagged[:limit]
-        # The tagger's words go into every system prompt's <sticker_guide>,
-        # and it read group chat to write them. Rendered the way few-shot
-        # fields are (scrubbed, tags escaped), so a stored tag cannot close
-        # the guide or forge a frame; done here rather than at tagging time
-        # so libraries tagged before this also render safely. A hostile tag
-        # rendered escaped never matches in pick_by_tag, which is fine.
+        # Rendered like few-shot fields (scrubbed, tags escaped), since the
+        # tagger read group chat; done here so older libraries render safely.
         seen_tags: dict[str, str] = {}
         for _, v in top:
             for t in v.get("tags", []):
@@ -519,10 +489,7 @@ class StickerLibrary:
         lines = [f"  {tag} ({meaning})" for tag, meaning in seen_tags.items()]
         return "\n".join(lines)
 
-    # Tag synonym map used by pick_by_tag for fuzzy retrieval. Both English
-    # and Chinese entries are seeded so the same dict serves both locales
-    # without users having to write their own. Add your own entries here if
-    # your sticker-tagger uses a different naming convention.
+    # Synonyms for pick_by_tag, seeded in English and Chinese.
     _SYNONYMS = {
         # English
         "eyeroll":   {"eyeroll", "tired", "speechless", "fed-up", "whatever"},
@@ -545,7 +512,7 @@ class StickerLibrary:
         "amazing":   {"amazing", "wow", "shocked"},
         "meme":      {"meme", "doge", "smug", "lol"},
         "agree":     {"agree", "exactly", "fair", "true"},
-        # Chinese (legacy / backward-compat seeds for Chinese-locale forks)
+        # Chinese
         "无奈": {"无奈", "翻白眼", "没办法", "醉了", "无语", "叹气", "服了"},
         "翻白眼": {"翻白眼", "无奈", "无语", "没办法"},
         "懒得理": {"懒得", "无语", "翻白眼", "无奈", "敷衍"},
@@ -572,33 +539,15 @@ class StickerLibrary:
         out = {tag_lc}
         if tag_lc in cls._SYNONYMS:
             out |= cls._SYNONYMS[tag_lc]
-        # 2-char prefix probe: meaningful for CJK tags (a 2-char word), but for
-        # English it produces noisy stubs ("smug" -> "sm" partial-matches
-        # "small"), so only add it when the tag starts with a CJK character.
+        # 2-char prefix probe, CJK only: in English it matches noise ("sm").
         if len(tag_lc) >= 2 and "一" <= tag_lc[0] <= "鿿":
             out.add(tag_lc[:2])
         return out
 
     def pick_by_tag(self, tag: str, exclude_md5s: set | None = None) -> Optional[Path]:
-        """Fuzzy match a tag to the best sticker.
-
-        Scoring layers:
-          - Exact tag match: +3.0
-          - Synonym/probe set hits in entry tags: +2.0 (exact) / +1.2 (partial)
-          - Probe hits in meaning text: +1.0
-          - Light usage bonus: up to +0.4
-          - Freshness bonus (favors recently-stolen entries): up to +0.6,
-            decaying over ~30 days so new stickers cycle in naturally
-          - Random jitter: 0-0.1
-
-        Safety:
-          - Skips entries flagged persona_fit=false (visual/quality demoted)
-          - Skips entries whose backing file is missing on disk (orphan
-            records can otherwise win the score and lead pick to a dead
-            path, blocking same-tag valid stickers from being chosen)
-          - Cooldown bucket: when no fresh match is found, fall back to a
-            cooled-down entry so a sticker-only reply doesn't drop silently
-        """
+        """Fuzzy-match a tag to the best sticker by tags, meaning, use and
+        freshness. Skips unfit entries and missing files; falls back to a
+        cooled-down match so a sticker-only reply isn't dropped."""
         if not tag:
             return None
         tag_lc = tag.lower().strip()
@@ -633,21 +582,14 @@ class StickerLibrary:
                 if probe in meaning_lc:
                     score += 1.0
             score += min(v.get("use_count", 0), 20) * 0.02
-            # Freshness bonus: favor recently-stolen entries so the library
-            # cycles naturally instead of locking onto old picks. Max +0.6
-            # at < 1 day, decays to ~0 over 30 days. Stays well below the
-            # exact-tag (+3.0) tier so semantics still dominate.
+            # Freshness: up to +0.6, gone after 30 days; well below an exact tag.
             first_seen = v.get("first_seen", 0)
             if first_seen:
                 age_days = max(0.0, (now - first_seen) / 86400.0)
                 score += max(0.0, 0.6 - age_days * 0.02)
             score += random.uniform(0, 0.1)
-            # Orphan records pointing at a missing file must not win: the dead
-            # path would be returned, _deliver_segments' .exists() would trip,
-            # and same-tag valid stickers would never get chosen. Checked HERE
-            # rather than at the top of the loop so only an entry that actually
-            # beats the running best is stat'ed, a handful of syscalls instead
-            # of one per library entry.
+            # A record with a missing file must not win; stat only an entry
+            # that beats the running best.
             last = self._last_used.get(filename, 0)
             if now - last < RECENT_USE_COOLDOWN_SEC:
                 if score > cd_score and (self.dir / filename).exists():
@@ -668,9 +610,7 @@ class StickerLibrary:
         return self.dir / best_filename
 
     async def bootstrap_tag_all(self) -> int:
-        """Scan library for untagged entries with enough contexts and kick off
-        tagging for each. Called on agent startup to process seed data from
-        bootstrap_from_history. Returns count scheduled."""
+        """Schedule tagging for every entry that is ready; returns the count."""
         if not self._llm_caller:
             return 0
         pending = [

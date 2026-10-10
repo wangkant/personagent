@@ -25,15 +25,13 @@ class WebSearch:
         return bool(_SEARCH_HINT_RE.search(t))
 
     async def _web_search(self, query: str, max_results: int = 4) -> str:
-        """Dispatch to the configured search backend: Tavily if a key is set
-        (keyed, more reliable, LLM-optimized), else no-key DuckDuckGo."""
+        """Tavily if a key is set, else keyless DuckDuckGo."""
         if self.tavily_key:
             return await self._web_search_tavily(query, max_results)
         return await self._web_search_ddg(query, max_results)
 
     async def _web_search_tavily(self, query: str, max_results: int = 4) -> str:
-        """Tavily search (keyed). Returns a compact results block, or '' on any
-        failure — search must never break the reply."""
+        """Tavily results as a compact block, or '' on any failure."""
         try:
             async with self._http(timeout=20) as client:
                 resp = await client.post(
@@ -66,8 +64,7 @@ class WebSearch:
         return "\n".join(lines)
 
     async def _web_search_ddg(self, query: str, max_results: int = 4) -> str:
-        """No-key DuckDuckGo search (via ddgs). Returns a compact results block,
-        or '' on any failure — search must never break the reply."""
+        """DuckDuckGo (ddgs) results as a compact block, or '' on any failure."""
         try:
             from ddgs import DDGS
         except Exception:
@@ -84,11 +81,8 @@ class WebSearch:
 
     async def _ground_with_search(self, messages: list[dict],
                                   hint: str = "") -> list[dict]:
-        """Run the search gate once and return `messages` with any results
-        folded into the last turn, as a new list. A caller making two model
-        calls off one turn's research grounds up front and passes
-        `enable_search=False`; left inside `_call_llm`, the grounded list
-        would die with the call. Failures never block the reply."""
+        """`messages` with any search results folded into the last turn, as a new
+        list; a caller making two calls off one turn grounds once up front."""
         if not messages:
             return messages
         try:
@@ -104,18 +98,9 @@ class WebSearch:
         }]
 
     async def _decide_and_search(self, messages: list[dict], hint: str = "") -> str:
-        """Let the model decide whether to web-search and with what query, via
-        the OpenAI-compatible /v1 function-calling endpoint; if it calls
-        web_search, run the configured backend and return the formatted
-        results. Returns '' if no search is warranted. Never raises.
-
-        `hint` = the actual trigger message. Prefer it over scanning `messages`:
-        `messages[-1]` in the group flow is the *fully rendered* user_prompt
-        (metadata header + dozens of history lines + instructions), whose first
-        800 chars are the OLDEST background — the real trigger sits at the end
-        and never reaches the judge. Passing the trigger directly keeps the
-        decision on what was actually said and stops _might_need_search firing
-        on almost every call."""
+        """Let the judge model decide on a web search and its query; the results,
+        or '' (never raises). `hint` is the trigger message, since a rendered
+        group prompt opens with its oldest history."""
         if not (self.base_url and self.api_key):
             return ""
         latest = (hint or "").strip()
@@ -140,8 +125,7 @@ class WebSearch:
                 },
             }
             payload = {
-                # Cheapest available model — this is only a yes/no + query
-                # decision, so route it through llm_judge_model like the reply gate.
+                # A yes/no-plus-query decision, so the cheap judge model.
                 "model": self.llm_judge_model,
                 "messages": [
                     {"role": "system", "content": (
@@ -165,17 +149,13 @@ class WebSearch:
                 ],
                 "tools": [tool],
                 "tool_choice": "auto",
-                # 800, not 150: measured decision+arguments run up to ~360
-                # tokens even with thinking off.
+                # Decision plus arguments can run to ~360 tokens.
                 "max_tokens": 800,
                 "temperature": 0.1,
             }
             url, key = self._endpoint_for(self.llm_judge_model)
-            # Thinking off, and not only for the budget: with thinking on,
-            # this endpoint rarely emits tool_calls at ANY budget (measured
-            # 7/30 at max_tokens=256), so the search silently never fires.
-            # In the endpoint's own dialect — the judge model is often the
-            # fallback, on another vendor.
+            # Thinking off: with it on, this endpoint rarely emits tool_calls at
+            # all. Spelled for the judge's endpoint, often another vendor's.
             self._thinking_off(payload, url)
             resp = await self._post_chat(url, key, payload, timeout=20)
             if resp.status_code != 200:
