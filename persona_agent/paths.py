@@ -110,7 +110,8 @@ def parse_jsonl(blob: bytes) -> list[dict]:
     rows: list[dict] = []
     # Decoded with "replace": one bad byte costs its row, not the whole file.
     for line in blob.decode("utf-8", "replace").splitlines():
-        if not line.strip():
+        line = line.strip()
+        if not line:
             continue
         try:
             row = json.loads(line)

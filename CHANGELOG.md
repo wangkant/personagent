@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-A smaller, faster codebase with the same behaviour: about 7,000 fewer lines, most of them comments that restated the code, duplicated helpers and scripts that only forwarded to a `personagent` command.
+A smaller, faster codebase with the same behaviour: the package and tools are about 4,700 lines shorter, mostly comments that restated the code, duplicated helpers and scripts that only forwarded to a `personagent` command.
 
 ### Changed
 
@@ -18,12 +18,13 @@ A smaller, faster codebase with the same behaviour: about 7,000 fewer lines, mos
 ### Removed
 
 - `try_chat.py` and the `tools/healthcheck.py`, `tools/candidates_admin.py` and `tools/behavior_eval.py` shims. Use `personagent chat`, `doctor`, `learned` and `eval`.
-- `tools/prompt_lab.py` with `tools/fixtures.*.jsonl`, and the unfinished `tools/dspy_tune.py`. `personagent chat` tries a prompt change on the real pipeline and `personagent eval` measures it. `LAB_MODEL` is no longer read: `doctor` warns about it instead of failing.
+- `tools/prompt_lab.py` with `tools/fixtures.*.jsonl`, and the unfinished `tools/dspy_tune.py`. `personagent chat` tries a prompt change on the real pipeline and `personagent eval` measures it. `LAB_MODEL` (and its pre-1.0 name `PROMPT_LAB_MODEL`) is no longer read: `doctor` warns about it, and the service starts.
 - A `runtime/example_candidates.json` left from before the evidence ledger is no longer touched. Nothing read it; it can be deleted.
 
 ### Fixed
 
 - **`personagent eval` uses the eval home's persona card.** It used to read `persona.card.json` from your real home.
+- **A lorebook entry with a non-numeric `scan_depth` no longer stops the whole lorebook from loading.** The key was never used and is no longer read.
 
 ## [1.0.1] — 2026-10-03
 

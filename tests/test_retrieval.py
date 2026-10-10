@@ -275,6 +275,13 @@ def test_force_reload_and_malformed_lines() -> None:
         check("reload: seed loads with no runtime file", replies(a) == ["seed_only"])
 
 
+def test_hand_edited_lines_padded_with_unicode_spaces_still_load() -> None:
+    from persona_agent.paths import parse_jsonl
+
+    blob = ' {"a": 1}\n{"b": 2}　\n\x1f{"c": 3}\n'.encode("utf-8")
+    check("padded rows load", parse_jsonl(blob) == [{"a": 1}, {"b": 2}, {"c": 3}])
+
+
 def test_file_without_trailing_newline_is_fully_parsed() -> None:
     """Hand-edited datasets may lack the final newline; that last entry must
     still load."""

@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             failures.append(step)
 
     server = ThreadingHTTPServer(("127.0.0.1", _free_port()), FakeModel)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     model_url = f"http://127.0.0.1:{server.server_address[1]}/v1"
     work = Path(tempfile.mkdtemp(prefix="personagent-smoke-"))
     home = work / "home"
