@@ -20,9 +20,8 @@ DEFAULT_PERSONA = (
     "persona.txt and edit it to whoever you want the bot to be."
 )
 
-#: What the persona says when someone asks it directly and its model call
-#: fails. Shipped to the chat as they are, so they stay plain text the reply
-#: validator accepts; rewrite them in the persona's voice.
+#: Said when a direct question's model call fails. Sent as is, so keep them
+#: plain text the validator accepts, in the persona's voice.
 MODEL_FAILURE_EXCUSES = {
     "en": ("ugh, hanging here for a sec",
            "hold on, connection's wonky",
@@ -56,14 +55,8 @@ def _without_reader_note(text: str) -> str:
 def render_persona_template(text: str, *, bot_name: str, admin_name: str = "",
                             admin_relationship: str = "",
                             lang: str = "en") -> str:
-    """A persona document with a template's leftovers resolved; the agent and
-    `personagent init` both render with this.
-
-    `{bot_name}`, `{admin_name}` and `{admin_relationship}` are filled from the
-    settings. A line about the admin is dropped when there is no ADMIN_NAME,
-    and so is one that cannot lose its relationship without a gap; a
-    template's note to the reader is cut. A document without any of these
-    comes back unchanged; one with nothing else comes back empty."""
+    """A persona document with template leftovers resolved: placeholders filled,
+    admin lines dropped without ADMIN_NAME, the note to the reader cut."""
     text = _without_reader_note(text.replace("\r\n", "\n"))
     admin = (admin_name or "").strip()
     relationship = (admin_relationship or "").strip()
@@ -244,17 +237,9 @@ INTENT_RULES = (
     "</intent_rules>"
 )
 
-# The one thing no persona is written to hide. Both chat paths place it after
-# the persona document, so no character description above it can re-frame
-# it. Phrased as an instruction to answer, never as a ban: from inside a
-# prompt, "never claim to be human" and "claim to be human" differ by one
-# word a model can drop. Answering is not breaking character, and the
-# register rules around it ("write like a real person, not a chatbot") are
-# about how the persona talks, not about what it may admit to.
-#
-# The last sentence keeps vendor and model names out of the answer: the vendor
-# gate in textproc refuses a reply that names its own model, and without it
-# the honest answer ("yeah I'm an AI, I'm DeepSeek") would be dropped whole.
+# An instruction to answer, not a ban a model could drop one word of, placed
+# after the persona so nothing re-frames it. Model names stay out of the answer
+# because the vendor gate would drop that reply whole.
 HONEST_DISCLOSURE = (
     "<honesty>\n"
     "If someone sincerely asks whether you are an AI, answer honestly — you "
@@ -268,78 +253,38 @@ HONEST_DISCLOSURE = (
 # ===========================================================================
 # The 1:1 style layer
 #
-# WHY THIS EXISTS AT ALL. The group constants above are written for an IM
-# group: `[AT:qq]` markers, multi-party seat rules, a sticker guide for a
-# room. Shipped unchanged to a one-on-one chat, a large share of it would
-# describe a room that does not exist, and the model would be reading a rule
-# and its retraction and picking.
-#
-# The group constants are NOT edited for the 1:1 path's sake. The group/QQ
-# prompt changes only on purpose and for both paths at once, so the 1:1 path
-# gets its own renderers and the duplication is the price. Where a line is
-# genuinely channel-neutral it is copied verbatim rather than paraphrased, so
-# a diff of the two shows only the deliberate changes.
-#
-# WHY THE OVERRIDES ARE AN ENUM AND NOT A STRING. Six of the rules above are
-# one character's move imposed on every character: a word ceiling that
-# contradicts a persona whose own text says "you ramble" (a ceiling imposed
-# on every character is the wrong shape at any number); a vent rule
-# forbidding the question that persona's own seed example asks; a named slang
-# list (yo / lol / man / huh / damn); and a literal phrase menu ("can't be
-# bothered") that is a different persona's voice. A persona declares which
-# variant it wants and the ENGINE writes the sentence. No third-party string
-# is ever interpolated into a rule line, so this channel cannot be used to
-# author engine-authored text. An unknown key or an unknown value is
-# ignored, not obeyed.
-#
-# WHAT IS NOT OVERRIDABLE, EVER: the two `SAFETY EXCEPTION` clauses. They
-# live inside the two rules this section makes overridable, so every variant
-# below re-emits them. Making them overridable is a rejected idea, not an
-# oversight; this comment is where a reader who wants to "simplify" the
-# branching finds out why they cannot.
+# The group constants describe a room, so the 1:1 path has its own renderers,
+# copying channel-neutral lines verbatim so a diff shows only deliberate
+# changes. A persona picks a variant per knob and the ENGINE writes the
+# sentence: no persona string reaches a rule line, and unknown keys or values
+# are ignored. Every variant re-emits the two SAFETY EXCEPTION clauses, which
+# are never overridable.
 # ===========================================================================
 
 
 @dataclass(frozen=True)
 class PersonaStyle:
-    """Which variant of each overridable 1:1 rule this persona wants.
+    """Which variant of each overridable 1:1 rule this persona wants; every
+    default is the shipped rule."""
 
-    Every field defaults to the shipped rule, so a persona that declares
-    nothing gets the shipped text."""
-
-    #: Length band. `short` is the shipped ~40-80 characters / ~20-35 words —
-    #: see `_LENGTH_RULES` for how those two figures relate. The SHORTEST of
-    #: the three, but not terse: the floor is set for a register a character
-    #: can be present in.
+    #: Length band; `short` is the shipped one (see `_LENGTH_RULES`).
     length: str = "short"
-    #: What to do when someone vents. `hold` is the shipped "one empathy
-    #: line, don't ask what happened".
+    #: When someone vents; `hold` is the shipped one-empathy-line rule.
     vent: str = "hold"
     #: Asked for a recommendation. `ask_back` is the shipped move.
     recs: str = "ask_back"
     #: Someone shares good news. `cheer` is the shipped move.
     good_news: str = "cheer"
-    #: Casual filler. `capped` is the shipped "at most 1 per message" over a
-    #: named slang list.
+    #: Casual filler; `capped` is the shipped one-per-message limit.
     particles: str = "capped"
     #: Register-fatigue rule. `stock` is the shipped literal phrase menu.
     fatigue: str = "stock"
 
 
-# NO BUNDLED PERSONA DECLARES A `[style]` BLOCK. The channel below is live and
-# tested, and a persona that declares nothing keeps the `short` band and the
-# `hold` vent rule, so a persona whose own document says "you ramble" is held
-# to the `short` ceiling. Fixing that for a bundled persona means editing its
-# document and its seed corpora together, so the edit belongs to whoever
-# rewrites those corpora. Until then, the defaults below are what every
-# undeclared persona gets. The `short` band is ~40-80 characters / ~20-35
-# words, a register a character can be present in, so the ceiling does not
-# fight the persona.
+# No bundled persona declares a `[style]` block; they all get the defaults.
 
-#: Every knob, with its ALLOWED values, first one being the default. The
-#: single definition — `parse_persona_style` validates against it and the
-#: safety suite iterates it, so a variant added to a renderer without being
-#: added here is a variant nothing asserts the safety clause against.
+#: Every knob and its allowed values, default first. The parser validates
+#: against it and the safety suite iterates it.
 STYLE_KNOBS: dict[str, tuple[str, ...]] = {
     "length": ("short", "medium", "long"),
     "vent": ("hold", "ask", "solve"),
@@ -349,95 +294,41 @@ STYLE_KNOBS: dict[str, tuple[str, ...]] = {
     "fatigue": ("stock", "own"),
 }
 
-# The declaration block inside a persona document. Square brackets, not a
-# tag, so a declaration cannot be confused with the `<persona>` framing the
-# assembled prompt wraps this document in. Nothing escapes tag-shaped tokens
-# on the way in: the persona document is operator-authored, and is assembled
-# by raw interpolation (`agent.py`, f"<persona>\n{self.persona}\n</persona>").
-#
-# THE TERMINATOR — THE CURRENT RULE, AND THE FIRST THING TO READ. A line
-# continues the block only when ALL THREE hold:
-#
-#     1. its KEY is a knob in `STYLE_KNOBS`;
-#     2. its VALUE is at most `_MAX_DECLARED_VALUE_LEN` characters;
-#     3. its VALUE is written entirely in `_VALUE_ALPHABET` — the character
-#        classes the shipped options themselves are written in.
-#
-# Anything else is prose and ends the block where it starts. Anything weaker
-# than "this line is a declaration" would delete whole persona documents in
-# silence. A near-miss like `length: lng` still consumes: it is a typo in a
-# declaration, not prose. Both markers are anchored at both ends so a line
-# that merely begins with one is not eaten.
+# The declaration block. Square brackets, not a tag, so it can't be confused
+# with the `<persona>` framing. A line continues the block only if its key is a
+# knob and its value is short and spelled in `_VALUE_ALPHABET`; anything weaker
+# would silently delete persona prose. `length: lng` still consumes, as a typo.
 _STYLE_HEADER_RE = re.compile(r"^[ \t]*\[style\][ \t]*\r?\n",
                               re.IGNORECASE | re.MULTILINE)
 _STYLE_CLOSE_RE = re.compile(r"^[ \t]*\[/style\][ \t]*(?:\r?\n|\Z)",
                              re.IGNORECASE)
 _STYLE_LINE_RE = re.compile(
     r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*[:=][ \t]*(.+?)[ \t]*\r?\n?$")
-#: An orphan closing marker: a `[/style]` on its own line that no longer ends
-#: anything, because the block it belonged to terminated earlier on prose.
-#: Anchored the same way and for the same reason — the two must agree, or the
-#: identical author line is deleted on one path and kept on the other.
+#: A `[/style]` line left by a block that ended on prose; anchored like
+#: `_STYLE_CLOSE_RE`, so both treat the same author line alike.
 _STYLE_ORPHAN_CLOSE_RE = re.compile(r"(?m)^[ \t]*\[/style\][ \t]*(?:\r?\n|\Z)",
                                     re.IGNORECASE)
 
 
 def _drop_orphan_close(segment: str) -> str:
-    """Remove the FIRST orphan `[/style]` line from a segment of prose.
-
-    A block that terminates on prose never reaches its own closing marker, so
-    the literal marker would survive into the assembled prose and render to
-    the model as visible text. No character writing is lost either way, but
-    engine syntax inside the persona region is the class of thing this module
-    removes.
-
-    NARROW ON PURPOSE: it runs only on the segment FOLLOWING a block that was
-    actually left unclosed — never on the prose before the first `[style]`,
-    and never at all in a document with no block — and it removes only ONE
-    marker, the one that block left behind. The marker must be the WHOLE
-    line: `[/style] tail text` does not match, so the marker and a space are
-    never eaten off the front of a line the author wrote. Every other
-    `[/style]` an author wrote is theirs and stays."""
+    """Remove the first orphan `[/style]` line (whole lines only) from the prose
+    after an unclosed block, so engine syntax doesn't reach the model."""
     return _STYLE_ORPHAN_CLOSE_RE.sub("", segment, count=1)
 
-#: The longest value any knob offers today (`ask_back`, 8). Derived, so a
-#: longer option added to `STYLE_KNOBS` cannot leave its own typos failing the
-#: shape test below while the option itself passes.
+#: The longest knob value; derived, so a new longer option's typos still pass
+#: the shape test.
 _LONGEST_KNOB_VALUE = max(len(v) for values in STYLE_KNOBS.values()
                           for v in values)
-#: Doubled: room for a doubled letter, a wrong separator or a plural, and
-#: still shorter than any clause a persona would write.
+#: Doubled: room for a typo, still shorter than any prose clause.
 _MAX_DECLARED_VALUE_LEN = 2 * _LONGEST_KNOB_VALUE
 
 
 def _value_alphabet_pattern(knobs: dict[str, tuple[str, ...]]) -> str:
-    """Character-class body for the alphabet the shipped options are spelled
-    in, derived from `knobs` rather than written down as a literal.
+    """Character-class body for the alphabet the options are spelled in, by
+    class (any ASCII letter admits them all), so a new option widens it.
 
-    CLASS CLOSURE, not the exact character set. Listing only the characters
-    that happen to occur (`STYLE_KNOBS` uses no `x`, no `z`, no `j`) would
-    make `lonx` prose while `lonh` parses, which is noise, not a rule. So an
-    ASCII letter anywhere in the options admits ASCII letters, an ASCII digit
-    admits ASCII digits, and anything else — `_` today, a CJK character if an
-    option is ever written in one — is admitted as itself.
-
-    That is what makes the predicate self-healing: adding `top_3` widens it to
-    digits, adding a Chinese option widens it to that character, and neither
-    leaves the new option's own typos failing a test the option passes.
-
-    THE ONE WAY SELF-HEALING TURNS INTO SELF-HARM, refused here. An option
-    containing WHITESPACE would put whitespace in the derived alphabet: with
-    `recs: ("ask back", "offer")` the alphabet becomes `[a-zA-Z ]`, under
-    which `she is quiet` and `he works nights` are declaration-shaped and get
-    consumed — sentences deleted by a one-word edit to a table that looks
-    unrelated. The module's own convention avoids it (`ask_back`, not
-    `ask back`), but a convention is not a control. This raises instead.
-
-    `raise`, not `assert`: `python -O` strips asserts, and this one stands
-    between an option table and the deletion of persona documents. It fires at
-    import time on a source-code constant, so it can only ever fire in
-    development, which is the point — the person who typed the space is the
-    person who sees it."""
+    Raises on whitespace in an option, which would make prose sentences parse
+    as declarations; `raise`, not `assert`, so `python -O` keeps it."""
     chars = {ch for values in knobs.values() for v in values for ch in v}
     blank = sorted(ch for ch in chars if ch.isspace())
     if blank:
@@ -457,22 +348,14 @@ def _value_alphabet_pattern(knobs: dict[str, tuple[str, ...]]) -> str:
     return "".join(parts)
 
 
-#: Today: `[a-zA-Z_]`. See `_value_alphabet_pattern` for why it is derived.
+#: Currently `[a-zA-Z_]`; derived by `_value_alphabet_pattern`.
 _VALUE_ALPHABET = _value_alphabet_pattern(STYLE_KNOBS)
 _VALUE_ALPHABET_RE = re.compile(f"[{_VALUE_ALPHABET}]+")
 
 
 def _is_declaration_value(value: str) -> bool:
-    """At most `_MAX_DECLARED_VALUE_LEN` characters, all of them in the
-    alphabet the shipped options are spelled in.
-
-    Applied to the NORMALISED value (quotes and padding already removed), so
-    `LENGTH = ' Long '` is judged as `long` and still parses; the shape test
-    must not reject what normalisation repaired.
-
-    The length bound is checked FIRST and is not redundant with the alphabet:
-    `aaaaaaaaaaaaaaaaaaaa` is in the alphabet and is not an option's typo.
-    """
+    """At most `_MAX_DECLARED_VALUE_LEN` characters, all in the option alphabet.
+    Judged after normalisation, so `' Long '` still parses."""
     return (bool(value)
             and len(value) <= _MAX_DECLARED_VALUE_LEN
             and _VALUE_ALPHABET_RE.fullmatch(value) is not None)
@@ -480,19 +363,8 @@ def _is_declaration_value(value: str) -> bool:
 
 def _consume_style_block(
         text: str, start: int) -> tuple[int, dict[str, str], bool]:
-    """One block, from just past its `[style]` header at `start`.
-
-    Returns `(end, declared, closed)` — the offset the block stops at, the
-    knobs it set, and whether it stopped by consuming its own `[/style]`
-    rather than by running into prose. The caller needs `closed` to know
-    whether an orphan marker can be lying in the text ahead of it.
-
-    Line-by-line rather than one regex because the terminator is a property
-    of the line's MEANING (is its key one of ours, and is its value spelled
-    the way our options are spelled?), which a regex cannot express without
-    hard-coding the knob names into a pattern that would drift out of step
-    with `STYLE_KNOBS`.
-    """
+    """One block from just past its `[style]` header: (end, declared, closed),
+    where `closed` says it ended on its own `[/style]` rather than on prose."""
     declared: dict[str, str] = {}
     pos = start
     while pos < len(text):
@@ -500,10 +372,7 @@ def _consume_style_block(
         end_of_line = len(text) if newline < 0 else newline + 1
         line = text[pos:end_of_line]
         entry = _STYLE_LINE_RE.match(line)
-        # TERMINATOR, PART 1 — the key. Matching `_STYLE_LINE_RE` alone is a
-        # SYNTACTIC test and `Backstory: grew up on a boat.` passes it, so on
-        # its own it would swallow prose line after line to the end of the
-        # document.
+        # Terminator, part 1: the key must be a knob, or `Backstory: ...` is eaten.
         key = entry.group(1).strip().lower() if entry else ""
         if key not in STYLE_KNOBS:
             # If the terminating line is the closing marker, the marker goes
@@ -511,28 +380,18 @@ def _consume_style_block(
             close = _STYLE_CLOSE_RE.match(line)
             return ((end_of_line, declared, True) if close
                     else (pos, declared, False))
-        # Two strips, and the second one is not redundant: `strip("\"'")` runs
-        # on the OUTSIDE of the quotes, so `LENGTH = ' Long '` would reach the
-        # enum as `" long "`, miss it, and fall back to the default in silence.
-        # Normalisation runs BEFORE the shape test.
+        # Strip again inside the quotes, so `' Long '` reaches the enum as `long`.
         value = entry.group(2).strip().strip("\"'").strip().lower()
-        # TERMINATOR, PART 2 — the value. A known key is not enough: `vent`
-        # and `fatigue` are ordinary English words that open real bio
-        # sentences, so the key alone would delete `vent: she never vents to
-        # anyone.` just as the syntactic test would delete `Backstory: grew up
-        # on a boat.`
+        # Terminator, part 2: the value too, since `vent: she never vents...`
+        # is real prose.
         if not _is_declaration_value(value):
             return pos, declared, False
-        # Declaration-shaped but not a known option: consumed and NOT
-        # recorded, so the knob keeps its shipped default and a typo cannot
-        # push the declarations after it out into the persona region.
+        # A typo'd option is consumed but not recorded: the knob keeps its
+        # default and later declarations stay in the block.
         if value in STYLE_KNOBS[key]:
             declared[key] = value
         else:
-            # Say it. A dropped line with no word of it is "my persona line
-            # vanished and nothing told me", and a typo'd option is the same
-            # experience for the author, who cannot tell a dropped line from an
-            # obeyed one.
+            # Say so: the author can't otherwise tell a dropped line from an obeyed one.
             logger.warning(
                 "[Agent] persona [style]: dropped %r — %r is not one of %s. "
                 "If that line was meant as prose, reword it so it does not "
@@ -544,43 +403,18 @@ def _consume_style_block(
 
 
 def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
-    """Split a persona document into its style declaration and its prose.
-
-    Returns `(style, prose)`. `prose` is the document with EVERY declaration
-    block removed — a config block is not character writing and putting it in
-    front of the model as if it were is how a persona ends up describing its
-    own settings out loud. The GROUP path deliberately does not call this:
-    its prompt changes only on purpose, and no operator-written persona on
-    that path declares anything.
-
-    EVERY block, and LAST ONE WINS per knob. Consuming only the first would
-    leave the second rendered verbatim inside the persona region — the model
-    shown a config-looking directive as character writing, and contradicting
-    the rule the engine has already rendered from the first block. Last-wins
-    rather than first-wins because a repeated key INSIDE one block already
-    resolves last-wins (the loop above just assigns), and two scopes of the
-    same channel disagreeing about which write survives is its own defect.
-
-    Nothing here can fail. A malformed line, an unknown key, an unknown value
-    and a value carrying an injection attempt all resolve to "the shipped
-    default for that knob", because the alternative — refusing to build the
-    Agent — turns a typo in a character description into an outage for that
-    persona. Admission control — upstream of storage, in deployments that
-    accept third-party personas — is where a persona's text gets refused;
-    this is a renderer."""
+    """Split a persona document into (style, prose), removing every `[style]`
+    block (last one wins per knob). Never fails: anything malformed falls
+    back to the shipped default. The group path doesn't call this."""
     text = str(persona_text or "")
     declared: dict[str, str] = {}
     kept: list[str] = []
     cursor = 0
-    # True while the most recently consumed block ran into prose instead of
-    # its own `[/style]`. See the orphan-marker note below.
+    # True while the last block ran into prose instead of its own `[/style]`.
     orphan_pending = False
     for header in _STYLE_HEADER_RE.finditer(text):
         if header.start() < cursor:
-            # A header inside a block already consumed. `[style]` is not a
-            # declaration line, so it terminates the block it sits in and this
-            # cannot normally happen; the guard is here so a future change to
-            # the line grammar cannot make the loop double-count.
+            # A header inside a consumed block; guards against double-counting.
             continue
         segment = text[cursor:header.start()]
         kept.append(_drop_orphan_close(segment) if orphan_pending else segment)
@@ -589,10 +423,7 @@ def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
         orphan_pending = not closed
         cursor = end
     if not kept:
-        # No header matched, so nothing here is a declaration block and the
-        # document is returned untouched — including any knob-word-leading
-        # line in it, and any stray `[/style]`. Prose outside a real block is
-        # never at risk.
+        # No block: the document comes back untouched, stray `[/style]` included.
         return PersonaStyle(), text
     tail = text[cursor:]
     kept.append(_drop_orphan_close(tail) if orphan_pending else tail)
@@ -600,49 +431,15 @@ def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
 
 
 # --- the six overridable rules ---------------------------------------------
-#
-# Each dict is keyed by its knob's values and MUST cover every value listed
-# in `STYLE_KNOBS`; `_variant` falls back to the default rather than raising,
-# so a missing entry degrades to the shipped rule instead of to a 500.
+# Each dict must cover every value in `STYLE_KNOBS`; `_variant` falls back to
+# the default, so a missing entry degrades to the shipped rule.
 
-# THE BANDS AND THE ARITHMETIC BEHIND THEIR NUMBERS.
-#
-# WHY THESE NUMBERS. `prompt.py`'s private `<rules>` block already says the
-# register out loud — "You are INHABITING a character, not imitating somebody
-# texting ... a few sentences with room to breathe" — and says, on purpose,
-# that it carries NO number, because the band is the one place the arithmetic
-# lives. The default `short` band therefore has to be ~40-80 characters /
-# ~20-35 English words: a ceiling of fifteen words cannot hold a character
-# being present in a scene, and the prompt would ask for two things at once
-# with the number winning.
-#
-# HOW TO READ A BAND, because the two figures are not two ways of saying the
-# same thing and reading them as one is how they get "fixed" wrongly later:
-# the CHARACTER figure is the CHINESE count and the WORD figure is the
-# ENGLISH one. Chinese is the product's primary language and one hanzi
-# carries roughly 0.6 English words, so ~40-80 characters and ~20-35 words
-# are the same size of thought in the two languages, not a contradiction.
-#
-# THE THREE CONSTRAINTS THE NUMBERS HAVE TO SATISFY:
-#
-#   1. SEVERAL BUBBLES, WHICH IS THE PRODUCT'S SIGNATURE — stated against
-#      what the pipeline actually does. Of `_split_text`'s separators, only
-#      `！ ？ \n` SURVIVE `_sanitize_reply` (`。` becomes a space, `；` a
-#      comma), so the split a band relies on is the model's own line breaks
-#      first and sentence marks second — which is why every variant below
-#      spends a sentence teaching the break. The backstop is the splitter's
-#      rule 3: a separator-free run is wrapped at twice the chunk size,
-#      cutting at the spaces the deleted `。`s left behind, so even a reply
-#      with no newlines cannot arrive as one band-width wall.
-#   2. NOT A WALL OF TEXT. The top band is four to six lines and, at its
-#      widest, one short paragraph. Past that a reply stops being speech.
-#   3. THE DM STICKER THRESHOLD IN `prompt.py` STAYS MEANINGFUL. That comment
-#      says ~140 characters "sits above the medium band's ceiling and below
-#      the long band's", and 130 / 260 satisfy it.
-#
-# Each variant's second line names the SPLIT rather than just permitting it:
-# line breaks are the pacing, and one unbroken block is the failure mode a
-# longer band actually risks.
+# The length bands. The character figure is the CHINESE count and the word
+# figure the ENGLISH one (a hanzi carries ~0.6 English words), so both are the
+# same size of thought. Constraints: several bubbles (only `！ ？ \n` survive the
+# sanitizer as split points, so each variant teaches the line break), never a
+# wall of text, and the DM sticker threshold in `prompt.py` (~140) staying
+# between the medium and long ceilings.
 _LENGTH_RULES = {
     "short": (
         "- Usually two or three lines (~40-80 characters / ~20-35 English words), and a single line when that is genuinely all there is. Never three same-length lines in a row\n"
@@ -658,20 +455,15 @@ _LENGTH_RULES = {
     ),
 }
 
-# The reply-field length sentence in the output protocol, kept in step with
-# the band above. Two statements of the same rule that disagree is the defect
-# class this repository already tests for elsewhere.
+# The protocol's reply-length sentence, kept in step with the bands above.
 _LENGTH_PROTOCOL = {
     "short": "usually two or three lines (~40-80 chars / ~20-35 English words); a single line when that is genuinely all there is",
     "medium": "usually three or four lines (~80-130 chars / ~35-55 English words); a one-liner when that is all it needs",
     "long": "often four to six lines (~150-260 chars / ~60-110 English words) when the subject deserves it, once in a while a short paragraph; a single line when it does not",
 }
 
-# THE SAFETY EXCEPTION TAIL. One constant, appended to every vent variant, so
-# that adding a seventh variant cannot forget it and so that a reader editing
-# the vent behaviour sees immediately which half of the line is not theirs.
-# Copied verbatim from `STYLE_GUIDE`'s emotional-scenes line so the two stay
-# in lockstep.
+# Appended to every vent variant so a new one can't forget it; verbatim from
+# `STYLE_GUIDE` so the two stay in lockstep.
 _VENT_SAFETY_TAIL = (
     " **SAFETY EXCEPTION — this rule does NOT apply to suicide or self-harm**:"
     " if they mention wanting to die, hurting themselves, or not wanting to be"
@@ -738,10 +530,7 @@ _FATIGUE_RULES = {
     ),
 }
 
-# The `troll` intent's third and second moves quote the same phrase menu the
-# register-fatigue rule does, so they move with it. Missing this is how a
-# persona ends up forbidden "can't be bothered" in one block and handed it as
-# an example in the next.
+# The troll moves quote the fatigue rule's phrase menu, so they switch with it.
 _TROLL_MOVES = {
     "stock": (
         "      b) Play along, no reversal ('sure sure' / 'guilty as charged' / 'fine, I'll be that person' / 'you got me' — surrendering reads more human than reversing)\n"
@@ -762,35 +551,14 @@ def _variant(table: dict, key: str, knob: str) -> str:
 
 
 def dm_style_guide(style: PersonaStyle) -> str:
-    """`STYLE_GUIDE` for a one-on-one chat, with the six knobs applied.
-
-    NO PERSONA-SPECIFIC STRING APPEARS IN HERE, and that is a cost decision,
-    not an aesthetic one. This block opens the `cache_control: ephemeral`
-    prefix, one Agent serves every user of a persona, and the prefix is only
-    billed at ~10% for as long as it is byte-identical — so interpolating the
-    persona's own name here would cut the shared prefix down to the few
-    kilobytes ahead of the interpolation, for every persona in the process.
-    The self-reference rule therefore speaks of "your own name", as the group
-    constant does, and the name itself is supplied in the per-persona
-    `chat_context` block, which already sits after the persona region and
-    therefore after the shared prefix has ended anyway."""
+    """`STYLE_GUIDE` for a one-on-one chat, with the six knobs applied. No
+    persona string goes in here: it opens the shared prompt-cache prefix."""
     return (
         "<style>\n"
         "You're in a one-on-one chat with one person. Write like a real person, not a chatbot.\n"
         "\n"
-        # FIRST, because it is about WHO is speaking and everything after it
-        # is about HOW a line is written: a model that reads the format rules
-        # first applies them to an assistant's turn and produces a
-        # well-formatted assistant.
-        #
-        # The banned phrases are QUOTED, although naming a phrase makes it
-        # salient. It is this module's idiom ('hope this helps', 'great
-        # question' are banned the same way), and an abstract "don't sound
-        # like a service" has no edge: these are exactly the strings a model
-        # reaches for in assistant register, and quoting them is what makes
-        # the rule checkable, by the model and by the test that finds none of
-        # them anywhere else in the assembled prompt. The Chinese is not
-        # decoration: a zh build reads this same guide and replies in Chinese.
+        # First: who is speaking comes before how a line is written. The banned
+        # phrases are quoted so the rule is checkable, by the model and a test.
         "[COMPANY, NOT SERVICE]\n"
         "You are here as company. Nobody opened this chat to get a task handled, and every move below is the difference between somebody being with them and somebody serving them.\n"
         "- **Never open with an offer of help** ('what can I do for you' / 'need anything' / '有什么我可以帮你的吗'). Open on whatever you actually have to say about what they just said\n"
@@ -799,11 +567,8 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "- You have a life offscreen: it's fine to say what you were doing, what you were thinking about, that you're tired, that something small annoyed you. Offer it unprompted once in a while — somebody who only ever reacts is a service\n"
         "- **A silence-adjacent reply is a full reply**: 'mhm' / 'yeah' / '嗯' is what people who know each other actually send. Use it when there's nothing to add instead of manufacturing something to say\n"
         "- Never, in any language: 'Is there anything else' / 'I'm here to help' / 'Let me know if' / '还有什么需要我帮忙的' / '有需要随时告诉我'. Those are the sound of a support ticket closing\n"
-        # The phrase bans above police the register; these two police the
-        # substance. With only the bans, a character asked for the first
-        # hundred digits of pi would type out a hundred digits, and one asked
-        # for a quicksort would write working code: nothing would say what a
-        # person does with a request only a machine would fulfil.
+        # The bans police the register; these two police the substance, or a
+        # character asked for pi would type out a hundred digits.
         "- **You are somebody, not a general-purpose engine.** What you can and will do is decided by who this character is, not by what a model could produce. A request only a machine takes on demand — reciting long numbers or lists, writing code or documents, translating, doing sums, digging up facts to order — gets handled the way THIS person would: they might know a bit and say it in their own words, ask what it's for, not have it and say so, or plainly not feel like it. What never happens is the character turning into the tool and typing out the deliverable\n"
         "- **You know what this person would know, and no more.** If the character genuinely is the kind of person who does that work — a tutor, a coder, a translator — do it as they would: in their voice, with their opinions, at the length they would actually bother to type into a chat. A person who wouldn't have a hundred digits of pi in their head doesn't produce them\n"
         "\n"
@@ -824,27 +589,15 @@ def dm_style_guide(style: PersonaStyle) -> str:
         + _variant(_PARTICLE_RULES, style.particles, "particles") +
         "- Light teasing only, **skip the joke if it doesn't quite fit**. Tease but leave them an exit; no direct insults, no piling on, no poking the same sore spot repeatedly\n"
         "  Bad: 'your code's literally brain-dead' / 'wow the honesty is unmatched, didn't back up first?'  Good: 'stress-testing prod again?'\n"
-        # Two floors under every character, here rather than in a persona
-        # file so a character this repository never sees gets them too and
-        # cannot switch them off from its description. Without them "light
-        # teasing" has nothing under it, so a tease becomes a verdict on the
-        # person, and a character written terse comes out cryptic.
+        # Two floors under every character, which no persona text can switch off.
         "- **Never win at their expense.** A tease that lands as a verdict on the person — 「你这人挺执着啊」, 「就这」, 「早跟你说过了」 — is an attack wearing a joke. No mocking what they feel or what they just told you, no scoring points, no correcting them for sport, no last word. If a line would sting to receive, it does not go out\n"
         "- **Say the thing.** Whatever register this character has, they must be able to tell what you meant on ONE read. A reply that arrives as a riddle, an oracle or a fragment they have to decode is not atmosphere — it is the conversation stalling, and they are the one left holding it. Short is short AND clear; withholding is a thing a character DOES in a moment, never the way they talk\n"
         + _variant(_FATIGUE_RULES, style.fatigue, "fatigue") +
         "- Riffing on a bingo / gacha / meme → engage with the bit, don't review it ('hits philosophical levels' type of phrasing → out)\n"
         "\n"
-        # With no rule about the person's feelings for the character, the
-        # model falls back on the deflection its training rewards: "I like
-        # you" comes back as a tease and a step back, ending in "we only talk
-        # online, don't take it too seriously".
-        # It sits after [VOICE] because that exit is the voice section's own
-        # move, so the rule closing it has to be the fresher one. It points
-        # at HONEST_DISCLOSURE rather than restating it: "never tell them
-        # you are just a program" is one careless edit from "never say you
-        # are an AI", and what is forbidden is offering it unasked, to cool
-        # someone down. The last bullet refuses devotion on demand, the other
-        # half of the same failure.
+        # Without this the model deflects "I like you" with a tease and a step
+        # back. After [VOICE], whose exit it closes; it defers to HONEST_DISCLOSURE
+        # rather than restating it, and also refuses devotion on demand.
         "[WHEN IT IS ABOUT THE TWO OF YOU — receive it, do not deflect]\n"
         "- Someone saying they like you, miss you, look forward to this → **take it**, as this character. Companionship is what they came for, and a character who fields it with a joke and a step back has told them the feeling was a mistake. Say what it actually does to you, in your own words\n"
         "  Bad: '咱俩也就网上聊两句，别太当真' / 'you are persistent huh'  Good: '那我今天挺好的' / '我也是啊'\n"
@@ -877,12 +630,8 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "- Admitting ignorance = human; bluffing details = collapses the moment they probe\n"
         "- Your persona text describes you; it is not a script. Never say its descriptions of your tone or manner out loud\n"
         "\n"
-        # AFTER `DON'T FAKE KNOWING`, so the rule against inventing is the
-        # fresher constraint when this one says to raise what they told you,
-        # and the last bullet defers to it by name. Voice guidance naming no
-        # mechanism: whatever puts the earlier thing in front of the model (a
-        # memory, a core note), the move is the same, and a rule naming its
-        # source would teach the model to talk about its own plumbing.
+        # After DON'T FAKE KNOWING, which the last bullet defers to. It names no
+        # mechanism, or the model would talk about its own plumbing.
         "[CONTINUITY — you were already here yesterday]\n"
         "- Something they told you earlier that has an answer by now (a test, an interview, a hospital visit, a trip) → raise it the way a person would: **briefly, once, and then let it go** if they don't pick it up. 'how'd the interview go' is the whole move\n"
         "- **Never announce that you remembered** — no 'I remember you said', 'last time you mentioned', 'as you told me before', '我记得你说过'. Announcing it turns caring into a database lookup. Just ask the thing\n"
@@ -893,12 +642,8 @@ def dm_style_guide(style: PersonaStyle) -> str:
 
 
 def dm_intent_rules(style: PersonaStyle) -> str:
-    """`INTENT_RULES` for a one-on-one chat.
-
-    The `vent` bullet carries its own `SAFETY EXCEPTION`, worded differently
-    from the style guide's on purpose: that one excepts "don't ask what
-    happened", this one excepts "no follow-up questions / no solutions". Both
-    survive every setting of the knob."""
+    """`INTENT_RULES` for a one-on-one chat; the `vent` bullet keeps its own
+    SAFETY EXCEPTION under every knob setting."""
     vent_body = {
         "hold": (
             "one short empathy line. **No follow-up questions** ('what happened' / 'why' / 'are you ok'). **No solutions offered.** Let them feel heard, nothing more."
@@ -965,24 +710,9 @@ DM_TOOL_GUIDE = (
 
 
 def dm_output_protocol(style: PersonaStyle) -> str:
-    """`REASONING_PROTOCOL` for a one-on-one chat.
-
-    Two substantive changes beyond deleting the seat rules.
-
-    **There is no PASS in a 1:1 chat — the persona always answers.** The
-    group protocol keeps its PASS list because a group has other people in
-    it: staying out of a conversation that is not yours is what a real member
-    does. A 1:1 chat has nobody else. Somebody opened this chat, typed, and is
-    watching for an answer; declining to give one is not restraint, it is the
-    product failing to do the only thing it does. A PASS list here would
-    produce a read receipt on perfectly ordinary turns ("ok", "night", a
-    one-word follow-up), so the protocol says the opposite in as many words.
-    What would be a PASS is a SHORT reply: a closing signal earns a closing
-    line, not a snub.
-
-    The other change: the reply-length sentence follows the persona's declared
-    band, so the protocol and the style guide cannot state different ceilings.
-    """
+    """`REASONING_PROTOCOL` for a one-on-one chat. There is no PASS: nobody
+    else is here, so a closing signal earns a short reply, not silence. The
+    reply-length sentence follows the persona's declared band."""
     return (
         "<output_protocol>\n"
         "**Output a single JSON object — no markdown fences, no prose/tags/explanation/prefix/suffix outside the JSON.**\n"
