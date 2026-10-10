@@ -770,7 +770,6 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
         "feedback view": a.promoted_feedback_file,
         "examples": a.examples_file, "feedback": a.feedback_file,
         "teacher stats": a.teacher_stats.path,
-        "legacy candidate pool": a.example_candidates.path,
         "audit": a.candidates_file, "eval": a.eval_file,
     }
     for label, path in paths.items():

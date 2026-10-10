@@ -104,25 +104,29 @@ def resolve_runtime_lang_file(stem: str, ext: str, lang: str) -> Path:
     return runtime_dir() / f"{stem}.{lang}.{ext}"
 
 
+def parse_jsonl(blob: bytes) -> list[dict]:
+    """The object rows of a JSONL blob; blank and malformed lines are skipped."""
+    rows: list[dict] = []
+    # Decoded with "replace": one bad byte costs its row, not the whole file.
+    for line in blob.decode("utf-8", "replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
 def read_jsonl(paths: Iterable[Path]) -> list[dict]:
     """Read valid object rows from multiple JSONL files, in path order."""
     rows: list[dict] = []
     for path in paths:
         try:
-            # errors="replace", like pools._parse_jsonl: read_text raises
-            # UnicodeDecodeError — a ValueError, so it escapes an OSError
-            # guard — and one bad byte in a retrieval pool then breaks the
-            # reload on every turn rather than costing the one row.
-            lines = path.read_bytes().decode("utf-8", "replace").splitlines()
+            blob = path.read_bytes()
         except OSError:
             continue
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if isinstance(row, dict):
-                rows.append(row)
+        rows.extend(parse_jsonl(blob))
     return rows

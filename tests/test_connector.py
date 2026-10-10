@@ -19,10 +19,8 @@ import httpx
 
 from persona_agent import channels
 from persona_agent import paths as agent_paths
-from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.transport import SendResult
-from persona_agent.learning import Learning
 from persona_agent.textproc import TextProcessing, _strip_web_desc
 from persona_agent.connector import (ConnectorSink, current_sink,
                                    message_to_reply_item,
@@ -565,7 +563,6 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     )
     # Keep runtime state files out of the repo during tests.
     a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     a.connector_handles.path = tmp / "connector_handles.json"
     # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
@@ -1060,7 +1057,7 @@ async def test_one_reply_fans_out_into_at_most_the_cap(
     agent._typing_delay = lambda chunk: 0.0
     # The sanitizer's length bound runs first; every word it keeps must land.
     kept = TextProcessing._sanitize_reply(
-        degenerate, agent._validator_lang(), agent.reply_style).count("hi")
+        degenerate, agent.agent_lang, agent.reply_style).count("hi")
 
     result = await agent._send_group("123456", degenerate)
     check("QQ: the throttle lets the whole reply through",
@@ -2425,8 +2422,6 @@ async def test_eval_auto_append_examples(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
-    agent.example_candidates = promotion.CandidatePool(
-        tmp / "example_candidates.json")  # nor the repo-real candidate pool
 
     class _FakeResp:
         def raise_for_status(self):
@@ -5036,7 +5031,6 @@ async def test_the_fallback_model_calls_its_own_endpoint(tmp: Path) -> None:
     seen.clear()
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"
-    agent.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     await agent._evaluate_reply("g", "called", "question", "a reply", None, "chat",
                                 ["Alice: question"])
     check("self-eval: the eval model is the fallback, so its endpoint",
@@ -5401,13 +5395,6 @@ def test_the_channel_key_table_is_one_table() -> None:
         check(f"channels: both spellings agree for {routing!r}",
               channels.platform_of(learning) == platform,
               repr(channels.platform_of(learning)))
-
-    check("channels: Agent._dm_scope_key has no opinion of its own",
-          all(Agent._dm_scope_key(r) == channels.learning_key(r)
-              for r, _, _ in rows))
-    check("channels: Learning._conv_platform has no opinion of its own",
-          all(Learning._conv_platform(r) == channels.platform_of(r)
-              for r, _, _ in rows))
 
     # The wire format itself, pinned against literals rather than against the
     # prefix constants — comparing a constant to itself would pass no matter

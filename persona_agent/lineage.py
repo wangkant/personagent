@@ -1,10 +1,8 @@
 """Persona lineage: which persona-document hashes count as the same character.
 
-Learning scope is keyed on a hash of the persona text, so a one-byte edit
-would orphan everything the bot has learned. A lineage records every hash seen
-under one PERSONA_VERSION; all of them are one character for scope purposes.
-A new PERSONA_VERSION (or PERSONA_NAME) starts a new lineage, which is the
-deliberate way to begin a clean slate."""
+Every hash seen under one PERSONA_VERSION is one character for learning
+scope, so editing the document orphans nothing; a new PERSONA_VERSION (or
+PERSONA_NAME) starts a clean slate."""
 from __future__ import annotations
 
 import json
@@ -75,19 +73,15 @@ class PersonaLineage:
         try:
             self._save()
         except OSError as exc:
-            # Undo the append: leaving it in memory makes the early return above
-            # swallow every later retry, so the revision is lost at restart.
+            # Undone, or the early return above would swallow every retry.
             hashes.remove(persona_hash)
             logger.warning("[Agent] persona lineage not saved (%s): %s", self.path, exc)
             return (hashes[0] if hashes else persona_hash), not was_empty
         return hashes[0], not was_empty
 
     def adopt(self, version: str, persona_hash: str) -> bool:
-        """Add a hash from before the lineage existed (operator recovery).
-
-        Unlike ``extend``, a failed write raises: this runs from the admin CLI,
-        where an operator who is told "adopted" must not be told it on a write
-        that never landed."""
+        """Add a hash from before the lineage existed (operator recovery); a
+        failed write raises, unlike ``extend``."""
         version = version or ""
         hashes = self._lineages.setdefault(version, [])
         if persona_hash in hashes:

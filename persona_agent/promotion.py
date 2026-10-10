@@ -1,33 +1,13 @@
 """The promotion policy: when may evidence grant a candidate authority.
 
-Evidence (evidence.py) records what happened. Candidates (candidates.py) record
-what was proposed. This module decides the one question neither of them may
-answer for itself: **is this proposal allowed to change how the agent talks.**
+A single automatic signal must never permanently change behaviour, so
+promotion needs ``MIN_EVENTS`` compatible events (same persona, language and
+conversation), ``MIN_STRONG`` of them strong, and no compatible evidence
+pointing the other way; contradictions are left for a human. Weak evidence
+never promotes at any quantity. Also ``retract_example``, how a human
+disagreement pulls a row out of the hand-approved example pool.
 
-The rule the whole design exists to enforce: *a single automatic signal must
-never permanently change behaviour.* One `haha` may be politeness, or aimed at
-someone else in the thread. One "no, that's wrong" may be a troll, or a
-misreading. The agent's own top score comes from an evaluator documented as
-generous. Yet anything reaching a retrieval pool is imitated indefinitely, so
-promotion requires corroboration:
-
-- at least ``MIN_EVENTS`` distinct compatible events, and
-- at least ``MIN_STRONG`` of them strong (a directed correction from the person
-  the reply was aimed at, or a retry that person then accepted),
-- combinable only across compatible persona, language, conversation and
-  scenario scope,
-- and never when compatible evidence points in two directions at once — that
-  is left for a human, because guessing which contradiction wins is how a
-  feedback loop entrenches a mistake.
-
-Weak evidence never promotes anything at any quantity, so laughter alone cannot
-grow the example pool; it accrues on a candidate and waits for an anchor.
-
-Also here, the pre-ledger leftovers: ``CandidatePool``, read-and-withdraw
-only, and ``retract_example`` — how a human disagreement pulls a row out of a
-pool that was learned before the ledger existed. Neither promotes anything.
-
-Pure logic — no clock reads, no LLM. Callers pass `now`.
+Pure logic: no clock reads, no LLM. Callers pass `now`.
 """
 from __future__ import annotations
 
@@ -37,49 +17,20 @@ from pathlib import Path
 
 from . import candidates, evidence
 from .config_env import env_bool, env_float, env_int
-from .pools import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
+from .ranking import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
 from .storage import append_lock, atomic_write_text
 
-# ---------------------------------------------------------------------------
-# Automatic promotion policy
-# ---------------------------------------------------------------------------
-# Conservative by construction, and every threshold is named: an operator who
-# wants a looser loop should have to say so in .env, in a value they can read
-# back later, rather than discover it in a diff.
-
-# Two distinct compatible events, one of which must be strong. Two is not a
-# statistical claim — it is the smallest number that cannot be produced by one
-# misreading.
+# Two events is the smallest number one misreading cannot produce.
 MIN_EVENTS = 2
 MIN_STRONG = 1
-# ...from at least this many distinct people, admin exempt.
-#
-# MIN_EVENTS counts events, and one determined member can produce two by
-# themselves: correct a reply, then accept the agent's retry. Delayed
-# elicitation even has the agent *solicit* that second event from the same
-# person. So "two distinct compatible events" is not "two people agreed".
-#
-# The default is 1 because the attack path and the honest path are
-# structurally identical. "that's not what I asked" followed by
-# "I meant check the logs" is one person, two events, and it is exactly how a
-# real clarification looks; requiring a second voice would refuse it too, and
-# solo clarification is the flagship zero-effort loop. What is closed by
-# default instead is the unambiguous part: a topic change does not count as
-# acceptance, and an adjudicator verdict of accept=false is never overridden
-# (see evidence.classify_strength).
-#
-# Set PROMOTE_MIN_SPEAKERS=2 for a room where strangers should not be able to
-# teach the agent unaided. Nothing is lost when it blocks: the candidate is
-# still proposed and waits in `personagent learned list` for a human.
+# Distinct people, admin exempt. 1 by default: one person's correction then
+# acceptance is how a real clarification looks. Set PROMOTE_MIN_SPEAKERS=2
+# where strangers should not teach unaided; blocked candidates wait for a human.
 MIN_SPEAKERS = 1
-# Evidence older than this stops counting as support. A correction from four
-# months and one persona revision ago is history, not a mandate. 0 turns the
-# window off entirely — both directions of it, so stale rejections keep vetoing
-# too; it is not "maximum strictness".
+# Older evidence stops counting. 0 disables the window in both directions,
+# so stale rejections keep vetoing too.
 MAX_EVIDENCE_AGE_DAYS = 30.0
-# Combine evidence only within one conversation. The same wording can be right
-# in one room and wrong in the next, and cross-room combination is exactly how
-# a single loud teacher would reach the threshold everywhere at once.
+# Cross-room combination would let one loud teacher reach the threshold everywhere.
 REQUIRE_SAME_CONVERSATION = True
 # Master switch: false leaves every candidate for human review.
 AUTO_PROMOTE = True
@@ -101,15 +52,12 @@ class Policy:
         """Read through config_env, so a typo or a value under a floor is
         logged and falls back to the default, like every other setting."""
         return cls(
-            # Floors, not suggestions: PROMOTE_MIN_EVENTS=1 would reintroduce
-            # exactly the failure this module exists to prevent.
+            # Floors: PROMOTE_MIN_EVENTS=1 would let one signal promote.
             min_events=env_int("PROMOTE_MIN_EVENTS", MIN_EVENTS,
                                minimum=MIN_EVENTS, env=env),
             min_strong=env_int("PROMOTE_MIN_STRONG", MIN_STRONG,
                                minimum=MIN_STRONG, env=env),
-            # Floor of 1, not 2: an operator running a private single-user
-            # deployment has nobody to corroborate with, and should be able to
-            # say so explicitly rather than have promotion silently never fire.
+            # Floor of 1: a single-user deployment has nobody to corroborate with.
             min_speakers=env_int("PROMOTE_MIN_SPEAKERS", MIN_SPEAKERS,
                                  minimum=1, env=env),
             max_evidence_age_days=env_float(
@@ -151,29 +99,15 @@ def scope_compatible(a: dict, b: dict, *,
                      compare_mode: bool = True) -> bool:
     """May evidence in scope `a` be combined with evidence in scope `b`.
 
-    Persona identity and language must match exactly: a correction earned by one
-    character in one language says nothing about another. Persona *version* is
-    included because a prompt rewrite is a different agent for this purpose —
-    evidence about how the old one talked should not authorize changes to the
-    new one. Conversation scope is on by default and configurable. Mode is
-    compared because it comes from a fixed vocabulary (owner / called / followup
-    / judge) and genuinely names a different situation. `compare_mode=False`
-    asks whether two rewrites would meet in one prompt, which mode does not
-    decide: retrieval authorizes by conversation and only ranks by mode.
-
-    **Scenario** compatibility is enforced structurally, not by label. Every
-    combination this module performs already requires the events to be about the
-    *identical reply text* in the same conversation and mode, which pins the
-    scene far more tightly than the 2-5 word label the adjudicator improvises
-    per call — and comparing those labels would reject two accounts of the same
-    moment for being worded differently, which in practice means nothing is ever
-    corroborated. The label is kept in the scope record for audit.
+    Language, platform, persona (through its lineage) and persona version must
+    match; conversation too when required; mode unless `compare_mode=False`
+    (would two rewrites meet in one prompt). The adjudicator's scenario label
+    is not compared: identical reply text already pins the scene.
     """
     for key in ("lang", "platform", "persona", "persona_version"):
         if str(a.get(key) or "") != str(b.get(key) or ""):
             return False
-    # Through the lineage, not the raw hash: an edited persona document is
-    # the same character; a new PERSONA_VERSION is not.
+    # An edited persona document is the same character; a new version is not.
     if evidence.persona_identity(a) != evidence.persona_identity(b):
         return False
     if require_same_conversation and str(a.get("conv_id") or "") != str(b.get("conv_id") or ""):
@@ -183,19 +117,9 @@ def scope_compatible(a: dict, b: dict, *,
 
 def supports_candidate(event: dict, cand: dict, *,
                        policy: Policy = DEFAULT_POLICY) -> bool:
-    """Does `event` argue for *this* candidate specifically.
-
-    Three things have to line up, and the third is the one that is easy to get
-    wrong: the event must be about the same reply, in a compatible scope, and —
-    for a rewrite — must not be proposing a *different* rewrite. An event
-    carrying "replace X with C" is real evidence that X was wrong, but counting
-    it as support for "replace X with B" would let one correction authorize a
-    rewrite nobody asked for.
-
-    That holds for a person's own words only. A rejection's `better` is the
-    adjudicator's guess at what they wanted, and the complaint a retry answers
-    (the candidate's ``payload.answers``) is the reason the retry exists; a
-    differing draft on either does not stop it arguing that X was wrong.
+    """Does `event` argue for *this* candidate: same reply, compatible scope,
+    and for a rewrite, not a person proposing a different rewrite (a
+    rejection's guessed draft and the complaint a retry answers still count).
     """
     ctype = str(cand.get("type") or "")
     if not evidence.supports(event, ctype):
@@ -216,9 +140,7 @@ def supports_candidate(event: dict, cand: dict, *,
 
 def anchors(event: dict, cand: dict) -> bool:
     """Can `event` be the strong one `cand` needs: strong, and for a rewrite,
-    naming no rewrite or this one. A correction drafting something else
-    supports a retry it answers, but cannot put the retry's words into the
-    prompt on its own authority."""
+    naming no rewrite or this one."""
     return (evidence.classify_strength(event) == evidence.STRONG
             and (cand.get("type") != candidates.TYPE_PAIR
                  or _vouches_for(event, cand)))
@@ -232,21 +154,12 @@ def _vouches_for(event: dict, cand: dict) -> bool:
 
 def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
                    related_events=()) -> list[str]:
-    """Candidate ids that propose something incompatible with `cand`.
-
-    Two proposals conflict when they rewrite the same reply, in compatible
-    scope, into different things. Only live proposals count: a rejected or
-    superseded candidate has already been adjudicated and must not keep
-    blocking its replacement. A PROPOSED rewrite that no person argued for
-    (see `witnessed_rewrites`), or that only the complaint `cand` answers
-    argues for, is a draft rather than a rival. A PROMOTED one always
-    conflicts: one reply never has two active rewrites.
+    """Live candidates rewriting the same reply, in compatible scope, into
+    something else. A proposed rewrite no person argued for (or only the
+    complaint `cand` answers) is a draft, not a rival; a promoted one always
+    conflicts.
     """
-    # ONE pass over the events, before the peer loop, not one per peer — see
-    # `witnessed_rewrites`. `None` when the caller supplied nothing, which is
-    # distinct from "supplied an empty list": with no events to read the
-    # conflict stands, because the alternative is a veto silently vanishing
-    # whenever a caller omits them.
+    # None without events: then every conflict stands rather than a veto vanishing.
     witnessed = witnessed_rewrites(related_events) if related_events else None
     answers = str((cand.get("payload") or {}).get("answers") or "")
     out: list[str] = []
@@ -269,9 +182,6 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
                 backing = set(other.get("evidence") or ())
                 if answers and backing and backing <= {answers}:
                     continue
-                # `related_events` is only consulted when we have it: with no
-                # events to read, the conflict stands, because the alternative
-                # is a veto silently disappearing whenever a caller omits them.
                 if witnessed is not None:
                     rewrite = str(other.get("better") or "").strip()
                     # An empty rewrite keeps its veto.
@@ -283,9 +193,8 @@ def find_conflicts(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
 
 def answered_drafts(cand: dict, peers, *,
                     policy: Policy = DEFAULT_POLICY) -> list[str]:
-    """Proposed rewrites of `cand`'s reply that nothing but `cand`'s own
-    evidence argues for: drafts of the complaint `cand` answered, which can
-    no longer promote once `cand` is active."""
+    """Proposed rewrites of `cand`'s reply backed only by `cand`'s own
+    evidence: drafts of the complaint it answered."""
     if cand.get("type") != candidates.TYPE_PAIR:
         return []
     backing = set(cand.get("evidence") or ())
@@ -309,9 +218,8 @@ def answered_drafts(cand: dict, peers, *,
 
 def active_rivals(cand: dict, ledger_rows, *,
                   policy: Policy = DEFAULT_POLICY) -> list[dict]:
-    """Promoted rewrites of `cand`'s reply into something else, in a scope
-    whose prompt would carry both: what promoting `cand` would leave beside
-    it. An operator replaces one with `supersede` instead."""
+    """Promoted rewrites of `cand`'s reply into something else that one
+    prompt would carry beside it (an operator uses `supersede` instead)."""
     if cand.get("type") != candidates.TYPE_PAIR:
         return []
     reply = str(cand.get("reply") or "").strip()
@@ -329,21 +237,13 @@ def active_rivals(cand: dict, ledger_rows, *,
     ]
 
 
-# The two event kinds nobody witnessed: the agent scoring itself, and the
-# agent diagnosing itself. Neither is a person disagreeing with anything.
+# The agent scoring or diagnosing itself: no person witnessed either.
 _UNWITNESSED_KINDS = (evidence.KIND_SELF_REVIEW, evidence.KIND_SELF_EVAL)
 
 
 def witnessed_rewrites(events) -> frozenset:
-    """Every rewrite a PERSON has argued for, in one pass over the events.
-
-    A rejection's draft is not one: the person said the reply was wrong, and
-    the adjudicator guessed the rest. Nor is a dismissed event's, or a retry
-    the person merely moved on from.
-
-    Computed once before the peer loop in `find_conflicts`, not once per peer:
-    a per-peer scan was O(peers x events) and candidates sharing a reply text
-    make that quadratic in practice."""
+    """Every rewrite a person argued for: not a rejection's guessed draft, a
+    dismissed event's, or a retry the person merely moved on from."""
     return frozenset(
         str((event.get("adjudication") or {}).get("better") or "").strip()
         for event in events or ()
@@ -355,23 +255,46 @@ def witnessed_rewrites(events) -> frozenset:
 
 
 def related_events(cand: dict, events) -> list[dict]:
-    """The `related_events` argument `decide` expects, for one candidate.
-
-    Events about the reply a candidate would replace AND about the text it
-    would replace it with. `counter_evidence` treats a rejection of the
-    REWRITE as arguing against the pair, so filtering to the original alone
-    makes that branch unreachable.
-
-    One function because there are two callers, the running agent
-    (`learning._decide_promotion`) and `personagent learned`, and the two
-    must judge a candidate from the same list.
-    """
+    """Events about the reply `cand` replaces or the rewrite it proposes:
+    `decide`'s related_events, shared so every caller judges from one list."""
     wanted = {str(cand.get("reply") or "").strip()}
     better = str(cand.get("better") or "").strip()
     if better:
         wanted.add(better)
     return [event for event in events or ()
             if str(event.get("reply") or "").strip() in wanted]
+
+
+class EvidenceIndex:
+    """Events and candidates by reply text, built once, so judging many
+    candidates reads only what each one is about instead of the whole log."""
+
+    def __init__(self, events: list[dict], peers: list[dict]) -> None:
+        self.events = events
+        self.by_id = {e.get("event_id"): e for e in events}
+        self._pos = {e.get("event_id"): i for i, e in enumerate(events)}
+        self._by_text: dict[str, list[int]] = {}
+        for i, event in enumerate(events):
+            self._by_text.setdefault(str(event.get("reply") or "").strip(), []).append(i)
+        self._peers: dict[str, list[dict]] = {}
+        for cand in peers:
+            self._peers.setdefault(str(cand.get("reply") or ""), []).append(cand)
+
+    def linked(self, cand: dict) -> list[dict]:
+        """`cand`'s own evidence, once each, in log order."""
+        ids = {eid for eid in cand.get("evidence") or [] if eid in self.by_id}
+        return [self.by_id[eid] for eid in sorted(ids, key=self._pos.__getitem__)]
+
+    def related(self, cand: dict) -> list[dict]:
+        # Narrowed by text, then still filtered by related_events' own rule.
+        texts = {str(cand.get("reply") or "").strip(),
+                 str(cand.get("better") or "").strip()}
+        hits = sorted(i for text in texts for i in self._by_text.get(text, ()))
+        return related_events(cand, [self.events[i] for i in hits])
+
+    def peers(self, cand: dict) -> list[dict]:
+        """The only candidates find_conflicts can match: same reply text."""
+        return self._peers.get(str(cand.get("reply") or ""), [])
 
 
 def counter_evidence(cand: dict, events, *, now: float = 0.0,
@@ -387,28 +310,14 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
     for ev in events or ():
         ev_reply = str(ev.get("reply") or "")
         about_reply = ev_reply == reply
-        # A rejection of the REWRITE argues against the pair as directly as a
-        # laugh at the reply it would replace. Rollback covers only candidates
-        # already promoted, so without this a pair could be rejected while
-        # `proposed` and then promoted anyway on a later event about the
-        # original, teaching the text the user had just refused.
+        # Rollback only covers promoted pairs; this stops a proposed one whose
+        # rewrite was refused.
         about_rewrite = (ctype == candidates.TYPE_PAIR and better
                          and ev_reply.strip() == better)
         if not (about_reply or about_rewrite):
             continue
-        # THE AGE WINDOW APPLIES TO ONE OF THESE AND NOT THE OTHER.
-        #
-        # Counter-evidence about the REPLY expires on purpose — a stale laugh
-        # must not veto a fresh correction, which is what "4b: expired
-        # counter-evidence does not block promotion" pins.
-        #
-        # A rejection of the REWRITE is a different statement: this person
-        # refused this exact text, and that does not stop being true because a
-        # month passed. Expiring it would let the protection be outwaited
-        # (rejection on day 0, two fresh corroborating corrections on days 40
-        # and 41, and the refused text promoted into the prompt). A promoted
-        # pair rolled back for the same reason never comes back; a proposed
-        # one must not be able to wait it out.
+        # Only evidence about the reply expires: a refused rewrite must not be
+        # outwaited.
         if (about_reply and now and max_age > 0
                 and now - epoch(ev.get("ts")) > max_age):
             continue
@@ -424,13 +333,8 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
 def decide(cand: dict, *, linked_events, related_events=(), peers=(),
            now: float = 0.0, policy: Policy = DEFAULT_POLICY,
            admin_ids=()) -> Decision:
-    """Should `cand` be promoted automatically, right now.
-
-    `linked_events` are the events recorded as supporting it, `related_events`
-    every event about the same reply (searched for contradictions), `peers` the
-    other candidates (searched for conflicting proposals). `admin_ids` are the
-    admin's accounts, exempt from the distinct-speaker requirement.
-    """
+    """Should `cand` be promoted automatically, right now. `related_events`
+    are searched for contradictions, `peers` for conflicting proposals."""
     if not policy.auto_promote:
         return Decision(False, "automatic promotion disabled (PROMOTE_AUTO_ENABLED)")
     if cand.get("state") != candidates.STATE_PROPOSED:
@@ -453,12 +357,8 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         seen_ids.add(eid)
         supporting.append(ev)
 
-    # Re-derive rather than trust the stored field: `strength` is excluded from
-    # _ID_FIELDS, so it is the one promotion input an edit to evidence.jsonl can
-    # change without breaking event_id. Hand-editing a bystander's correction to
-    # "strong" would otherwise buy a rewrite that classify_strength exists to
-    # refuse. For untampered rows this is the same value make_event wrote.
-    # `anchors` also requires a strong event to vouch for this very rewrite.
+    # Re-derived, not read: `strength` is outside the event id, so a hand edit
+    # could change it without breaking the row.
     strong = [e for e in supporting if anchors(e, cand)]
     against = counter_evidence(cand, related_events, now=now, policy=policy)
     if against:
@@ -470,10 +370,7 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         return Decision(False, "a conflicting candidate exists — left for review",
                         len(supporting), len(strong), ",".join(conflicting[:3]))
     if len(strong) < policy.min_strong:
-        # Say which kind of "not yet" this is. A positive_example cannot
-        # reach `min_strong` from any quantity of the events that support it
-        # (see evidence.can_be_strong), so reporting it as a count would make
-        # the audit log read like a threshold the next reaction might cross.
+        # A type no event can make strong must not read like a reachable count.
         if not evidence.can_be_strong(ctype):
             return Decision(
                 False,
@@ -491,18 +388,12 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
             False,
             f"{len(supporting)}/{policy.min_events} compatible events",
             len(supporting), len(strong))
-    # Distinct people, not distinct events. One member correcting a reply and
-    # then accepting the retry produces two compatible events by themselves —
-    # and delayed elicitation has the agent *ask* for that second one. The
-    # admin is exempt: whoever deployed the agent may teach it alone.
+    # Distinct people, not events; the admin may teach alone.
     speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
     # Compared as stored: make_event cuts speaker_id at 64 characters.
     admins = {evidence._text(o, 64) for o in admin_ids} - {""}
     admin_spoke = bool(admins & speakers)
-    # `not speakers` means no event carried attribution at all — an adapter
-    # that does not supply speaker ids, or older events from before the field
-    # existed. Missing data must not veto: fall back to the event count rather
-    # than silently refusing to ever promote on such a deployment.
+    # No attribution at all must not veto: the event count decides.
     if speakers and not admin_spoke and len(speakers) < policy.min_speakers:
         return Decision(
             False,
@@ -515,65 +406,12 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         len(supporting), len(strong))
 
 
-# ---------------------------------------------------------------------------
-# Legacy pre-ledger pool — read and retract only
-# ---------------------------------------------------------------------------
-# This pool has no promotion gate of its own: promotion goes through the
-# ledger and `decide` above, so a second set of rules here would diverge from
-# the live gate.
-#
-# What it keeps is what a deployment that learned before the ledger still needs:
-# load `example_candidates.json` as written, and let a human disagreement pull
-# a reply back out of it.
-
-
-class CandidatePool:
-    """A pre-ledger candidate file, kept readable so `withdraw` still works.
-
-    New corroboration goes through the evidence ledger and `decide` above; this
-    never grows any more, it only shrinks."""
-
-    def __init__(self, path: Path):
-        self.path = Path(path)
-        self._d: dict[str, dict] = {}
-        try:
-            loaded = json.loads(self.path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                self._d = {k: v for k, v in loaded.items() if isinstance(v, dict)}
-        except (OSError, json.JSONDecodeError):
-            self._d = {}
-
-    # -- persistence -------------------------------------------------------
-    def _save(self) -> None:
-        try:
-            atomic_write_text(
-                self.path,
-                json.dumps(self._d, ensure_ascii=False, indent=1),
-            )
-        except OSError:
-            pass
-
-    def withdraw(self, reply: str) -> bool:
-        """Drop a candidate outright — a human disagreed with this reply."""
-        if self._d.pop((reply or "").strip(), None) is not None:
-            self._save()
-            return True
-        return False
-
-
 def retract_example(path: Path, reply: str) -> int:
-    """Remove every banked example whose reply is `reply`. Returns how many.
+    """Remove every banked example whose reply is `reply`; returns how many.
 
-    The counterpart to promotion: a reply the user later rejected must stop
-    being retrieved as a model answer. Rewrites atomically and leaves every
-    other row byte-identical.
-
-    Read and replace happen under the same lock appenders take: this is a
-    read-modify-write of the whole pool, and the agent banks new examples into
-    it continuously, so any row appended between the read and the replace
-    would be erased with no trace. A failed replace is allowed to raise rather
-    than being reported as "nothing to retract" — the caller logs it, and
-    silently leaving a rejected reply retrievable is the worse outcome.
+    Atomic, other rows byte-identical, under the appenders' lock so a
+    concurrent append is not erased. A failed replace raises rather than
+    silently leaving the rejected reply retrievable.
     """
     reply = (reply or "").strip()
     if not reply or not Path(path).exists():

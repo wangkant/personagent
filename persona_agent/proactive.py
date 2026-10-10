@@ -4,11 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import re
 import time
 
 from . import access
 from . import channels
+from .decision import SEND
 from .textproc import (
     TextProcessing,
 )
@@ -17,13 +17,9 @@ logger = logging.getLogger("agent")
 
 
 class Proactive:
-    # ---------------- Proactive (self-initiated) messaging ----------------
     async def loop_proactive(self) -> None:
-        """Background loop that occasionally initiates a message with no incoming
-        trigger, so the bot reads like a person who sometimes breaks the silence.
-        Opt-in (PROACTIVE_ENABLED). Skips sleep hours; per-target silence /
-        cooldown / probability gating lives in the dispatchers. At most one
-        proactive action (group OR dm) per tick."""
+        """Opt-in loop (PROACTIVE_ENABLED): at most one unprompted group or DM
+        message per tick, never in sleep hours."""
         if not self.enabled or not self.proactive_enabled:
             return
         logger.info(
@@ -56,15 +52,12 @@ class Proactive:
         groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
         for gid in groups:
-            # A DM key is the DM pass's. A room nothing can deliver to
-            # unprompted (a connector that does not pull the outbox) is
-            # skipped before a model call is spent on it.
+            # DMs are the DM pass's; an unreachable room costs no model call.
             if (channels.is_dm(gid) or not self._proactive_platform_ok(gid)
                     or self._background_route(gid) is None):
                 continue
             last_act = self.last_activity_at.get(gid, 0.0)
-            # Never cold-open a group we've observed no activity in this run, and
-            # only after it's been quiet long enough.
+            # Only a group active this run, and quiet long enough.
             if not last_act or now - last_act < self.proactive_min_silence_s:
                 continue
             if now - self.last_proactive_at.get(gid, 0.0) < self.proactive_cooldown_s:
@@ -80,22 +73,11 @@ class Proactive:
                 continue
             # Mark the attempt either way so a PASS doesn't re-roll every tick.
             self.last_proactive_at[gid] = now
-            if not reply or reply.strip().upper() == "PASS":
+            final = self._final_reply(reply, log_ctx=f"mode=proactive, group={gid}")
+            if final.verdict != SEND:
                 continue
-            final = self._finalize_reply(reply, log_ctx=f"mode=proactive, group={gid}")
-            if final is None:
-                continue
-            reply, at_uid, _pending_core, had_visible_candidate = final
-            if had_visible_candidate and not reply:
-                continue
-            # Re-check PASS: "[CORE_UPDATE]..[/CORE_UPDATE]PASS" or '"PASS"'
-            # only reduce to a bare PASS after post-processing.
-            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
-                continue
-            # Serialize under send_lock (don't interleave chunks with a
-            # concurrent normal reply), and record the opener in the buffer —
-            # NapCat doesn't webhook the bot's own messages, so without this a
-            # followup to the opener has no record and reads as off-topic.
+            reply, at_uid = final.text, final.at_uid
+            # Buffered below: NapCat does not echo the bot's own messages.
             async with self.send_locks[gid]:
                 result = await self._send_background(
                     gid, lambda: self._send_group(gid, reply, at_uid),
@@ -113,7 +95,7 @@ class Proactive:
                 continue
             self.last_reply_at[gid] = now
             self._append_buffer(gid, self.persona_name, reply)
-            self._commit_core_memory(gid, _pending_core)
+            self._commit_core_memory(gid, final.core_note)
             if mem:
                 self._save_auto_memory(gid, mem)
             logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
@@ -121,10 +103,8 @@ class Proactive:
         return False
 
     async def _maybe_proactive_dms(self) -> bool:
-        """At most one proactive DM per tick, to someone who has DMed the bot
-        before this run: an admin or an allowed user on QQ, or anyone the
-        agent admitted through a connector that pulls the outbox. Returns
-        True if sent."""
+        """At most one proactive DM per tick, to someone who DMed the bot this
+        run and may be reached unprompted. True if sent."""
         now = time.time()
         admins = self._admins()
         allowed = self._dm_allowlist()
@@ -148,8 +128,7 @@ class Proactive:
             # Don't cold-DM someone who never messaged the bot.
             if not last_act or now - last_act < self.proactive_dm_min_silence_s:
                 continue
-            # The learning spelling on purpose: `transport._evict_conversation`
-            # pops `last_proactive_at` under the learning key.
+            # The learning key, which eviction also pops.
             key = channels.dm_learning_key(uid)
             if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown_s:
                 continue
@@ -164,16 +143,13 @@ class Proactive:
             except Exception as e:
                 logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
                 continue
-            # Mark the attempt before the PASS check so a PASS doesn't re-roll
-            # every tick.
+            # Marked either way so a PASS doesn't re-roll every tick.
             self.last_proactive_at[key] = now
 
-            final = self._finalize_reply(reply, log_ctx=f"proactive DM user={uid}")
-            if final is None:
+            final = self._final_reply(reply, log_ctx=f"proactive DM user={uid}")
+            if final.verdict != SEND:
                 continue
-            reply, _, pending_core, _ = final
-            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
-                continue
+            reply = final.text
 
             async with self.send_locks[pkey]:
                 self._dm_send_tasks[pkey] = asyncio.current_task()
@@ -196,7 +172,7 @@ class Proactive:
                     async with self.locks[pkey]:
                         self.dm_history.setdefault(uid, []).append(
                             {"role": "assistant", "content": reply})
-                        self._commit_core_memory(pkey, pending_core)
+                        self._commit_core_memory(pkey, final.core_note)
                         if mem:
                             self._save_auto_memory(pkey, mem)
                 finally:

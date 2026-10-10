@@ -9,9 +9,6 @@ from typing import Optional
 
 from .access import ADMIN_MODE
 from . import channels
-from .paths import (
-    resolve_runtime_state_file,
-)
 from .prompts import (
     DM_TOOL_GUIDE,
     HONEST_DISCLOSURE,
@@ -34,16 +31,14 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# What a platform name has to look like to be quoted in an engine-written
-# prompt line (see _at_example).
+# A platform name safe to quote in an engine-written line (see _at_example).
 _PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
 
 @dataclass(frozen=True)
 class GroupPrompt:
     system: str
-    #: The gate reads no examples or sticker guide: they shape how to
-    #: reply, not whether.
+    #: Without examples and sticker guide: they shape how to reply, not whether.
     gate_system: str
     user: str
 
@@ -53,9 +48,7 @@ class DMPrompt:
     messages: list
 
 
-# How much of a connector caller's proactive cue reaches the model. The cue is
-# a scheduler's briefing ("their exam was today"), not a document, and it is
-# handed over as external material beside the engine's own proactive note.
+# A scheduler's briefing, handed over as external material.
 _PROACTIVE_CUE_MAX_CHARS = 500
 
 
@@ -68,9 +61,7 @@ class PromptBuilder:
         caller_override: Optional[tuple] = None,
     ) -> GroupPrompt:
         all_history = list(self.buffers[group_id])
-        # called/admin/followup use the last 30 turns; judge/proactive get a
-        # wider window but still capped (the PASS/REPLY judgment rarely needs
-        # the full buffer, and the gate call pays input tokens for every line).
+        # Wider for judge/proactive, still capped: the gate pays for every line.
         history = all_history[-30:] if mode in ("followup", "called", ADMIN_MODE) else all_history[-60:]
         # A name is as sender-authored as a message; neither may forge a frame.
         def _fmt_line(m: dict) -> str:
@@ -79,15 +70,11 @@ class PromptBuilder:
             if uid:
                 return f"[{name}|id={uid}] {m['text']}"
             return f"[{name}] {m['text']}"
-        # The whole history is one data span inside the application's own
-        # scaffold, so the instructions around it stay outside the frame.
+        # One data span; the instructions around it stay outside the frame.
         history_text = _fence_user_data(
             "\n".join(_fmt_line(m) for m in history))
 
-        # If the triggering (latest) message is only placeholders the bot can't
-        # read (bare image/voice/video/file/forward/unresolved-quote), tell it not
-        # to fabricate. called/admin skip the PASS gate and must reply, so they're
-        # the ones that otherwise answer media they never saw.
+        # A trigger the bot cannot see: tell it not to make the content up.
         blind_note = ""
         if history and TextProcessing._is_blind_content(
                 history[-1].get("text", "")):
@@ -118,13 +105,8 @@ class PromptBuilder:
 
         focus_block = ""
         focus_items: list[str] = []
-        # Also capture the sticker / bare-image markers _extract_text emits
-        # ([sticker: ...], [image]), otherwise recognized stickers/images never
-        # reach the focus block — violating the prompt's own "images/cards are
-        # primary signal" rule.
-        # No class may run over a span delimiter: a card descriptor ends at
-        # its ETX, and an item that swallowed it would close a span it never
-        # opened.
+        # Images, stickers and cards are the turn's primary signal. No class
+        # may run over a span delimiter, or an item could close a span.
         focus_pat = re.compile(
             r"\[image:[^\]\x02\x03]+\]|\[sticker:[^\]\x02\x03]+\]"
             r"|\[image\]|\[sticker\]"
@@ -135,9 +117,7 @@ class PromptBuilder:
             line = m.get("text", "")
             for hit in focus_pat.finditer(line):
                 item = hit.group(0).strip()
-                # Lifted out of an enrichment span, a caption or card title
-                # is still third-party text; it keeps that label here rather
-                # than passing as something the member wrote.
+                # Lifted from an enrichment span, it stays third-party text.
                 before = line[:hit.start()]
                 if before.rfind(_WEB_DESC_OPEN) > before.rfind(_WEB_DESC_CLOSE):
                     item = f"{_WEB_DESC_OPEN}{item}{_WEB_DESC_CLOSE}"
@@ -150,11 +130,6 @@ class PromptBuilder:
                             for item in focus_items[-4:])
                 + "\n\n"
             )
-
-        # NOTE: memory extraction is carried by the JSON `mem` field defined in
-        # REASONING_PROTOCOL, parsed in _parse_model_output. No separate
-        # plaintext "MEM:" instruction is added: nothing parses it and it
-        # would contradict the JSON-only output contract.
 
         signals = self._compute_chat_signals(group_id, history)
 
@@ -173,7 +148,7 @@ class PromptBuilder:
             f"{_fence_user_data(f'{latest_nick} (id={latest_uid})')})"
             if latest_nick else ""
         )
-        # judge / proactive only: lets the model open at a specific member.
+        # Lets judge / proactive open at a specific member.
         active_text = self._active_users_for_prompt(group_id)
 
         if mode == "called":
@@ -186,9 +161,7 @@ class PromptBuilder:
                 f"Address {_fence_user_data(latest_nick) if latest_nick else 'the person who called you'} directly, sound like a real person."
             )
         elif mode == ADMIN_MODE:
-            # ADMIN_NAME is optional and ships empty, while admin mode needs
-            # only an admin id: unguarded, both lines would lose their subject
-            # ("latest line is from , the admin").
+            # ADMIN_NAME may be empty.
             admin_ref = self.admin_name or "the owner"
             admin_from = f"{admin_ref}, the owner" if self.admin_name else admin_ref
             admin_is = f"{admin_ref} is" if self.admin_name else "This is"
@@ -213,13 +186,8 @@ class PromptBuilder:
                 f"{decision_framework}"
             )
         elif mode == "proactive":
-            # Self-initiated (no incoming message). Deliberately NOT using
-            # decision_framework here — that block tells the model "silence is
-            # not a reason to reply", which is right for reactive judging but is
-            # the opposite of what this path is for. Instead: explicit permission
-            # to break the silence, but a strong PASS bias and a hard no-filler
-            # rule so it reads like a person with a genuine thought, not a bot
-            # filling dead air.
+            # Not decision_framework, which says silence is no reason to speak;
+            # instead permission to break it, with a strong PASS bias.
             at_hint = ""
             if active_text:
                 at_hint = (
@@ -274,8 +242,7 @@ class PromptBuilder:
                 f"Engage naturally — a touch more attentive than to others, lean towards replying — but **don't overdo intimacy, don't get cutesy, don't be clingy**.\n"
                 f"When they say something wrong or do something dumb, light teasing is fine (leave them an out), but **don't reverse-tease every time** — a flat acknowledgement, a lazy reply, or a sticker work too."
             )
-        # Static prefix first so the provider's prefix cache hits; the
-        # per-call tail (examples, lorebook, memory) goes last.
+        # Static prefix first, for the provider's prefix cache.
         static_block = (
             f"<persona>\n{self.persona}\n</persona>\n\n"
             f"{STYLE_GUIDE}\n\n"
@@ -295,19 +262,13 @@ class PromptBuilder:
             f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
         system_content = static_block + semi_static_block + examples_block + context_block
-        # Gate prompt drops examples + sticker guide: they shape HOW to
-        # reply, not WHETHER.
         gate_system_content = static_block + context_block
         return GroupPrompt(system=system_content,
                            gate_system=gate_system_content, user=user_prompt)
 
     def _sticker_guide_for_prompt(self, dm: bool = False) -> str:
-        """Sticker guide. ALWAYS returns content — when library is empty, gives
-        anti-confab rules (don't fabricate stickers you don't have); when populated,
-        encourages frequent trailing stickers (default: every message + one).
-
-        `private` sizes the "no sticker on an explanation" threshold for a
-        DM's longer register."""
+        """Sticker guide: with an empty library, not to invent stickers; else
+        how and how often to use them. `dm` sizes the explanation threshold."""
         stats = self.stickers.stats()
         tags_summary = self.stickers.available_tags_summary(limit=20)
         if not tags_summary:
@@ -341,12 +302,7 @@ class PromptBuilder:
             "\n"
             "**Don't use a sticker when**:\n"
             "- answering a real question / delivering concrete info\n"
-            # The line's job is "a sticker decorates a beat, not an answer",
-            # done by naming a length that reads as substantial. A group line
-            # is ~15-30 characters, so ~50 already is. A DM line is 40-80 in
-            # the default band, where 50 would retire stickers from replies
-            # rather than from explanations; ~140 sits above the medium band's
-            # ceiling and below the long band's.
+            # A length that reads as an explanation in each register.
             f"- explanation runs past ~{140 if dm else 50} chars\n"
             "- you just sent one in the previous reply\n"
             "\n"
@@ -362,24 +318,18 @@ class PromptBuilder:
         )
 
     def _admin_sticker_pattern_block(self) -> str:
-        """If owner_profile.json (a stored name) exists, embed measured
-        frequency as the target.
-        Otherwise return a placeholder telling model to use moderate frequency."""
-        # ADMIN_NAME is optional and ships empty, and this block reaches EVERY
-        # group and private prompt: unguarded concatenation would put "haven't
-        # analyzed 's chat style yet" in front of the model on every turn.
+        """The admin's measured sticker rate from owner_profile.json, else a
+        moderate default."""
+        # ADMIN_NAME may be empty, and this reaches every prompt.
         admin_ref = self.admin_name or "the owner"
-        profile_file = resolve_runtime_state_file("owner_profile.json")  # stored name
+        profile_file = self.owner_profile_file
         if not profile_file.exists():
             return (
                 "**Frequency reference**: haven't analyzed " + admin_ref +
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
-        # Parse AND read inside the try. A file that parses to a list or a
-        # string would make `.get()` raise an AttributeError out of a helper
-        # called from `_think`, where the catch-all turns it into a silent
-        # no-reply — every message, not just this block.
+        # All inside the try: a malformed file must not silence every turn.
         try:
             profile = json.loads(profile_file.read_text(encoding="utf-8"))
             if not isinstance(profile, dict):
@@ -403,18 +353,15 @@ class PromptBuilder:
 
     @staticmethod
     def _at_example(group_id: str) -> str:
-        """An [AT:...] example spelled the way this conversation's ids are.
-
-        A bare QQ number would teach the model on Telegram to write [AT:42],
-        which the connector cannot resolve. The platform name is connector-supplied,
-        so it reaches this engine-written line only if it looks like one."""
+        """An [AT:...] example spelled like this conversation's ids; the
+        connector-supplied platform name only if it looks like one."""
         platform = channels.platform_of(group_id)
         if channels.is_native(group_id) or not _PLATFORM_NAME_RE.fullmatch(platform):
             return "[AT:123456]"
         return f"[AT:{platform}:123456]"
 
     def _active_users_for_prompt(self, group_id: str) -> str:
-        """Return the list of recently active group members; used in judge-mode prompts."""
+        """Recently active members, newest first, for judge and proactive prompts."""
         users = list(self.active_users.get(group_id, []))
         if not users:
             return ""
@@ -460,7 +407,6 @@ class PromptBuilder:
         """The system prompt and the framed turns of a one-on-one chat; see
         `_chat_dm` for what each argument means."""
         last_user = self._last_user_text(history)
-        # Gate on `is_admin` alone: ADMIN_NAME is optional and ships empty.
         if is_admin:
             admin_ref = self.admin_name or "the owner"
             persona_extra = (
@@ -468,14 +414,12 @@ class PromptBuilder:
                 + (f" ({self.admin_relationship})" if self.admin_relationship else "")
                 + ". In private chat you can be more relaxed and direct, but keep the persona.\n"
             )
-            # The private guides are persona-agnostic, so WHO this person is
-            # has to be stated here.
+            # The private guides are persona-agnostic: say who this is here.
             dm_overrides = (
                 f"<private_overrides>\n"
                 f"- {admin_ref} = someone you know 100%. No need for 'pretend not to recognize' defenses.\n"
                 f"- If they ask 'who am I / do you know me / remember me' → answer warmly with their name/relationship. **DO NOT** play dumb / deflect / interrogate.\n"
-                # Comes after <rules>, so it has to say which of its options it
-                # takes away, or the model reads both and picks per turn.
+                # Names the <rules> option it removes, or the model picks per turn.
                 f"- If they ask you to do something / look something up / chat about a topic → engage directly, in your own voice rather than as a deliverable, none of the 'can't be bothered / not interested' attitude. For them, the 'no interest at all' option in <rules> does not apply.\n"
                 f"- Tone: familiar, gentle, default-trust what they say; occasional light pushback is fine but **no venom, no cold-shoulder, no defensive posture**.\n"
                 f"- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode.\n"
@@ -495,10 +439,8 @@ class PromptBuilder:
                 "- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
                 "</private_overrides>\n\n"
             )
-        # Static prefix first (provider prefix-caches it), dynamic tail last so
-        # the output protocol is the final thing the model reads. PRIVATE
-        # guide variants: the group ones carry a PASS list that has no place
-        # in a one-on-one chat.
+        # Static prefix first; the output protocol is the last thing read. The
+        # private guide variants carry no PASS list.
         static_block = (
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
@@ -508,22 +450,11 @@ class PromptBuilder:
             f"{DM_TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
             f"{HONEST_DISCLOSURE}\n\n"
-            # No AI-identity rule in here, on purpose. "Don't reveal you're an
-            # AI" would be an instruction to deceive whoever sincerely asked,
-            # and the output filter would then drop the admission it failed to
-            # prevent, so the honest answer would reach nobody at all.
-            # HONEST_DISCLOSURE above says what to do instead.
+            # No "don't reveal you're an AI" rule: HONEST_DISCLOSURE governs that.
             f"<rules>\n"
-            # The register, restated: the reader is meant to be inside a
-            # character, not fooled by somebody texting, and that wants room
-            # for the character to be present in a reply. It carries NO
-            # number on purpose. The length band is declared per persona and
-            # already stated twice (style guide and output protocol); a third
-            # ceiling here would be one more statement of the rule to drift.
+            # No number here: the length band is stated per persona elsewhere.
             f"- You are INHABITING a character, not imitating somebody texting. Write the way this person talks when they actually have something to say — a few sentences with room to breathe, and a short paragraph when the moment earns one.\n"
-            # Restated from the style block, some 12 KB back: a tool-shaped
-            # request is where the character and the model's own urge to be
-            # useful pull apart, so the rule is repeated nearer the reply.
+            # Restated nearer the reply: tool-shaped requests pull hardest.
             f"- The character decides what gets done, not the model. Asked for something only a machine hands over on demand — a long number, a list, code, a document, a translation, a sum, a fact looked up to order — answer as this person would from what they would know (an [external_web_search_data] block in this turn counts as something they know): a bit of it in their own words, a question back, an honest \"don't have that\", or no interest at all. The person never turns into the tool.\n"
             f"- Length follows the moment, not a quota. A closing beat (\"night\", \"mm\", \"go home\") is still one line, and padding a small moment out to a paragraph is worse than being brief.\n"
             f"- Break the reply where this person would pause. Each line is delivered as its own message, so line breaks are the pacing — one unbroken block arrives as a wall of text.\n"
@@ -542,9 +473,7 @@ class PromptBuilder:
                 "If nothing feels natural, output exactly: PASS. Don't send filler like 'you there?' / 'hello?'.\n"
                 "</proactive>\n\n"
             )
-        # The private-chat memory namespace: _handle_dm persists to
-        # private:<uid>; the same namespace must be read back into the prompt
-        # here, otherwise private memories are write-only.
+        # Read back from the namespace _handle_dm writes (private:<uid>).
         memory_blocks = ""
         if pkey:
             memory_blocks = (
@@ -554,16 +483,14 @@ class PromptBuilder:
         dynamic_block = (
             f"{proactive_note}"
             f"{dm_overrides}"
-            f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
+            f"{self._examples_for_prompt(focus_text=last_user, conv_id=channels.learning_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
             f"{dm_output_protocol(self.persona_style)}"
         )
         system = static_block + semi_static_block + dynamic_block
-        # Every turn the person wrote goes in as framed data, which the rules
-        # above explain. The persona's own turns stay as they are, and so does
-        # the proactive cue below: the application wrote it, and a connector
-        # caller's note inside it carries a frame of its own.
+        # The person's turns are framed data; the persona's turns and the
+        # engine's proactive cue are not.
         messages = [
             {**m, "content": _fence_user_data(m.get("content", ""))}
             if m.get("role") == "user" else dict(m)

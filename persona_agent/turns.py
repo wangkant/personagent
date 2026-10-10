@@ -4,13 +4,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import re
 import time
 from contextlib import asynccontextmanager
 
 from . import access
-from .decision import (SLEEP_WINDOW, STICKY_CALL, choose_group_mode,
-                       pacing_skip)
+from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
+                       choose_group_mode, pacing_skip)
 from . import channels
 from . import decision_log
 from .connector import (ConnectorSink, current_sink,
@@ -26,23 +25,21 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# Conversations whose refusal has been logged, kept bounded: forwarded ids are
-# chosen by the connector, so an unbounded set would grow with every room.
+# Bounded: connector-chosen ids would otherwise grow the set with every room.
 _MAX_REFUSALS_LOGGED = 4096
 
 # How often one conversation may hear that the model is not answering.
 _EXCUSE_COOLDOWN_S = 300.0
 
+# A bare call ("@Bot", "Bot?") waits this long for the message that follows it.
+BARE_CALL_DEBOUNCE_S = 5.0
+
 
 class Turns:
     async def handle_onebot(self, payload: dict, *,
                             proactive: bool = False) -> bool:
-        # One OneBot-shaped payload: from /v1/onebot, the catch-up sweep, or
-        # handle_event after synthesize_onebot_payload.
-        # `proactive`: this turn's text is a cue its CALLER wrote, not a
-        # message from the person on the other end. See _handle_dm.
-        # Top-level guard so any failure in the message pipeline is logged
-        # loudly instead of silently dying as an unretrieved-task warning.
+        # One OneBot-shaped payload (/v1/onebot, the catch-up sweep or
+        # handle_event); `proactive` text is the caller's cue (see _handle_dm).
         try:
             return await self._handle_inner(payload, proactive=proactive)
         except Exception:
@@ -70,16 +67,11 @@ class Turns:
             lock.release()
 
     async def handle_event(self, event: dict) -> dict:
-        """Handle one platform-neutral event posted by a connector.
-
-        Synchronous round-trip: a ConnectorSink is installed as a contextvar so
-        the NapCat send funnels divert their messages into it, then the normal
-        pipeline runs to completion and the collected replies go back in the
-        HTTP response (the connector relays them to the source platform)."""
+        """Handle one connector event synchronously: a ConnectorSink contextvar
+        collects the sends, and the replies go back in the HTTP response."""
         sender, bot = (str(event.get(k, "") or "") for k in ("sender_id", "bot_id"))
         if sender and sender == bot:
-            # The bot's own message echoed back: nothing to answer, and the
-            # connector's own model must not answer it either.
+            # The bot's own echo: owned, so the connector's model stays quiet too.
             logger.debug("[Agent] dropped the bot's own message (%s)",
                          event.get("platform", "?"))
             return {"handled": False, "owned": True, "replies": []}
@@ -91,10 +83,8 @@ class Turns:
             route_key = str(payload.get("group_id", ""))
         if route_key:
             self._connector_inflight[route_key] += 1
-        # The sink needs to know which platform this turn came from: on a
-        # native platform `_ns` mints ids BARE for the ledgers, and an
-        # outbound mention has to be handed back namespaced or the connector
-        # cannot resolve it (see message_to_reply_item).
+        # A native platform's ids are bare inside; outbound mentions are
+        # namespaced again (see message_to_reply_item).
         sink_platform = str(payload.get("_platform", "") or "")
         sink = ConnectorSink(
             platform=sink_platform,
@@ -103,15 +93,13 @@ class Turns:
             prefiltered=event_prefiltered(event),
         )
         tok = current_sink.set(sink)
-        # Read off `event` (synthesize drops unknown keys) and passed as an
-        # argument, not a payload flag: /v1/onebot accepts arbitrary JSON.
+        # An argument, not a payload flag: /v1/onebot accepts arbitrary JSON.
         proactive = bool(event.get("proactive"))
         try:
             handled = await self.handle_onebot(payload, proactive=proactive)
         finally:
-            # Close before reset: background tasks spawned during handling
-            # inherit a context that still references this sink, and a send
-            # after the response is gone should be dropped, not collected.
+            # Closed first: background tasks inherit this sink and must not
+            # collect into a response that is gone.
             sink.closed = True
             current_sink.reset(tok)
             if route_key:
@@ -121,8 +109,7 @@ class Turns:
                 else:
                     self._connector_inflight.pop(route_key, None)
                 self._trim_connector_convs()
-        # Only an admitted turn may leave an address behind: a connector must
-        # not plant handles for conversations the agent refuses.
+        # Only an admitted turn may leave a handle behind.
         connector = event_connector(event)
         if (route_key and sink.owned
                 and (connector["reply_handle"] or connector["connector_id"])):
@@ -134,27 +121,19 @@ class Turns:
                 conversation_id=str(event.get(
                     "sender_id" if dm else "conversation_id") or ""),
                 prefiltered=sink.prefiltered)
-        # `owned` is not `handled`. See ConnectorSink: a connector needs to know
-        # whether to suppress its own model, and "produced no reply" is the
-        # wrong signal for that — silence is frequently the persona's answer.
+        # `owned`, not `handled`, tells a connector to suppress its own model:
+        # silence is often the persona's answer.
         return {"handled": bool(handled), "owned": sink.owned,
                 "replies": sink.items}
 
     def _claim_connector_turn(self) -> None:
-        """Mark the current connector turn as ours, whatever it decides to say.
-
-        Called once the admission gates pass, which is the moment the answer
-        to "is this conversation mine" is known — everything after it is about
-        what to say, including saying nothing.
-        """
+        """Mark the connector turn as ours once admission passes, whatever it says."""
         sink = current_sink.get()
         if sink is not None:
             sink.owned = True
 
     def _admins(self) -> frozenset[str]:
-        """Every admin account (ADMIN_IDS), canonical. Re-read on each call
-        because it is a live attribute the tests and admin paths edit; the
-        set is tiny."""
+        """Every admin account (ADMIN_IDS), canonical; re-read since it is edited live."""
         return access.parse_ids(
             self.admin_ids, native_platforms=self.connector_qq_platforms)
 
@@ -170,8 +149,7 @@ class Turns:
             self.access_groups, native_platforms=self.connector_qq_platforms)
 
     def _log_refusal(self, conv_key: str, reason: str) -> None:
-        """Say once per conversation why it is not answered. Silent refusals
-        are one of the reasons deploy.md lists for "it never replies"."""
+        """Say once per conversation why it is not answered."""
         key = f"{conv_key}\x00{reason}"
         if key in self._refusals_logged:
             return
@@ -181,10 +159,8 @@ class Turns:
         logger.info("[Agent] not answering %s: %s", conv_key, reason)
 
     def _excuse_begin(self, conv_key: str) -> bool:
-        """Whether this conversation may be told the model is not answering
-        now: once per `_EXCUSE_COOLDOWN_S`, so an outage is one line, not an
-        excuse for every message. The cooldown starts only in `_excuse_end`,
-        once the excuse is delivered."""
+        """May this conversation be told the model is not answering: once per
+        `_EXCUSE_COOLDOWN_S`, counted from a delivered excuse (`_excuse_end`)."""
         if conv_key in self._excuse_inflight:
             return False
         last = self._last_excuse_at.get(conv_key)
@@ -212,9 +188,8 @@ class Turns:
         if payload.get("post_type") and payload.get("post_type") != "message":
             return False
 
-        # De-dup check only; remembering happens after the admission gates so
-        # unauthorized ids don't churn the ring. str(): catch-up replay passes
-        # NapCat's raw int while the webhook path stringifies.
+        # Remembered only after admission, so refused ids don't churn the ring;
+        # str() because the catch-up sweep passes ints.
         mid = payload.get("message_id")
         if mid is not None and str(mid) in self._seen_msg_ids:
             return False
@@ -222,9 +197,7 @@ class Turns:
         message_type = payload.get("message_type", "group")
         user_id = str(payload.get("user_id", ""))
 
-        # Admission, per platform (access.py). The sink is set only by
-        # handle_event, so /v1/onebot cannot claim to be a connector: there
-        # a namespaced id is forged, and a bare one is QQ's to gate.
+        # Only handle_event sets a sink, so /v1/onebot cannot pose as a connector.
         sink = current_sink.get()
         via_connector = sink is not None
         prefiltered = getattr(sink, "prefiltered", True)
@@ -240,13 +213,10 @@ class Turns:
             self._claim_connector_turn()
             if mid is not None:
                 self._remember_msg_id(mid)
-            # Connector DM keys are connector-chosen → register in the LRU so an
-            # over-the-cap flood evicts the least-recently-active conversation.
+            # Connector-chosen keys go through the LRU cap.
             if via_connector and not channels.is_native(user_id):
                 self._touch_connector_conv(channels.dm_routing_key(user_id))
-            # `proactive` is honoured on the private path only, which can
-            # hand the cue to the model for one call. A group event carrying
-            # it is claimed and dropped below.
+            # Only the DM path can carry a proactive cue.
             return await self._handle_dm(user_id, payload,
                                               is_admin=is_admin,
                                               proactive=proactive)
@@ -254,8 +224,6 @@ class Turns:
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
             return False
-        # A bare id is QQ's from either door, a native connector's included,
-        # so it is measured against the QQ entries like any other.
         refusal = access.group_refusal(
             group_id, self._group_allowlist(),
             via_connector=via_connector, prefiltered=prefiltered,
@@ -266,16 +234,11 @@ class Turns:
         self._claim_connector_turn()
         if mid is not None:
             self._remember_msg_id(mid)
-        # A group turn has no transient cue to carry the caller's text as:
-        # past this point it is buffered as the sender's line, counted toward
-        # the triggers and can be saved as a memory about them. Claimed, so
-        # the connector does not answer the cue with its own model either.
-        # _maybe_proactive_groups composes the QQ groups' own proactive turns.
+        # A group turn would buffer the cue as the sender's line; claimed and dropped.
         if proactive:
             logger.info("[Agent] proactive cue on a group conversation is not "
                         "supported; dropped (group=%s)", group_id)
             return False
-        # Connector group keys are connector-chosen → register in the LRU.
         if via_connector and not channels.is_native(group_id):
             self._touch_connector_conv(group_id)
 
@@ -292,37 +255,24 @@ class Turns:
                 self._vision_in_flight[group_id] = max(0, self._vision_in_flight[group_id] - 1)
         if not text:
             return False
-        # Two views of the same text: ctrl_text excludes web-fetched
-        # enrichment so a third-party page can't trigger name-call mode or
-        # memory commands; text keeps it, sentinels included, so the prompt
-        # can still tell the model which part a third party wrote.
+        # ctrl_text drops link enrichment, so a fetched page cannot call the bot
+        # or run memory commands; text keeps it, marked, for the prompt.
         ctrl_text = _strip_web_desc(text)
 
-        # `or {}` (not a default of {}) because the protocol can emit
-        # "sender": null — a present-but-null key, where .get("sender", {})
-        # still returns None and the following .get() raises AttributeError.
-        sender = payload.get("sender") or {}
-        # Cleaned once here: the name also reaches the active-members list,
-        # the self-eval context and the reaction judge, none of which pass
-        # through `_fmt_line`, so a U+0002 in a card must not open a span.
+        sender = payload.get("sender") or {}  # may be present but null
+        # Cleaned here: the name reaches prompts that bypass `_fmt_line`.
         nickname = (_clean_prompt_source(
             sender.get("card") or sender.get("nickname")) or "?")[:8]
 
         is_at = self._is_at_me(payload)
-        # ctrl_text: a linked page's og:title containing the bot name must not
-        # force called mode — only the member's own words count.
         is_called = self._names_me(ctrl_text)
         addressed = is_at or is_called
         is_noise = len(text.strip()) < 4 and not addressed
 
         is_admin_msg = access.is_admin(user_id, self._admins())
 
-        # Reaction learning: is this message a directed reaction to a recent
-        # bot reply (quote of a bot message, or @/name-call)? Adjudication runs
-        # off the hot path; the message still flows through the normal reply
-        # pipeline below.
-        # A memory command is not a reaction: it costs no model call and
-        # must not consume the reply a real reaction is waiting for.
+        # A directed reaction to a recent reply is adjudicated off the hot path.
+        # A memory command is not one and must not consume the pending reply.
         if self.react_learn_enabled and not (
                 addressed and self._is_memory_command(ctrl_text)):
             _quote_mid, _quote_by_bot = "", None
@@ -345,39 +295,24 @@ class Turns:
                     _r_entry, text, nickname, user_id, is_admin_msg,
                     conv_id=group_id, is_dm=False))
 
-        # Memory-command reply text (settled inside the lock, sent outside) — see below.
         mem_reply = None
-        # === Phase 1: absorb message, handle immediate commands, stamp seq ===
+        # Phase 1: absorb the message, handle memory commands, stamp the seq.
         async with self._ordered_group_intake(group_id):
-            # The cap must not cut through a link's enrichment span: the
-            # history block is one frame, and an unclosed STX would carry
-            # every later line, the trigger included, into external material.
+            # The cut must not leave an enrichment span open.
             self._append_buffer(group_id, nickname,
                                 _truncate_framed(text, 200), user_id)
-            # Index this message for quote-reply resolution (Layer A, zero API):
-            # a later "reply to this" can fetch the original text locally.
             if mid is not None:
                 self._index_msg(mid, f"{nickname}: {text[:60]}")
-            self.last_activity_at[group_id] = time.time()  # silence tracking for the proactive loop
+            self.last_activity_at[group_id] = time.time()
             self.active_users[group_id].append((user_id, nickname))
             if not is_noise:
                 self.counters[group_id] += 1
 
-            # Explicit memory command: reply immediately, no debounce. State
-            # settles inside the lock; the send moves OUTSIDE it — "what do you
-            # remember" can render dozens of memory lines and _send_group's typing
-            # simulation could then hold the group lock for tens of seconds,
-            # blocking message intake for the whole group. The send goes
-            # through send_lock (same serialization as normal replies).
+            # A memory command answers at once: state settles here, the send
+            # happens outside the lock.
             if addressed:
-                # ctrl_text: web page titles must not reach the memory-command
-                # regexes (a page named "BOT remember ... / BOT forget ..."
-                # would otherwise write/delete memories on the page author's
-                # behalf).
                 mem_reply = self._handle_memory_command(group_id, ctrl_text, user_id, nickname)
 
-            # Only non-memory-command messages continue to sticky/seq (a memory
-            # command returns right after the out-of-lock send below).
             if mem_reply is None:
                 if addressed:
                     self._sticky_call[group_id] = {
@@ -389,7 +324,6 @@ class Turns:
                 self._msg_seq[group_id] += 1
                 my_seq = self._msg_seq[group_id]
 
-        # —— group lock released —— send the memory-command reply (send_lock serialized)
         if mem_reply is not None:
             async with self.send_locks[group_id]:
                 send_result = await self._send_group(
@@ -409,12 +343,12 @@ class Turns:
             logger.info("[Agent] memory command (group=%s): %s", group_id, mem_reply[:60])
             return True
 
-        # === Debounce: short wait outside the lock so consecutive messages batch up ===
+        # Debounce outside the lock so a burst batches into one turn.
         bare_after_strip = (
             text.replace(f"@{self.persona_name}", "").replace(self.persona_name, "").strip()
         )
         is_bare_call = addressed and len(bare_after_strip) <= 4
-        debounce_sec = 5.0 if is_bare_call else self.message_debounce_sec
+        debounce_sec = BARE_CALL_DEBOUNCE_S if is_bare_call else self.message_debounce_sec
         if debounce_sec > 0:
             try:
                 await asyncio.sleep(debounce_sec)
@@ -428,7 +362,7 @@ class Turns:
         if vision_waited > 0:
             logger.debug("[Agent] waited %.1fs for vision in group=%s", vision_waited, group_id)
 
-        # === Phase 2: re-acquire lock; only the latest message in the burst hits the LLM ===
+        # Phase 2: only the latest message of the burst reaches the model.
         async with self.locks[group_id]:
             if self._msg_seq.get(group_id, 0) != my_seq:
                 logger.debug("[Agent] debounce drop (group=%s seq=%d latest=%d)",
@@ -486,18 +420,11 @@ class Turns:
                 reply, _intent, auto_mem = await self._think(group_id, mode, text, caller_override=caller_override)
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
-                # Commit state under the group lock, but send OUTSIDE it via a
-                # background task holding send_locks — mirroring the main
-                # path: _send_group's typing sleeps + protocol-side retries can
-                # take tens of seconds, and holding the group lock that long
-                # stalls Phase-1 message absorption for the whole group;
-                # skipping send_locks would let this chunk interleave with an
-                # in-flight reply.
+                # Sent from a background task under the send lock, like a reply.
                 if mode in ("called", access.ADMIN_MODE) and self._excuse_begin(group_id):
                     fallback = self._model_failure_excuse()
 
-                    # The task outlives a connector turn's response, so it goes
-                    # out the way unprompted messages do (_send_background).
+                    # Outlives the connector response, hence _send_background.
                     async def _send_fallback() -> None:
                         delivered = False
                         try:
@@ -527,17 +454,11 @@ class Turns:
 
             # A PASS commits nothing, neither core note nor auto-memory: both
             # describe a reply that was never sent.
-            final = self._finalize_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
-            if final is None:
+            final = self._final_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
+            # Blocked is not a PASS: no log line, no follow-up reset.
+            if final.verdict == BLOCKED:
                 return False
-            reply, at_uid, _pending_core, had_visible_candidate = final
-            if not at_uid and mode == "called":
-                at_uid = user_id
-            # A visible candidate that validation reduced to nothing is
-            # rejected, not treated as a state-bearing PASS.
-            if had_visible_candidate and not reply:
-                return False
-            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
+            if final.verdict == PASS:
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 decision_log.record(group_id, mode, False, "passed", ctrl_text,
                                     sender=sender_name)
@@ -545,20 +466,15 @@ class Turns:
                     self.last_reply_at[group_id] = (
                         time.time() - self.chat_followup_window_s - 1)
                 return False
-            # Eval context snapshot: must be taken before appending the bot's
-            # own reply, and inside the lock. Otherwise _evaluate_reply runs
-            # after the send (seconds of typing simulation), the buffer has
-            # been pushed past by new messages → it scores the wrong context,
-            # and worse, writes the mismatched context into examples.jsonl's
-            # few-shot pool (slow degradation).
+            reply, at_uid = final.text, final.at_uid
+            if not at_uid and mode == "called":
+                at_uid = user_id
+            # Snapshot now, inside the lock: after the send the buffer has moved on.
             eval_ctx = [f"{m['name']}: {m['text']}" for m in list(self.buffers[group_id])[-5:]]
             outbound_done = asyncio.Event()
             self._pending_outbound[group_id] = outbound_done
 
-        # —— group lock released ——
-        # The send still runs under a per-group send lock so same-group sends
-        # stay serialized (no interleaved text/sticker chunks), but new
-        # messages can be absorbed while the bot is "typing".
+        # Outside the group lock, so intake continues while the bot "types".
         try:
             async with self.send_locks[group_id]:
                 send_result = await self._send_group(group_id, reply, at_uid)
@@ -567,21 +483,15 @@ class Turns:
                                mode, group_id)
                 return False
 
-            # A partial send still put text in front of everyone. Returning
-            # early here would leave last_reply_at, the buffer and
-            # pending_reactions untouched for words the group has already
-            # read — the followup window would never open and the next _think
-            # could re-emit the same line verbatim. Commit what was actually
-            # delivered; withhold only what belongs to the reply as a whole
-            # (core memory, auto-memory and the self-eval below all describe
-            # the complete answer).
+            # A partial send is committed as delivered; core note, auto-memory
+            # and self-eval describe the whole answer and are withheld.
             committed = reply if send_result.success else send_result.delivered
             async with self.locks[group_id]:
                 self.last_reply_at[group_id] = time.time()
                 if committed:
                     self._append_buffer(group_id, self.persona_name, committed)
                 if send_result.success:
-                    self._commit_core_memory(group_id, _pending_core)
+                    self._commit_core_memory(group_id, final.core_note)
                     if auto_mem:
                         self._save_auto_memory(group_id, auto_mem)
             if not send_result.success:
@@ -597,9 +507,7 @@ class Turns:
         decision_log.record(group_id, mode, True, why, committed,
                             answered=ctrl_text, sender=sender_name)
 
-        # Reaction learning tracks what was actually said: a reaction to a
-        # truncated reply is a reaction to the truncation, and adjudicating it
-        # against the full text would attribute a complaint to words nobody read.
+        # Reactions are judged against what was actually delivered.
         if self.react_learn_enabled and committed:
             self.pending_reactions.record(
                 group_id, reply=committed, ctx_lines=eval_ctx, mode=mode,
@@ -615,9 +523,7 @@ class Turns:
             except Exception as e:
                 logger.warning("[Agent] on_reply callback failed: %s", e)
 
-        # Self-eval only for a complete reply. Scoring a half-delivered answer
-        # measures the network, not the persona, and a low score would feed the
-        # learning loop a verdict about text the model never got to finish.
+        # Self-eval only for a complete reply.
         if self.eval_enabled and send_result.success:
             self._spawn(self._evaluate_reply(
                 group_id, mode, text, reply, send_result.sticker_files,

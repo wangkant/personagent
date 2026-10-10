@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime
 from operator import mul
 from typing import Iterable, Optional, Sequence
+
+from .embeddings import text_key
 
 #: Where a row came from, lowest first: a shipped seed, something this
 #: deployment learned for its persona, something learned in this conversation.
@@ -16,7 +19,7 @@ SEED, PERSONA, CONVERSATION = 0, 1, 2
 BM25_K1 = 1.2
 BM25_B = 0.75
 
-# math.sumprod (3.12+) halves the cost of a pool's worth of dot products.
+# math.sumprod is 3.12+.
 _dot = getattr(math, "sumprod", None) or (lambda a, b: sum(map(mul, a, b)))
 
 
@@ -35,9 +38,7 @@ class Weights:
     mode: float = 0.0
 
 
-#: Examples and pairs. The lexical, field, mode and recency weights are the
-#: substring scorer's, so without embeddings the order barely moves; scope
-#: stays under the mode bonus, a preference rather than a filter.
+#: Examples and pairs; scope stays under the mode bonus, a preference not a filter.
 EXAMPLE_WEIGHTS = Weights(lexical=1.0, embedding=2.0, recency=0.3,
                           half_life_days=14.0, fields=(1.0, 0.3),
                           scope=(0.0, 0.2, 0.4), mode=0.5)
@@ -47,13 +48,9 @@ MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=1.0,
 
 
 class Lexicon:
-    """BM25 over one pool for one query.
-
-    A term occurs in a field when it is a substring of it, so the
-    two-character CJK windows of `_focus_tokens` need no segmenter. IDF is
-    rescaled so the query's matching terms average 1.0: a term of average
-    rarity in a field of average length scores one hit's worth, and the other
-    signals keep their weight against it."""
+    """BM25 over one pool for one query. Terms match as substrings (CJK
+    bigrams need no segmenter); IDF is rescaled to average 1.0 over the
+    query's matching terms."""
 
     def __init__(self, tokens: Iterable[str], docs: Sequence[Sequence[str]]):
         df = dict.fromkeys(tokens, 0)
@@ -62,8 +59,11 @@ class Lexicon:
         for doc in docs:
             for i, text in enumerate(doc):
                 totals[i] += len(text)
+            # One substring test per token; NUL never occurs in a token, so
+            # no match can straddle two fields.
+            blob = doc[0] if len(doc) == 1 else "\x00".join(doc)
             for tok in df:
-                if any(tok in text for text in doc):
+                if tok in blob:
                     df[tok] += 1
         self.avg_len = [max(1.0, total / n) for total in totals]
         idf = {tok: math.log(1.0 + (n - d + 0.5) / (d + 0.5))
@@ -80,6 +80,40 @@ class Lexicon:
                     norm = 1.0 - BM25_B + BM25_B * len(text) / avg
                     s += weight * idf * tf * (BM25_K1 + 1.0) / (tf + BM25_K1 * norm)
         return s
+
+
+def epoch(ts) -> float:
+    """ISO timestamp -> epoch seconds; 0.0 when unparsable. Naive stamps are
+    read as local time, matching every other timestamp in the pipeline."""
+    if not ts:
+        return 0.0
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError, OSError, OverflowError):
+        return 0.0
+
+
+def embedding_text(rec: dict) -> str:
+    """What a row is embedded as: the situation it answers, not the reply."""
+    ctx = rec.get("context") or []
+    if not isinstance(ctx, list):
+        ctx = [ctx]
+    return "\n".join([str(rec.get("scenario") or ""), *(str(c) for c in ctx)])
+
+
+def row_fields(rec: dict) -> tuple[str, str, float, str]:
+    """What scoring needs from a row, computed once at load: lowercased
+    scenario and context, the timestamp as epoch seconds (0.0 means no
+    recency bonus) and the row's embedding key."""
+    ctx = rec.get("context") or []
+    if not isinstance(ctx, list):
+        ctx = [ctx]
+    return (
+        str(rec.get("scenario") or "").lower(),
+        " ".join(str(c) for c in ctx).lower(),
+        epoch(rec.get("ts")),
+        text_key(embedding_text(rec)),
+    )
 
 
 def cosine(a, b) -> Optional[float]:

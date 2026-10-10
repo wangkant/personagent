@@ -1,10 +1,7 @@
-"""Is the persona being named in a message.
+"""Is the persona being named in a message: one rule for every caller.
 
-One rule for every place that asks: the group turn's name-call check, the
-missed-mention catch-up and the memory commands. A Latin-script name matches
-case-insensitively as a whole word ("luna" calls Luna, "Lunar" does not); a
-name with CJK characters in it matches as a substring, because those scripts
-put no spaces between words.
+A Latin-script name matches case-insensitively as a whole word ("luna" calls
+Luna, "Lunar" does not); a name with CJK in it matches as a substring.
 """
 from __future__ import annotations
 

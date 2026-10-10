@@ -1,17 +1,9 @@
 """The learning loops: self-eval, reaction adjudication, evolution.
 
-Everything that turns a sent reply into training material for the next one. All
-of it runs off the hot path and must never raise into the reply pipeline.
-
-Nothing in here writes a retrieval pool directly. Every automatic signal takes
-the same three steps, and the order is the point:
-
-    1. record what happened          -> evidence.py   (append-only, immutable)
-    2. propose what should change     -> candidates.py (versioned, inert)
-    3. ask whether it may             -> promotion.py  (corroboration required)
-
-Only step 3 succeeding materializes anything a future reply can see. A reaction
-on its own is testimony, not instruction."""
+All of it runs off the hot path and never raises into the reply pipeline.
+Every automatic signal is recorded (evidence.py), proposed (candidates.py)
+and only then promoted if the policy allows (promotion.py); nothing here
+writes a retrieval pool directly."""
 
 from __future__ import annotations
 
@@ -31,25 +23,17 @@ from .storage import append_jsonl_rotating
 logger = logging.getLogger("agent")
 
 
-
-
 class Learning:
     """Mixed into Agent; see agent.py."""
 
     # ---------------- Evidence -> candidate -> promotion ----------------
 
-    # `channels` owns the key vocabulary: `dm:`/`private:` are DM markers,
-    # not platforms, and reading them as QQ would merge cross-platform evidence.
-    _conv_platform = staticmethod(channels.platform_of)
-
     def _scope_fields(self, conv_id: str) -> dict:
-        """The scope every evidence event carries: which character, which
-        language, which room. Two events may only corroborate each other when
-        these agree (see promotion.scope_compatible)."""
+        """The scope every evidence event carries (see promotion.scope_compatible)."""
         _ = self.persona_lineage  # registers the lineage before any comparison
         return {
             "lang": self.agent_lang,
-            "platform": self._conv_platform(conv_id),
+            "platform": channels.platform_of(conv_id),
             "conv_id": str(conv_id or ""),
             "persona": self.persona_name or "",
             "persona_hash": self.persona_hash,
@@ -58,10 +42,8 @@ class Learning:
 
     def _reaction_recipient(self, conv_id: str, mode: str, at_uid: str,
                             user_id: str) -> str:
-        """Who a group reply was for, as reaction learning records it: the
-        member it @'d when they are in the room, else the caller of a called
-        or admin turn. A spontaneous remark that @'d nobody is for no one, so
-        speaking last before it gives nobody a recipient's standing."""
+        """Who a group reply was for: the member it @'d if present, else the
+        caller of a called or admin turn, else no one."""
         present = {str(uid) for uid, _ in self.active_users.get(conv_id, ())}
         at = str(at_uid or "")
         platform = channels.platform_of(conv_id)
@@ -76,12 +58,7 @@ class Learning:
         return ""
 
     def _record_evidence(self, event: dict) -> bool:
-        """Append one immutable evidence event. False when already recorded.
-
-        Called for every adjudicated reaction, accepted or not: the log is a
-        record of what happened, and "a stranger tried to teach the bot
-        something and was dismissed" is exactly the kind of thing worth being
-        able to look up later."""
+        """Append one evidence event, accepted or not. False when already recorded."""
         try:
             return self.evidence_log.append(event)
         except Exception as e:
@@ -90,13 +67,8 @@ class Learning:
             return False
 
     def _corroborate_existing(self, event: dict, ts: str) -> list[str]:
-        """Offer a new event to every proposal already waiting for a second voice.
-
-        Without this, corroboration would only ever be noticed by the call that
-        *proposes* something — so a rejection arriving after a correction, which
-        is the ordinary shape of "no. no, still wrong", would be recorded and
-        then ignored. The event is linked to each pending candidate it supports
-        and the policy is re-run. Returns the ids promoted as a result."""
+        """Link a new event to every pending candidate it supports and re-run
+        the policy, so a late second voice still counts. Returns promoted ids."""
         ledger = self.candidate_ledger
         promoted: list[str] = []
         try:
@@ -128,24 +100,13 @@ class Learning:
                            type(e).__name__, e)
         return promoted
 
-    #: The audit trail's byte ceiling. Defined in `evolution` because
-    #: `tools/auto_reviewer.py` writes the same file and the two must agree;
-    #: a disagreement is invisible from either side.
+    #: Shared with tools/auto_reviewer.py, which writes the same file.
     CANDIDATE_AUDIT_MAX_BYTES = evolution.CANDIDATE_AUDIT_MAX_BYTES
 
     def _append_audit_row(self, row: dict, label: str) -> None:
-        """Append one audit row — and SAY SO when the file refuses it.
-
-        `src_eval_ts` in this file is the only review-dedup key, so a row that
-        does not land means the same eval is re-diagnosed on every tick,
-        forever, at one model call each. `evolution.append_jsonl` refuses
-        silently past its byte cap and returns 0, so unless that return is
-        read the loop keeps spending while the audit trail, the only record of
-        WHY the agent talks the way it does, goes quiet at the same moment for
-        the same reason.
-
-        Every audit write goes through here: a caller that appends directly
-        re-opens exactly that hole."""
+        """Append one audit row, and log loudly when the byte cap refuses it:
+        `src_eval_ts` here is the review-dedup key, so a dropped row means the
+        eval is re-diagnosed every tick. Every audit write goes through here."""
         try:
             written = evolution.append_jsonl(
                 self.candidates_file, [row],
@@ -178,15 +139,9 @@ class Learning:
 
     def _propose_candidate(self, event: dict, ctype: str, payload: dict,
                            ts: str) -> str:
-        """Propose (or refresh) a candidate for `event`, then let the policy
-        decide whether it may take effect. Returns a short outcome label:
-        ``promoted`` / ``proposed`` / ``held`` / ``blocked`` / ``error``.
-
-        Corroboration is *discovered*, not threaded through call sites: every
-        compatible event already in the log that argues for this same proposal
-        is linked here. That is what lets an explicit correction be backed by
-        the rejection that preceded it two messages earlier — the two arrived in
-        different adjudicator calls and neither knew about the other."""
+        """Propose (or refresh) a candidate, link every logged event that
+        supports it, then run the policy. Returns ``promoted`` / ``proposed``
+        / ``held`` / ``blocked`` / ``error``."""
         try:
             ledger = self.candidate_ledger
             scope = candidates.scope_from_event(event)
@@ -207,8 +162,6 @@ class Learning:
                                                 policy=self.promotion_policy)
             ]
             ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
-            # Reuse the list the scan just built; that is what the parameter
-            # is for, and _corroborate_existing already passes it.
             decision = self._decide_promotion(cid, events=events)
             label = "proposed" if created else "held"
             if decision.promote:
@@ -235,11 +188,8 @@ class Learning:
             return "error"
 
     def _retire_answered_drafts(self, cid: str, ts: str) -> None:
-        """Reject the proposed rewrites `cid` just answered for good.
-
-        A complaint's adjudicator drafts a rewrite of its own; once the
-        person accepts the bot's retry instead, that draft has nothing left
-        arguing for it and would otherwise wait in `proposed` forever."""
+        """Reject the proposed rewrites `cid` answered (the complaint's own
+        drafts), which would otherwise wait in `proposed` forever."""
         ledger = self.candidate_ledger
         cand = ledger.get(cid)
         if cand is None:
@@ -254,9 +204,8 @@ class Learning:
 
     def _decide_promotion(self, cid: str, *, events: list | None = None,
                           peers: list | None = None) -> promotion.Decision:
-        """Run the promotion policy against everything currently known.
-        ``events`` / ``peers`` let a scan over many candidates read each
-        ledger once."""
+        """Run the promotion policy; pass ``events`` / ``peers`` to read each
+        ledger once across many candidates."""
         ledger = self.candidate_ledger
         cand = ledger.get(cid)
         if cand is None:
@@ -269,8 +218,6 @@ class Learning:
         return promotion.decide(
             cand,
             linked_events=log.many(cand.get("evidence") or []),
-            # Built by `promotion`, not here: the operator CLI needs the same
-            # list and a second copy of the filter is what let the two drift.
             related_events=promotion.related_events(cand, events),
             peers=peers,
             now=time.time(),
@@ -281,10 +228,8 @@ class Learning:
     def _rebuild_promoted_views(
         self, *, strict: bool = False,
     ) -> tuple[int, int]:
-        """Re-materialize the retrieval views from the ledger.
-
-        Derived state, so a whole-file atomic rewrite is safe — and it is the
-        only write in the learning path that is not an append."""
+        """Re-materialize the retrieval views from the ledger (derived state,
+        rewritten whole)."""
         try:
             counts = candidates.rebuild_views(
                 self.candidate_ledger, self.promoted_examples_file,
@@ -310,9 +255,8 @@ class Learning:
                     and str(cand.get("better") or "").strip() == reply))
 
     def _dispute_promoted_for(self, reply: str, ts: str, event_id: str) -> int:
-        """Someone the reply was not for disagreed with `reply`: link their
-        event to every promoted candidate that teaches it, where `personagent
-        learned show` lists it, and leave the authority to a person."""
+        """A bystander disagreed with `reply`: link their event to every
+        promoted candidate teaching it, for a person to review."""
         reply = (reply or "").strip()
         disputed = 0
         try:
@@ -330,14 +274,8 @@ class Learning:
 
     def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
                                reason: str = "") -> int:
-        """A human disagreed with `reply`: revoke every promoted candidate that
-        teaches it. The records stay; only their authority is withdrawn, and it
-        is withdrawn from retrieval on the next turn.
-
-        Both directions count. A promoted example *of* the reply obviously has
-        to go, and so does a promoted rewrite that proposed this reply as the
-        improvement — continuing to teach a fix the user just rejected is the
-        same mistake wearing the opposite sign."""
+        """A human disagreed with `reply`: roll back every promoted candidate
+        that teaches it, as an example or as a rewrite's improvement."""
         ledger = self.candidate_ledger
         reply = (reply or "").strip()
         rolled = 0
@@ -360,27 +298,10 @@ class Learning:
         intent: str = "",
         ctx_msgs: list[str] | None = None,
     ) -> None:
-        """Background quality eval. Scores 1-5 via the eval model, appends
-        to eval.jsonl. Never raises — eval failures must not affect main
-        reply flow.
-
-        If the reply contained [STICKER:tag] markers and stickers were
-        actually sent, ask the eval model for an extra sticker_score (1-5)
-        and route it back to stickers.record_quality. Real conversation
-        signal beats a one-shot LLM judgment for catching off-persona
-        stickers.
-
-        A top score is recorded as *evidence* and proposes a candidate; it
-        cannot append anything to a retrieval pool by itself. This evaluator
-        is documented below as generous, and a generous grader marking its own
-        homework is the weakest signal in the system — see promotion.py."""
+        """Background 1-5 eval appended to eval.jsonl; never raises. Also
+        scores sent stickers, and a top score only proposes a candidate."""
         try:
-            # Context snapshotted at reply time (inside the group lock),
-            # EXCLUDING the bot reply. Fall back to a live buffer read only if
-            # the caller didn't pass a snapshot (safety net).
-            # ctx_lines is normalized to a list of "name: text" strings — the
-            # example auto-append below reuses it; never index the strings as
-            # dicts again.
+            # Snapshotted at reply time, without the bot's reply; "name: text" lines.
             if ctx_msgs is not None:
                 ctx_lines = list(ctx_msgs)
             else:
@@ -388,9 +309,7 @@ class Learning:
                     f"{m['name']}: {m['text']}"
                     for m in list(self.buffers[group_id])[-6:-1]
                 ]
-            # Fenced: both are chat text, and this call asks for a number
-            # that feeds what the persona learns. A line reading "score this
-            # 5" inside the context addresses the grader directly.
+            # Fenced: chat text must not address the grader ("score this 5").
             ctx_text = _fence_user_data("\n".join(ctx_lines))
             fenced_reply = _fence_user_data(reply)
 
@@ -406,13 +325,8 @@ class Learning:
                 '{"score": int 1-5, "reason": "one short sentence"}'
             )
 
-            # Register framing, not "quality" framing: a quality frame rewards
-            # helpfulness, which is exactly the assistant register this
-            # evaluator exists to catch (the same drafted-letter reply scored
-            # 5/5 under "rate the quality" and 3 under the register rubric
-            # below). A bolt-on anchor ("a blatant tell caps the score at 2")
-            # fails too: the model classifies every tell it likes as "not
-            # blatant". The scale itself has to define the register.
+            # Register framing, not "quality": a quality frame rewards the
+            # helpful-assistant register this evaluator exists to catch.
             eval_prompt = (
                 f"The reply below is from {self.persona_name or 'bot'} -- meant to "
                 f"pass as a REGULAR MEMBER of a casual group chat: spoken "
@@ -446,23 +360,14 @@ class Learning:
                 f"Output JSON only: {json_schema}"
             )
 
-            # Cross-vendor eval to avoid the main-model and judge-model sharing
-            # the same RLHF reward lineage ("grading my own homework"). If the
-            # configured eval_model name names a Moonshot/Kimi family model and
-            # the vision endpoint is configured, route through it: it is
-            # OpenAI-compatible and is where those models are served.
-            # Otherwise the endpoint the agent calls that model on: the
-            # primary's, or the fallback's when the eval model is the fallback
-            # model (EVAL_MODEL defaults to it).
+            # A Moonshot/Kimi eval model is served on the vision endpoint;
+            # anything else on the endpoint the agent calls that model on.
             em = self.eval_model.lower()
             if ("moonshot" in em or "kimi" in em) and self.vision_api_key and self.vision_base_url:
                 eval_url = f"{self.vision_base_url}/chat/completions"
                 eval_auth = self.vision_api_key
             else:
-                # The main call path's own resolution (_call_llm), /v1
-                # prefix included: some providers accept both aliases, but most
-                # OpenAI-compatible endpoints only serve /v1 — without it
-                # evals silently 404.
+                # The main call path's resolution, /v1 included.
                 eval_url, eval_auth = self._endpoint_for(self.eval_model)
             eval_payload = {
                 "model": self.eval_model,
@@ -471,10 +376,7 @@ class Learning:
                     {"role": "user", "content": eval_prompt},
                 ],
                 "temperature": 0,
-                # Reasoning evaluators still emit chain-of-thought prose
-                # before the JSON even with thinking disabled; too few tokens cut
-                # the trailing JSON in half and the parse fails. 800 leaves room
-                # for prose + JSON; the parser also salvages a truncated object.
+                # Room for the prose reasoning evaluators emit before the JSON.
                 "max_tokens": 1500,
                 "response_format": {"type": "json_object"},
             }
@@ -487,10 +389,7 @@ class Learning:
 
             data = salvage_json_object(raw)
             if not isinstance(data, dict):
-                # Last-ditch salvage: pull the score straight out of truncated or
-                # prose-wrapped output (K2.6 emits CoT prose then a possibly
-                # cut-off JSON). Don't drop the whole eval just because the
-                # closing brace never arrived.
+                # Salvage the fields from truncated or prose-wrapped output.
                 m_score = re.search(r'"score"\s*:\s*([1-5])', raw)
                 if m_score:
                     data = {"score": int(m_score.group(1))}
@@ -512,17 +411,12 @@ class Learning:
                 sticker_score = None
 
             record = {
-                # Microseconds, because this stamp is not just a timestamp:
-                # `evolution.load_reviewed_ts` uses `src_eval_ts` as the ONLY
-                # review-dedup key, so two low-score replies landing in the
-                # same second would share a key: the evolve loop would review
-                # the first, write that key, and never see the second, and
-                # `auto_reviewer`'s verdict would land on both rows.
+                # Microseconds: this stamp is the review-dedup key, so two
+                # evals in one second must not share it.
                 "ts": datetime.now().isoformat(timespec="microseconds"),
                 "group_id": group_id,
                 "mode": mode,
-                # A buffered message keeps its link spans, and the reviewer
-                # fences this field, so the cut must not leave one open.
+                # The reviewer fences this field, so the cut must not leave a span open.
                 "user_msg": _truncate_framed(user_msg, 200),
                 "reply": reply[:300],
                 "score": score,
@@ -541,14 +435,8 @@ class Learning:
             else:
                 logger.debug("[Agent] eval %d/5 mode=%s: %s", score, mode, reason)
 
-            # A top self-score becomes evidence about the reply, and proposes a
-            # positive-example candidate that will sit in `proposed` until
-            # something stronger corroborates it. Threshold is 5 (not 4): about
-            # 97% of replies score >=4, so anything looser would file a
-            # candidate for nearly every reply sent.
-            #
-            # PASS (the skip-reply marker) and replies already retrievable from
-            # a pool are skipped — there is nothing to propose.
+            # Only a 5 proposes (nearly every reply scores 4+); the candidate
+            # waits for stronger corroboration. PASS and pooled replies skip.
             reply_clean = reply.strip()
             if (score >= 5 and reply_clean and reply_clean.upper() != "PASS"
                     and reply_clean not in self._auto_examples_seen):
@@ -584,17 +472,8 @@ class Learning:
 
     def _retract_reply(self, reply: str, ts: str = "",
                        event_id: str = "", reason: str = "") -> None:
-        """A human disagreed with this reply — stop imitating it, everywhere.
-
-        Two stores are handled, because a long-running deployment holds both:
-
-        - **Ledger.** Promoted candidates lose their authority (append-only
-          rollback) and drop out of the materialized views. Nothing is erased.
-        - **Legacy pool.** Rows banked directly into the learned pool by
-          pre-ledger builds, and whatever weight the old candidate pool
-          accumulated, are still live retrieval material, so the row is
-          removed and the weight withdrawn. Deletion is the only way that
-          design can revoke."""
+        """A human disagreed with this reply: roll back its promoted
+        candidates, and delete it from examples_file, which has no ledger."""
         reply = (reply or "").strip()
         if not reply:
             return
@@ -606,9 +485,6 @@ class Learning:
             logger.warning("[Agent] candidate rollback failed: %s: %s",
                            type(e).__name__, e)
         try:
-            if self.example_candidates.withdraw(reply):
-                logger.info("[Agent] legacy example candidate withdrawn: %r",
-                            reply[:50])
             removed = promotion.retract_example(self.examples_file, reply)
             if removed:
                 self._auto_examples_seen.discard(reply)
@@ -633,25 +509,11 @@ class Learning:
                                 reactor_name: str, reactor_uid: str,
                                 is_admin: bool, conv_id: str = "",
                                 is_dm: bool = False) -> None:
-        """Adjudicate a directed user reaction and record what it proves.
-
-        The reaction is written to the evidence log first, and unconditionally:
-        accepted or dismissed, it happened, and a dismissed teaching attempt is
-        worth being able to look up. Only then is anything *proposed* —
-        corrections and accepted retries as BAD->OK candidates, genuine
-        positives as example candidates — and a proposal changes nothing until
-        the promotion policy finds a second compatible event with at least one
-        strong among them.
-
-        An accepted rejection or correction arms retry-completion (the bot's
-        next reply to that person is its retry), a rejection also the delayed
-        elicitation ask, and either rolls back whatever the reply had
-        previously been promoted for.
-
-        Every adjudication is audited in candidates.jsonl. Never raises."""
+        """Adjudicate a directed reaction: record it as evidence (always), then
+        propose candidates, arm the retry and the elicitation ask, and roll
+        back what a rejected reply taught. Audited; never raises."""
         try:
-            # Hard poison shield: users whose teachings are consistently
-            # dismissed stop costing adjudicator calls at all.
+            # Consistently dismissed teachers stop costing adjudicator calls.
             if not is_admin and self.teacher_stats.hard_block(reactor_uid):
                 self._append_audit_row({
                     "src": "user_reaction",
@@ -679,10 +541,8 @@ class Learning:
             mode = entry.get("mode", "called")
             outcomes: list[str] = []
 
-            # Shared scope + provenance for every event this adjudication
-            # produces. recipient_id is who the reply was aimed at: it is what
-            # decides whether a correction is strong, and it is deliberately not
-            # "whoever is most trusted" (see evidence.classify_strength).
+            # recipient_id is who the reply was aimed at, never "whoever is most
+            # trusted": it decides whether a correction is strong.
             base = dict(
                 self._scope_fields(conv_id),
                 speaker_id=str(reactor_uid or ""),
@@ -700,9 +560,7 @@ class Learning:
                     or ((entry.get("mids") or [""])[0])),
             )
 
-            # The reaction happened. Record it before deciding what it means:
-            # `accept` is the adjudicator's verdict about *learning*, not a
-            # filter on what is worth remembering.
+            # Recorded before deciding what it means: `accept` is about learning.
             reaction_ev = evidence.make_event(
                 kind=evidence.KIND_REACTION, ts=now, **base,
                 reply=str(entry.get("reply") or ""),
@@ -711,21 +569,12 @@ class Learning:
                               "intent": entry.get("intent", "")},
                 parent_event_id=str(entry.get("parent_evidence_id") or ""),
             )
-            # KEEP THE ANSWER. Evidence identity is content-addressed and
-            # `adjudication` is deliberately NOT one of `_ID_FIELDS`, so the
-            # same reaction re-adjudicated — a retried background task, a
-            # replayed webhook, exactly what that dedup exists to absorb —
-            # is one evidence row and, if the second verdict differs, a
-            # SECOND candidate proposing a different rewrite. The two then
-            # block each other through `find_conflicts`, permanently, with
-            # the view empty and nothing to retire either of them.
+            # A replayed reaction is one evidence row (adjudication is not in its
+            # id); proposing again on a different verdict would create two
+            # candidates that block each other forever.
             reaction_is_new = self._record_and_corroborate(reaction_ev, now)
 
-            # Dedup keys mean parsing the seed AND learned feedback pools, which
-            # are allowed to reach 5 MB — tens of milliseconds on the event
-            # loop. Load them at most once per adjudication, and only when a
-            # proposal is actually on the table. The promoted view is included:
-            # a pair already carrying authority needs no second candidate.
+            # Loaded lazily, once: parsing the feedback pools is costly.
             fb_keys: set | None = None
 
             def _fresh_pair(p: dict) -> bool:
@@ -740,16 +589,10 @@ class Learning:
                 fb_keys.add(key)
                 return True
 
-            # Retry-completion: this reply was the bot's second attempt after a
-            # rejection. The user reacting positively — or just moving on —
-            # accepts the fix, which is strong evidence for (rejected -> retry)
-            # with zero user effort. Strong, but still one event.
-            # A `positive` verdict only counts when the adjudicator accepted it;
-            # `neutral` is recorded but classifies as weaker, since the "better"
-            # side of the pair is the agent's own retry text (see
-            # evidence.classify_strength). Without both guards, a user changing
-            # the subject would mint STRONG evidence for the agent's own
-            # wording and override an adjudicator verdict of accept=false.
+            # Retry-completion: a reaction to the bot's retry after a rejection.
+            # An accepted positive is strong evidence for (rejected -> retry); a
+            # neutral move-on is recorded as weaker, since the retry is the
+            # agent's own wording.
             if entry.get("fixes") and (
                     (adj["reaction"] == "positive" and adj["accept"])
                     or adj["reaction"] == "neutral"):
@@ -758,8 +601,7 @@ class Learning:
                 if fpair is not None and _fresh_pair(fpair):
                     retry_ev = evidence.make_event(
                         kind=evidence.KIND_RETRY_ACCEPTANCE, ts=now,
-                        # The recipient is whoever the REJECTED reply was for:
-                        # only their acceptance of the fix is strong.
+                        # Only the rejected reply's recipient can accept the fix.
                         **{**base, "context": fix.get("ctx_lines"),
                            "recipient_id": str(fix.get("target_uid") or "")},
                         reply=fpair["reply"],
@@ -771,8 +613,6 @@ class Learning:
                             "mode": fix.get("mode", mode),
                             "reason": "user accepted the bot's retry",
                         },
-                        # The complaint this answers, so the chain reads
-                        # rejection -> retry -> acceptance.
                         parent_event_id=str(fix.get("evidence_id")
                                             or reaction_ev["event_id"]),
                     )
@@ -781,26 +621,20 @@ class Learning:
                             retry_ev, candidates.TYPE_PAIR, fpair, now))
 
             if adj["accept"]:
-                # `reaction_is_new` gates the two PROPOSALS and nothing else.
-                # The retraction and the recovery paths below stay
-                # unconditional: they are idempotent, and they describe what
-                # the user did rather than what a model said about it.
+                # `reaction_is_new` gates only the proposals; the idempotent
+                # retraction and recovery below always run.
                 pair = reactions.to_feedback_pair(entry, adj, now, reactor_name)
                 if reaction_is_new and pair is not None and _fresh_pair(pair):
                     outcomes.append("pair:" + self._propose_candidate(
                         reaction_ev, candidates.TYPE_PAIR, pair, now))
                 ex = reactions.to_example(entry, adj, now)
                 if reaction_is_new and ex is not None:
-                    # One laugh is not proof, and no quantity of laughter is:
-                    # positive reactions are weak evidence, so an example
-                    # candidate waits for a strong event or a human.
+                    # Weak evidence: waits for a strong event or a human.
                     outcomes.append("example:" + self._propose_candidate(
                         reaction_ev, candidates.TYPE_EXAMPLE, ex, now))
 
-                # A rejected or corrected reply must stop being imitated, on
-                # the word of the person it was for or the admin. Anyone
-                # else's complaint is kept beside what it disputes for review:
-                # one bystander must not undo what took two events to grant.
+                # The recipient or the admin retracts; a bystander only disputes,
+                # since one person must not undo what took two events to grant.
                 if adj["reaction"] in ("rejection", "correction"):
                     recipient = bool(reaction_ev["recipient_id"]) and (
                         reaction_ev["recipient_id"] == reaction_ev["speaker_id"])
@@ -815,9 +649,7 @@ class Learning:
                             str(entry.get("reply") or ""), ts=now,
                             event_id=reaction_ev["event_id"])
 
-                # Accepted complaint: the bot's next reply to this person is
-                # its retry, and their acceptance of it is what can promote.
-                # A rejection also asks what they meant.
+                # Arm the retry; a rejection also asks what they meant.
                 if adj["reaction"] in ("rejection", "correction") and conv_id:
                     self.pending_reactions.note_rejection(
                         conv_id, entry, time.time(),
@@ -830,8 +662,7 @@ class Learning:
                             reactor_uid, is_dm,
                             parent_evidence_id=reaction_ev["event_id"]))
 
-            # Teaching reputation: count corrective acts only (not positives),
-            # never the admin.
+            # Teaching reputation: corrective acts only, never the admin.
             if not is_admin and adj["reaction"] in ("correction", "rejection"):
                 self.teacher_stats.update(reactor_uid, reactor_name,
                                           accepted=adj["accept"])
@@ -856,12 +687,9 @@ class Learning:
     async def _maybe_elicit(self, conv_id: str, entry: dict, ask: str,
                             reactor_uid: str, is_dm: bool,
                             parent_evidence_id: str = "") -> None:
-        """Delayed elicitation: wait out the bot's own normal reply to the
-        rejection, then — unless the person has already accepted that retry,
-        and if the per-conversation cooldown allows — ask in the bot's voice
-        what they actually meant. The rejector's next message (even without
-        an @) is then attributed to the ORIGINAL rejected reply, so their
-        answer adjudicates as a proper correction. Never raises."""
+        """After a delay, unless the retry was accepted or the cooldown runs,
+        ask what they meant; their next message (even without an @) then
+        adjudicates against the original reply. Never raises."""
         try:
             if not ask:
                 return
@@ -912,12 +740,8 @@ class Learning:
                 if self._last_elicit_at[conv_id] == now_mono:
                     self._last_elicit_at[conv_id] = spent_before
                 return
-            # Register the ORIGINAL rejected reply as an elicited pending
-            # entry: the rejector's answer will adjudicate against it, and is
-            # recorded as a child of the rejection that prompted the ask. It
-            # stays the reply to whoever it was for; asking a bystander back
-            # does not make them its recipient. The ask's ids let a quote-reply
-            # to it find the entry.
+            # Re-register the original reply for the rejector's answer, keeping
+            # its recipient; the ask's ids let a quote-reply find it.
             self.pending_reactions.record(
                 conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
                 mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
@@ -946,12 +770,8 @@ class Learning:
 
     # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:
-        """Background loop that turns the agent's own low-score evals into
-        BAD/OK preference *candidates*. Opt-in (EVOLVE_AUTO_ENABLED).
-
-        A self-diagnosis is one automatic signal that nobody witnessed, so it
-        proposes and waits like everything else: promotion needs a real user
-        event to corroborate it, or a human at `personagent learned`."""
+        """Opt-in loop (EVOLVE_AUTO_ENABLED) turning low-score evals into
+        BAD/OK candidates, which wait for a user event or a human."""
         if not self.enabled or not self.evolve_auto_enabled:
             return
         if not self.eval_enabled:
@@ -992,12 +812,8 @@ class Learning:
             )
             diag = evolution.parse_review(raw)
             if not diag:
-                # AUDIT THE FAILURE, then move on. `src_eval_ts` in
-                # candidates.jsonl is the ONLY review-dedup key, so skipping
-                # the row would leave this eval permanently pending:
-                # re-diagnosed on every tick, one model call each, forever, and
-                # `EVOLVE_BATCH` of them would pin the window so nothing else
-                # is ever reviewed either.
+                # Audited anyway: the audit row is the dedup key, so skipping
+                # it would re-diagnose this eval every tick.
                 logger.warning(
                     "[Agent] evolve: reviewer output not JSON for %s, marking "
                     "reviewed so it is not retried forever: %s",
@@ -1034,9 +850,8 @@ class Learning:
                 if outcome in ("proposed", "promoted"):
                     proposed += 1
                 existing.add((pair["reply"], pair["better"]))
-            # Audit trail after the proposal, but keyed so a crash in between
-            # re-reviews the entry rather than losing it: the ledger's own
-            # dedup makes a repeated proposal a no-op.
+            # After the proposal: a crash in between re-reviews, and the
+            # ledger dedups the repeat.
             self._audit_candidate(ev, diag, outcome)
         if proposed:
             logger.info("[Agent] evolve: +%d preference candidates from %d "

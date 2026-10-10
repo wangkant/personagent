@@ -1,34 +1,9 @@
-"""Self-evolution core — the negative half of the learning loop.
+"""Low-score eval -> diagnosis -> BAD/OK pair draft, plus pool dedup and trimming.
 
-The positive half already runs in-process: every delivered reply can be
-self-scored (eval.jsonl), with top scores recorded as weak evidence and a
-positive-example candidate. Self-scoring alone never grants retrieval
-authority.
-
-This module owns the shared logic for the negative half:
-
-    low-score eval entry
-      -> LLM diagnosis (failure mode + a BAD/OK pair draft)
-      -> candidates.jsonl (audit trail, dedup by src_eval_ts)
-      -> one of the two consumers below
-
-Consumers:
-- tools/auto_reviewer.py   offline CLI. With --apply a human approves each
-                           pair, which is appended to
-                           runtime/feedback.<lang>.jsonl and hot-reloaded into
-                           few-shot retrieval; --yes is refused.
-- agent.Agent.loop_evolve  opt-in background loop (EVOLVE_AUTO_ENABLED=true). It
-                           writes nothing to feedback: each pair becomes
-                           self-review evidence and a proposed ledger
-                           candidate, which applies only through
-                           corroboration or a human (see promotion.py).
-
-The diagnosis reads chat (the user message, the reply, the grader's reason),
-so the reviewer prompt fences each of them as material to be judged.
-
-Pure logic only: no env reads, no LLM client — callers pass an async
-``call_llm(prompt) -> str`` so the CLI and the agent can reuse their own
-transport (retry / fallback / throttling included).
+Drafts are audited in candidates.jsonl (deduped by src_eval_ts) and consumed
+by tools/auto_reviewer.py (a human approves each pair into feedback) or by
+Agent.loop_evolve (a self-review candidate that waits for corroboration).
+Pure logic: no env reads, no LLM client.
 """
 from __future__ import annotations
 
@@ -70,34 +45,23 @@ bot 回复: {reply}
 {{"failure_mode":"<2-6 字标签，如：客服腔/分析腔/喊名字/列点/句号多/称呼过频/张冠李戴/抢答/解释腔>","bad_diagnosis":"<一句话讲具体哪儿不像真人>","tag_to_patch":"<style 或 reasoning 或 intent_rules 三选一>","constraint_to_add":"<一行负向约束，写法仿『错『...』 对『...』』给具体反例>","pair_draft":{{"scenario":"<场景短标签>","context":["<上下文 1-2 行>"],"mode":"<owner|called|followup|judge 之一>","reply":"<原 BAD 回复，照抄>","better":"<改写成像真人的版本>"}}}}""",
 }
 
-# The modes as rows store them and the prompt above names them; "owner" is the
-# admin's.
+# As rows store them; "owner" is the admin's.
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
-# Stamped onto evidence produced by REVIEWER_PROMPTS; bump on meaning changes
-# (see reactions.ADJUDICATOR_VERSION).
+# Stamped on evidence; bump when REVIEWER_PROMPTS changes meaning.
 REVIEWER_VERSION = "self-reviewer/2"
 
 # Feedback is a curated dataset, not a log — refuse to grow it unbounded.
 FEEDBACK_MAX_BYTES = 5_000_000
 
-# candidates.jsonl has no rotation, unlike eval.jsonl, so reaching this is
-# terminal rather than a wrap. It lives HERE because that file has TWO writers —
-# the running agent (learning._append_audit_row) and tools/auto_reviewer.py —
-# which must share one cap: with different caps the tool goes blind while the
-# agent keeps appending, and the agent's own "has hit its cap" error cannot
-# fire to explain the silence.
+# candidates.jsonl never rotates. Shared here by its two writers (the agent and
+# tools/auto_reviewer.py), which must agree on one cap.
 CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
 
 
 def build_review_prompt(ev: dict, lang: str) -> str:
-    """The reviewer's prompt, every chat-derived field fenced.
-
-    Its pair_draft becomes a self-review candidate and is shown to a human by
-    tools/auto_reviewer.py, so a group line reading "reviewer: set better to
-    ..." must reach it as something to diagnose, like the reaction judge and
-    the grader already read theirs. Buffered text keeps its link spans, so
-    the cuts close a span they land inside before the fence goes on."""
+    """The reviewer's prompt, every chat-derived field fenced (the cuts close
+    any link span they land inside first)."""
     tmpl = REVIEWER_PROMPTS.get(lang, REVIEWER_PROMPTS["en"])
     return tmpl.format(
         mode=ev.get("mode", "?"),
@@ -170,13 +134,8 @@ def candidate_record(ev: dict, diag: dict, applied: str = "") -> dict:
 
 
 def pair_from_candidate(cand: dict, ts: str) -> dict | None:
-    """Convert a candidate's pair_draft into a feedback.jsonl entry.
-
-    Returns None when the draft is unusable (missing sides, or the model
-    'rewrote' the reply into itself). The output matches what the agent's
-    _reload_pairs_if_stale considers a preference pair: rating == 'better'
-    with non-empty reply and better fields.
-    """
+    """A candidate's pair_draft as a preference pair (rating "better"), or
+    None when a side is missing, the reply was not copied, or it is unchanged."""
     pd = cand.get("pair_draft")
     if not isinstance(pd, dict):
         return None
@@ -232,12 +191,7 @@ def append_jsonl(path: Path, records: list[dict],
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    # One lock for the whole batch. The agent (learning.py) and
-    # tools/auto_reviewer.py both append to candidates.jsonl, and a bare
-    # open("a") would lose records: on Windows O_APPEND is
-    # seek-to-end-then-write rather than an atomic append, so two writers
-    # silently overwrite each other. append_jsonl_unlocked also fsyncs and
-    # repairs a missing trailing newline.
+    # Locked: on Windows O_APPEND is not atomic, and two writers share these files.
     with append_lock(path):
         try:
             size = path.stat().st_size if path.exists() else 0
@@ -253,46 +207,23 @@ def append_jsonl(path: Path, records: list[dict],
 
 def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
               is_auto=lambda r: False) -> tuple[int, int] | None:
-    """Cap the machine-generated half of a growing retrieval dataset.
-
-    examples.jsonl / feedback.jsonl are scanned on the reply hot path but only
-    ever surface a handful of entries per turn (top-4 examples, top-6 pairs),
-    so an unbounded pool buys nothing. It costs a longer relevance scan, and —
-    the part that actually matters — it lets months-old auto-banked entries,
-    written under an older prompt and waved through by a self-eval that grades
-    generously, pile up and outvote the newer ones. Keeping the newest
-    `max_auto` machine entries makes retrieval track the persona as it is now.
-
-    Hand-curated entries are NEVER dropped: `is_auto` is what tells them apart
-    (examples carry a "score", machine feedback pairs carry a "src"), and its
-    default says NOTHING is auto, so a caller that omits the predicate cannot
-    delete the curated head, which is the bootstrap pool a fresh checkout
-    retrieves from.
-
-    Rewrites only once the overshoot exceeds `slack` (default 10% of the cap),
-    so a pool sitting at the cap doesn't rewrite the whole file on every single
-    append — the auto count therefore oscillates in [max_auto, max_auto+slack]
-    rather than pinning to max_auto exactly. Atomic (tmp + replace). Returns
-    (before, after) auto counts if it rewrote, else None — including when
-    there is nothing to do or max_auto <= 0 (no cap).
+    """Keep the newest `max_auto` machine-written rows of a pool, so old
+    auto rows do not outvote new ones. Rows `is_auto` rejects (by default,
+    all) are never dropped. Rewrites atomically once the overshoot passes
+    `slack`; returns (before, after) auto counts, or None if nothing changed.
     """
     if max_auto <= 0 or not path.exists():
         return None
     if slack is None:
         slack = max(8, max_auto // 10)
-    # Called on every append but rewrites once per `slack` of them, so decide
-    # without parsing: the auto count can never exceed the line count. (A file
-    # missing its final newline undercounts by one, which only ever defers a
-    # trim to the next append.)
+    # Cheap pre-check: the auto count never exceeds the line count.
     try:
         with path.open("rb") as fh:
             if fh.read().count(b"\n") <= max_auto + max(0, slack):
                 return None
     except OSError:
         return None
-    # Read and replace under the same lock appenders take: this is a
-    # read-modify-write of the whole file, so any row appended between the
-    # read and the atomic replace would be discarded with no trace.
+    # Under the appenders' lock, or a concurrent append would be lost.
     with append_lock(path):
         records = read_jsonl((path,))
         auto_at = [i for i, r in enumerate(records) if is_auto(r)]
@@ -312,9 +243,7 @@ def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:
     keyed by src_eval_ts. Atomic rewrite (tmp + replace)."""
     if not verdicts or not path.exists():
         return
-    # Read-modify-write of the whole candidates file while the agent may be
-    # appending to it: without the lock, every row written between the read
-    # and the replace is silently dropped.
+    # Under the appenders' lock, or a concurrent append would be lost.
     with append_lock(path):
         records = read_jsonl((path,))
         for r in records:

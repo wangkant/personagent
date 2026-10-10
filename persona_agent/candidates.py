@@ -1,29 +1,18 @@
 """Versioned behaviour candidates and the append-only ledger that owns them.
 
-A candidate is a *proposal*: "replace this reply with that one", "this reply is
-worth imitating". Adjudicating evidence (evidence.py) mints candidates; nothing
-else may. A candidate on its own changes nothing — it sits in ``proposed``
-until something grants it authority.
-
-Authority is a lifecycle event, not a field:
+A candidate is an inert proposal minted from evidence. Authority is a
+lifecycle event, not a field:
 
     proposed --promote--> promoted --rollback--> rolled_back
         |                     |
         |                     +--supersede--> superseded  (replacement promoted)
         +--reject---------> rejected
 
-Every transition is appended to the ledger; no earlier row is ever edited or
-deleted, so "why is the agent talking like this" always has an answer, and so
-does "why did it stop". The current state of the world is a *projection* — a
-replay of the log from the beginning — which is why a restart cannot disagree
-with the process that wrote it.
+Rows are only ever appended; current state is a replay of the log. Retrieval
+reads view files materialized from active candidates (``rebuild_views``),
+which can always be rebuilt from the log.
 
-Retrieval never reads this ledger directly. Promoted-and-active candidates are
-materialized into small view files (``rebuild_views``) that the agent loads on
-the hot path; the view is a cache and may be rewritten atomically at any time,
-because it can always be rebuilt from the log.
-
-Pure logic — no clock reads, no LLM. Callers pass timestamps.
+Pure logic: no clock reads, no LLM. Callers pass timestamps.
 """
 from __future__ import annotations
 
@@ -65,9 +54,7 @@ ROW_SUPERSESSION = "supersession"
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
 _WARN_BYTES_ENV = "LEDGER_CANDIDATES_WARN_BYTES"
 
-# Which states a transition may be written from. The ledger replays whatever it
-# contains — this is a write-time guard, so a mistaken admin command is refused
-# instead of becoming permanent history.
+# Write-time guard: an illegal transition is refused, never recorded.
 _ALLOWED_FROM = {
     STATE_PROMOTED: (STATE_PROPOSED, STATE_ROLLED_BACK),
     STATE_REJECTED: (STATE_PROPOSED, STATE_PROMOTED, STATE_ROLLED_BACK),
@@ -75,10 +62,7 @@ _ALLOWED_FROM = {
     STATE_SUPERSEDED: (STATE_PROPOSED, STATE_PROMOTED),
 }
 
-# Identity fields: what makes two proposals the same proposal. Scenario labels
-# and modes are deliberately excluded — the adjudicator writes a free-text
-# scene label per call, and letting it split identity would strand each event
-# on its own candidate where none ever reaches the corroboration threshold.
+# No scenario or mode: a free-text label per call would split corroboration.
 _ID_FIELDS = ("type", "lang", "platform", "persona", "persona_hash",
               "persona_version", "conv_id", "reply", "better")
 
@@ -120,13 +104,8 @@ def candidate_id(ctype: str, scope: dict, reply: str, better: str = "") -> str:
 def make_candidate(*, ctype: str, scope: dict, payload: dict,
                    evidence=(), created_at: str = "",
                    adjudication_version: str = "") -> dict:
-    """Build a candidate record from a retrieval-shaped payload.
-
-    ``payload`` is the row the pools already understand — what
-    ``reactions.to_feedback_pair`` / ``reactions.to_example`` produce. Storing
-    it verbatim means a promoted candidate materializes into exactly the row
-    shape retrieval reads, with no second format to keep in sync.
-    """
+    """Build a candidate record. ``payload`` is stored verbatim in the row
+    shape retrieval reads, so a promoted candidate needs no conversion."""
     reply = str(payload.get("reply") or "").strip()
     better = str(payload.get("better") or "").strip()
     return {
@@ -208,10 +187,7 @@ class CandidateLedger:
 
     # -- projection --------------------------------------------------------
     def _rows(self) -> list[dict]:
-        # Stamp BEFORE the read, like EvidenceLog._load. Stamped after, a row
-        # another process appends DURING the read is missed by this projection
-        # and covered by a stamp that says the projection is current — so it
-        # stays invisible until something else touches the file.
+        # Stamp before the read: a row appended during it must look stale.
         stamp = file_stamp(self.path)
         result = read_validated_jsonl(self.path, _validate_row)
         self._quarantined = result.quarantined
@@ -219,12 +195,7 @@ class CandidateLedger:
         return result.rows
 
     def _project(self) -> dict[str, dict]:
-        """Replay the log into current candidate state.
-
-        Deterministic and order-only: the same file always yields the same
-        projection, which is what makes "restart and replay produce identical
-        state" a property of the design rather than a hope.
-        """
+        """Replay the log into current candidate state (deterministic)."""
         if self._by_id is not None and self._stamp == file_stamp(self.path):
             return self._by_id
         out: dict[str, dict] = {}
@@ -234,23 +205,13 @@ class CandidateLedger:
         return out
 
     def _apply_row(self, out: dict[str, dict], row: dict) -> None:
-        """Fold one log row into a projection.
-
-        Split out of `_project` so the replay reads as what it is — one pass
-        applying rows in order — and so the meaning of each row kind is stated
-        once, in one place, next to the mutations the write methods make to
-        the live projection. Those two have to agree: `_append` lets the live
-        projection stand rather than replaying for its own write, which is
-        only sound while every write method leaves `self._by_id` exactly as a
-        cold replay of the same file would. `test_ledger.py` asserts that by
-        diffing the two.
-        """
+        """Fold one log row into a projection. The write methods must leave
+        `_by_id` exactly as this replay would (test_ledger.py diffs the two)."""
         cid = row["candidate_id"]
         kind = row.get("kind")
         if kind == ROW_CANDIDATE:
             if cid in out:
-                # A re-proposal of an existing candidate adds evidence, it
-                # does not reset the lifecycle.
+                # A re-proposal adds evidence; it never resets the lifecycle.
                 self._merge_evidence(out[cid], row.get("evidence"))
                 return
             cand = dict(row)
@@ -262,8 +223,7 @@ class CandidateLedger:
         if kind == ROW_SUPERSESSION:
             replacement_id = str(row.get("replacement_id") or "")
             old, new = out.get(cid), out.get(replacement_id)
-            # A compound row is all-or-nothing on replay. If either
-            # candidate definition is absent/corrupt, apply neither half.
+            # All-or-nothing: with either candidate missing, apply neither half.
             if old is None or new is None or cid == replacement_id:
                 return
             old["state"] = STATE_SUPERSEDED
@@ -281,8 +241,7 @@ class CandidateLedger:
             return
         cand = out.get(cid)
         if cand is None:
-            # Lifecycle row for an unknown candidate: keep the history
-            # rather than drop it, so a hand-repaired log stays inspectable.
+            # Kept, so a hand-repaired log stays inspectable.
             cand = {"candidate_id": cid, "type": "", "scope": {},
                     "payload": {}, "evidence": [], "state": STATE_PROPOSED,
                     "history": [], "orphan": True}
@@ -328,8 +287,7 @@ class CandidateLedger:
         return self.by_state(STATE_PROPOSED)
 
     def active(self) -> list[dict]:
-        """Promoted and not since rolled back or superseded — the only
-        candidates allowed to influence retrieval."""
+        """Promoted candidates: the only ones allowed to influence retrieval."""
         return self.by_state(STATE_PROMOTED)
 
     def history(self, cid: str) -> list[dict]:
@@ -342,10 +300,8 @@ class CandidateLedger:
         if reason:
             raise ValueError(f"invalid candidate ledger row: {reason}")
         with append_lock(self.path):
-            # Callers have already applied the row to `_by_id` (do not
-            # `_apply_row` here: it would land twice). Only advance the stamp
-            # when nobody else wrote since our projection — decided under the
-            # same lock as the append, or a foreign row could be hidden.
+            # Callers apply the row to `_by_id` themselves. Advance the stamp
+            # only if nobody else wrote since, decided under the lock.
             current = (self._by_id is not None
                        and self._stamp == file_stamp(self.path))
             append_jsonl_unlocked(self.path, row)
@@ -362,12 +318,8 @@ class CandidateLedger:
         )
 
     def propose(self, cand: dict) -> tuple[dict, bool]:
-        """Record a candidate. Returns ``(projected, created)``.
-
-        Idempotent: proposing an existing candidate again only links whatever
-        new evidence came with it, so a repeated reaction cannot resurrect a
-        rejected proposal or restart a promoted one.
-        """
+        """Record a candidate; returns ``(projected, created)``. Proposing an
+        existing one again only links its new evidence."""
         cid = cand["candidate_id"]
         if self.get(cid) is not None:
             self.link_evidence(cid, cand.get("evidence") or [],
@@ -400,13 +352,8 @@ class CandidateLedger:
 
     def transition(self, cid: str, state: str, *, ts: str, actor: str,
                    reason: str = "", evidence=()) -> bool:
-        """Append one lifecycle event. False when the transition is not legal
-        from the candidate's current state (nothing is written).
-
-        Supersession is written as its own `ROW_SUPERSESSION` row by
-        `supersede()`. `_apply_row` still reads `supersedes` /
-        `superseded_by` off a lifecycle row, so a schema-1 log still projects
-        and `personagent learned show` still prints them."""
+        """Append one lifecycle event; False (nothing written) when it is not
+        legal from the current state. Supersession goes through `supersede()`."""
         cand = self.get(cid)
         if cand is None or state not in _ALLOWED_FROM:
             return False
@@ -440,12 +387,8 @@ class CandidateLedger:
 
     def supersede(self, old_cid: str, new_cid: str, *, ts: str, actor: str,
                   reason: str = "") -> bool:
-        """Deactivate `old_cid` and activate `new_cid`, keeping both records.
-
-        Either half failing leaves nothing written: a half-applied supersession
-        would either drop both replies out of retrieval or leave two
-        contradictory ones in it.
-        """
+        """Deactivate `old_cid` and activate `new_cid` in one row: either half
+        failing writes nothing."""
         old, new = self.get(old_cid), self.get(new_cid)
         if old is None or new is None or old_cid == new_cid:
             return False
@@ -491,12 +434,7 @@ def view_rows(ledger: CandidateLedger) -> tuple[list[dict], list[dict]]:
 
 
 def _write_view(path: Path, rows: list[dict]) -> int:
-    """Rewrite a materialized view atomically.
-
-    Rewriting (rather than appending) is safe precisely because this file is
-    derived: the ledger is the source of truth and this is a cache of its
-    current projection.
-    """
+    """Rewrite a materialized view atomically (derived from the ledger)."""
     text = "".join(
         json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     atomic_write_text(path, text)
@@ -506,17 +444,9 @@ def _write_view(path: Path, rows: list[dict]) -> int:
 def rebuild_views(ledger: CandidateLedger, examples_view: Path,
                   feedback_view: Path, *, max_examples: int = 0,
                   max_pairs: int = 0) -> tuple[int, int]:
-    """Rebuild both retrieval views from the ledger. Returns (examples, pairs).
-
-    The caps keep the newest N rows per view (0 = unbounded) — the same
-    PROMOTE_MAX_EXAMPLES / PROMOTE_MAX_FEEDBACK limits the learned pools carry, for
-    the same reason: only a handful of rows reach a prompt per turn, and
-    material promoted under an older persona should not outvote recent material.
-
-    Dropping a row from a view is not a lifecycle change. The candidate stays
-    promoted in the ledger and returns to the view if newer rows are rolled
-    back — the cap is about how much retrieval scans, not about authority.
-    """
+    """Rebuild both retrieval views; returns (examples, pairs). The caps keep
+    the newest N rows per view (0 = unbounded); a capped-out row stays
+    promoted in the ledger."""
     examples, pairs = view_rows(ledger)
     if max_examples > 0:
         examples = examples[-max_examples:]

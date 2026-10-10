@@ -8,15 +8,11 @@ import time
 from pathlib import Path
 
 from . import candidates as candidates_mod
+from . import channels
 from . import evidence as evidence_mod
 from . import promotion as promotion_mod
-from .paths import (
-    read_jsonl,
-)
-from .pools import (
-    _read_jsonl_appended,
-    _retrieval_fields,
-)
+from .paths import parse_jsonl, read_jsonl
+from .ranking import row_fields
 from .storage import atomic_write_text
 from .textproc import _TYPOGRAPHY_MAP, TextProcessing
 
@@ -57,52 +53,30 @@ class DataViews:
             logger.warning("[Agent] %s save failed: %s", label, e)
 
     def _reload_examples_if_stale(self) -> None:
-        """Hot-reload the seed + runtime example pools.
-
-        The seed is read-only and the runtime file only ever grows, so the
-        common case (the agent just banked one of its own replies) parses the
-        appended tail alone instead of re-reading both files whole — see
-        _read_jsonl_appended. Any other shape, including a seed edit or the
-        pool-cap rewrite, falls back to a full reload."""
-        paths = (self.examples_seed_file, self.examples_file)
-        stamp = self._pool_stamp(paths)
+        """Hot-reload the seed + runtime example pools when either file changes."""
+        stamp = self._pool_stamp((self.examples_seed_file, self.examples_file))
         if stamp == self._examples_mtime:
             return
         try:
-            records, appended = self._read_pool_delta(
-                paths, "_examples", self._examples_mtime, stamp)
-            replies = {
+            records = self._read_pool(self.examples_seed_file, self.examples_file)
+            self._examples_cache = records
+            # Rebuilt from disk so a restart remembers which replies are pooled.
+            self._auto_examples_seen = {
                 r.get("reply", "").strip() for r in records
                 if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
-            if appended:
-                self._examples_cache.extend(records)
-                # Runtime dedup set: appends only add, so update in place.
-                self._auto_examples_seen.update(replies)
-            else:
-                self._examples_cache = records
-                # Rebuild runtime auto-append dedup set from on-disk replies so
-                # a restart doesn't forget which replies are already in the pool.
-                self._auto_examples_seen = replies
             self._examples_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] examples.jsonl reload failed: %s", e)
 
     def _reload_pairs_if_stale(self) -> None:
-        """Load preference pairs from the seed + runtime feedback pools
-        (rating=better only). Append-aware, same as _reload_examples_if_stale."""
-        paths = (self.feedback_seed_file, self.feedback_file)
-        stamp = self._pool_stamp(paths)
+        """Hot-reload the seed + runtime preference pairs (rating=better only)."""
+        stamp = self._pool_stamp((self.feedback_seed_file, self.feedback_file))
         if stamp == self._pairs_mtime:
             return
         try:
-            records, appended = self._read_pool_delta(
-                paths, "_pairs", self._pairs_mtime, stamp)
-            pairs = [r for r in records if self._is_better_pair(r)]
-            if appended:
-                self._pairs_cache.extend(pairs)
-            else:
-                self._pairs_cache = pairs
+            records = self._read_pool(self.feedback_seed_file, self.feedback_file)
+            self._pairs_cache = [r for r in records if self._is_better_pair(r)]
             self._pairs_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
@@ -111,46 +85,46 @@ class DataViews:
         """This turn's scope, normalised the way the ledger stores one."""
         return evidence_mod.normalize_scope({
             "lang": self.agent_lang,
-            "platform": self._conv_platform(conv_id) if conv_id else "",
+            "platform": channels.platform_of(conv_id) if conv_id else "",
             "conv_id": conv_id,
             "persona": self.persona_name,
             "persona_hash": self.persona_hash,
             "persona_version": self.persona_version,
         })
 
-    def _scope_authorizes(self, scope, current_scope: dict) -> bool:
+    def _scope_authorizes(self, scope, current_scope: dict,
+                          identity: str | None = None) -> bool:
         """May a promoted row with ``scope`` reach a prompt in ``current_scope``?
-        Persona is compared through its lineage, everything else exactly."""
+        Persona is compared through its lineage, everything else exactly.
+        Pass ``identity`` (self.persona_identity) when checking many rows."""
         if not isinstance(scope, dict):
             return False
-        # Read first: reading it registers the lineage the lookup below uses.
-        identity = self.persona_identity
+        if identity is None:
+            # Read first: reading it registers the lineage the lookup below uses.
+            identity = self.persona_identity
         return (all(str(scope.get(key) or "") == str(value or "")
                     for key, value in current_scope.items() if key != "persona_hash")
                 and evidence_mod.persona_identity(scope) == identity)
 
     def _learned_summary(self, group_id: str) -> str:
-        """What this room has taught the bot, in chat-sized form: memories,
-        promoted material, proposals still waiting (for a second voice, or
-        for the admin), the latest promotion and why it passed, and the
-        recent self-scores. Reads state only; no model call."""
+        """What this room has taught the bot, chat-sized: counts, what waits,
+        the latest promotion and why. Reads state only."""
         zh = self.agent_lang == "zh"
         current_scope = self._live_scope(group_id)
+        identity = self.persona_identity
         self._reload_views_if_stale()
         examples = [r for r in self._view_examples_cache
-                    if self._scope_authorizes(r.get("scope"), current_scope)]
+                    if self._scope_authorizes(r.get("scope"), current_scope, identity)]
         pairs = [r for r in self._view_pairs_cache
-                 if self._scope_authorizes(r.get("scope"), current_scope)]
-        voice, admin, latest = self._learning_status(group_id, current_scope)
+                 if self._scope_authorizes(r.get("scope"), current_scope, identity)]
+        voice, admin, latest = self._learning_status(current_scope)
         scores = []
         if self.eval_enabled:
             scores = [int(r["score"]) for r in read_jsonl((self.eval_file,))
                       if r.get("group_id") == group_id and isinstance(r.get("score"), int)][-10:]
         memories = len(self.memories.get(group_id, []))
 
-        # Plain lines, ASCII separators: the reply crosses the character policy
-        # like any other, which strips middle dots, arrows, the ellipsis and
-        # list markers, and refuses brackets and pipes outright.
+        # Plain lines: the reply crosses the character policy like any other.
         n_ex, n_pr = len(examples), len(pairs)
         if zh:
             head = (f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，"
@@ -184,9 +158,8 @@ class DataViews:
         return self._policy_safe(head, lines)
 
     def _policy_safe(self, head: str, lines: list[str]) -> str:
-        """`head` plus every line of learned text the character policy lets
-        through whole. Learned text is chat text: a meta phrase in one
-        drafted rewrite would otherwise refuse the entire summary."""
+        """`head` plus each learned line the character policy passes whole, so
+        one bad line cannot refuse the summary."""
         def passes(text: str) -> bool:
             return TextProcessing._sanitize_reply(
                 text, self.agent_lang, self.reply_style) == text
@@ -197,15 +170,10 @@ class DataViews:
                 kept.append(line)
         return "\n".join(kept)
 
-    def _learning_status(self, group_id: str, current_scope: dict):
+    def _learning_status(self, current_scope: dict):
         """(waiting for a second voice, waiting for the admin, latest active
-        candidate) for this conversation. A rewrite blocked by a conflict or
-        by disagreeing evidence waits for the admin, not for a voice. Liked
-        replies are not counted: only a person can promote one, and they pile
-        up with every laugh.
-
-        One pass over the ledger and the log, not one per candidate: anyone
-        in the room can ask, and this runs on the event loop."""
+        candidate) for this conversation, in one pass over each ledger. Liked
+        replies are not counted: only a person can promote them."""
         try:
             cands = self.candidate_ledger.all()
             events = self.evidence_log.all()
@@ -220,23 +188,12 @@ class DataViews:
         if waiting and not self.promotion_policy.auto_promote:
             admin = len(waiting)
         elif waiting:
-            by_id = {e.get("event_id"): e for e in events}
-            by_reply: dict[str, list] = {}
-            for e in events:
-                by_reply.setdefault(str(e.get("reply") or "").strip(), []).append(e)
-            peers: dict[str, list] = {}
-            for c in cands:
-                peers.setdefault(str(c.get("reply") or ""), []).append(c)
+            index = promotion_mod.EvidenceIndex(events, cands)
             now, admins = time.time(), self._admins()
             for c in waiting:
-                reply = str(c.get("reply") or "").strip()
-                better = str(c.get("better") or "").strip()
                 decision = promotion_mod.decide(
-                    c, linked_events=[by_id[i] for i in c.get("evidence") or ()
-                                      if i in by_id],
-                    related_events=by_reply.get(reply, []) + (
-                        by_reply.get(better, []) if better and better != reply else []),
-                    peers=peers.get(str(c.get("reply") or ""), []), now=now,
+                    c, linked_events=index.linked(c), related_events=index.related(c),
+                    peers=index.peers(c), now=now,
                     policy=self.promotion_policy, admin_ids=admins)
                 if decision.blocked_by:
                     admin += 1
@@ -255,9 +212,8 @@ class DataViews:
         return voice, admin, latest
 
     def _promotion_chain(self, cand: dict, zh: bool, conv_id: str) -> str:
-        """One line: who argued for `cand`, how, and why it passed. Only
-        people in `conv_id` are named; who argued in another chat stays
-        there."""
+        """One line: who argued for `cand`, how, and why it passed (only people
+        in `conv_id` are named)."""
         try:
             linked = self.evidence_log.many(cand.get("evidence") or [])
         except Exception:
@@ -298,14 +254,8 @@ class DataViews:
         return ("原因：" + "，".join(steps)) if zh else ("why: " + ", ".join(steps))
 
     def _reload_views_if_stale(self) -> None:
-        """Hot-reload the materialized views of promoted candidates.
-
-        These are the *only* rows the automatic learning path can put in front
-        of the model. They are small (capped), derived, and rewritten whole on
-        every promotion or rollback, so there is no append-only fast path to
-        preserve here — a plain mtime+size check and a full reparse is both
-        correct and cheap. A rollback therefore takes effect on the next turn
-        without a restart, which is the point of keeping the view separate."""
+        """Hot-reload the promoted views, the only rows automatic learning can
+        put in a prompt; a rollback takes effect on the next turn."""
         for path, attr, pairs_only in (
             (self.promoted_examples_file, "_view_examples", False),
             (self.promoted_feedback_file, "_view_pairs", True),
@@ -330,7 +280,7 @@ class DataViews:
     def _tag_rows(rows: list) -> list:
         """Precompute the per-row retrieval fields once at load, not per turn."""
         for rec in rows:
-            rec["_rt"] = _retrieval_fields(rec)
+            rec["_rt"] = row_fields(rec)
         return rows
 
     @staticmethod
@@ -340,17 +290,10 @@ class DataViews:
             rec["_seed"] = True  # ranked below what this deployment learned
         return rows
 
-    def _set_pool_pos(self, attr: str, eof: int, offset: int, sig: bytes) -> None:
-        setattr(self, attr + "_eof", eof)
-        setattr(self, attr + "_offset", offset)
-        setattr(self, attr + "_sig", sig)
-
     @staticmethod
     def _pool_stamp(paths, *, strict: bool = False) -> tuple:
-        """Identity, nanosecond mtime and size per file, including replacements.
-
-        Strict callers distinguish an unreadable file from an absent one.
-        """
+        """Identity, nanosecond mtime and size per file; `strict` raises on an
+        unreadable (not absent) file."""
         out: list = []
         for p in paths:
             try:
@@ -364,52 +307,15 @@ class DataViews:
                 out.append((0, 0, 0, 0))
         return tuple(out)
 
-    def _read_pool_delta(self, paths: tuple[Path, Path], attr: str,
-                         prev_stamp, stamp: tuple) -> tuple[list[dict], bool]:
-        """Read a (seed, runtime) retrieval pool, appended-tail-only when possible.
-
-        Returns ``(records, appended_only)``. When appended_only is True the
-        records are strictly new rows to be concatenated onto the existing
-        cache — safe because the cache is ordered seed-then-runtime and every
-        writer appends to the runtime file's tail.
-
-        The fast path needs a previous successful load whose seed is still
-        untouched; `prev_stamp` set to anything that isn't such a stamp (the
-        `= 0.0` force-reload idiom the tools and tests use) drops back to a
-        full read of both files. _read_jsonl_appended re-checks the runtime
-        prefix itself and falls back on its own if it has been rewritten.
-        """
-        seed_path, runtime_path = paths
-        can_append = (
-            isinstance(prev_stamp, tuple) and len(prev_stamp) == len(stamp)
-            and prev_stamp[0] == stamp[0]         # seed untouched
-            and prev_stamp[1][:2] == stamp[1][:2]  # same runtime file
-            and getattr(self, attr + "_sig")      # a prefix was consumed before
-            and runtime_path.exists()
-        )
-        if can_append:
-            records, appended, eof, offset, sig = _read_jsonl_appended(
-                runtime_path,
-                getattr(self, attr + "_eof"),
-                getattr(self, attr + "_offset"),
-                getattr(self, attr + "_sig"),
-                identity=prev_stamp[1][:2],
-            )
-            self._set_pool_pos(attr, eof, offset, sig)
-            if appended:
-                return self._tag_rows(records), True
-            # _read_jsonl_appended rejected the prefix and re-read the runtime
-            # file whole; the seed still has to be prepended.
-            return self._tag_rows(self._read_seed(seed_path) + records), False
-
-        seed_records = self._read_seed(seed_path)
-        if runtime_path.exists():
-            runtime_records, _, eof, offset, sig = _read_jsonl_appended(
-                runtime_path, 0, 0, b"")
-        else:
-            runtime_records, eof, offset, sig = [], 0, 0, b""
-        self._set_pool_pos(attr, eof, offset, sig)
-        return self._tag_rows(seed_records + runtime_records), False
+    @classmethod
+    def _read_pool(cls, seed: Path, runtime: Path) -> list:
+        """Seed rows then runtime rows, tagged. A runtime read error raises,
+        so the caller keeps its cache and retries on the next turn."""
+        try:
+            blob = runtime.read_bytes()
+        except FileNotFoundError:
+            blob = b""
+        return cls._tag_rows(cls._read_seed(seed) + parse_jsonl(blob))
 
     def _reload_json_if_stale(self, path: Path, attr: str, parse,
                               name: str, unit: str) -> None:
@@ -434,7 +340,6 @@ class DataViews:
         except Exception as e:
             logger.warning("[Agent] %s.json load failed: %s", name, e)
 
-    # -------- Output filter (SillyTavern regex-extension style) --------
     def _reload_filters_if_stale(self) -> None:
         def parse(data) -> list:
             raw = data.get("filters", []) if isinstance(data, dict) else data
@@ -460,8 +365,8 @@ class DataViews:
                                    "output_filter", "rules")
 
     def _apply_output_filter(self, reply: str) -> tuple[str, str]:
-        """Pre-send regex sanity net. Returns (filtered_reply, blocked_reason).
-        Non-empty blocked_reason → drop the whole reply, take the PASS path."""
+        """Pre-send regex net: (filtered_reply, blocked_reason); a reason drops
+        the whole reply."""
         self._reload_filters_if_stale()
         if not self._filters_cache or not reply:
             return reply, ""
@@ -475,7 +380,6 @@ class DataViews:
                 reply = f["regex"].sub(f.get("replacement", ""), reply)
         return reply.strip(), ""
 
-    # -------- Lorebook (SillyTavern World Info style) --------
     def _reload_lorebook_if_stale(self) -> None:
         def parse(data) -> list:
             raw = data.get("entries", []) if isinstance(data, dict) else data
@@ -489,7 +393,6 @@ class DataViews:
                     "keywords": [str(k).lower() for k in kws],
                     "content": e["content"],
                     "priority": int(e.get("priority", 100)),
-                    "scan_depth": int(e.get("scan_depth", 5)),
                 })
             entries.sort(key=lambda x: -x["priority"])
             return entries

@@ -1,26 +1,11 @@
 """Append-only record of what happened in a conversation.
 
-An evidence event says *a thing occurred*: this reply was sent, that person
-quoted it and said "no, I meant X", the adjudicator read the exchange and
-returned this verdict. Nothing more. An event carries no authority over future
-behaviour — it cannot change a prompt, grow a retrieval pool, or silence a
-reply. It is testimony, and testimony is worth keeping even when it is wrong,
-because the record of a bad teaching is how you find out you were taught badly.
+An event is testimony with no authority: only a promoted candidate
+(candidates.py, promotion.py) reaches retrieval. Only the adjudicator's
+structured verdict and short reason are stored, never raw model output, and
+the log lives in the runtime directory. Identity is the sha256 of the
+semantic payload, so a replayed event is one row.
 
-Authority lives one layer up: adjudicating evidence produces a *candidate*
-(candidates.py), and only a *promoted* candidate reaches retrieval. The split
-exists because the two have opposite requirements — evidence must be cheap to
-write and never rewritten, authority must be expensive to grant and reversible.
-
-What is deliberately NOT stored:
-
-- **Chain of thought.** Only the structured verdict and the one-sentence reason
-  the adjudicator was asked for. The raw model output never lands on disk.
-- Anything outside the runtime directory. Events quote real conversations, so
-  the log lives with the other gitignored learned state (see paths.py).
-
-Event identity is the sha256 of the semantic payload, so the same event
-recorded twice — a retried background task, a replayed webhook — is one row.
 Pure logic: no clock reads, no LLM. Callers pass timestamps.
 """
 from __future__ import annotations
@@ -59,8 +44,7 @@ _MAX_CTX_LINES = 4
 _MAX_CTX_CHARS = 300
 _MAX_REASON = 200
 
-# Fields that define an event's identity. Timestamps and derived fields are
-# excluded: the same reaction re-adjudicated a second later is the same event.
+# Identity fields: no timestamps or derived fields, so a re-adjudicated reaction is one event.
 _ID_FIELDS = (
     "kind", "lang", "platform", "conv_id", "persona", "persona_hash",
     "persona_version", "speaker_id", "recipient_id", "reply", "context",
@@ -111,38 +95,22 @@ def _validate_event(record: dict) -> str | None:
 def classify_strength(event: dict) -> str:
     """How much this single event may authorize on its own.
 
-    - ``STRONG`` — an explicit directed correction from the person the reply
-      was aimed at, carrying a concrete replacement; or a retry that same
-      person then accepted. Someone told the agent it was wrong *about them*
-      and said what right looks like.
-    - ``NEGATIVE_ONLY`` — a rejection (any rewrite on it is the adjudicator's
-      guess), or a correction from a bystander. Real evidence that something
-      was off, but not a mandate to rewrite: **admin status does not make
-      someone the affected recipient**, so a third party's correction —
-      however trusted — lands here rather than in STRONG.
-    - ``WEAK`` — laughter, agreement, banter, the agent's own score. Never
-      sufficient to promote anything, at any quantity.
-
-    A dismissed adjudication (``accept`` false) is still recorded, and still
-    classified, but the promotion policy ignores it as support.
+    ``STRONG``: a correction with a replacement from the reply's recipient,
+    or a retry that person accepted. ``NEGATIVE_ONLY``: a rejection, or a
+    bystander's correction (admin status does not make someone the
+    recipient). ``WEAK``: laughter, agreement, the agent's own score.
     """
     kind = event.get("kind")
     if kind == KIND_RETRY_ACCEPTANCE:
-        # Acceptance only counts from the person the REJECTED reply was for
-        # (its recipient_id). A bystander laughing at the second attempt, or
-        # accepting a retry of someone else's reply, is not them satisfied.
+        # Only the rejected reply's recipient can accept its retry.
         if not _same_person(event):
             return NEGATIVE_ONLY
-        # Silence is not acceptance. `neutral` means the person simply moved
-        # on — and the "better" text of a retry-acceptance event is the agent's
-        # OWN retry, so counting a topic change as STRONG would let the agent
-        # manufacture a mandate for its own wording out of nothing happening.
+        # Moving on is not acceptance: the "better" side is the agent's own retry.
         if event.get("reaction_type") == "neutral":
             return NEGATIVE_ONLY
         return STRONG
     if kind == KIND_SELF_REVIEW:
-        # The agent noticing its own failure and drafting a fix. Concrete, but
-        # nobody witnessed it — a single unwitnessed signal cannot authorize.
+        # Concrete, but nobody witnessed it.
         return NEGATIVE_ONLY
     if kind == KIND_SELF_EVAL:
         return WEAK
@@ -155,10 +123,8 @@ def classify_strength(event: dict) -> str:
     return WEAK
 
 
-# Persona lineage: (persona_version, persona_hash) -> lineage root. Registered
-# from persona_lineage.json by the agent and the CLI; every hash in one lineage
-# is the same character for scope purposes, so editing the document does not
-# orphan what was learned. A new PERSONA_VERSION is a new lineage.
+# (persona_version, persona_hash) -> lineage root, registered from
+# persona_lineage.json: every hash in one lineage is the same character.
 _PERSONA_LINEAGE: dict[tuple[str, str], str] = {}
 
 
@@ -176,11 +142,8 @@ def persona_identity(scope: dict) -> str:
     return _PERSONA_LINEAGE.get((str(scope.get("persona_version") or ""), phash), phash)
 
 
-# The six fields promotion compares, and the length each is STORED at. One
-# table, because the producer and the comparator live in different modules and
-# must agree: `make_event` writes through it, and
-# `agent._examples_for_prompt` reads a live scope through `normalize_scope`
-# before comparing; a mismatch fails silently (see `normalize_scope`).
+# The scope fields and the length each is stored at. make_event writes through
+# this table and retrieval normalizes the live scope with it; they must agree.
 SCOPE_LIMITS = {
     "lang": 16,
     "platform": 32,
@@ -192,30 +155,15 @@ SCOPE_LIMITS = {
 
 
 def normalize_scope(scope: dict) -> dict:
-    """A live scope, as the ledger would have stored it.
-
-    `_authorized_view` requires all six fields to match exactly and the
-    ledger holds bounded values, so a live scope has to be bounded the same
-    way: a 45-character PERSONA_VERSION compared raw against its stored form
-    would drop every promoted row on every turn, silently. A shared function
-    rather than a comment asking the next caller to remember."""
+    """A live scope bounded the way the ledger stored it, so an over-long
+    value still compares equal to its stored form."""
     return {key: _scope_text(scope.get(key), limit)
             for key, limit in SCOPE_LIMITS.items()}
 
 
 def _scope_text(value, limit: int) -> str:
-    """Bounded like everything else here, but still DISTINCT.
-
-    A plain truncation would make two values differing only past the limit
-    EQUAL: material promoted in a room whose id shares a 128-character prefix
-    with another would be authorized into that other room's prompt, and
-    `PROMOTE_REQUIRE_SAME_CONVERSATION` could not stop it because the two ids
-    would be the same string by then. Two release labels sharing a
-    32-character prefix would likewise be one agent.
-
-    An over-length value keeps a readable prefix and carries a digest of the
-    WHOLE original, so the field stays bounded and the comparison stays
-    injective. Short values, which is every real id, are untouched."""
+    """Bounded but still distinct: an over-long value keeps a prefix plus a
+    digest of the whole, so two ids sharing a prefix never become equal."""
     text = str(value or "").strip()
     if len(text) <= limit:
         return text
@@ -254,20 +202,14 @@ def make_event(
     source_event_id: str = "",
     parent_event_id: str = "",
 ) -> dict:
-    """Build a normalized, id-stamped evidence event.
-
-    ``adjudication`` is reduced to the structured verdict plus a short reason —
-    any other key the caller passes (a raw completion, a reasoning trace) is
-    dropped here rather than trusted not to exist.
-    """
+    """Build a normalized, id-stamped evidence event. ``adjudication`` keeps
+    only the structured verdict and a short reason; any other key is dropped."""
     adj = adjudication or {}
     event = {
         "schema": SCHEMA,
         "event_id": "",
         "ts": _text(ts, 32),
         "kind": kind if kind in KINDS else KIND_REACTION,
-        # Through SCOPE_LIMITS, so the length retrieval compares at cannot
-        # drift from the length this writes at.
         **normalize_scope({
             "lang": lang, "platform": platform, "conv_id": conv_id,
             "persona": persona, "persona_hash": persona_hash,
@@ -303,13 +245,8 @@ def make_event(
 
 
 def supports(event: dict, candidate_type: str) -> bool:
-    """True when this event argues *for* a candidate of that type.
-
-    Direction matters as much as strength. A laugh at a reply supports keeping
-    it; a correction of the same reply supports replacing it. Neither supports
-    the other, and treating a mixed pile as a majority vote is how a feedback
-    loop talks itself into contradictions.
-    """
+    """True when this event argues *for* a candidate of that type: a laugh
+    supports keeping a reply, a correction supports replacing it."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
     kind = event.get("kind")
@@ -318,14 +255,7 @@ def supports(event: dict, candidate_type: str) -> bool:
             return True
         return event.get("reaction_type") in ("correction", "rejection")
     if candidate_type == "positive_example":
-        # NOT a retry acceptance, and the exclusion is load-bearing. That
-        # event is about the PAIR — its `reply` field is the text the user
-        # REJECTED and its `better` is the retry — so admitting it here makes
-        # "the user accepted the fix" argue that the text they rejected is a
-        # good example to imitate. It is STRONG, so one of them would clear
-        # `min_strong` on its own. `promotion.supports_candidate`'s
-        # reply-equality check would disagree, but that is a guard by
-        # accident and not by intent.
+        # Not a retry acceptance: its `reply` is the text the user rejected.
         if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
             return False
         if kind == KIND_SELF_EVAL:
@@ -334,51 +264,23 @@ def supports(event: dict, candidate_type: str) -> bool:
     return False
 
 
-# Which candidate types any single event can lend STRONG authority to.
-# Derived from the pair of functions above, not asserted alongside them:
-# `supports` says what argues FOR a type and `classify_strength` says how much
-# one event may lend, so "can this type ever clear min_strong" is their
-# intersection. `tests/test_ledger.py` re-derives this by scanning every
-# kind x reaction_type combination and fails if the answer moves.
+# Types some supporting event can make STRONG: the intersection of `supports`
+# and `classify_strength` (tests/test_ledger.py re-derives it).
 STRONG_CAPABLE_TYPES = frozenset({"preference_pair"})
 
 
 def can_be_strong(candidate_type: str) -> bool:
-    """Can any event that SUPPORTS this candidate type ever classify STRONG.
-
-    False for `positive_example`, and that is the POLICY rather than an
-    oversight. What supports one is a self-eval or a positive reaction, and
-    `classify_strength` calls both WEAK: "laughter, agreement, banter, the
-    agent's own score. Never sufficient to promote anything, at any
-    quantity." Such a candidate is still proposed, still audited, and still
-    promotable — by a person, through `personagent learned promote`.
-    It is waiting for a human, not for more events.
-
-    Promotion asks this so its refusal can say WHICH of those two it is: "0/1
-    strong events (4 supporting)" describes a threshold you could reach by
-    waiting, and no amount of waiting reaches this one.
-    """
+    """Can any event that supports this type classify STRONG. False for
+    `positive_example` by policy: only a person can promote one."""
     return candidate_type in STRONG_CAPABLE_TYPES
 
 
 def opposes_rewrite(event: dict) -> bool:
-    """True when this event argues against a pair's PROPOSED replacement.
-
-    `opposes` below asks about the reply a candidate would replace. This asks
-    about the text it would replace it WITH, which is a different question: a
-    user rejecting or correcting the bot's `better` text is saying the fix
-    itself is wrong.
-
-    Without it, a pair still sitting in `proposed` when its rewrite was
-    rejected could be promoted afterwards by an unrelated second event about
-    the original, and go on to teach the exact text the user refused.
-    `_rollback_promoted_for` covers only candidates already PROMOTED, so the
-    window between proposal and promotion needs this."""
+    """True when this event argues against a pair's proposed replacement text
+    (`opposes` asks about the reply it would replace)."""
     if not (event.get("adjudication") or {}).get("accept"):
         return False
-    # A PERSON has to have refused it (`promotion.witnessed_rewrites` excludes
-    # the same two kinds): a self-review carrying reaction_type="rejection"
-    # must not veto a user correction.
+    # A person has to have refused it, as in promotion.witnessed_rewrites.
     if event.get("kind") in (KIND_SELF_REVIEW, KIND_SELF_EVAL):
         return False
     return event.get("reaction_type") in ("rejection", "correction")
@@ -390,15 +292,7 @@ def opposes(event: dict, candidate_type: str) -> bool:
         return False
     kind = event.get("kind")
     if candidate_type == "preference_pair":
-        # NOT a retry acceptance. `reaction_type` on that event is "positive"
-        # because the user accepted the RETRY — the opposite of liking the
-        # reply the pair replaces, which is what a positive reaction means on
-        # every other kind. Reading the field without the kind would turn the
-        # STRONG event a retry-completion pair is BUILT FROM into
-        # counter-evidence against that same pair: `supports` and `opposes`
-        # would both answer True for one event, `decide` would return
-        # "compatible evidence disagrees", and the zero-user-effort retry
-        # loop could never promote anything.
+        # A retry acceptance is "positive" about the retry, not the replaced reply.
         if kind in (KIND_RETRY_ACCEPTANCE, KIND_SELF_REVIEW):
             return False
         return event.get("reaction_type") == "positive"
@@ -408,12 +302,8 @@ def opposes(event: dict, candidate_type: str) -> bool:
 
 
 class EvidenceLog:
-    """The append-only event log. Never rewritten, never truncated in place.
-
-    Loaded lazily and cached in memory: the id index is what makes appends
-    idempotent, and rebuilding it per write would re-read the whole log on
-    every reaction.
-    """
+    """The append-only event log, cached in memory with the id index that
+    makes appends idempotent."""
 
     def __init__(self, path):
         self.path = Path(path)
@@ -442,12 +332,7 @@ class EvidenceLog:
 
     # -- writes ------------------------------------------------------------
     def append(self, event: dict) -> bool:
-        """Append one event. Returns False when it was already recorded.
-
-        A duplicate is not an error: the same reaction can be delivered twice,
-        and the point of a content-addressed id is that replaying it changes
-        nothing.
-        """
+        """Append one event. Returns False when it was already recorded."""
         eid = event.get("event_id")
         if not eid:
             return False
@@ -455,9 +340,7 @@ class EvidenceLog:
         if reason:
             raise ValueError(f"invalid evidence event: {reason}")
         with append_lock(self.path):
-            # Another process may have appended since the cache was built;
-            # re-read under the lock, but only when the stamp moved (a full
-            # validating replay costs ~450 ms at 20k rows).
+            # Another process may have appended: re-read only if the stamp moved.
             if self._events is None or file_stamp(self.path) != self._stamp:
                 result = read_validated_jsonl(self.path, _validate_event)
                 self._events = result.rows
@@ -467,8 +350,7 @@ class EvidenceLog:
                 self._stamp = file_stamp(self.path)
                 return False
             append_jsonl_unlocked(self.path, event)
-            # Rebound rather than mutated in place: `all()` hands this list
-            # out, and a caller holding one must not see it grow underneath.
+            # Rebound, not mutated: callers may hold the list all() returned.
             self._events = self._events + [event]
             self._ids = self._ids | {eid}
             self._stamp = file_stamp(self.path)

@@ -1,10 +1,6 @@
-"""Crash-conscious primitives for small local runtime stores.
-
-The agent intentionally uses ordinary files instead of a database.  These
-helpers centralize the guarantees those files need: one process per runtime,
-locked append-only writes, durable same-directory replacement, private
-permissions, and strict JSONL replay that reports invalid rows without
-deleting history.
+"""Crash-conscious primitives for the runtime's plain files: one process per
+root, locked appends, durable atomic replacement, private permissions, and
+JSONL replay that quarantines invalid rows without deleting them.
 """
 from __future__ import annotations
 
@@ -67,10 +63,7 @@ def _sync_directory(directory: Path) -> None:
         fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
         os.fsync(fd)
     except OSError:
-        # Some filesystems reject directory fsync.  The file itself has already
-        # been fsynced; lack of directory support must not turn a safe replace
-        # into an application failure.
-        pass
+        pass  # some filesystems reject directory fsync
     finally:
         if fd >= 0:
             os.close(fd)
@@ -160,15 +153,8 @@ class FileLock:
 
 
 class RuntimeInstanceLock(FileLock):
-    """Non-blocking single-holder lock for one DEPLOYMENT ROOT.
-
-    The root is AGENT_HOME (`paths.ROOT`), which is what the only caller
-    passes — NOT `paths.runtime_dir()`. The distinction is load-bearing: two
-    processes may share one AGENT_HOME while pointing AGENT_RUNTIME_DIR at
-    different directories, and a lock taken per runtime directory would let
-    both of them start and corrupt each other's ledgers, which is exactly what
-    docs/deploy.md's "one process per root" promises cannot happen.
-    """
+    """Non-blocking single-holder lock for one deployment root: AGENT_HOME,
+    not the runtime dir, which two processes could set apart."""
 
     def __init__(self, deployment_root: str | Path):
         deployment_root = Path(deployment_root)
@@ -199,10 +185,7 @@ def append_jsonl_unlocked(path: str | Path, row: dict) -> int:
     payload = (json.dumps(
         row, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
     existed = path.exists()
-    # O_BINARY matters on Windows: without it the fd is in text mode, so every
-    # newline in the payload is written as CRLF, the returned length is short
-    # by one byte per row, and the file ends up with mixed line endings against
-    # every other writer here (all of which pin newline to LF).
+    # O_BINARY: in text mode Windows would write CRLF.
     fd = os.open(
         path,
         os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0),
@@ -252,14 +235,9 @@ def append_jsonl_rotating(path: str | Path, row: dict, *, max_bytes: int,
 
 def atomic_write_text(path: str | Path, text: str, *,
                       encoding: str = "utf-8", fsync: bool = True) -> None:
-    """Durably replace ``path`` using a unique same-directory temporary file.
-
-    ``fsync=False`` keeps the atomic replace — a reader still sees either the
-    whole old file or the whole new one — but does not wait for the disk. The
-    wait is the entire cost here (measured ~4ms median, ~6ms p90 for a 35 KiB
-    file), and on an asyncio caller it is paid by every conversation, not just
-    the one saving. Pass it ONLY for state that can be rebuilt from elsewhere;
-    a ledger or a lineage must keep the default."""
+    """Durably replace ``path`` through a same-directory temporary file.
+    ``fsync=False`` stays atomic but skips the disk wait; only for state that
+    can be rebuilt, never a ledger or a lineage."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
@@ -308,11 +286,8 @@ def read_validated_jsonl(
     path: str | Path,
     validate: Callable[[dict], str | None],
 ) -> ValidatedJsonl:
-    """Read valid JSON-object rows and quarantine invalid rows in place.
-
-    "In place" means invalid source bytes remain untouched in the append-only
-    history but are excluded from replay and surfaced in metadata.
-    """
+    """Valid JSON-object rows; invalid ones are skipped and reported, never
+    removed from the file."""
     path = Path(path)
     try:
         lines = path.read_bytes().splitlines()
