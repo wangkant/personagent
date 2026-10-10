@@ -26,6 +26,8 @@ from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
 from persona_agent.textproc import TextProcessing
 
+from helpers import check
+
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from fastapi.testclient import TestClient
@@ -38,10 +40,6 @@ WRITE = {"content-type": "application/json", "x-personagent-dashboard": "1"}
 SECRET_KEY = "sk-live-SECRET-0123456789abcdef"
 SECRET_TOKEN = "connector-SECRET-token-987654"
 DASH_TOKEN = "dashTOKEN-0123456789abcdefghijklmnopqrstuv"
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _runtime_listing() -> list[str]:

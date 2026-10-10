@@ -22,9 +22,7 @@ from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
 from persona_agent.transport import SendResult
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 @pytest.fixture(scope="module", autouse=True)

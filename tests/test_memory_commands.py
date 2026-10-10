@@ -12,9 +12,7 @@ from persona_agent.agent import Agent
 from persona_agent.memory import _COMMAND_REPLIES
 from persona_agent.textproc import TextProcessing
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def make_agent(tmp: Path, *, name: str = "Luna", lang: str = "en") -> Agent:

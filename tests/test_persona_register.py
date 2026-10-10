@@ -26,10 +26,7 @@ from persona_agent.prompts import (
     dm_style_guide,
 )
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def make_agent(tmp: Path) -> Agent:

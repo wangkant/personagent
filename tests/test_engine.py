@@ -12,11 +12,9 @@ from persona_agent.connector import synthesize_onebot_payload
 from persona_agent.prompts import MODEL_FAILURE_EXCUSES, render_persona_template
 from persona_agent.transport import SendResult
 
+from helpers import check
+
 QQ_BOT_ID = "10001"
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def make_agent(tmp: Path, **overrides) -> Agent:

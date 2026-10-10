@@ -6,10 +6,7 @@ from __future__ import annotations
 
 from persona_agent import access
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def test_ids_are_canonicalised_to_the_keys_events_carry() -> None:

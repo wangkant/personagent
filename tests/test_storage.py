@@ -18,14 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 from persona_agent import paths, storage
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def _append_worker(path: str, worker: int, count: int) -> None:

@@ -17,12 +17,10 @@ from persona_agent import outbox as outbox_mod
 from persona_agent.agent import Agent
 from persona_agent.outbox import HandleStore, Outbox
 
+from helpers import check
+
 QQ_BOT_ID = "10001"
 TOKEN = "outbox-secret"
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def make_agent(tmp: Path) -> Agent:

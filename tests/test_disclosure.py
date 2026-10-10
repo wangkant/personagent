@@ -28,12 +28,9 @@ from pathlib import Path
 from persona_agent.agent import Agent
 from persona_agent.prompts import HONEST_DISCLOSURE
 
+from helpers import check
+
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def make_agent(tmp: Path, persona: str = "PERSONA-DOCUMENT-MARKER",

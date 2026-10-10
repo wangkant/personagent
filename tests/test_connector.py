@@ -27,16 +27,9 @@ from persona_agent.connector import (ConnectorSink, current_sink,
                                    synthesize_onebot_payload)
 from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
 
+from helpers import check
+
 QQ_BOT_ID = "10001"
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 # ---------------------------------------------------------------------------

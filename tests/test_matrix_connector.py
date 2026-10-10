@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "integrations" / "matrix"))
 import matrix_connector as mc  # noqa: E402
 
+from helpers import check
+
 BOT = "@nova:example.org"
 ALEX = "@alex:example.org"
 BRIDGE = "@whatsappbot:example.org"
@@ -27,10 +29,6 @@ GROUP = "!group:example.org"
 DM = "!dm:example.org"
 NOW = 1_790_320_000
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, f"{name}: {detail}"
 
 
 class Obj(types.SimpleNamespace):

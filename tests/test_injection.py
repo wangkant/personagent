@@ -29,15 +29,12 @@ from persona_agent.textproc import (
     scrub_third_party_text,
 )
 
+from helpers import check
+
 
 def renderable_form(value: object) -> str:
     """`value` reduced to the code points a renderer draws, as a model reads it."""
     return _renderable_with_index(str(value or ""))[0]
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def make_agent(tmp: Path, persona: str = "test persona") -> Agent:

@@ -24,6 +24,8 @@ from persona_agent import candidates, evidence, promotion, reactions
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
 
+from helpers import check
+
 NOW = 1_800_000_000.0
 
 
@@ -31,15 +33,6 @@ def stamp(seconds: float) -> str:
     """Epoch -> ISO. Every fixture timestamp derives from NOW through this, so
     that no test's meaning depends on the day it happens to run."""
     return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _runtime_listing() -> list[str]:

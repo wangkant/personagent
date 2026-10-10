@@ -8,9 +8,7 @@ import httpx
 from persona_agent.agent import Agent
 from persona_agent.endpoints import adapt_rejected_payload
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def make_agent(tmp: Path, base_url: str) -> Agent:

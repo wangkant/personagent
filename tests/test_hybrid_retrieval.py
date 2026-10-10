@@ -21,9 +21,7 @@ from persona_agent.llm import _PooledHTTP
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import _focus_tokens
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 # ---------------------------------------------------------------------------
