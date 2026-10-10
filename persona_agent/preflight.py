@@ -1,18 +1,12 @@
 """Config preflight: say what is wrong before the bot pretends to work.
 
-The deployment surface is 80 settings and four of them matter for a first
-reply. That asymmetry is fine — everything else has a default — but it has a
-sharp edge: **a misspelled key is completely silent.** `.env` with
-`DEEPSEK_API_KEY=sk-...` produces a bot that starts cleanly, logs nothing
-unusual, and never answers, and the only way to find out is to read the code.
+A misspelled key is otherwise silent: the bot starts cleanly and never
+answers. `.env.example` is the authority on key names (a test keeps it in
+step with the code), so a key in `.env` it does not list is a typo or a
+removed setting.
 
-`.env.example` is the authority for what a key is allowed to be called. It is
-kept in step with the code by a test (`test_http.py`), so anything in `.env`
-that is not in the template is a typo or a setting that was removed — and
-either way the operator believes it is doing something.
-
-Read-only and total: this reports, it never edits `.env`, and it never raises.
-A preflight that can fail is a preflight nobody runs.
+check_config only reports and never raises; migrate_env_file, behind
+`doctor --fix`, is the one writer.
 """
 from __future__ import annotations
 
@@ -38,30 +32,22 @@ REQUIRED = ("LLM_API_KEY",)
 #: and behaves oddly rather than not running.
 WANTED = {
     "PERSONA_NAME": "the persona has no name, so it cannot notice being called",
-    # Emptied rather than unset is the whole point: `os.getenv` only applies
-    # its default when the key is ABSENT, so `LLM_MODEL=` in a hand-edited
-    # `.env` sends `{"model": ""}` on every completion — a guaranteed 400 that
-    # also arms the fallback cooldown. `LLM_DM_MODEL` has a runtime fallback
-    # for exactly this (see settings.py); the primary model has none.
+    # Unlike LLM_DM_MODEL, the primary model has no runtime fallback for "".
     "LLM_MODEL": "every chat completion will be sent with model='' and fail",
 }
 
 #: Names a live `.env` may legitimately carry that the template does not.
 #: Deliberately tiny — every entry is a hole in the typo check.
 TEMPLATE_EXEMPT = frozenset({
-    # Set by the process manager / shell rather than by the file, and
-    # documented in the deployment notes rather than as a knob.
+    # Set by the shell or process manager, not the file.
     "PYTHONUTF8", "PYTHONPATH", "TZ",
-    # Proxy configuration. `load_dotenv` puts these in `os.environ` and httpx
-    # honours them — the suite has a whole test built around an `HTTP_PROXY`
-    # in the launching shell — so reporting them as typos would tell an
-    # operator their working proxy setting is being ignored.
+    # Proxy settings, which httpx honours from os.environ.
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 })
 
-#: Every setting name retired in 1.0 -> the name that replaced it. A hint and
-#: nothing more: none of these is read, so a value under one is ignored.
+#: Every setting name retired in 1.0 -> its replacement. None is read: a start
+#: with one is refused, and `doctor --fix` renames them.
 RENAMED = {
     "LLM_TIMEOUT": "LLM_TIMEOUT_S",
     "PRIVATE_MODEL": "LLM_DM_MODEL",
@@ -233,35 +219,24 @@ class Finding:
         return f"<{self.level} {self.key}: {self.detail}>"
 
     def line(self) -> str:
-        # `!r` on the key, because a name that differs only by an invisible
-        # character — a BOM, a stray space — otherwise prints identically to
-        # the real one and the operator reads the report as nonsense.
+        # repr a key with an invisible character (a BOM, a stray space), or
+        # it prints exactly like the real one.
         shown = self.key if self.key.isprintable() else repr(self.key)
         return f"[{self.level:>5}] {shown}: {self.detail}"
 
 
 def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:
-    """Key -> value for one dotenv file; **None** when it is absent.
+    """Key -> value for one dotenv file, or None when it is absent.
 
-    `None` and `{}` are different answers: a missing `.env.example` read as
-    empty would make the unknown-key check conclude "the authority lists
-    nothing" and report every configured key as a typo. Any layout that ships
-    `.env` without the template, including the multi-persona `AGENT_HOME`
-    arrangement the template itself recommends, would get one ERROR per
-    setting, which teaches people to ignore the checker.
-
-    Uses python-dotenv's own parser rather than a local one: the agent loads
-    these files through it, so the two must not disagree."""
+    None, not {}: a missing template read as empty would report every key as
+    a typo. Parsed by python-dotenv, which is how the agent loads it."""
     try:
         if not path.is_file():
             return None
         from dotenv import dotenv_values
         values = {k: v for k, v in dotenv_values(path).items() if k}
-        # A BOM survives dotenv and lands on the first key. For the TEMPLATE
-        # that only produces a false "unknown key" report, so strip it. For
-        # `.env` it must NOT be stripped: the agent's own `load_dotenv` does
-        # not strip it either, so the setting genuinely never arrives, and a
-        # preflight that tidied it away would call a broken deployment fine.
+        # A BOM lands on the first key. Strip it from the template only: the
+        # agent's load_dotenv keeps it on `.env`, so that setting never arrives.
         if strip_bom:
             values = {k.lstrip("﻿"): v for k, v in values.items()}
         return values
@@ -272,11 +247,9 @@ def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:
 def check_config(root: Path | None = None, env: dict | None = None) -> list[Finding]:
     """Everything wrong with the configuration, worst first.
 
-    `env` defaults to the parsed `.env`, not to `os.environ`, because the
-    question is "what did the operator write down" — a value exported in the
-    shell is not a typo anyone is hunting for. A retired name is the
-    exception: a container passes its settings in the environment, so without
-    an explicit `env` that is searched for them too."""
+    `env` defaults to the parsed `.env`, not os.environ: the question is what
+    the operator wrote. Retired names are then searched for in os.environ
+    too, since a container passes its settings there."""
     base = Path(root) if root is not None else ROOT
     template = _parse(base / ".env.example", strip_bom=True)
     if template is None:
@@ -298,10 +271,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "Re-save it as UTF-8 without a BOM"))
 
     for key in REQUIRED:
-        # `.env` OR the process environment. A container, a systemd unit and a
-        # CI runner all pass configuration in the environment and ship no
-        # `.env` at all — reading only the file would tell a correctly-running
-        # deployment that every turn will fail.
+        # Or the environment: a container or systemd unit ships no `.env`.
         if not (str(configured.get(key) or "").strip()
                 or os.environ.get(key, "").strip()):
             findings.append(Finding(
@@ -310,9 +280,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                 "endpoint to call, so every turn will fail"))
 
     if template is None:
-        # Without the template there is no authority on what a key may be
-        # called, so the typo check is not merely wrong here, it is
-        # unanswerable. Say that once instead of accusing every key.
+        # No authority on key names: say so once instead of accusing every key.
         findings.append(Finding(
             "WARN", ".env.example",
             "is missing, so misspelled settings cannot be detected. Copy it "
@@ -354,10 +322,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             resolved = Path(home).expanduser()
             bad = not resolved.is_dir()
         except (OSError, RuntimeError) as exc:
-            # `expanduser()` on `~/...` RAISES when no home directory can be
-            # determined, and this function's contract is that it never does:
-            # `main.lifespan` calls it unguarded, so a `~` in AGENT_HOME on a
-            # host without HOME set would take the whole process down at startup.
+            # expanduser() raises without a home directory, and lifespan calls
+            # this unguarded.
             resolved, bad = home, True
             findings.append(Finding(
                 "ERROR", "AGENT_HOME",
@@ -380,11 +346,9 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         findings.append(Finding(
             "INFO", "ACCESS_GROUPS",
             "is unset, so the bot listens in every QQ group it is a member of"))
-    # QQ_BOT_ID is silently load-bearing on QQ: a QQ @ carries the account's
-    # number and `_is_at_me` has nothing else to match it against, so a QQ
-    # deployment that is otherwise complete never answers a mention. Only QQ
-    # intent counts: QQ ids, or a OneBot setting the operator wrote. The
-    # template's former QQ_ONEBOT_URL default is not intent.
+    # A QQ @ carries the account number, so without QQ_BOT_ID a QQ deployment
+    # never answers a mention. Only QQ intent counts: QQ ids, or a OneBot
+    # setting other than the former template default.
     onebot_url = str(configured.get("QQ_ONEBOT_URL") or "").strip().rstrip("/")
     looks_like_qq = (bool(qq_ids)
                      or (bool(onebot_url) and onebot_url != _FORMER_ONEBOT_URL)
@@ -440,10 +404,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             f" {high:g}, such as 8 or -5, or leave it blank for UTC+8 with"
             " AGENT_LANG=zh and this machine's offset otherwise"))
 
-    # The fallback endpoint serves the fallback MODEL (endpoints.endpoint_for),
-    # so both of its failure modes are silent: configured for a fallback that
-    # is the primary's own name, it is never called; pointed at another host
-    # without its own key, it is handed the primary's.
+    # Both fallback-endpoint mistakes are silent: only a distinct fallback
+    # model is sent there, and without its own key it gets the primary's.
     fallback_url = str(configured.get("LLM_FALLBACK_BASE_URL") or "").strip()
     fallback_key = str(configured.get("LLM_FALLBACK_API_KEY") or "").strip()
     fallback_model = str(configured.get("LLM_FALLBACK_MODEL") or "").strip()
@@ -481,9 +443,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
 
 
 def log_findings(findings: list[Finding]) -> None:
-    """Report at startup. Errors are logged as errors; nothing is raised —
-    a deployment that is 90% configured should still start and say what is
-    missing, not refuse and say nothing."""
+    """Log each finding at its level; nothing is raised."""
     for finding in findings:
         if finding.level == "ERROR":
             logger.error("[preflight] %s", finding.line())

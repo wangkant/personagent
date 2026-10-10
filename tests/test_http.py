@@ -1,9 +1,5 @@
-"""Tests for bounded webhook request-body reads.
-
-Run from the repo root:
-
-    python -m pytest tests/test_http.py
-"""
+"""Tests for the HTTP service: request limits, authentication, preflight and
+health probes."""
 from __future__ import annotations
 
 import hashlib
@@ -107,9 +103,7 @@ def test_exposure_guard_fails_closed() -> None:
 
 
 def test_numeric_config_parser_is_bounded() -> None:
-    """main.py used to carry its own copy of this; the package's reader is now
-    the only one, so the bounds it enforces are the bounds every setting in
-    every module gets."""
+    """The package's one numeric reader enforces the bounds every setting gets."""
     from persona_agent.config_env import env_int
 
     def parser(name, raw, default, **kw):
@@ -126,10 +120,8 @@ def test_numeric_config_parser_is_bounded() -> None:
 
 
 def test_error_bodies_carry_a_stable_code() -> None:
-    """`error` is prose for a human and free to be reworded; `code` is the
-    half a client may branch on. /v1/events answers 403 for three
-    unrelated causes whose fixes differ (allowlist / token / clock), so the
-    status alone is not actionable."""
+    """`code` is the half a client branches on: /v1/events answers 403 for
+    three causes whose fixes differ (allowlist / token / clock)."""
     builder = getattr(main_module, "_error", None)
     check("error builder exists", callable(builder))
     if not callable(builder):
@@ -160,10 +152,8 @@ def test_error_bodies_carry_a_stable_code() -> None:
 
 
 def test_webhook_routes_are_documented_for_openapi() -> None:
-    """FastAPI builds each route's OpenAPI description from the decorated
-    function's docstring. Both POST routes were bare, so the one asymmetry a
-    third-party integrator most needs — /v1/onebot is fire-and-forget while
-    /v1/events answers synchronously — appeared nowhere in /docs."""
+    """A route's OpenAPI text is its docstring, and integrators need the
+    asymmetry: /v1/onebot is fire-and-forget, /v1/events synchronous."""
     for name in ("onebot_webhook", "connector_events"):
         fn = getattr(main_module, name, None)
         doc = (getattr(fn, "__doc__", "") or "").strip()
@@ -218,10 +208,8 @@ async def test_public_health_is_a_cheap_liveness_check() -> None:
 
 
 def test_a_skipped_critical_probe_is_not_a_pass() -> None:
-    """`ok` is tri-state: True passed, False failed, None never ran ("not
-    configured"). One blank LLM_API_KEY makes BOTH critical chat probes report
-    None, so counting None as a pass is exactly how a botched key rotation
-    keeps /health green while the agent cannot answer a single message."""
+    """`ok` is tri-state; a blank LLM_API_KEY makes both critical chat probes
+    None, which must not read as healthy."""
     from persona_agent import health
 
     def r(name: str, ok, critical: bool = True) -> dict:
@@ -406,29 +394,15 @@ def test_connector_envelope_rejects_replay_and_stale_requests() -> None:
 
 
 def test_every_setting_the_code_reads_is_in_the_template() -> None:
-    """`.env.example` is the authority on what a key may be CALLED.
+    """`.env.example` must list every key the code reads, or preflight reports
+    a real setting as a typo.
 
-    `preflight.check_config` reports anything in `.env` that the template does
-    not list, because a misspelled key is otherwise completely silent — the
-    value is ignored, the default is used, and the bot runs and misbehaves
-    with no clue anywhere. That check is only honest while the template
-    actually covers what the code reads: a setting the code reads and the
-    template omits would be reported to its operator as a typo.
-
-    Scanned rather than listed, so the two cannot drift apart again.
-    `os.getenv`, `os.environ.get` and the `config_env` readers, which are how
-    most settings are read now — a key that moved from a bare `os.getenv` onto
-    `env_int`/`env_str` must not drop out of this scan, or the template check
-    silently stops covering it. `Policy.from_env` reads through a dict
-    parameter and is out of reach of a syntactic scan, which is a gap worth
-    naming rather than pretending away."""
+    Scanned rather than listed, so the two cannot drift: `os.getenv`,
+    `os.environ.get` and the `config_env` readers."""
     import ast
 
-    # `tools/` AND the root entry points, not just the package. Scanning only
-    # `main.py` and `persona_agent/` left nine real settings undocumented —
-    # `ANTHROPIC_API_KEY` and `LAB_MODEL` among them, which
-    # `tools/prompt_lab.py` explicitly tells the operator to put in `.env` —
-    # and the preflight then reported every one of them as a misspelling.
+    # `tools/` and the root entry points too: the tools read settings the
+    # operator puts in `.env`.
     root = Path(__file__).resolve().parents[1]
     sources = [
         root / "main.py", root / "try_chat.py", root / "quickstart.py",
@@ -489,14 +463,8 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
 
 
 def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
-    """134 lines wired into `lifespan` had no behavioural test at all.
-
-    The thing it has to get right is not the true positives — those are easy —
-    but the FALSE ones. A checker that fires at a working deployment teaches
-    the operator to skip its output, and then the real report goes unread too.
-    Four of these were live: settings the shipped tools read, a container
-    passing config in the environment, a persona home with no template, and a
-    BOM on the template."""
+    """The false positives matter most: a checker that fires at a working
+    deployment teaches the operator to skip its output."""
     from persona_agent import preflight
 
     # Without an explicit env the check reads the process environment for
@@ -521,9 +489,7 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
     import os as _os
     _os.environ["LLM_API_KEY"] = "sk-from-the-environment"
     try:
-        # A container, a systemd unit and a CI runner all configure this way
-        # and ship no `.env`. Reading only the file told them every turn
-        # would fail while they answered correctly.
+        # A container or systemd unit configures this way and ships no `.env`.
         check("preflight: configuration in the environment counts as set",
               not levels(env={}))
     finally:
@@ -540,7 +506,7 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
     check("preflight: the former template's NapCat address alone is not QQ",
           not levels(env={"LLM_API_KEY": "x", "QQ_ONEBOT_URL": "http://127.0.0.1:3000"}))
 
-    # --- and it must never raise, which is its own docstring's promise -----
+    # --- and it must never raise -------------------------------------------
     for hostile in ({"AGENT_HOME": "~nosuchuser/x"}, {"AGENT_HOME": "\x00"},
                     {"": "x"}, {"LLM_API_KEY": None}):
         try:
@@ -578,14 +544,9 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
         check("preflight: a fresh template copy is silent", not levels(root=home),
               repr(levels(root=home)))
 
-        # A BOM on `.env`. Whether it survives the dotenv parser is a property
-        # of that parser and the platform — measured: it does on Windows and
-        # does not on the Linux CI runners — so asserting the MECHANISM here
-        # passed locally and failed in CI. What has to hold on both is that
-        # the deployment is never SILENTLY broken: either the key arrives and
-        # there is nothing to say, or it does not and the BOM is named. A
-        # report that lists findings without explaining the invisible
-        # character is the failure this is guarding against.
+        # A BOM on `.env`: whether dotenv keeps it differs by platform, so only
+        # assert the deployment is never silently broken: the key arrives, or
+        # the BOM is named.
         (home / ".env.example").write_text("LLM_API_KEY=\n",
                                            encoding="utf-8")
         (home / ".env").write_bytes(b"\xef\xbb\xbfLLM_API_KEY=x\n")
@@ -601,9 +562,8 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
 
 def test_preflight_names_what_a_retired_setting_became(
         monkeypatch, tmp_path) -> None:
-    """1.0 renamed most settings and reads none of the old names. One left in
-    `.env` or the environment would otherwise be silently ignored, or called a
-    typo when it is a setting that moved: it is a WARN naming its new name."""
+    """A retired name left in `.env` or the environment is a WARN naming its
+    replacement, not ignored or called a typo."""
     from persona_agent import preflight
     from persona_agent.settings import AgentSettings
 
@@ -655,11 +615,9 @@ def test_preflight_names_what_a_retired_setting_became(
 
 
 def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
-    """ADMIN_IDS, ACCESS_GROUPS and ACCESS_DM_USERS take ids on every
-    platform, and the ways to get them wrong are silent:
-    another platform's id pasted without its prefix reads as a QQ id (and in
-    ACCESS_GROUPS closes every QQ group), a capitalised platform never
-    matches, and one entry takes a whole platform away from the connector."""
+    """The silent identity mistakes: an id without its platform prefix reads as
+    QQ, a capitalised platform never matches, and one entry takes a whole
+    platform away from the connector."""
     from persona_agent import preflight
 
     def findings(**env):
@@ -710,10 +668,9 @@ def test_preflight_reads_the_identity_settings_as_the_agent_does() -> None:
 
 
 def test_preflight_names_a_fallback_endpoint_that_cannot_work_as_meant() -> None:
-    """The fallback endpoint serves the fallback MODEL, and both ways to get it
-    wrong are silent: set up for a fallback that is the primary's own name, it
-    is never called; pointed at another provider without its own key, it is
-    handed the primary's."""
+    """Both silent fallback-endpoint mistakes: a fallback named like the primary
+    is never sent there, and another host without its own key gets the
+    primary's."""
     from persona_agent import preflight
 
     def levels(**env):
@@ -769,10 +726,8 @@ def test_preflight_names_a_language_or_time_zone_it_cannot_use() -> None:
 
 
 def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> None:
-    """The tools probe asks for LLM_FALLBACK_MODEL and the eval probe for
-    EVAL_MODEL. With a fallback endpoint configured, the agent sends that
-    model there; a probe that still asked the primary for it would report
-    an outage that is not happening, and miss the one that is."""
+    """The tools and eval probes ask the endpoint the agent sends that model
+    to, or they report an outage that is not happening."""
     from persona_agent import health
 
     posted: list = []
@@ -851,21 +806,11 @@ def test_the_dm_chat_probe_uses_the_agents_default_model(monkeypatch) -> None:
 
 
 def test_connector_envelope_refuses_a_bad_signature() -> None:
-    """The signature is what binds the BODY to the token. Nothing tested it.
+    """The signature binds the body to the token; without it a token seen once
+    in a log is enough to inject any event.
 
-    Every other envelope test supplies a correctly computed signature and
-    varies something else — replay, staleness, persistence, cache pressure —
-    so `if not hmac.compare_digest(supplied_signature, expected)` could be
-    replaced with `if False:` and the whole suite stayed green. Measured, by
-    mutation. The QQ webhook has its negative case (`ASGI auth: invalid QQ
-    signature rejected`); this one did not, and without the binding a bearer
-    token seen once in a log or a proxy is enough to inject arbitrary chat
-    events with no tie to the payload at all.
-
-    EVERY CASE GETS A FRESH NONCE AND A FRESH GUARD, and the control below
-    proves why that matters: reuse either and the refusal comes from the
-    replay guard instead, which is a test that passes for the wrong reason —
-    the failure mode this suite has already been bitten by twice."""
+    Every case gets a fresh nonce and a fresh guard: reuse either and the
+    refusal comes from the replay guard, passing for the wrong reason."""
     verifier = main_module._verify_envelope
     guard_cls = main_module.ReplayGuard
     token = "shared-secret"
@@ -912,9 +857,8 @@ def test_connector_envelope_refuses_a_bad_signature() -> None:
         check(f"connector signature: {label} is refused",
               verdict(headers) is False, repr(headers.get("x-personagent-signature")))
 
-    # The BINDING, one field at a time: a signature that is valid for some
-    # other request must not travel. These are the shapes an attacker who can
-    # see one signed request actually has.
+    # The binding, one field at a time: a signature valid for another
+    # request must not travel.
     check("connector signature: does not travel to a different body",
           verdict(envelope("n6"), payload=b'{"message_id":"m1","text":"drop table"}')
           is False)
@@ -1025,18 +969,8 @@ def test_startup_view_rebuild_can_fail_closed() -> None:
 
 
 def test_a_failed_log_rotation_does_not_swallow_the_record() -> None:
-    """A rollover that cannot happen must not take the log line with it.
-
-    Windows refuses `os.rename` on a file another handle holds open, and a
-    leftover uvicorn is a normal state here. `RotatingFileHandler.emit` calls
-    `doRollover` inside its own try, so the failure is not "rotation skipped"
-    — it is `handleError`, and the record is gone. The log starts losing lines
-    exactly when the file gets big enough to be worth rotating.
-
-    The bare handler runs alongside so the test shows the loss rather than
-    asserting an absence: if the stock class ever stopped dropping records,
-    this would stop being a fix worth having and the second check would say
-    so."""
+    """A rollover that cannot happen must not take the log line with it. The
+    stock handler runs alongside as the control that does lose it."""
     def emit_three(handler):
         for i in range(3):
             handler.emit(logging.LogRecord(
@@ -1319,9 +1253,8 @@ def test_the_host_header_name_handles_ports_and_ipv6() -> None:
 
 
 def test_log_files_stay_private_across_rotation() -> None:
-    """Rotation recreates the base file under the process umask, so a
-    one-time chmod at setup left every file after the first rollover
-    world-readable, message excerpts and user ids included."""
+    """Rotation recreates the base file under the process umask, so every file
+    it opens must be made private again."""
     import os
 
     import pytest

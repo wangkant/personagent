@@ -1,15 +1,12 @@
 """Messages nobody asked for, and how to reach the conversations they are for.
 
-A connector turn answers inside its own HTTP response. A proactive opener, the
-follow-up question after a rejection and the excuse for a failed model call
-have no request to answer in, so a connector that declared the `outbox`
-capability pulls them from ``POST /v1/outbox`` instead
-(docs/connectors.md, "Outbox"). Pull, not push: the agent never has to reach
-the connector, so one behind NAT works the same.
+A proactive opener, the follow-up after a rejection and the excuse for a
+failed model call have no request to answer in, so a connector with the
+`outbox` capability pulls them from ``POST /v1/outbox`` (docs/connectors.md,
+"Outbox"). Pull, not push, so a connector behind NAT works the same.
 
-``HandleStore`` remembers, per routing key, what the connector said to hand
-back to address the conversation later. ``Outbox`` queues deliveries, hands
-each one out once, and waits for the connector's ack, so the caller commits
+``HandleStore`` remembers how to address each conversation later; ``Outbox``
+hands each delivery out once and waits for its ack, so the caller commits
 only what was actually sent.
 """
 from __future__ import annotations
@@ -348,9 +345,8 @@ class Outbox:
                     break
             else:
                 deadline = d.handed_out + d.expires_in + self.ack_grace_s
-                # The ReadTimeout of this channel: it may have gone out. A
-                # connector that stopped pulling ends the wait early, since
-                # the caller holds the conversation's send lock meanwhile.
+                # It may have gone out. A connector that stopped pulling ends
+                # the wait early: the caller holds the send lock meanwhile.
                 if now >= deadline or not self.live(d.connector_id):
                     self._resolve(d, "no_ack")
                     break
@@ -455,11 +451,9 @@ class Outbox:
         self._stamp(connector_id)
         for ack in acks or ():
             self.ack(connector_id, ack)
-        # Acks come on the next pull, so what this connector was handed
-        # before it and has not acked went to a pull that never got through:
-        # a restarted connector's abandoned long-poll, or a lost response.
-        # Settling it here frees the conversation's send lock now rather
-        # than after expires_in plus the grace.
+        # Acks come on the next pull, so an earlier hand-out still unacked
+        # went to a pull that never got through; settling it frees the send
+        # lock now rather than after expires_in plus the grace.
         for d in list(self._handed.values()):
             if d.connector_id == connector_id and d.handed_by < pull_no:
                 self._handed.pop(d.delivery_id, None)

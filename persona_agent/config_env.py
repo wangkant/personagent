@@ -1,11 +1,8 @@
-"""One way to read a setting out of the environment.
+"""One way to read a setting from the environment.
 
-A typo in one setting behaves the same as a typo in any other, and it is
-always visible: a bad value falls back to the declared default and says so in
-the log; it never takes the process down, and it never silently means the
-opposite of what was written.
-
-Dependency-free on purpose: most of the package imports it at module scope.
+A bad value falls back to the declared default and says so in the log; it
+never raises and never silently means the opposite of what was written.
+Dependency-free: most of the package imports it at module scope.
 """
 from __future__ import annotations
 
@@ -14,10 +11,27 @@ import os
 
 logger = logging.getLogger("agent")
 
-#: Accepted spellings of yes and no. Anything else keeps the default rather
-#: than silently picking the opposite of what the operator meant.
+#: Accepted spellings of yes and no; anything else keeps the default.
 _TRUE = frozenset({"true", "1", "yes", "on"})
 _FALSE = frozenset({"false", "0", "no", "off"})
+
+
+def _env_number(cast, name, default, minimum, maximum, env):
+    source = os.environ if env is None else env
+    raw = source.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    shown = "%d" if cast is int else "%s"
+    try:
+        value = cast(str(raw).strip())
+    except (TypeError, ValueError):
+        logger.warning("invalid %s=%r; using " + shown, name, raw, default)
+        return default
+    if ((minimum is not None and value < minimum)
+            or (maximum is not None and value > maximum)):
+        logger.warning("out-of-range %s=%r; using " + shown, name, raw, default)
+        return default
+    return value
 
 
 def env_int(
@@ -28,26 +42,9 @@ def env_int(
     maximum: int | None = None,
     env=None,
 ) -> int:
-    """One integer setting, never raising.
-
-    An unset name, an empty value, a non-number and an out-of-range number all
-    fall back to ``default``; the last two say so at WARNING, because they are
-    the cases where the operator wrote something and got something else.
-    """
-    source = os.environ if env is None else env
-    raw = source.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        logger.warning("invalid %s=%r; using %d", name, raw, default)
-        return default
-    if ((minimum is not None and value < minimum)
-            or (maximum is not None and value > maximum)):
-        logger.warning("out-of-range %s=%r; using %d", name, raw, default)
-        return default
-    return value
+    """One integer setting, never raising: unset, empty, invalid and
+    out-of-range all mean ``default``, the last two with a warning."""
+    return _env_number(int, name, default, minimum, maximum, env)
 
 
 def env_float(
@@ -59,20 +56,7 @@ def env_float(
     env=None,
 ) -> float:
     """One float setting, never raising. See :func:`env_int`."""
-    source = os.environ if env is None else env
-    raw = source.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    try:
-        value = float(str(raw).strip())
-    except (TypeError, ValueError):
-        logger.warning("invalid %s=%r; using %s", name, raw, default)
-        return default
-    if ((minimum is not None and value < minimum)
-            or (maximum is not None and value > maximum)):
-        logger.warning("out-of-range %s=%r; using %s", name, raw, default)
-        return default
-    return value
+    return _env_number(float, name, default, minimum, maximum, env)
 
 
 #: The UTC offsets in use, in hours: PERSONA_TZ_OFFSET_HOURS outside this is
@@ -92,12 +76,8 @@ def parse_tz_offset(raw) -> float | None:
 
 
 def env_bool(name: str, default: bool, *, env=None) -> bool:
-    """One boolean setting, never raising.
-
-    Accepts every ordinary spelling of yes and no. An unrecognised value keeps
-    ``default`` and warns; the alternative is that ``PROACTIVE_ENABLED=1``
-    reads as False and nothing says so.
-    """
+    """One boolean setting, never raising; an unrecognised value keeps
+    ``default`` and warns."""
     source = os.environ if env is None else env
     raw = source.get(name)
     if raw is None or str(raw).strip() == "":
@@ -111,20 +91,14 @@ def env_bool(name: str, default: bool, *, env=None) -> bool:
     return default
 
 
-#: What a deployment talks to when LLM_MODEL / LLM_BASE_URL are unset. Named
-#: once, here, so the agent, the health probes, preflight and the offline
-#: tools all fall back to the same thing.
+#: What LLM_MODEL / LLM_BASE_URL mean when unset, everywhere.
 DEFAULT_LLM_MODEL = "deepseek-flash"
 DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
 
 
 def vision_endpoint_from_env(env=None) -> tuple[str, str]:
-    """``(api_key, base_url)`` of the vision endpoint.
-
-    ``VISION_API_KEY`` / ``VISION_BASE_URL`` configure whichever
-    OpenAI-compatible model ``VISION_MODEL`` names, so the base URL has no
-    default: the model decides the provider.
-    """
+    """``(api_key, base_url)`` of the vision endpoint; no default base URL,
+    since ``VISION_MODEL`` decides the provider."""
     return (env_str("VISION_API_KEY", strip=True, env=env),
             env_str("VISION_BASE_URL", strip=True, env=env).rstrip("/"))
 
@@ -132,14 +106,8 @@ def vision_endpoint_from_env(env=None) -> tuple[str, str]:
 def env_str(name: str, default: str = "", *, strip: bool = False, env=None) -> str:
     """One string setting, with ``os.getenv`` semantics.
 
-    Deliberately NOT "empty means unset": ``LLM_MODEL=`` in a hand-edited
-    ``.env`` has to keep reading as the empty string, because that is the case
-    ``preflight.WANTED`` exists to report. Collapsing it into the default would
-    hide the very misconfiguration the preflight was written for.
-
-    ``strip=True`` for the settings whose value is an identifier rather than
-    prose (a language tag, a model name), where a trailing space in ``.env`` is
-    never what the operator meant.
+    Empty is not unset: ``LLM_MODEL=`` stays "" so ``preflight.WANTED`` can
+    report it. ``strip=True`` is for identifiers (a model name, a language tag).
     """
     source = os.environ if env is None else env
     raw = source.get(name)

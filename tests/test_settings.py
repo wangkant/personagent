@@ -1,17 +1,12 @@
 """Tests for the one record the agent is configured from.
 
-What matters here is not that a field round-trips — a dataclass does that on
-its own — but the promises `settings.py` makes:
+The promises `settings.py` makes:
 
-1. `AgentSettings()` reads the environment for the OPERATIONAL knobs and
-   nothing else. An embedder, a benchmark arm or a test suite that passes its
-   own `model=` must not have the surrounding `.env`'s `LLM_MODEL` applied
-   behind its back.
-2. `from_env()` reads the deployment, bounds included, and starts from the
-   same defaults as the constructor and `.env.example`.
-3. The empty-model fallbacks resolve in dependency order. Each of these ships
-   blank and has to end up as a name the endpoint actually serves; one of them
-   resolving before its source is set means `{"model": ""}` on a live call.
+1. `AgentSettings()` reads the environment for the operational knobs only, so
+   an embedder's own `model=` is never overridden by the surrounding `.env`.
+2. `from_env()` reads the deployment, bounds included, from the same defaults
+   as the constructor and `.env.example`.
+3. The empty-model fallbacks resolve in dependency order, never to "".
 """
 from __future__ import annotations
 
@@ -338,8 +333,7 @@ def test_the_agent_accepts_the_record_and_its_fields() -> None:
 
 def test_settings_named_in_log_messages_exist() -> None:
     """A log line that tells the operator to change a setting must name one
-    that exists. The empty-reply warning used to say "raise LLM_MAX_TOKENS",
-    which no code reads and which preflight reports as an ERROR once added."""
+    that exists."""
     import ast
     import re
 
