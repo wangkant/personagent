@@ -20,6 +20,24 @@ _TRUE = frozenset({"true", "1", "yes", "on"})
 _FALSE = frozenset({"false", "0", "no", "off"})
 
 
+def _env_number(cast, name, default, minimum, maximum, env):
+    source = os.environ if env is None else env
+    raw = source.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    shown = "%d" if cast is int else "%s"
+    try:
+        value = cast(str(raw).strip())
+    except (TypeError, ValueError):
+        logger.warning("invalid %s=%r; using " + shown, name, raw, default)
+        return default
+    if ((minimum is not None and value < minimum)
+            or (maximum is not None and value > maximum)):
+        logger.warning("out-of-range %s=%r; using " + shown, name, raw, default)
+        return default
+    return value
+
+
 def env_int(
     name: str,
     default: int,
@@ -34,20 +52,7 @@ def env_int(
     fall back to ``default``; the last two say so at WARNING, because they are
     the cases where the operator wrote something and got something else.
     """
-    source = os.environ if env is None else env
-    raw = source.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        logger.warning("invalid %s=%r; using %d", name, raw, default)
-        return default
-    if ((minimum is not None and value < minimum)
-            or (maximum is not None and value > maximum)):
-        logger.warning("out-of-range %s=%r; using %d", name, raw, default)
-        return default
-    return value
+    return _env_number(int, name, default, minimum, maximum, env)
 
 
 def env_float(
@@ -59,20 +64,7 @@ def env_float(
     env=None,
 ) -> float:
     """One float setting, never raising. See :func:`env_int`."""
-    source = os.environ if env is None else env
-    raw = source.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    try:
-        value = float(str(raw).strip())
-    except (TypeError, ValueError):
-        logger.warning("invalid %s=%r; using %s", name, raw, default)
-        return default
-    if ((minimum is not None and value < minimum)
-            or (maximum is not None and value > maximum)):
-        logger.warning("out-of-range %s=%r; using %s", name, raw, default)
-        return default
-    return value
+    return _env_number(float, name, default, minimum, maximum, env)
 
 
 #: The UTC offsets in use, in hours: PERSONA_TZ_OFFSET_HOURS outside this is
