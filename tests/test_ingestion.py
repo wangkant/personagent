@@ -933,7 +933,8 @@ async def test_ocr_delegation_is_ssrf_gated(tmp: Path) -> None:
             posts.append((kw.get("json") or {}).get("image"))
             return _Resp()
 
-    agent._http = lambda **kw: _HTTP()
+    # NapCat is reached through _local_http; both clients are spied on.
+    agent._http = agent._local_http = lambda **kw: _HTTP()
     for u in ("http://169.254.169.254/latest/meta-data/",
               "http://127.0.0.1:6099/api/token",
               "http://localhost/x",
