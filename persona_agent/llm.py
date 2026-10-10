@@ -19,9 +19,8 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# Hosts whose chat endpoint takes DeepSeek's `thinking` switch, and hosts
-# known to refuse it; any other endpoint is asked by its first call that
-# turns thinking off (or the startup probe), and the answer remembered.
+# Hosts known to take or refuse DeepSeek's `thinking` switch; any other is
+# asked by its first thinking-off call and the answer remembered.
 _THINKING_HOSTS = ("deepseek.com", "bigmodel.cn", "z.ai", "moonshot.cn",
                    "moonshot.ai", "volces.com")
 _NO_THINKING_HOSTS = ("openai.com", "groq.com", "googleapis.com",
@@ -75,22 +74,13 @@ def _error_text(e: BaseException, status) -> str:
         text += " " + _response_text(e).lower()
     return text
 
-# httpx expires an idle keep-alive connection after 5s, and the gap between a
-# person's turns is always longer, so the pool would empty between every turn
-# and each one would pay a fresh TCP+TLS handshake to the provider. The other
-# two numbers are httpx's own defaults, spelled out because `Limits` resets
-# any it is not given to "unlimited".
+# Long keep-alive: turns are further apart than httpx's 5s expiry. The other
+# two are httpx's defaults, spelled out because `Limits` resets omitted ones.
 _HTTP_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20,
                             keepalive_expiry=300.0)
 
 class _PooledHTTP:
-    """An ``async with``-compatible handle over a shared, long-lived httpx client.
-
-    Entering returns the pooled client; exiting does NOT close it. A
-    config-keyed connection pool avoids paying a fresh TCP+TLS handshake on
-    every call, and call sites keep the ``async with`` form of a plain
-    ``httpx.AsyncClient``.
-    """
+    """``async with`` handle over a shared httpx client; exiting does not close it."""
 
     __slots__ = ("_client",)
 
@@ -106,12 +96,8 @@ class _PooledHTTP:
 
 class ModelCalls:
     def _http(self, **kwargs) -> "_PooledHTTP":
-        """Pooled httpx client. Use exactly like a native ``AsyncClient`` context.
-
-        Identical constructor kwargs reuse the same client (a keep-alive
-        connection pool), eliminating the per-request TCP+TLS handshake. The
-        clients are process-lived and need no explicit close.
-        """
+        """Pooled httpx client, used like an ``AsyncClient`` context; identical
+        kwargs share one process-lived keep-alive pool."""
         kwargs.setdefault("limits", _HTTP_LIMITS)
 
         def _norm(v):
@@ -139,32 +125,14 @@ class ModelCalls:
         return _PooledHTTP(client)
 
     def _local_http(self, **kwargs) -> "_PooledHTTP":
-        """Pooled client for the NapCat bridge, which is a LOCAL service.
-
-        `trust_env=False` because httpx has no implicit localhost bypass the
-        way `requests` does: with an `HTTP_PROXY` in the launching shell — the
-        normal state of affairs for anyone who needs a proxy to reach a model
-        endpoint at all — every reply, every history poll and every OCR
-        delegation to `127.0.0.1` would be relayed through that proxy, so
-        restarting it would take the bot's outbound chat down with it.
-
-        A separate entry point rather than `trust_env=False` repeated at each
-        call site: the kwargs are the pool key, so this also keeps the bridge's
-        connections in their own pool, and a new NapCat call does not have to
-        remember. Outbound calls to the wider internet keep
-        `trust_env=True` — a deployment that needs a proxy to reach its model
-        still gets one."""
+        """Pooled client for the local NapCat bridge, with `trust_env=False`:
+        httpx has no localhost proxy bypass, so an HTTP_PROXY would relay every
+        bridge call. It also keeps the bridge in its own pool."""
         return self._http(trust_env=False, **kwargs)
 
     def _endpoint_for(self, model: str) -> tuple[str, str]:
-        """(chat-completions URL, API key) for one model name.
-
-        Every raw POST to the chat model goes through here: the fallback
-        model may live on its own endpoint (LLM_FALLBACK_BASE_URL /
-        LLM_FALLBACK_API_KEY), and a call that took the primary's URL for it
-        would share the very outage the fallback exists to survive. Read on
-        every call, not snapshotted, because the model names and base URLs
-        are plain attributes that callers and tests reassign."""
+        """(chat-completions URL, API key) for one model name; the fallback may
+        have its own endpoint. Read per call, since callers reassign them."""
         base, key = endpoint_for(
             model, primary_model=self.model, fallback_model=self.llm_fallback_model,
             base_url=self.base_url, api_key=self.api_key,
@@ -184,13 +152,7 @@ class ModelCalls:
 
     def _thinking_verdict(self, url: str, model: str):
         """Whether `model` at `url` takes DeepSeek's `thinking` switch: True,
-        False, or None when nobody knows yet.
-
-        Elsewhere it is rejected rather than ignored (Groq answers `400
-        property 'thinking' is unsupported`, OpenAI 400s any unknown
-        argument). Known: what this model at this URL showed, a listed
-        vendor, the fallback's host with LLM_FALLBACK_THINKING, or a vendor
-        known to refuse it. Per model, because one gateway serves many."""
+        False, or None when unknown (others 400 it rather than ignore it)."""
         verdict = self._api_quirks.get(("thinking", url, model))
         if verdict is not None:
             return verdict
@@ -205,11 +167,8 @@ class ModelCalls:
         return None
 
     def _thinking_off(self, payload: dict, url: str) -> dict:
-        """Ask the model behind `url` to skip hidden reasoning, in the
-        spellings that endpoint accepts. An endpoint nobody knows yet is sent
-        `thinking` and _post_chat learns from its answer. OpenRouter passes
-        `thinking` through to upstreams that ignore it and has a switch of
-        its own (see textproc.apply_k2_quirks)."""
+        """Ask the model behind `url` to skip hidden reasoning, in the spellings
+        that endpoint accepts; an unknown endpoint is sent `thinking` to learn."""
         if self._thinking_verdict(url, str(payload.get("model") or "")) is not False:
             payload["thinking"] = {"type": "disabled"}
         if "openrouter.ai" in url:
@@ -236,13 +195,9 @@ class ModelCalls:
 
     async def _post_chat(self, url: str, key: str, payload: dict, *,
                          timeout: float):
-        """POST one chat completion and return the response, unraised.
-
-        A 400 that refuses a field this endpoint does not take (`thinking`,
-        or `max_tokens` / `temperature` on OpenAI's reasoning models) is
-        retried without it. When the retry succeeds the endpoint and model
-        are remembered, so later calls are spelled right the first time; so
-        is whether an endpoint nobody knew about takes `thinking`."""
+        """POST one chat completion and return the response, unraised. A 400
+        refusing a field (`thinking`, `max_tokens`, `temperature`) is retried
+        without it, and the endpoint's answer remembered."""
         self._apply_quirks(url, payload)
         model = str(payload.get("model") or "")
         asking = ("thinking" in payload
@@ -357,25 +312,14 @@ class ModelCalls:
         json_object: bool = False,
         plain_text_fallback: bool = False,
     ) -> str:
-        """OpenAI-compatible /v1/chat/completions over plain httpx, with web
-        search, jittered retry and error-driven fallback. `json_object` forces
-        response_format: without it a thinking model drops the JSON protocol
-        on ~1/3 of turns (measured 9/26 → 0/52).
+        """OpenAI-compatible chat completion with web search, jittered retry and
+        error-driven fallback. `json_object` sets response_format, without which
+        a thinking model drops the JSON protocol on some turns.
 
-        `plain_text_fallback` is the other half of that trade. With
-        response_format set AND a prior assistant turn in the history,
-        DeepSeek answers whitespace with finish_reason "stop" (measured 4/4
-        on two of its models; the same messages without response_format:
-        0/4) — so every private-chat turn after the
-        first could come back empty. Reshaping the stored assistant turns as
-        protocol JSON does not help (also 4/4): the trigger is
-        response_format itself. With the flag, a reply still blank after the
-        retries below is asked for once more without it, and the prose that
-        comes back is wrapped into the protocol by `_as_protocol_object`;
-        the parser is not loosened. Set only where `reply` IS the schema —
-        the two reply calls. A gate, the adjudicator or the sticker tagger
-        parse shapes of their own, and a recovered sentence would turn "could
-        not decide" into "decided this"."""
+        `plain_text_fallback` (reply calls only, where `reply` IS the schema):
+        with response_format and a prior assistant turn DeepSeek can answer
+        blank, so a still-blank reply is asked once more without it and the
+        prose wrapped by `_as_protocol_object`."""
         if not (self.base_url and self.api_key):
             logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
             return ""
@@ -383,8 +327,7 @@ class ModelCalls:
 
         async def _do_call(mtok: int, mdl: str, force_disable_thinking: bool = False,
                            force_plain_text: bool = False):
-            # Per call, not per invocation: `mdl` changes across the recovery
-            # rungs below, and the fallback may live on another endpoint.
+            # Per call: `mdl` changes across the rungs, and the endpoint with it.
             _url, _key = self._endpoint_for(mdl)
             payload = {"model": mdl, "max_tokens": mtok, "messages": _oai_messages}
             if temperature is not None:
@@ -398,22 +341,16 @@ class ModelCalls:
             resp.raise_for_status()
             return resp.json()
 
-        # Web search: let the model decide (OpenAI-compatible /v1
-        # function-calling), fetch real results (Tavily if keyed, else
-        # DuckDuckGo), and inject them into the last user turn. Failures never
-        # block the reply.
+        # Web search grounding; a failure never blocks the reply.
         if enable_search:
             messages = await self._ground_with_search(messages, hint=search_hint)
 
         # OpenAI endpoint uses a single system message; provider auto prefix-caches.
         _oai_messages = ([{"role": "system", "content": sys_text}] if sys_text else []) + list(messages)
 
-        # ── Call recovery: jittered backoff on transient errors +
-        # error-driven model failover ──
-        # Network blips / 5xx auto-retry; throttling switches to the fallback model
-        # immediately and arms a cooldown window (_pick_group_model then routes
-        # subsequent traffic to the fallback too); after retries are exhausted a
-        # non-auth error gets one last shot on the fallback model.
+        # Recovery: transient errors back off and retry; throttling arms a
+        # cooldown and switches to the fallback at once; anything else but
+        # auth gets one last try on the fallback.
         async def _call_with_recovery():
             cur_model = model
             attempt = 0
@@ -422,14 +359,8 @@ class ModelCalls:
                     return (await _do_call(max_tokens, cur_model)), cur_model
                 except Exception as e:
                     kind = self._classify_api_error(e)
-                    # Throttled: arm a cooldown window for the model that just
-                    # failed (later calls reroute via _pick_group_model) and
-                    # switch to the fallback model now — don't waste retries on
-                    # the throttled model. Arming is unconditional (it cools
-                    # whichever model failed, the fallback included); only the
-                    # switch needs a distinct fallback to jump to. The SHORT
-                    # window: a 429 is metering, not breakage (see
-                    # AgentSettings.llm_rate_limit_cooldown_s).
+                    # Throttled: cool down whichever model failed (the short,
+                    # metering window) and switch to a distinct fallback now.
                     if kind == "rate_limit" and self.llm_fallback_model:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
@@ -451,9 +382,8 @@ class ModelCalls:
                             kind, attempt, self.api_max_retries, cur_model, delay, e)
                         await asyncio.sleep(delay)
                         continue
-                    # Retries exhausted / request-level error: one last shot on the
-                    # fallback model (except auth/billing, which it can't fix).
-                    # Same unconditional-arm / conditional-switch split as above.
+                    # Exhausted or request-level: one last try on the fallback,
+                    # which can't fix auth or billing.
                     if kind != "fatal_auth" and self.llm_fallback_model:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
@@ -477,10 +407,8 @@ class ModelCalls:
                     choice.get("finish_reason", "?"))
 
         def _hidden_reasoning(d: dict) -> str:
-            # Read only to decide on a retry, never to take text from: a
-            # fluent reasoning fragment cannot be told apart from a naked chat
-            # line, and salvaging one would cross the protocol boundary
-            # _parse_model_output exists to hold.
+            # Only to decide on a retry, never to take text from: salvaging a
+            # reasoning fragment would cross the protocol boundary.
             choice = (d.get("choices") or [{}])[0]
             return ((choice.get("message") or {}).get("reasoning_content") or "").strip()
 
@@ -493,12 +421,8 @@ class ModelCalls:
             return ""
 
         def _budget_starved(t: str, fin: str) -> bool:
-            # Truncation shows up two ways on a reasoning model: no visible
-            # text at all (budget died mid-thought), or — in json_object mode —
-            # a half-emitted object like '{\n  "' that the fail-closed parser
-            # would silently drop. Both are the same defect: the answer did
-            # not fit. An empty-only condition would let every truncated
-            # non-empty JSON skip the retry and vanish with no length warning.
+            # Truncation: no visible text, or a half-emitted JSON object the
+            # fail-closed parser would silently drop.
             if fin != "length":
                 return False
             if not t:
@@ -511,12 +435,8 @@ class ModelCalls:
             return False
 
         if _budget_starved(text, finish):
-            # A reasoning model spends the budget on its chain of thought and
-            # can hit the cap before emitting a single visible token. The
-            # symptom is an empty reply on every turn, and "finish_reason=length"
-            # alone does not tell an operator that their model choice is the
-            # cause. Retry once with a materially larger budget, then say
-            # plainly what happened.
+            # A reasoning model can spend the whole budget thinking: retry once
+            # with a bigger one, then say plainly what happened.
             retry_tokens = max_tokens * 4
             logger.warning(
                 "[Agent] empty reply, finish_reason=length (model=%s, "
@@ -538,11 +458,8 @@ class ModelCalls:
                     "model, or one that accepts thinking off.",
                     retry_tokens, used_model)
         elif not text and finish == "stop" and not disable_thinking and reasoning:
-            # A thinking model occasionally puts the ENTIRE answer in
-            # reasoning_content and leaves `content` whitespace while finishing
-            # normally — "stop", so _budget_starved never sees it, and the
-            # turn would go silent. Intermittent and prompt-dependent. The same
-            # request with thinking off answers in `content`; ask once more.
+            # Some thinking models put the whole answer in reasoning_content and
+            # finish "stop" with blank content; thinking off answers in content.
             logger.warning(
                 "[Agent] blank content with %d chars of reasoning_content "
                 "(model=%s); retrying once with thinking disabled",
@@ -559,13 +476,8 @@ class ModelCalls:
         elif not text:
             logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
                            finish, used_model)
-        # The last rung: ask once more without response_format (see the
-        # docstring). After the ladder rather than inside it, so it catches
-        # whatever the rungs above left empty, whatever their reason — gating
-        # it on the one diagnosis that led here would miss the next variant
-        # of the same provider behaviour.
-        # JSON mode is a request, not a guarantee: some upstreams answer in
-        # prose anyway, and that prose is the reply, not something to drop.
+        # Last rung, after the ladder so it catches whatever is still blank.
+        # JSON mode is a request, not a guarantee: prose is the reply.
         if (text and json_object and plain_text_fallback
                 and not re.sub(r"^```(?:json)?\s*", "", text.lstrip(),
                                flags=re.IGNORECASE).startswith(("{", "["))):
@@ -588,18 +500,14 @@ class ModelCalls:
                 text = _as_protocol_object(plain)
                 logger.info("[Agent] plain-text retry recovered %d chars (model=%s)",
                             len(plain), used_model)
-        # Providers auto prefix-cache and report it in usage, in two spellings:
-        # DeepSeek's prompt_cache_hit/miss_tokens, and the OpenAI-style
-        # prompt_tokens_details.cached_tokens (OpenAI, OpenRouter, Zhipu).
-        # Reading only the first would leave the line silent on the others.
+        # Cache usage comes in DeepSeek's and the OpenAI-style spelling.
         usage = data.get("usage") or {}
         _hit = usage.get("prompt_cache_hit_tokens")
         _miss = usage.get("prompt_cache_miss_tokens")
         if _hit is None and isinstance(usage.get("prompt_tokens_details"), dict):
             _hit = usage["prompt_tokens_details"].get("cached_tokens")
         _in = usage.get("prompt_tokens")
-        # Logged at hit=0 too: a zero hit rate is the condition worth noticing,
-        # and a silent line cannot be told apart from a missing one.
+        # Logged at hit=0 too: a zero hit rate is what is worth noticing.
         if _in or _hit or _miss:
             logger.info("[Agent] cache: hit=%s miss=%s in=%s (model=%s)",
                         _hit or 0, _miss, _in, used_model)
@@ -614,12 +522,9 @@ class ModelCalls:
                     " (the reply model; LLM_JUDGE_MODEL can name a cheaper one)"
                     if gate == self.model else "")
 
-        # Private and group chat share the primary endpoint (llm_dm_model is
-        # just a model name), so the group probe covers it — or, when it is
-        # the fallback's name, the fallback probe does. The fallback is
-        # probed only when it has an endpoint of its own: it exists for the
-        # primary's outage, and a typo in its URL or key would otherwise
-        # surface during that outage and not before.
+        # DM shares the primary endpoint, so the group probe covers it. The
+        # fallback is probed only on its own endpoint, so a typo there shows
+        # now rather than during the outage it exists for.
         probes = [("group", self.model)]
         if self._endpoint_for(self.llm_fallback_model) != self._endpoint_for(self.model):
             probes.append(("fallback", self.llm_fallback_model))
@@ -659,23 +564,13 @@ class ModelCalls:
         self._start_embedding_backfill()
 
     def _pick_group_model(self, mode: str = "") -> str:
-        """Pick primary or fallback model based on recent call frequency.
-
-        called/admin are explicit "I'm asking you" — precisely when the bot is
-        @-ed the most it should stay on the primary model, otherwise you get
-        the "the more you call it, the dumber it gets" inversion. So the
-        frequency-driven downgrade only applies to self-initiated modes
-        (followup/judge/proactive); called/admin downgrade only on a **real**
-        provider throttle (error-driven)."""
+        """Primary or fallback model. Frequency-driven downgrade applies only to
+        self-initiated modes: being @-ed often must not make the bot dumber."""
         now = time.time()
         while self.model_calls and self.model_calls[0] < now - self.llm_rate_window_s:
             self.model_calls.popleft()
 
-        # Error-driven fallback (real 429/5xx) applies to every mode — when the
-        # provider throttles the model we are about to pick, there is no
-        # choice. Only the primary's own entry counts: a failure on the judge
-        # or private model says nothing about it. A cooling fallback is still
-        # returned — there is no third model to try.
+        # A real provider throttle on the primary applies to every mode.
         if self._fallback_until.get(self.model, 0.0) > now:
             return self.llm_fallback_model
 
