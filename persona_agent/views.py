@@ -119,7 +119,7 @@ class DataViews:
                     if self._scope_authorizes(r.get("scope"), current_scope, identity)]
         pairs = [r for r in self._view_pairs_cache
                  if self._scope_authorizes(r.get("scope"), current_scope, identity)]
-        voice, admin, latest = self._learning_status(group_id, current_scope)
+        voice, admin, latest = self._learning_status(current_scope)
         scores = []
         if self.eval_enabled:
             scores = [int(r["score"]) for r in read_jsonl((self.eval_file,))
@@ -175,7 +175,7 @@ class DataViews:
                 kept.append(line)
         return "\n".join(kept)
 
-    def _learning_status(self, group_id: str, current_scope: dict):
+    def _learning_status(self, current_scope: dict):
         """(waiting for a second voice, waiting for the admin, latest active
         candidate) for this conversation. A rewrite blocked by a conflict or
         by disagreeing evidence waits for the admin, not for a voice. Liked
@@ -198,23 +198,12 @@ class DataViews:
         if waiting and not self.promotion_policy.auto_promote:
             admin = len(waiting)
         elif waiting:
-            by_id = {e.get("event_id"): e for e in events}
-            by_reply: dict[str, list] = {}
-            for e in events:
-                by_reply.setdefault(str(e.get("reply") or "").strip(), []).append(e)
-            peers: dict[str, list] = {}
-            for c in cands:
-                peers.setdefault(str(c.get("reply") or ""), []).append(c)
+            index = promotion_mod.EvidenceIndex(events, cands)
             now, admins = time.time(), self._admins()
             for c in waiting:
-                reply = str(c.get("reply") or "").strip()
-                better = str(c.get("better") or "").strip()
                 decision = promotion_mod.decide(
-                    c, linked_events=[by_id[i] for i in c.get("evidence") or ()
-                                      if i in by_id],
-                    related_events=by_reply.get(reply, []) + (
-                        by_reply.get(better, []) if better and better != reply else []),
-                    peers=peers.get(str(c.get("reply") or ""), []), now=now,
+                    c, linked_events=index.linked(c), related_events=index.related(c),
+                    peers=index.peers(c), now=now,
                     policy=self.promotion_policy, admin_ids=admins)
                 if decision.blocked_by:
                     admin += 1

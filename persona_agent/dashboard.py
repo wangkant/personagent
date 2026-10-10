@@ -662,37 +662,6 @@ def _event_view(event: dict, cand: dict, policy) -> dict:
     }
 
 
-class _Index:
-    """Events and candidates by reply text, built once per request, so each
-    proposal reads only its own instead of the whole log."""
-
-    def __init__(self, events: list[dict], peers: list[dict]) -> None:
-        self.events = events
-        self.by_id = {e.get("event_id"): e for e in events}
-        self._pos = {e.get("event_id"): i for i, e in enumerate(events)}
-        self._by_text: dict[str, list[int]] = {}
-        for i, event in enumerate(events):
-            self._by_text.setdefault(str(event.get("reply") or "").strip(), []).append(i)
-        self._peers: dict[str, list[dict]] = {}
-        for cand in peers:
-            self._peers.setdefault(str(cand.get("reply") or ""), []).append(cand)
-
-    def linked(self, cand: dict) -> list[dict]:
-        ids = {eid for eid in cand.get("evidence") or [] if eid in self.by_id}
-        return [self.by_id[eid] for eid in sorted(ids, key=self._pos.__getitem__)]
-
-    def related(self, cand: dict) -> list[dict]:
-        # Narrowed by text, then still filtered by promotion's own rule.
-        texts = {str(cand.get("reply") or "").strip(),
-                 str(cand.get("better") or "").strip()}
-        hits = sorted(i for text in texts for i in self._by_text.get(text, ()))
-        return promotion.related_events(cand, [self.events[i] for i in hits])
-
-    def peers(self, cand: dict) -> list[dict]:
-        """The only candidates find_conflicts can match: same reply text."""
-        return self._peers.get(str(cand.get("reply") or ""), [])
-
-
 def _active_rivals(cand: dict, peers: list[dict], policy) -> list[dict]:
     """Other rewrites of the same reply already in use: one reply never has
     two active rewrites, so promoting `cand` must replace them."""
@@ -701,7 +670,8 @@ def _active_rivals(cand: dict, peers: list[dict], policy) -> list[dict]:
             and p.get("state") == candidates.STATE_PROMOTED]
 
 
-def _checklist(cand: dict, learning: _Learning, index: _Index, now: float) -> dict:
+def _checklist(cand: dict, learning: _Learning, index: promotion.EvidenceIndex,
+               now: float) -> dict:
     """Each promotion rule, passed or not, in the order `promotion.decide`
     applies them; the verdict itself is `decide`'s."""
     policy = learning.policy
@@ -762,7 +732,7 @@ def _checklist(cand: dict, learning: _Learning, index: _Index, now: float) -> di
             "promote": decision.promote, "verdict": decision.reason}
 
 
-def _candidate_view(cand: dict, learning: _Learning, index: _Index,
+def _candidate_view(cand: dict, learning: _Learning, index: promotion.EvidenceIndex,
                     now: float) -> dict:
     by_id = index.by_id
     actions = _allowed_actions(cand.get("state", ""))
@@ -816,7 +786,7 @@ def conversation_payload(agent, conv_id: str) -> dict:
     learning = _Learning(agent)
     learning_key = channels.learning_key(conv_id)
     peers = learning.ledger.all()
-    index = _Index(learning.log.all(), peers)
+    index = promotion.EvidenceIndex(learning.log.all(), peers)
     now = time.time()
     mine = [c for c in peers
             if str((c.get("scope") or {}).get("conv_id") or "") == learning_key]

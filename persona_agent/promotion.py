@@ -373,6 +373,38 @@ def related_events(cand: dict, events) -> list[dict]:
             if str(event.get("reply") or "").strip() in wanted]
 
 
+class EvidenceIndex:
+    """Events and candidates by reply text, built once, so judging many
+    candidates reads only what each one is about instead of the whole log."""
+
+    def __init__(self, events: list[dict], peers: list[dict]) -> None:
+        self.events = events
+        self.by_id = {e.get("event_id"): e for e in events}
+        self._pos = {e.get("event_id"): i for i, e in enumerate(events)}
+        self._by_text: dict[str, list[int]] = {}
+        for i, event in enumerate(events):
+            self._by_text.setdefault(str(event.get("reply") or "").strip(), []).append(i)
+        self._peers: dict[str, list[dict]] = {}
+        for cand in peers:
+            self._peers.setdefault(str(cand.get("reply") or ""), []).append(cand)
+
+    def linked(self, cand: dict) -> list[dict]:
+        """`cand`'s own evidence, once each, in log order."""
+        ids = {eid for eid in cand.get("evidence") or [] if eid in self.by_id}
+        return [self.by_id[eid] for eid in sorted(ids, key=self._pos.__getitem__)]
+
+    def related(self, cand: dict) -> list[dict]:
+        # Narrowed by text, then still filtered by related_events' own rule.
+        texts = {str(cand.get("reply") or "").strip(),
+                 str(cand.get("better") or "").strip()}
+        hits = sorted(i for text in texts for i in self._by_text.get(text, ()))
+        return related_events(cand, [self.events[i] for i in hits])
+
+    def peers(self, cand: dict) -> list[dict]:
+        """The only candidates find_conflicts can match: same reply text."""
+        return self._peers.get(str(cand.get("reply") or ""), [])
+
+
 def counter_evidence(cand: dict, events, *, now: float = 0.0,
                      policy: Policy = DEFAULT_POLICY) -> list[str]:
     """Event ids that argue against `cand` — a rejection of a reply somebody
