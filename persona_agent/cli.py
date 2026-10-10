@@ -24,7 +24,7 @@ COMMANDS = {
             "start the service the connectors talk to"),
     "connect": ("persona_agent.setup_wizard", "connect_main",
                 "connect a chat platform (AstrBot)"),
-    "doctor": ("persona_agent.cli", "_doctor",
+    "doctor": ("persona_agent.doctor", "main",
                "check the setup and every upstream service"),
     "learned": ("persona_agent.ledger_admin", "main",
                 "review, promote or roll back what it learned"),
@@ -42,12 +42,6 @@ def _run_server(argv: list[str], prog: str) -> int:
 
     server.main(host=args.host, port=args.port)
     return 0
-
-
-def _doctor(argv: list[str], prog: str) -> int:
-    from persona_agent import doctor
-
-    return doctor.main(argv, prog)
 
 
 def _parser() -> argparse.ArgumentParser:
