@@ -6,13 +6,12 @@ concern:
 - settings   everything the agent is configured with, built once and passed in
 - agent      wiring: applies the settings and builds the runtime state
 - turns      intake, admission, modes and debounce for one message
-- thinking   one group turn's model work: the gate, then the reply
+- decision   whether to speak, the gate, then the reply
 - dm         the one-on-one turn
 - llm        model calls: endpoints, retries, fallback, probes
 - prompts    the persona contract (style guide, output protocol, intent rules)
 - textproc   pure text: tokenising, sanitising, whitelist validator, splitting,
              the prompt's data frames
-- pools      JSONL loading for the retrieval datasets
 - ingestion  links, share cards, images, OCR, vision, with the SSRF guard
 - transport  throttling, chunking, typing simulation, sends, conversation LRU
 - learning   self-eval, reaction adjudication, the EVOLVE_AUTO_ENABLED loop

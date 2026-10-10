@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+A smaller, faster codebase with the same behaviour: about 7,000 fewer lines, most of them comments that restated the code, duplicated helpers and scripts that only forwarded to a `personagent` command.
+
+### Changed
+
+- **Building a reply's context takes about half the time.** With 500 learned examples and 500 learned pairs, picking what a turn sees went from 22 ms to 11 ms, with the same result.
+- **The server depends on plain `uvicorn`** instead of `uvicorn[standard]`, so websockets, watchfiles, PyYAML, httptools and uvloop are no longer installed. The server never used them.
+- **The examples and feedback pools are reread whole when their file changes**, instead of reading only the appended tail. Edits made while the service runs still show up on the next turn.
+- **The changelog keeps 1.x in full and summarizes 0.x.** The full earlier text is in the [v1.0.1 changelog](https://github.com/wangkant/personagent/blob/v1.0.1/CHANGELOG.md).
+
+### Removed
+
+- `try_chat.py` and the `tools/healthcheck.py`, `tools/candidates_admin.py` and `tools/behavior_eval.py` shims. Use `personagent chat`, `doctor`, `learned` and `eval`.
+- `tools/prompt_lab.py` with `tools/fixtures.*.jsonl`, and the unfinished `tools/dspy_tune.py`. `personagent chat` tries a prompt change on the real pipeline and `personagent eval` measures it. `LAB_MODEL` is no longer read: `doctor` warns about it instead of failing.
+- A `runtime/example_candidates.json` left from before the evidence ledger is no longer touched. Nothing read it; it can be deleted.
+
+### Fixed
+
+- **`personagent eval` uses the eval home's persona card.** It used to read `persona.card.json` from your real home.
+
 ## [1.0.1] — 2026-10-03
 
 The README becomes a landing page, and the PyPI page shows it.

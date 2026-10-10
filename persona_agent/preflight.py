@@ -46,6 +46,13 @@ TEMPLATE_EXEMPT = frozenset({
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 })
 
+#: Settings whose only reader was removed; warned about, not refused, so a 1.x
+#: upgrade with an old `.env` still passes.
+DROPPED = {
+    "LAB_MODEL": "tools/prompt_lab.py, its only reader, was removed",
+    "PROMPT_LAB_MODEL": "tools/prompt_lab.py, its only reader, was removed",
+}
+
 #: Every setting name retired in 1.0 -> its replacement. None is read: a start
 #: with one is refused, and `doctor --fix` renames them.
 RENAMED = {
@@ -104,7 +111,6 @@ RENAMED = {
     "EVAL_ENABLE": "EVAL_ENABLED",
     "AGENT_EVIDENCE_WARN_BYTES": "LEDGER_EVIDENCE_WARN_BYTES",
     "AGENT_CANDIDATE_LEDGER_WARN_BYTES": "LEDGER_CANDIDATES_WARN_BYTES",
-    "PROMPT_LAB_MODEL": "LAB_MODEL",
     "BENCH_EVAL_DELAY": "BENCH_EVAL_DELAY_S",
     # Older aliases of the same settings.
     "GLM_API_KEY": "VISION_API_KEY",
@@ -289,7 +295,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         unknown = sorted(
             key for key in configured
             if key not in template and key not in TEMPLATE_EXEMPT
-            and key not in RENAMED)
+            and key not in RENAMED and key not in DROPPED)
         for key in unknown:
             findings.append(Finding(
                 "ERROR", key,
@@ -302,6 +308,9 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
         findings.append(Finding(
             "WARN", old,
             f"was renamed to {RENAMED[old]} in 1.0 and is no longer read"))
+    for key in sorted(set(configured) & DROPPED.keys()):
+        findings.append(Finding(
+            "WARN", key, f"is no longer read ({DROPPED[key]}); delete the line"))
 
     for key, why in WANTED.items():
         if key in configured and not str(configured.get(key) or "").strip():

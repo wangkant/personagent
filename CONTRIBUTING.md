@@ -157,12 +157,11 @@ The rest of the package:
 |---|---|
 | `persona_agent/agent.py` | `Agent`: construction, runtime state, the ledgers and views it holds, shutdown |
 | `persona_agent/turns.py` | Intake: dedup, admission, debounce and the group turn from message to send |
-| `persona_agent/decision.py` | Whether to speak: a group turn's mode (`choose_group_mode`), pacing skips (`pacing_skip`), the cheap gate model (`_gate`), chat signals |
+| `persona_agent/decision.py` | Whether to speak: a group turn's mode (`choose_group_mode`), pacing skips (`pacing_skip`), the cheap gate model (`_gate`), the turn's model work (`_think`), and the shared reply finalizer (`_final_reply`) |
 | `persona_agent/prompt.py` | What the model reads: `_build_group_prompt`, `_build_dm_prompt` and their context blocks |
 | `persona_agent/retrieval.py` | What past material a turn sees: examples, memories, lorebook entries, and the embeddings fetched for them ahead of the prompt |
 | `persona_agent/ranking.py` | The retrieval score: BM25, embedding similarity, scope and recency, with their weights (pure logic) |
 | `persona_agent/embeddings.py` | The optional `/embeddings` call and its cache, in memory and in `runtime/embeddings.jsonl` |
-| `persona_agent/thinking.py` | One group turn's model work: prompt, gate, reply (`_think`) |
 | `persona_agent/dm.py` | The one-on-one turn |
 | `persona_agent/messages.py` | Reading a message: its text, quotes, buffer lines, @-mentions |
 | `persona_agent/addressing.py` | Whether a message names the persona: the one rule the group turn, the missed-mention sweep and the memory commands share |
@@ -175,24 +174,23 @@ The rest of the package:
 | `persona_agent/config_env.py` | The one way to read a setting from the environment (`env_int`, `env_bool`, `env_str`, ...) |
 | `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |
 | `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting, the prompt's data frames |
-| `persona_agent/pools.py` | Append-aware JSONL loading for the retrieval datasets |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
 | `persona_agent/transport.py` | Throttling, chunking, typing simulation, sends, connector conversation LRU |
 | `persona_agent/learning.py` | Self-eval, reaction adjudication, the evolution loop: the glue that records evidence and proposes candidates |
 | `persona_agent/evidence.py` | The append-only evidence log: schema, strength classification, idempotent appends (pure logic) |
 | `persona_agent/candidates.py` | Versioned candidates, the append-only lifecycle ledger, the materialized retrieval views (pure logic) |
-| `persona_agent/promotion.py` | The promotion policy: thresholds, scope compatibility, conflicts. Also `CandidatePool` and `retract_example`, which only withdraw rows learned before the ledger existed |
+| `persona_agent/promotion.py` | The promotion policy: thresholds, scope compatibility, conflicts. `EvidenceIndex` and `retract_example` |
 | `persona_agent/reactions.py` | Reaction attribution and adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | Low-score eval → diagnosis → BAD/OK pair, dedup, pool trimming (pure logic) |
 | `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
-| `persona_agent/connector.py` | The platform-neutral `/v1/events` event schema and reply sink |
+| `persona_agent/connector.py` | Translating a `/v1/events` event to the internal shape, and the reply sink ([docs/connectors.md](docs/connectors.md) has the schema) |
 | `persona_agent/outbox.py` | Messages no request is waiting for: each connector conversation's reply handle, and the queue a connector pulls from `/v1/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
 | `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS` (pure logic) |
 | `persona_agent/lineage.py` | Which persona-document hashes count as one character, so a persona edit doesn't orphan what was learned |
 | `persona_agent/stickers.py` | Sticker library: ingestion, dedup, tagging, persona-fit gate, selection |
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
-| `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup |
+| `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup, JSONL reading |
 | `persona_agent/health.py`, `preflight.py` | Dependency probes; startup config check (missing or misspelled keys) |
 | `tools/` | Offline scripts that are not part of the package; [docs/tools.md](docs/tools.md) lists them |
 

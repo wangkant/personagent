@@ -59,6 +59,14 @@ def test_a_current_env_has_nothing_retired(tmp_path: Path) -> None:
     assert preflight.retired_problem("personagent doctor --fix", home, environ={}) is None
 
 
+def test_a_setting_whose_tool_was_removed_is_a_warning_not_an_error(tmp_path: Path) -> None:
+    home = _home(tmp_path, "LLM_API_KEY=x\nLAB_MODEL=m\n")
+    findings = {(f.level, f.key) for f in preflight.check_config(home)}
+    assert ("WARN", "LAB_MODEL") in findings
+    assert ("ERROR", "LAB_MODEL") not in findings
+    assert preflight.retired_problem("personagent doctor --fix", home, environ={}) is None
+
+
 def test_the_refusal_says_one_sentence_per_setting_and_the_fix(tmp_path: Path) -> None:
     home = _home(tmp_path)
     problem = preflight.retired_problem("personagent doctor --fix", home, environ={})
