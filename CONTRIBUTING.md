@@ -34,7 +34,7 @@ With the venv active, run the checks CI runs:
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ruff check . --select F401,F811,F821,F841
-python -m compileall -q persona_agent main.py try_chat.py quickstart.py tools tests integrations
+python -m compileall -q persona_agent main.py quickstart.py tools tests integrations
 ```
 
 The suite takes about a minute and needs no network or API key: the tests
@@ -146,9 +146,9 @@ commands keep working:
 | `persona_agent/home.py` | Where a deployment lives (`AGENT_HOME`, the checkout, the working folder, `~/personagent`) and where shipped files are found. Stdlib only |
 | `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `main.py` starts it |
 | `persona_agent/setup_wizard.py` | `init` and `connect`: bilingual questions, the key test, the AstrBot handshake. Stdlib only. `quickstart.py` makes the venv, then calls it |
-| `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo. `try_chat.py` runs the chat |
+| `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo |
 | `persona_agent/dashboard.py`, `static/` | The local page at `/`, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
-| `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval`. `tools/healthcheck.py`, `tools/candidates_admin.py` and `tools/behavior_eval.py` are shims over them |
+| `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval` |
 | `quickstart.py`, `start.sh`, `start.ps1`, `start.bat` | The clone route: set up, then start |
 
 The rest of the package:
@@ -240,9 +240,10 @@ like.
 ## Documentation
 
 The English page is the source of truth. A page with a `*.zh-CN.md` twin
-(`README`, `docs/deploy`, `DISCLAIMER`, the AstrBot plugin README) is
+(`README`, `docs/guide`, `DISCLAIMER`, the AstrBot plugin README) is
 written in natural Chinese for Chinese readers, not translated line by line:
-when you change a fact in one, change it in the other. Images in a README use
+when you change a fact in one, change it in the other. `docs/deploy.zh-CN.md`
+is not a twin: it is a separate step-by-step QQ tutorial. Images in a README use
 absolute `raw.githubusercontent.com` URLs so they render on PyPI.
 
 ## Releasing
@@ -252,11 +253,12 @@ A release is a tag. Only the maintainer does this.
 1. Put the version in `pyproject.toml`, `persona_agent/__init__.py`
    (`__version__`) and the plugin's `metadata.yaml`. A test fails if the three
    differ.
-2. In `CHANGELOG.md`, give the changes a section headed the way the others
-   are, `## [X.Y.Z] — YYYY-MM-DD` (an em dash), and add its link line,
-   `[X.Y.Z]: https://github.com/wangkant/personagent/compare/vA.B.C...vX.Y.Z`,
-   at the top of the link list at the end. The section under the version
-   becomes the release notes.
+2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
+   (an em dash) and put a new, empty `## [Unreleased]` above it. In the link
+   list at the end, add
+   `[X.Y.Z]: https://github.com/wangkant/personagent/compare/vA.B.C...vX.Y.Z`
+   under the `[Unreleased]` line and point that line at `vX.Y.Z...HEAD`. The
+   section under the version becomes the release notes.
 3. Merge to `main` and wait for CI to pass.
 4. Tag `main` and push the tag:
 

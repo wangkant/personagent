@@ -28,13 +28,16 @@ Everything you need to set personagent up, run it in your chats, teach it and lo
 | Into an environment you already have | `pip install personagent` |
 | From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
 
-personagent runs on Python 3.10–3.14. `uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you. `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
+personagent runs on Python 3.10–3.14. `uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you; install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS, Linux) or `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows). `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
 
-The **home folder** holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is:
+The **home folder** holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is the first of:
 
-- `~/personagent` for an installed copy;
-- the clone itself for a checkout;
-- or the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`.
+1. the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`;
+2. the clone, when you run from one;
+3. the current folder, if it holds both `.env` and `persona.txt`;
+4. `~/personagent`, which `personagent init` creates.
+
+To run several characters from one install, give each its own home.
 
 This guide writes commands as `personagent ...`. Put `uvx` in front if you did not install it. In a clone, `.venv/bin/python -m persona_agent ...` (Windows: `.venv\Scripts\python.exe -m persona_agent ...`) does the same.
 
@@ -199,9 +202,9 @@ QQ goes through NapCat, logged in with the bot's QQ account and connected to Ast
 
 The plugin posts only to the same host (or a container sharing its network), or to an HTTPS address with `connector_token` set. Plain `http://` anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead.
 
-`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`.
+`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host` in its compose file, or `docker run --network host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`. A NapCat container in the same compose file needs host networking too, so that `ws://127.0.0.1:6199/ws` still reaches AstrBot.
 
-personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
+personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. [Exposing the endpoints](deploy.md#exposing-the-endpoints) has the rest.
 
 ### Speaking first
 
@@ -303,11 +306,7 @@ It opens only through its private link, which `personagent run` prints when it s
   dashboard:  http://127.0.0.1:8080/?token=...
 ```
 
-- Opening the link signs this browser in for a year and takes the token out of the address bar.
-- The token is kept in `runtime/dashboard.token` in the home folder; delete that file and restart to issue a new one. `CONNECTOR_TOKEN` does not open the dashboard.
-- To open it from another computer, use an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then the link), or set `SERVER_HOST` to this machine's LAN or Tailscale address (which also needs `CONNECTOR_TOKEN`), and the printed link uses that address.
-- Other host names are refused, so no website can pose as this computer.
-- `DASHBOARD_ENABLED=false` turns it off.
+Opening the link signs this browser in for a year. The deployment guide's [dashboard section](deploy.md#the-dashboard) covers opening it from another computer, issuing a new link and turning it off.
 
 ![The personagent dashboard: the conversation list, proposals waiting for approval with Promote and Reject, and the chat itself, with where it stayed quiet and why, a corrected reply struck through, and the fix it learned with Roll back](dashboard.png)
 
@@ -363,13 +362,11 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 **Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on, then prints the dashboard's link. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON, and `--fix` renames settings retired in 1.0.
 
-**It runs but never replies.** In order:
+**It runs but never replies.** The three most common causes:
 
-1. The `personagent run` banner says the agent is on. If it says `OFF`, it names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
-2. Open [the dashboard](#the-dashboard) through the link the banner printed. If nothing has arrived, the connector is not reaching personagent: check `personagent_url` in the plugin, and that `CONNECTOR_TOKEN` is the same on both sides. Chats that were turned away are listed with the reason.
-3. Check the connector's allowlist. The AstrBot plugin forwards only the `groups` and `dm_users` it lists, and on QQ `aiocqhttp` must not be in its `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. If you set `ACCESS_GROUPS` or `ACCESS_DM_USERS`, they must list the chat too.
-4. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it does not answer everything: it considers joining in after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
-5. If AstrBot runs in Docker, look for `refusing unsafe personagent_url` in AstrBot's log (see [AstrBot in Docker](#astrbot-in-docker-or-on-another-host)).
+1. The agent is off. The `personagent run` banner then says `OFF` and names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
+2. Nothing arrives. Open [the dashboard](#the-dashboard) through the link the banner printed; if nothing has arrived, the connector is not forwarding or not reaching personagent. The AstrBot plugin forwards only the `groups` and `dm_users` it lists (and on QQ, `aiocqhttp` must not be in its `excluded_platforms`); check also its `personagent_url`, and that `CONNECTOR_TOKEN` is the same on both sides.
+3. It was not called. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it considers joining in only after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
 
 The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet).
 
@@ -381,12 +378,6 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Upgrading from 0.x
 
-Settings were renamed in 1.0, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`.
+1.0 renamed most settings, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`, and `personagent doctor --fix` renames them in `.env`. The changelog's [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) has every step. Memory and what it learned carry over.
 
-1. Run `personagent doctor --fix` to rename them in `.env`. It keeps the values and comments and saves the old file as `.env.bak`. Rename any that are set in the environment where you set them.
-2. Check the defaults that changed: the model is `deepseek-flash`, `QQ_ONEBOT_URL` is blank, and a blank `PERSONA_TZ_OFFSET_HOURS` follows `AGENT_LANG`.
-3. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again.
-
-Memory and what it learned carry over, and the old scripts (`main.py`, `try_chat.py`, `tools/healthcheck.py`, `tools/candidates_admin.py`, `tools/behavior_eval.py`) still work. The full list is in the [changelog](../CHANGELOG.md#upgrading-from-04).
-
-Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are experiments; [tools.md](tools.md) describes them.
+Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are for running from a clone; [tools.md](tools.md) describes them.

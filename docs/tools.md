@@ -8,11 +8,9 @@ the clone. Run them with the clone's interpreter, from the repository root:
 .venv/bin/python tools/<script>.py --help     # Windows: .venv\Scripts\python.exe
 ```
 
-Everyday jobs are `personagent` subcommands, not scripts: `personagent doctor`
-(was `tools/healthcheck.py`), `personagent learned` (was
-`tools/candidates_admin.py`) and `personagent eval` (was
-`tools/behavior_eval.py`). The old script names still work and call the same
-code.
+Everyday jobs are `personagent` subcommands, not scripts: `personagent doctor`,
+`personagent learned` and `personagent eval`. To try a prompt change, use
+`personagent chat`; to measure one, `personagent eval`.
 
 | Script | What it does | Needs | Calls a model | Status |
 |---|---|---|---|---|
@@ -22,8 +20,6 @@ code.
 | `evolution_benchmark.py` | Drives the real agent over the scenarios in `data/benchmark/` for several rounds, with the self-improvement loop on and off, and compares the two. `run` does it; `ingest` reads back judge scores | `LLM_API_KEY`; a judge that is not the model under test (`--judge export`, `openai` or `anthropic`, with `BENCH_JUDGE_MODEL`) | Yes, and a lot: every scenario, round and arm | Experimental. It measures the value of what the loop drafts, not how much a deployment learns on its own |
 | `scenario_probe.py` | Tries candidate benchmark scenarios against the real model and reports which ones expose the failure the benchmark needs | `LLM_API_KEY`; a file of candidate scenarios shaped like `data/benchmark/scenarios.train.en.jsonl`; `--judge-model` for the judge pass | Yes: a reply, a self-eval and a judge call per scenario | Experimental. For building the benchmark |
 | `sticker_holdout_eval.py` | Measures how stable and accurate the sticker approval gate is against stickers you labelled by hand | `runtime/holdout.jsonl` (format in `tools/holdout.example.jsonl`); the three `VISION_*` settings | Yes: images × `--runs` (default 5) vision calls, about 150 for 30 images | Experimental |
-| `prompt_lab.py` | An interactive menu for trying a prompt change and saving approved replies into the feedback pool | `pip install -e ".[judge]"`, `ANTHROPIC_API_KEY` and `LAB_MODEL`, a different vendor on purpose | Yes: the Anthropic model you name, on each generation | Experimental |
-| `dspy_tune.py` | A scaffold that lets DSPy search for better few-shot examples from the feedback pairs. `--bootstrap` previews the pairs, `--tune` runs the optimizer | `pip install dspy-ai` (it is in no extra); `LLM_API_KEY` | `--bootstrap` no; `--tune` yes, many calls | Experimental: a starting point, not a finished tuner |
 | `dashboard_snapshot.py` | Seeds a realistic state through the real service and captures the dashboard with headless Edge: en and zh, light and dark, phone, and a fresh home (`--out DIR`, `--only NAME...`) | Microsoft Edge (`--edge PATH`); runs offline | No: a scripted stand-in answers | Supported for maintainers; it makes `docs/dashboard*.png` |
 | `package_smoke.py` | Checks an installed `personagent` command end to end: version, `init --no-input`, `chat`, `run` plus `/health`, `doctor --json` | An installed `personagent` (`--personagent PATH`); nothing else | No: a stand-in server answers, nothing leaves the machine | Supported. CI runs it on Linux and Windows |
 | `release_notes.py` | Checks a release tag against `pyproject.toml` and prints that version's CHANGELOG section | The tag, e.g. `v1.0.0` | No | Supported. The release workflow runs it |

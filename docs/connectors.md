@@ -253,13 +253,26 @@ code `outbox_disabled` means the operator turned it off
 
 ## Speaking first without the outbox
 
-A connector that cannot poll can still start a DM: post an ordinary DM event
-with `"proactive": true`. Its text is read as a cue to the persona
+A connector that cannot poll can still start a DM: its own scheduler (an
+AstrBot plugin task, a cron entry) posts an ordinary DM event with
+`"proactive": true` to `/v1/events`. Its text is read as a cue to the persona
 ("they have been quiet a day; their exam was this morning"), cut at 500
-characters, and never stored as the person's words. If the persona decides to
-speak, the reply comes back in the response. A group event with the flag is
-claimed and dropped. The cue counts against the same DM cooldown as the
-agent's own openers, and not as the person's activity.
+characters, and never stored as the person's words. The engine's proactive
+instructions still decide the turn and may keep the persona silent; if it
+speaks, the reply comes back in the response for the scheduler to relay.
+
+The event needs what the connector's own events carry: the signed headers,
+every required field, the same `platform` and raw `sender_id` the connector
+sends for that person, non-empty text, and a fresh `message_id` each time (a
+repeated one is dropped without a word). The cue counts against the same DM
+cooldown as the agent's own openers (`PROACTIVE_DM_COOLDOWN_S`), and not as
+the person's activity.
+
+Always set the flag. Without it the cue is stored as the person's words: it
+stays in the DM history for the next 40 messages, can be quoted back at them,
+and can be saved as a memory about them. A group event with the flag is
+claimed (`owned: true`, so the connector keeps its own bot quiet) and dropped
+unread.
 
 ## Capabilities and what degrades
 

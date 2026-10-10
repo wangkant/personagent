@@ -35,11 +35,14 @@
 
 支持 Python 3.10–3.14。`quickstart.py` 会创建 `.venv`、安装依赖，然后进入和 `personagent init` 一样的设置流程。没有 Git 的话，下载 [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip)，解压出来是 `personagent-main` 文件夹。
 
-**主目录**放着设置（`.env`）、人设（`persona.txt`）和它学到的东西（`runtime/`）：
+**主目录**放着设置（`.env`）、人设（`persona.txt`）和它学到的东西（`runtime/`），按下面的顺序取第一个：
 
-- 安装版：用户目录下的 `personagent` 文件夹（Windows 上是 `C:\Users\你的用户名\personagent`）。
-- 源码版：仓库本身。
-- 也可以用 `--home 目录` 或环境变量 `AGENT_HOME` 指定。`--home` 放在命令前后都行，比如 `personagent chat --home D:\bot`；用了它，之后每条命令都要带上同一个目录。
+1. 用 `--home 目录` 或环境变量 `AGENT_HOME` 指定的文件夹。`--home` 放在命令前后都行，比如 `personagent chat --home D:\bot`；用了它，之后每条命令都要带上同一个目录。
+2. 从源码运行时，仓库本身。
+3. 当前文件夹，如果里面同时有 `.env` 和 `persona.txt`。
+4. 用户目录下的 `personagent` 文件夹（Windows 上是 `C:\Users\你的用户名\personagent`），`personagent init` 会创建它。
+
+一套安装想跑几个角色，就给每个角色一个自己的主目录。
 
 下文的命令都写成 `personagent ...`。没有安装的话，前面加上 `uvx`；源码版用 `.venv/bin/python -m persona_agent ...`（Windows：`.venv\Scripts\python.exe -m persona_agent ...`），效果一样。
 
@@ -251,7 +254,7 @@ QQ  ⇄  NapCat  ⇄  AstrBot（装了 personagent 插件）  ⇄  personagent  
 
 插件只会发往同一台机器（或共享网络的容器），或者设置了 `connector_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe personagent_url`，随后由 AstrBot 自己的模型回复。
 
-`personagent connect astrbot` 会问 AstrBot 是否跑在 Docker 里。解决办法有两个：给 AstrBot 容器开 host 网络（`network_mode: host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，用 `--url https://...` 传入。
+`personagent connect astrbot` 会问 AstrBot 是否跑在 Docker 里。解决办法有两个：给 AstrBot 容器开 host 网络（compose 文件里写 `network_mode: host`，`docker run` 用 `--network host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，用 `--url https://...` 传入。同一个 compose 文件里的 NapCat 容器也要开 host 网络，这样 `ws://127.0.0.1:6199/ws` 才连得到 AstrBot。
 
 personagent 默认监听 `127.0.0.1:8080`（`SERVER_HOST` 留空也是这个）。要监听网络地址（`--host 0.0.0.0` 或 `SERVER_HOST`），必须设置 `CONNECTOR_TOKEN`。加反向代理或隧道之前就先把它设好，哪怕都在一台机器上：隧道会让外面来的请求看起来像本机发的。请在前面放 HTTPS 反向代理或私有隧道，请求体原样转发，两端时钟偏差不超过五分钟。
 
@@ -402,13 +405,11 @@ personagent 保存的一切都在你自己的机器上，在主目录里：`.env
 
 **先运行 `personagent doctor`。** 它会检查配置、指出拼错的和已改名的设置，逐个探测 personagent 依赖的服务，最后打印管理面板的链接。探测会发很小的请求，可能消耗一点额度。加 `--json` 输出同样内容的 JSON；加 `--fix` 会把 1.0 改掉的旧设置名换成新名字。
 
-**服务在跑，但就是不回复。** 按顺序查：
+**服务在跑，但就是不回复。** 最常见的三个原因：
 
-1. `personagent run` 启动时打印的信息里，agent 是开着的。如果显示 `OFF`，后面会写原因，通常是没设 `LLM_API_KEY`：运行 `personagent init`。
-2. 用启动时打印的链接打开[管理面板](#管理面板)。如果什么都没收到，说明连接器没连上 personagent：检查插件里的 `personagent_url`，以及两边的 `CONNECTOR_TOKEN` 是否一致。被拦下的聊天会列出来，并写明原因。
-3. 查连接器白名单。AstrBot 插件只转发 `groups` 和 `dm_users` 里列出的；接 QQ 时，插件的 `excluded_platforms` 里不能有 `aiocqhttp`。Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。如果你设置了 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`，也要把这个聊天列进去。
-4. 叫它的名字（`PERSONA_NAME`）。群里它不会每条都回：攒够 `CHAT_TRIGGER_COUNT` 条消息（默认 30）才考虑插话，而且只在判断模型认为真人会接话时才开口。
-5. AstrBot 跑在 Docker 里的话，看 AstrBot 日志里有没有 `refusing unsafe personagent_url`（见[上文](#astrbot-跑在-docker-里或另一台机器上)）。
+1. agent 没开。`personagent run` 启动时打印的信息里会显示 `OFF` 并写明原因，通常是没设 `LLM_API_KEY`：运行 `personagent init`。
+2. 什么都没收到。用启动时打印的链接打开[管理面板](#管理面板)，如果什么都没收到，说明连接器没转发，或者没连上 personagent。AstrBot 插件只转发 `groups` 和 `dm_users` 里列出的（接 QQ 时，插件的 `excluded_platforms` 里不能有 `aiocqhttp`）；再检查插件里的 `personagent_url`，以及两边的 `CONNECTOR_TOKEN` 是否一致。
+3. 没叫到它。叫它的名字（`PERSONA_NAME`）。群里它不会每条都回：攒够 `CHAT_TRIGGER_COUNT` 条消息（默认 30）才考虑插话，而且只在判断模型认为真人会接话时才开口。
 
 完整的排查清单见[中文部署教程](deploy.zh-CN.md#机器人不说话)和[部署指南](deploy.md#when-the-bot-goes-quiet)（英文）。
 
@@ -420,15 +421,11 @@ personagent 保存的一切都在你自己的机器上，在主目录里：`.env
 
 ## 从 0.x 升级
 
-1.0 改了一批设置名。只要还留着旧名字，personagent 就不会启动，并逐个列出 `旧名 -> 新名`。运行 `personagent doctor --fix` 会在 `.env` 里改好，值和注释都保留，原文件另存为 `.env.bak`；写在系统环境变量里的，要到设置它的地方去改。
-
-有几项默认值也变了：模型是 `deepseek-flash`，`QQ_ONEBOT_URL` 默认留空，`PERSONA_TZ_OFFSET_HOURS` 留空时跟着 `AGENT_LANG` 走。用 `personagent connect astrbot` 重装 AstrBot 插件，再重新填一遍插件的 `groups` 和 `dm_users`。
-
-记忆和学到的东西会保留，旧脚本（`main.py`、`try_chat.py`、`tools/healthcheck.py`、`tools/candidates_admin.py`、`tools/behavior_eval.py`）也照样能用。完整清单见[更新日志](../CHANGELOG.md#upgrading-from-04)（英文）。
+1.0 改了一批设置名。只要还留着旧名字，personagent 就不会启动，并逐个列出 `旧名 -> 新名`；运行 `personagent doctor --fix` 会在 `.env` 里改好。完整步骤见更新日志里的[从 0.4 升级](../CHANGELOG.md#upgrading-from-04)（英文）。记忆和学到的东西会保留。
 
 ## 项目状态和其他文档
 
-1.0。QQ（经 AstrBot）是跑得最多的路线。AstrBot 的其他平台通过同一个插件支持；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有一项安装软件包并运行命令的检查。OneBot 直连入口（`/v1/onebot`）和 `launch.vbs` 已废弃，1.x 期间保留。`tools/` 里的脚本属于实验，说明见[工具脚本](tools.md)（英文）。
+1.0。QQ（经 AstrBot）是跑得最多的路线。AstrBot 的其他平台通过同一个插件支持；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有一项安装软件包并运行命令的检查。OneBot 直连入口（`/v1/onebot`）和 `launch.vbs` 已废弃，1.x 期间保留。`tools/` 里的脚本给源码版用，说明见[工具脚本](tools.md)（英文）。
 
 - [中文部署教程](deploy.zh-CN.md) · [部署指南](deploy.md)（英文）
 - 连接器：[AstrBot 插件](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [协议](connectors.md)（后三个为英文）
