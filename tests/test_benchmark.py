@@ -35,7 +35,8 @@ def test_scenario_sets() -> None:
     train_ids = {s["id"] for s in train}
     holdout_ids = {s["id"] for s in holdout}
     check("ids disjoint", train_ids.isdisjoint(holdout_ids))
-    check("families shared", bench.scenario_families(train) == bench.scenario_families(holdout))
+    check("families shared",
+          {s["family"] for s in train} == {s["family"] for s in holdout})
     check("every scenario has context", all(s.get("context") for s in train + holdout))
     check("modes valid", all(s["mode"] in {"owner", "called", "followup", "judge"}
                              for s in train + holdout))
@@ -147,9 +148,9 @@ def test_run_arm_isolation_and_growth() -> None:
         bench.build_isolated_agent = patched
         try:
             on = asyncio.run(bench.run_arm(train, holdout, "Robin", "en", 2,
-                                           True, tmp / "on", "claude"))
+                                           True, tmp / "on"))
             off = asyncio.run(bench.run_arm(train, holdout, "Robin", "en", 2,
-                                            False, tmp / "off", "claude"))
+                                            False, tmp / "off"))
         finally:
             bench.build_isolated_agent = orig
 
@@ -247,7 +248,7 @@ def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
         replies = asyncio.run(
             bench.run_round(
                 agent, train, holdout, "Robin",
-                evolve_on=True, judge_model="stub-judge",
+                evolve_on=True,
             )
         )
 

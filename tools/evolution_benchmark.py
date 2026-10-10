@@ -79,10 +79,6 @@ def load_scenarios(path: Path) -> list[dict]:
     return out
 
 
-def scenario_families(scns: list[dict]) -> set[str]:
-    return {s["family"] for s in scns}
-
-
 def _parse_line(line: str, persona_name: str) -> dict:
     line = line.replace("<bot-name>", persona_name)
     if ": " in line:
@@ -170,18 +166,6 @@ def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_ena
     async def _no_search(messages, hint=""):
         return ""
     a._decide_and_search = _no_search
-    # Force retrieval caches to reload from the (empty) redirected files. The
-    # evidence log, the candidate ledger and both promoted views are sidecars of
-    # examples_file's directory, so they followed the redirect above.
-    a._pairs_mtime = (-1.0, -1.0)
-    a._examples_mtime = (-1.0, -1.0)
-    a._pairs_cache = []
-    a._examples_cache = []
-    a._view_pairs_stamp = (-1.0, -1)
-    a._view_examples_stamp = (-1.0, -1)
-    a._view_pairs_cache = []
-    a._view_examples_cache = []
-    a._auto_examples_seen = set()
     return a
 
 
@@ -217,7 +201,7 @@ def _promote_pending(agent) -> int:
     return n
 
 
-async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_model: str):
+async def run_round(agent, train, holdout, persona_name, evolve_on: bool):
     if evolve_on:
         for scn in train:
             try:
@@ -302,7 +286,7 @@ def _reset_state_dir(state_dir: Path) -> None:
 
 
 async def run_arm(train, holdout, persona_name, lang, rounds, evolve_on, state_dir,
-                  judge_model, seed_state="empty"):
+                  seed_state="empty"):
     _reset_state_dir(state_dir)
     agent = build_isolated_agent(state_dir, persona_name, lang, eval_enabled=evolve_on)
     # Seed both arms identically (or start empty) AFTER build so the files
@@ -314,10 +298,10 @@ async def run_arm(train, holdout, persona_name, lang, rounds, evolve_on, state_d
     arm = "evolve-on" if evolve_on else "evolve-off"
     results = []
     # Round 0: baseline, no learning even on the on-arm.
-    base = await run_round(agent, train, holdout, persona_name, evolve_on=False, judge_model=judge_model)
+    base = await run_round(agent, train, holdout, persona_name, evolve_on=False)
     results.append({"round": 0, "feedback_pairs": _count_feedback(agent), "holdout": base})
     for k in range(1, rounds + 1):
-        rd = await run_round(agent, train, holdout, persona_name, evolve_on=evolve_on, judge_model=judge_model)
+        rd = await run_round(agent, train, holdout, persona_name, evolve_on=evolve_on)
         results.append({"round": k, "feedback_pairs": _count_feedback(agent), "holdout": rd})
         print(f"[{arm}] round {k}/{rounds}: feedback_pairs={_count_feedback(agent)}")
     return {"arm": arm, "rounds": results}
@@ -691,8 +675,7 @@ async def cmd_run(args) -> int:
     for evolve_on in (True, False):
         sd = out / ("state-on" if evolve_on else "state-off")
         arm = await run_arm(train, holdout, persona_name, args.lang, args.rounds,
-                            evolve_on, sd, judge_model=args.judge_model,
-                            seed_state=args.seed_state)
+                            evolve_on, sd, seed_state=args.seed_state)
         arms.append(arm)
     (out / "arms.json").write_text(json.dumps(arms, ensure_ascii=False, indent=2),
                                    encoding="utf-8", newline="\n")
