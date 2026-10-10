@@ -18,11 +18,9 @@ from persona_agent import setup_wizard as sw
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from persona_agent.prompts import _TEMPLATE_RULE_RE
 
+from helpers import check
+
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def check(name: str, cond, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 @pytest.fixture(autouse=True)
@@ -236,7 +234,7 @@ def fake_openai(statuses: list[int], seen: list):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"

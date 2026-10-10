@@ -16,14 +16,7 @@ from persona_agent import evidence, reactions
 from persona_agent.agent import Agent
 from persona_agent.transport import SendResult
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 
 # ---------------------------------------------------------------------------
@@ -350,27 +343,8 @@ def test_teacher_stats(tmp: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _make_agent(tmp: Path) -> Agent:
-    a = Agent(
-        api_key="test-key", qq_bot_id="10001", persona_name="Robin",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0, lang="en",
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
-    a.candidates_file = tmp / "candidates.jsonl"
-    a.feedback_seed_file = tmp / "feedback.seed.en.jsonl"
-    a.feedback_file = tmp / "feedback.en.jsonl"
-    a.examples_seed_file = tmp / "examples.seed.en.jsonl"
-    # The evidence log, the candidate ledger and both promoted views are
-    # sidecars of this directory, so redirecting the pool moves the whole
-    # learning layer into tmp with it.
-    a.examples_file = tmp / "examples.en.jsonl"
-    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
+    a = isolated_agent(tmp, seeds=True, persona_name="Robin",
+                       qq_onebot_url=CLOSED_ONEBOT_URL)
     a.react_elicit_delay_s = 0.0
     a._pairs_mtime = (-1.0, -1.0)
     a._examples_mtime = (-1.0, -1.0)
@@ -433,7 +407,7 @@ async def test_process_reaction(tmp: Path) -> None:
                            "better": "", "scenario": "landed"})
     a._call_llm = adj_positive
     # Laughter is weak evidence — at any quantity. It proposes an example
-    # candidate and waits for a strong event or a human (tools/candidates_admin.py).
+    # candidate and waits for a strong event or a human (`personagent learned`).
     for text in ("lmaooo real", "lmaooo again", "still funny", "ok this one's good"):
         await a._process_reaction(_pending_entry(), text, "alex", "42", False)
     check("no quantity of laughter banks an example",

@@ -18,10 +18,7 @@ from persona_agent.config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL,
                                       vision_endpoint_from_env)
 from persona_agent.settings import AgentSettings
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 #: A deployment `.env` with every setting set to something distinctive.

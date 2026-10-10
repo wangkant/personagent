@@ -81,17 +81,21 @@ python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --ver
   import `persona_agent`, the root shims and the CLI tools the way a
   deployment does.
 - `tests/conftest.py` provides the `tmp` fixture (a per-test scratch
-  directory) and runs each `async def` test on its own event loop. pytest is
-  the only test dependency.
-- Many suites define a local `check(name, cond, detail)` that asserts and
+  directory), runs each `async def` test on its own event loop, and skips
+  the 5 s bare-call debounce unless a test is marked `bare_call_wait`.
+  pytest is the only test dependency.
+- `tests/helpers.py` has `check(name, cond, detail)`, which asserts and
   names the property that failed. Use it or a plain `assert`.
+- `isolated_agent(tmp, **settings)` in `tests/helpers.py` builds a real
+  `Agent`; a suite's own `make_agent()` passes only what differs (persona
+  name, admins, a NapCat URL, stubs).
 
 **Tests must never write the repo's real state files.** Everything mutable
 lives under `runtime/`, and a relative state-file setting such as
 `MEMORY_FILE=memory.json` resolves there. A test that forgets to
-redirect a path will overwrite a running deployment's learned data. Start
-from the `make_agent()` helper in `tests/test_retrieval.py`, which redirects
-every state file into `tmp`.
+redirect a path will overwrite a running deployment's learned data.
+`isolated_agent()` redirects every state file into `tmp`; `seeds=True` also
+swaps the shipped seed pools for empty ones.
 
 The evidence log, the candidate ledger, both promoted views and the persona
 lineage all live next to `examples_file` (`Agent.learning_dir`). Redirecting

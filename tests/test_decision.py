@@ -9,10 +9,7 @@ from persona_agent import decision
 from persona_agent.access import ADMIN_MODE
 from persona_agent.textproc import SLEEP_PASS_PROB, SUB_TRIGGER_PASS_PROB
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check
 
 
 def mode(**kw) -> tuple[str, str]:

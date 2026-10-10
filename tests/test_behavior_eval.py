@@ -21,13 +21,11 @@ from persona_agent import evals as be
 from persona_agent import paths
 from persona_agent.agent import Agent
 
+from helpers import check
+
 ENV = {"LLM_API_KEY": "stub-key", "LLM_MODEL": "model-under-test",
        "BENCH_JUDGE_MODEL": "judge-model", "AGENT_LANG": "en"}
 CHECKOUT_ROOT = paths.ROOT
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _runtime_listing() -> list[str]:

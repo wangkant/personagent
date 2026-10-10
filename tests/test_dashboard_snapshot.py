@@ -30,8 +30,8 @@ def build_agent(lang: str, root: Path, base_url: str) -> Agent:
     agent, _ = demo.build_agent(lang, root, offline=True)
     agent.base_url, agent.model, agent.api_key = base_url, "deepseek-flash", "sk-snapshot"
     agent.api_max_retries = 0
-    # A reaction is judged in the background while the reply is written.
-    agent.message_debounce_sec = 0.3
+    # No debounce: a reaction is judged beside the reply turn, and the retry
+    # links in either order (test_teach_loop, test_reactions).
     del agent._call_llm  # back to the class's real HTTP caller
     return agent
 

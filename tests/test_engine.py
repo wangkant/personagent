@@ -12,27 +12,14 @@ from persona_agent.connector import synthesize_onebot_payload
 from persona_agent.prompts import MODEL_FAILURE_EXCUSES, render_persona_template
 from persona_agent.transport import SendResult
 
+from helpers import check, isolated_agent
+
 QQ_BOT_ID = "10001"
 
 
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, name + (f" - {detail}" if detail else "")
-
-
 def make_agent(tmp: Path, **overrides) -> Agent:
-    settings = dict(
-        api_key="test-key", qq_bot_id=QQ_BOT_ID, persona_name="Luna",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_file=str(tmp / "eval.jsonl"), stickers_dir=str(tmp / "stickers"),
-        stickers_file=str(tmp / "stickers.json"), message_debounce_sec=0,
-        lang="en", admin_ids=("42",))
-    settings.update(overrides)
-    a = Agent(**settings)
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.connector_handles.path = tmp / "connector_handles.json"
-    a._seen_msg_ids.clear()
-    a.core_memory.clear()
+    a = isolated_agent(tmp, **{"qq_bot_id": QQ_BOT_ID, "persona_name": "Luna",
+                               "admin_ids": ("42",), **overrides})
     a._typing_delay = lambda chunk: 0.0
     return a
 

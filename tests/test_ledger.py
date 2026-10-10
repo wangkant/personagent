@@ -20,9 +20,11 @@ from pathlib import Path
 
 import pytest
 
-from persona_agent import candidates, evidence, promotion, reactions
+from persona_agent import candidates, evidence, promotion
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
+
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 NOW = 1_800_000_000.0
 
@@ -31,15 +33,6 @@ def stamp(seconds: float) -> str:
     """Epoch -> ISO. Every fixture timestamp derives from NOW through this, so
     that no test's meaning depends on the day it happens to run."""
     return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
 
 
 def _runtime_listing() -> list[str]:
@@ -66,32 +59,12 @@ def real_runtime_directory_is_untouched():
 # ---------------------------------------------------------------------------
 
 def make_agent(tmp: Path) -> Agent:
-    """Agent with every learned-state path inside `tmp`.
-
-    The evidence log, the ledger and both views are sidecars of
+    """The evidence log, the ledger and both views are sidecars of
     examples_file.parent, so redirecting the pools moves the whole learning
     layer with them — see test_paths_never_touch_real_runtime_state."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang="en",
-        qq_onebot_url="http://127.0.0.1:9",
-        memory_file=str(tmp / "memory.json"), persona="test persona",
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-        message_debounce_sec=0,
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a._seen_msg_ids.clear()
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.candidates_file = tmp / "candidates.jsonl"
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
-    a.react_elicit_enabled = False          # no elicitation sends in these tests
-    return a
+    return isolated_agent(tmp, seeds=True, qq_bot_id="1", persona_name="B",
+                          qq_onebot_url=CLOSED_ONEBOT_URL,
+                          react_elicit_enabled=False)
 
 
 def entry(reply: str = "just restart it lol", *, target_uid: str = "42",
@@ -709,7 +682,7 @@ async def test_logs_are_append_only(tmp: Path) -> None:
 
 def test_legacy_feedback_still_loads(tmp: Path) -> None:
     a = make_agent(tmp)
-    # A pair approved by hand through prompt_lab.py (no "src" marker), a
+    # A pair approved by hand (no "src" marker), a
     # machine pair banked by a pre-ledger build, and a seed row.
     a.feedback_seed_file.write_text(json.dumps(
         {"scenario": "seed", "context": ["u: hi"], "mode": "called",
@@ -771,6 +744,12 @@ def test_paths_never_touch_real_runtime_state(tmp: Path) -> None:
         "examples": a.examples_file, "feedback": a.feedback_file,
         "teacher stats": a.teacher_stats.path,
         "audit": a.candidates_file, "eval": a.eval_file,
+        "memory": a.memory_file, "core memory": a.core_memory_file,
+        "seen ids": a._seen_msg_file, "handles": a.connector_handles.path,
+        "owner profile": a.owner_profile_file,
+        "unknown stickers": a.stickers.unknown_log,
+        "pending reactions": a.pending_reactions.state_file,
+        "lineage": a.persona_lineage.path, "embeddings": a.embedding_cache.path,
     }
     for label, path in paths.items():
         resolved = Path(path).resolve()
@@ -876,7 +855,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_admins(
     Both read ADMIN_IDS through access.identity_from_env; the CLI used to
     read the QQ admin alone, so a Telegram admin's candidate showed a speaker
     shortfall there that the agent itself did not see."""
-    from persona_agent import ledger_admin as candidates_admin
+    from persona_agent import ledger_admin
 
     a = make_agent(tmp)
     a.admin_ids = {"telegram:1"}
@@ -894,7 +873,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_admins(
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     monkeypatch.delenv("CONNECTOR_QQ_PLATFORMS", raising=False)
     agent_says = a._decide_promotion(cand["candidate_id"])
-    cli_says = candidates_admin._decide(
+    cli_says = ledger_admin._decide(
         a.candidate_ledger, a.evidence_log, cand, a.promotion_policy)
     check("admins: both ask with the Telegram admin",
           asked == [{"telegram:1"}] * 2,
@@ -1166,7 +1145,7 @@ def test_the_live_projection_equals_a_cold_replay(tmp: Path) -> None:
     # A SECOND WRITER must invalidate the stamp rather than be dropped. The
     # stamp is compared inside the append's own lock precisely so that this
     # cannot become "the other row vanished and the fresh stamp hid it" —
-    # `tools/candidates_admin.py` bypasses the instance lock, so this writer
+    # `personagent learned` bypasses the instance lock, so this writer
     # is real.
     other = candidates.CandidateLedger(path)
     other.propose(pair(97))
@@ -1235,7 +1214,7 @@ def test_a_retry_acceptance_does_not_argue_against_its_own_pair() -> None:
 def test_related_events_covers_the_rewrite() -> None:
     """One builder, because there are two callers.
 
-    The running agent and `tools/candidates_admin.py` each built this list.
+    The running agent and `personagent learned` each built this list.
     When only the first was widened to include events about the REWRITE, the
     CLI went on printing `policy: would promote` for a pair whose rewrite the
     user had rejected — with an unconditional `promote` command next to it.

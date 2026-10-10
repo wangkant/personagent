@@ -19,9 +19,7 @@ from persona_agent import server as main_module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "integrations" / "satori"))
 import satori_connector as sc  # noqa: E402
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    assert cond, f"{name}: {detail}" if detail else name
+from helpers import check
 
 
 # ---------- fakes for satori-python ----------

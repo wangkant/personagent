@@ -6,27 +6,24 @@ Run from the repo root:
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import gzip
 import io
+import os
 import re
 import socket
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from persona_agent.agent import Agent
 from persona_agent.ingestion import ContentIngestion, safe_fetch_url
 from tools.bootstrap_from_history import download_sticker
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English.
-
-    The suites state a property per line rather than one per function, and
-    they keep saying it that way; this turns each statement into the assert
-    pytest reports on."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
 
 class Harness(ContentIngestion):
@@ -752,3 +749,491 @@ async def test_vision_requests_apply_the_reasoning_quirks(path, sleeps) -> None:
     check(f"{path}: K2 thinking off at its fixed temperature",
           payload.get("thinking") == {"type": "disabled"}
           and payload.get("temperature") == 0.6, repr(payload)[:200])
+
+
+# ---------------------------------------------------------------------------
+# Through the real agent
+# ---------------------------------------------------------------------------
+
+def make_agent(tmp: Path) -> Agent:
+    # OCR is delegated to NapCat, so the agent needs an address for it.
+    return isolated_agent(tmp, qq_onebot_url=CLOSED_ONEBOT_URL)
+
+
+async def test_b64_image_fetch(tmp: Path) -> None:
+    """base64:// pseudo-URLs (b64-only connector inbound images) decode to
+    bytes locally instead of being routed through httpx."""
+    agent = make_agent(tmp)
+    raw = b"\x89PNG\r\n\x1a\nxx"
+    data = await agent._fetch_image_bytes("base64://" + base64.b64encode(raw).decode())
+    check("b64 fetch: decodes inline data", data == raw, repr(data))
+    bad = await agent._fetch_image_bytes("base64://QQ")  # bad padding
+    check("b64 fetch: invalid data returns None", bad is None, repr(bad))
+
+
+async def test_bounded_image_inputs(tmp: Path) -> None:
+    """Every image source is bounded, contained, and signature-validated."""
+    agent = make_agent(tmp)
+    png = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+    allowed_dir = tmp / "napcat-cache"
+    allowed_dir.mkdir(parents=True)
+    inside = allowed_dir / "inside.png"
+    inside.write_bytes(png)
+    outside = tmp / "outside.png"
+    outside.write_bytes(png)
+
+    old_dir = os.environ.pop("QQ_ONEBOT_IMAGE_DIR", None)
+    try:
+        data = await agent._fetch_image_bytes(outside.as_uri())
+        check("file image: unset allowlist rejects",
+              data is None, repr(data))
+
+        os.environ["QQ_ONEBOT_IMAGE_DIR"] = str(allowed_dir)
+        data = await agent._fetch_image_bytes(inside.as_uri())
+        check("file image: configured directory accepted",
+              data == png, repr(data))
+        data = await agent._fetch_image_bytes(outside.as_uri())
+        check("file image: outside configured directory rejected",
+              data is None, repr(data))
+
+        link = allowed_dir / "escape.png"
+        try:
+            link.symlink_to(outside)
+        except OSError:
+            link = None
+        if link is not None:
+            data = await agent._fetch_image_bytes(link.as_uri())
+            check("file image: symlink escape rejected",
+                  data is None, repr(data))
+    finally:
+        if old_dir is None:
+            os.environ.pop("QQ_ONEBOT_IMAGE_DIR", None)
+        else:
+            os.environ["QQ_ONEBOT_IMAGE_DIR"] = old_dir
+
+    oversized = b"\x89PNG\r\n\x1a\n" + b"x" * 5_000_000
+    encoded = base64.b64encode(oversized).decode()
+    data = await agent._fetch_image_bytes("base64://" + encoded)
+    check("base64 image: oversized payload rejected",
+          data is None, None if data is None else str(len(data)))
+
+    text_data = base64.b64encode(b"this is not an image").decode()
+    data = await agent._fetch_image_bytes("base64://" + text_data)
+    check("base64 image: unknown format rejected", data is None, repr(data))
+
+    class _StreamResponse:
+        status_code = 200
+        headers = {}
+
+        async def aiter_bytes(self):
+            yield b"\x89PNG\r\n\x1a\n"
+            yield b"x" * 3_000_000
+            yield b"x" * 3_000_000
+
+    class _StreamContext:
+        async def __aenter__(self):
+            return _StreamResponse()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeHTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return _StreamContext()
+
+        async def get(self, *args, **kwargs):
+            response = _StreamResponse()
+            response.content = (
+                b"\x89PNG\r\n\x1a\n" + b"x" * 6_000_000)
+            return response
+
+    agent._http = lambda **kwargs: _FakeHTTP()
+    data = await agent._fetch_image_bytes("https://image.invalid/large.png")
+    check("http image: streamed overflow rejected",
+          data is None, None if data is None else str(len(data)))
+
+
+def test_host_is_internal() -> None:
+    """SSRF guard: internal / cloud-metadata / RFC1918 (incl. 172.17-31 that a
+    substring blacklist would miss) / IPv6 must be blocked; public hosts pass."""
+    A = Agent
+    for u in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:3000/x",
+              "http://localhost/x", "http://192.168.1.10/x", "http://10.0.0.5/x",
+              "http://172.17.0.1/x", "http://[::1]/x"):
+        check(f"ssrf: blocks {u}", A._host_is_internal(u) is True, u)
+    for u in ("https://example.com/page", "https://www.bilibili.com/video/BV1x"):
+        check(f"ssrf: allows {u}", A._host_is_internal(u) is False, u)
+    check("ssrf: ext skip still fires", A._should_skip_url("https://example.com/a.zip") is True)
+    # Reserved names must be rejected by name, without a lookup.
+    for u in ("http://LOCALHOST./x", "http://a.localhost/x",
+              "http://ip6-localhost/x", "http://localhost.localdomain/x"):
+        check(f"ssrf: blocks reserved name {u}", A._host_is_internal(u) is True, u)
+
+
+def test_host_is_internal_never_resolves() -> None:
+    """The pre-filter must not touch the resolver.
+
+    It used to call socket.getaddrinfo synchronously inside a coroutine, so one
+    posted URL whose nameserver blackholes froze the whole event loop for the
+    resolver timeout. The security boundary is _resolve_public_target, which
+    resolves off-thread, refuses any internal answer and pins the address —
+    resolving here bought nothing and could not close the rebinding window.
+    A side effect worth keeping: this test no longer depends on the network."""
+    calls: list[str] = []
+    real = socket.getaddrinfo
+
+    def spy(host, *a, **k):
+        calls.append(str(host))
+        return real(host, *a, **k)
+
+    socket.getaddrinfo = spy
+    try:
+        for u in ("https://example.com/page", "http://some-name.invalid/x",
+                  "http://127.0.0.1/x", "http://localhost/x"):
+            Agent._host_is_internal(u)
+            Agent._should_skip_url(u)
+    finally:
+        socket.getaddrinfo = real
+    check("ssrf pre-filter performs no DNS lookup", calls == [], repr(calls))
+
+
+async def test_ocr_delegation_is_ssrf_gated(tmp: Path) -> None:
+    """The OCR fallback hands a URL to the protocol client, which fetches it
+    with no SSRF controls of its own — a delegated fetch, so it must be gated
+    here. It runs exactly when the direct fetch failed, and for an internal URL
+    that failure is guaranteed, so an ungated fallback converted every SSRF
+    refusal into an SSRF success by proxy, with the fetched text reflected back
+    into the group buffer and the prompt."""
+    agent = make_agent(tmp)
+    posts: list = []
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self):
+            return {"data": [{"text": "SECRET"}]}
+
+    class _HTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, **kw):
+            posts.append((kw.get("json") or {}).get("image"))
+            return _Resp()
+
+    # NapCat is reached through _local_http; both clients are spied on.
+    agent._http = agent._local_http = lambda **kw: _HTTP()
+    for u in ("http://169.254.169.254/latest/meta-data/",
+              "http://127.0.0.1:6099/api/token",
+              "http://localhost/x",
+              "file:///C:/Windows/win.ini"):
+        out = await agent._ocr_image(u)
+        check(f"ocr: refuses delegation for {u[:32]}", out == "", repr(out))
+    check("ocr: nothing forwarded to the protocol client", posts == [], repr(posts))
+
+
+def _link_payload(*segments: dict) -> dict:
+    return {"post_type": "message", "message_type": "group",
+            "group_id": "1", "user_id": "42",
+            "sender": {"nickname": "Mallory"}, "message": list(segments)}
+
+
+async def test_link_enrichment_capped_and_concurrent(tmp: Path) -> None:
+    """A message packed with URLs is one bounded, concurrent fetch step, not
+    one fetch per URL in sequence: each is an outbound request from the bot's
+    own IP to a host the sender picks, and in sequence their timeouts add up
+    into a stalled turn."""
+    agent = make_agent(tmp)
+    delay = 0.25
+    calls: list[str] = []
+    starts: list[float] = []
+
+    async def slow_describe(url: str) -> str:
+        calls.append(url)
+        starts.append(time.monotonic())
+        await asyncio.sleep(delay)
+        # Distinct from the raw URL, which the text segment already carries.
+        return f"[site] enriched-{url.rsplit('/', 1)[-1]}"
+
+    agent._describe_url = slow_describe
+    cap = agent.MAX_URLS_PER_MESSAGE
+    urls = [f"https://example.com/{i}" for i in range(50)]
+    t0 = time.monotonic()
+    result = await agent._extract_text(_link_payload(
+        {"type": "text", "data": {"text": " ".join(urls)}}))
+    elapsed = time.monotonic() - t0
+
+    check("link cap: only the first MAX_URLS_PER_MESSAGE URLs are fetched",
+          calls == urls[:cap], repr(calls))
+    found = [result.find(f"enriched-{i}") for i in range(cap)]
+    check("link cap: their descriptors reach the model, in order",
+          -1 not in found and found == sorted(found), repr(result))
+    check("link cap: URLs beyond the cap get no descriptor",
+          f"enriched-{cap}" not in result, repr(result))
+    # In sequence the fetches take `cap` delays; concurrently about one.
+    check("link cap: fetches run concurrently, not serially",
+          elapsed < delay * cap * 0.6 and max(starts) - min(starts) < delay * 0.5,
+          f"elapsed={elapsed:.3f}")
+
+
+async def test_link_enrichment_cap_is_per_message_not_per_segment(
+        tmp: Path) -> None:
+    """An inline @mention splits one paste into two text segments; the cap
+    must not multiply with the number of segments a sender produces."""
+    agent = make_agent(tmp)
+    calls: list[str] = []
+
+    async def fake_describe(url: str) -> str:
+        calls.append(url)
+        return f"[site] {url}"
+
+    agent._describe_url = fake_describe
+    first = [f"https://a.example/{i}" for i in range(4)]
+    second = [f"https://b.example/{i}" for i in range(4)]
+    await agent._extract_text(_link_payload(
+        {"type": "text", "data": {"text": " ".join(first)}},
+        {"type": "at", "data": {"qq": "999"}},
+        {"type": "text", "data": {"text": " ".join(second)}}))
+    check("link cap: counted across every text segment of the message",
+          calls == first[:agent.MAX_URLS_PER_MESSAGE], repr(calls))
+
+    calls.clear()
+    await agent._extract_text(_link_payload(
+        {"type": "text", "data": {"text": first[0]}},
+        {"type": "at", "data": {"qq": "999"}},
+        {"type": "text", "data": {"text": " ".join(second)}}))
+    check("link cap: a later segment gets what an earlier one left",
+          calls == [first[0]] + second[:agent.MAX_URLS_PER_MESSAGE - 1],
+          repr(calls))
+
+
+async def test_link_enrichment_budget_caps_total_wait(tmp: Path) -> None:
+    """A tarpit host cannot hold the turn past LINK_ENRICHMENT_BUDGET_SEC,
+    and a link that did answer in time keeps its descriptor."""
+    agent = make_agent(tmp)
+    agent.LINK_ENRICHMENT_BUDGET_SEC = 0.2
+    cancelled: list[str] = []
+
+    async def describe(url: str) -> str:
+        if "tarpit" not in url:
+            return "[site] answered in time"
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            cancelled.append(url)
+            raise
+        return "[site] should never surface"
+
+    agent._describe_url = describe
+    t0 = time.monotonic()
+    result = await agent._extract_text(_link_payload({"type": "text", "data": {
+        "text": "https://tarpit.example/x https://fast.example/y"}}))
+    elapsed = time.monotonic() - t0
+    check("link budget: the step gives up at the budget, not the fetch's delay",
+          elapsed < 5.0, f"elapsed={elapsed:.3f}")
+    check("link budget: no descriptor from the timed-out fetch",
+          "should never surface" not in result, repr(result))
+    check("link budget: the straggler is cancelled, not left running",
+          cancelled == ["https://tarpit.example/x"], repr(cancelled))
+    check("link budget: a link that answered in time keeps its descriptor",
+          "answered in time" in result, repr(result))
+
+    # An @mention splits one paste into several text segments. The budget
+    # and the concurrency are the message's: described per segment, three
+    # tarpits waited three budgets, one segment after another.
+    agent.LINK_ENRICHMENT_BUDGET_SEC = 0.3
+    cancelled.clear()
+    starts: list[float] = []
+
+    async def describe_split(url: str) -> str:
+        starts.append(time.monotonic())
+        return await describe(url)
+
+    agent._describe_url = describe_split
+    at = {"type": "at", "data": {"qq": "999"}}
+    t0 = time.monotonic()
+    result = await agent._extract_text(_link_payload(
+        {"type": "text", "data": {"text": "one https://tarpit.example/1"}}, at,
+        {"type": "text", "data": {"text": "two https://tarpit.example/2"}}, at,
+        {"type": "text", "data": {"text": "three https://fast.example/3"}}))
+    elapsed = time.monotonic() - t0
+    check("link budget: one budget per message, however it is split",
+          elapsed < agent.LINK_ENRICHMENT_BUDGET_SEC * 1.8,
+          f"elapsed={elapsed:.3f}")
+    check("link budget: links in different segments are fetched together",
+          len(starts) == 3 and max(starts) - min(starts) < 0.1, repr(starts))
+    check("link budget: every segment's straggler is cancelled",
+          sorted(cancelled) == ["https://tarpit.example/1",
+                                "https://tarpit.example/2"], repr(cancelled))
+    check("link budget: a descriptor still follows its own segment",
+          result.find("three") < result.find("answered in time")
+          and result.find("two") < result.find("three"), repr(result))
+
+
+async def test_link_enrichment_survives_a_failing_fetch(tmp: Path) -> None:
+    """One link raising must not take the message or its siblings with it."""
+    agent = make_agent(tmp)
+
+    async def describe(url: str) -> str:
+        if "broken" in url:
+            raise RuntimeError("boom")
+        return "[site] fine"
+
+    agent._describe_url = describe
+    result = await agent._extract_text(_link_payload({"type": "text", "data": {
+        "text": "look https://broken.example/x https://ok.example/y"}}))
+    check("link enrichment: a raising fetch is dropped, siblings kept",
+          "look" in result and "[site] fine" in result, repr(result))
+
+
+async def test_share_card_type_confusion(tmp: Path) -> None:
+    """Share-card JSON is fully sender-controlled: non-string fields (int
+    prompt, dict title, list url) must degrade to a placeholder instead of
+    raising out of _extract_text and dropping the whole inbound message."""
+    import json as _json
+    agent = make_agent(tmp)
+    bad_card = _json.dumps({
+        "prompt": 123,
+        "meta": {"news": {"title": {"a": 1}, "desc": 5, "qqdocurl": ["x"]}},
+    })
+    desc = await agent._describe_share(bad_card)
+    check("share card: non-string fields degrade, no crash",
+          isinstance(desc, str), repr(desc))
+    # Non-dict detail with a non-string prompt (old code: 123[:80] TypeError).
+    desc2 = await agent._describe_share(
+        _json.dumps({"prompt": 123, "meta": {"news": "notadict"}}))
+    check("share card: non-dict detail + int prompt degrades",
+          desc2 == "", repr(desc2))
+    # The whole message must survive: the text segment stays extractable.
+    payload = {
+        "post_type": "message", "message_type": "group", "group_id": "123",
+        "user_id": "42", "sender": {"nickname": "Alice"},
+        "message": [
+            {"type": "text", "data": {"text": "look at this"}},
+            {"type": "json", "data": {"data": bad_card}},
+        ],
+        "raw_message": "look at this",
+    }
+    text = await agent._extract_text(payload)
+    check("share card: sibling text segment survives a malformed card",
+          "look at this" in text, repr(text))
+
+
+async def test_b64_caption_cache_key(tmp: Path) -> None:
+    """Connector base64:// pseudo-URLs must be hashed before use as caption-cache
+    keys — the raw string can be multiple MB of base64 per entry."""
+    agent = make_agent(tmp)
+    big = "base64://" + "A" * 100_000
+    got = agent._accept_vision_caption(big, "a cute cat sticker", "test")
+    check("b64 cache: caption accepted", got == "a cute cat sticker", repr(got))
+    check("b64 cache: no raw base64 keys retained",
+          all(not k.startswith("base64://") for k in agent.image_caption_cache),
+          repr([k[:40] for k in agent.image_caption_cache]))
+    check("b64 cache: keys stay small",
+          all(len(k) < 200 for k in agent.image_caption_cache),
+          repr([len(k) for k in agent.image_caption_cache]))
+    # The hashed key must still round-trip as a cache hit.
+    hit = await agent._describe_image(big)
+    check("b64 cache: hashed key round-trips", hit == "a cute cat sticker", repr(hit))
+
+
+async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
+    """A miss is cached only when vision and OCR both answered. A vision outage
+    cached as "" would leave every image seen during it undescribed for good."""
+    agent = make_agent(tmp)
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
+    url = "https://example.com/a.png"
+    key = agent._image_cache_key(url)
+
+    async def vision_down(_url):
+        return None
+
+    async def ocr_down(_url):
+        return ""
+
+    agent._describe_image_vision, agent._ocr_image = vision_down, ocr_down
+    got = await agent._describe_image(url)
+    check("vision cache: an outage yields no caption", got == "", repr(got))
+    check("vision cache: an outage is not cached", key not in agent.image_caption_cache)
+
+    async def vision_empty(_url):
+        return ""
+
+    async def ocr_garbage(_url):
+        agent.image_caption_cache[key] = "a b"   # what _ocr_image caches on a reply
+        return "a b"
+
+    agent._describe_image_vision, agent._ocr_image = vision_empty, ocr_garbage
+    await agent._describe_image(url)
+    check("vision cache: a miss both channels answered is cached",
+          agent.image_caption_cache.get(key) == "", repr(agent.image_caption_cache.get(key)))
+
+
+async def test_ssrf_redirect_hops(tmp: Path) -> None:
+    """A public URL that 302s to an internal address must be refused at the
+    redirect hop (the initial-URL _host_is_internal check can't see it), while
+    public->public redirects keep working."""
+    agent = make_agent(tmp)
+    fetched: list[str] = []
+
+    class _Resp:
+        def __init__(self, status, headers=None, content=b"", url=""):
+            self.status_code = status
+            self.headers = headers or {}
+            self.content = content
+            self.url = url
+            self.text = ""
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def aiter_bytes(self):
+            yield self.content
+
+    class _FakeHTTP:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, headers=None):
+            return self._response(url)
+
+        def stream(self, method, url, headers=None, follow_redirects=False):
+            return self._response(url)
+
+        def _response(self, url):
+            fetched.append(url)
+            if url == "http://evil.invalid/img":  # public host, hostile redirect
+                return _Resp(302, {"location": "http://127.0.0.1:3000/send_group_msg?group_id=1"})
+            if url == "http://hop.invalid/a":  # public host, relative redirect
+                return _Resp(302, {"location": "/b"})
+            return _Resp(200, content=b"\x89PNG\r\n\x1a\nIMGDATA", url=url)
+
+    agent._http = lambda **kw: _FakeHTTP()
+    data = await agent._fetch_image_bytes("http://evil.invalid/img")
+    check("ssrf redirect: 302->internal returns None", data is None, repr(data))
+    check("ssrf redirect: internal target never fetched",
+          all("127.0.0.1" not in u for u in fetched), repr(fetched))
+    fetched.clear()
+    data2 = await agent._fetch_image_bytes("http://hop.invalid/a")
+    check("ssrf redirect: public relative redirect still followed",
+          data2 == b"\x89PNG\r\n\x1a\nIMGDATA"
+          and fetched == ["http://hop.invalid/a", "http://hop.invalid/b"],
+          repr((data2, fetched)))

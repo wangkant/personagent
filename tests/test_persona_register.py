@@ -26,31 +26,13 @@ from persona_agent.prompts import (
     dm_style_guide,
 )
 
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    """Assert `cond`, naming the property so a failure reads as English."""
-    assert cond, name + (f" - {detail}" if detail else "")
+from helpers import check, isolated_agent
 
 
 def make_agent(tmp: Path) -> Agent:
-    """Agent with every state file redirected into `tmp`. The persona is a
-    stub: the bundled example is the operator's text, and what these suites
-    own is the text the engine writes around it."""
-    tmp.mkdir(parents=True, exist_ok=True)
-    a = Agent(
-        api_key="k", qq_bot_id="1", persona_name="B", lang="en", persona="test persona",
-        memory_file=str(tmp / "memory.json"),
-        eval_enabled=False, eval_file=str(tmp / "eval.jsonl"),
-        stickers_dir=str(tmp / "stickers"), stickers_file=str(tmp / "stickers.json"),
-    )
-    a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.core_memory_file = tmp / "core_memory.json"
-    a.core_memory = {}
-    a.examples_seed_file = tmp / "seed_examples.jsonl"
-    a.examples_file = tmp / "examples.jsonl"
-    a.feedback_seed_file = tmp / "seed_feedback.jsonl"
-    a.feedback_file = tmp / "feedback.jsonl"
-    return a
+    """The persona is a stub: the bundled example is the operator's text, and
+    what these suites own is the text the engine writes around it."""
+    return isolated_agent(tmp, seeds=True, qq_bot_id="1", persona_name="B")
 
 
 def _every_style() -> list[PersonaStyle]:
