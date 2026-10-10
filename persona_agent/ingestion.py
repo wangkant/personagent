@@ -1257,61 +1257,89 @@ class ContentIngestion:
         must all be set, so no image is uploaded by default."""
         return bool(self.vision_model and self.vision_api_key and self.vision_base_url)
 
+    async def _vision_data_url(self, img_bytes: bytes, mime: str) -> str:
+        """Base64 data URL for the vision endpoint ("" when a GIF won't decode).
+
+        Raw URLs trip format errors on some providers, and many reject GIF, so
+        a GIF goes as its first frame, decoded off the event loop."""
+        if mime == "image/gif":
+            img_bytes = await asyncio.to_thread(self._gif_first_frame_png, img_bytes)
+            if not img_bytes:
+                return ""
+            mime = "image/png"
+        return f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
+
+    async def _vision_post(
+        self, prompt: str, data_url: str, *, max_tokens: int, temperature: float,
+        attempts: int, retryable: frozenset[int], backoff: float,
+        retry_errors: bool,
+    ) -> tuple[httpx.Response | None, Exception | None]:
+        """POST one image prompt, retrying `retryable` statuses (and transport
+        errors when `retry_errors`, else they raise) with exponential backoff.
+        Returns the last response (None if every try raised) and the last error."""
+        payload = {
+            "model": self.vision_model,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
+        r = None
+        last_exc = None
+        async with self._http(timeout=30) as c:
+            for attempt in range(attempts):
+                try:
+                    r = await c.post(
+                        f"{self.vision_base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.vision_api_key}"},
+                        json=payload,
+                    )
+                except Exception as e:
+                    if not retry_errors:
+                        raise
+                    r, last_exc = None, e
+                else:
+                    if r.status_code not in retryable:
+                        break
+                if attempt < attempts - 1:
+                    await asyncio.sleep(backoff * 2 ** attempt)
+        return r, last_exc
+
+    @staticmethod
+    def _vision_text(r: httpx.Response) -> str:
+        return (r.json().get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "") or "")
+
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
         """Ask the vision model if a sticker is visually tacky / off-persona.
         Returns True (tacky → should ban), False (fine), or None on judgment
         failure (read error / API error / unparseable response — entry is
-        left untouched). Reuses the caption path's plumbing: MIME detection,
-        first-frame for GIF, base64 data URL."""
+        left untouched)."""
         try:
             if not img_bytes or len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
                 return None
             mime = _detect_image_mime(img_bytes)
             if mime not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
                 return None
-            if mime == "image/gif":
-                frame = self._gif_first_frame_png(img_bytes)
-                if not frame:
-                    return None
-                img_bytes = frame
-                mime = "image/png"
-            data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
-
-            # Aggressive backoff: aesthetic recheck is a startup burst, free
-            # tiers rate-limit hard. Without retry many judgments return None
-            # and the recheck appears to do nothing.
-            payload = {
-                "model": self.vision_model,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": self.VISION_AESTHETIC_PROMPT},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                }],
-                "max_tokens": 60,
-                "temperature": 0,
-            }
-            apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
-            raw = ""
-            async with self._http(timeout=30) as c:
-                for attempt in range(4):
-                    r = await c.post(
-                        f"{self.vision_base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.vision_api_key}"},
-                        json=payload,
-                    )
-                    if r.status_code == 429:
-                        if attempt == 3:
-                            return None
-                        await asyncio.sleep(2 ** attempt * 3.0)  # 3s, 6s, 12s
-                        continue
-                    if r.status_code != 200:
-                        return None
-                    raw = (r.json().get("choices", [{}])[0]
-                                .get("message", {})
-                                .get("content", "") or "").strip()
-                    break
+            data_url = await self._vision_data_url(img_bytes, mime)
+            if not data_url:
+                return None
+            # Long 429 backoff: the recheck is a startup burst and free tiers
+            # rate-limit hard, so without it most verdicts come back None.
+            r, _ = await self._vision_post(
+                self.VISION_AESTHETIC_PROMPT, data_url, max_tokens=60,
+                temperature=0, attempts=4, retryable=frozenset({429}),
+                backoff=3.0, retry_errors=False)
+            if r is None or r.status_code != 200:
+                return None
+            raw = self._vision_text(r).strip()
             data = salvage_json_object(strip_json_fences(raw))
             if data is None or "tacky" not in data:
                 return None
@@ -1401,84 +1429,30 @@ class ContentIngestion:
                 logger.debug("[Agent] vision: unknown image magic %s",
                              img_bytes[:12].hex())
                 return ""
-            if mime == "image/gif":
-                # Many vision endpoints reject GIFs. Pull the first
-                # frame as PNG so animated stickers/memes still get a caption.
-                # PIL decode/transcode is CPU-bound — run it in a thread so it
-                # doesn't stall the event loop.
-                frame = await asyncio.to_thread(self._gif_first_frame_png, img_bytes)
-                if not frame:
-                    logger.info("[Agent] vision: skip GIF (first-frame extract failed), fallback to OCR")
-                    return ""
-                img_bytes = frame
-                mime = "image/png"
-            elif mime == "image/heic":
-                # HEIC/HEIF — vision endpoints commonly reject it; let caller fall through to OCR
+            # Vision endpoints commonly reject these; the caller falls back to OCR.
+            if mime == "image/heic":
                 logger.info("[Agent] vision: skip HEIC/HEIF, fallback to OCR")
                 return ""
-            elif mime == "image/avif":
-                # AVIF — commonly rejected too; OCR fallback
+            if mime == "image/avif":
                 logger.info("[Agent] vision: skip AVIF, fallback to OCR")
                 return ""
-            data_url = f"data:{mime};base64,{base64.b64encode(img_bytes).decode()}"
-
-            # 429 backoff retry: free-tier vision endpoints rate-limit
-            # aggressively. Each incoming group image goes through here, so
-            # without retry many captions silently fall back to OCR.
-            payload = {
-                "model": self.vision_model,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": self.VISION_PROMPT},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                }],
-                "max_tokens": 120,
-                "temperature": 0.3,
-            }
-            apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
-            async with self._http(timeout=30) as c:
-                r = None
-                last_exc = None
-                # Retry coverage: 429 throttling + 5xx + network timeouts
-                # (connect/read) + the occasional 400 image reject (some vision
-                # providers 400 even on magic-byte-valid images). The image
-                # bytes don't change and a resend is cheap — better than the
-                # caption silently falling out and the bot "not seeing" images.
-                retryable = {400, 429, 500, 502, 503, 504}
-                for attempt in range(3):
-                    try:
-                        r = await c.post(
-                            f"{self.vision_base_url}/chat/completions",
-                            headers={"Authorization": f"Bearer {self.vision_api_key}"},
-                            json=payload,
-                        )
-                    except Exception as e:
-                        # Connect/read timeouts are the most common transient
-                        # failure: back off and retry rather than falling
-                        # through to the outer except.
-                        last_exc = e
-                        r = None
-                        if attempt == 2:
-                            break
-                        await asyncio.sleep(2 ** attempt)  # 1s, 2s
-                        continue
-                    if r.status_code not in retryable:
-                        break  # 200 success, or a non-retryable error (e.g. 401)
-                    if attempt == 2:
-                        break  # retries exhausted; the non-200 branch below logs
-                    await asyncio.sleep(2 ** attempt)  # 1s, 2s
-                if r is None or r.status_code != 200:
-                    logger.warning("[Agent] vision HTTP %d: %s (exc=%s)",
-                                   r.status_code if r else 0,
-                                   (r.text if r else "")[:200], last_exc)
-                    return None
-                data = r.json()
-                text = (data.get("choices", [{}])[0]
-                            .get("message", {})
-                            .get("content", "") or "")
-                return self._accept_vision_caption(url, text, "api")
+            data_url = await self._vision_data_url(img_bytes, mime)
+            if not data_url:
+                logger.info("[Agent] vision: skip GIF (first-frame extract failed), fallback to OCR")
+                return ""
+            # Every group image comes through here: retry throttling, 5xx,
+            # timeouts and the odd 400 some providers give a valid image, or
+            # the bot silently stops seeing images.
+            r, last_exc = await self._vision_post(
+                self.VISION_PROMPT, data_url, max_tokens=120, temperature=0.3,
+                attempts=3, retryable=frozenset({400, 429, 500, 502, 503, 504}),
+                backoff=1.0, retry_errors=True)
+            if r is None or r.status_code != 200:
+                logger.warning("[Agent] vision HTTP %d: %s (exc=%s)",
+                               r.status_code if r else 0,
+                               (r.text if r else "")[:200], last_exc)
+                return None
+            return self._accept_vision_caption(url, self._vision_text(r), "api")
         except Exception as e:
             logger.debug("[Agent] vision failed: %s: %s",
                          type(e).__name__, e)
