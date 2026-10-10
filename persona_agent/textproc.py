@@ -228,15 +228,6 @@ def _renderable_with_index(text: str) -> tuple[str, list[int]]:
     return "".join(kept), index
 
 
-def renderable_form(value: object) -> str:
-    """`value` reduced to the code points a renderer actually draws.
-
-    Not a sanitiser, and never kept: it drops combining marks, which mangles
-    accented text. It answers what a token looks like to whoever reads it,
-    so `<`+U+00AD+`/persona>` is `</persona>` here, as it is to a model."""
-    return _renderable_with_index(str(value or ""))[0]
-
-
 def scrub_third_party_text(value: object) -> str:
     """Normalise one authored value and remove everything invisible in it.
 
@@ -267,7 +258,7 @@ def neutralize_markup_tags(value: object) -> str:
     """Escape every tag-shaped token so it cannot open or close a block.
 
     `<persona>` becomes `&lt;persona&gt;`: still legible as a mention of a
-    tag, no longer a tag. Tokens are FOUND in `renderable_form(value)` and
+    tag, no longer a tag. Tokens are FOUND in the rendered form of `value` and
     escaped in `value`, so a tag split by an invisible character is the same
     token as the plain one; matching the raw string is what lets a split tag
     through. Independent of the scrubber on purpose: it also stops what the
