@@ -6,11 +6,9 @@
     personagent demo --lang zh
 
 The scenes run through the same turn functions as `personagent chat` and the
-real evidence, candidate and promotion code, in a temporary home that is
-deleted afterwards. A scripted model stands in for the LLM by default: its
-answers are fixed, and everything that decides what to do with them is the
-real code. --online asks your configured model instead; --offline is the
-default, kept as an alias.
+real evidence, candidate and promotion code, in a temporary home deleted
+afterwards. By default a scripted model gives fixed answers and everything
+that acts on them is the real code; --offline is that default's alias.
 """
 from __future__ import annotations
 

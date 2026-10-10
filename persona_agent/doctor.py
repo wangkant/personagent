@@ -1,17 +1,6 @@
-"""One-shot health check for every external service the agent depends on.
+"""`personagent doctor`: check the setup, then probe every external service.
 
-Run:  personagent doctor
-Prints an OK/FAIL table and exits non-zero if any *critical* service is down.
-Shares its probes with /health/details (see health.py). The config and ledger
-sections are free; each service probe sends one tiny request to the provider
-and spends a small amount of credit. Safe to run while the agent is live.
-
-Run:  personagent doctor --json
-Same checks, machine-readable: the config findings, the retired settings and
-the service probes in one object.
-
-Run:  personagent doctor --fix
-Renames settings that 1.0 retired to their new names in <home>/.env.
+The probes are shared with /health/details (health.py); the flags are in USAGE.
 """
 import json
 import sys

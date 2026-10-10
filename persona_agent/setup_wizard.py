@@ -870,9 +870,8 @@ def astrbot_qq_routed(cfg: dict) -> bool:
 def astrbot_plugin_config(existing: dict | None, *, personagent_url: str, token: str,
                           qq: bool | None, groups: list[str] | None,
                           dm_users: list[str] | None, url_override: str = "") -> dict:
-    """The plugin's config document. A value passed as None keeps what the
-    operator set, and keys this does not manage are kept: re-running must not
-    undo a setup."""
+    """The plugin's config document. None keeps the operator's value and other
+    keys are kept, so re-running never undoes a setup."""
     cfg = dict(existing or {})
     if url_override:
         cfg["personagent_url"] = url_override
@@ -1457,10 +1456,8 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
 # ---------------------------------------------------------------------------
 
 def apply_flags(home: Path, args: argparse.Namespace) -> str:
-    """Templates in place and the flags written; returns the bot's name.
-
-    An unedited shipped persona.txt follows the name, the language and
-    --persona; an edited one is never touched."""
+    """Write the templates and flags; returns the bot's name. An unedited
+    shipped persona.txt follows the flags; an edited one is never touched."""
     if args.provider == "other" and not args.base_url:
         raise SystemExit("--provider other needs --base-url")
     if args.base_url and not has_scheme(args.base_url):

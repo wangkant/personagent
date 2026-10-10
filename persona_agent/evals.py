@@ -15,9 +15,9 @@ Three suites, each reporting numbers:
   A held-out probe in the same conversation runs before and after, and the
   judge says whether each follows a target behaviour.
 
-Each run builds its agents in a throwaway deployment root (AGENT_HOME), which
-is deleted afterwards unless --keep. The judge is BENCH_JUDGE_MODEL and must
-not be the model under test. Reports go to <home>/benchmark_runs/.
+Agents run in a throwaway deployment root, deleted afterwards unless --keep.
+The judge is BENCH_JUDGE_MODEL and must not be the model under test. Reports
+go to <home>/benchmark_runs/.
 
     personagent eval --suite speak --lang en
     personagent eval --suite all --lang zh --limit 6
@@ -100,11 +100,8 @@ NAME_UID = _NameUid()
 
 
 def strip_pass_sentinel(reply: str) -> str:
-    """Collapse the model's PASS sentinel to an empty reply.
-
-    PASS is the JSON protocol's "I choose not to speak", not an utterance; the
-    live pipeline drops it before sending, so a harness that calls _think
-    directly must not grade it or learn from it."""
+    """The model's PASS sentinel as an empty reply: it means "stay quiet", and
+    a harness calling _think directly must not grade or learn from it."""
     reply = (reply or "").strip()
     if re.match(r"PASS\b", reply, re.IGNORECASE):
         return ""
@@ -249,10 +246,8 @@ def prepare_persona(text: str, name: str) -> str:
 
 @contextlib.contextmanager
 def deployment_root(home: Path):
-    """Make `home` the agent's deployment root for the block.
-
-    The deployment's own data/ overrides are copied in; every other seed
-    resolves to the shipped copy, as it does for the deployment."""
+    """Make `home` the agent's deployment root for the block, with the
+    deployment's own data/ overrides copied in."""
     home = home.resolve()
     (home / "data").mkdir(parents=True, exist_ok=True)
     for src in (paths.ROOT / "data").glob("*"):

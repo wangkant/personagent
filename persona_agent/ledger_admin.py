@@ -1,9 +1,7 @@
 """Inspect and control what the agent is allowed to learn.
 
-The automatic path proposes; this is where a human decides. Candidates the
-promotion policy would not promote on its own — a single correction, anything
-backed only by laughter, two suggestions that contradict each other — sit in
-`proposed` until someone looks at them here.
+Candidates the promotion policy will not promote on its own (a single
+correction, laughter only, contradicting suggestions) wait here for a human.
 
     personagent learned list                  # pending proposals
     personagent learned list --state promoted # what is live now
@@ -17,10 +15,8 @@ backed only by laughter, two suggestions that contradict each other — sit in
 Ids may be abbreviated to any unique prefix. A reply has at most one live
 rewrite: `promote` refuses a second one and names the `supersede` to run.
 
-Every action appends a lifecycle event; nothing in the log is ever edited or
-removed. Promotion, rejection, rollback and supersession all re-derive the
-materialized retrieval views afterwards, so the running agent picks the change
-up on its next turn — no restart.
+Every action appends a lifecycle event and re-derives the retrieval views, so
+the running agent picks the change up on its next turn.
 """
 from __future__ import annotations
 
@@ -41,8 +37,7 @@ from persona_agent.paths import resolve_runtime_lang_file  # noqa: E402
 from persona_agent.settings import normalize_lang  # noqa: E402
 
 AGENT_LANG = normalize_lang(os.getenv("AGENT_LANG", "en"))
-# Same caps the agent applies when it rebuilds a view (see
-# candidates.rebuild_views), so both writers converge on one pool size.
+# The caps the agent applies when it rebuilds a view.
 PROMOTE_MAX_EXAMPLES = env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0)
 PROMOTE_MAX_FEEDBACK = env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0)
 
@@ -81,9 +76,8 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
 
 
 def _decide(ledger, log, cand, policy) -> promotion.Decision:
-    """What the policy would say, using the same inputs the agent uses: the
-    same `related_events`, and the admins from the agent's own reader, so
-    every account in ADMIN_IDS is exempt here as it is there."""
+    """What the policy would say, from the same inputs (related events,
+    ADMIN_IDS) the agent uses."""
     return promotion.decide(
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
