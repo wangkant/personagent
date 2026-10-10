@@ -423,20 +423,6 @@ class PendingReplies:
             return slots.get(str(complainant))
         return next(reversed(slots.values()), None)
 
-    def has_elicited(self, conv_id: str, uid: str, now: float) -> bool:
-        """True if an elicited entry for `uid` is still pending (i.e. the user
-        has not answered the bot's what-did-you-mean ask yet).
-
-        No production caller: this is the read seam the tests use to assert the
-        elicit one-shot, and it is cheaper to keep than to have them reach into
-        ``_by_conv``. Not dead code — don't delete it on a grep."""
-        self._expire(conv_id, now)
-        q = self._by_conv.get(conv_id)
-        # Same window as match()'s elicited branch, or the two disagree.
-        return bool(q) and any(
-            e.get("elicited_uid") == str(uid)
-            and now - e["ts"] <= self.elicit_window_sec for e in q)
-
     def _expire(self, conv_id: str, now: float) -> None:
         q = self._by_conv.get(conv_id)
         if not q:

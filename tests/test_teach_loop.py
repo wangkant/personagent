@@ -337,7 +337,7 @@ async def test_no_follow_up_ask_once_the_retry_was_accepted(tmp: Path) -> None:
     sent = await run(a, accept=True)
     check("j: no stale ask after the retry was accepted", sent == [], str(sent))
     check("j: and the old reply is not re-registered for the rejector",
-          not a.pending_reactions.has_elicited(CONV, "42", now=time.time()))
+          a.pending_reactions.match(CONV, sender_uid="42", now=time.time()) is None)
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +612,7 @@ async def test_a_failed_ask_leaves_the_cooldown_unspent(tmp: Path) -> None:
     check("m: the ask is tried again after a failed delivery",
           len(sent) == 2, str(sent))
     check("m: the delivered ask registers the reply",
-          a.pending_reactions.has_elicited(CONV, "42", now=time.time()))
+          a.pending_reactions.match(CONV, sender_uid="42", now=time.time()) is not None)
 
 
 async def test_a_bystanders_complaint_does_not_revoke_what_was_taught(tmp: Path) -> None:

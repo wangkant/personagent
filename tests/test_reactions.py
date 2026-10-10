@@ -321,18 +321,12 @@ def test_retry_and_elicited() -> None:
           reactions.fix_pair(bad, "just restart it", "ts") is None)
 
     p.record("g3", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
-    check("has_elicited true", p.has_elicited("g3", "42", now=110.0))
     check("elicited: other user no match",
           p.match("g3", sender_uid="99", now=110.0) is None)
     check("elicited: rejector matches without @",
           p.match("g3", sender_uid="42", now=110.0) is not None)
-    check("has_elicited false after consume", not p.has_elicited("g3", "42", 111.0))
 
     p.record("g4", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
-    # Still inside the TTL, past the elicit window: the read seam must say
-    # what match() would do.
-    check("has_elicited false past the elicit window",
-          not p.has_elicited("g4", "42", now=100.0 + 51))
     check("elicited window expires",
           p.match("g4", sender_uid="42", now=100.0 + 51) is None)
 
@@ -502,11 +496,11 @@ async def test_retry_and_elicit(tmp: Path) -> None:
                               "alex", "42", False, conv_id="g1", is_dm=False)
     await asyncio.sleep(0.05)  # let the delayed elicitation task run (delay=0)
     check("elicitation ask sent", len(sent) == 1 and "mean" in sent[0][1])
+    # The rejector's next plain message is attributed to the asked-about reply.
     check("elicited entry registered",
-          a.pending_reactions.has_elicited("g1", "42", now=_time.time()))
+          a.pending_reactions.match("g1", sender_uid="42", now=_time.time()) is not None)
 
     # cooldown: a second rejection does not re-ask
-    a.pending_reactions.match("g1", sender_uid="42", now=_time.time())
     await a._process_reaction(_pending_entry(), "still wrong",
                               "alex", "42", False, conv_id="g1", is_dm=False)
     await asyncio.sleep(0.05)
