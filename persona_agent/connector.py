@@ -1,113 +1,15 @@
-"""Platform-neutral connector layer.
+"""Platform-neutral connector layer: an event in, its replies in the same response.
 
-Lets an external connector (e.g. an AstrBot plugin bridging Telegram /
-Discord / Slack) POST one inbound message to this agent
-and receive the agent's replies in the same HTTP response. The QQ/NapCat
-direct path is untouched: the connector event is turned into a
-OneBot-v11-shaped payload that the existing pipeline consumes unchanged, and
-a contextvar sink diverts the NapCat send funnels into an in-memory reply
-list for the duration of that one handle_event() call.
+The event and reply schemas are in docs/connectors.md. An event becomes a
+OneBot-v11-shaped payload that the QQ pipeline consumes unchanged, and the
+`current_sink` contextvar diverts the NapCat send funnels into that turn's
+reply list for the one handle_event() call.
 
-Neutral inbound event schema (the body of POST /v1/events):
-
-    {
-      "kind":              "event"?,
-      "platform":          str,                  # e.g. "telegram"
-      "conversation_type": "group" | "dm",
-      "conversation_id":   str,                  # group/channel id on the platform
-      "sender_id":         str,                  # sender id on the platform
-      "sender_name":       str,
-      "bot_id":            str,                  # the bot's own id on the platform
-      "message_id":        str | int | null,
-      "sent_at":           int,                  # REQUIRED; unix seconds
-      "addressed":         bool,
-      "segments": [
-        {"type": "text", "text": str}
-        | {"type": "mention", "user_id": str, "name": str}
-        | {"type": "image", "url": str?, "b64": str?, "sticker": bool?}
-        | {"type": "emoji", "name": str?, "id": str?}
-        | {"type": "reply", "message_id": str?, "text": str?,
-           "sender_id": str?, "sender_name": str?}
-      ],
-      "text":              str,
-      "proactive":         bool?,                # see below
-      "prefiltered":       bool?,                # default true; see below
-      "connector_id":      str?,                 # see below
-      "reply_handle":      str?,
-      "capabilities":      [str]?
-    }
-
-A reply segment's `text` is the quoted message as the connector saw it. The
-agent prefers its own record of that message and uses the connector's only
-when it never saw the original (a quote of its own reply, or of something
-older than its index), fenced as text the sender did not write. An emoji's
-`name` reaches the model as `[emoji: name]`; an image with `sticker` true
-reads as `[sticker: ...]` instead of `[image: ...]`.
-
-`connector_id`, `reply_handle` and `capabilities` say how to reach the
-conversation later without an incoming message (docs/connectors.md,
-"Outbox"). They are remembered per conversation once a turn is admitted
-(outbox.HandleStore); a value of the wrong type or shape is ignored, never a
-400, so a connector that sends none of them just gets no outbox.
-
-`prefiltered` says whether the connector applied its own allowlist. Absent or
-true, a platform with no ACCESS_GROUPS / ACCESS_DM_USERS entries is left to
-the connector; false makes the agent's lists the only filter, so that
-platform is refused until it has entries. It can only tighten, which is why
-a connector may assert it (access.py).
-
-`sent_at` is the moment the SOURCE platform stamped the message, not the
-moment the connector sent it on: the two ages are checked separately, so a
-connector that retries for a minute is not mistaken for a replayed event. It
-is rejected when it differs from now by more than CONNECTOR_MAX_EVENT_AGE_S
-(`_connector_event_is_fresh` in server.py), and it is required — an event
-without it is a 400, which is why it appears in
-`server._validate_event_payload`'s required tuple.
-
-An event whose `sender_id` equals its `bot_id` is the bot's own message
-echoed back: it is owned and not answered.
-
-`proactive` marks a turn NOBODY SENT. It says the text on this event is a cue
-the CALLER wrote to brief the persona — "they have been quiet a while, say
-something if you genuinely have something to say" — rather than a message
-from the person on the other end. The model reads it for that one call, as
-reference beside the engine's own proactive instructions (which are what
-allow the persona to stay silent), fenced as external material and cut at
-500 characters. Left out, which is every ordinary forwarded turn, nothing
-changes.
-
-It is how a connector that cannot poll the outbox gets proactive turns. The
-agent cannot open a conversation through such a connector: the reply sink
-closes when the request returns, so there is no channel to speak into
-between requests. Inverting it removes the problem instead of solving it —
-the connector issues the request on a schedule of its own, and if the persona
-has something to say the reply comes back in the response like any other.
-It stamps the same DM cooldown the agent's own proactive loop reads.
-
-The flag is load-bearing, not decorative. Without it the caller's own
-directive is indistinguishable from the reader's words: it lands in
-`dm_history` as `{"role": "user"}`, stays for 40 turns, can be quoted
-back at somebody who never wrote it, and can be promoted into a memory about
-them.
-
-It is honoured on DM events only. A group event carrying it is claimed
-(`owned` comes back true, so the connector keeps its own model quiet too) and
-dropped before the text is buffered: a room has no transient cue to carry it
-as, and it is never read as anyone's words.
-
-Platform ids are namespaced as "<platform>:<raw id>" before they enter the
-pipeline, so memory / RAG / buffers can never collide with real QQ numbers.
-Message ids are additionally namespaced by conversation
-("<platform>:<conversation>:<raw mid>") because some platforms issue ids
-per chat, and the dedupe ring must not collide across chats.
-
-Neutral outbound reply items (the "replies" list in the response):
-
-    {"type": "text",  "text": str, "mention_user_id": str?}
-    {"type": "image", "b64": str,  "mention_user_id": str?}
-
-where mention_user_id, when present, is the platform-prefixed id the reply
-mentions (the connector converts it back to a native mention).
+Ids are namespaced "<platform>:<raw id>" so they never collide with QQ
+numbers, and message ids also carry the conversation because some platforms
+issue them per chat. A CONNECTOR_QQ_PLATFORMS platform mints bare ids
+instead (see `_ns`). A mention of the bot becomes QQ_BOT_ID, or
+CONNECTOR_BOT_ID when that is blank.
 """
 from __future__ import annotations
 
@@ -341,7 +243,7 @@ def event_prefiltered(event: dict) -> bool:
 
 def synthesize_onebot_payload(
         event: dict, self_mention_id: str, native_platforms=()) -> dict:
-    """Convert a neutral inbound event (schema in the module docstring) into
+    """Convert a neutral inbound event (docs/connectors.md) into
     a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
     unchanged. Mentions of the platform bot_id are normalized to
     `self_mention_id` so _is_at_me fires exactly like a real QQ @-mention. The

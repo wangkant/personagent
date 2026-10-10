@@ -40,34 +40,20 @@ from persona_agent import dashboard
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
-    """A rollover that cannot happen must not eat the log line.
-
-    Windows refuses `os.rename` on a file another handle holds open, and a
-    second uvicorn is a normal state here — killing one does not always take.
-    `RotatingFileHandler.emit` calls `doRollover` INSIDE its own try, so a
-    failed rotation is not "rotation skipped", it is `handleError`: the record
-    is never written. The log would start losing exactly the lines it exists
-    to keep, at the moment the file grew big enough to be worth rotating.
-
-    Downgraded to a rollover that did not happen — the current file stays open
-    and grows past `maxBytes` until some later attempt succeeds. An oversized
-    log is a nuisance; a missing one is why anyone set SERVER_LOG_FILE.
-    """
+    """A failed rollover keeps writing to the current file instead of dropping
+    the record (Windows refuses to rename a file another process holds open)."""
 
     def doRollover(self) -> None:
         try:
             super().doRollover()
         except OSError:
-            # Reopen if the base class closed the stream before it failed, or
-            # every subsequent emit writes to a dead handle.
+            # The base class may have closed the stream before it failed.
             if self.stream is None:
                 self.stream = self._open()
 
     def _open(self):
-        # A rollover recreates the base file through _open, which uses the
-        # process umask: a one-time chmod at setup would leave bot.log and
-        # every backup world-readable after the first rotation. These lines
-        # hold message excerpts and user ids, so every file this opens is 0600.
+        # A rollover recreates the file under the process umask; these lines
+        # hold message excerpts and user ids, so every file is 0600.
         stream = super()._open()
         if os.name != "nt":
             try:
@@ -1008,7 +994,7 @@ async def connector_events(request: Request):
     not stop the turn, which still commits its reply and everything it
     learned from it.
 
-    Body schema: see ``persona_agent/connector.py``. The response is
+    Body schema: docs/connectors.md. The response is
     ``{"handled": bool, "owned": bool, "replies": [...]}``, where ``owned``
     says the conversation is this persona's whether or not it chose to speak —
     a connector should suppress its own model on ``owned``, never on whether
@@ -1037,11 +1023,6 @@ async def connector_events(request: Request):
 
 
 async def _connector_events_admitted(request: Request):
-    """Platform-neutral inbound endpoint for connectors (schema in
-    connector.py). Unlike /v1/onebot this is a synchronous round-trip: the
-    connector needs the replies in the response body to relay them back, so
-    the full handle pipeline (debounce + typing simulation included) runs
-    before returning — set the connector's HTTP timeout accordingly."""
     body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
