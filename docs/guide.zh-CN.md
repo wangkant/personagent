@@ -421,15 +421,11 @@ personagent 保存的一切都在你自己的机器上，在主目录里：`.env
 
 ## 从 0.x 升级
 
-1.0 改了一批设置名。只要还留着旧名字，personagent 就不会启动，并逐个列出 `旧名 -> 新名`。运行 `personagent doctor --fix` 会在 `.env` 里改好，值和注释都保留，原文件另存为 `.env.bak`；写在系统环境变量里的，要到设置它的地方去改。
-
-有几项默认值也变了：模型是 `deepseek-flash`，`QQ_ONEBOT_URL` 默认留空，`PERSONA_TZ_OFFSET_HOURS` 留空时跟着 `AGENT_LANG` 走。用 `personagent connect astrbot` 重装 AstrBot 插件，再重新填一遍插件的 `groups` 和 `dm_users`。
-
-记忆和学到的东西会保留。完整清单见[更新日志](../CHANGELOG.md#upgrading-from-04)（英文）。
+1.0 改了一批设置名。只要还留着旧名字，personagent 就不会启动，并逐个列出 `旧名 -> 新名`；运行 `personagent doctor --fix` 会在 `.env` 里改好。完整步骤见更新日志里的[从 0.4 升级](../CHANGELOG.md#upgrading-from-04)（英文）。记忆和学到的东西会保留。
 
 ## 项目状态和其他文档
 
-1.0。QQ（经 AstrBot）是跑得最多的路线。AstrBot 的其他平台通过同一个插件支持；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有一项安装软件包并运行命令的检查。OneBot 直连入口（`/v1/onebot`）和 `launch.vbs` 已废弃，1.x 期间保留。`tools/` 里的脚本属于实验，说明见[工具脚本](tools.md)（英文）。
+1.0。QQ（经 AstrBot）是跑得最多的路线。AstrBot 的其他平台通过同一个插件支持；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有一项安装软件包并运行命令的检查。OneBot 直连入口（`/v1/onebot`）和 `launch.vbs` 已废弃，1.x 期间保留。`tools/` 里的脚本给源码版用，说明见[工具脚本](tools.md)（英文）。
 
 - [中文部署教程](deploy.zh-CN.md) · [部署指南](deploy.md)（英文）
 - 连接器：[AstrBot 插件](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [协议](connectors.md)（后三个为英文）

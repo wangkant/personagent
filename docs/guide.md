@@ -378,12 +378,6 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Upgrading from 0.x
 
-Settings were renamed in 1.0, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`.
+1.0 renamed most settings, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`, and `personagent doctor --fix` renames them in `.env`. The changelog's [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) has every step. Memory and what it learned carry over.
 
-1. Run `personagent doctor --fix` to rename them in `.env`. It keeps the values and comments and saves the old file as `.env.bak`. Rename any that are set in the environment where you set them.
-2. Check the defaults that changed: the model is `deepseek-flash`, `QQ_ONEBOT_URL` is blank, and a blank `PERSONA_TZ_OFFSET_HOURS` follows `AGENT_LANG`.
-3. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again.
-
-Memory and what it learned carry over. The full list is in the [changelog](../CHANGELOG.md#upgrading-from-04).
-
-Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are experiments; [tools.md](tools.md) describes them.
+Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are for running from a clone; [tools.md](tools.md) describes them.
