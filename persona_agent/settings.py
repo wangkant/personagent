@@ -1,28 +1,18 @@
-"""Everything the agent is configured with, as one object.
+"""Everything the agent is configured with: one record, built once, passed in.
 
-The rule here is **one record, built once, passed in.** ``Agent`` holds no
-parsing logic and no defaults of its own; it copies this object's fields onto
-itself.
+``Agent`` has no parsing logic or defaults of its own; it copies these fields.
 
-Two ways in, and the difference between them is deliberate:
+* ``AgentSettings(...)``: literal defaults for the deployment settings, the
+  environment for the operational knobs (the loops, reaction learning, the
+  retrieval caps). An embedder, tool or test gets the agent it configured,
+  not one the surrounding ``.env`` configured.
+* ``AgentSettings.from_env()``: also reads the deployment settings
+  (``LLM_API_KEY``, ``PERSONA_NAME``, ``ADMIN_IDS``, ...). This is the bot
+  process.
 
-* ``AgentSettings(...)`` — literal defaults for the deployment settings, the
-  environment for the operational knobs. This is what an embedder, a tool or a
-  test suite wants: an agent it configured, not one the surrounding ``.env``
-  configured behind its back.
-* ``AgentSettings.from_env()`` — additionally reads the deployment settings
-  (``LLM_API_KEY``, ``PERSONA_NAME``, ``ADMIN_IDS``, …) out of the environment.
-  This is the bot process.
-
-Both start from the same defaults, and those are the values ``.env.example``
-documents, so a setting left out behaves the same everywhere.
-
-The operational knobs — the proactive loop, the evolution loop, reaction
-learning, the retrieval caps — read the environment in BOTH.
-
-Every read goes through :mod:`persona_agent.config_env`, so a typo in one
-setting behaves like a typo in any other: the declared default, and a warning
-that says so.
+Both share the defaults ``.env.example`` documents, and every read goes
+through :mod:`persona_agent.config_env`: a bad value means the default and a
+warning.
 """
 from __future__ import annotations
 
@@ -39,8 +29,7 @@ logger = logging.getLogger("agent")
 #: Spellings of the two supported languages that mean one of them.
 _LANG_ALIASES = {"cn": "zh", "chinese": "zh", "中文": "zh", "english": "en"}
 
-#: The shortest EVOLVE_INTERVAL_HOURS the loop runs at; 0 would run it back
-#: to back.
+#: The shortest EVOLVE_INTERVAL_HOURS the loop runs at; 0 runs it back to back.
 MIN_EVOLVE_INTERVAL_HOURS = 0.1
 
 _warned_langs: set[str] = set()
@@ -71,44 +60,31 @@ def normalize_lang(value: object) -> str:
 
 @dataclass
 class AgentSettings:
-    """One agent's configuration, fully resolved.
+    """One agent's configuration, fully resolved; the fields are the keywords
+    ``Agent(...)`` accepts.
 
-    The fields are the keywords ``Agent(...)`` accepts.
-
-    ``__post_init__`` resolves every setting — the empty-model fallbacks, the
-    URL trimming, the string coercions — so the object handed to ``Agent`` is
-    what ``Agent`` will use. It is idempotent: re-running it
-    (``dataclasses.replace``) changes nothing.
+    ``__post_init__`` resolves every setting (empty-model fallbacks, URL
+    trimming, coercions) and is idempotent, so ``dataclasses.replace`` is safe.
     """
 
     # ---- the LLM endpoint -------------------------------------------------
     api_key: str
     base_url: str = DEFAULT_LLM_BASE_URL
     model: str = DEFAULT_LLM_MODEL
-    #: Alternate model name for private chats, served by the same
-    #: OpenAI-compatible primary endpoint — not a second provider, unless it
-    #: is also ``llm_fallback_model``'s name, which is served on the fallback's
-    #: endpoint (``endpoints.endpoint_for`` routes by name). A blank
-    #: ``LLM_DM_MODEL`` in ``.env`` would otherwise send ``{"model": ""}`` on
-    #: every DM: a guaranteed 400 per DM. Resolved to ``model`` when empty.
+    #: Model name for DMs, on the primary endpoint unless it is the fallback's
+    #: name (``endpoints.endpoint_for``). Blank resolves to ``model``, never "".
     llm_dm_model: str = ""
     llm_fallback_model: str = ""
-    #: The fallback model's own endpoint, so the primary provider's outage is
-    #: not also the fallback's. Blank = the primary's ``base_url`` /
-    #: ``api_key``, read at call time. Only a ``llm_fallback_model``
-    #: distinct from ``model`` is sent there (see ``endpoints.endpoint_for``).
+    #: The fallback model's own endpoint, so a primary outage is not also the
+    #: fallback's. Blank = the primary's; only a fallback model distinct from
+    #: ``model`` is sent there.
     llm_fallback_base_url: str = ""
     llm_fallback_api_key: str = ""
-    #: Send DeepSeek's ``thinking`` field to the fallback's host without
-    #: asking first. Off by default: listed vendors get it, vendors known to
-    #: refuse it do not, and any other endpoint is asked by its first call
-    #: that turns thinking off (see ``llm.ModelCalls._thinking_verdict``).
+    #: Send DeepSeek's ``thinking`` field to the fallback's host unasked. Off:
+    #: an unlisted host is probed first (``llm.ModelCalls._thinking_verdict``).
     llm_fallback_thinking: bool = False
-    #: The "judgment" model: cheapest available, used only to gate
-    #: self-initiated modes (judge / followup / proactive) — decide PASS vs
-    #: reply. The reply that actually gets sent is always written by the main
-    #: model. Defaults to the fallback (cheap) model; set ``LLM_JUDGE_MODEL`` to
-    #: point at an even cheaper one.
+    #: The cheap model that decides PASS or reply in self-initiated modes; the
+    #: reply itself is always the main model's. Blank = the fallback model.
     llm_judge_model: str = _env(
         lambda env: env_str("LLM_JUDGE_MODEL", "", strip=True, env=env))
     #: LLM transient-error retry count (jittered backoff; 0 disables).
@@ -126,12 +102,9 @@ class AgentSettings:
     qq_onebot_url: str = ""
     admin_name: str = ""
     admin_relationship: str = ""
-    #: Process-wide language. 'en' (default) is the primary build; 'zh' selects
-    #: the Chinese variant. Blank means "whatever ``AGENT_LANG`` says".
+    #: 'en' or 'zh'; blank means whatever ``AGENT_LANG`` says.
     lang: str = ""
-    #: The resolved language, which everything language-dependent reads:
-    #: the reply validator, the per-language data files, the control-flow
-    #: lexicons. Derived from ``lang``/``AGENT_LANG`` unless set outright.
+    #: The resolved language everything language-dependent reads.
     agent_lang: str = ""
 
     # ---- conversation -----------------------------------------------------
@@ -141,12 +114,11 @@ class AgentSettings:
     memory_file: str = "memory.json"
     memory_max_per_conversation: int = 50
     message_debounce_sec: float = 2.5
-    #: Persona document. ``None`` means "load it from ``PERSONA_FILE``", which
-    #: the agent does at construction — file reads stay out of this record.
+    #: Persona document; ``None`` means the agent loads ``PERSONA_FILE``, so
+    #: file reads stay out of this record.
     persona: Optional[str] = None
-    #: Optional operator-set label recorded alongside the persona hash. Both
-    #: are part of evidence-combination scope, so a persona rewrite stops old
-    #: evidence from authorizing changes to the new character.
+    #: Operator label stored with the persona hash; both scope evidence, so old
+    #: evidence cannot authorize changes to a rewritten persona.
     persona_version: str = _env(
         lambda env: env_str("PERSONA_VERSION", "", strip=True, env=env))
     on_reply: Optional[Callable[[str, str], Awaitable[None]]] = None
@@ -157,24 +129,17 @@ class AgentSettings:
     admin_ids: tuple[str, ...] = ()
     #: Groups the agent admits (``ACCESS_GROUPS``), per platform: a platform
     #: with no entries is not restricted here.
-    #: Without an in-code gate a bot invited into N groups replies in all of
-    #: them regardless of the setting.
     access_groups: tuple[str, ...] = _env(
         lambda env: access.identity_from_env(env).written["ACCESS_GROUPS"])
     #: Who else may DM the bot (``ACCESS_DM_USERS``). Admins always may;
     #: these take the "ordinary friend" branch rather than the admin's.
     access_dm_users: tuple[str, ...] = _env(
         lambda env: access.identity_from_env(env).written["ACCESS_DM_USERS"])
-    #: Connector platforms whose ids are minted BARE instead of namespaced, so
-    #: a QQ message relayed by a connector lands on the same keys NapCat would
-    #: have produced. Empty by default, and an operator setting rather than
-    #: something the connector asserts: a bare id carries QQ authority — it is
-    #: what the QQ entries of the lists above are compared against.
+    #: Connector platforms whose ids are minted bare, on NapCat's keys. The
+    #: operator's call, never the connector's: a bare id carries QQ authority.
     connector_qq_platforms: tuple[str, ...] = ()
-    #: Whether a connector that pulls the outbox may be sent messages nobody
-    #: asked for: openers, the follow-up question, the excuse for a failed
-    #: model call (``CONNECTOR_OUTBOX_ENABLED``). Off, the outbox endpoint answers 404
-    #: and those stay QQ-only.
+    #: Whether the outbox may carry messages nobody asked for (openers,
+    #: follow-ups, excuses). Off, it answers 404 and those stay QQ-only.
     connector_outbox_enabled: bool = _env(
         lambda env: env_bool("CONNECTOR_OUTBOX_ENABLED", True, env=env))
 
@@ -201,28 +166,21 @@ class AgentSettings:
     embedding_api_key: str = ""
 
     # ---- model-error fallback ---------------------------------------------
-    #: Two independent fallback clocks share these numbers: the error-driven
-    #: one, kept per model (a failed model is skipped in every mode, for
-    #: ``llm_fallback_duration_s``, or ``llm_rate_limit_cooldown_s`` after a
-    #: 429) and the frequency-driven self-throttle (self-initiated modes only;
-    #: called/admin are exempt).
+    #: Shared by two clocks: the per-model error fallback (a failed model is
+    #: skipped for ``llm_fallback_duration_s``) and the frequency self-throttle
+    #: (self-initiated modes only).
     llm_rate_window_s: int = 120
     llm_rate_threshold: int = 30
     llm_fallback_duration_s: int = 180
-    #: How long a model that answered 429 is skipped. Its own clock because a
-    #: throttled model is metered, not broken: the call that hit the 429 has
-    #: already failed over; this only has to keep the next few turns off the
-    #: same wall.
+    #: How long a model that answered 429 is skipped: metered, not broken, so
+    #: only the next few turns avoid it.
     llm_rate_limit_cooldown_s: int = 20
 
     # ---- the proactive loop -----------------------------------------------
-    #: A background loop that occasionally self-initiates a message (no
-    #: incoming trigger) so the bot reads more like a real person who sometimes
-    #: breaks the silence — not a 24/7 responder. Off by default. Heavily
-    #: gated: only chats it has already seen activity in, only outside sleep
-    #: hours, only after a quiet stretch, with per-target cooldowns and a low
-    #: per-tick probability, and the model is told to PASS unless it genuinely
-    #: has something to say. DMs go to the admin + the DM allowlist only.
+    #: Occasionally speak first. Off by default and heavily gated: chats seen
+    #: before, outside sleep hours, after a quiet stretch, with cooldowns, a
+    #: low per-tick probability and a model told to PASS. DMs go to the admin
+    #: and the DM allowlist only.
     proactive_enabled: bool = _env(
         lambda env: env_bool("PROACTIVE_ENABLED", False, env=env))
     proactive_interval_s: int = _env(  # tick: 25 min
@@ -243,28 +201,21 @@ class AgentSettings:
     proactive_dm_prob: float = _env(
         lambda env: env_float("PROACTIVE_DM_PROB", 0.2, minimum=0.0,
                               maximum=1.0, env=env))
-    #: Which platforms the loop may speak first on (``PROACTIVE_PLATFORMS``,
-    #: e.g. "qq,telegram"); empty is every platform it can reach. A
+    #: Platforms the loop may speak first on; empty is all it can reach. A
     #: CONNECTOR_QQ_PLATFORMS name means QQ, whose keys it mints.
     proactive_platforms: tuple[str, ...] = _env(
         lambda env: access.split_ids(
             env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)))
 
     # ---- the self-evolution loop ------------------------------------------
-    #: Opt-in background task that closes the negative half of the learning
-    #: loop unattended. Low-score eval entries become BAD/OK candidates, but
-    #: never enter retrieval without compatible corroborating evidence or an
-    #: explicit human promotion.
+    #: Opt-in loop turning low-score eval entries into BAD/OK candidates, which
+    #: still need corroborating evidence or a human promotion.
     evolve_auto_enabled: bool = _env(
         lambda env: env_bool("EVOLVE_AUTO_ENABLED", False, env=env))
     evolve_interval_hours: float = _env(
         lambda env: env_float("EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0, env=env))
-    #: 3, not 2: on the evaluator's register scale (learning.py), 3 means
-    #: "human-plausible but drifting into helpful-assistant register" —
-    #: precisely the failure mode the loop exists to correct. Validated on 8
-    #: known-label replies: every known tell (drafted letter, mini tutorials)
-    #: scored exactly 3, every casual line scored 5, so a threshold of 2 would
-    #: leave the loop with nothing to learn from.
+    #: 3, not 2: on the evaluator's scale (learning.py) 3 is "drifting into
+    #: assistant register", the failure the loop exists to correct.
     evolve_threshold: int = _env(
         lambda env: env_int("EVOLVE_THRESHOLD", 3, env=env))
     evolve_batch: int = _env(  # diagnoses per tick
@@ -273,13 +224,9 @@ class AgentSettings:
         lambda env: env_str("EVOLVE_MODEL", "", strip=True, env=env))
 
     # ---- reaction learning ------------------------------------------------
-    #: The PRIMARY self-evolution signal. Every sent reply waits (bounded, TTL)
-    #: for a directed user reaction — a quote of the bot's message, an @/name
-    #: call, or the interlocutor's next DM. An in-process adjudicator (single
-    #: LLM call) classifies it and filters banter and trolling. The verdict is
-    #: recorded as evidence and may propose a candidate; it does not write a
-    #: retrieval pool. LLM self-eval remains the fallback channel for replies
-    #: that never get a directed reaction.
+    #: The primary learning signal: a sent reply waits (bounded, TTL) for a
+    #: directed reaction (a quote, an @/name call, the next DM), which one model
+    #: call classifies. The verdict is evidence, never a pool write.
     react_learn_enabled: bool = _env(
         lambda env: env_bool("REACT_LEARN_ENABLED", True, env=env))
     react_model: str = _env(
@@ -290,9 +237,8 @@ class AgentSettings:
         lambda env: env_float("REACT_TTL_S", 900.0, minimum=0.0, env=env))
     react_fix_window_s: float = _env(
         lambda env: env_float("REACT_FIX_WINDOW_S", 600.0, minimum=0.0, env=env))
-    #: Elicitation: after an accepted rejection with no correction content, the
-    #: bot may ask what the user actually meant — delayed, so it never talks
-    #: over its own normal reply, and cooldown-limited, so it never begs.
+    #: After a rejection with no correction, ask what they meant: delayed, so
+    #: never over its own reply, and cooldown-limited, so it never begs.
     react_elicit_enabled: bool = _env(
         lambda env: env_bool("REACT_ELICIT_ENABLED", True, env=env))
     react_elicit_delay_s: float = _env(
@@ -302,18 +248,13 @@ class AgentSettings:
                               env=env))
 
     # ---- retrieval --------------------------------------------------------
-    #: Retrieval pool caps. Both pools are scanned on every LLM turn but only
-    #: ever surface 4 examples + 6 pairs, so an unbounded pool costs a longer
-    #: scan per reply and dilutes retrieval with entries written under an older
-    #: prompt. These bound the materialized views of promoted candidates — the
-    #: only rows the automatic path can add. The ``data/`` seeds and the
-    #: pre-ledger learned pools are left exactly as they are. 0 = no cap.
+    #: Caps on the promoted-candidate views (0 = none); the ``data/`` seeds are
+    #: not counted. Unbounded, every reply scans longer and older entries dilute.
     promote_max_examples: int = _env(
         lambda env: env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0, env=env))
     promote_max_feedback: int = _env(
         lambda env: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env))
-    #: When evidence may grant a candidate authority. Its own record, read the
-    #: same way this one is.
+    #: When evidence may grant a candidate authority.
     promotion_policy: promotion.Policy = _env(promotion.Policy.from_env)
 
     def __post_init__(self) -> None:
@@ -338,9 +279,7 @@ class AgentSettings:
                 "back; using %s", self.evolve_interval_hours,
                 MIN_EVOLVE_INTERVAL_HOURS)
             self.evolve_interval_hours = MIN_EVOLVE_INTERVAL_HOURS
-        # Empty-model fallbacks, in dependency order: each of these is a model
-        # name that ships blank and has to resolve to something the endpoint
-        # actually serves, or the call it gates 400s.
+        # Empty-model fallbacks, in dependency order: a blank model name 400s.
         self.llm_fallback_model = self.llm_fallback_model or self.model
         self.llm_judge_model = (
             self.llm_judge_model or self.llm_fallback_model or self.model)
@@ -348,8 +287,7 @@ class AgentSettings:
         self.eval_model = self.eval_model or self.llm_fallback_model or self.model
         self.evolve_model = self.evolve_model or self.eval_model
         self.react_model = self.react_model or self.llm_judge_model
-        # Accept any iterable of ids from a caller; store the canonical form,
-        # so "qq:1" and a native connector's "aiocqhttp:1" both read as "1".
+        # Canonical ids: "qq:1" and a native "aiocqhttp:1" both read as "1".
         natives = self.connector_qq_platforms = access.split_ids(
             self.connector_qq_platforms)
         for name in ("admin_ids", "access_groups", "access_dm_users"):
@@ -380,15 +318,9 @@ class AgentSettings:
 
     @classmethod
     def from_env(cls, env=None, **overrides) -> "AgentSettings":
-        """The bot process's configuration: deployment settings included.
+        """The bot process's configuration, deployment settings included.
 
-        The bounds are floors and ceilings on what a deployment may ask for,
-        not the defaults — an out-of-range value falls back to the default and
-        warns, like any other bad setting.
-
-        Defaults match the dataclass's and ``.env.example``'s, so behaviour is
-        identical whether or not a ``.env`` is present.
-        """
+        An out-of-range value falls back to the default and warns."""
         def _str(name: str, default: str = "", *, strip: bool = False) -> str:
             return env_str(name, default, strip=strip, env=env)
 
