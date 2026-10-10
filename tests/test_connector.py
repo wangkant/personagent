@@ -1110,7 +1110,7 @@ def test_quickstart_set_env_values() -> None:
     """The wizard's .env writer must fill existing keys in place, preserve
     comments (so .env keeps doubling as the annotated reference), skip
     commented-out keys, and append keys that don't exist yet."""
-    from quickstart import set_env_values
+    from persona_agent.setup_wizard import set_env_values
     src = ("# ==== section ====\n"
            "LLM_API_KEY=\n"
            "PERSONA_NAME=old\n"
