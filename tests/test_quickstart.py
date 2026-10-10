@@ -400,3 +400,22 @@ def test_agent_home_divergence_warning(monkeypatch, tmp_path) -> None:
     check("agent_home: os.environ takes precedence over .env",
           sw.configured_agent_home(env) == str(home))
     check("agent_home: silent when it resolves to this home", said() == "", said())
+
+
+def test_quickstart_set_env_values() -> None:
+    """The wizard's .env writer must fill existing keys in place, preserve
+    comments (so .env keeps doubling as the annotated reference), skip
+    commented-out keys, and append keys that don't exist yet."""
+    from persona_agent.setup_wizard import set_env_values
+    src = ("# ==== section ====\n"
+           "LLM_API_KEY=\n"
+           "PERSONA_NAME=old\n"
+           "# PERSONA_NAME=commented reference\n")
+    out = set_env_values(src, {"LLM_API_KEY": "sk-1", "PERSONA_NAME": "New",
+                               "BRAND_NEW": "v"})
+    check("env writer: fills blank key in place", "LLM_API_KEY=sk-1" in out, out)
+    check("env writer: replaces existing value", "PERSONA_NAME=New" in out, out)
+    check("env writer: preserves comments",
+          "# ==== section ====" in out and "# PERSONA_NAME=commented reference" in out, out)
+    check("env writer: appends missing key", "BRAND_NEW=v" in out, out)
+    check("env writer: no duplicated keys", out.count("\nPERSONA_NAME=") == 1, out)
