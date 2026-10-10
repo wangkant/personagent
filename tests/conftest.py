@@ -8,6 +8,19 @@ from pathlib import Path
 import pytest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "bare_call_wait: keep the real bare-call debounce")
+
+
+@pytest.fixture(autouse=True)
+def _no_bare_call_wait(request: pytest.FixtureRequest,
+                       monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the 5 s bare-call debounce unless a test is marked bare_call_wait."""
+    if request.node.get_closest_marker("bare_call_wait") is None:
+        monkeypatch.setattr("persona_agent.turns.BARE_CALL_DEBOUNCE_S", 0.0)
+
+
 @pytest.fixture
 def tmp(tmp_path: Path) -> Path:
     """The per-test scratch directory the suites take as `tmp`.

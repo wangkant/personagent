@@ -33,6 +33,9 @@ _MAX_REFUSALS_LOGGED = 4096
 # How often one conversation may hear that the model is not answering.
 _EXCUSE_COOLDOWN_S = 300.0
 
+# A bare call ("@Bot", "Bot?") waits this long for the message that follows it.
+BARE_CALL_DEBOUNCE_S = 5.0
+
 
 class Turns:
     async def handle_onebot(self, payload: dict, *,
@@ -414,7 +417,7 @@ class Turns:
             text.replace(f"@{self.persona_name}", "").replace(self.persona_name, "").strip()
         )
         is_bare_call = addressed and len(bare_after_strip) <= 4
-        debounce_sec = 5.0 if is_bare_call else self.message_debounce_sec
+        debounce_sec = BARE_CALL_DEBOUNCE_S if is_bare_call else self.message_debounce_sec
         if debounce_sec > 0:
             try:
                 await asyncio.sleep(debounce_sec)
