@@ -23,7 +23,6 @@ logger = logging.getLogger("agent")
 
 
 class Retrieval:
-    # -------- Embeddings: fetched in the async path, read by the ranking --------
     def _stored_vector(self, key: str):
         if not self.embedding_model:
             return None
@@ -61,8 +60,7 @@ class Retrieval:
                         self.embedding_model)
 
     async def _prepare_retrieval(self, focus_text: str, memory_key: str = "") -> None:
-        """Embed what this turn's ranking will look up, before its prompt is
-        built. Only the query and a few new memories are waited for, briefly;
+        """Embed the query and a few new memories before the prompt is built;
         pool rows are backfilled in the background. Never raises."""
         if not self.embedding_model or time.monotonic() < self._embedding_retry_at:
             return
@@ -133,34 +131,23 @@ class Retrieval:
         limit_good: int = 4,
         conv_id: str = "",
     ) -> str:
-        """Contrastive pairs first (stronger signal), then chosen-only goods.
-        Dynamic retrieval: rank by BM25 over scenario and context, embedding
-        similarity when EMBEDDING_MODEL is set, scope, recency and mode match
-        (ranking.py); with no signal at all, take the newest. Pairs are
-        auto-mined from feedback.jsonl entries the user rated 'better'."""
+        """BAD/OK pairs first, then good examples, ranked by ranking.py
+        (the newest when the turn gives no signal)."""
         self._reload_examples_if_stale()
         self._reload_pairs_if_stale()
         self._reload_views_if_stale()
 
-        # Seed + legacy/hand-approved rows, plus the promoted-candidate views.
-        # Concatenated only when a view is non-empty: on a fresh deployment
-        # that is two list copies per turn saved on the hot path.
-        # Normalised, because the rows being compared against were written
-        # through the same table: the ledger stores a TRUNCATED scope, so a raw
-        # live scope would mismatch on any field over its limit — a
-        # `persona_version` of 45 characters, say — making every promoted row
-        # unretrievable on every turn, with nothing logged anywhere.
+        # Normalised like the stored scopes, or long values never match.
         current_scope = self._live_scope(conv_id)
 
         def _authorized_view(rows: list) -> list:
-            # A row without an enforcement scope, or a turn without a
-            # conversation, authorizes nothing: startup rebuild upgrades old views.
+            # No conversation or no row scope authorizes nothing.
             authorized = []
             if rows and conv_id:
                 identity = self.persona_identity
                 authorized = [row for row in rows if self._scope_authorizes(
                     row.get("scope"), current_scope, identity)]
-            # Warn (edge-triggered) when a non-empty view is refused whole.
+            # Edge-triggered warning when a non-empty view is refused whole.
             if authorized:
                 self._scope_drop_warned = False
             elif rows and not self._scope_drop_warned:
@@ -196,9 +183,7 @@ class Retrieval:
         now = time.time()
 
         def _scorer(pool: list):
-            # The fields are lowercased, parsed and hashed once at load time
-            # (ranking.row_fields); the fallback covers records injected
-            # straight into the cache.
+            # Precomputed at load; the fallback covers rows injected directly.
             lexicon = ranking.Lexicon(
                 focus_tokens,
                 [(ex.get("_rt") or ranking.row_fields(ex))[:2] for ex in pool])
@@ -211,13 +196,10 @@ class Retrieval:
                     similarity=None if query_vec is None else ranking.cosine(
                         query_vec, self._stored_vector(key)),
                     tier=ranking.scope_tier(ex, conv_key),
-                    # A row without a parsable timestamp gets no recency bonus.
                     age_s=(now - ts_epoch) if ts_epoch else None,
                     mode_match=bool(mode) and ex.get("mode") == mode)
             return _score
 
-        # nlargest is equivalent to sorted(..., reverse=True)[:n], ties and
-        # all, but keeps a heap of n instead of sorting the whole pool.
         have_signal = bool(focus_tokens or mode or query_vec is not None)
         if have_signal:
             pairs = heapq.nlargest(limit_pairs, pairs_pool, key=_scorer(pairs_pool))
@@ -231,8 +213,7 @@ class Retrieval:
                 "[Contrastive] Below are same-scenario [BAD] vs [OK] reply pairs. "
                 "Learn the voice in [OK], avoid the AI-flavored phrasing in [BAD]."
             )
-            # Every field through `_example_field`: rows can carry chat
-            # text, and a row must not be able to close this block.
+            # Through `_example_field`: a row must not be able to close this block.
             for p in pairs:
                 ctx = _example_field("\n".join(p.get("context", [])))
                 parts.append(
@@ -244,8 +225,6 @@ class Retrieval:
 
         pair_chosen_set = {p.get("better", "") for p in pairs}
         if have_signal:
-            # Generator, not a list: at the 5 MB trim ceiling materializing the
-            # filtered pool is thousands of dicts copied per turn for 4 picks.
             goods = heapq.nlargest(
                 limit_good,
                 (e for e in examples_pool
@@ -323,15 +302,8 @@ class Retrieval:
             )
         for name, lst in per_user.items():
             if self.agent_lang == "zh":
-                # Rewrite the first-person pronoun to the speaker's name so a
-                # memory stored as "我喜欢猫" surfaces as "Alice 喜欢猫". English
-                # memories keep their "I" — rewriting it would be lossy.
-                # No \b here: Python \b treats CJK as word chars, so r"\b我\b"
-                # never matches inside normal Chinese text (dead code). The
-                # negative lookahead keeps 我们 intact; per-user memories are
-                # all self-bound ("记住我…"), so 我 always means the speaker.
-                # A function, not the name: a nickname is not a regex
-                # template, and "\o/" as one would raise on every turn.
+                # "我喜欢猫" -> "Alice 喜欢猫" (not 我们). A function, since a
+                # nickname is no regex template.
                 texts = [re.sub(r"我(?!们)", lambda _m: name, it["text"])
                          for it in lst]
             else:
@@ -359,8 +331,7 @@ class Retrieval:
         )
 
     def _lorebook_for_prompt(self, history: list, focus_text: str = "") -> str:
-        """Scan recent history + focus_text; inject keyword-matched entries.
-        Caps at 5 entries per turn to keep the prompt from ballooning."""
+        """Entries whose keywords appear in recent history or focus_text, at most 5."""
         self._reload_lorebook_if_stale()
         if not self._lorebook_cache:
             return ""

@@ -1,10 +1,7 @@
-"""Recent speak decisions per conversation, kept in memory for the dashboard.
+"""Recent speak decisions per conversation, in memory for the dashboard.
 
-Bounded twice (entries per conversation, conversations per process) and never
-written to disk. A record holds the mode, whether it spoke, a short reason, a
-short excerpt (its reply, or the message it let pass), the start of the message
-it answered and that sender's display name: no prompt text and no whole
-message bodies.
+Bounded per conversation and per process, never written to disk, and holding
+only short excerpts: no prompt text, no whole messages.
 """
 from __future__ import annotations
 

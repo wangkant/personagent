@@ -107,10 +107,8 @@ class DataViews:
                 and evidence_mod.persona_identity(scope) == identity)
 
     def _learned_summary(self, group_id: str) -> str:
-        """What this room has taught the bot, in chat-sized form: memories,
-        promoted material, proposals still waiting (for a second voice, or
-        for the admin), the latest promotion and why it passed, and the
-        recent self-scores. Reads state only; no model call."""
+        """What this room has taught the bot, chat-sized: counts, what waits,
+        the latest promotion and why. Reads state only."""
         zh = self.agent_lang == "zh"
         current_scope = self._live_scope(group_id)
         identity = self.persona_identity
@@ -126,9 +124,7 @@ class DataViews:
                       if r.get("group_id") == group_id and isinstance(r.get("score"), int)][-10:]
         memories = len(self.memories.get(group_id, []))
 
-        # Plain lines, ASCII separators: the reply crosses the character policy
-        # like any other, which strips middle dots, arrows, the ellipsis and
-        # list markers, and refuses brackets and pipes outright.
+        # Plain lines: the reply crosses the character policy like any other.
         n_ex, n_pr = len(examples), len(pairs)
         if zh:
             head = (f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，"
@@ -162,9 +158,8 @@ class DataViews:
         return self._policy_safe(head, lines)
 
     def _policy_safe(self, head: str, lines: list[str]) -> str:
-        """`head` plus every line of learned text the character policy lets
-        through whole. Learned text is chat text: a meta phrase in one
-        drafted rewrite would otherwise refuse the entire summary."""
+        """`head` plus each learned line the character policy passes whole, so
+        one bad line cannot refuse the summary."""
         def passes(text: str) -> bool:
             return TextProcessing._sanitize_reply(
                 text, self.agent_lang, self.reply_style) == text
@@ -177,13 +172,8 @@ class DataViews:
 
     def _learning_status(self, current_scope: dict):
         """(waiting for a second voice, waiting for the admin, latest active
-        candidate) for this conversation. A rewrite blocked by a conflict or
-        by disagreeing evidence waits for the admin, not for a voice. Liked
-        replies are not counted: only a person can promote one, and they pile
-        up with every laugh.
-
-        One pass over the ledger and the log, not one per candidate: anyone
-        in the room can ask, and this runs on the event loop."""
+        candidate) for this conversation, in one pass over each ledger. Liked
+        replies are not counted: only a person can promote them."""
         try:
             cands = self.candidate_ledger.all()
             events = self.evidence_log.all()
@@ -222,9 +212,8 @@ class DataViews:
         return voice, admin, latest
 
     def _promotion_chain(self, cand: dict, zh: bool, conv_id: str) -> str:
-        """One line: who argued for `cand`, how, and why it passed. Only
-        people in `conv_id` are named; who argued in another chat stays
-        there."""
+        """One line: who argued for `cand`, how, and why it passed (only people
+        in `conv_id` are named)."""
         try:
             linked = self.evidence_log.many(cand.get("evidence") or [])
         except Exception:
@@ -265,14 +254,8 @@ class DataViews:
         return ("原因：" + "，".join(steps)) if zh else ("why: " + ", ".join(steps))
 
     def _reload_views_if_stale(self) -> None:
-        """Hot-reload the materialized views of promoted candidates.
-
-        These are the *only* rows the automatic learning path can put in front
-        of the model. They are small (capped), derived, and rewritten whole on
-        every promotion or rollback, so there is no append-only fast path to
-        preserve here — a plain mtime+size check and a full reparse is both
-        correct and cheap. A rollback therefore takes effect on the next turn
-        without a restart, which is the point of keeping the view separate."""
+        """Hot-reload the promoted views, the only rows automatic learning can
+        put in a prompt; a rollback takes effect on the next turn."""
         for path, attr, pairs_only in (
             (self.promoted_examples_file, "_view_examples", False),
             (self.promoted_feedback_file, "_view_pairs", True),
@@ -309,10 +292,8 @@ class DataViews:
 
     @staticmethod
     def _pool_stamp(paths, *, strict: bool = False) -> tuple:
-        """Identity, nanosecond mtime and size per file, including replacements.
-
-        Strict callers distinguish an unreadable file from an absent one.
-        """
+        """Identity, nanosecond mtime and size per file; `strict` raises on an
+        unreadable (not absent) file."""
         out: list = []
         for p in paths:
             try:
@@ -359,7 +340,6 @@ class DataViews:
         except Exception as e:
             logger.warning("[Agent] %s.json load failed: %s", name, e)
 
-    # -------- Output filter (SillyTavern regex-extension style) --------
     def _reload_filters_if_stale(self) -> None:
         def parse(data) -> list:
             raw = data.get("filters", []) if isinstance(data, dict) else data
@@ -385,8 +365,8 @@ class DataViews:
                                    "output_filter", "rules")
 
     def _apply_output_filter(self, reply: str) -> tuple[str, str]:
-        """Pre-send regex sanity net. Returns (filtered_reply, blocked_reason).
-        Non-empty blocked_reason → drop the whole reply, take the PASS path."""
+        """Pre-send regex net: (filtered_reply, blocked_reason); a reason drops
+        the whole reply."""
         self._reload_filters_if_stale()
         if not self._filters_cache or not reply:
             return reply, ""
@@ -400,7 +380,6 @@ class DataViews:
                 reply = f["regex"].sub(f.get("replacement", ""), reply)
         return reply.strip(), ""
 
-    # -------- Lorebook (SillyTavern World Info style) --------
     def _reload_lorebook_if_stale(self) -> None:
         def parse(data) -> list:
             raw = data.get("entries", []) if isinstance(data, dict) else data

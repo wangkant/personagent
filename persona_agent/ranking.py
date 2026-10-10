@@ -19,7 +19,7 @@ SEED, PERSONA, CONVERSATION = 0, 1, 2
 BM25_K1 = 1.2
 BM25_B = 0.75
 
-# math.sumprod (3.12+) halves the cost of a pool's worth of dot products.
+# math.sumprod is 3.12+.
 _dot = getattr(math, "sumprod", None) or (lambda a, b: sum(map(mul, a, b)))
 
 
@@ -38,9 +38,7 @@ class Weights:
     mode: float = 0.0
 
 
-#: Examples and pairs. The lexical, field, mode and recency weights are the
-#: substring scorer's, so without embeddings the order barely moves; scope
-#: stays under the mode bonus, a preference rather than a filter.
+#: Examples and pairs; scope stays under the mode bonus, a preference not a filter.
 EXAMPLE_WEIGHTS = Weights(lexical=1.0, embedding=2.0, recency=0.3,
                           half_life_days=14.0, fields=(1.0, 0.3),
                           scope=(0.0, 0.2, 0.4), mode=0.5)
@@ -50,13 +48,9 @@ MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=1.0,
 
 
 class Lexicon:
-    """BM25 over one pool for one query.
-
-    A term occurs in a field when it is a substring of it, so the
-    two-character CJK windows of `_focus_tokens` need no segmenter. IDF is
-    rescaled so the query's matching terms average 1.0: a term of average
-    rarity in a field of average length scores one hit's worth, and the other
-    signals keep their weight against it."""
+    """BM25 over one pool for one query. Terms match as substrings (CJK
+    bigrams need no segmenter); IDF is rescaled to average 1.0 over the
+    query's matching terms."""
 
     def __init__(self, tokens: Iterable[str], docs: Sequence[Sequence[str]]):
         df = dict.fromkeys(tokens, 0)

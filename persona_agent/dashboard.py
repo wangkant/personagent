@@ -841,8 +841,7 @@ def _promote(learning: _Learning, cid: str, action: str, ts: str,
     else:
         ok = ledger.supersede(rivals[0].get("candidate_id", ""), cid, ts=ts,
                               actor=ACTOR, reason=reason)
-        # More than one rival means the ledger predates the one-live-rewrite
-        # rule; retire the rest too.
+        # A ledger may hold several live rivals; retire them all.
         for extra in rivals[1:] if ok else ():
             ledger.rollback(extra.get("candidate_id", ""), ts=ts, actor=ACTOR,
                             reason=f"replaced by {cid}")
