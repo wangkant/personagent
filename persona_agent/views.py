@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from . import candidates as candidates_mod
+from . import channels
 from . import evidence as evidence_mod
 from . import promotion as promotion_mod
 from .paths import parse_jsonl, read_jsonl
@@ -84,7 +85,7 @@ class DataViews:
         """This turn's scope, normalised the way the ledger stores one."""
         return evidence_mod.normalize_scope({
             "lang": self.agent_lang,
-            "platform": self._conv_platform(conv_id) if conv_id else "",
+            "platform": channels.platform_of(conv_id) if conv_id else "",
             "conv_id": conv_id,
             "persona": self.persona_name,
             "persona_hash": self.persona_hash,
@@ -424,7 +425,6 @@ class DataViews:
                     "keywords": [str(k).lower() for k in kws],
                     "content": e["content"],
                     "priority": int(e.get("priority", 100)),
-                    "scan_depth": int(e.get("scan_depth", 5)),
                 })
             entries.sort(key=lambda x: -x["priority"])
             return entries

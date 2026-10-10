@@ -626,12 +626,6 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             logger.error("[Agent] background task %s crashed: %s: %s",
                          task.get_name(), type(exc).__name__, exc, exc_info=exc)
 
-    def _validator_lang(self) -> str:
-        """The language `_validate_reply_safe` is handed. Its rules are the
-        same for every language today; the argument stays so a per-reader
-        language has one place to come in."""
-        return self.agent_lang
-
     def _remember_msg_id(self, mid) -> None:
         """Bank a message_id in the dedup ring and persist (throttled), so a
         restart doesn't re-answer @s already handled. Always str: the two

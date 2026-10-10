@@ -21,7 +21,6 @@ from persona_agent import channels
 from persona_agent import paths as agent_paths
 from persona_agent.agent import Agent
 from persona_agent.transport import SendResult
-from persona_agent.learning import Learning
 from persona_agent.textproc import TextProcessing, _strip_web_desc
 from persona_agent.connector import (ConnectorSink, current_sink,
                                    message_to_reply_item,
@@ -1058,7 +1057,7 @@ async def test_one_reply_fans_out_into_at_most_the_cap(
     agent._typing_delay = lambda chunk: 0.0
     # The sanitizer's length bound runs first; every word it keeps must land.
     kept = TextProcessing._sanitize_reply(
-        degenerate, agent._validator_lang(), agent.reply_style).count("hi")
+        degenerate, agent.agent_lang, agent.reply_style).count("hi")
 
     result = await agent._send_group("123456", degenerate)
     check("QQ: the throttle lets the whole reply through",
@@ -5396,13 +5395,6 @@ def test_the_channel_key_table_is_one_table() -> None:
         check(f"channels: both spellings agree for {routing!r}",
               channels.platform_of(learning) == platform,
               repr(channels.platform_of(learning)))
-
-    check("channels: Agent._dm_scope_key has no opinion of its own",
-          all(Agent._dm_scope_key(r) == channels.learning_key(r)
-              for r, _, _ in rows))
-    check("channels: Learning._conv_platform has no opinion of its own",
-          all(Learning._conv_platform(r) == channels.platform_of(r)
-              for r, _, _ in rows))
 
     # The wire format itself, pinned against literals rather than against the
     # prefix constants — comparing a constant to itself would pass no matter

@@ -188,7 +188,7 @@ class DirectMessages:
             return None
         had_visible = bool(filtered.strip())
         reply = TextProcessing._sanitize_reply(
-            filtered, self._validator_lang(), self.reply_style)
+            filtered, self.agent_lang, self.reply_style)
         reply = TextProcessing._unwrap_reply(reply)
         # Non-digit targets included: connector ids look like "telegram:12345".
         at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
@@ -196,12 +196,6 @@ class DirectMessages:
         # Strip every marker (a second, hallucinated one would ship as text).
         reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
         return reply, at_uid, pending_core, had_visible
-
-    @staticmethod
-    def _dm_scope_key(pkey: str) -> str:
-        """Learning scope (`dm:<uid>`) of the DM whose memory namespace is
-        `pkey` (`private:<uid>`); derived, so no call site can desync them."""
-        return channels.learning_key(pkey)
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with
@@ -214,8 +208,8 @@ class DirectMessages:
         pkey = "private:<uid>" memory namespace — without it, private-chat
         memories / core notes are write-only (the model saves a mem but never
         sees it next turn, which reads as "forgot everything I told it").
-        The LEARNING scope is a different key derived from it — see
-        `_dm_scope_key`.
+        The LEARNING scope is a different key derived from it
+        (`channels.learning_key`).
 
         `proactive_cue` is a connector caller's briefing for a proactive turn.
         It joins the internal cue as bounded external material: the engine's
@@ -278,7 +272,7 @@ class DirectMessages:
         decision on the words the model produced, and asking again would buy
         the same no at full price, from input a user can choose."""
         text, refusal = TextProcessing._sanitize_reply_with_reason(
-            reply or "", self._validator_lang(), self.reply_style)
+            reply or "", self.agent_lang, self.reply_style)
         if refusal:
             # Still a refusal, but the label set has drifted from the guards.
             if refusal not in _REFUSAL_LABELS:

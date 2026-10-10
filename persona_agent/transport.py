@@ -416,7 +416,7 @@ class Transport:
         target_key = group_id
         self._sent_mids[target_key] = []
         text = TextProcessing._sanitize_reply(
-            text, self._validator_lang(), self.reply_style)
+            text, self.agent_lang, self.reply_style)
         if not text:
             return SendResult()
         # On the QQ path an at target must be a bare QQ number — a hallucinated
@@ -451,7 +451,7 @@ class Transport:
         target_key = channels.dm_routing_key(user_id)
         self._sent_mids[target_key] = []
         text = TextProcessing._sanitize_reply(
-            text, self._validator_lang(), self.reply_style)
+            text, self.agent_lang, self.reply_style)
         # Private chat is 1:1 — there's no "target someone" semantics. The
         # model still occasionally emits [AT:xxx] (STYLE_GUIDE teaches the
         # marker); the group path extracts it, private has no extractor — left

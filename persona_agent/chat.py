@@ -634,7 +634,7 @@ class Trial:
                 turn.mode, turn.memory = "memory", True
                 turn.memory_saved = len(agent.memories.get(conv, [])) > notes
                 turn.reply = turn.sent = TextProcessing._sanitize_reply(
-                    mem_reply, agent._validator_lang(), agent.reply_style)
+                    mem_reply, agent.agent_lang, agent.reply_style)
                 agent.last_reply_at[conv] = time.time()
                 agent._append_buffer(conv, agent.persona_name, mem_reply)
                 self.last = turn
@@ -695,7 +695,7 @@ class Trial:
                     time.time() - agent.chat_followup_window_s - 1)
             return turn
         sent = TextProcessing._sanitize_reply(
-            reply, agent._validator_lang(), agent.reply_style)
+            reply, agent.agent_lang, agent.reply_style)
         if not sent:
             turn.quiet, turn.raw = "character", clip(reply, 60)
             return turn

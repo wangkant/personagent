@@ -38,10 +38,6 @@ class Learning:
 
     # ---------------- Evidence -> candidate -> promotion ----------------
 
-    # `channels` owns the key vocabulary: `dm:`/`private:` are DM markers,
-    # not platforms, and reading them as QQ would merge cross-platform evidence.
-    _conv_platform = staticmethod(channels.platform_of)
-
     def _scope_fields(self, conv_id: str) -> dict:
         """The scope every evidence event carries: which character, which
         language, which room. Two events may only corroborate each other when
@@ -49,7 +45,7 @@ class Learning:
         _ = self.persona_lineage  # registers the lineage before any comparison
         return {
             "lang": self.agent_lang,
-            "platform": self._conv_platform(conv_id),
+            "platform": channels.platform_of(conv_id),
             "conv_id": str(conv_id or ""),
             "persona": self.persona_name or "",
             "persona_hash": self.persona_hash,

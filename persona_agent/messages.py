@@ -106,7 +106,7 @@ class MessageParsing:
                 # bare "[reply]" if it can't be fetched (never blocks / drops).
                 qid = d.get("id")
                 hint = self._quote_hint(d)
-                quoted = (await self._resolve_quote(qid, group_id, hint=hint)
+                quoted = (await self._resolve_quote(qid, hint=hint)
                           if qid or hint else "")
                 parts.append(_fence(f"[reply {quoted}]") if quoted else "[reply]")
             elif t == "record":
@@ -182,7 +182,7 @@ class MessageParsing:
             name = _clean_prompt_source(data.get("quote_name")).strip()[:8]
         return f"{name}: {text}" if name else text
 
-    async def _resolve_quote(self, mid, group_id: str, hint: str = "") -> str:
+    async def _resolve_quote(self, mid, hint: str = "") -> str:
         """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
         understands the referent. Layer A: local _msg_index (zero cost, hits most
         recent messages). Then the connector's own copy (`hint`), which covers

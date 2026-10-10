@@ -551,7 +551,7 @@ class PromptBuilder:
         dynamic_block = (
             f"{proactive_note}"
             f"{dm_overrides}"
-            f"{self._examples_for_prompt(focus_text=last_user, conv_id=self._dm_scope_key(pkey))}"
+            f"{self._examples_for_prompt(focus_text=last_user, conv_id=channels.learning_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
             f"{dm_output_protocol(self.persona_style)}"
