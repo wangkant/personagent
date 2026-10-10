@@ -27,7 +27,7 @@ that says so.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Awaitable, Callable, Optional
 
 from . import access, channels, promotion
@@ -44,6 +44,12 @@ _LANG_ALIASES = {"cn": "zh", "chinese": "zh", "中文": "zh", "english": "en"}
 MIN_EVOLVE_INTERVAL_HOURS = 0.1
 
 _warned_langs: set[str] = set()
+
+
+def _env(read):
+    """A field whose default is ``read(None)`` (os.environ); ``from_env(env=...)``
+    calls ``read(env)`` instead."""
+    return field(default_factory=lambda: read(None), metadata={"env": read})
 
 
 def normalize_lang(value: object) -> str:
@@ -103,14 +109,14 @@ class AgentSettings:
     #: reply. The reply that actually gets sent is always written by the main
     #: model. Defaults to the fallback (cheap) model; set ``LLM_JUDGE_MODEL`` to
     #: point at an even cheaper one.
-    llm_judge_model: str = field(
-        default_factory=lambda: env_str("LLM_JUDGE_MODEL", "", strip=True))
+    llm_judge_model: str = _env(
+        lambda env: env_str("LLM_JUDGE_MODEL", "", strip=True, env=env))
     #: LLM transient-error retry count (jittered backoff; 0 disables).
-    api_max_retries: int = field(
-        default_factory=lambda: env_int("LLM_MAX_RETRIES", 2, minimum=0))
+    api_max_retries: int = _env(
+        lambda env: env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env))
     #: Main LLM call timeout (seconds); reasoning models can be slow.
-    llm_timeout_s: float = field(
-        default_factory=lambda: env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0))
+    llm_timeout_s: float = _env(
+        lambda env: env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env))
 
     # ---- identity ---------------------------------------------------------
     qq_bot_id: str = ""
@@ -141,8 +147,8 @@ class AgentSettings:
     #: Optional operator-set label recorded alongside the persona hash. Both
     #: are part of evidence-combination scope, so a persona rewrite stops old
     #: evidence from authorizing changes to the new character.
-    persona_version: str = field(
-        default_factory=lambda: env_str("PERSONA_VERSION", "", strip=True))
+    persona_version: str = _env(
+        lambda env: env_str("PERSONA_VERSION", "", strip=True, env=env))
     on_reply: Optional[Callable[[str, str], Awaitable[None]]] = None
 
     # ---- who may talk to it -----------------------------------------------
@@ -153,14 +159,12 @@ class AgentSettings:
     #: with no entries is not restricted here.
     #: Without an in-code gate a bot invited into N groups replies in all of
     #: them regardless of the setting.
-    access_groups: tuple[str, ...] = field(
-        default_factory=lambda: access.identity_from_env().written[
-            "ACCESS_GROUPS"])
+    access_groups: tuple[str, ...] = _env(
+        lambda env: access.identity_from_env(env).written["ACCESS_GROUPS"])
     #: Who else may DM the bot (``ACCESS_DM_USERS``). Admins always may;
     #: these take the "ordinary friend" branch rather than the admin's.
-    access_dm_users: tuple[str, ...] = field(
-        default_factory=lambda: access.identity_from_env().written[
-            "ACCESS_DM_USERS"])
+    access_dm_users: tuple[str, ...] = _env(
+        lambda env: access.identity_from_env(env).written["ACCESS_DM_USERS"])
     #: Connector platforms whose ids are minted BARE instead of namespaced, so
     #: a QQ message relayed by a connector lands on the same keys NapCat would
     #: have produced. Empty by default, and an operator setting rather than
@@ -171,8 +175,8 @@ class AgentSettings:
     #: asked for: openers, the follow-up question, the excuse for a failed
     #: model call (``CONNECTOR_OUTBOX_ENABLED``). Off, the outbox endpoint answers 404
     #: and those stay QQ-only.
-    connector_outbox_enabled: bool = field(
-        default_factory=lambda: env_bool("CONNECTOR_OUTBOX_ENABLED", True))
+    connector_outbox_enabled: bool = _env(
+        lambda env: env_bool("CONNECTOR_OUTBOX_ENABLED", True, env=env))
 
     # ---- self-evaluation --------------------------------------------------
     eval_enabled: bool = False
@@ -219,55 +223,54 @@ class AgentSettings:
     #: hours, only after a quiet stretch, with per-target cooldowns and a low
     #: per-tick probability, and the model is told to PASS unless it genuinely
     #: has something to say. DMs go to the admin + the DM allowlist only.
-    proactive_enabled: bool = field(
-        default_factory=lambda: env_bool("PROACTIVE_ENABLED", False))
-    proactive_interval_s: int = field(  # tick: 25 min
-        default_factory=lambda: env_int("PROACTIVE_INTERVAL_S", 1500, minimum=1))
-    proactive_min_silence_s: int = field(  # group quiet >= 45 min
-        default_factory=lambda: env_int("PROACTIVE_MIN_SILENCE_S", 2700, minimum=0))
-    proactive_cooldown_s: int = field(  # >= 3h between group initiations
-        default_factory=lambda: env_int("PROACTIVE_COOLDOWN_S", 10800, minimum=0))
-    proactive_prob: float = field(  # per eligible tick
-        default_factory=lambda: env_float(
-            "PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0))
-    proactive_dm_min_silence_s: int = field(  # DM quiet >= 4h
-        default_factory=lambda: env_int(
-            "PROACTIVE_DM_MIN_SILENCE_S", 14400, minimum=0))
-    proactive_dm_cooldown_s: int = field(  # >= 24h between DMs
-        default_factory=lambda: env_int(
-            "PROACTIVE_DM_COOLDOWN_S", 86400, minimum=0))
-    proactive_dm_prob: float = field(
-        default_factory=lambda: env_float(
-            "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0))
+    proactive_enabled: bool = _env(
+        lambda env: env_bool("PROACTIVE_ENABLED", False, env=env))
+    proactive_interval_s: int = _env(  # tick: 25 min
+        lambda env: env_int("PROACTIVE_INTERVAL_S", 1500, minimum=1, env=env))
+    proactive_min_silence_s: int = _env(  # group quiet >= 45 min
+        lambda env: env_int("PROACTIVE_MIN_SILENCE_S", 2700, minimum=0, env=env))
+    proactive_cooldown_s: int = _env(  # >= 3h between group initiations
+        lambda env: env_int("PROACTIVE_COOLDOWN_S", 10800, minimum=0, env=env))
+    proactive_prob: float = _env(  # per eligible tick
+        lambda env: env_float("PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0,
+                              env=env))
+    proactive_dm_min_silence_s: int = _env(  # DM quiet >= 4h
+        lambda env: env_int("PROACTIVE_DM_MIN_SILENCE_S", 14400, minimum=0,
+                            env=env))
+    proactive_dm_cooldown_s: int = _env(  # >= 24h between DMs
+        lambda env: env_int("PROACTIVE_DM_COOLDOWN_S", 86400, minimum=0,
+                            env=env))
+    proactive_dm_prob: float = _env(
+        lambda env: env_float("PROACTIVE_DM_PROB", 0.2, minimum=0.0,
+                              maximum=1.0, env=env))
     #: Which platforms the loop may speak first on (``PROACTIVE_PLATFORMS``,
     #: e.g. "qq,telegram"); empty is every platform it can reach. A
     #: CONNECTOR_QQ_PLATFORMS name means QQ, whose keys it mints.
-    proactive_platforms: tuple[str, ...] = field(
-        default_factory=lambda: access.split_ids(
-            env_str("PROACTIVE_PLATFORMS", "", strip=True)))
+    proactive_platforms: tuple[str, ...] = _env(
+        lambda env: access.split_ids(
+            env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)))
 
     # ---- the self-evolution loop ------------------------------------------
     #: Opt-in background task that closes the negative half of the learning
     #: loop unattended. Low-score eval entries become BAD/OK candidates, but
     #: never enter retrieval without compatible corroborating evidence or an
     #: explicit human promotion.
-    evolve_auto_enabled: bool = field(
-        default_factory=lambda: env_bool("EVOLVE_AUTO_ENABLED", False))
-    evolve_interval_hours: float = field(
-        default_factory=lambda: env_float(
-            "EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0))
+    evolve_auto_enabled: bool = _env(
+        lambda env: env_bool("EVOLVE_AUTO_ENABLED", False, env=env))
+    evolve_interval_hours: float = _env(
+        lambda env: env_float("EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0, env=env))
     #: 3, not 2: on the evaluator's register scale (learning.py), 3 means
     #: "human-plausible but drifting into helpful-assistant register" —
     #: precisely the failure mode the loop exists to correct. Validated on 8
     #: known-label replies: every known tell (drafted letter, mini tutorials)
     #: scored exactly 3, every casual line scored 5, so a threshold of 2 would
     #: leave the loop with nothing to learn from.
-    evolve_threshold: int = field(
-        default_factory=lambda: env_int("EVOLVE_THRESHOLD", 3))
-    evolve_batch: int = field(  # diagnoses per tick
-        default_factory=lambda: env_int("EVOLVE_BATCH", 5, minimum=1))
-    evolve_model: str = field(
-        default_factory=lambda: env_str("EVOLVE_MODEL", "", strip=True))
+    evolve_threshold: int = _env(
+        lambda env: env_int("EVOLVE_THRESHOLD", 3, env=env))
+    evolve_batch: int = _env(  # diagnoses per tick
+        lambda env: env_int("EVOLVE_BATCH", 5, minimum=1, env=env))
+    evolve_model: str = _env(
+        lambda env: env_str("EVOLVE_MODEL", "", strip=True, env=env))
 
     # ---- reaction learning ------------------------------------------------
     #: The PRIMARY self-evolution signal. Every sent reply waits (bounded, TTL)
@@ -277,27 +280,26 @@ class AgentSettings:
     #: recorded as evidence and may propose a candidate; it does not write a
     #: retrieval pool. LLM self-eval remains the fallback channel for replies
     #: that never get a directed reaction.
-    react_learn_enabled: bool = field(
-        default_factory=lambda: env_bool("REACT_LEARN_ENABLED", True))
-    react_model: str = field(
-        default_factory=lambda: env_str("REACT_MODEL", "", strip=True))
-    react_max_pending: int = field(
-        default_factory=lambda: env_int("REACT_MAX_PENDING", 4, minimum=1))
-    react_ttl_s: float = field(
-        default_factory=lambda: env_float("REACT_TTL_S", 900.0, minimum=0.0))
-    react_fix_window_s: float = field(
-        default_factory=lambda: env_float("REACT_FIX_WINDOW_S", 600.0, minimum=0.0))
+    react_learn_enabled: bool = _env(
+        lambda env: env_bool("REACT_LEARN_ENABLED", True, env=env))
+    react_model: str = _env(
+        lambda env: env_str("REACT_MODEL", "", strip=True, env=env))
+    react_max_pending: int = _env(
+        lambda env: env_int("REACT_MAX_PENDING", 4, minimum=1, env=env))
+    react_ttl_s: float = _env(
+        lambda env: env_float("REACT_TTL_S", 900.0, minimum=0.0, env=env))
+    react_fix_window_s: float = _env(
+        lambda env: env_float("REACT_FIX_WINDOW_S", 600.0, minimum=0.0, env=env))
     #: Elicitation: after an accepted rejection with no correction content, the
     #: bot may ask what the user actually meant — delayed, so it never talks
     #: over its own normal reply, and cooldown-limited, so it never begs.
-    react_elicit_enabled: bool = field(
-        default_factory=lambda: env_bool("REACT_ELICIT_ENABLED", True))
-    react_elicit_delay_s: float = field(
-        default_factory=lambda: env_float(
-            "REACT_ELICIT_DELAY_S", 120.0, minimum=0.0))
-    react_elicit_cooldown_s: float = field(
-        default_factory=lambda: env_float(
-            "REACT_ELICIT_COOLDOWN_S", 3600.0, minimum=0.0))
+    react_elicit_enabled: bool = _env(
+        lambda env: env_bool("REACT_ELICIT_ENABLED", True, env=env))
+    react_elicit_delay_s: float = _env(
+        lambda env: env_float("REACT_ELICIT_DELAY_S", 120.0, minimum=0.0, env=env))
+    react_elicit_cooldown_s: float = _env(
+        lambda env: env_float("REACT_ELICIT_COOLDOWN_S", 3600.0, minimum=0.0,
+                              env=env))
 
     # ---- retrieval --------------------------------------------------------
     #: Retrieval pool caps. Both pools are scanned on every LLM turn but only
@@ -306,14 +308,13 @@ class AgentSettings:
     #: prompt. These bound the materialized views of promoted candidates — the
     #: only rows the automatic path can add. The ``data/`` seeds and the
     #: pre-ledger learned pools are left exactly as they are. 0 = no cap.
-    promote_max_examples: int = field(
-        default_factory=lambda: env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0))
-    promote_max_feedback: int = field(
-        default_factory=lambda: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0))
+    promote_max_examples: int = _env(
+        lambda env: env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0, env=env))
+    promote_max_feedback: int = _env(
+        lambda env: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env))
     #: When evidence may grant a candidate authority. Its own record, read the
     #: same way this one is.
-    promotion_policy: promotion.Policy = field(
-        default_factory=promotion.Policy.from_env)
+    promotion_policy: promotion.Policy = _env(promotion.Policy.from_env)
 
     def __post_init__(self) -> None:
         self.base_url = str(self.base_url or "").rstrip("/")
@@ -438,72 +439,10 @@ class AgentSettings:
             lang=normalize_lang(_str("AGENT_LANG", "en", strip=True)),
             connector_qq_platforms=identity.native_platforms,
         )
-        # The operational knobs are read by the field defaults, which go
-        # through `os.environ` directly. An explicit `env` mapping has to reach
-        # them too, or `from_env(env=...)` would be half-honoured.
+        # The operational knobs' field defaults read os.environ; an explicit
+        # mapping has to reach them too, or from_env(env=...) is half-honoured.
         if env is not None:
-            defaults.update(cls._operational_from_env(env))
+            defaults.update((f.name, f.metadata["env"](env))
+                            for f in fields(cls) if "env" in f.metadata)
         defaults.update(overrides)
         return cls(**defaults)
-
-    @staticmethod
-    def _access_from_env(env) -> dict:
-        """The admission lists, which are operational knobs too."""
-        identity = access.identity_from_env(env)
-        return dict(
-            access_groups=identity.written["ACCESS_GROUPS"],
-            access_dm_users=identity.written["ACCESS_DM_USERS"],
-        )
-
-    @classmethod
-    def _operational_from_env(cls, env) -> dict:
-        """The knobs whose defaults come from the environment, read from
-        ``env`` instead of ``os.environ``."""
-        return dict(
-            llm_judge_model=env_str("LLM_JUDGE_MODEL", "", strip=True, env=env),
-            api_max_retries=env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env),
-            llm_timeout_s=env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env),
-            persona_version=env_str("PERSONA_VERSION", "", strip=True, env=env),
-            **cls._access_from_env(env),
-            proactive_enabled=env_bool("PROACTIVE_ENABLED", False, env=env),
-            proactive_interval_s=env_int(
-                "PROACTIVE_INTERVAL_S", 1500, minimum=1, env=env),
-            proactive_min_silence_s=env_int(
-                "PROACTIVE_MIN_SILENCE_S", 2700, minimum=0, env=env),
-            proactive_cooldown_s=env_int(
-                "PROACTIVE_COOLDOWN_S", 10800, minimum=0, env=env),
-            proactive_prob=env_float(
-                "PROACTIVE_PROB", 0.25, minimum=0.0, maximum=1.0, env=env),
-            proactive_dm_min_silence_s=env_int(
-                "PROACTIVE_DM_MIN_SILENCE_S", 14400, minimum=0, env=env),
-            proactive_dm_cooldown_s=env_int(
-                "PROACTIVE_DM_COOLDOWN_S", 86400, minimum=0, env=env),
-            proactive_dm_prob=env_float(
-                "PROACTIVE_DM_PROB", 0.2, minimum=0.0, maximum=1.0, env=env),
-            proactive_platforms=access.split_ids(
-                env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)),
-            connector_outbox_enabled=env_bool(
-                "CONNECTOR_OUTBOX_ENABLED", True, env=env),
-            evolve_auto_enabled=env_bool("EVOLVE_AUTO_ENABLED", False, env=env),
-            evolve_interval_hours=env_float(
-                "EVOLVE_INTERVAL_HOURS", 6.0, minimum=0.0, env=env),
-            evolve_threshold=env_int("EVOLVE_THRESHOLD", 3, env=env),
-            evolve_batch=env_int("EVOLVE_BATCH", 5, minimum=1, env=env),
-            evolve_model=env_str("EVOLVE_MODEL", "", strip=True, env=env),
-            react_learn_enabled=env_bool("REACT_LEARN_ENABLED", True, env=env),
-            react_model=env_str("REACT_MODEL", "", strip=True, env=env),
-            react_max_pending=env_int("REACT_MAX_PENDING", 4, minimum=1, env=env),
-            react_ttl_s=env_float("REACT_TTL_S", 900.0, minimum=0.0, env=env),
-            react_fix_window_s=env_float(
-                "REACT_FIX_WINDOW_S", 600.0, minimum=0.0, env=env),
-            react_elicit_enabled=env_bool("REACT_ELICIT_ENABLED", True, env=env),
-            react_elicit_delay_s=env_float(
-                "REACT_ELICIT_DELAY_S", 120.0, minimum=0.0, env=env),
-            react_elicit_cooldown_s=env_float(
-                "REACT_ELICIT_COOLDOWN_S", 3600.0, minimum=0.0, env=env),
-            promote_max_examples=env_int(
-                "PROMOTE_MAX_EXAMPLES", 500, minimum=0, env=env),
-            promote_max_feedback=env_int(
-                "PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env),
-            promotion_policy=promotion.Policy.from_env(env),
-        )
