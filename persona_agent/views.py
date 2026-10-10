@@ -91,13 +91,16 @@ class DataViews:
             "persona_version": self.persona_version,
         })
 
-    def _scope_authorizes(self, scope, current_scope: dict) -> bool:
+    def _scope_authorizes(self, scope, current_scope: dict,
+                          identity: str | None = None) -> bool:
         """May a promoted row with ``scope`` reach a prompt in ``current_scope``?
-        Persona is compared through its lineage, everything else exactly."""
+        Persona is compared through its lineage, everything else exactly.
+        Pass ``identity`` (self.persona_identity) when checking many rows."""
         if not isinstance(scope, dict):
             return False
-        # Read first: reading it registers the lineage the lookup below uses.
-        identity = self.persona_identity
+        if identity is None:
+            # Read first: reading it registers the lineage the lookup below uses.
+            identity = self.persona_identity
         return (all(str(scope.get(key) or "") == str(value or "")
                     for key, value in current_scope.items() if key != "persona_hash")
                 and evidence_mod.persona_identity(scope) == identity)
@@ -109,11 +112,12 @@ class DataViews:
         recent self-scores. Reads state only; no model call."""
         zh = self.agent_lang == "zh"
         current_scope = self._live_scope(group_id)
+        identity = self.persona_identity
         self._reload_views_if_stale()
         examples = [r for r in self._view_examples_cache
-                    if self._scope_authorizes(r.get("scope"), current_scope)]
+                    if self._scope_authorizes(r.get("scope"), current_scope, identity)]
         pairs = [r for r in self._view_pairs_cache
-                 if self._scope_authorizes(r.get("scope"), current_scope)]
+                 if self._scope_authorizes(r.get("scope"), current_scope, identity)]
         voice, admin, latest = self._learning_status(group_id, current_scope)
         scores = []
         if self.eval_enabled:

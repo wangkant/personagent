@@ -155,8 +155,11 @@ class Retrieval:
         def _authorized_view(rows: list) -> list:
             # A row without an enforcement scope, or a turn without a
             # conversation, authorizes nothing: startup rebuild upgrades old views.
-            authorized = [row for row in rows
-                          if conv_id and self._scope_authorizes(row.get("scope"), current_scope)]
+            authorized = []
+            if rows and conv_id:
+                identity = self.persona_identity
+                authorized = [row for row in rows if self._scope_authorizes(
+                    row.get("scope"), current_scope, identity)]
             # Warn (edge-triggered) when a non-empty view is refused whole.
             if authorized:
                 self._scope_drop_warned = False
