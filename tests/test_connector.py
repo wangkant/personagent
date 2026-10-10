@@ -19,7 +19,6 @@ import httpx
 
 from persona_agent import channels
 from persona_agent import paths as agent_paths
-from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.transport import SendResult
 from persona_agent.learning import Learning
@@ -565,7 +564,6 @@ def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     )
     # Keep runtime state files out of the repo during tests.
     a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     a.connector_handles.path = tmp / "connector_handles.json"
     # The ctor already loaded the repo's real seen_msg_ids.json / core_memory.json
@@ -2425,8 +2423,6 @@ async def test_eval_auto_append_examples(tmp: Path) -> None:
     agent = make_agent(tmp)
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"  # never write the repo-real pool
-    agent.example_candidates = promotion.CandidatePool(
-        tmp / "example_candidates.json")  # nor the repo-real candidate pool
 
     class _FakeResp:
         def raise_for_status(self):
@@ -5036,7 +5032,6 @@ async def test_the_fallback_model_calls_its_own_endpoint(tmp: Path) -> None:
     seen.clear()
     agent.examples_seed_file = tmp / "examples.seed.jsonl"
     agent.examples_file = tmp / "examples.jsonl"
-    agent.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     await agent._evaluate_reply("g", "called", "question", "a reply", None, "chat",
                                 ["Alice: question"])
     check("self-eval: the eval model is the fallback, so its endpoint",

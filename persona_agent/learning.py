@@ -590,11 +590,9 @@ class Learning:
 
         - **Ledger.** Promoted candidates lose their authority (append-only
           rollback) and drop out of the materialized views. Nothing is erased.
-        - **Legacy pool.** Rows banked directly into the learned pool by
-          pre-ledger builds, and whatever weight the old candidate pool
-          accumulated, are still live retrieval material, so the row is
-          removed and the weight withdrawn. Deletion is the only way that
-          design can revoke."""
+        - **Example pool.** Rows the offline tools banked into examples_file
+          are live retrieval material with no ledger record, so the row is
+          removed."""
         reply = (reply or "").strip()
         if not reply:
             return
@@ -606,9 +604,6 @@ class Learning:
             logger.warning("[Agent] candidate rollback failed: %s: %s",
                            type(e).__name__, e)
         try:
-            if self.example_candidates.withdraw(reply):
-                logger.info("[Agent] legacy example candidate withdrawn: %r",
-                            reply[:50])
             removed = promotion.retract_example(self.examples_file, reply)
             if removed:
                 self._auto_examples_seen.discard(reply)

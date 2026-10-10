@@ -14,7 +14,6 @@ import httpx
 
 from persona_agent import server as main_module
 from persona_agent import outbox as outbox_mod
-from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.outbox import HandleStore, Outbox
 
@@ -38,7 +37,6 @@ def make_agent(tmp: Path) -> Agent:
         message_debounce_sec=0, lang="en",
     )
     a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     a.connector_handles.path = tmp / "connector_handles.json"
     a.examples_file = tmp / "examples.jsonl"

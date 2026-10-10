@@ -5,7 +5,6 @@ from pathlib import Path
 
 import httpx
 
-from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.endpoints import adapt_rejected_payload
 
@@ -22,7 +21,6 @@ def make_agent(tmp: Path, base_url: str) -> Agent:
               stickers_file=str(tmp / "stickers.json"), message_debounce_sec=0,
               lang="en", base_url=base_url)
     a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     a.connector_handles.path = tmp / "connector_handles.json"
     a.model = a.llm_fallback_model = a.llm_judge_model = "m"

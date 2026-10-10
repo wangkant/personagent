@@ -25,7 +25,6 @@ from .paths import (
     resolve_runtime_state_file,
     resolve_seed_lang_file,
 )
-from . import promotion
 # The Agent's behaviour lives in these mixins; this module builds its state.
 from .decision import ReplyDecision
 from .dm import DirectMessages
@@ -536,16 +535,6 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         """Retrieval's vectors, beside the pools they were computed from."""
         return self._sidecar("_embedding_cache", embeddings_mod.EmbeddingCache,
                              self.learning_dir / "embeddings.jsonl")
-
-    @property
-    def example_candidates(self) -> promotion.CandidatePool:
-        """Evidence gate in front of the example pool (see promotion.py)."""
-        return self._sidecar("_example_candidates", promotion.CandidatePool,
-                             self.examples_file.parent / "example_candidates.json")
-
-    @example_candidates.setter
-    def example_candidates(self, pool: promotion.CandidatePool) -> None:
-        self._example_candidates = pool
 
     # ---- Evidence ledger (sidecars of the learned example pool) ----------
 

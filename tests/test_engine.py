@@ -6,7 +6,6 @@ import asyncio
 import logging
 from pathlib import Path
 
-from persona_agent import promotion
 from persona_agent.agent import Agent
 from persona_agent.access import ADMIN_MODE
 from persona_agent.connector import synthesize_onebot_payload
@@ -30,7 +29,6 @@ def make_agent(tmp: Path, **overrides) -> Agent:
     settings.update(overrides)
     a = Agent(**settings)
     a._seen_msg_file = tmp / "seen_msg_ids.json"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.core_memory_file = tmp / "core_memory.json"
     a.connector_handles.path = tmp / "connector_handles.json"
     a._seen_msg_ids.clear()

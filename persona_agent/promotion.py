@@ -23,9 +23,8 @@ promotion requires corroboration:
 Weak evidence never promotes anything at any quantity, so laughter alone cannot
 grow the example pool; it accrues on a candidate and waits for an anchor.
 
-Also here, the pre-ledger leftovers: ``CandidatePool``, read-and-withdraw
-only, and ``retract_example`` — how a human disagreement pulls a row out of a
-pool that was learned before the ledger existed. Neither promotes anything.
+Also here, ``retract_example``: how a human disagreement pulls a row out of
+the hand-approved example pool. It never promotes anything.
 
 Pure logic — no clock reads, no LLM. Callers pass `now`.
 """
@@ -513,52 +512,6 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         True,
         f"{len(supporting)} compatible events, {len(strong)} strong",
         len(supporting), len(strong))
-
-
-# ---------------------------------------------------------------------------
-# Legacy pre-ledger pool — read and retract only
-# ---------------------------------------------------------------------------
-# This pool has no promotion gate of its own: promotion goes through the
-# ledger and `decide` above, so a second set of rules here would diverge from
-# the live gate.
-#
-# What it keeps is what a deployment that learned before the ledger still needs:
-# load `example_candidates.json` as written, and let a human disagreement pull
-# a reply back out of it.
-
-
-class CandidatePool:
-    """A pre-ledger candidate file, kept readable so `withdraw` still works.
-
-    New corroboration goes through the evidence ledger and `decide` above; this
-    never grows any more, it only shrinks."""
-
-    def __init__(self, path: Path):
-        self.path = Path(path)
-        self._d: dict[str, dict] = {}
-        try:
-            loaded = json.loads(self.path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                self._d = {k: v for k, v in loaded.items() if isinstance(v, dict)}
-        except (OSError, json.JSONDecodeError):
-            self._d = {}
-
-    # -- persistence -------------------------------------------------------
-    def _save(self) -> None:
-        try:
-            atomic_write_text(
-                self.path,
-                json.dumps(self._d, ensure_ascii=False, indent=1),
-            )
-        except OSError:
-            pass
-
-    def withdraw(self, reply: str) -> bool:
-        """Drop a candidate outright — a human disagreed with this reply."""
-        if self._d.pop((reply or "").strip(), None) is not None:
-            self._save()
-            return True
-        return False
 
 
 def retract_example(path: Path, reply: str) -> int:

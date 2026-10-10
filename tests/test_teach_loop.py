@@ -56,7 +56,6 @@ def make_agent(tmp: Path, *, persona: str = "test persona",
     a.examples_file = tmp / "examples.jsonl"
     a.feedback_seed_file = tmp / "seed_feedback.jsonl"
     a.feedback_file = tmp / "feedback.jsonl"
-    a.example_candidates = promotion.CandidatePool(tmp / "example_candidates.json")
     a.teacher_stats = reactions.TeacherStats(tmp / "teacher_stats.json")
     a.pending_reactions = reactions.PendingReplies()
     a.react_elicit_enabled = False
