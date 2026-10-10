@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 from persona_agent import evolution  # noqa: E402
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
 from persona_agent.endpoints import chat_completions_url  # noqa: E402
-from persona_agent.evals import NAME_UID, strip_pass_sentinel  # noqa: E402
+from persona_agent.evals import NAME_UID, Judge, strip_pass_sentinel  # noqa: E402
 from persona_agent.paths import seed_file  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
@@ -545,13 +545,19 @@ def _judge_item_prompt(item: dict) -> str:
     return f"{_JUDGE_RUBRIC}{ctx_block}Reply: {item['reply']}"
 
 
-def _parse_judge_json(raw: str) -> dict:
-    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
-    d = json.loads(raw)
+def _decode_judge_json(raw: str):
+    return json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip())
+
+
+def _judge_score(d: dict) -> dict:
     score = int(d["score"])
     if not 1 <= score <= 5:
         raise ValueError(f"score {score} out of range")
     return {"score": score, "reason": str(d.get("reason", ""))[:200]}
+
+
+def _parse_judge_json(raw: str) -> dict:
+    return _judge_score(_decode_judge_json(raw))
 
 
 async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
@@ -563,50 +569,27 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
     exists to test for. ``aggregate`` refuses to run on a partial score set, so
     dropping the item surfaces the problem instead of averaging it away.
     """
-    import httpx
-
     base = (os.getenv("BENCH_JUDGE_BASE_URL")
             or os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)).rstrip("/")
     key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
     if not key:
         sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or LLM_API_KEY")
-    url = chat_completions_url(base)
+    judge = Judge(model, chat_completions_url(base), key, timeout_s=60.0)
 
     scores: dict = {}
     failures: list[str] = []
     sem = asyncio.Semaphore(4)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        async def one(it: dict) -> None:
-            async with sem:
-                for attempt in range(3):
-                    try:
-                        r = await client.post(
-                            url,
-                            headers={"Authorization": f"Bearer {key}"},
-                            # Generous budget: a reasoning judge spends most of
-                            # it on hidden thinking tokens and emits nothing at
-                            # all if the cap lands mid-thought.
-                            json={"model": model, "max_tokens": 1200,
-                                  "temperature": 0,
-                                  "messages": [{"role": "user",
-                                                "content": _judge_item_prompt(it)}]})
-                        r.raise_for_status()
-                        body = r.json()["choices"][0]
-                        text = (body["message"].get("content") or "").strip()
-                        if not text and body.get("finish_reason") == "length":
-                            raise ValueError(
-                                "empty judge output, finish_reason=length "
-                                "(reasoning model? pick a non-reasoning judge)")
-                        scores[it["item_id"]] = _parse_judge_json(text)
-                        return
-                    except Exception as exc:  # noqa: BLE001 - reported, not swallowed
-                        if attempt == 2:
-                            failures.append(f"{it['item_id']}: {exc}")
-                        else:
-                            await asyncio.sleep(1.5 * (attempt + 1))
+    async def one(it: dict) -> None:
+        async with sem:
+            verdict, error = await judge.verdict(
+                _judge_item_prompt(it), _judge_score, decode=_decode_judge_json)
+        if verdict is None:
+            failures.append(f"{it['item_id']}: {error}")
+        else:
+            scores[it["item_id"]] = verdict
 
-        await asyncio.gather(*(one(it) for it in inbox))
+    await asyncio.gather(*(one(it) for it in inbox))
 
     if failures:
         print(f"\n  {len(failures)} of {len(inbox)} judge calls failed after retries:")

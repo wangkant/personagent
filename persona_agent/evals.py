@@ -404,9 +404,10 @@ class Judge:
     url: str
     api_key: str
     retry_delay_s: float = 1.5
+    timeout_s: float = 90.0
 
     async def complete(self, prompt: str) -> str:
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
             r = await client.post(
                 self.url, headers={"Authorization": f"Bearer {self.api_key}"},
                 # A reasoning judge spends most of the budget thinking.
@@ -420,13 +421,14 @@ class Judge:
                                  "(a reasoning judge? pick a non-reasoning one)")
             return text
 
-    async def verdict(self, prompt: str, parse) -> tuple[dict | None, str]:
+    async def verdict(self, prompt: str, parse,
+                      decode=salvage_json_object) -> tuple[dict | None, str]:
         """(verdict, error). A failed verdict is left out, never backfilled:
         a made-up middle score would pull every number toward no effect."""
         error = ""
         for attempt in range(3):
             try:
-                data = salvage_json_object(await self.complete(prompt))
+                data = decode(await self.complete(prompt))
                 out = parse(data) if isinstance(data, dict) else None
                 if out is not None:
                     return out, ""
