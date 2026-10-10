@@ -424,7 +424,7 @@ personagent 保存的一切都在你自己的机器上，在主目录里：`.env
 
 有几项默认值也变了：模型是 `deepseek-flash`，`QQ_ONEBOT_URL` 默认留空，`PERSONA_TZ_OFFSET_HOURS` 留空时跟着 `AGENT_LANG` 走。用 `personagent connect astrbot` 重装 AstrBot 插件，再重新填一遍插件的 `groups` 和 `dm_users`。
 
-记忆和学到的东西会保留，旧脚本（`main.py`、`try_chat.py`、`tools/healthcheck.py`、`tools/candidates_admin.py`、`tools/behavior_eval.py`）也照样能用。完整清单见[更新日志](../CHANGELOG.md#upgrading-from-04)（英文）。
+记忆和学到的东西会保留。完整清单见[更新日志](../CHANGELOG.md#upgrading-from-04)（英文）。
 
 ## 项目状态和其他文档
 

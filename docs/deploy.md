@@ -81,8 +81,7 @@ From a clone, `start.bat` (double-click on Windows), `start.ps1` and `start.sh`
 do the same. If there is no `.env` yet, they run the setup wizard first.
 
 `personagent doctor` checks the setup and every upstream service
-(`--json` for a script). `tools/healthcheck.py` still works and is the same
-command. It reports missing and **misspelled** settings (a typo is otherwise
+(`--json` for a script). It reports missing and **misspelled** settings (a typo is otherwise
 silent: the default is used), then probes each service, and prints the
 dashboard's link on its last line. Startup logs the same settings check.
 

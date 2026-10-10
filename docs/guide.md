@@ -387,6 +387,6 @@ Settings were renamed in 1.0, and personagent will not start while an old name i
 2. Check the defaults that changed: the model is `deepseek-flash`, `QQ_ONEBOT_URL` is blank, and a blank `PERSONA_TZ_OFFSET_HOURS` follows `AGENT_LANG`.
 3. Reinstall the AstrBot plugin with `personagent connect astrbot` and set its `groups` and `dm_users` again.
 
-Memory and what it learned carry over, and the old scripts (`main.py`, `try_chat.py`, `tools/healthcheck.py`, `tools/candidates_admin.py`, `tools/behavior_eval.py`) still work. The full list is in the [changelog](../CHANGELOG.md#upgrading-from-04).
+Memory and what it learned carry over. The full list is in the [changelog](../CHANGELOG.md#upgrading-from-04).
 
 Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are experiments; [tools.md](tools.md) describes them.
