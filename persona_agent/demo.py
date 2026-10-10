@@ -27,7 +27,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from persona_agent import agent as agent_module
 from persona_agent import candidates, evidence, home, paths, reactions
 from persona_agent.agent import Agent
 from persona_agent.chat import (
@@ -405,25 +404,10 @@ class ScriptedModel:
 def throwaway_home(base: str | None = None):
     """A deployment root that exists for the block and is deleted after it."""
     tmp = Path(tempfile.mkdtemp(prefix="personagent-demo-", dir=base))
-    saved_root = paths.ROOT
-    # The persona card and text are read from the module's own copy of ROOT.
-    saved_agent_root = agent_module.ROOT
-    saved_env = {k: os.environ.get(k) for k in (
-        "AGENT_HOME", "AGENT_RUNTIME_DIR", "PERSONA_FILE", "PERSONA_CARD_FILE")}
-    paths.ROOT = agent_module.ROOT = tmp
-    os.environ["AGENT_HOME"] = str(tmp)
-    for key in ("AGENT_RUNTIME_DIR", "PERSONA_FILE", "PERSONA_CARD_FILE"):
-        os.environ.pop(key, None)
     try:
-        yield tmp
+        with paths.use_root(tmp):
+            yield tmp
     finally:
-        paths.ROOT = saved_root
-        agent_module.ROOT = saved_agent_root
-        for key, value in saved_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
         shutil.rmtree(tmp, ignore_errors=True)
 
 

@@ -32,7 +32,6 @@ import hashlib
 import json
 import logging
 import math
-import os
 import random
 import re
 import shutil
@@ -252,29 +251,15 @@ def prepare_persona(text: str, name: str) -> str:
 def deployment_root(home: Path):
     """Make `home` the agent's deployment root for the block.
 
-    paths.ROOT is fixed at import, so AGENT_HOME alone would not move a
-    package that is already loaded. The deployment's own data/ overrides are
-    copied in; every other seed resolves to the shipped copy, as it does for
-    the deployment."""
-    source = paths.ROOT
+    The deployment's own data/ overrides are copied in; every other seed
+    resolves to the shipped copy, as it does for the deployment."""
     home = home.resolve()
     (home / "data").mkdir(parents=True, exist_ok=True)
-    for src in (source / "data").glob("*"):
+    for src in (paths.ROOT / "data").glob("*"):
         if src.is_file():
             shutil.copy2(src, home / "data" / src.name)
-    saved = {k: os.environ.get(k) for k in ("AGENT_HOME", "AGENT_RUNTIME_DIR")}
-    paths.ROOT = home
-    os.environ["AGENT_HOME"] = str(home)
-    os.environ.pop("AGENT_RUNTIME_DIR", None)
-    try:
+    with paths.use_root(home):
         yield home
-    finally:
-        paths.ROOT = source
-        for key, value in saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 def agent_settings(home: Path, *, lang: str, persona: str, persona_name: str,
