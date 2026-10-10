@@ -407,7 +407,7 @@ async def test_process_reaction(tmp: Path) -> None:
                            "better": "", "scenario": "landed"})
     a._call_llm = adj_positive
     # Laughter is weak evidence — at any quantity. It proposes an example
-    # candidate and waits for a strong event or a human (tools/candidates_admin.py).
+    # candidate and waits for a strong event or a human (`personagent learned`).
     for text in ("lmaooo real", "lmaooo again", "still funny", "ok this one's good"):
         await a._process_reaction(_pending_entry(), text, "alex", "42", False)
     check("no quantity of laughter banks an example",

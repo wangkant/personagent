@@ -68,8 +68,8 @@ def bank_example(a: Agent, rec: dict) -> None:
 
     The agent itself no longer writes this pool — automatic learning goes
     through the evidence ledger and lands in a separate promoted view (see
-    tests/test_ledger.py). `tools/auto_reviewer.py` and `tools/prompt_lab.py`
-    still write here, and this is their pattern: trim_pool + append. The cap and
+    tests/test_ledger.py). `tools/auto_reviewer.py` still writes here, and
+    this is its pattern: trim_pool + append. The cap and
     the reload have to keep agreeing about the result, which is
     what the tests below check."""
     evolution.trim_pool(a.examples_file, max_auto=a.promote_max_examples,

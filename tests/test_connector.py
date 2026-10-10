@@ -3288,14 +3288,10 @@ def test_the_channel_key_table_is_one_table() -> None:
 
     Routing (locks, buffers, transport), memory (`memories` / `core_memory`)
     and learning (the `conv_id` in every evidence event and candidate scope)
-    are different keys for the same conversation. Three call sites derived the
-    mapping between them independently and two were wrong: retrieval read
-    promoted rows under the MEMORY key while every writer used the LEARNING
-    one, and `_conv_platform` read the whole `dm:` prefix as QQ so every
-    Telegram DM was stamped `platform="qq"`.
-
-    The last two checks are the ones that keep this honest: a delegate that
-    grows its own opinion is how there came to be three copies."""
+    are different keys for the same conversation. Derived separately, they
+    drifted: retrieval read promoted rows under the MEMORY key while every
+    writer used the LEARNING one, and a `dm:` prefix read as QQ stamped every
+    Telegram DM `platform="qq"`."""
     rows = (
         # routing,             learning,          platform
         ("123456",             "123456",          "qq"),

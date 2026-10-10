@@ -682,7 +682,7 @@ async def test_logs_are_append_only(tmp: Path) -> None:
 
 def test_legacy_feedback_still_loads(tmp: Path) -> None:
     a = make_agent(tmp)
-    # A pair approved by hand through prompt_lab.py (no "src" marker), a
+    # A pair approved by hand (no "src" marker), a
     # machine pair banked by a pre-ledger build, and a seed row.
     a.feedback_seed_file.write_text(json.dumps(
         {"scenario": "seed", "context": ["u: hi"], "mode": "called",
@@ -855,7 +855,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_admins(
     Both read ADMIN_IDS through access.identity_from_env; the CLI used to
     read the QQ admin alone, so a Telegram admin's candidate showed a speaker
     shortfall there that the agent itself did not see."""
-    from persona_agent import ledger_admin as candidates_admin
+    from persona_agent import ledger_admin
 
     a = make_agent(tmp)
     a.admin_ids = {"telegram:1"}
@@ -873,7 +873,7 @@ async def test_the_cli_and_the_agent_exempt_the_same_admins(
     monkeypatch.setenv("ADMIN_IDS", "telegram:1")
     monkeypatch.delenv("CONNECTOR_QQ_PLATFORMS", raising=False)
     agent_says = a._decide_promotion(cand["candidate_id"])
-    cli_says = candidates_admin._decide(
+    cli_says = ledger_admin._decide(
         a.candidate_ledger, a.evidence_log, cand, a.promotion_policy)
     check("admins: both ask with the Telegram admin",
           asked == [{"telegram:1"}] * 2,
@@ -1145,7 +1145,7 @@ def test_the_live_projection_equals_a_cold_replay(tmp: Path) -> None:
     # A SECOND WRITER must invalidate the stamp rather than be dropped. The
     # stamp is compared inside the append's own lock precisely so that this
     # cannot become "the other row vanished and the fresh stamp hid it" —
-    # `tools/candidates_admin.py` bypasses the instance lock, so this writer
+    # `personagent learned` bypasses the instance lock, so this writer
     # is real.
     other = candidates.CandidateLedger(path)
     other.propose(pair(97))
@@ -1214,7 +1214,7 @@ def test_a_retry_acceptance_does_not_argue_against_its_own_pair() -> None:
 def test_related_events_covers_the_rewrite() -> None:
     """One builder, because there are two callers.
 
-    The running agent and `tools/candidates_admin.py` each built this list.
+    The running agent and `personagent learned` each built this list.
     When only the first was widened to include events about the REWRITE, the
     CLI went on printing `policy: would promote` for a pair whose rewrite the
     user had rejected — with an unconditional `promote` command next to it.

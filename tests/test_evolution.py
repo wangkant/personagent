@@ -333,7 +333,7 @@ async def test_evolve_tick(tmp: Path) -> None:
     check("tick: retrieval does not see an unpromoted candidate",
           not a._pairs_cache and not a._view_pairs_cache)
 
-    # A human (tools/candidates_admin.py) can grant it authority, and then it
+    # A human (`personagent learned`) can grant it authority, and then it
     # hot-reloads into retrieval like any other pair.
     cid = cands[0]["candidate_id"]
     a.candidate_ledger.promote(cid, ts="2026-07-25T12:00:00", actor="admin",
