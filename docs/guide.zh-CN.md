@@ -35,11 +35,14 @@
 
 支持 Python 3.10–3.14。`quickstart.py` 会创建 `.venv`、安装依赖，然后进入和 `personagent init` 一样的设置流程。没有 Git 的话，下载 [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip)，解压出来是 `personagent-main` 文件夹。
 
-**主目录**放着设置（`.env`）、人设（`persona.txt`）和它学到的东西（`runtime/`）：
+**主目录**放着设置（`.env`）、人设（`persona.txt`）和它学到的东西（`runtime/`），按下面的顺序取第一个：
 
-- 安装版：用户目录下的 `personagent` 文件夹（Windows 上是 `C:\Users\你的用户名\personagent`）。
-- 源码版：仓库本身。
-- 也可以用 `--home 目录` 或环境变量 `AGENT_HOME` 指定。`--home` 放在命令前后都行，比如 `personagent chat --home D:\bot`；用了它，之后每条命令都要带上同一个目录。
+1. 用 `--home 目录` 或环境变量 `AGENT_HOME` 指定的文件夹。`--home` 放在命令前后都行，比如 `personagent chat --home D:\bot`；用了它，之后每条命令都要带上同一个目录。
+2. 从源码运行时，仓库本身。
+3. 当前文件夹，如果里面同时有 `.env` 和 `persona.txt`。
+4. 用户目录下的 `personagent` 文件夹（Windows 上是 `C:\Users\你的用户名\personagent`），`personagent init` 会创建它。
+
+一套安装想跑几个角色，就给每个角色一个自己的主目录。
 
 下文的命令都写成 `personagent ...`。没有安装的话，前面加上 `uvx`；源码版用 `.venv/bin/python -m persona_agent ...`（Windows：`.venv\Scripts\python.exe -m persona_agent ...`），效果一样。
 
@@ -251,7 +254,7 @@ QQ  ⇄  NapCat  ⇄  AstrBot（装了 personagent 插件）  ⇄  personagent  
 
 插件只会发往同一台机器（或共享网络的容器），或者设置了 `connector_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe personagent_url`，随后由 AstrBot 自己的模型回复。
 
-`personagent connect astrbot` 会问 AstrBot 是否跑在 Docker 里。解决办法有两个：给 AstrBot 容器开 host 网络（`network_mode: host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，用 `--url https://...` 传入。
+`personagent connect astrbot` 会问 AstrBot 是否跑在 Docker 里。解决办法有两个：给 AstrBot 容器开 host 网络（compose 文件里写 `network_mode: host`，`docker run` 用 `--network host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，用 `--url https://...` 传入。同一个 compose 文件里的 NapCat 容器也要开 host 网络，这样 `ws://127.0.0.1:6199/ws` 才连得到 AstrBot。
 
 personagent 默认监听 `127.0.0.1:8080`（`SERVER_HOST` 留空也是这个）。要监听网络地址（`--host 0.0.0.0` 或 `SERVER_HOST`），必须设置 `CONNECTOR_TOKEN`。加反向代理或隧道之前就先把它设好，哪怕都在一台机器上：隧道会让外面来的请求看起来像本机发的。请在前面放 HTTPS 反向代理或私有隧道，请求体原样转发，两端时钟偏差不超过五分钟。
 

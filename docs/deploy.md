@@ -2,35 +2,10 @@
 
 [中文：从零部署到 QQ 群（NapCat + AstrBot + personagent）](deploy.zh-CN.md)
 
-The README gets you to a first chat. This guide covers what a live deployment
-needs, and what to check when the bot goes quiet.
-
-## Install and the home folder
-
-| You want | Run |
-|---|---|
-| To see it with nothing configured | `uvx personagent demo` |
-| To set it up and chat | `uvx personagent init`, then `uvx personagent chat` |
-| A permanent command | `uv tool install personagent` or `pipx install personagent`, then `personagent init` |
-| To install into a venv | `pip install personagent` |
-| To work from a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
-
-uv fetches a suitable Python by itself. To install uv: macOS and Linux
-`curl -LsSf https://astral.sh/uv/install.sh | sh`; Windows
-`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`.
-Python 3.10 to 3.14 work. With no Git, download the repository ZIP from GitHub;
-it unpacks to `personagent-main`.
-
-Everything personagent keeps lives in one **home folder**: `.env` (settings),
-`persona.txt`, and `runtime/` (what it remembers and learned). The home is:
-
-1. the folder `AGENT_HOME` names, or `--home DIR`, before or after the
-   command (`personagent --home D:\bot run` or `personagent run --home D:\bot`);
-2. else the clone, when you run from one;
-3. else the current folder, if it holds both `.env` and `persona.txt`;
-4. else `~/personagent`, which `personagent init` creates.
-
-To run several personas from one install, give each its own home.
+The [user guide](guide.md) gets you to a first chat: installing, the
+[home folder](guide.md#install-and-the-home-folder), setup and starting the
+service. This guide covers what a live deployment needs, and what to check
+when the bot goes quiet.
 
 ## The shortest config that works
 
@@ -67,23 +42,9 @@ empty `ACCESS_GROUPS` leaves every group to the plugin's allowlist.
 
 ## Running it
 
-```
-personagent run                  # from a clone: start.bat, start.ps1, start.sh, or .venv/bin/python main.py
-```
-
-It prints a short banner: the version, the address, the home folder, the
-dashboard's private link, and whether the agent is on (with the model and
-language) or `OFF` with the reason and the fix. Keep it running; the
-connectors talk to it. `--host` and `--port` override `SERVER_HOST` and
-`SERVER_PORT`; a blank value means `127.0.0.1`, never every interface.
-
-From a clone, `start.bat` (double-click on Windows), `start.ps1` and `start.sh`
-do the same. If there is no `.env` yet, they run the setup wizard first.
-
-`personagent doctor` checks the setup and every upstream service
-(`--json` for a script). It reports missing and **misspelled** settings (a typo is otherwise
-silent: the default is used), then probes each service, and prints the
-dashboard's link on its last line. Startup logs the same settings check.
+Start it with `personagent run`, as [Go live](guide.md#go-live) describes,
+and keep it running: the connectors talk to it. `personagent doctor` checks
+the settings and probes every upstream service.
 
 **Settings renamed in 1.0.** A start refuses, with exit code 2, while any
 setting name that 1.0 retired is still set, and lists each as `OLD -> NEW`.
@@ -96,11 +57,9 @@ while any remain, and `--json` lists them under `retired_settings`. `HOST`,
 
 ### The dashboard
 
-The dashboard shows whether messages arrive, which connectors are pulling, why
-it spoke or stayed quiet in each chat, what it learned with the evidence
-behind it, and promote / reject / roll back / replace buttons. It needs no
-extra install and loads nothing from the internet. It never shows keys or
-tokens. `DASHBOARD_ENABLED=false` removes the page and its API.
+[The dashboard](guide.md#the-dashboard) needs no extra install, loads nothing
+from the internet and never shows keys or tokens. `DASHBOARD_ENABLED=false`
+removes the page and its API.
 
 It opens only through its private link,
 `http://127.0.0.1:<SERVER_PORT>/?token=<token>`, which the startup banner and
@@ -139,31 +98,6 @@ restart to issue a new one, which signs every browser out.
 `AGENT_RUNTIME_DIR` must resolve beneath the home, or startup fails. A relative
 `PERSONA_FILE` or `PERSONA_CARD_FILE` resolves under it too, so a persona kept
 elsewhere needs an absolute path.
-
-Seed data (examples, lorebook, output filters) comes from `<home>/data/` first,
-then from the copy shipped with the package. To change one, put a file of the
-same name under `<home>/data/`.
-
-## Connectors
-
-personagent never logs in to a chat platform. A connector does: it turns each
-message into a neutral event, posts it to `POST /v1/events`, and sends
-the replies that come back. Three ship in this repository:
-
-| Connector | Reaches | Guide |
-|---|---|---|
-| AstrBot plugin | every AstrBot adapter: QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, WeChat official accounts, ... | [below](#connecting-through-astrbot) |
-| Satori | every Satori server (Koishi and others): Telegram, Discord, KOOK, Lark, DingTalk, LINE, QQ, ... | [integrations/satori](../integrations/satori/README.md) |
-| Matrix | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages, ... | [integrations/matrix](../integrations/matrix/README.md) |
-
-For anything else, the [connector protocol](connectors.md) is one signed HTTP
-request per message plus an optional outbox, and
-`integrations/sdk/personagent_connector.py` is its client side in Python.
-
-Connectors can run side by side against one personagent. Each names its
-platform, so ids never collide (`telegram:-1001234`, `matrix:!room:example.org`).
-Do not bring one chat in through two connectors, or every message arrives
-twice.
 
 ## Connecting through AstrBot
 
@@ -223,15 +157,8 @@ On the personagent side:
   restricts that platform to its entries. A turn personagent refuses goes
   back unclaimed, so AstrBot's own model may answer it.
 
-### AstrBot in Docker
-
-Inside a container, `127.0.0.1` is the container itself, and the plugin refuses
-plain `http://` to any other address. Either give AstrBot host networking
-(`network_mode: host` in its compose file, or `docker run --network host`;
-Docker Desktop needs 4.34 or later with host networking enabled), or put
-personagent behind HTTPS and pass that address with `--url`. A NapCat container
-in the same compose file needs the same treatment, and its WebSocket address
-becomes `ws://127.0.0.1:6199/ws`.
+AstrBot in Docker or on another host: see
+[the user guide](guide.md#astrbot-in-docker-or-on-another-host).
 
 ## QQ through AstrBot
 
@@ -285,6 +212,10 @@ the same way (`personagent connect astrbot <dir> --platform <kind> --token
 ids are namespaced as `<platform>:<id>`, so they never collide with a QQ
 number. The connector's allowlists are their filter until `ACCESS_GROUPS` or
 `ACCESS_DM_USERS` lists an entry for that platform.
+
+Connectors can run side by side against one personagent, since each names its
+platform (`telegram:-1001234`, `matrix:!room:example.org`). Do not bring one
+chat in through two connectors, or every message arrives twice.
 
 Messages nobody asked for (proactive openers, the question asked after a
 rejection, the excuse when the model call fails in a group) reach a platform

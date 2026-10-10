@@ -28,13 +28,16 @@ Everything you need to set personagent up, run it in your chats, teach it and lo
 | Into an environment you already have | `pip install personagent` |
 | From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
 
-personagent runs on Python 3.10–3.14. `uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you. `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
+personagent runs on Python 3.10–3.14. `uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you; install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS, Linux) or `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows). `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
 
-The **home folder** holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is:
+The **home folder** holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is the first of:
 
-- `~/personagent` for an installed copy;
-- the clone itself for a checkout;
-- or the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`.
+1. the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`;
+2. the clone, when you run from one;
+3. the current folder, if it holds both `.env` and `persona.txt`;
+4. `~/personagent`, which `personagent init` creates.
+
+To run several characters from one install, give each its own home.
 
 This guide writes commands as `personagent ...`. Put `uvx` in front if you did not install it. In a clone, `.venv/bin/python -m persona_agent ...` (Windows: `.venv\Scripts\python.exe -m persona_agent ...`) does the same.
 
@@ -199,9 +202,9 @@ QQ goes through NapCat, logged in with the bot's QQ account and connected to Ast
 
 The plugin posts only to the same host (or a container sharing its network), or to an HTTPS address with `connector_token` set. Plain `http://` anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead.
 
-`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`.
+`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host` in its compose file, or `docker run --network host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`. A NapCat container in the same compose file needs host networking too, so that `ws://127.0.0.1:6199/ws` still reaches AstrBot.
 
-personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. Put an HTTPS reverse proxy or a private tunnel in front, keep the request body byte-for-byte intact, and keep the two clocks within five minutes of each other.
+personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. [Exposing the endpoints](deploy.md#exposing-the-endpoints) has the rest.
 
 ### Speaking first
 
@@ -303,11 +306,7 @@ It opens only through its private link, which `personagent run` prints when it s
   dashboard:  http://127.0.0.1:8080/?token=...
 ```
 
-- Opening the link signs this browser in for a year and takes the token out of the address bar.
-- The token is kept in `runtime/dashboard.token` in the home folder; delete that file and restart to issue a new one. `CONNECTOR_TOKEN` does not open the dashboard.
-- To open it from another computer, use an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then the link), or set `SERVER_HOST` to this machine's LAN or Tailscale address (which also needs `CONNECTOR_TOKEN`), and the printed link uses that address.
-- Other host names are refused, so no website can pose as this computer.
-- `DASHBOARD_ENABLED=false` turns it off.
+Opening the link signs this browser in for a year. The deployment guide's [dashboard section](deploy.md#the-dashboard) covers opening it from another computer, issuing a new link and turning it off.
 
 ![The personagent dashboard: the conversation list, proposals waiting for approval with Promote and Reject, and the chat itself, with where it stayed quiet and why, a corrected reply struck through, and the fix it learned with Roll back](dashboard.png)
 
