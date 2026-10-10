@@ -199,12 +199,12 @@ class Retrieval:
             # The fields are lowercased, parsed and hashed once at load time
             # (ranking.row_fields); the fallback covers records injected
             # straight into the cache.
-            fields = [ex.get("_rt") or ranking.row_fields(ex) for ex in pool]
-            lexicon = ranking.Lexicon(focus_tokens, [f[:2] for f in fields])
-            by_row = {id(ex): f for ex, f in zip(pool, fields)}
+            lexicon = ranking.Lexicon(
+                focus_tokens,
+                [(ex.get("_rt") or ranking.row_fields(ex))[:2] for ex in pool])
 
             def _score(ex: dict) -> float:
-                scenario_lc, ctx_lc, ts_epoch, key = by_row[id(ex)]
+                scenario_lc, ctx_lc, ts_epoch, key = ex.get("_rt") or ranking.row_fields(ex)
                 return ranking.score(
                     weights,
                     lexical=lexicon.score((scenario_lc, ctx_lc), weights.fields),

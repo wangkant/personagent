@@ -9,9 +9,6 @@ from typing import Optional
 
 from .access import ADMIN_MODE
 from . import channels
-from .paths import (
-    resolve_runtime_state_file,
-)
 from .prompts import (
     DM_TOOL_GUIDE,
     HONEST_DISCLOSURE,
@@ -369,7 +366,7 @@ class PromptBuilder:
         # group and private prompt: unguarded concatenation would put "haven't
         # analyzed 's chat style yet" in front of the model on every turn.
         admin_ref = self.admin_name or "the owner"
-        profile_file = resolve_runtime_state_file("owner_profile.json")  # stored name
+        profile_file = self.owner_profile_file
         if not profile_file.exists():
             return (
                 "**Frequency reference**: haven't analyzed " + admin_ref +

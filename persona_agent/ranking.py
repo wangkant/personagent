@@ -65,8 +65,11 @@ class Lexicon:
         for doc in docs:
             for i, text in enumerate(doc):
                 totals[i] += len(text)
+            # One substring test per token; NUL never occurs in a token, so
+            # no match can straddle two fields.
+            blob = doc[0] if len(doc) == 1 else "\x00".join(doc)
             for tok in df:
-                if any(tok in text for text in doc):
+                if tok in blob:
                     df[tok] += 1
         self.avg_len = [max(1.0, total / n) for total in totals]
         idf = {tok: math.log(1.0 + (n - d + 0.5) / (d + 0.5))

@@ -439,6 +439,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # letta-style core memory (per-group short note, always in prompt)
         self.core_memory_file = resolve_runtime_state_file("core_memory.json")
         self.core_memory: dict[str, str] = self._load_core_memory()
+        # Resolved once: every group and DM prompt checks it (prompt.py).
+        self.owner_profile_file = resolve_runtime_state_file("owner_profile.json")
         self.candidates_file = resolve_runtime_state_file("candidates.jsonl")
 
         self.pending_reactions = reactions.PendingReplies(
