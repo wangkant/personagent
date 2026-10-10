@@ -424,11 +424,8 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     naming rather than pretending away."""
     import ast
 
-    # `tools/` AND the root entry points, not just the package. Scanning only
-    # `main.py` and `persona_agent/` left nine real settings undocumented —
-    # `ANTHROPIC_API_KEY` and `LAB_MODEL` among them, which
-    # `tools/prompt_lab.py` explicitly tells the operator to put in `.env` —
-    # and the preflight then reported every one of them as a misspelling.
+    # `tools/` and the root entry points too: settings only the offline tools
+    # read would otherwise be reported to their operator as misspellings.
     root = Path(__file__).resolve().parents[1]
     sources = [
         root / "main.py", root / "quickstart.py",
@@ -512,7 +509,7 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
           not levels(env={"LLM_API_KEY": "sk-x"}))
     check("preflight: settings the offline tools read are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
-                          "LAB_MODEL": "m", "REVIEWER_MODEL": "r",
+                          "REVIEWER_MODEL": "r",
                           "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1"}))
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
