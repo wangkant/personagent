@@ -1,10 +1,7 @@
-"""Shared API health probes for the agent's external dependencies.
+"""API health probes for `personagent doctor` and /health/details.
 
-Used by `personagent doctor` and /health/details. Service probes are tiny but
-not free: each POSTs a few-token completion (or 1 test image / 1 search
-credit) to the configured provider. The environment must already be loaded
-(the server and the CLI load .env first); this module only reads os.getenv
-and has no import-time side effects.
+Each probe spends a few tokens (or one test image or search credit). Reads
+os.getenv only: the caller loads .env first.
 """
 import base64
 import io
@@ -85,13 +82,9 @@ def _llm_endpoint(model: str) -> tuple[str, str]:
 
 
 def check_dm_chat():
-    """DM model probe. LLM_DM_MODEL is an alternate model name
-    (blank = LLM_MODEL) on the primary's endpoint — unless it is also the
-    LLM_FALLBACK_MODEL, which the agent sends to the fallback's own endpoint.
-    Routed like the agent, or the probe would report on an endpoint DMs do
-    not use."""
-    # The agent's own default and semantics (settings.py): unset reads as the
-    # default model, an explicit blank stays blank for preflight to report.
+    """DM model probe, routed like the agent: LLM_DM_MODEL (blank = LLM_MODEL)
+    on the primary endpoint, or the fallback's when it is the fallback model."""
+    # As in the agent, an explicit blank LLM_MODEL stays blank.
     model = os.getenv("LLM_DM_MODEL", "") or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     base, key = _llm_endpoint(model)
     if not (key and model):
@@ -104,10 +97,8 @@ def check_dm_chat():
 
 
 def check_primary_chat_tools():
-    """Primary OpenAI-compatible chat endpoint, exercised with the same /v1
-    function-calling path the web-search decision uses — on the endpoint the
-    agent would send that model to, which is the fallback's own when one is
-    configured."""
+    """The function-calling path the web-search decision uses, on the
+    endpoint the agent sends that model to."""
     model = os.getenv("LLM_FALLBACK_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL
     base, key = _llm_endpoint(model)
     if not key:
@@ -215,9 +206,7 @@ def check_onebot():
 
 
 def check_ledger_sizes():
-    """Ledger size and quarantined-row counts, via each ledger's own
-    `health_metadata` (a full replay, but the parse is the point: unparseable
-    rows are the signal). Never critical."""
+    """Ledger sizes and unparseable-row counts (a full replay). Never critical."""
     from .candidates import CandidateLedger
     from .evidence import EvidenceLog
     from .paths import resolve_runtime_lang_file
@@ -293,8 +282,6 @@ def run_checks() -> list:
 
 
 def all_critical_ok(results) -> bool:
-    # A critical probe that never ran (ok is None, "not configured") is not a
-    # pass: one missing LLM_API_KEY skips BOTH chat probes, and counting that
-    # as healthy is how a botched key rotation stays green on the dashboard
-    # while the agent cannot answer a single message.
+    # A critical probe that never ran is not a pass: a missing LLM_API_KEY
+    # skips both chat probes.
     return not any(r["critical"] and r["ok"] is not True for r in results)

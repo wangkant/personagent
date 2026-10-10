@@ -1,22 +1,17 @@
 """Who the agent answers, and who its admin is, on every platform.
 
-Ids here are compared in the spelling the stores use (see channels): a QQ id
-is bare, every other platform's is "<platform>:<id>". A setting may also write
-a QQ id as "qq:<id>", and an id from a CONNECTOR_QQ_PLATFORMS connector as
-"<that platform>:<id>"; both mean the bare key such an event carries.
+Ids are compared in the stores' spelling (see channels): a QQ id is bare,
+every other platform's is "<platform>:<id>". A setting may also write a QQ id
+as "qq:<id>", and a CONNECTOR_QQ_PLATFORMS id as "<that platform>:<id>".
 
-Three settings, one list each:
+* ADMIN_IDS: the admin's accounts, one person on many platforms.
+* ACCESS_GROUPS / ACCESS_DM_USERS: who the agent admits, per platform. A
+  platform with no entries is not restricted here: every QQ group is
+  answered, a QQ DM still needs the admin or an entry, and a forwarded
+  platform is left to the connector unless it sent ``prefiltered: false``.
 
-* ADMIN_IDS: the admin's accounts. One person on many platforms, sharing
-  ADMIN_NAME and ADMIN_RELATIONSHIP.
-* ACCESS_GROUPS / ACCESS_DM_USERS: who the agent itself admits, partitioned
-  per platform. A platform with no entries is not restricted by the agent:
-  every QQ group is answered, a QQ DM still needs the admin or an entry, and a
-  forwarded platform is left to the connector's own allowlist unless the event
-  says the connector did not filter (``prefiltered: false``).
-
-Pure on purpose: it imports only channels, so settings, preflight and the
-offline tools can all ask the same questions without an import cycle.
+Imports only channels, so settings, preflight and the tools share it without
+an import cycle.
 """
 from __future__ import annotations
 
@@ -64,10 +59,8 @@ def canonical_id(raw, native_platforms: Iterable[str] = ()) -> str:
 
 
 def is_malformed(entry: str) -> bool:
-    """An entry with an empty platform (":1") or an empty id ("telegram:").
-
-    Neither names anyone, and kept as-is either would be counted as an entry
-    on a platform: ":1" reads as QQ, so it would close every QQ group."""
+    """An entry with an empty platform (":1") or an empty id ("telegram:"),
+    which names no one; kept, ":1" would read as QQ and close every QQ group."""
     prefix, sep, rest = str(entry).partition(":")
     return bool(sep) and (not prefix or not rest)
 
@@ -102,10 +95,8 @@ def entries_on(platform: str, ids: Iterable[str]) -> frozenset[str]:
 
 
 def admin_on(platform: str, admins: Iterable[str]) -> str:
-    """The admin's account on `platform`, else their QQ one, else "".
-
-    The QQ fallback keeps memories attributed to the admin's QQ account on
-    platforms where they have no account of their own."""
+    """The admin's account on `platform`, else their QQ one, else "", so
+    memories stay with the admin where they have no account."""
     admins = tuple(admins)
     for wanted in (platform, channels.NATIVE_PLATFORM):
         found = sorted(entries_on(wanted, admins))
@@ -186,10 +177,8 @@ class Identity:
 
 
 def identity_from_env(env: Mapping[str, str] | None = None) -> Identity:
-    """The one reader of the identity settings.
-
-    The agent, preflight and the offline tools all read them here, so the
-    admin the operator CLI exempts is the admin the agent exempts."""
+    """The one reader of the identity settings, shared by the agent,
+    preflight and the tools so they agree on who the admin is."""
     source = os.environ if env is None else env
     written = {name: split_ids(source.get(name)) for name in IDENTITY_SETTINGS}
     return Identity(written, split_ids(source.get("CONNECTOR_QQ_PLATFORMS")))

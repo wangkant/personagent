@@ -21,16 +21,12 @@ from . import channels
 
 logger = logging.getLogger("agent.connector")
 
-#: The id a forwarded mention of the bot itself is rewritten to when QQ_BOT_ID is
-#: blank, which it is on every install without QQ: QQ_BOT_ID is the bot's QQ
-#: account and nothing else. Without it the self mention would be an @ of ""
-#: and _is_at_me could not recognise it. No namespaced id (those always
-#: contain ':') and no QQ number (digits) can equal it.
+#: What a mention of the bot becomes when QQ_BOT_ID (the bot's QQ account) is
+#: blank, so _is_at_me still sees it. No namespaced id or QQ number equals it.
 CONNECTOR_BOT_ID = "persona-self"
 
 #: The platform an event is filed under when it names none, or names QQ
-#: without being a CONNECTOR_QQ_PLATFORMS one. A stored name: ids minted under
-#: it are already in the memory and ledger rows, so it keeps its spelling.
+#: without being a CONNECTOR_QQ_PLATFORMS one. Stored in ids, so keep it.
 FALLBACK_PLATFORM = "gateway"
 
 #: Inbound segment types this version understands. Anything else is dropped
@@ -41,55 +37,34 @@ _KNOWN_SEGMENT_TYPES = frozenset({"text", "mention", "image", "emoji", "reply"})
 def _ns_mid(platform: str, native: bool, conversation_id, mid) -> str:
     """Namespace a MESSAGE id.
 
-    A non-native platform gets the conversation in the key too, because
-    several of them (Telegram, Slack) issue message ids per chat: the same raw
-    mid routinely appears in two rooms, and a bare "<platform>:<mid>" would let
-    the dedupe ring swallow the second one.
-
-    A native mid must stay bare for the opposite reason. QQ mids are already
-    globally unique, and the ring holds them bare from the NapCat path — so
-    namespacing one would make the same message delivered by both doors look
-    like two messages, and it would be answered twice.
+    A non-native one carries the conversation, since Telegram and Slack issue
+    ids per chat. A native one stays bare, as NapCat delivers it, or a message
+    arriving through both doors would be answered twice.
     """
     return str(mid) if native else f"{platform}:{conversation_id}:{mid}"
 
 
 def _ns(platform: str, native: bool, raw: object) -> str:
-    """Namespace a USER or GROUP id — unless the platform is native.
+    """Namespace a USER or GROUP id, unless the platform is native.
 
-    A key with NO namespace is QQ (`channels.NATIVE_PLATFORM`), and every store
-    on disk is keyed that way. So a QQ message that reaches the agent through
-    a connector rather than from NapCat has to mint exactly the ids NapCat
-    would: prefix it and it addresses a different conversation than the one it
-    came from, orphaning everything learned about that room and everyone in
-    it. The ledgers content-address their rows over `conv_id`, so such a
-    rename cannot be repaired by rewriting a field; every derived id changes
-    too.
+    An unprefixed key is QQ and every store is keyed that way, so a QQ message
+    relayed by a connector must mint exactly NapCat's ids; the ledgers
+    content-address rows over `conv_id`, so a rename cannot be repaired.
 
-    `native` is NOT the connector's decision. It is the operator's, via
-    CONNECTOR_QQ_PLATFORMS, because minting a bare id claims QQ authority:
-    bare ids are what the QQ entries of ADMIN_IDS, ACCESS_GROUPS and
-    ACCESS_DM_USERS are compared against. A connector that could assert it
-    for itself could address any QQ conversation the agent can reach.
-    Default empty — every platform is namespaced until an operator says
-    otherwise.
+    `native` comes from the operator's CONNECTOR_QQ_PLATFORMS, never from the
+    connector: a bare id is compared against the QQ entries of ADMIN_IDS,
+    ACCESS_GROUPS and ACCESS_DM_USERS.
     """
     return str(raw) if native else f"{platform}:{raw}"
 
-# Set (to a ConnectorSink) only inside Agent.handle_event. The NapCat send
-# funnels check it first and divert into the sink instead of doing HTTP, so
-# every other caller — the entire QQ path — sees the default None and is
-# behaviorally unchanged.
+# A ConnectorSink only inside Agent.handle_event: the NapCat send funnels
+# divert into it, and every other caller sees None.
 current_sink: contextvars.ContextVar[Optional["ConnectorSink"]] = contextvars.ContextVar(
     "current_sink", default=None,
 )
 
-# A contextvar rather than a threaded parameter, for the same reason
-# `current_sink` is one: per-turn state on an Agent instance shared by every
-# conversation, where asyncio hands each Task its own copy so two turns in
-# flight cannot see each other's value. None means "not supplied" and the
-# PERSONA_TZ_OFFSET_HOURS setting applies. A connector embedder with a
-# per-user notion of "local time" may set it for the duration of a turn.
+# Per-turn, like `current_sink`. None means PERSONA_TZ_OFFSET_HOURS applies;
+# an embedder may set a per-user offset for the duration of a turn.
 current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
     "current_tz_offset_h", default=None,
 )
@@ -98,22 +73,13 @@ current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.Conte
 def message_to_reply_item(
         message, *, platform: str = "", native: bool = False,
         bot_id: str = "") -> dict:
-    """Convert one NapCat-shaped message (str or v11 segment list, exactly
-    what _onebot_send_group/_onebot_send_dm receive) into one neutral
-    reply item. The send paths only ever emit a bare text chunk, [at?, text]
-    or [at?, image base64://...], so a single folded item is lossless.
+    """One NapCat-shaped message (str or v11 segments) as one neutral reply
+    item; the send paths emit only text, [at?, text] or [at?, image], so the
+    fold is lossless.
 
-    `platform`/`native` re-namespace an outbound mention. Inbound, `_ns` mints
-    ids for a native platform BARE, because every store on disk is keyed that
-    way — but `mention_user_id` is read by the connector, not by a store, and
-    the connector resolves "<platform>:<raw>". A mention that came in bare
-    would go back out bare, and the reference client would drop it: on the
-    supported QQ path (CONNECTOR_QQ_PLATFORMS=aiocqhttp) every group @-mention
-    would disappear. Restoring the prefix here keeps the two spellings where
-    they belong: bare for the ledgers, namespaced on the wire.
-
-    `bot_id` is never prefixed: it is the agent's own id on the native side,
-    and addressing it would make the connector @ the bot itself."""
+    `platform`/`native` restore the prefix of an outbound mention: native ids
+    are stored bare, but the connector resolves "<platform>:<raw>". `bot_id`
+    is never prefixed, or the connector would @ the bot itself."""
     if isinstance(message, str):
         return {"type": "text", "text": message}
     at_user_id = ""
@@ -152,24 +118,17 @@ class ConnectorSink:
 
     def __init__(self, platform: str = "", native: bool = False,
                  bot_id: str = "", prefiltered: bool = True) -> None:
-        # Which platform this turn arrived from, and whether the operator
-        # authorized it to mint bare (native-spelled) ids. Both are needed to
-        # put an outbound mention back into the "<platform>:<raw>" form the
-        # connector resolves — see message_to_reply_item. The defaults
-        # leave mentions as they are.
+        # For re-prefixing outbound mentions (message_to_reply_item).
         self.platform = str(platform or "")
         self.native = bool(native)
         self.bot_id = str(bot_id or "")
-        # Whether the connector filtered this turn itself; see the schema.
+        # Whether the connector filtered this turn itself.
         self.prefiltered = bool(prefiltered)
         self.items: list[dict] = []
         self.closed = False
-        # Set once this turn clears the admission gates. It answers a
-        # different question than `items`: whether the conversation is OURS,
-        # not whether we chose to speak in it. A connector that conflates the
-        # two hands every deliberate silence — a PASS, a debounce merge, a
-        # rhythm-gate skip — to its own built-in model, which then answers as
-        # someone else in a conversation this persona had decided to sit out.
+        # Set once the turn clears admission: the conversation is ours whether
+        # or not we spoke, so a deliberate silence is not handed to the
+        # connector's own model.
         self.owned = False
 
     def add(self, message) -> bool:
@@ -243,26 +202,17 @@ def event_prefiltered(event: dict) -> bool:
 
 def synthesize_onebot_payload(
         event: dict, self_mention_id: str, native_platforms=()) -> dict:
-    """Convert a neutral inbound event (docs/connectors.md) into
-    a OneBot-v11-shaped payload that _handle_inner/_extract_text consume
-    unchanged. Mentions of the platform bot_id are normalized to
-    `self_mention_id` so _is_at_me fires exactly like a real QQ @-mention. The
-    agent passes QQ_BOT_ID, or CONNECTOR_BOT_ID when that is blank
-    (Agent._self_mention_id).
+    """A neutral inbound event (docs/connectors.md) as the OneBot-v11 payload,
+    in OneBot's vocabulary, that _handle_inner/_extract_text consume unchanged.
 
-    `native_platforms` is the operator's list of connector platforms whose ids
-    are minted bare instead of namespaced — see `_ns`. Empty by default.
-
-    The payload keeps OneBot's own vocabulary ("private", user_id, self
-    mentions as at segments): it is what the QQ pipeline reads."""
+    A mention of the platform bot_id becomes `self_mention_id` (QQ_BOT_ID, or
+    CONNECTOR_BOT_ID when blank) so _is_at_me fires; `native_platforms` mint
+    bare ids (see `_ns`)."""
     platform = str(event.get("platform", "") or FALLBACK_PLATFORM).strip()
     native = platform in (native_platforms or ())
     if not native and platform == channels.NATIVE_PLATFORM:
-        # An unauthorized connector must not mint "qq:123" either. It looks
-        # namespaced, but platform_of() reads the segment before the colon and
-        # would report the NATIVE platform — so this event's evidence would
-        # compare compatible with real QQ evidence, which is the cross-platform
-        # mixing that function exists to prevent. Give it a name that cannot.
+        # Not "qq:123" either: platform_of() would read it as native and mix
+        # its evidence with real QQ evidence.
         platform = FALLBACK_PLATFORM
     message_type = "private" if event.get("conversation_type") == "dm" else "group"
     conversation_id = (
@@ -283,12 +233,8 @@ def synthesize_onebot_payload(
             continue
         t = seg.get("type")
         if t not in _KNOWN_SEGMENT_TYPES:
-            # Graceful degradation is intended — a connector may legitimately
-            # send a segment type this version predates. DEBUG, not WARNING,
-            # so forward-compatible traffic is not reported as a fault; but
-            # not silence either, because a typo ("iamge") and a sticker from
-            # next year's plugin look identical from here, and today both
-            # leave the reader's message quietly truncated.
+            # DEBUG: a newer connector may send types this version predates,
+            # but a typo looks the same, so not silent either.
             logger.debug("[Connector] %s: dropping unknown segment type %r",
                          platform, t)
             continue
@@ -340,9 +286,8 @@ def synthesize_onebot_payload(
                     if isinstance(name, str) and name.strip():
                         data["quote_name"] = name[:64]
             message.append({"type": "reply", "data": data})
-    # Some platforms signal "this message addresses the bot" without a real
-    # mention segment (e.g. a Telegram reply-to-bot). Prepend a synthetic at
-    # so _is_at_me fires.
+    # Addressed without a mention (a Telegram reply to the bot): prepend a
+    # synthetic at so _is_at_me fires.
     if event.get("addressed") and not has_self_mention:
         message.insert(0, {"type": "at", "data": {"qq": self_mention_id}})
 
@@ -361,10 +306,6 @@ def synthesize_onebot_payload(
             platform, native, event.get("conversation_id", ""))
     mid = event.get("message_id")
     if mid is not None and mid != "":
-        # Namespace the dedupe key by conversation as well: several platforms
-        # (Telegram, Slack) issue message ids per chat, so the same raw mid
-        # routinely appears in two different chats and a bare
-        # "<platform>:<mid>" key would silently swallow the second message.
-        # DM events use the sender as the conversation.
+        # Per-conversation dedupe key (see _ns_mid); a DM's is its sender.
         payload["message_id"] = _ns_mid(platform, native, conversation_id, mid)
     return payload
