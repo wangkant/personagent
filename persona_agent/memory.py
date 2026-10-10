@@ -16,8 +16,7 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# What the memory commands answer, per AGENT_LANG. Plain text with ASCII or
-# full-width separators: the reply crosses the character policy like any other.
+# Plain text: the reply crosses the character policy like any other.
 _COMMAND_REPLIES = {
     "en": {
         "remember_what": ("remember what? you didn't say anything", "spill it",
@@ -82,15 +81,9 @@ def _forget_query(content: str) -> str:
     query = re.sub(r"^(?:about|that)\s+", "", content.strip(), flags=re.IGNORECASE)
     return query.strip(" \t.!?,;:。！？，、~～…")
 
-# When a new auto-memory is a fuller telling of one already written down
-# (`Agent._restated_memory`). The rule that does the work is the dropped
-# share: a retelling keeps everything the earlier note said and adds to it,
-# while a different fact in the same sentence frame drops the tokens that
-# carried the old one ("rescue dog called Momo" -> "rescue cat called Momo"
-# shares 88% and drops 12%), and no overlap ratio separates those two. The
-# shared-token floor keeps a note too short to judge from being absorbed; the
-# window is one sitting, since a note from last week that shares today's
-# wording is a second fact, not a restatement.
+# When a new auto-memory rewrites an older one (see `_restated_memory`): it may
+# drop almost none of the old note's tokens, must share a few, and only within
+# one sitting.
 _MEMORY_MERGE_MAX_DROPPED = 0.05
 
 _MEMORY_MERGE_MIN_SHARED = 4
@@ -129,13 +122,8 @@ class Memory:
         self._save_json(self.core_memory_file, self.core_memory, "core_memory")
 
     def _extract_core_update(self, reply: str) -> tuple[str, str]:
-        """Pull the [CORE_UPDATE]...[/CORE_UPDATE] block; return (reply with the
-        tag stripped, new_note). **Parse only — no persistence.** Committing is
-        _commit_core_memory's job, so the output filter can rule first: a
-        blocked reply (self-outing / AI tells) must not write its worldview
-        into core memory (poison protection). The model rewrites the whole
-        note each time (no merging), which forces it to keep the note short.
-        Closed tag form so nested [STICKER:xxx] doesn't truncate it."""
+        """Split off a trailing [CORE_UPDATE]...[/CORE_UPDATE] note: (reply,
+        note). Parse only, so a reply the filter blocks never commits its note."""
         m = re.search(r'\s*\[CORE_UPDATE\](.*?)\[/CORE_UPDATE\]\s*$', reply,
                       re.DOTALL)
         if not m:
@@ -147,9 +135,7 @@ class Memory:
 
     def _commit_core_memory(self, group_id: str, new_note: str) -> None:
         """Persist a note extracted by _extract_core_update. Empty notes skip."""
-        # Judged at the core note's own cap (plus the "..." a capped note
-        # carries): the memory default of 200 would cut every rewrite
-        # mid-word and drop the members past the cut each time.
+        # At the core note's own cap (plus a capped note's "...").
         note = self._validate_memory_candidate(
             new_note, max_chars=self.CORE_MEMORY_MAX_CHARS + 3)
         if note:
@@ -206,8 +192,7 @@ class Memory:
                 return say("not_instructions")
             item: dict = {"text": content, "time": time.time()}
             if caller and not is_admin:
-                # Who saved it (theirs to forget) and who it is about (whose
-                # presence brings it into the prompt) are kept apart.
+                # The saver may forget it; the subject's presence brings it into prompts.
                 item["saved_by"] = caller
                 if user_name:
                     item["saved_by_name"] = user_name
@@ -228,10 +213,8 @@ class Memory:
 
         if kind == "forget":
             query = _forget_query(arg)
-            # A too-short query over-deletes, and the admin's reaches every
-            # member's rows. An English query must be 3+ characters and match
-            # whole words ("tea" must not hit "steak"); CJK has no spaces to
-            # find words by, so it keeps a substring match at 2+ characters.
+            # Short queries over-delete: English needs 3+ characters and whole
+            # words ("tea" not "steak"), CJK a 2+ character substring.
             by_word = query.isascii()
             if len(query) < (3 if by_word else 2) or query.lower() in _EVERYTHING:
                 return say("forget_what")
@@ -239,10 +222,8 @@ class Memory:
                               re.IGNORECASE)
             items = self.memories.get(group_id, [])
             before = len(items)
-            # One-directional match (query in text): a short memory ("cat")
-            # must not collide with a long forget sentence. Authority fails
-            # closed: only the admin may delete others' entries; an anonymous
-            # caller owns only notes nobody owns.
+            # Query in text, never the reverse. Only the admin deletes others'
+            # notes; an anonymous caller owns only unowned ones.
             kept = [
                 it for it in items
                 if not (word.search(it["text"]) if by_word else query in it["text"])
@@ -256,15 +237,13 @@ class Memory:
 
         items = self.memories.get(group_id, [])
         if not is_admin:
-            # A note about someone is theirs and its saver's to read; with no
-            # id there is no one to show it to.
+            # A note about someone is shown only to them and its saver.
             items = [it for it in items if not it.get("user_id") or (
                 caller and caller in (str(it.get("user_id")),
                                       str(it.get("saved_by") or "")))]
         if not items:
             return say("empty")
-        # No brackets, no list markers: the reply crosses the character
-        # policy, which hard-refuses `[` and strips leading `- `.
+        # No brackets or list markers: the character policy refuses them.
         lines: list[str] = []
         for it in items:
             if it.get("user_id") and it.get("user_name"):
@@ -278,9 +257,8 @@ class Memory:
 
     def _note_subject(self, group_id: str, text: str, saver: str,
                       saver_name: str) -> tuple[str, str]:
-        """Who a member's saved note is about: themselves when it speaks in
-        the first person or names them, a member of this room it names, or
-        nobody (a note for the whole group)."""
+        """Who a saved note is about: the saver when it says "I" or names them,
+        else a member it names, else nobody."""
         if _FIRST_PERSON.search(text) or (
                 saver_name and len(saver_name) >= 2 and saver_name in text):
             return saver, saver_name
@@ -296,26 +274,19 @@ class Memory:
         return mentions_name(text, self.persona_name)
 
     def _memory_cmd_patterns(self) -> tuple:
-        """remember / forget / recall / learned regexes, cached per
-        persona_name (tests reassign persona_name after init). English +
-        Chinese forms."""
+        """remember / forget / recall / learned regexes, cached per persona_name."""
         cached = getattr(self, "_mem_cmd_pats", None)
         if cached and cached[0] == self.persona_name:
             return cached[1]
-        # A command opens the message: after a quote placeholder and any
-        # at-mentions, the name (or, with no name, nothing). Anchored so that
-        # "I don't remember what you said" inside an addressed message stays
-        # conversation.
+        # Anchored at the start, so "I don't remember..." stays conversation.
         lead = r"^\s*(?:\[reply\]\s*)?"
         if self.persona_name:
             head = (lead + r"(?:@\S+\s*)*?@?" + name_regex(self.persona_name)
                     + r"\s*[，,:：]?\s*")
         else:
             head = lead + r"(?:@\S*\s*)?[，,]?\s*"
-        # \b after the English keywords: "remembered my birthday" is not a
-        # command to save "ed my birthday". CJK needs none (and \b would not
-        # work there: Python counts CJK as word characters).
-        # Recall is the whole message: "小夏 记忆力真好" is a compliment.
+        # \b only after English keywords (Python counts CJK as word characters).
+        # Recall must be the whole message: "小夏 记忆力真好" is a compliment.
         tail = r"\s*(?:呢|呀|啊|吗|嘛)?[\s?？!！.。~～]*$"
         pats = (
             re.compile(head + r"(?:(?:remember|memorize)\b" + _NOT_A_NOTE
@@ -334,14 +305,8 @@ class Memory:
 
     @staticmethod
     def _evict_memory(items: list[dict]) -> None:
-        """Drop one entry to honor the per-group cap, preferring the oldest
-        AUTO memory so a user's explicitly-saved ("remember X") memory isn't
-        silently churned out by frequent auto-memory growth. Falls back to
-        FIFO when no auto entry remains.
-
-        Oldest by `time`, not by position: a merge in `_save_auto_memory`
-        refreshes a note in place, so the first auto row can be the one the
-        conversation just restated."""
+        """Drop one entry for the cap: the oldest auto memory by `time` (merges
+        refresh in place), else the first entry."""
         autos = [i for i, it in enumerate(items) if it.get("auto")]
         if not autos:
             items.pop(0)
@@ -356,25 +321,17 @@ class Memory:
         if any(it["text"] == text for it in items):
             return
         now = time.time()
-        # Resolved before the merge, which needs it: rewriting a note about
-        # one member with a fact about another would leave the first one's
-        # user_id on the second one's fact.
+        # Before the merge, which must not cross subjects.
         uid, name = self._memory_subject(group_id, text)
         old = self._restated_memory(items, text, now, uid,
                                     room=not channels.is_dm(group_id))
-        # A match is a strict token superset, so a restatement that is
-        # shorter in characters still says something the stored note does
-        # not ("心情不好" eight times is 32 characters and 4 tokens): it is
-        # added beside it rather than dropped.
+        # A shorter restatement is added beside the note rather than dropped.
         if old is not None and len(text) >= len(old["text"]):
-            # `born` before `time` is overwritten: a note stored before the
-            # field existed anchors on its last touch, and reading that after
-            # the line below would re-anchor it to now on every merge.
+            # Before `time` is overwritten, or `born` would move on every merge.
             old.setdefault("born", float(old.get("time") or now))
             old["text"] = text
             old["time"] = now
-            # Only a DM reaches this with a subject the note lacked; a room
-            # keeps its unattributed note (`room` in `_restated_memory`).
+            # Only a DM gets here with a subject the note lacked.
             if uid and not old.get("user_id"):
                 old["user_id"], old["user_name"] = uid, name
             self._save_memories()
@@ -390,20 +347,15 @@ class Memory:
         logger.info("[Agent] auto-memory (group=%s)%s: %s", group_id, subj, text[:60])
 
     def _memory_subject(self, group_id: str, text: str) -> tuple[str, str]:
-        """Who `text` is about, as (user_id, user_name), or ("", "").
-
-        Only names this conversation has actually seen count, so the map is
-        built from the live buffer plus the admin rather than from anything
-        the model wrote. Two characters minimum: a one-character name matches
-        inside ordinary words."""
+        """Who `text` is about, as (user_id, user_name), or ("", ""): only names
+        seen in the buffer (plus the admin), two characters minimum."""
         name_to_uid: dict[str, str] = {}
         for m in self.buffers.get(group_id, []):
             nm = m.get("name", "")
             uid = m.get("user_id", "")
             if nm and len(nm) >= 2 and uid:
                 name_to_uid.setdefault(nm, uid)
-        # The admin's account on this platform, so a Telegram room does not
-        # attribute them to their QQ number when it knows their Telegram one.
+        # The admin's account on this conversation's platform.
         admin_uid = access.admin_on(channels.platform_of(group_id),
                                     self._admins())
         if admin_uid and self.admin_name and len(self.admin_name) >= 2:
@@ -419,34 +371,12 @@ class Memory:
                          ) -> Optional[dict]:
         """The auto note `text` is a fuller telling of, or None.
 
-        A note is rewritten only by one that keeps what it said and adds to
-        it. Measured with `_focus_tokens` ("dropped" is the share of the old
-        note's tokens the new one lacks):
-
-            dropped  merge  pair
-            0.00     yes    对方养了两只猫 -> ...，都是橘猫
-            0.50     no     深夜向我表白 -> 表白后问能否攻略 (one episode)
-            0.12     no     rescue dog called Momo -> rescue cat called Momo
-            0.17     no     night shifts at the hospital -> ... the bakery
-            0.33     no     learning French -> learning French horn
-            0.40     no     西山爬山徒步 -> 西山骑行露营
-            0.33     no     他弟弟在上海 -> 他妹妹在上海
-            0.25     no     对方喜欢猫 -> 对方喜欢狗 (also under the floor)
-
-        An episode retold in different words is token-for-token the same
-        shape as a different fact in the same frame, so it stays two notes:
-        a notebook that repeats itself is something the reader can see and
-        delete, one that quietly swapped "dog" for "cat" is a fact gone.
-
-        Only auto notes (one the reader asked to keep is never rewritten by
-        a turn), only within `_MEMORY_MERGE_WINDOW_S` of when the note was
-        first written, and never between two different named subjects. In a
-        `room` an unattributed note never takes a restatement that names
-        somebody, because the merge would file the group's fact under them.
+        Only a note that keeps every old token and adds some ("dog" -> "cat"
+        drops one, so it stays a second note); only auto notes, within the
+        merge window, never across two named subjects, and in a `room` never
+        an unattributed note into one that names somebody.
         """
-        # Always "zh": with "en" the tokenizer emits ASCII words only, so a
-        # Chinese note would produce no tokens and never match. "zh" is a
-        # superset, and this compares a note with a note, not with the turn.
+        # "zh" tokenizes both scripts; "en" would yield nothing for Chinese.
         fresh = _focus_tokens(text, "zh")
         if len(fresh) < _MEMORY_MERGE_MIN_SHARED:
             return None
@@ -455,21 +385,13 @@ class Memory:
         for it in items:
             if not it.get("auto"):
                 continue
-            # From when it was written, not last touched: `time` is reset by
-            # every merge, which would let a note absorb a restatement every
-            # few hours forever. Rows from before `born` fall back to `time`.
+            # From when it was written; `time` resets on every merge.
             born = float(it.get("born") or it.get("time") or 0.0)
             if now - born > _MEMORY_MERGE_WINDOW_S:
                 continue
-            # Only when both are named: an unattributed note is the common
-            # case (most are about the one person in a DM) and stays mergeable.
             if subject and it.get("user_id") and it["user_id"] != subject:
                 continue
-            # In a room an unattributed note is shown to everyone, while one
-            # filed under a member shows only while they are in the buffer
-            # (and is theirs to forget): a merge that names somebody would
-            # hide the group's fact. Skipped here rather than after the
-            # search, so a note already filed under them can still match.
+            # Filing a room's shared note under one member would hide it.
             if room and subject and not it.get("user_id"):
                 continue
             old_tokens = _focus_tokens(it.get("text", ""), "zh")
@@ -485,25 +407,16 @@ class Memory:
 
     @staticmethod
     def _validate_memory_candidate(text: str, *, max_chars: int = 200) -> str:
-        """Accept short user facts; reject durable prompt/persona controls.
-
-        Memory is re-injected on every later turn, so a false "fact" about the
-        assistant's identity or permissions is as dangerous here as an explicit
-        imperative. The rules therefore cover both shapes while deliberately
-        leaving ordinary third-person preferences, relationships and life facts
-        available to the memory feature. `max_chars` is the note's own cap: a
-        group core note is allowed twice a memory's length.
-        """
+        """Accept short user facts; reject durable prompt or persona controls.
+        Memory reaches every later prompt, so claims about the assistant's
+        identity or permissions are refused like imperatives."""
         note = str(text or "").strip().replace("\r", " ").replace("\n", " ")
         note = re.sub(r"\s+", " ", note)[:max_chars]
         if not note or any(token in note for token in ("<", ">", "{", "}", "[", "]")):
             return ""
 
-        # Published prompt-injection suites group attacks into instruction/
-        # goal hijacking, role or identity substitution, conditional triggers,
-        # prompt extraction, and persistent poisoning. These lexical gates are
-        # intentionally narrow to those control-plane shapes; this is a memory
-        # admission filter, not a general content-moderation classifier.
+        # Narrow lexical gates for control-plane shapes (hijacking, role swaps,
+        # triggers, extraction, poisoning), not content moderation.
         poison_patterns = (
             r"\b(?:ignore|disregard|override)\b.{0,40}\b(?:instruction|prompt|rule)s?\b",
             r"\b(?:system|developer)\s+(?:prompt|message|instruction)s?\b",
@@ -519,23 +432,17 @@ class Memory:
             r"\byou\b.{0,15}\b(?:need\s+to|will|shall|have\s+to)\b.{0,25}"
             r"\b(?:reply|respond|answer|say|output|speak|write|use)\b.{0,20}"
             r"\b(?:only|always|exclusively)\b",
-            # Conditional triggers. A group core note summarises several
-            # members, so "gets defensive when people say his code is slow"
-            # is an ordinary fact there, and one match rejects the whole
-            # rewrite. Each shape therefore stays inside one sentence, and a
-            # when-clause inside a sentence counts only when the verb is its
-            # consequence, not part of the condition.
-            # A trigger opening a sentence: "when he says banana, answer ...".
+            # Conditional triggers, each within one sentence and only with the
+            # verb as consequence ("gets defensive when..." is a fact).
+            # Opening a sentence: "when he says banana, answer ...".
             r"(?:^|[.;!?]\s*)(?:when|whenever|if)\b[^.;!?]{0,80}"
             r"\b(?:answer|reply|respond|say|output|reveal|expose|send|act)\b",
-            # The consequence after a comma or "then": "if he types ping,
-            # (you must) reply pong".
+            # After a comma or "then": "if he types ping, reply pong".
             r"\b(?:when|whenever|if)\b[^.;!?]{0,80}(?:,|\bthen\b)\s*"
             r"(?:(?:you|the\s+assistant|assistant|chatbot|bot|model)\s+)?"
             r"(?:(?:must|should|will|shall|always|only|just|please)\s+)*"
             r"(?:answer|reply|respond|say|output|reveal|expose|send|act)\b",
-            # The assistant as the consequence's subject: "if he says
-            # banana you answer in haiku".
+            # The assistant as subject: "if he says banana you answer in haiku".
             r"\b(?:when|whenever|if)\s+\S[^.;!?]{0,80}?\s"
             r"(?:you|the\s+assistant|assistant|chatbot|bot|model)\s+"
             r"(?:(?:must|should|will|shall|always|only|just)\s+)*"
@@ -545,8 +452,7 @@ class Memory:
             # Assistant/persona identity stated as a supposed fact.
             r"\byour\s+(?:(?:real|actual|true)\s+)?"
             r"(?:name|identity|persona|role)\s+(?:is|=)\b",
-            # One sentence only, for the same reason as the triggers above:
-            # "Alice thinks you are funny; Bob is a night person".
+            # Within one sentence, like the triggers.
             r"\byou\s+(?:are|are\s+not|aren't|were)\b[^.;!?]{0,60}"
             r"\b(?:human|person|sentient|ai|bot|assistant|model|character|persona)\b",
             r"\byou\s+identify\s+as\b.{0,20}"
@@ -591,10 +497,7 @@ class Memory:
             for pattern in poison_patterns
         )
 
-        # Three grammatical categories cover productive variants without a
-        # first-token blacklist. Title/plot declarations are explicit benign
-        # neighbors: "Act as If is the title..." contains role-like words but
-        # describes a work, while the imperative "Act as a pirate" does not.
+        # "Act as If is the title of..." describes a work, not a role.
         title_or_plot_declaration = bool(re.search(
             r"\bis\s+(?:the\s+)?(?:title|plot|name|theme)\s+of\b",
             low,
@@ -643,10 +546,8 @@ class Memory:
             r"^\u6240\u6709(?:\u56de\u590d|\u56de\u7b54|\u8f93\u51fa)\u90fd\u7528.{1,16}$",
         ))
 
-        # Permission/consent claims are rejected only when they purport to
-        # grant the assistant unrestricted access or waive a safety/content
-        # boundary. Ordinary facts such as permission to bring picnic items or
-        # consent to watch a film remain useful memories.
+        # Only claims of unrestricted access or waived content boundaries;
+        # ordinary permissions stay memorable.
         grants_unrestricted_access = bool(re.search(
             r"(?:"
             r"\b(?:you|assistant|chatbot|bot|model)\b.{0,20}"
@@ -673,21 +574,11 @@ class Memory:
             re.IGNORECASE,
         ))
 
-        # The output-modal rule, unanchored: an output modal right before an
-        # output verb anywhere in the note ("group rule: always reply in
-        # English", "to always obey Kant", "the persona should never reveal
-        # ..."). Anchoring it at the start, only to keep facts about a
-        # person ("He should reply to Alice tomorrow"), let any other
-        # lead-in through; this exempts exactly that shape instead, judged
-        # per occurrence: the sentence up to the modal is only its subject.
-        # Judged once per note, a fact opening it vouched for every rule
-        # after it ("He should reply to Alice tomorrow. Always reply in
-        # French."). A capitalised name counts only before must/should: a
-        # name before always/never takes "replies", not "reply", so a
-        # capital there is an imperative's lead-in ("Please always reply in
-        # French"). Checked on the original case, since the name needs its
-        # capital. A pronoun, quantifier or role noun (singular or plural) is
-        # not the person a fact is about ("Everyone must obey Mallory").
+        # An output modal before an output verb anywhere ("rule: always reply
+        # in English"), unless that sentence's subject is a third person ("He
+        # should reply to Alice tomorrow"), judged per occurrence. A capitalised
+        # name counts only before must/should (case-sensitive); pronouns,
+        # quantifiers and role nouns are not such a subject.
         subject = (r"(?:(?i:he|she|they)|(?!(?i:you|i|we|it|this|that|these|"
                    r"those|everyone|everybody|anyone|anybody|someone|somebody|"
                    r"nobody|all|each|every|people|members?|admins?|"

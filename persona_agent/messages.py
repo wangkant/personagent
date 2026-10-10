@@ -21,24 +21,16 @@ class MessageParsing:
         group_id = str(payload.get("group_id", ""))
         sender_uid = str(payload.get("user_id", ""))
 
-        # Fence text the speaker did not author (web pages, vision captions,
-        # sticker meanings, quoted messages) so it never reaches ctrl_text —
-        # a page titled "<BOT> remember X" must not drive is_called or memory
-        # commands, even when re-quoted. Cleaned of all four delimiters first:
-        # a quote may be an older rendering that carries its own spans, and
-        # none of it may close this one or forge the user-data frame.
+        # Text the speaker did not write is fenced out of ctrl_text, after
+        # cleaning any delimiters it carries so it cannot close the span.
         def _fence(s: str) -> str:
             return f"{_WEB_DESC_OPEN}{_clean_prompt_source(s)}{_WEB_DESC_CLOSE}"
 
-        # Links are described once for the whole message, after the loop:
-        # one concurrent fetch under one LINK_ENRICHMENT_BUDGET_SEC. Awaited
-        # per text segment, an @mention-split paste fetched each segment's
-        # links after the last one's, every segment with a fresh budget.
-        # Each slot is (index in parts, how many of `msg_urls` it holds).
+        # Links are fetched once, concurrently, under one budget after the loop;
+        # each slot is (index in parts, how many of `msg_urls` it holds).
         msg_urls: list[str] = []
         link_slots: list[tuple[int, int]] = []
-        # Where a rendered mention sits, so the text after it is not glued
-        # to it: QQ clients type that space themselves, connectors may not.
+        # Mentions, so following text gets a space connectors may omit.
         at_slots: set[int] = set()
         for seg in payload.get("message", []):
             if not isinstance(seg, dict):
@@ -49,10 +41,7 @@ class MessageParsing:
                 # The sender's own words may not manufacture either frame.
                 txt = _clean_prompt_source(d.get("text", ""))
                 parts.append(txt)
-                # Inline URLs in plain text: pull metadata as separate buffer
-                # segments so reasoning can actually "see" what the link is
-                # about (Bilibili, YouTube, or any OG-tagged site). The cap
-                # counts across every text segment of the message.
+                # The cap counts across the whole message.
                 urls = self._extract_urls(txt)[
                     :self.MAX_URLS_PER_MESSAGE - len(msg_urls)]
                 if urls:
@@ -67,8 +56,6 @@ class MessageParsing:
             elif t == "image":
                 url = d.get("url") or d.get("file", "")
                 file_field = d.get("file", "")
-                # A connector marks a sticker sent as an image; the focus
-                # block and the prompt treat [sticker] and [image] alike.
                 kind = "sticker" if d.get("sticker") is True else "image"
                 if not url:
                     parts.append(f"[{kind}]")
@@ -82,10 +69,7 @@ class MessageParsing:
                     continue
                 desc = await self._describe_image(url)
                 parts.append(_fence(f"[{kind}: {desc}]") if desc else f"[{kind}]")
-                # Sticker stealing is a QQ-path feature: connector images must
-                # not get cataloged into the QQ sticker library or burn
-                # tagging calls, so skip the spawn while the connector sink is
-                # set (the steal decision happens inside handle_event).
+                # Sticker stealing is QQ-only.
                 if group_id and sender_uid != self.qq_bot_id \
                         and current_sink.get() is None:
                     self._spawn(self._steal_image_async(
@@ -94,46 +78,33 @@ class MessageParsing:
                         group_id=group_id,
                     ))
             elif t == "face":
-                # A forwarded platform emoji carries its name; fenced because
-                # whoever named a custom emoji is not the sender.
+                # Fenced: whoever named a custom emoji is not the sender.
                 name = _clean_prompt_source(d.get("name")).strip()[:40]
                 parts.append(_fence(f"[emoji: {name}]") if name else "[face]")
             elif t == "reply":
-                # QQ quote-reply: data.id is the quoted message's id. Resolve it
-                # to the original text so the model knows what's being replied to;
-                # otherwise it sees a referent-less "[reply]111" and guesses who/
-                # what → wrong-person / crossed-thread replies. Falls back to a
-                # bare "[reply]" if it can't be fetched (never blocks / drops).
+                # Resolved to the quoted text, or a bare "[reply]".
                 qid = d.get("id")
                 hint = self._quote_hint(d)
                 quoted = (await self._resolve_quote(qid, hint=hint)
                           if qid or hint else "")
                 parts.append(_fence(f"[reply {quoted}]") if quoted else "[reply]")
             elif t == "record":
-                # Voice message — no ASR pipeline; show a clean placeholder
-                # so the raw CQ-code (which would leak file paths) doesn't
-                # fall through to raw_message at the bottom of this function.
+                # No speech recognition; never the raw CQ code (file paths).
                 parts.append("[voice]")
             elif t == "video":
                 parts.append("[video]")
             elif t == "file":
                 parts.append("[file]")
             elif t == "forward":
-                # Merged-forward contents aren't fetched here — mark "not visible"
-                # so the model asks instead of fabricating what the forward said.
+                # Not fetched; said so, so the model asks instead of inventing it.
                 parts.append("[forwarded-chat (content not visible)]")
             elif t == "mface":
-                # Market emoji: the `summary` field often carries a name
-                # (e.g. "[dice]") — prefer it; otherwise fall back to a placeholder.
                 summary = _clean_prompt_source(d.get("summary")).strip()
                 parts.append(summary if summary else "[face]")
             elif t == "json":
                 raw_data = d.get("data", "")
                 if raw_data:
-                    # Fail soft like every other segment parser here: the card
-                    # JSON is sender-controlled, and an exception would unwind
-                    # to handle()'s catch-all and drop the WHOLE message
-                    # (including its other text segments).
+                    # Sender-controlled JSON must not drop the whole message.
                     try:
                         desc = await self._describe_share(raw_data)
                     except Exception as e:
@@ -159,12 +130,11 @@ class MessageParsing:
         return _clean_prompt_source(payload.get("raw_message")).strip()
 
     def _index_msg(self, mid, rendered: str) -> None:
-        """Record a message_id -> 'speaker: text' entry for quote-reply
-        resolution (Layer A, zero cost). Bounded: drops the oldest on overflow."""
+        """Record message_id -> 'speaker: text' for quote resolution (bounded LRU)."""
         if mid is None or not rendered:
             return
         key = str(mid)
-        self._msg_index.pop(key, None)  # re-insert at the end to refresh recency
+        self._msg_index.pop(key, None)
         self._msg_index[key] = rendered
         if len(self._msg_index) > self._msg_index_cap:
             del self._msg_index[next(iter(self._msg_index))]
@@ -183,12 +153,8 @@ class MessageParsing:
         return f"{name}: {text}" if name else text
 
     async def _resolve_quote(self, mid, hint: str = "") -> str:
-        """Resolve a quoted (引用回复) message_id to 'speaker: text' so the model
-        understands the referent. Layer A: local _msg_index (zero cost, hits most
-        recent messages). Then the connector's own copy (`hint`), which covers
-        the bot's replies and anything older than the index. Layer B: NapCat
-        get_msg (one call, only on a miss). Any failure returns '' — the caller
-        degrades to a bare '[reply]', never blocking or dropping the message."""
+        """A quoted message as 'speaker: text': the local index, then the
+        connector's copy (`hint`), then one NapCat get_msg; '' on any failure."""
         key = "" if mid is None or mid == "" else str(mid)
         if key:
             hit = self._msg_index.get(key)
@@ -198,7 +164,6 @@ class MessageParsing:
             if key:
                 self._index_msg(key, hint)
             return hint
-        # Connector path has no NapCat to query; skip the API call.
         if not key or current_sink.get() is not None or not self.qq_onebot_url:
             return ""
         try:
@@ -215,19 +180,16 @@ class MessageParsing:
         sender = data.get("sender") or {}
         name = (sender.get("card") or sender.get("nickname") or "")[:8]
         raw = (data.get("raw_message") or "").strip()
-        # Strip nested CQ codes (image/at/reply/...) to keep a clean one-liner; cap.
         raw = re.sub(r"\[CQ:[^\]]*\]", "", raw).strip()[:60]
         if not raw:
             return ""
         rendered = f"{name}: {raw}" if name else raw
-        self._index_msg(key, rendered)  # cache so repeats in a burst skip the API
+        self._index_msg(key, rendered)
         return rendered
 
     def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
         buf = self.buffers[group_id]
-        # Merge only when BOTH name AND user_id match the previous entry —
-        # keying on name alone cross-merges different users sharing a nickname
-        # and collides with the bot's own name.
+        # Merge on name and user_id: nicknames collide.
         if (buf and buf[-1].get("name") == name
                 and buf[-1].get("user_id", "") == user_id
                 and len(buf[-1].get("text", "")) < 300):
@@ -236,10 +198,8 @@ class MessageParsing:
             buf.append({"name": name, "text": text, "user_id": user_id})
 
     def _self_mention_id(self) -> str:
-        """The id an @ of the bot carries: QQ_BOT_ID, or CONNECTOR_BOT_ID on an
-        install without QQ, where the connector mints it for a self mention.
-        Only the mention paths use it; NapCat's own-message filters and the
-        missed-mention sweep stay on qq_bot_id."""
+        """The id an @ of the bot carries: QQ_BOT_ID, else CONNECTOR_BOT_ID
+        (mention paths only; NapCat's filters stay on qq_bot_id)."""
         return self.qq_bot_id or CONNECTOR_BOT_ID
 
     def _is_at_me(self, payload: dict) -> bool:
