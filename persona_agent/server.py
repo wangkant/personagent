@@ -731,11 +731,7 @@ async def lifespan(app: FastAPI):
             await asyncio.gather(*tasks, return_exceptions=True)
         if agent is not None:
             try:
-                close = getattr(agent, "aclose", None)
-                if close is not None:
-                    await close()
-                else:
-                    agent.flush_state()
+                await agent.aclose()
             except Exception:
                 logger.exception("shutdown cleanup failed")
         if runtime_lock is not None:
