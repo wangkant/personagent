@@ -8,6 +8,7 @@ import time
 
 from .access import ADMIN_MODE
 from . import channels
+from .decision import PASS, SEND
 from .textproc import (
     TextProcessing,
     _REFUSAL_LABELS,
@@ -116,15 +117,12 @@ class DirectMessages:
                 if not reply:
                     return False
 
-                final = self._finalize_reply(reply, log_ctx=f"DM user={user_id}")
-                if final is None:
-                    return False
-                reply, _, pending_core, had_visible_candidate = final
-                if had_visible_candidate and not reply:
-                    return False
-                if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
+                final = self._final_reply(reply, log_ctx=f"DM user={user_id}")
+                if final.verdict == PASS:
                     logger.info("[Agent] PASS (DM user=%s)", user_id)
+                if final.verdict != SEND:
                     return False
+                reply, pending_core = final.text, final.core_note
 
                 send_result = await self._send_dm(user_id, reply)
                 if not send_result.success:
@@ -174,28 +172,6 @@ class DirectMessages:
                 if said and not committed:
                     async with self.locks[pkey]:
                         self._dm_unanswered[user_id] = said[-3:]
-
-    def _finalize_reply(self, reply: str, *, log_ctx: str):
-        """Post-LLM pipeline shared by every reply path: core-memory tag,
-        output filter, sanitize (before any state is committed), [AT:] marker.
-        Returns (reply, at_uid, pending_core, had_visible), or None if the
-        filter blocked the reply."""
-        reply, pending_core = self._extract_core_update(reply or "")
-        filtered, blocked = self._apply_output_filter(reply)
-        if blocked:
-            logger.warning("[Agent] output_filter blocked (%s): %s | original=%s",
-                           log_ctx, blocked, reply[:120])
-            return None
-        had_visible = bool(filtered.strip())
-        reply = TextProcessing._sanitize_reply(
-            filtered, self.agent_lang, self.reply_style)
-        reply = TextProcessing._unwrap_reply(reply)
-        # Non-digit targets included: connector ids look like "telegram:12345".
-        at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
-        at_uid = at_match.group(1) if at_match else ""
-        # Strip every marker (a second, hallucinated one would ship as text).
-        reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
-        return reply, at_uid, pending_core, had_visible
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """Private chat. Same OpenAI-compatible endpoint as group chat, with

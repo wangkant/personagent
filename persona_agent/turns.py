@@ -4,13 +4,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import re
 import time
 from contextlib import asynccontextmanager
 
 from . import access
-from .decision import (SLEEP_WINDOW, STICKY_CALL, choose_group_mode,
-                       pacing_skip)
+from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
+                       choose_group_mode, pacing_skip)
 from . import channels
 from . import decision_log
 from .connector import (ConnectorSink, current_sink,
@@ -530,17 +529,12 @@ class Turns:
 
             # A PASS commits nothing, neither core note nor auto-memory: both
             # describe a reply that was never sent.
-            final = self._finalize_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
-            if final is None:
-                return False
-            reply, at_uid, _pending_core, had_visible_candidate = final
-            if not at_uid and mode == "called":
-                at_uid = user_id
+            final = self._final_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
             # A visible candidate that validation reduced to nothing is
             # rejected, not treated as a state-bearing PASS.
-            if had_visible_candidate and not reply:
+            if final.verdict == BLOCKED:
                 return False
-            if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
+            if final.verdict == PASS:
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 decision_log.record(group_id, mode, False, "passed", ctrl_text,
                                     sender=sender_name)
@@ -548,6 +542,9 @@ class Turns:
                     self.last_reply_at[group_id] = (
                         time.time() - self.chat_followup_window_s - 1)
                 return False
+            reply, at_uid = final.text, final.at_uid
+            if not at_uid and mode == "called":
+                at_uid = user_id
             # Eval context snapshot: must be taken before appending the bot's
             # own reply, and inside the lock. Otherwise _evaluate_reply runs
             # after the send (seconds of typing simulation), the buffer has
@@ -584,7 +581,7 @@ class Turns:
                 if committed:
                     self._append_buffer(group_id, self.persona_name, committed)
                 if send_result.success:
-                    self._commit_core_memory(group_id, _pending_core)
+                    self._commit_core_memory(group_id, final.core_note)
                     if auto_mem:
                         self._save_auto_memory(group_id, auto_mem)
             if not send_result.success:

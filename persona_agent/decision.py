@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 from .access import ADMIN_MODE
@@ -25,6 +27,17 @@ GATED_MODES = ("judge", "followup", "proactive")
 #: Reasons the callers act on.
 STICKY_CALL = "sticky call"
 SLEEP_WINDOW = "sleep window"
+
+#: Verdicts of `_final_reply`.
+SEND, PASS, BLOCKED = "send", "pass", "blocked"
+
+
+@dataclass(frozen=True)
+class FinalReply:
+    verdict: str
+    text: str = ""
+    at_uid: str = ""
+    core_note: str = ""
 
 
 def choose_group_mode(*, addressed: bool, is_admin: bool,
@@ -129,6 +142,41 @@ class ReplyDecision:
             logger.debug("[Agent] group model metadata parsed (mode=%s intent=%s, reasoning_chars=%d)",
                          mode, intent or "?", len(reasoning))
         return reply, intent or "chat", mem
+
+    def _finalize_reply(self, reply: str, *, log_ctx: str):
+        """Post-LLM pipeline shared by every reply path: core-memory tag,
+        output filter, sanitize (before any state is committed), [AT:] marker.
+        Returns (reply, at_uid, pending_core, had_visible), or None if the
+        filter blocked the reply."""
+        reply, pending_core = self._extract_core_update(reply or "")
+        filtered, blocked = self._apply_output_filter(reply)
+        if blocked:
+            logger.warning("[Agent] output_filter blocked (%s): %s | original=%s",
+                           log_ctx, blocked, reply[:120])
+            return None
+        had_visible = bool(filtered.strip())
+        reply = TextProcessing._sanitize_reply(
+            filtered, self.agent_lang, self.reply_style)
+        reply = TextProcessing._unwrap_reply(reply)
+        # Non-digit targets included: connector ids look like "telegram:12345".
+        at_match = re.search(r'\[AT:([^\]\s]+)\]', reply)
+        at_uid = at_match.group(1) if at_match else ""
+        # Strip every marker (a second, hallucinated one would ship as text).
+        reply = re.sub(r'\[AT:[^\]\s]+\]', '', reply).strip()
+        return reply, at_uid, pending_core, had_visible
+
+    def _final_reply(self, raw: str, *, log_ctx: str) -> FinalReply:
+        """`_finalize_reply` plus its verdict: SEND, a deliberate PASS, or
+        BLOCKED (filtered, or a visible draft the character policy emptied)."""
+        final = self._finalize_reply(raw, log_ctx=log_ctx)
+        if final is None:
+            return FinalReply(BLOCKED)
+        text, at_uid, core_note, had_visible = final
+        if had_visible and not text:
+            return FinalReply(BLOCKED)
+        if not text or re.match(r"PASS\b", text, re.IGNORECASE):
+            return FinalReply(PASS)
+        return FinalReply(SEND, text, at_uid, core_note)
 
     async def _gate(self, prompt) -> tuple[bool, str]:
         """Stage 1 for the gated modes: the cheapest model decides only
