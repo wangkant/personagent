@@ -1,4 +1,4 @@
-"""tools/bootstrap_from_history.py — one-shot bootstrap from NapCat group history.
+"""One-shot bootstrap from NapCat group history.
 
 Does two things:
   1) owner_profile.json (a stored name): the admin's sticker-send rate, text-length distribution, top stickers
@@ -59,9 +59,7 @@ logger = logging.getLogger("bootstrap")
 
 
 def _atomic_write_json(path, obj) -> None:
-    """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
-    stickers.json, or the bot's next startup _load() silently falls back to an
-    empty library (all metadata lost)."""
+    """Atomic write: a truncated stickers.json would load as an empty library."""
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 # ============ NapCat history ============
@@ -191,9 +189,7 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
     if not url:
         return None
     try:
-        # Production callers pass None so safe_fetch_url owns a fresh,
-        # address-pinned client. The optional client is retained only as a
-        # lightweight injection seam for this standalone tool's tests.
+        # None lets safe_fetch_url own an address-pinned client; tests inject one.
         client_factory = (lambda **_kwargs: client) if client is not None else None
         result = await safe_fetch_url(
             url,
@@ -207,12 +203,8 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
         )
         if result is None:
             return None
-        # allowed_content_types only checks what the SERVER DECLARED. The
-        # production path validates the bytes too — ingestion._safe_get_bytes
-        # returns None unless _detect_image_mime matches, and steal() refuses
-        # anything else. This tool writes into that same library, so without
-        # the same check an error page served as image/png becomes a permanent
-        # sticker record with a `.bin` file behind it.
+        # The declared type is not enough: check the bytes, as the live path
+        # does, or an error page served as image/png becomes a sticker.
         if not _detect_image_mime(result.content):
             logger.debug("not an image by magic byte (%s)", url[:80])
             return None
@@ -222,8 +214,7 @@ async def download_sticker(client: httpx.AsyncClient, url: str) -> bytes | None:
         return None
 
 def guess_ext(b: bytes) -> str:
-    # Through the shared detector, not a private copy of the magic-byte
-    # table — the pair StickerLibrary._guess_ext uses.
+    # The same detector StickerLibrary._guess_ext uses.
     return _IMAGE_EXT.get(_detect_image_mime(b), "bin")
 
 def format_ctx_line(msg: dict) -> str:

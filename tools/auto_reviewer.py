@@ -5,17 +5,11 @@ LLM into candidates.jsonl (failure mode + constraint + a BAD/OK pair draft).
 
 Stage 2 (apply, opt-in): pending candidates are converted into preference
 pairs and appended to runtime/feedback.<lang>.jsonl, which the running agent
-hot-reloads into few-shot retrieval — no restart needed.
+hot-reloads into few-shot retrieval.
 
-Blast radius: a pair approved here goes straight into the auto-pool that
-every prompt retrieval draws from unconditionally, for every room and every
-persona this deployment serves, and it survives PERSONA_VERSION changes —
-unlike ledger-promoted rows (persona_agent/promotion.py), which must pass
-scope authorization before they apply beyond the conversation that produced
-them. This is intentional: --apply is a human looking at each pair before it
-lands, which is exactly what the promotion scope rules exempt. It is also
-global reach from one room's correction, so if you want a room- or
-persona-scoped correction instead, use `personagent learned`.
+A pair approved here applies to every room and persona, with no scope check,
+and survives PERSONA_VERSION changes; for a room- or persona-scoped
+correction, use `personagent learned`.
 
 Usage:
     python tools/auto_reviewer.py                     # review only
@@ -73,8 +67,7 @@ REVIEWER_MODEL = (
     or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
 )
 AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
-# Keep the newest N machine-generated pairs (0 = no cap) — mirrors the running
-# agent so both writers converge on the same pool size.
+# Newest N machine pairs kept (0 = no cap), the same cap the agent applies.
 PROMOTE_MAX_FEEDBACK = int(os.getenv("PROMOTE_MAX_FEEDBACK", 500) or 0)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
@@ -113,10 +106,7 @@ async def call_llm(prompt: str) -> str:
 async def review_pending(threshold: int, limit: int, *, no_write: bool,
                          call_model: bool = True) -> list[dict]:
     """Stage 1: diagnose new low-score evals into candidates.jsonl.
-
-    `call_model=False` is the real dry run: it reports what WOULD be reviewed
-    and spends nothing. `no_write` is the narrower one — review for real, print
-    the diagnoses, leave the file alone."""
+    `call_model=False` spends nothing; `no_write` reviews but only prints."""
     evals = evolution.load_evals(EVAL_FILE, threshold)
     seen = evolution.load_reviewed_ts(CANDIDATES_FILE)
     pending = [e for e in evals if e.get("ts") not in seen][:limit]
@@ -158,19 +148,9 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
         if no_write:
             print(line)
         else:
-            # One locked, fsynced append per record instead of a bare
-            # long-lived handle. The running agent appends to this same
-            # file throughout — that is the documented workflow — and an
-            # unlocked handle would lose a share of this run's own diagnoses.
-            # Worse, a torn line lands mid-multibyte on Chinese payloads,
-            # after which every reader of candidates.jsonl raises
-            # UnicodeDecodeError and the negative half of the learning
-            # loop stops permanently, including the code that could repair it.
-            # CHECK THE RETURN. append_jsonl refuses SILENTLY past the cap
-            # and returns 0, and `src_eval_ts` in this file is the only
-            # review-dedup key — so a row that does not land means this
-            # eval is re-diagnosed, and re-billed, on every later run,
-            # forever, while the log still says it was written.
+            # Locked append per record: the running agent writes this file too.
+            # A row refused at the cap would be re-reviewed (and re-billed)
+            # every run, since src_eval_ts is the only dedup key.
             if not evolution.append_jsonl(
                     CANDIDATES_FILE, [record],
                     max_bytes=evolution.CANDIDATE_AUDIT_MAX_BYTES):
@@ -194,9 +174,8 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
 def apply_candidates(auto_yes: bool) -> None:
     """Stage 2: pending candidates -> feedback pairs, always human-gated."""
     if auto_yes:
-        # Model output is not operator authority. Unattended self-review must
-        # travel through evidence -> candidate -> promotion in the in-process
-        # evolution loop; it may never write a trusted retrieval pool directly.
+        # Model output is not operator authority: unattended review goes
+        # through evidence -> candidate -> promotion, never straight to a pool.
         logger.error(
             "--yes direct apply is disabled; use EVOLVE_AUTO_ENABLED for gated "
             "unattended review, or --apply for explicit per-pair approval")
@@ -248,10 +227,8 @@ def apply_candidates(auto_yes: bool) -> None:
             verdicts[ts] = "rejected"
         # anything else: leave pending for a later run
 
-    # Same auto-pool cap the running agent applies, on the same runtime file
-    # (machine pairs carry a "src"; pairs you rated yourself don't and are
-    # never dropped, and the data/ seed is never touched), so approving a
-    # batch here can't push the pool past what retrieval wants to scan.
+    # Only machine pairs (with "src") count toward the cap; hand-rated pairs
+    # and the data/ seed are never dropped.
     trimmed = evolution.trim_pool(
         feedback, max_auto=PROMOTE_MAX_FEEDBACK,
         is_auto=lambda r: bool(r.get("src")))
@@ -260,10 +237,8 @@ def apply_candidates(auto_yes: bool) -> None:
                     trimmed[0], trimmed[1], PROMOTE_MAX_FEEDBACK)
     n = evolution.append_jsonl(feedback, approved)
     if n < len(approved):
-        # append_jsonl writes a prefix and stops at the cap. Marking the dropped
-        # tail "approved" anyway would strand it: load_pending_candidates skips
-        # anything with an `applied` field, so those candidates would be neither
-        # in the feedback pool nor ever offered again. Leave them pending.
+        # The unwritten tail stays pending: marked approved, it would be in no
+        # pool and never offered again.
         for ts in approved_ts[n:]:
             verdicts.pop(ts, None)
         logger.warning("feedback file at size cap: %d of %d pairs written; "
@@ -282,9 +257,6 @@ async def main() -> int:
                    help="treat score <= threshold as a low-score entry (default 3)")
     p.add_argument("--limit", type=int, default=20,
                    help="max entries to review per run (default 20)")
-    # `--dry-run` must not spend anything: reaching for it to see what the
-    # tool would do cannot bill a reviewer call per pending eval. The narrower
-    # "review for real, don't write" is `--no-write`.
     p.add_argument("--dry-run", action="store_true",
                    help="show what would be reviewed; calls no model and "
                         "writes nothing")
@@ -300,10 +272,8 @@ async def main() -> int:
                    help="deprecated unsafe mode; refused without writing feedback")
     args = p.parse_args()
 
-    # review_pending() returning [] means either "nothing pending" (fine,
-    # exit 0) or "LLM_API_KEY not configured" (a cron job silently never
-    # reviewing anything, ever) -- the empty list alone can't tell those
-    # apart, so check the key directly instead of inferring from the result.
+    # Checked here: an empty review result cannot tell "nothing pending" from
+    # "no key", and a cron job would then never review anything.
     if not args.dry_run and not API_KEY:
         logger.error("LLM_API_KEY not configured; cannot call reviewer")
         return 1

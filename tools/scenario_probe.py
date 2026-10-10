@@ -1,23 +1,12 @@
-"""tools/scenario_probe.py — calibrate candidate benchmark scenarios.
+"""Calibrate candidate benchmark scenarios against the real model.
 
-A scenario earns its place in the benchmark by demonstrating, against the real
-model, that it does the one thing the ablation needs: make a weakly-styled
-agent produce a reply the measurement instruments can actually see. A scenario
-that "should" bait assistant-voice but does not is dead weight — it dilutes
-the curve and inflates run cost — and intuition is a poor predictor of which
-prompts actually trip a given model. So: measure, keep what fires, record why
-the rest were dropped.
+A scenario is worth keeping only if a weakly-styled agent's reply to it is
+something both instruments can see. For each candidate this reports:
 
-For every candidate scenario this probe reports two numbers:
-
-- self_eval: the agent's own 1-5 quality score for its weak-style reply. This
-  is the learning trigger — only scores <= EVOLVE_THRESHOLD (default 3)
-  become material the evolve tick can turn into feedback pairs. A family
-  whose replies never dip that low gives the evolve-on arm nothing to learn.
-- judge: the blind judge's 1-5 AI-tell score (via --judge-model, an
-  OpenAI-compatible endpoint). This is the measurement — if the judge cannot
-  see the tell either, the failure the loop fixes would be invisible in the
-  curve.
+- self_eval: the agent's own 1-5 score for its weak-style reply, the learning
+  trigger (only scores <= EVOLVE_THRESHOLD, default 3, become feedback pairs).
+- judge: the blind judge's 1-5 AI-tell score (--judge-model, an
+  OpenAI-compatible endpoint), the measurement.
 
 Usage:
     python tools/scenario_probe.py --candidates my_candidates.jsonl \
@@ -54,11 +43,7 @@ async def probe_one(scn: dict, persona_name: str, lang: str, state_root: Path) -
     if not reply:
         row["self_eval_reason"] = "empty reply"
         return row
-    # Same trigger chain as the benchmark: the buffer still holds the context,
-    # the eval model falls back to the main model when EVAL_MODEL is unset.
-    # ctx_msgs keeps the latest user line: in the live path the snapshot window
-    # ends at the bot's own reply, so the message being replied to is part of
-    # the eval context there too.
+    # ctx_msgs keeps the latest user line, as the live snapshot window does.
     ctx_lines = [f"{m['name']}: {m['text']}" for m in list(agent.buffers["g1"])]
     latest = ctx_lines[-1] if ctx_lines else ""
     await agent._evaluate_reply("g1", scn["mode"], latest, reply,
@@ -110,16 +95,11 @@ async def main_async(args) -> int:
     out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
                    encoding="utf-8", newline="\n")
 
-    # Per-family summary: does the family produce trigger material (self_eval
-    # <= 2) and visible tells (judge <= 3)?
+    # Per family: trigger material (self_eval <= 2) and visible tells (judge <= 3).
     fams: dict[str, list[dict]] = {}
     for r in rows:
         fams.setdefault(r["family"], []).append(r)
-    # --judge-model defaults to empty and is documented as "skips the judge
-    # pass", so no row carries a `judge` key at all. `(r.get("judge") or 5)`
-    # then makes tell 0 for every family and the table reports
-    # "invisible-to-judge" / "inert" — a judgment nobody made, in the column
-    # the operator reads to decide whether a family is worth keeping.
+    # Without a judge the tell column is unmeasured, not zero.
     judged = any(r.get("judge") is not None for r in rows)
     print(f"\n{'family':<14} {'n':>2} {'self<=2':>7} {'judge<=3':>8}  verdict")
     for fam, frs in sorted(fams.items()):

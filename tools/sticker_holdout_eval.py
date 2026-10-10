@@ -1,11 +1,8 @@
-"""tools/sticker_holdout_eval.py — measure the visual aesthetic gate's
-stability and accuracy against a human-labeled holdout set.
+"""Measure the sticker aesthetic gate's stability and accuracy against a
+human-labeled holdout set.
 
-Why this exists: the VISION_AESTHETIC_PROMPT in persona_agent/ingestion.py is hand-tuned. If
-you only iterate the prompt against the same handful of failure examples
-you have on hand, "the next version" is fitting that handful — not
-improving real performance on borderline images. A holdout set you don't
-touch while tuning is the only way to tell those two apart.
+VISION_AESTHETIC_PROMPT (persona_agent/ingestion.py) is hand-tuned; a holdout
+you never tune against tells real improvement from fitting a few examples.
 
 How to use it:
   1) Hand-label 30-50 stickers from `stickers/auto/` into
@@ -21,14 +18,9 @@ How to use it:
        - confusion matrix vs the labels (accuracy / precision / recall)
        - stability count: how many images flipped between runs
 
-  After changing the prompt, run the same holdout again and compare. If
-  accuracy went up and stability didn't get worse, the change actually
-  helped. If accuracy is flat but the failure cases you targeted got
-  better, you most likely fit the targeted cases at the expense of
-  something else.
+  After changing the prompt, run the same holdout again and compare.
 
-Budget: ~30 images × 5 runs = ~150 vision calls. With a cheap vision
-endpoint this should cost well under $1.
+Cost: images x runs vision calls.
 """
 from __future__ import annotations
 
@@ -54,18 +46,8 @@ STICKERS_DIR = ROOT / "stickers" / "auto"
 
 
 def is_unstable(true_count: int, false_count: int) -> bool:
-    """Did the judge flip on this image, over the verdicts it actually gave.
-
-    Counted over the VALID verdicts only. Measured against the run count, a
-    None folds in as "the judge said False", so the metric would be wrong in
-    both directions exactly when the endpoint partially fails — the condition
-    it exists to survive. Its own module returns None on a 429 that outlasts
-    the backoff, so partial failure is the expected shape, not the exotic one.
-
-    A module-level predicate rather than an expression inside the scoring
-    loop so the partial-failure cases are checkable without an API key: (1, 0)
-    with three Nones is stable, (3, 0) with two Nones is not a flip.
-    """
+    """Did the judge flip on this image? Counted over valid verdicts only:
+    a failed call (None) must not read as a False vote."""
     valid = true_count + false_count
     if valid >= 4:
         return true_count >= 2 and false_count >= 2
@@ -92,10 +74,8 @@ async def main(holdout_path: Path, runs: int) -> None:
         sys.exit(1)
     print(f"loaded {len(holdout)} holdout entries, runs={runs}")
 
-    # Spin up an Agent purely for the vision aesthetic pipeline. Most
-    # fields aren't exercised; we just need the vision model and endpoint.
-    # Checked up front: without them every POST goes to a hostless URL and
-    # the whole holdout scores None, which reads as "the judge is broken".
+    # An Agent only for its vision aesthetic judge. Without the endpoint
+    # every verdict would be None, which reads as a broken judge.
     vision_model = os.getenv("VISION_MODEL", "")
     vision_key, vision_base = vision_endpoint_from_env()
     if not (vision_model and vision_key and vision_base):
@@ -127,8 +107,7 @@ async def main(holdout_path: Path, runs: int) -> None:
                 results[fn].append(None)
                 continue
             img_bytes = path.read_bytes()
-            # The aesthetic judge returns True (tacky → ban), False (fine), or
-            # None (judgment failed). Invert so "approved" = "not tacky".
+            # The judge answers "tacky?" (None = failed); approved is the inverse.
             verdict_raw = await agent._judge_sticker_aesthetic(img_bytes)
             verdict = (None if verdict_raw is None else (not verdict_raw))
             results[fn].append(verdict)
