@@ -50,7 +50,7 @@ logger = logging.getLogger("agent")
 
 
 def _load_persona_card() -> Optional[dict]:
-    """The optional persona card (PERSONA_CARD_FILE), today the `reply_style`
+    """The optional persona card (PERSONA_CARD_FILE) with the `reply_style`
     policy. Any failure means no card: the narrow default, failing closed."""
     card_path = ROOT / os.getenv("PERSONA_CARD_FILE", "persona.card.json")
     if not card_path.is_file():
