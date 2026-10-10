@@ -66,15 +66,6 @@ class LauncherTests(unittest.TestCase):
         return [powershell, "-NoLogo", "-NoProfile", "-NonInteractive",
                 "-ExecutionPolicy", "Bypass", "-File", str(repo / "start.ps1")]
 
-    def _run_powershell_launcher(self, host: str) -> tuple[dict, Path]:
-        repo, caller, env = self._windows_repo()
-        env.update({"SERVER_HOST": host, "SERVER_PORT": "8123"})
-        result = self._run(self._powershell(repo), cwd=caller, env=env)
-        capture = Path(env["LAUNCHER_CAPTURE"])
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertTrue(capture.is_file(), result.stdout + result.stderr)
-        return json.loads(capture.read_text(encoding="utf-8")), repo
-
     def test_powershell_launcher_points_an_unconfigured_checkout_at_setup(self) -> None:
         repo, caller, env = self._windows_repo(configured=False)
         result = self._run(self._powershell(repo), cwd=caller, env=env)
@@ -84,16 +75,23 @@ class LauncherTests(unittest.TestCase):
         self.assertFalse(Path(env["LAUNCHER_CAPTURE"]).exists(),
                          "a server without configuration must not start")
 
-    @unittest.skipUnless(os.name == "nt", "cmd.exe launcher")
-    def test_bat_launcher_runs_start_ps1(self) -> None:
+    def test_start_ps1_runs_from_the_repository_root_on_the_configured_address(
+            self) -> None:
+        """One PowerShell start: through start.bat on Windows, which runs
+        start.ps1, and start.ps1 directly elsewhere."""
         repo, caller, env = self._windows_repo()
-        env.update({"SERVER_HOST": "127.0.0.3", "SERVER_PORT": "8124"})
-        result = self._run(["cmd", "/c", str(repo / "start.bat")], cwd=caller, env=env)
+        env.update({"SERVER_HOST": "127.0.0.2", "SERVER_PORT": "8123"})
+        if os.name == "nt":
+            cmd = ["cmd", "/c", str(repo / "start.bat")]
+        else:
+            cmd = self._powershell(repo)
+        result = self._run(cmd, cwd=caller, env=env)
         capture = Path(env["LAUNCHER_CAPTURE"])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(capture.is_file(), result.stdout + result.stderr)
         recorded = json.loads(capture.read_text(encoding="utf-8"))
         self.assertEqual(Path(recorded["cwd"]).resolve(), repo.resolve())
-        self.assertEqual((recorded["host"], recorded["port"]), ("127.0.0.3", "8124"))
+        self.assertEqual((recorded["host"], recorded["port"]), ("127.0.0.2", "8123"))
 
     def test_windows_scripts_are_crlf(self) -> None:
         bat = (ROOT / "start.bat").read_bytes()
@@ -103,17 +101,6 @@ class LauncherTests(unittest.TestCase):
         attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
         for pattern in ("*.bat", "*.cmd", "*.vbs"):
             self.assertIn(f"{pattern} text eol=crlf", attributes)
-
-    def test_powershell_launcher_runs_from_repository_root(self) -> None:
-        capture, repo = self._run_powershell_launcher("127.0.0.1")
-        self.assertEqual(Path(capture["cwd"]).resolve(), repo.resolve())
-
-    def test_powershell_launcher_honors_configured_host(self) -> None:
-        capture, _ = self._run_powershell_launcher("127.0.0.2")
-        self.assertEqual(
-            (capture["host"], capture["port"]),
-            ("127.0.0.2", "8123"),
-        )
 
     @unittest.skipIf(os.name == "nt", "POSIX launcher behavior runs on Unix CI")
     def test_posix_launcher_is_executable_and_honors_configured_host(self) -> None:
