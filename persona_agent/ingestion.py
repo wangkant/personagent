@@ -1,8 +1,6 @@
-"""Content understanding: what the bot can actually see.
+"""Content understanding: links, share cards, images, OCR and sticker aesthetics.
 
-Links, share cards, bilibili/YouTube metadata, images, OCR and sticker
-aesthetics. All network egress here goes through the SSRF guard
-(_safe_get / _host_is_internal) — third-party URLs are untrusted input."""
+All network egress goes through the SSRF guard; third-party URLs are untrusted."""
 
 from __future__ import annotations
 
@@ -36,8 +34,7 @@ from .textproc import (_detect_image_mime, _truncate_framed, apply_k2_quirks,
 
 logger = logging.getLogger("agent")
 
-# Hard ceiling on any image the bot will decode or forward. Bounds both
-# memory and what a hostile URL can push through the vision path.
+# Hard ceiling on any image the bot decodes or forwards.
 VISION_MAX_IMAGE_BYTES = env_int("VISION_MAX_IMAGE_BYTES", 5_000_000, minimum=1)
 
 MAX_URL_LENGTH = 4096
@@ -46,9 +43,7 @@ MAX_HTML_DECODED_BYTES = 128 * 1024
 MAX_IMAGE_PIXELS = 16_000_000
 MAX_IMAGE_DIMENSION = 8192
 
-# Hostnames that are internal by definition (RFC 6761 / RFC 2606), so the
-# network-free pre-filter can reject them without a lookup. Anything outside
-# this set is decided by _resolve_public_target at connect time.
+# Internal by definition (RFC 6761/2606), so rejected without a lookup.
 _RESERVED_LOCAL_NAMES = frozenset({
     "localhost", "localhost.localdomain",
     "ip6-localhost", "ip6-loopback",
@@ -70,9 +65,8 @@ def _ip_obj_is_internal(ip) -> bool:
     mapped = getattr(ip, "ipv4_mapped", None)
     if mapped is not None:
         ip = mapped
-    # `not is_global` catches 100.64.0.0/10 (CGNAT, Tailscale, Alibaba's
-    # 100.100.100.200 metadata service), which none of the flags below cover;
-    # deprecated site-local fec0::/10 still reports is_global on 3.11.
+    # `not is_global` catches CGNAT 100.64.0.0/10 (a cloud metadata range no
+    # flag below covers); site-local fec0::/10 still reports is_global on 3.11.
     return (not ip.is_global or getattr(ip, "is_site_local", False)
             or ip.is_private or ip.is_loopback or ip.is_link_local
             or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
@@ -88,14 +82,8 @@ def _is_internal_ip(value: str) -> bool:
 
 
 def _url_for_log(url: str) -> str:
-    """`scheme://host[:port]/…` of a URL we fetch, for a log line.
-
-    The path and query are not ours to log. Telegram's file URLs carry the
-    bot token in the path (https://api.telegram.org/file/bot<TOKEN>/...),
-    AstrBot forwards them unchanged, so a URL slice would put the token into
-    every caption line and every refused hop. The host is what an operator
-    needs to see which fetch misbehaved.
-    """
+    """`scheme://host[:port]/…` of a fetched URL, for a log line: the path can
+    carry a token (Telegram file URLs do)."""
     try:
         parts = urlsplit(str(url))
         scheme = parts.scheme.lower()
@@ -120,12 +108,8 @@ def _cap_cache(cache: dict, cap: int = 200, drop: int = 50) -> None:
 
 
 async def _resolve_public_target(url: str) -> tuple[str, str, int] | None:
-    """Resolve once and return (hostname, pinned public IP, port).
-
-    Every returned address must be public. Mixed public/private answers fail
-    closed because selecting only the public record would still leave room for
-    address-family or retry behavior to reach the private record.
-    """
+    """Resolve once and return (hostname, pinned public IP, port), or None.
+    Fails closed unless every returned address is public."""
     try:
         parsed = urlsplit(url)
         scheme = parsed.scheme.lower()
@@ -291,9 +275,8 @@ async def safe_fetch_url(
             logger.warning("[Agent] DNS resolution timed out: %s", _url_for_log(current))
             return None
         if resolved is None and client_factory is not None:
-            # Reserved .invalid names are used by the repository's injected
-            # transport tests. They never reach a real socket; production has
-            # no injected factory and therefore remains fail-closed.
+            # Reserved .invalid hosts are for injected test transports; without
+            # an injected factory this stays fail-closed.
             try:
                 test_host = (urlsplit(current).hostname or "").rstrip(".")
             except Exception:
@@ -398,24 +381,12 @@ async def safe_fetch_url(
 
 
 def _resolve_jailed_file_url(url: str, allowed_dir: str) -> Path | None:
-    """Resolve a ``file://`` image URL, or None if it escapes the jail.
-
-    A module-level function, like the http(s) half (``safe_fetch_url``), so
-    the Windows drive-letter strip below, UNC paths and ``..`` segments can be
-    tested without standing up an Agent.
-
-    Returns the resolved path only when QQ_ONEBOT_IMAGE_DIR is set, the target
-    resolves inside it, it is a regular file, and it is within
-    VISION_MAX_IMAGE_BYTES. The size check belongs here rather than after the read:
-    it is a property of the resolved path, and checking it first avoids
-    reading a large file to then discard it.
-    """
+    """Resolve a ``file://`` image URL inside QQ_ONEBOT_IMAGE_DIR, or None
+    (also for a non-file or one over VISION_MAX_IMAGE_BYTES)."""
     from urllib.parse import urlparse, unquote
 
     local = unquote(urlparse(url).path)
-    # "/C:/x" is what a Windows file:// URL parses to; strip the leading
-    # slash or Path() reads it as an absolute POSIX path and the jail
-    # comparison below is made against the wrong thing.
+    # "/C:/x" is how a Windows file:// URL parses; drop the slash for Path().
     if len(local) > 3 and local[0] == "/" and local[2] == ":":
         local = local[1:]
     try:
@@ -451,19 +422,13 @@ class ContentIngestion:
     ]
 
     # ============ Generic URL understanding ============
-    # URL terminator: whitespace, CJK characters (U+3000-303F punctuation,
-    # U+4E00-9FFF ideographs, U+FF00-FFEF full-width), or common ASCII
-    # brackets/pipes that would never appear inside a URL.
+    # Ends at whitespace, CJK punctuation/ideographs/full-width, or brackets.
     URL_PATTERN = re.compile(
         r'https?://[^\s　-〿一-鿿＀-￯<>{}|`\[\]]+'
     )
-    #: Links described per message. Each one is an outbound fetch made before
-    #: the message is buffered, so an uncapped count lets a single message full
-    #: of cache-busted URLs stall the intake loop and point the bot's own IP at
-    #: whatever host the sender names. Message-wide, not per text segment: an
-    #: inline @mention splits one paste into several segments, and a
-    #: per-segment cap multiplies by however many a sender produces. Nobody
-    #: pastes four links and expects all four summarised anyway.
+    #: Links described per message, message-wide: each is an outbound fetch
+    #: before the message is buffered, so uncapped, one message of
+    #: cache-busted URLs could stall intake.
     MAX_URLS_PER_MESSAGE = 3
     #: Wall clock for describing one message's links, which run concurrently:
     #: a slow or tarpit host costs its own descriptor, never the turn.
@@ -500,13 +465,7 @@ class ContentIngestion:
         "6. Don't prefix with \"this image / the picture shows / in the image\" — just say it."
     )
 
-    # Aesthetic judgment prompt used by visual_recheck_aesthetic_all. The
-    # auto-tagger only sees the *context* a sticker is used in (and decides
-    # emotional intent) — it can't see the image itself, so it can't tell a
-    # cleanly-designed "smug" sticker from a tacky old WeChat-family-group
-    # one with the same emotional intent. This prompt asks the vision model
-    # to look at the image directly and judge whether the visual style
-    # matches the configured persona.
+    # The auto-tagger sees only a sticker's context; this looks at its pixels.
     VISION_AESTHETIC_PROMPT = (
         "Judge whether the visual aesthetic of this reaction sticker fits the kind "
         "of taste a **clean modern internet-savvy user** would actually post — vs. "
@@ -530,36 +489,28 @@ class ContentIngestion:
         "When in doubt, return false (better to keep one through than to mis-ban a good one). Only ban what's obviously dated/crude at a glance."
     )
 
-    # Bump this whenever VISION_AESTHETIC_PROMPT criteria change. On the next
-    # startup, visual_recheck_aesthetic_all will re-judge every entry whose
-    # _visual_aesthetic_version is older — no manual JSON surgery needed.
+    # Bump when VISION_AESTHETIC_PROMPT changes, so every entry is re-judged.
     VISUAL_AESTHETIC_VERSION = 1
 
-    # Tokens that signal "the vision model couldn't actually see the image" —
-    # if any of these appear in the caption we treat it as a non-caption and
-    # fall back to OCR / placeholder. Chinese tokens are kept because some
-    # vision endpoints answer in Chinese even when prompted in English.
+    # A caption containing any of these means the model couldn't see the image.
     _VISION_REJECT_TOKENS = (
         # English
         "can't see", "cannot see", "unable to see", "no image", "not visible",
         "can't read", "cannot read", "can't open", "cannot open",
         "unclear", "unrecognizable", "blank", "black screen", "empty image",
         "failed to load", "cannot access",
-        # Chinese (legacy; many cn-region vision endpoints reply in Chinese)
+        # Chinese: some endpoints answer in Chinese whatever the prompt
         "不清楚", "不确定", "看不到", "看不了", "看不清", "打不开",
         "无法", "不存在", "无内容", "黑屏", "空白", "没看到",
         "图片为空", "加载失败", "无法访问", "无法识别",
     )
 
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
-        """Fetch image bytes. Handles base64:// (inline data from a connector
-        b64-only image segment), file:// (local read for NapCat local-cache
-        mode) and http(s) (httpx)."""
+        """Image bytes from a base64://, jailed file:// or SSRF-guarded http(s) URL."""
         if not url:
             return None
         if url.startswith("base64://"):
-            # synthesize_onebot_payload emits a base64:// file field when the
-            # connector had no URL — the bytes are inline, nothing to fetch.
+            # A connector image with no URL arrives inline.
             encoded = url[len("base64://"):]
             max_encoded = ((VISION_MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
             if len(encoded) > max_encoded:
@@ -591,11 +542,8 @@ class ContentIngestion:
         if len(url) > MAX_URL_LENGTH:
             logger.warning("[Agent] image URL exceeds length limit")
             return None
-        # SSRF guard: an image-segment URL can point at internal endpoints
-        # (169.254.169.254 IMDS, RFC1918) and the fetched bytes get shipped to
-        # the vision provider / sticker library. _safe_get re-checks every
-        # redirect hop, so a public URL 302-ing to an internal address is
-        # blocked too — this fetcher doesn't go through _should_skip_url.
+        # SSRF guard: these bytes go to the vision provider and the sticker
+        # library, and every redirect hop is re-checked.
         try:
             return await self._safe_get_bytes(
                 url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
@@ -630,8 +578,7 @@ class ContentIngestion:
                          type(e).__name__, str(e) or "(no message)")
 
     async def _record_sticker_context(self, md5: str, group_id: str, sender_uid: str) -> None:
-        """Lightweight: log another context sighting for a known sticker
-        (skipping the byte download since md5 already matches the entry)."""
+        """Log another context sighting for a known sticker, without a download."""
         if not md5 or not group_id:
             return
         entry = self.stickers.lookup_by_md5(md5)
@@ -645,8 +592,7 @@ class ContentIngestion:
         self.stickers._append_context(filename, sender_uid, ctx)
 
     def _sticker_context_lines(self, group_id: str, n: int = 6) -> list[str]:
-        """Format the most recent buffer entries as 'name: text' lines for
-        sticker context capture. Excludes bot's own messages."""
+        """Recent buffer lines as 'name: text' for sticker context, minus the bot."""
         buf = list(self.buffers.get(group_id, []))
         out: list[str] = []
         for m in buf[-n:]:
@@ -658,9 +604,7 @@ class ContentIngestion:
 
     @staticmethod
     def _format_bili_line(info: dict, title_fallback: str = "") -> str:
-        """Build the `[bilibili-video] "title" — by <up>, AI summary/description: ...`
-        descriptor fed to the model. Shared by _describe_share and _describe_url
-        (the share path passes a title_fallback; the URL path leaves it empty)."""
+        """The `[bilibili-video] "title" — by <up>, ...` line fed to the model."""
         title = info.get("title") or title_fallback
         up = info.get("up", "")
         summary = (info.get("summary", "") or "").strip().replace("\n", " ")
@@ -675,10 +619,8 @@ class ContentIngestion:
         return line
 
     async def _describe_share(self, raw_json: str) -> str:
-        """Parse an IM mini-app share-card JSON segment into a text line the LLM
-        can read. Special-cases Bilibili video shares (resolves shortlink,
-        fetches full title/uploader/desc); other shares fall back to
-        whatever title+desc the card already carries."""
+        """A share-card JSON segment as a line the LLM can read: Bilibili shares
+        resolved, others via their URL or the card's own title and desc."""
         try:
             outer = json.loads(raw_json)
         except (TypeError, ValueError, json.JSONDecodeError):
@@ -686,10 +628,8 @@ class ContentIngestion:
         if not isinstance(outer, dict):
             return ""
 
-        # Every field below is sender-controlled and may be any JSON type
-        # (int/dict/list where a string is expected). Non-strings are treated
-        # as absent — a crafted card must degrade to a thin placeholder, not
-        # raise out of here and drop the whole inbound message.
+        # Every field is sender-controlled and any JSON type; non-strings count
+        # as absent, so a crafted card degrades instead of dropping the message.
         def _text(v) -> str:
             return v if isinstance(v, str) else ""
 
@@ -727,9 +667,7 @@ class ContentIngestion:
                 return self._format_bili_line(info, title_fallback=desc_field)
             return f"[bilibili-video] \"{desc_field}\"" if desc_field else "[bilibili-video]"
 
-        # Non-Bilibili mini-app share card: the card's own title/desc fields
-        # are usually thin. If the card carries a jumpUrl/qqdocurl, route it
-        # through the generic URL describer for richer OG-tag metadata.
+        # Other cards are thin; their jump URL often has richer OG metadata.
         if url:
             url_info = await self._describe_url(url)
             if url_info and url_info != "[link]":
@@ -743,9 +681,8 @@ class ContentIngestion:
         return f"[share|{title_field or 'unknown'}]"
 
     async def _fetch_bili_info(self, url: str) -> dict:
-        """Resolve b23.tv shortlinks → real URL → BVid; then call Bilibili web
-        view API for title/up/desc. Returns {} on any failure so callers can
-        gracefully fall back to the share-card's own title/desc."""
+        """Bilibili title/uploader/desc (and AI summary) for a share URL, via
+        b23.tv and the web view API; {} on any failure."""
         if not url or len(url) > MAX_URL_LENGTH:
             return {}
 
@@ -755,16 +692,13 @@ class ContentIngestion:
 
         real_url = url
         if "b23.tv" in url:
-            # SSRF gate: share-card JSON is group-member-controlled, and
-            # "contains b23.tv" is not "is a Bilibili shortlink"
-            # (http://10.0.0.1/x?b23.tv matches too) — never fetch internal hosts.
+            # "contains b23.tv" is not "is a shortlink": never fetch internal hosts.
             if self._host_is_internal(url):
                 logger.warning("[Agent] refusing internal-address b23 url: %s", url)
                 self.bili_info_cache[cache_key] = {}
                 return {}
             try:
-                # _safe_get follows the shortlink redirect manually, refusing
-                # any hop that lands on an internal address.
+                # _safe_get re-checks every redirect hop.
                 r = await self._safe_get(url, timeout=5,
                                          headers={"User-Agent": "Mozilla/5.0"})
                 if r is not None:
@@ -814,8 +748,7 @@ class ContentIngestion:
         return info
 
     async def _fetch_wbi_keys(self) -> tuple[str, str]:
-        """Fetch (img_key, sub_key) used to sign WBI requests; cached 24h.
-        Returns ('','') on failure — caller should skip WBI-protected calls."""
+        """(img_key, sub_key) for WBI signing, cached 24h; ('', '') on failure."""
         now = time.time()
         if self._wbi_keys[0] and now - self._wbi_keys_ts < 86400:
             return self._wbi_keys
@@ -855,7 +788,7 @@ class ContentIngestion:
         return signed
 
     async def _fetch_bili_summary(self, bvid: str, cid: int, up_mid: int) -> str:
-        """Bilibili AI summary via view/conclusion/get. Returns empty string on failure or no summary."""
+        """Bilibili AI summary via view/conclusion/get, or ""."""
         img_key, sub_key = await self._fetch_wbi_keys()
         if not img_key or not sub_key:
             return ""
@@ -922,25 +855,11 @@ class ContentIngestion:
 
     @classmethod
     def _host_is_internal(cls, url: str) -> bool:
-        """Cheap, network-free SSRF pre-filter: True if the URL's host is
-        *self-evidently* internal — an IP literal in a non-public range
-        (loopback, RFC1918, link-local incl. the 169.254.169.254 metadata
-        endpoint, reserved, IPv6 equivalents) or a reserved local name.
+        """Network-free SSRF pre-filter: an internal IP literal or reserved name.
 
-        **This is a fast reject, not the security boundary.** The boundary is
-        _resolve_public_target: resolve once, refuse if any answer is
-        internal, then pin the connection to that exact address. Every fetch
-        goes through it, and every redirect hop is re-validated by it.
-
-        It deliberately does NOT resolve hostnames, which would cost two
-        things and buy nothing. `socket.getaddrinfo` is synchronous, so one
-        posted URL whose nameserver blackholes would freeze the whole event
-        loop (every group, the connector round-trip, all background loops) for
-        the resolver timeout. And a name resolved *here* says nothing about the
-        address connected to later; that gap is precisely the DNS-rebinding
-        window that _resolve_public_target's pinning closes. A public name
-        pointing at an internal address is still refused, at connect time, by
-        the layer that can actually make the refusal stick."""
+        A fast reject, not the boundary (`_resolve_public_target` pins each
+        connection). It never resolves: getaddrinfo would block the event loop,
+        and a name resolved here says nothing about the address connected later."""
         try:
             host = (urlsplit(url).hostname or "").strip("[]").rstrip(".")
         except Exception:
@@ -951,20 +870,15 @@ class ContentIngestion:
             return _ip_obj_is_internal(ipaddress.ip_address(host))
         except ValueError:
             pass  # not an IP literal
-        # Names that are internal by definition, so no lookup is needed.
-        # Anything else is left to _resolve_public_target.
+        # Internal by definition; anything else is left to _resolve_public_target.
         low = host.lower()
         return low in _RESERVED_LOCAL_NAMES or low.endswith(".localhost")
 
     async def _safe_get(self, url: str, *, timeout: float,
                         headers: Optional[dict] = None,
                         max_redirects: int = 5) -> Optional[httpx.Response]:
-        """GET with redirects followed manually so EVERY hop is re-resolved,
-        re-validated and pinned by _resolve_public_target. httpx's automatic
-        following would happily chase a public URL that 302s to 127.0.0.1 (the
-        protocol API) or 169.254.169.254 (IMDS) — no check of the initial URL
-        can see that. Returns the final response, or None if any hop resolves
-        to an internal address or the redirect cap is exceeded."""
+        """GET with every redirect hop re-resolved, re-validated and pinned; None
+        if a hop is internal or the redirect cap is exceeded."""
         result = await safe_fetch_url(
             url,
             timeout=timeout,
@@ -979,12 +893,8 @@ class ContentIngestion:
         if result is None:
             return None
         request = httpx.Request("GET", result.url)
-        # safe_fetch_url already decoded the body (_decode_body, bounded), so
-        # the transfer-framing headers now describe something that is no longer
-        # true. Passing content-encoding: gzip alongside plaintext makes httpx
-        # re-run its decompressor over it and raise DecodingError from the
-        # constructor, which is swallowed upstream and would silently degrade
-        # every link on a gzip-serving site (i.e. most of them) to "[link]".
+        # The body is already decoded, so drop the framing headers, or httpx
+        # re-runs gzip over plaintext and every gzip-served link degrades.
         headers = {
             k: v for k, v in (result.headers or {}).items()
             if k.lower() not in ("content-encoding", "content-length",
@@ -1023,18 +933,8 @@ class ContentIngestion:
         return cls._host_is_internal(url)
 
     async def _describe_url(self, url: str) -> str:
-        """Fetch URL metadata and return a preformatted descriptor like
-        `[bilibili-video] ...` / `[YouTube] "title" — author` / `[site] "title" desc`.
-
-        Routing:
-          - bilibili.com / b23.tv → reuse _fetch_bili_info (title + uploader + AI summary)
-          - youtube.com / youtu.be → oEmbed (no API key required)
-          - everything else → generic OG-tag scrape (og:title / og:description /
-            og:site_name, falling back to <title>)
-
-        Cache: same URL across the same group only hits the network once.
-        Failures return "[link]" as a graceful placeholder so the model knows
-        a URL was present without reciting the raw href."""
+        """A descriptor for one URL: Bilibili API, YouTube oEmbed, or the page's
+        OG tags. Cached; "[link]" on failure, so the model knows a URL was there."""
         if not url or len(url) > MAX_URL_LENGTH or self._should_skip_url(url):
             return ""
         cache_key = self._url_cache_key(url)
@@ -1067,15 +967,9 @@ class ContentIngestion:
         return result
 
     async def _describe_urls(self, urls: list[str]) -> list[str]:
-        """One descriptor per URL, aligned with `urls`: "" for a link that
-        failed, described to nothing, or was still loading when
-        ``LINK_ENRICHMENT_BUDGET_SEC`` ran out.
-
-        Concurrent, because in sequence each link's own timeout adds up and a
-        few slow hosts hold the turn. ``asyncio.wait`` rather than gather under
-        one timeout: it hands back what already finished, so a straggler costs
-        only its own descriptor. Aligned so the caller can make one call for
-        the whole message and still put each descriptor after its segment."""
+        """One descriptor per URL, aligned with `urls` ("" for a failure or a
+        link still loading at ``LINK_ENRICHMENT_BUDGET_SEC``). Concurrent, so a
+        straggler costs only its own descriptor."""
         if not urls:
             return []
         tasks = [asyncio.ensure_future(self._describe_url(u)) for u in urls]
@@ -1127,9 +1021,7 @@ class ContentIngestion:
         return ""
 
     async def _fetch_og_meta(self, url: str) -> str:
-        """Generic Open Graph / Twitter card scraper. GET the first 100KB of
-        HTML and pull og:title / og:description / og:site_name (falling back
-        to <title>). Returns "" on every failure path so callers can shrug."""
+        """Open Graph / Twitter card scrape of a page, or "" on any failure."""
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
@@ -1175,19 +1067,14 @@ class ContentIngestion:
 
     @staticmethod
     def _image_cache_key(url: str) -> str:
-        """Caption-cache key for an image 'url'. Connector images with only
-        inline bytes arrive as base64://<payload> pseudo-URLs — up to several
-        MB each — so keying the cache on the raw string would park megabytes
-        of dead base64 per entry. Hash those; real URLs stay as-is."""
+        """Caption-cache key, hashed: base64:// pseudo-URLs can be megabytes."""
         prefix = "b64:" if url.startswith("base64://") else "url:"
         return prefix + hashlib.sha256(
             url.encode("utf-8", errors="replace"),
         ).hexdigest()
 
     def _accept_vision_caption(self, url: str, text: str, provider: str) -> str:
-        # Truncated to 150 chars (a long caption is still useful), not
-        # rejected for length: a length reject would silently throw away many
-        # valid descriptions of complex images.
+        # Truncated, not rejected: a long caption is still useful.
         text = (text or "").strip()[:150]
         hit = next((t for t in self._VISION_REJECT_TOKENS if t in text), "")
         if text and len(text) >= 4 and not hit:
@@ -1204,10 +1091,7 @@ class ContentIngestion:
 
     @staticmethod
     def _gif_first_frame_png(gif_bytes: bytes) -> bytes:
-        """Extract a GIF's first frame as PNG. Many vision endpoints reject
-        GIF directly; the first frame as PNG carries enough signal for a
-        caption. Returns empty bytes on
-        failure so the caller can fall back to OCR."""
+        """A GIF's first frame as PNG, or b"" so the caller falls back to OCR."""
         class _BoundedBuffer(io.BytesIO):
             def write(self, data) -> int:
                 if self.tell() + len(data) > VISION_MAX_IMAGE_BYTES:
@@ -1253,15 +1137,12 @@ class ContentIngestion:
                 close_image()
 
     def _vision_configured(self) -> bool:
-        """Whether the operator set up a vision model: model, key and base URL
-        must all be set, so no image is uploaded by default."""
+        """Model, key and base URL all set, so no image is uploaded by default."""
         return bool(self.vision_model and self.vision_api_key and self.vision_base_url)
 
     async def _vision_data_url(self, img_bytes: bytes, mime: str) -> str:
-        """Base64 data URL for the vision endpoint ("" when a GIF won't decode).
-
-        Raw URLs trip format errors on some providers, and many reject GIF, so
-        a GIF goes as its first frame, decoded off the event loop."""
+        """Base64 data URL for the vision endpoint (raw URLs trip some providers);
+        a GIF goes as its first frame, decoded off the loop, or "" if that fails."""
         if mime == "image/gif":
             img_bytes = await asyncio.to_thread(self._gif_first_frame_png, img_bytes)
             if not img_bytes:
@@ -1318,10 +1199,8 @@ class ContentIngestion:
                 .get("content", "") or "")
 
     async def _judge_sticker_aesthetic(self, img_bytes: bytes) -> bool | None:
-        """Ask the vision model if a sticker is visually tacky / off-persona.
-        Returns True (tacky → should ban), False (fine), or None on judgment
-        failure (read error / API error / unparseable response — entry is
-        left untouched)."""
+        """Whether the vision model finds a sticker tacky: True, False, or None
+        when no verdict came back (the entry is left untouched)."""
         try:
             if not img_bytes or len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
                 return None
@@ -1350,22 +1229,9 @@ class ContentIngestion:
             return None
 
     async def visual_recheck_aesthetic_all(self, limit: int = 200) -> int:
-        """Scan tagged stickers and demote visually-tacky ones to
-        persona_fit=false. Complements the text-based recheck_persona_fit_all:
-        that one only sees meaning/tags (LLM-inferred from usage context and
-        oblivious to visual style), so two stickers with the same "smug"
-        meaning but wildly different aesthetics (clean meme vs gaudy old
-        family-group sticker) both look fit by text alone. This pass looks
-        at the pixels.
-
-        Version-gated via _visual_aesthetic_version on each entry. Bump
-        VISUAL_AESTHETIC_VERSION to force re-judgment of all entries.
-
-        Runs on every startup, so it does nothing without a configured vision
-        model: sticker tagging needs only the text LLM, and a default install
-        would otherwise upload its whole sticker library, keyless, to the
-        default endpoint. Only a real verdict is stamped; a failed call
-        leaves the entry to be judged next time."""
+        """Demote visually tacky stickers to persona_fit=false; the text recheck
+        sees only meaning, not style. Version-gated per entry, and a no-op
+        without a configured vision model, so a default install uploads nothing."""
         if not self._vision_configured():
             return 0
         todo = [
@@ -1394,26 +1260,18 @@ class ContentIngestion:
                 marked += 1
                 logger.info("[stickers] visual-aesthetic ban %s: meaning=%r",
                             fn, v.get("meaning", ""))
-            # 5s pacing: free-tier vision rate limits are tight; tighter
-            # spacing burns through the quota in seconds and most judgments
-            # come back None from 429s.
+            # Pacing for tight free-tier vision rate limits.
             await asyncio.sleep(5.0)
-        # Forced, like recheck_persona_fit_all: the version stamps record a
-        # paid vision call per sticker. When nothing was banned no purge
-        # follows to save them, and a write the throttle skipped would leave
-        # them in memory only, so a crash before the next save would pay for
-        # the whole library again.
+        # Forced: the version stamps record a paid call per sticker, and a
+        # throttled write would lose them to a crash.
         self.stickers._save(force=True)
         logger.info("[Agent] visual aesthetic recheck: scanned=%d banned=%d",
                     len(todo), marked)
         return marked
 
     async def _describe_image_vision(self, url: str) -> str | None:
-        """OpenAI-compatible vision call, for any vision model that takes the
-        /chat/completions shape with image_url. Fetches the image bytes, sends as a base64 data URL —
-        raw URLs trigger format errors on some providers; base64 is the
-        reliable path. None = the call failed (fetch, network, HTTP) and may
-        succeed later; "" = the image has no usable caption."""
+        """Caption an image through the OpenAI-compatible vision endpoint. None
+        means the call failed and may succeed later; "" means no usable caption."""
         try:
             img_bytes = await self._fetch_image_bytes(url)
             if not img_bytes:
@@ -1459,8 +1317,7 @@ class ContentIngestion:
             return None
 
     async def _describe_image(self, url: str) -> str:
-        """Vision goes through the OpenAI-compatible endpoint
-        (_describe_image_vision), with OCR as the fallback on a miss. Filters garbage OCR (too short / single-char fragments)."""
+        """Vision caption, else OCR; garbage OCR (short fragments) is dropped."""
         if not url:
             return ""
         cache_key = self._image_cache_key(url)
@@ -1469,16 +1326,12 @@ class ContentIngestion:
 
         caption = ""
         if self._vision_configured():
-            # Any OpenAI-compatible vision model.
             caption = await self._describe_image_vision(url)
         vision_failed = caption is None
         if caption:
             return caption
 
-        # The OCR fallback is a QQ-path facility: NapCat cannot fetch
-        # foreign-platform URLs or base64 pseudo-URLs, so a connector image
-        # would only burn a doomed NapCat call. Skip it while the connector
-        # sink is set.
+        # OCR is QQ-only: NapCat can't fetch a connector image's URL.
         if current_sink.get() is not None:
             return ""
 
@@ -1488,13 +1341,8 @@ class ContentIngestion:
             avg_token_len = sum(len(t) for t in tokens) / max(len(tokens), 1)
             if avg_token_len >= 2:
                 return ocr_text
-        # Remember the miss, the way _describe_url caches its "[link]", but only
-        # when both channels answered: re-running them on every repost buys the
-        # same nothing at the price of the vision retry ladder plus a NapCat
-        # round trip. _ocr_image caches only a reply it got, and a vision call
-        # that failed is "not now", which cached would blind this image for
-        # good. The connector-sink return above is not cached either: that one
-        # is "not from here", not "never".
+        # Cache the miss only when both channels answered: a failed vision call
+        # means "not now", and cached it would blind this image for good.
         if not vision_failed and cache_key in self.image_caption_cache:
             self.image_caption_cache[cache_key] = ""
             self._gc_image_cache()
@@ -1504,18 +1352,10 @@ class ContentIngestion:
         _cap_cache(self.image_caption_cache)
 
     async def _ocr_image(self, url: str) -> str:
-        """Call the OneBot /ocr_image endpoint (NapCat etc.) to extract text
-        from an image. Returns "" on failure or when no text is detected.
+        """Text from NapCat's /ocr_image, or "".
 
-        The URL is handed to NapCat, which fetches it with no SSRF controls of
-        its own — so this is a delegated fetch and must be gated here. It is
-        reached precisely when the direct fetch failed, and for an internal URL
-        that failure is *guaranteed* (safe_fetch_url refuses it, the vision
-        caption comes back empty, and this is the fallback). Ungated, the SSRF
-        refusal would be converted into an SSRF *success* by proxy, with the
-        fetched text reflected back into the group buffer and the prompt.
-        file:// is refused for the same reason the direct image path keeps a
-        QQ_ONEBOT_IMAGE_DIR jail: those URLs really do arrive here."""
+        A delegated fetch with no SSRF controls of its own, reached exactly when
+        the direct fetch refused a URL, so it is gated here (public http(s) only)."""
         if not url or not self.qq_onebot_url:
             return ""
         if not url.lower().startswith(("http://", "https://")):
