@@ -6,6 +6,7 @@ Run from the repo root:
 """
 from __future__ import annotations
 
+import base64
 import gzip
 import io
 import re
@@ -407,3 +408,347 @@ def test_every_non_global_address_is_internal(address, internal) -> None:
 
     check(f"ssrf: {address} internal={internal}",
           _is_internal_ip(address) is internal)
+
+
+# --- Vision requests: the caption and the sticker-aesthetic verdict ----------
+
+VISION_BASE = "https://vision.example/v1"
+PNG = b"\x89PNG\r\n\x1a\n" + b"p" * 400
+GIF = b"GIF89a" + b"g" * 400
+FRAME = b"\x89PNG\r\n\x1a\n" + b"frame" * 80
+BMP = b"BM" + b"b" * 400
+HEIC = b"\x00\x00\x00\x18ftypheic" + b"h" * 400
+AVIF = b"\x00\x00\x00\x18ftypavif" + b"a" * 400
+UNKNOWN = b"\x00" * 400
+IMAGE_URL = "https://img.example/a.png"
+
+
+def _data_url(mime: str, body: bytes) -> str:
+    return f"data:{mime};base64,{base64.b64encode(body).decode()}"
+
+
+class VisionResponse:
+    def __init__(self, status: int, content: str = "") -> None:
+        self.status_code = status
+        self.text = f"status {status} body"
+        self._content = content
+
+    def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
+
+
+class ScriptedVision:
+    """Stands in for `agent._http`: each POST takes the next scripted outcome."""
+
+    def __init__(self, *outcomes) -> None:
+        self.outcomes = list(outcomes)
+        self.posts: list[dict] = []
+        self.client_kwargs: list[dict] = []
+
+    def __call__(self, **kwargs):
+        self.client_kwargs.append(kwargs)
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.posts.append({"url": url, "headers": headers, "json": json})
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class VisionHarness(Harness):
+    vision_model = "vision-model"
+    vision_api_key = "vision-key"
+    vision_base_url = VISION_BASE
+
+    def __init__(self, image: bytes | None = PNG, *outcomes) -> None:
+        super().__init__()
+        self.image = image
+        self.vision = ScriptedVision(*outcomes)
+        self._http = self.vision
+
+    async def _fetch_image_bytes(self, url: str) -> bytes | None:
+        return self.image
+
+
+@pytest.fixture
+def sleeps(monkeypatch) -> list:
+    """Backoff delays the vision paths asked for; nothing actually waits."""
+    from persona_agent import ingestion
+
+    delays: list = []
+
+    async def no_wait(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr(ingestion.asyncio, "sleep", no_wait)
+    return delays
+
+
+def _expected_payload(prompt: str, data_url: str, max_tokens: int,
+                      temperature: float) -> dict:
+    return {
+        "model": "vision-model",
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ],
+        }],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+
+
+async def test_vision_caption_request_shape(sleeps) -> None:
+    agent = VisionHarness(PNG, VisionResponse(200, "doge - smug"))
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption: accepted text returned", got == "doge - smug", repr(got))
+    check("caption: one client, 30 s timeout",
+          agent.vision.client_kwargs == [{"timeout": 30}],
+          repr(agent.vision.client_kwargs))
+    post = agent.vision.posts[0]
+    check("caption: posts to chat/completions",
+          post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
+    check("caption: bearer key", post["headers"] == {
+        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+    expected = _expected_payload(ContentIngestion.VISION_PROMPT,
+                                 _data_url("image/png", PNG), 120, 0.3)
+    check("caption: payload shape", post["json"] == expected, repr(post["json"])[:300])
+    check("caption: no backoff on success", sleeps == [], repr(sleeps))
+
+
+@pytest.mark.parametrize("status", [400, 429, 500, 502, 503, 504])
+async def test_vision_caption_retries_a_retryable_status(status, sleeps) -> None:
+    agent = VisionHarness(PNG, *[VisionResponse(status)] * 3)
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check(f"caption {status}: None after the last try", got is None, repr(got))
+    check(f"caption {status}: three tries", len(agent.vision.posts) == 3,
+          repr(len(agent.vision.posts)))
+    check(f"caption {status}: 1 s then 2 s backoff", sleeps == [1, 2], repr(sleeps))
+
+    agent = VisionHarness(PNG, VisionResponse(status), VisionResponse(200, "a cat on a mat"))
+    sleeps.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check(f"caption {status}: a later success is used", got == "a cat on a mat", repr(got))
+    check(f"caption {status}: one backoff before it", sleeps == [1], repr(sleeps))
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 422])
+async def test_vision_caption_does_not_retry_other_statuses(status, sleeps) -> None:
+    agent = VisionHarness(PNG, VisionResponse(status))
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check(f"caption {status}: None", got is None, repr(got))
+    check(f"caption {status}: a single try", len(agent.vision.posts) == 1)
+    check(f"caption {status}: no backoff", sleeps == [], repr(sleeps))
+
+
+async def test_vision_caption_retries_transport_errors(sleeps) -> None:
+    import httpx
+
+    agent = VisionHarness(PNG, *[httpx.ReadTimeout("slow")] * 3)
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption errors: None after three tries", got is None, repr(got))
+    check("caption errors: three tries", len(agent.vision.posts) == 3)
+    check("caption errors: 1 s then 2 s backoff", sleeps == [1, 2], repr(sleeps))
+
+    agent = VisionHarness(PNG, httpx.ConnectError("refused"),
+                          VisionResponse(200, "a cat on a mat"))
+    sleeps.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption errors: a later success is used", got == "a cat on a mat", repr(got))
+    check("caption errors: one backoff before it", sleeps == [1], repr(sleeps))
+
+
+@pytest.mark.parametrize("image, expected", [
+    (None, None),
+    (b"", None),
+    (PNG[:199], ""),
+    (b"\x89PNG\r\n\x1a\n" + b"p" * 5_000_000, ""),
+    (UNKNOWN, ""),
+    (HEIC, ""),
+    (AVIF, ""),
+], ids=["none", "empty", "tiny", "huge", "unknown", "heic", "avif"])
+async def test_vision_caption_skips_unusable_images(image, expected, sleeps) -> None:
+    agent = VisionHarness(image)
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption skip: result", got == expected, repr(got))
+    check("caption skip: nothing posted", agent.vision.posts == [])
+
+
+async def test_vision_caption_sends_bmp_as_is(sleeps) -> None:
+    agent = VisionHarness(BMP, VisionResponse(200, "a cat on a mat"))
+    await agent._describe_image_vision(IMAGE_URL)
+    sent = agent.vision.posts[0]["json"]["messages"][0]["content"][1]
+    check("caption bmp: sent with its own mime",
+          sent["image_url"]["url"] == _data_url("image/bmp", BMP))
+
+
+async def test_vision_caption_sends_a_gif_as_its_first_frame(sleeps) -> None:
+    import threading
+
+    threads: list = []
+
+    def first_frame(data: bytes) -> bytes:
+        threads.append(threading.get_ident())
+        return FRAME if data == GIF else b""
+
+    agent = VisionHarness(GIF, VisionResponse(200, "a cat on a mat"))
+    agent._gif_first_frame_png = first_frame
+    got = await agent._describe_image_vision(IMAGE_URL)
+    sent = agent.vision.posts[0]["json"]["messages"][0]["content"][1]
+    check("caption gif: captioned", got == "a cat on a mat", repr(got))
+    check("caption gif: first frame sent as PNG",
+          sent["image_url"]["url"] == _data_url("image/png", FRAME))
+    check("caption gif: decoded off the event loop thread",
+          threads and threads[0] != threading.get_ident(), repr(threads))
+
+    agent = VisionHarness(GIF)
+    agent._gif_first_frame_png = lambda data: b""
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption gif: a failed decode is no caption", got == "", repr(got))
+    check("caption gif: and nothing is posted", agent.vision.posts == [])
+
+
+async def test_vision_aesthetic_request_shape(sleeps) -> None:
+    agent = VisionHarness(None, VisionResponse(200, ' {"tacky": true, "reason": "x"} '))
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check("aesthetic: verdict parsed", got is True, repr(got))
+    check("aesthetic: one client, 30 s timeout",
+          agent.vision.client_kwargs == [{"timeout": 30}],
+          repr(agent.vision.client_kwargs))
+    post = agent.vision.posts[0]
+    check("aesthetic: posts to chat/completions",
+          post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
+    check("aesthetic: bearer key", post["headers"] == {
+        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+    expected = _expected_payload(ContentIngestion.VISION_AESTHETIC_PROMPT,
+                                 _data_url("image/png", PNG), 60, 0)
+    check("aesthetic: payload shape", post["json"] == expected, repr(post["json"])[:300])
+    check("aesthetic: no backoff on success", sleeps == [], repr(sleeps))
+
+
+@pytest.mark.parametrize("content, expected", [
+    ('{"tacky": false}', False),
+    ('```json\n{"tacky": true}\n```', True),
+    ('{"reason": "no verdict"}', None),
+    ("no idea", None),
+    ("", None),
+], ids=["false", "fenced", "no-verdict", "prose", "blank"])
+async def test_vision_aesthetic_verdict_parsing(content, expected, sleeps) -> None:
+    agent = VisionHarness(None, VisionResponse(200, content))
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check(f"aesthetic parse {content!r}", got is expected, repr(got))
+
+
+async def test_vision_aesthetic_retries_429_only(sleeps) -> None:
+    agent = VisionHarness(None, *[VisionResponse(429)] * 4)
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check("aesthetic 429: None after the last try", got is None, repr(got))
+    check("aesthetic 429: four tries", len(agent.vision.posts) == 4,
+          repr(len(agent.vision.posts)))
+    check("aesthetic 429: 3, 6, 12 s backoff", sleeps == [3.0, 6.0, 12.0], repr(sleeps))
+
+    agent = VisionHarness(None, VisionResponse(429), VisionResponse(429),
+                          VisionResponse(200, '{"tacky": false}'))
+    sleeps.clear()
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check("aesthetic 429: a later success is used", got is False, repr(got))
+    check("aesthetic 429: two backoffs before it", sleeps == [3.0, 6.0], repr(sleeps))
+
+
+@pytest.mark.parametrize("status", [400, 401, 500, 503])
+async def test_vision_aesthetic_gives_up_on_other_statuses(status, sleeps) -> None:
+    agent = VisionHarness(None, VisionResponse(status))
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check(f"aesthetic {status}: None", got is None, repr(got))
+    check(f"aesthetic {status}: a single try", len(agent.vision.posts) == 1)
+    check(f"aesthetic {status}: no backoff", sleeps == [], repr(sleeps))
+
+
+async def test_vision_aesthetic_does_not_retry_transport_errors(sleeps) -> None:
+    import httpx
+
+    agent = VisionHarness(None, httpx.ReadTimeout("slow"))
+    got = await agent._judge_sticker_aesthetic(PNG)
+    check("aesthetic error: None", got is None, repr(got))
+    check("aesthetic error: a single try", len(agent.vision.posts) == 1)
+    check("aesthetic error: no backoff", sleeps == [], repr(sleeps))
+
+
+@pytest.mark.parametrize("image", [
+    b"",
+    PNG[:199],
+    b"\x89PNG\r\n\x1a\n" + b"p" * 5_000_000,
+    BMP,
+    HEIC,
+    AVIF,
+    UNKNOWN,
+], ids=["empty", "tiny", "huge", "bmp", "heic", "avif", "unknown"])
+async def test_vision_aesthetic_skips_unusable_images(image, sleeps) -> None:
+    agent = VisionHarness(None)
+    got = await agent._judge_sticker_aesthetic(image)
+    check("aesthetic skip: no verdict", got is None, repr(got))
+    check("aesthetic skip: nothing posted", agent.vision.posts == [])
+
+
+async def test_vision_aesthetic_sends_a_gif_as_its_first_frame(sleeps) -> None:
+    agent = VisionHarness(None, VisionResponse(200, '{"tacky": false}'))
+    agent._gif_first_frame_png = lambda data: FRAME if data == GIF else b""
+    got = await agent._judge_sticker_aesthetic(GIF)
+    sent = agent.vision.posts[0]["json"]["messages"][0]["content"][1]
+    check("aesthetic gif: judged", got is False, repr(got))
+    check("aesthetic gif: first frame sent as PNG",
+          sent["image_url"]["url"] == _data_url("image/png", FRAME))
+
+    agent = VisionHarness(None)
+    agent._gif_first_frame_png = lambda data: b""
+    got = await agent._judge_sticker_aesthetic(GIF)
+    check("aesthetic gif: a failed decode is no verdict", got is None, repr(got))
+    check("aesthetic gif: and nothing is posted", agent.vision.posts == [])
+
+
+async def test_vision_real_gif_decodes_to_png(sleeps) -> None:
+    from PIL import Image
+
+    source = io.BytesIO()
+    Image.new("P", (32, 32), color=1).save(source, format="GIF")
+    gif = source.getvalue() + b"\x00" * 200
+    agent = VisionHarness(gif, VisionResponse(200, "a cat on a mat"))
+    await agent._describe_image_vision(IMAGE_URL)
+    url = agent.vision.posts[0]["json"]["messages"][0]["content"][1]["image_url"]["url"]
+    sent = base64.b64decode(url.split(",", 1)[1])
+    check("real gif: sent as a PNG data URL",
+          url.startswith("data:image/png;base64,") and sent.startswith(b"\x89PNG"))
+
+
+@pytest.mark.parametrize("path", ["caption", "aesthetic"])
+async def test_vision_requests_apply_the_reasoning_quirks(path, sleeps) -> None:
+    agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
+    agent.vision_base_url = "https://openrouter.ai/api/v1"
+    if path == "caption":
+        await agent._describe_image_vision(IMAGE_URL)
+    else:
+        await agent._judge_sticker_aesthetic(PNG)
+    payload = agent.vision.posts[0]["json"]
+    check(f"{path}: OpenRouter reasoning switched off",
+          payload.get("reasoning") == {"enabled": False}, repr(payload.get("reasoning")))
+
+    agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
+    agent.vision_model = "kimi-k2.6"
+    if path == "caption":
+        await agent._describe_image_vision(IMAGE_URL)
+    else:
+        await agent._judge_sticker_aesthetic(PNG)
+    payload = agent.vision.posts[0]["json"]
+    check(f"{path}: K2 thinking off at its fixed temperature",
+          payload.get("thinking") == {"type": "disabled"}
+          and payload.get("temperature") == 0.6, repr(payload)[:200])
