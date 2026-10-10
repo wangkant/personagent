@@ -178,6 +178,7 @@ class DirectMessages:
         # turn's empty draft is the persona declining.
         if not proactive and self._draft_should_be_retried(reply):
             logger.info("[Agent] DM draft renders empty, retrying once")
+            # The protocol block ends without a newline.
             retry_reply, retry_mem = await draft(
                 system + "\n\n" + _EMPTY_DRAFT_RETRY_NOTE)
             # The first draft's memory is still a fact about the conversation.
