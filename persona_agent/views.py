@@ -10,13 +10,8 @@ from pathlib import Path
 from . import candidates as candidates_mod
 from . import evidence as evidence_mod
 from . import promotion as promotion_mod
-from .paths import (
-    read_jsonl,
-)
-from .pools import (
-    _parse_jsonl,
-    _retrieval_fields,
-)
+from .paths import parse_jsonl, read_jsonl
+from .ranking import row_fields
 from .storage import atomic_write_text
 from .textproc import _TYPOGRAPHY_MAP, TextProcessing
 
@@ -308,7 +303,7 @@ class DataViews:
     def _tag_rows(rows: list) -> list:
         """Precompute the per-row retrieval fields once at load, not per turn."""
         for rec in rows:
-            rec["_rt"] = _retrieval_fields(rec)
+            rec["_rt"] = row_fields(rec)
         return rows
 
     @staticmethod
@@ -345,7 +340,7 @@ class DataViews:
             blob = runtime.read_bytes()
         except FileNotFoundError:
             blob = b""
-        return cls._tag_rows(cls._read_seed(seed) + _parse_jsonl(blob))
+        return cls._tag_rows(cls._read_seed(seed) + parse_jsonl(blob))
 
     def _reload_json_if_stale(self, path: Path, attr: str, parse,
                               name: str, unit: str) -> None:

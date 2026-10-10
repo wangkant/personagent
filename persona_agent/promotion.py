@@ -37,7 +37,7 @@ from pathlib import Path
 
 from . import candidates, evidence
 from .config_env import env_bool, env_float, env_int
-from .pools import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
+from .ranking import epoch  # noqa: F401  (re-export; tests and the CLI use promotion.epoch)
 from .storage import append_lock, atomic_write_text
 
 # ---------------------------------------------------------------------------

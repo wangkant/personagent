@@ -12,10 +12,6 @@ from itertools import chain
 
 from . import embeddings, ranking
 from .endpoints import embedding_endpoint
-from .pools import (
-    _retrieval_fields,
-    embedding_text,
-)
 from .textproc import (
     _clean_prompt_source,
     _example_field,
@@ -103,13 +99,13 @@ class Retrieval:
         wanted: dict[str, object] = {}
         for row in chain(self._examples_cache, self._pairs_cache,
                          self._view_examples_cache, self._view_pairs_cache):
-            wanted[(row.get("_rt") or _retrieval_fields(row))[3]] = row
+            wanted[(row.get("_rt") or ranking.row_fields(row))[3]] = row
         for items in self.memories.values():
             for it in items:
                 text = it.get("text", "")
                 wanted[embeddings.text_key(text)] = text
         cache.prune(model, set(wanted))
-        missing = [(key, src if isinstance(src, str) else embedding_text(src))
+        missing = [(key, src if isinstance(src, str) else ranking.embedding_text(src))
                    for key, src in wanted.items() if not cache.has(model, key)]
         # An empty input fails the whole batch it is in.
         missing = [(key, text) for key, text in missing if embeddings.clip(text)]
@@ -198,9 +194,9 @@ class Retrieval:
 
         def _scorer(pool: list):
             # The fields are lowercased, parsed and hashed once at load time
-            # (_retrieval_fields); the fallback covers records injected
+            # (ranking.row_fields); the fallback covers records injected
             # straight into the cache.
-            fields = [ex.get("_rt") or _retrieval_fields(ex) for ex in pool]
+            fields = [ex.get("_rt") or ranking.row_fields(ex) for ex in pool]
             lexicon = ranking.Lexicon(focus_tokens, [f[:2] for f in fields])
             by_row = {id(ex): f for ex, f in zip(pool, fields)}
 
