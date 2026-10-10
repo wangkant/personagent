@@ -135,7 +135,7 @@ def _host_header_name(host: str) -> str:
     return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
 
 
-def _credentialless_request_is_local(request) -> tuple[bool, str]:
+def _credentialless_request_is_local(request) -> bool:
     """Whether a request to an endpoint with no credential set really comes
     from a local program, and if not, which header gave it away.
 
@@ -158,7 +158,7 @@ def _credentialless_request_is_local(request) -> tuple[bool, str]:
     elif any(name in headers for name in _PROXY_HEADERS):
         reason = "forwarded"
     if not reason:
-        return True, ""
+        return True
     if reason not in _NON_LOCAL_WARNED:
         _NON_LOCAL_WARNED.add(reason)
         logger.warning(
@@ -167,18 +167,30 @@ def _credentialless_request_is_local(request) -> tuple[bool, str]:
             "a proxy. Local programs should call http://127.0.0.1; anything "
             "else needs QQ_ONEBOT_SECRET / CONNECTOR_TOKEN set",
             request.url.path, reason)
-    return False, reason
+    return False
 
 
 def _refuse_non_local(request, credential: str) -> JSONResponse | None:
     """The 403 for a credentialless endpoint reached by a non-local request."""
-    if credential:
-        return None
-    local, _reason = _credentialless_request_is_local(request)
-    if local:
+    if credential or _credentialless_request_is_local(request):
         return None
     return _error(403, "non_local_request",
                   "no credential is configured; only local requests accepted")
+
+
+def _refuse_caller(request, credential: str, *,
+                   token: bool = False) -> JSONResponse | None:
+    """The 403 for a caller refused before admission, so it holds no slot.
+
+    `token` adds the connector token compare; the signature needs the body."""
+    peer = request.client.host if request.client is not None else ""
+    if not _request_peer_is_allowed(peer, credential):
+        return _error(403, "unauthenticated", "authentication required")
+    refused = _refuse_non_local(request, credential)
+    if refused is None and token and credential and not _ct_equal(
+            request.headers.get("x-personagent-token", ""), credential):
+        refused = _invalid_envelope()
+    return refused
 
 
 def _ct_equal(supplied: str, expected: str) -> bool:
@@ -610,6 +622,23 @@ async def _read_webhook_body(request: Request) -> bytes | JSONResponse:
         return _error(400, "client_disconnected", "client disconnected")
 
 
+def _invalid_envelope() -> JSONResponse:
+    # One code for four causes (bad token, bad signature, stale timestamp,
+    # replayed nonce): _verify_envelope folds them into a bool.
+    return _error(403, "invalid_envelope",
+                  "invalid, stale, or replayed request envelope")
+
+
+async def _read_signed_body(request: Request) -> bytes | JSONResponse:
+    """A connector request's body once its envelope verifies, or the error."""
+    body = await _read_webhook_body(request)
+    if isinstance(body, JSONResponse):
+        return body
+    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
+        return _invalid_envelope()
+    return body
+
+
 def _on_bg_task_done(task: asyncio.Task) -> None:
     """Discard the strong ref AND retrieve the exception.
 
@@ -862,11 +891,7 @@ async def onebot_webhook(request: Request):
             403, "onebot_disabled",
             "/v1/onebot is off: this service listens on the network and "
             "QQ_ONEBOT_SECRET is not set"))
-    peer = request.client.host if request.client is not None else ""
-    if not _request_peer_is_allowed(peer, QQ_ONEBOT_SECRET):
-        return _mark_deprecated(_error(
-            403, "unauthenticated", "authentication required"))
-    refused = _refuse_non_local(request, QQ_ONEBOT_SECRET)
+    refused = _refuse_caller(request, QQ_ONEBOT_SECRET)
     if refused is not None:
         return _mark_deprecated(refused)
     if not await _onebot_admission.try_acquire():
@@ -1002,17 +1027,10 @@ async def connector_events(request: Request):
     # without the token must not be able to hold one of the slots a real
     # turn needs. The signature, nonce and replay checks still run after it,
     # so a 429 never burns a nonce.
-    peer = request.client.host if request.client is not None else ""
-    if not _request_peer_is_allowed(peer, CONNECTOR_TOKEN):
-        return _error(403, "unauthenticated", "authentication required")
-    refused = _refuse_non_local(request, CONNECTOR_TOKEN)
+    refused = _refuse_caller(request, CONNECTOR_TOKEN, token=True)
     if refused is not None:
         return refused
     _warn_ignored_connector_token_once(request)
-    if CONNECTOR_TOKEN and not _ct_equal(
-            request.headers.get("x-personagent-token", ""), CONNECTOR_TOKEN):
-        return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed request envelope")
     if not await _connector_admission.try_acquire():
         return _error(429, "capacity_exceeded", "webhook capacity exceeded",
                       retry_after=3)
@@ -1028,17 +1046,9 @@ async def _connector_events_admitted(request: Request):
     connector needs the replies in the response body to relay them back, so
     the full handle pipeline (debounce + typing simulation included) runs
     before returning — set the connector's HTTP timeout accordingly."""
-    body = await _read_webhook_body(request)
+    body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
-    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
-        # One code for four causes (bad token, bad signature, timestamp
-        # outside the window, replayed nonce): _verify_envelope folds
-        # them into a bool before this sees them, and its True/False contract
-        # is pinned by tests. `invalid_envelope` at least separates these from
-        # the other two 403s this route can answer.
-        return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed request envelope")
     try:
         event = json.loads(body or b"{}")
     except Exception:
@@ -1082,16 +1092,9 @@ async def connector_outbox(request: Request):
     ``CONNECTOR_OUTBOX_ENABLED`` is off (a 404 without a code is an agent
     without the outbox).
     """
-    peer = request.client.host if request.client is not None else ""
-    if not _request_peer_is_allowed(peer, CONNECTOR_TOKEN):
-        return _error(403, "unauthenticated", "authentication required")
-    refused = _refuse_non_local(request, CONNECTOR_TOKEN)
+    refused = _refuse_caller(request, CONNECTOR_TOKEN, token=True)
     if refused is not None:
         return refused
-    if CONNECTOR_TOKEN and not _ct_equal(
-            request.headers.get("x-personagent-token", ""), CONNECTOR_TOKEN):
-        return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed request envelope")
     if not await _outbox_admission.try_acquire():
         return _error(429, "capacity_exceeded", "outbox capacity exceeded",
                       retry_after=5)
@@ -1102,12 +1105,9 @@ async def connector_outbox(request: Request):
 
 
 async def _connector_outbox_admitted(request: Request):
-    body = await _read_webhook_body(request)
+    body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
-    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
-        return _error(403, "invalid_envelope",
-                      "invalid, stale, or replayed request envelope")
     try:
         pull = parse_pull(json.loads(body or b"{}"))
     except Exception:
