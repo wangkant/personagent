@@ -1,6 +1,6 @@
 """Try the agent in your terminal: a simulated group chat, no platform needed.
 
-    personagent chat                # or: python try_chat.py in a checkout
+    personagent chat
     personagent chat --dm           # a one-to-one chat instead of a group
     personagent chat --lang zh      # the Chinese variant
     personagent chat --name Alex    # your display name

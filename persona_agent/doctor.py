@@ -65,7 +65,7 @@ def _fix() -> int:
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    prog = prog or "python tools/healthcheck.py"
+    prog = prog or "personagent doctor"
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv == ["--fix"]:
         return _fix()

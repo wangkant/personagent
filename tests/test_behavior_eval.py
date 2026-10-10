@@ -1,4 +1,4 @@
-"""Tests for the behavioural eval (tools/behavior_eval.py).
+"""Tests for the behavioural eval (`personagent eval`).
 
 Every suite runs end to end against stub models: the agent's `_call_llm` and
 the judge's `complete` are replaced, everything between them is the real

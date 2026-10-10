@@ -431,7 +431,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     # and the preflight then reported every one of them as a misspelling.
     root = Path(__file__).resolve().parents[1]
     sources = [
-        root / "main.py", root / "try_chat.py", root / "quickstart.py",
+        root / "main.py", root / "quickstart.py",
         *sorted((root / "persona_agent").glob("*.py")),
         *sorted((root / "tools").glob("*.py")),
     ]
