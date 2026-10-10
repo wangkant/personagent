@@ -230,25 +230,9 @@ the excuse are not sent. `PROACTIVE_PLATFORMS` limits where the proactive loop
 may speak first (`PROACTIVE_PLATFORMS=qq` keeps it on QQ), and
 `CONNECTOR_OUTBOX_ENABLED=false` turns the outbox off altogether.
 
-**To speak first in a DM without the outbox**, have your own scheduler (an
-AstrBot plugin task, a cron entry) post an ordinary DM event with
-`"proactive": true` to `/v1/events` (schema in
-[the connector protocol](connectors.md)). Its text is a cue to the persona
-("they have been quiet a day; their exam was this morning"), not the other
-person's words, cut at 500 characters. The engine's proactive
-instructions still decide the turn and may keep the persona silent; if it
-speaks, the reply comes back in the response for the scheduler to relay.
-The request needs what the plugin's requests carry: the signed headers, every
-required field, the same platform name and raw sender id the plugin sends,
-non-empty text, and a fresh `message_id` each time (a repeated one is dropped
-without a word). It counts against the same DM cooldown
-(`PROACTIVE_DM_COOLDOWN_S`) as the agent's own openers.
-
-Always set the flag. Without it, the cue is stored as the other person's
-words: it stays in the DM history for the next 40 messages, can be quoted back
-at them, and can be saved as a memory about them. A group event marked
-`"proactive"` is claimed (`owned: true`, so the connector keeps its own model
-quiet) and dropped unread.
+To speak first in a DM without the outbox, your own scheduler (an AstrBot
+plugin task, a cron entry) can post a DM event marked `"proactive": true`; see
+[Speaking first without the outbox](connectors.md#speaking-first-without-the-outbox).
 
 ## Exposing the endpoints
 
