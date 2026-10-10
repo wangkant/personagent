@@ -25,7 +25,6 @@ from .paths import (
     resolve_runtime_state_file,
     resolve_seed_lang_file,
 )
-# The Agent's behaviour lives in these mixins; this module builds its state.
 from .decision import ReplyDecision
 from .dm import DirectMessages
 from .ingestion import ContentIngestion
@@ -51,12 +50,8 @@ logger = logging.getLogger("agent")
 
 
 def _load_persona_card() -> Optional[dict]:
-    """Optional persona card JSON (PERSONA_CARD_FILE, default persona.card.json
-    next to persona.txt). Carries author-level knobs that are configuration
-    rather than prose — today the `reply_style` character policy (see
-    `textproc.ReplyStyle.from_card`). Any read or parse failure means "no
-    card": the narrow default character policy applies, which is the
-    fail-closed direction."""
+    """The optional persona card (PERSONA_CARD_FILE), today the `reply_style`
+    policy. Any failure means no card: the narrow default, failing closed."""
     card_path = ROOT / os.getenv("PERSONA_CARD_FILE", "persona.card.json")
     if not card_path.is_file():
         return None
@@ -79,10 +74,8 @@ def _note_persona_source(source: str) -> None:
 
 
 def _load_persona(lang: str = "en") -> str:
-    """Load persona text from PERSONA_FILE (default persona.txt); fall back to
-    the bundled persona.example.<lang>.txt, then DEFAULT_PERSONA. Falling back
-    to the language-appropriate example keeps a fresh checkout coherent before
-    the user writes their own persona.txt."""
+    """PERSONA_FILE (default persona.txt), else the bundled
+    persona.example.<lang>.txt, else DEFAULT_PERSONA."""
     persona_path = ROOT / os.getenv("PERSONA_FILE", "persona.txt")
     if persona_path.is_file():
         try:
@@ -108,18 +101,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             Retrieval, ModelCalls, WebSearch, Proactive, Memory,
             DataViews, ContentIngestion, Transport, Learning):
     def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
-        """Wire one agent from one settings record.
-
-        ``Agent(settings)`` is how the bot process builds it — see
-        ``AgentSettings.from_env``. ``Agent(api_key=..., qq_bot_id=...)`` is the
-        same act spelled shorter, for embedders, tools and the test suites:
-        those keywords ARE the settings fields, and they build the record here.
-
-        Nothing is parsed, defaulted or resolved below this line — that happens
-        once, in settings.py. What is left is the three things wiring an agent
-        actually is: put the configuration on it, create the empty runtime
-        state, and open the learning layer.
-        """
+        """Wire one agent from one settings record: ``Agent(settings)``, or
+        the settings fields as keywords (``Agent(api_key=..., ...)``)."""
         if settings is None:
             settings = AgentSettings(**overrides)
         else:
@@ -128,15 +111,11 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                     "Agent() takes an AgentSettings, or its fields as "
                     f"keywords, not {type(settings).__name__}")
             if overrides:
-                # Silently merging them would make which of the two won a
-                # question about argument order rather than about the record.
                 raise TypeError(
                     "Agent() takes a settings record or its fields as "
                     "keywords, not both — use dataclasses.replace(settings, "
                     "...) to vary one: " + ", ".join(sorted(overrides)))
-        #: What this agent was configured with, kept whole. The attributes
-        #: below are the live values, which a caller may change afterwards;
-        #: this stays the record of what was asked for.
+        #: As configured; the attributes below are the live values.
         self.settings = settings
         self._apply_settings(settings)
         self._init_runtime_state()
@@ -151,21 +130,12 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                            "explicit @-mentions (set PERSONA_NAME so it answers to its name)")
 
     def _apply_settings(self, s: AgentSettings) -> None:
-        """Put the configuration on the agent, one field per attribute.
-
-        A flat copy on purpose rather than reads through ``self.settings``:
-        every layer of this package and every tool reads ``self.model``,
-        ``self.llm_judge_model``, ``self.proactive_enabled`` and the rest
-        directly, and a test that assigns one of them expects the agent to behave
-        differently from the next call on.
-        """
+        """Copy the configuration onto the agent, one field per attribute, so
+        callers can read and reassign `self.model` and the rest directly."""
         self.api_key = s.api_key
         self.base_url = s.base_url
         self.model = s.model
-        # Process-wide language. 'en' (default) is the primary build; 'zh'
-        # selects the Chinese variant. Drives the reply validator, the
-        # per-language data files, and the control-flow lexicons. Single
-        # source of truth — everything language-dependent reads self.agent_lang.
+        # Process-wide: the validator, data files and lexicons all read it.
         self.agent_lang = s.agent_lang
         self.llm_fallback_model = s.llm_fallback_model
         self.llm_fallback_base_url = s.llm_fallback_base_url
@@ -195,8 +165,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if s.persona is not None:
             raw_persona = s.persona
         else:
-            # A persona.txt copied from the shipped template still carries
-            # its placeholders and its note to the reader.
+            # A copied template still carries placeholders and a note to the reader.
             loaded = _load_persona(self.agent_lang)
             raw_persona = render_persona_template(
                 loaded, bot_name=s.persona_name, admin_name=s.admin_name,
@@ -209,23 +178,15 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                 _note_persona_source(
                     "filled in the template's {placeholders} and dropped its "
                     "note to the reader")
-        # A persona document may end with a [style] declaration block. Parsing
-        # strips it from the prose (so the model never reads raw knob config as
-        # persona text) and keeps the knobs for prompt variants that use them.
+        # A trailing [style] block is stripped from the prose and kept as knobs.
         self.persona_style, self.persona = parse_persona_style(raw_persona)
-        # The per-persona character policy. Without a card (or with a broken
-        # one) this is the narrow fail-closed default.
         self.reply_style = ReplyStyle.from_card(_load_persona_card())
-        # Scope identity of the current persona. The hash is always available;
-        # persona_version is an optional operator-set label recorded alongside
-        # it. Both are part of evidence-combination scope, so a persona rewrite
-        # stops old evidence from authorizing changes to the new character.
+        # Both are evidence scope; lineage.py keeps edits of one document in it.
         self.persona_version = s.persona_version
         self.persona_hash = hashlib.sha256(
             (self.persona or "").encode("utf-8")).hexdigest()[:12]
 
-        # Sets, not the settings' tuples: these are read on every inbound
-        # message and edited in place by the tests and the admin paths.
+        # Sets: edited in place by the tests and the admin paths.
         self.admin_ids: set = set(s.admin_ids)
         self.access_groups: set = set(s.access_groups)
         self.access_dm_users: set = set(s.access_dm_users)
@@ -271,141 +232,91 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
         self.promote_max_examples = s.promote_max_examples
         self.promote_max_feedback = s.promote_max_feedback
-        # Evidence -> candidate -> promotion. A reaction is recorded as
-        # evidence (append-only, immutable); adjudicating it proposes a
-        # versioned candidate; only a promoted candidate is materialized into
-        # the views retrieval reads. Nothing here writes examples_file or
-        # feedback_file: those hold the seed-era and hand-approved rows, which
-        # stay exactly as they are. See evidence.py / candidates.py /
-        # promotion.py, and `personagent learned` for the human controls.
+        # Learning writes the ledger and promoted views, never examples_file
+        # or feedback_file (see learning.py).
         self.promotion_policy = s.promotion_policy
 
     def _init_runtime_state(self) -> None:
-        """The empty mutable state every agent starts with.
-
-        Everything here is per-process bookkeeping — locks, windows, caches,
-        de-dup rings. None of it is configuration, and the only disk read is
-        the seen-message ring, which exists precisely to survive a restart.
-        """
+        """The empty per-process state: locks, windows, caches, de-dup rings.
+        The only disk read is the seen-message ring."""
         self.model_calls: deque = deque()
-        # Two independent fallback clocks:
-        # _fallback_until = error-driven (real 429/5xx), applies to every mode
-        # (provider throttling leaves no choice). Keyed by MODEL NAME, so a
-        # failing judge or private model cools only itself instead of sending
-        # every group reply to the fallback.
-        # _freq_fallback_until = frequency-driven self-throttle, applies only
-        # to self-initiated modes — called/admin are exempt. One per agent:
-        # it throttles the persona's own chatter, not a model.
+        # Error-driven fallback, per model name, for every mode.
         self._fallback_until: dict[str, float] = {}
+        # Frequency self-throttle, self-initiated modes only.
         self._freq_fallback_until: float = 0.0
-        # Shared httpx connection pool, bucketed by (timeout, follow_redirects, ...).
         self._http_pool: dict = {}
-        # Strong refs to fire-and-forget tasks. asyncio only weak-refs running
-        # tasks, so a detached create_task() can be GC'd mid-flight.
+        # Strong refs: asyncio only weak-refs running tasks.
         self._bg_tasks: set[asyncio.Task] = set()
-        # Set by aclose(); read by _http so a use-after-close is visible
-        # rather than silently leaking a fresh, never-closed pool.
+        # Lets _http report a use after aclose().
         self._closed = False
         self._warned_use_after_close = False
 
-        # Outbound throttle state: one small global gate lock (holds only
-        # itself, never the group locks / send locks) + a per-target sliding
-        # window. See _throttle_send.
+        # See _throttle_send; the gate lock never holds another lock.
         self._send_gate = asyncio.Lock()
         self._last_send_mono: float = 0.0
         self._send_window: dict = defaultdict(deque)
-        # Connector conversation LRU (key -> last-touch monotonic). See
-        # _touch_connector_conv.
         self._connector_conv_lru: dict[str, float] = {}
         self._connector_inflight: dict[str, int] = defaultdict(int)
-        # Admission refusals already logged; see _log_refusal.
         self._refusals_logged: dict[str, None] = {}
-        # Conversations already reported as unreachable; see _log_no_route.
         self._no_route_logged: dict[str, None] = {}
-        # When each conversation was last told the model is not answering.
         self._last_excuse_at: dict[str, float] = {}
-        # Conversations with an excuse being sent right now.
         self._excuse_inflight: set[str] = set()
 
-        # Bound at construction, like the rest of the buffer's shape: a later
-        # change to self.chat_context_messages must not silently give new
-        # conversations a different depth from the ones already running.
+        # Bound once, so every conversation keeps the same depth.
         chat_context_messages = self.chat_context_messages
         self.buffers: dict[str, deque] = defaultdict(
             lambda: deque(maxlen=chat_context_messages))
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # Separate per-group send locks: _send_group sleeps through its typing
-        # simulation, so it runs OUTSIDE the group lock (which would otherwise
-        # block message intake for the whole send). The send lock still
-        # serializes same-group sends so two replies can't interleave.
+        # Sends run outside the group lock (typing sleeps would block intake);
+        # this lock keeps same-group sends from interleaving.
         self.send_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # A group reply reserves its place before releasing the intake lock.
-        # Later inbound tasks wait on this event before mutating the buffer, so
-        # the reply cannot be committed behind messages it never saw.
+        # A reply reserves its place before releasing the intake lock, so it is
+        # never committed behind messages it never saw.
         self._pending_outbound: dict[str, asyncio.Event] = {}
-        # Private send locks are deliberately re-used by Transport's public
-        # standalone-send wrapper. This task marker makes that lock re-entrant
-        # for conversation paths which hold it through state commit.
+        # Makes a DM send lock re-entrant for the task already holding it.
         self._dm_send_tasks: dict[str, asyncio.Task] = {}
         self.active_users: dict[str, deque] = defaultdict(lambda: deque(maxlen=20))
 
         self.image_caption_cache: dict[str, str] = {}
         self.bili_info_cache: dict[str, dict] = {}
-        # Generic URL metadata cache (key=url, value=preformatted descriptor
-        # like `[bilibili-video] ...` / `[YouTube] "title" — author` /
-        # `[site] "title" desc`).
-        # Bounded FIFO at 200 entries — the same URL reposted across a
-        # group only hits the network once.
+        # url -> rendered descriptor, a bounded FIFO.
         self.url_info_cache: dict[str, str] = {}
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
         self.dm_history: dict[str, list[dict]] = {}
-        # A DM message whose turn committed nothing (the model failed or
-        # PASSed, the reply was blocked or never delivered), per user, the
-        # last three. Kept out of dm_history, where a lone user turn
-        # would break role alternation and silence the proactive cue, and
-        # merged into the reader's next turn instead. See _handle_dm.
+        # A user's last three DM messages whose turns committed nothing, merged
+        # into their next turn (see _handle_dm).
         self._dm_unanswered: dict[str, list[str]] = {}
 
-        # Last time any human message landed in a group / DM (silence tracking),
-        # and the last time the bot proactively initiated (per group and "dm:<uid>").
+        # Silence tracking, and the last proactive opener per group / "dm:<uid>".
         self.last_activity_at: dict[str, float] = defaultdict(float)
         self.last_dm_activity_at: dict[str, float] = defaultdict(float)
         self.last_proactive_at: dict[str, float] = defaultdict(float)
         self._last_elicit_at: dict[str, float] = defaultdict(float)
-        # Outbound message_ids of the current _send_group call, per group —
-        # written under the per-group send lock, consumed right after it.
+        # Written under the send lock, read right after it.
         self._sent_mids: dict[str, list[str]] = {}
 
         self._msg_seq: dict[str, int] = defaultdict(int)
         self._vision_in_flight: dict[str, int] = defaultdict(int)
         self._sticky_call: dict[str, dict] = {}
 
-        # message_id ring for de-duping between webhook and periodic catch-up
-        # paths. Persisted to disk so a restart doesn't accidentally re-handle
-        # messages the bot already responded to before going down — without
-        # this, the startup check_missed_mentions sees an empty ring and may
-        # treat a still-recent @ mention as new.
+        # De-dups the webhook against the catch-up sweep; persisted so a restart
+        # does not re-answer recent mentions.
         self._seen_msg_ids: deque = deque(maxlen=2000)
         self._seen_msg_file = resolve_runtime_state_file("seen_msg_ids.json")
         self._load_seen_msg_ids()
-        # seen_msg_ids flush-throttle counters: the in-memory ring updates on
-        # every message; disk writes are batched (see _remember_msg_id).
+        # Disk writes of the ring are batched (see _persist_seen).
         self._seen_dirty = 0
         self._seen_last_flush = 0.0
 
-        # Quote-reply resolution index: message_id -> "speaker: text". When a
-        # later message quotes an earlier one, _extract_text looks it up here
-        # (zero cost) before falling back to a NapCat get_msg call. Without it the
-        # quoted content never reaches the model and it has to guess who/what it
-        # is replying to → wrong-person / crossed-thread replies (off-topic).
+        # message_id -> "speaker: text", checked before a get_msg call when a
+        # message quotes another.
         self._msg_index: dict[str, str] = {}
         self._msg_index_cap = 1000
 
-        # How to reach each connector conversation unprompted, and the queue
-        # its connector pulls from (outbox.py). Loaded on first use.
+        # Reply handles and the outbox queue (outbox.py), loaded on first use.
         self.connector_handles = outbox_mod.HandleStore(
             resolve_runtime_state_file("connector_handles.json"))
         self.outbox = outbox_mod.Outbox(self.connector_handles)
@@ -428,14 +339,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                            type(e).__name__, e)
 
     def _init_learning_state(self) -> None:
-        """Open everything the agent remembers with: memory, reactions, the
-        sticker library, the retrieval pools and the ledger views.
-
-        Runs after :meth:`_apply_settings` because all of it hangs off the
-        configured paths, the persona and the judgment model.
-        """
+        """Open memory, reactions, stickers, the retrieval pools and the ledger
+        views; after _apply_settings, since all of it hangs off the settings."""
         self.memories: dict[str, list[dict]] = self._load_memories()
-        # letta-style core memory (per-group short note, always in prompt)
+        # One short note per conversation, always in the prompt.
         self.core_memory_file = resolve_runtime_state_file("core_memory.json")
         self.core_memory: dict[str, str] = self._load_core_memory()
         # Resolved once: every group and DM prompt checks it (prompt.py).
@@ -449,8 +356,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             max_conversations=_MAX_CONNECTOR_CONVS,
             state_file=self.memory_file.with_name("pending_reactions.json"),
         )
-        # Per-user teaching reputation (never the admin); consistently bad
-        # teachers are hard-blocked before any adjudicator call.
+        # Teaching reputation; bad teachers are blocked before any adjudicator call.
         self.teacher_stats = reactions.TeacherStats(
             resolve_runtime_state_file("teacher_stats.json"))
 
@@ -460,24 +366,18 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         stickers_json = Path(self.settings.stickers_file)
         if not stickers_json.is_absolute():
             stickers_json = resolve_runtime_state_file(stickers_json)
-        # Pass a one-line persona digest down to the sticker library; it uses
-        # this to ask the tagger whether each sticker fits the persona (so
-        # off-character stickers get persona_fit=false and aren't picked).
-        # Truncated so it stays well under the tagger's prompt budget.
+        # For the tagger's persona-fit check, kept short.
         persona_brief = (self.persona or "").replace("\n", " ").strip()[:200]
         self.stickers = StickerLibrary(
             stickers_dir=stickers_path,
             stickers_file=stickers_json,
             unknown_log=resolve_runtime_state_file("unknown_stickers.jsonl"),
             llm_caller=self._call_llm,
-            # Cheap judgment model configured for THIS endpoint — a hardcoded
-            # model name here would 404 on every other provider.
             tagger_model=self.llm_judge_model,
             persona_brief=persona_brief,
         )
 
-        # Few-shot examples: curated seed/runtime rows plus a separate
-        # ledger-derived view containing only promoted automatic candidates.
+        # Seed and hand-approved rows; promoted candidates have their own views.
         self.examples_seed_file = resolve_seed_lang_file(
             "examples", "jsonl", self.agent_lang)
         self.examples_file = resolve_runtime_lang_file(
@@ -485,8 +385,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._examples_cache: list = []
         # A stamp from _pool_stamp; `= 0.0` forces the next reload.
         self._examples_mtime: tuple = ()
-        # In-memory dedup for runtime-appended examples: a frequent stock
-        # phrase should only land in the pool once.
+        # Replies already pooled, so self-eval does not propose them again.
         self._auto_examples_seen: set[str] = set()
 
         self.feedback_seed_file = resolve_seed_lang_file(
@@ -501,30 +400,27 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._view_examples_stamp: tuple = ()
         self._view_pairs_cache: list = []
         self._view_pairs_stamp: tuple = ()
-        # Edge-triggered "every promoted row refused by scope" warning.
         self._scope_drop_warned = False
-        # Optional embeddings (retrieval.py): the one backfill in flight, when
-        # a failed endpoint may be tried again, and whether it has said so.
+        # The embedding backfill in flight, retry time and warned flag (retrieval.py).
         self._embedding_backfill: asyncio.Task | None = None
         self._embedding_retry_at = 0.0
         self._embedding_warned = False
 
-        # SillyTavern-style pre-send regex filter (rejects/replaces known bad patterns)
+        # Pre-send regex filter.
         self.output_filter_file = resolve_seed_lang_file(
             "output_filter", "json", self.agent_lang)
         self._filters_cache: list = []
         self._filters_stamp: tuple = ()
 
-        # SillyTavern-style lorebook (keyword-triggered context entries)
+        # Keyword-triggered context entries.
         self.lorebook_file = resolve_seed_lang_file(
             "lorebook", "json", self.agent_lang)
         self._lorebook_cache: list = []
         self._lorebook_stamp: tuple = ()
 
     def _sidecar(self, attr: str, cls, path: Path):
-        """Lazy sidecar of examples_file, rebuilt whenever the pool is repointed
-        (test harness, benchmark arm, AGENT_RUNTIME_DIR) so evidence never
-        accumulates against the wrong pool."""
+        """A lazy sidecar object, rebuilt whenever its path moves (harnesses
+        repoint the pools after __init__)."""
         obj = getattr(self, attr, None)
         if obj is None or obj.path != path:
             obj = cls(path)
@@ -561,18 +457,15 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
     @property
     def persona_lineage(self) -> lineage_mod.PersonaLineage:
-        """Lazy like the ledgers: harnesses redirect the learning dir after
-        __init__, and the file has to follow it. First access records the
-        current revision and registers the lineage for scope comparison."""
+        """Lazy, like the ledgers. First access records the current revision
+        and registers the lineage for scope comparison."""
         obj = self._sidecar("_persona_lineage", lineage_mod.PersonaLineage,
                             self.learning_dir / lineage_mod.FILE_NAME)
         key = (obj.path, self.persona_version, self.persona_hash)
         if self._lineage_registered_for != key:
             _root, extended = obj.extend(self.persona_version, self.persona_hash)
             hashes = obj.hashes(self.persona_version)
-            # A failed save rolls the hash back out of the lineage, but this
-            # process still runs as it: scope it in, or every earlier revision
-            # falls out of scope until a restart manages to save.
+            # After a failed save the running hash still has to be in scope.
             if self.persona_hash and self.persona_hash not in hashes:
                 hashes.append(self.persona_hash)
             evidence_mod.register_persona_lineage(self.persona_version, hashes)
@@ -608,9 +501,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._candidate_ledger = ledger
 
     def _spawn(self, coro) -> asyncio.Task:
-        """Launch a background task and keep a strong reference to it until it
-        finishes, so it can't be garbage-collected mid-flight. A crash is
-        logged with the task's name when it ends, not left for the GC."""
+        """Launch a background task, held until it finishes; a crash is logged."""
         t = asyncio.create_task(coro, name=getattr(coro, "__qualname__", None))
         self._bg_tasks.add(t)
         t.add_done_callback(self._on_bg_task_done)
@@ -626,9 +517,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                          task.get_name(), type(exc).__name__, exc, exc_info=exc)
 
     def _remember_msg_id(self, mid) -> None:
-        """Bank a message_id in the dedup ring and persist (throttled), so a
-        restart doesn't re-answer @s already handled. Always str: the two
-        producers disagree on int vs str."""
+        """Bank a message_id in the de-dup ring (as str: producers disagree)."""
         self._seen_msg_ids.append(str(mid))
         self._seen_dirty += 1
         self._persist_seen()
@@ -649,13 +538,11 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             self._seen_dirty = 0
             self._seen_last_flush = now
         except Exception as e:
-            # Disk full / read-only fs shouldn't fail message handling
             logger.debug("[Agent] seen_msg_ids persist failed: %s", e)
 
     def flush_state(self) -> None:
-        """Force out writes still held by the throttles (dedup ring + sticker
-        library) so catch-up dedup and sticker use_count/context updates aren't
-        lost across a restart. Called from the lifespan shutdown hook."""
+        """Force out the throttled writes (de-dup ring, reactions, handles,
+        stickers) before shutdown."""
         self._persist_seen(force=True)
         self.pending_reactions.flush()
         self.connector_handles.flush(force=True)
@@ -665,18 +552,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             logger.debug("[Agent] sticker flush on shutdown failed: %s", e)
 
     async def aclose(self) -> None:
-        """Stop owned work, close transports, then persist final state.
-
-        One-way: after this returns the Agent is spent. `_http` builds its
-        pool lazily and rebuilds any entry whose client `is_closed`, so a
-        `handle()` on a closed Agent does not fail — it quietly mints a fresh
-        connection pool that nothing will ever close again. Two ways to get
-        there: a forced uvicorn shutdown that lands while a synchronous
-        `/v1/events` turn is still running, and any host that embeds
-        `persona_agent.Agent` directly (it is a public, importable class) and
-        reuses the object after closing it. Neither is loud today; the flag
-        below makes both say so once.
-        """
+        """Stop owned work, close transports, then persist final state. One-way:
+        a later turn would mint a pool nothing closes, so `_http` warns."""
         self._closed = True
         # Waiting deliveries end as not sent, and open long-polls return.
         await self.outbox.aclose()
@@ -697,5 +574,4 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                 return_exceptions=True)
         self.flush_state()
 
-    # -------- Core memory (letta style) --------
     CORE_MEMORY_MAX_CHARS = 400

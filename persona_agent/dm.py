@@ -17,13 +17,8 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# What the DM retry appends to the system prompt (see
-# `Agent._chat_dm`). The dominant cause of an empty 1:1 turn is
-# deterministic, an emoji-only draft the sanitizer eats, so the second prompt
-# has to differ from the first. It amends the output contract rather than
-# replacing it: it lands right after `dm_output_protocol`, and "reply in
-# plain text" from that last position would talk the model out of the JSON
-# the fail-closed parser needs, turning one empty turn into two.
+# Appended for the one DM retry: an emoji-only draft the sanitizer eats would
+# come back identical from an unchanged prompt. It keeps the JSON contract.
 _EMPTY_DRAFT_RETRY_NOTE = (
     "Your previous draft could not be rendered. Emit the same JSON object "
     "again — same keys, same shape — with a `reply` of at least one word "
@@ -35,19 +30,12 @@ class DirectMessages:
     async def _handle_dm(self, user_id: str, payload: dict,
                               is_admin: bool = True,
                               proactive: bool = False) -> bool:
-        """Run one DM turn in send/commit order without blocking intake.
-
-        `proactive`: the text is the caller's cue, not the reader's words, so
-        it must never be appended to history or attributed to them. It
-        reaches the model for this one call, as `proactive_cue`."""
+        """Run one DM turn in send/commit order without blocking intake. A
+        `proactive` text is the caller's cue: never history, never the reader's."""
         pkey = channels.dm_routing_key(user_id)
         async with self.send_locks[pkey]:
             self._dm_send_tasks[pkey] = asyncio.current_task()
-            # What this turn put in front of the model as the reader's words,
-            # and whether they reached dm_history. Any other way out (the
-            # model failed or PASSed, the reply was blocked or never
-            # delivered) keeps them for the reader's next turn; dropped, that
-            # turn had no record of what they said.
+            # The reader's words this turn; kept for their next turn unless committed.
             said: list[str] = []
             committed = False
             try:
@@ -55,17 +43,13 @@ class DirectMessages:
                 if not text:
                     return False
 
-                # Nothing to react TO on a proactive turn: the text is the
-                # caller's cue, so matching it against a pending reaction
-                # would attribute the caller's words to the reader.
+                # A proactive cue is not a reaction from the reader.
                 if self.react_learn_enabled and not proactive:
                     entry = self.pending_reactions.match(
                         channels.dm_learning_key(user_id),
                         sender_uid=user_id, is_dm=True, now=time.time())
                     if entry:
                         self._spawn(self._process_reaction(
-                            # The reactor's name as the judge reads it and the
-                            # audit row stores it.
                             entry, text, "owner" if is_admin else "friend",
                             user_id, is_admin,
                             conv_id=channels.dm_learning_key(user_id),
@@ -73,30 +57,22 @@ class DirectMessages:
 
                 async with self.locks[pkey]:
                     if proactive:
-                        # The reader said nothing. The connector's scheduler
-                        # and the agent's own loop share one DM cooldown.
+                        # Shared with the agent's own proactive loop.
                         self.last_proactive_at[
                             channels.dm_learning_key(user_id)] = time.time()
                     else:
                         self.last_dm_activity_at[user_id] = time.time()
                     history = list(self.dm_history.get(user_id, []))
-                    # The one line this flag is about. Appended, the cue stays
-                    # for 40 turns as something the reader supposedly said.
-                    # Left out, _chat_dm's own internal cue applies —
-                    # it fires only when the last turn is not a user message,
-                    # so the two halves depend on each other.
+                    # A proactive turn leaves the history ending on the bot,
+                    # which is what lets _build_dm_prompt add its internal cue.
                     if not proactive:
-                        # Messages whose turns committed nothing join this
-                        # one in a single user turn, for the same reason:
-                        # stored apart, two user turns would sit in a row
-                        # and the stored history could end on the reader.
+                        # Earlier uncommitted messages join this user turn,
+                        # so two user turns never sit in a row.
                         said = self._dm_unanswered.get(user_id, []) + [text]
                         history.append({"role": "user",
                                         "content": "\n".join(said)})
                     history = history[-40:]
 
-                # The cue exists only on a proactive turn, so only that call
-                # carries it; an ordinary turn's call is unchanged.
                 cue = ({"proactive": True, "proactive_cue": text}
                        if proactive else {})
                 try:
@@ -104,8 +80,7 @@ class DirectMessages:
                         history, is_admin=is_admin, pkey=pkey, **cue)
                 except Exception as e:
                     logger.warning("[Agent] DM model call failed: %s", e)
-                    # Someone wrote to it and is waiting; say why it is quiet.
-                    # Not committed to the history, which stays the reader's.
+                    # Tell the waiting reader; not committed to the history.
                     if not proactive and self._excuse_begin(pkey):
                         delivered = False
                         try:
@@ -129,10 +104,7 @@ class DirectMessages:
                     logger.warning(
                         "[Agent] DM delivery failed (user=%s, partial=%s)",
                         user_id, send_result.partial)
-                    # The reader saw the delivered prefix, so it is committed
-                    # the way the group path commits one, or the next turn
-                    # may say the same line again. The core note and
-                    # auto-memory describe the whole answer and are withheld.
+                    # Commit the delivered prefix; the core note and memory are withheld.
                     if send_result.partial and send_result.delivered:
                         async with self.locks[pkey]:
                             history.append({"role": "assistant",
@@ -152,10 +124,7 @@ class DirectMessages:
                     self._commit_core_memory(pkey, pending_core)
                     if auto_mem:
                         self._save_auto_memory(pkey, auto_mem)
-                    # Same leak as the history append, one file over:
-                    # `ctx_lines` would store the caller's cue as a line the
-                    # reader wrote. And what a proactive reply answers is not
-                    # a message at all, so there is nothing to attribute.
+                    # A proactive reply answers no message of the reader's.
                     if self.react_learn_enabled and not proactive:
                         self.pending_reactions.record(
                             channels.dm_learning_key(user_id), reply=reply,
@@ -168,37 +137,21 @@ class DirectMessages:
             finally:
                 if self._dm_send_tasks.get(pkey) is asyncio.current_task():
                     self._dm_send_tasks.pop(pkey, None)
-                # Empty on a proactive turn: its text is the caller's cue.
                 if said and not committed:
                     async with self.locks[pkey]:
                         self._dm_unanswered[user_id] = said[-3:]
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
-        """Private chat. Same OpenAI-compatible endpoint as group chat, with
-        LLM_DM_MODEL as an optional alternate model name.
-
-        is_admin=True  → admin-style override (very close, all defenses off)
-        is_admin=False → ordinary-friend override (looser than group chat,
-                         but doesn't pretend close acquaintance; some
-                         distance preserved since the relationship is unclear).
-        pkey = "private:<uid>" memory namespace — without it, private-chat
-        memories / core notes are write-only (the model saves a mem but never
-        sees it next turn, which reads as "forgot everything I told it").
-        The LEARNING scope is a different key derived from it
-        (`channels.learning_key`).
-
-        `proactive_cue` is a connector caller's briefing for a proactive turn.
-        It joins the internal cue as bounded external material: the engine's
-        own `<proactive>` note still says what the turn is and that PASS is
-        allowed, because a scheduler's text has no authority to say either."""
+        """One DM model turn (LLM_DM_MODEL): `is_admin` picks the close or
+        the friend register, `pkey` ("private:<uid>") the memory namespace,
+        and `proactive_cue` is a scheduler's note, framed as external material.
+        Returns (reply, memory)."""
         await self._prepare_retrieval(self._last_user_text(history), pkey)
         prompt = self._build_dm_prompt(history, is_admin=is_admin,
                                        proactive=proactive, pkey=pkey,
                                        proactive_cue=proactive_cue)
         system, messages = prompt.system, prompt.messages
-        # Grounded here, once, rather than inside `_call_llm`, so a retry
-        # below answers from the same research without paying for the gate
-        # again. An unprompted opening has no question to research.
+        # Searched once here, so the retry reuses it.
         if not proactive:
             messages = await self._ground_with_search(messages)
 
@@ -210,10 +163,7 @@ class DirectMessages:
                 max_tokens=4096,
                 enable_search=False,
                 json_object=True,
-                # The 1:1 reply: `reply` is the whole schema, so prose recovered
-                # without response_format is unambiguous. Also the path the
-                # blank-JSON defect hits — every turn after the first replays
-                # the persona's own assistant turns.
+                # `reply` is the whole schema, so recovered prose is unambiguous.
                 plain_text_fallback=True,
             )
             reply, reasoning, intent, mem = TextProcessing._parse_model_output(
@@ -224,33 +174,22 @@ class DirectMessages:
             return reply, mem
 
         reply, mem = await draft(system)
-        # The private protocol has no PASS, so a turn that renders to nothing
-        # is a failure, worth exactly one more call; a second failure says the
-        # trouble is not the draft. Not on a proactive turn: its cue offers
-        # PASS, so an empty draft there is the persona declining to speak.
+        # A DM has no PASS, so an empty render is retried once; a proactive
+        # turn's empty draft is the persona declining.
         if not proactive and self._draft_should_be_retried(reply):
             logger.info("[Agent] DM draft renders empty, retrying once")
-            # "\n\n": the protocol block ends without a newline, and the
-            # note must not read as the tail of its closing tag.
             retry_reply, retry_mem = await draft(
                 system + "\n\n" + _EMPTY_DRAFT_RETRY_NOTE)
-            # The memory the first draft asked to save is a fact about the
-            # conversation, not about the draft that failed to render.
+            # The first draft's memory is still a fact about the conversation.
             reply, mem = retry_reply, (retry_mem or mem)
         return reply, mem
 
     def _draft_should_be_retried(self, reply: str) -> bool:
-        """Would this draft reach the reader as nothing at all, by accident?
-
-        A preview of `_finalize_reply`, which still runs on whatever comes
-        back. Only the sanitize half: a guard refusing the draft (its label
-        is in `_REFUSAL_LABELS`) or the output filter blocking it is a
-        decision on the words the model produced, and asking again would buy
-        the same no at full price, from input a user can choose."""
+        """Would this draft render to nothing by accident? A guard's refusal is
+        a decision, not an accident, and is not retried."""
         text, refusal = TextProcessing._sanitize_reply_with_reason(
             reply or "", self.agent_lang, self.reply_style)
         if refusal:
-            # Still a refusal, but the label set has drifted from the guards.
             if refusal not in _REFUSAL_LABELS:
                 logger.warning(
                     "[Agent] unknown sanitizer refusal label %r, not retried; "
