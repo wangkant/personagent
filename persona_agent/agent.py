@@ -43,7 +43,6 @@ from .settings import AgentSettings
 from .stickers import StickerLibrary
 from .storage import atomic_write_text
 from .textproc import ReplyStyle
-from .thinking import Thinking
 from .transport import _MAX_CONNECTOR_CONVS, Transport
 from .turns import Turns
 from .views import DataViews
@@ -106,7 +105,7 @@ def _load_persona(lang: str = "en") -> str:
 
 
 class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
-            Retrieval, Thinking, ModelCalls, WebSearch, Proactive, Memory,
+            Retrieval, ModelCalls, WebSearch, Proactive, Memory,
             DataViews, ContentIngestion, Transport, Learning):
     def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
         """Wire one agent from one settings record.
