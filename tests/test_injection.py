@@ -22,12 +22,17 @@ from persona_agent.textproc import (
     _WEB_DESC_CLOSE,
     _WEB_DESC_OPEN,
     _example_field,
+    _renderable_with_index,
     _strip_web_desc,
     _truncate_framed,
     neutralize_markup_tags,
-    renderable_form,
     scrub_third_party_text,
 )
+
+
+def renderable_form(value: object) -> str:
+    """`value` reduced to the code points a renderer draws, as a model reads it."""
+    return _renderable_with_index(str(value or ""))[0]
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
