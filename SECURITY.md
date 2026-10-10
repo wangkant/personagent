@@ -79,8 +79,6 @@ them is a vulnerability.
 
 ## Running it safely
 
-Keep `SERVER_HOST=127.0.0.1` when the connector is on the same machine. If you
-expose it, set `CONNECTOR_TOKEN` before you add any proxy or tunnel, and put
-HTTPS in front. Keep `.env`, `runtime/` and the dashboard's link private and
-out of version control. See
-[docs/deploy.md](docs/deploy.md#exposing-the-endpoints).
+See [Exposing the endpoints](docs/deploy.md#exposing-the-endpoints) before you
+reach it from another machine, and the guide's
+[privacy section](docs/guide.md#privacy-and-consent) for what to keep private.

@@ -362,13 +362,11 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 **Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on, then prints the dashboard's link. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON, and `--fix` renames settings retired in 1.0.
 
-**It runs but never replies.** In order:
+**It runs but never replies.** The three most common causes:
 
-1. The `personagent run` banner says the agent is on. If it says `OFF`, it names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
-2. Open [the dashboard](#the-dashboard) through the link the banner printed. If nothing has arrived, the connector is not reaching personagent: check `personagent_url` in the plugin, and that `CONNECTOR_TOKEN` is the same on both sides. Chats that were turned away are listed with the reason.
-3. Check the connector's allowlist. The AstrBot plugin forwards only the `groups` and `dm_users` it lists, and on QQ `aiocqhttp` must not be in its `excluded_platforms`; the Satori and Matrix connectors keep theirs in their own `.env`. If you set `ACCESS_GROUPS` or `ACCESS_DM_USERS`, they must list the chat too.
-4. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it does not answer everything: it considers joining in after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
-5. If AstrBot runs in Docker, look for `refusing unsafe personagent_url` in AstrBot's log (see [AstrBot in Docker](#astrbot-in-docker-or-on-another-host)).
+1. The agent is off. The `personagent run` banner then says `OFF` and names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
+2. Nothing arrives. Open [the dashboard](#the-dashboard) through the link the banner printed; if nothing has arrived, the connector is not forwarding or not reaching personagent. The AstrBot plugin forwards only the `groups` and `dm_users` it lists (and on QQ, `aiocqhttp` must not be in its `excluded_platforms`); check also its `personagent_url`, and that `CONNECTOR_TOKEN` is the same on both sides.
+3. It was not called. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it considers joining in only after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
 
 The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet).
 

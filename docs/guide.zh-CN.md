@@ -405,13 +405,11 @@ personagent 保存的一切都在你自己的机器上，在主目录里：`.env
 
 **先运行 `personagent doctor`。** 它会检查配置、指出拼错的和已改名的设置，逐个探测 personagent 依赖的服务，最后打印管理面板的链接。探测会发很小的请求，可能消耗一点额度。加 `--json` 输出同样内容的 JSON；加 `--fix` 会把 1.0 改掉的旧设置名换成新名字。
 
-**服务在跑，但就是不回复。** 按顺序查：
+**服务在跑，但就是不回复。** 最常见的三个原因：
 
-1. `personagent run` 启动时打印的信息里，agent 是开着的。如果显示 `OFF`，后面会写原因，通常是没设 `LLM_API_KEY`：运行 `personagent init`。
-2. 用启动时打印的链接打开[管理面板](#管理面板)。如果什么都没收到，说明连接器没连上 personagent：检查插件里的 `personagent_url`，以及两边的 `CONNECTOR_TOKEN` 是否一致。被拦下的聊天会列出来，并写明原因。
-3. 查连接器白名单。AstrBot 插件只转发 `groups` 和 `dm_users` 里列出的；接 QQ 时，插件的 `excluded_platforms` 里不能有 `aiocqhttp`。Satori 和 Matrix 连接器的白名单在它们自己的 `.env` 里。如果你设置了 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`，也要把这个聊天列进去。
-4. 叫它的名字（`PERSONA_NAME`）。群里它不会每条都回：攒够 `CHAT_TRIGGER_COUNT` 条消息（默认 30）才考虑插话，而且只在判断模型认为真人会接话时才开口。
-5. AstrBot 跑在 Docker 里的话，看 AstrBot 日志里有没有 `refusing unsafe personagent_url`（见[上文](#astrbot-跑在-docker-里或另一台机器上)）。
+1. agent 没开。`personagent run` 启动时打印的信息里会显示 `OFF` 并写明原因，通常是没设 `LLM_API_KEY`：运行 `personagent init`。
+2. 什么都没收到。用启动时打印的链接打开[管理面板](#管理面板)，如果什么都没收到，说明连接器没转发，或者没连上 personagent。AstrBot 插件只转发 `groups` 和 `dm_users` 里列出的（接 QQ 时，插件的 `excluded_platforms` 里不能有 `aiocqhttp`）；再检查插件里的 `personagent_url`，以及两边的 `CONNECTOR_TOKEN` 是否一致。
+3. 没叫到它。叫它的名字（`PERSONA_NAME`）。群里它不会每条都回：攒够 `CHAT_TRIGGER_COUNT` 条消息（默认 30）才考虑插话，而且只在判断模型认为真人会接话时才开口。
 
 完整的排查清单见[中文部署教程](deploy.zh-CN.md#机器人不说话)和[部署指南](deploy.md#when-the-bot-goes-quiet)（英文）。
 
