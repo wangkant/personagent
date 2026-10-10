@@ -1,18 +1,15 @@
 """Try the agent in your terminal: a simulated group chat, no platform needed.
 
-    personagent chat                # or: python try_chat.py in a checkout
+    personagent chat
     personagent chat --dm           # a one-to-one chat instead of a group
     personagent chat --lang zh      # the Chinese variant
     personagent chat --name Alex    # your display name
     personagent chat --admin        # speak as the configured admin
     personagent chat --trigger 4    # messages before it considers joining in
 
-Every line runs through the functions the live bot runs. A plain line is
-ordinary group chat and meets the same speak-or-stay-quiet decision, and the
-trial says why when it stays quiet. A line with its name is a call; memory
-commands are the bot's own. Reply to it and the reaction is judged and
-recorded in the learning ledger. The trial keeps its state in
-<runtime>/trial/, apart from the live bot's.
+Every line runs through the functions the live bot runs, and the trial says
+why when it stays quiet. A reply to it is judged and recorded in the learning
+ledger. State lives in <runtime>/trial/, apart from the live bot's.
 """
 from __future__ import annotations
 
@@ -326,9 +323,8 @@ def failure_text(lang: str, failure: Failure, doctor: str | None = None) -> str:
 
 @dataclass
 class Checklist:
-    """The promotion rules for one candidate, and where each stands.
-
-    Counted with the policy's own functions; the verdict is the policy's."""
+    """The promotion rules for one candidate and where each stands, counted
+    with the policy's own functions."""
 
     events: int
     need_events: int

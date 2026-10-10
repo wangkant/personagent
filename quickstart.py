@@ -22,16 +22,7 @@ from pathlib import Path  # noqa: E402
 
 from persona_agent import home as homes  # noqa: E402
 from persona_agent import setup_wizard  # noqa: E402
-from persona_agent.setup_wizard import (  # noqa: E402
-    PLATFORMS, PLUGIN_NAME, astrbot_platform_entry, astrbot_plugin_config,
-    connect_astrbot, install_astrbot_plugin, read_astrbot_config, secure_env_file,
-    set_env_values, write_astrbot_config, write_astrbot_platform, write_env)
-
-# Kept importable from here for scripts written against this file.
-__all__ = ["PLATFORMS", "PLUGIN_NAME", "astrbot_platform_entry", "astrbot_plugin_config",
-           "connect_astrbot", "install_astrbot_plugin", "read_astrbot_config",
-           "secure_env_file", "set_env_values", "write_astrbot_config",
-           "write_astrbot_platform", "write_env", "main"]
+from persona_agent.setup_wizard import PLATFORMS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 PROG = "python quickstart.py"

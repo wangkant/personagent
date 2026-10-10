@@ -15,9 +15,9 @@ Three suites, each reporting numbers:
   A held-out probe in the same conversation runs before and after, and the
   judge says whether each follows a target behaviour.
 
-Each run builds its agents in a throwaway deployment root (AGENT_HOME), which
-is deleted afterwards unless --keep. The judge is BENCH_JUDGE_MODEL and must
-not be the model under test. Reports go to <home>/benchmark_runs/.
+Agents run in a throwaway deployment root, deleted afterwards unless --keep.
+The judge is BENCH_JUDGE_MODEL and must not be the model under test. Reports
+go to <home>/benchmark_runs/.
 
     personagent eval --suite speak --lang en
     personagent eval --suite all --lang zh --limit 6
@@ -32,7 +32,6 @@ import hashlib
 import json
 import logging
 import math
-import os
 import random
 import re
 import shutil
@@ -101,11 +100,8 @@ NAME_UID = _NameUid()
 
 
 def strip_pass_sentinel(reply: str) -> str:
-    """Collapse the model's PASS sentinel to an empty reply.
-
-    PASS is the JSON protocol's "I choose not to speak", not an utterance; the
-    live pipeline drops it before sending, so a harness that calls _think
-    directly must not grade it or learn from it."""
+    """The model's PASS sentinel as an empty reply: it means "stay quiet", and
+    a harness calling _think directly must not grade or learn from it."""
     reply = (reply or "").strip()
     if re.match(r"PASS\b", reply, re.IGNORECASE):
         return ""
@@ -250,31 +246,15 @@ def prepare_persona(text: str, name: str) -> str:
 
 @contextlib.contextmanager
 def deployment_root(home: Path):
-    """Make `home` the agent's deployment root for the block.
-
-    paths.ROOT is fixed at import, so AGENT_HOME alone would not move a
-    package that is already loaded. The deployment's own data/ overrides are
-    copied in; every other seed resolves to the shipped copy, as it does for
-    the deployment."""
-    source = paths.ROOT
+    """Make `home` the agent's deployment root for the block, with the
+    deployment's own data/ overrides copied in."""
     home = home.resolve()
     (home / "data").mkdir(parents=True, exist_ok=True)
-    for src in (source / "data").glob("*"):
+    for src in (paths.ROOT / "data").glob("*"):
         if src.is_file():
             shutil.copy2(src, home / "data" / src.name)
-    saved = {k: os.environ.get(k) for k in ("AGENT_HOME", "AGENT_RUNTIME_DIR")}
-    paths.ROOT = home
-    os.environ["AGENT_HOME"] = str(home)
-    os.environ.pop("AGENT_RUNTIME_DIR", None)
-    try:
+    with paths.use_root(home):
         yield home
-    finally:
-        paths.ROOT = source
-        for key, value in saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 def agent_settings(home: Path, *, lang: str, persona: str, persona_name: str,
@@ -404,9 +384,10 @@ class Judge:
     url: str
     api_key: str
     retry_delay_s: float = 1.5
+    timeout_s: float = 90.0
 
     async def complete(self, prompt: str) -> str:
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_s) as client:
             r = await client.post(
                 self.url, headers={"Authorization": f"Bearer {self.api_key}"},
                 # A reasoning judge spends most of the budget thinking.
@@ -420,13 +401,14 @@ class Judge:
                                  "(a reasoning judge? pick a non-reasoning one)")
             return text
 
-    async def verdict(self, prompt: str, parse) -> tuple[dict | None, str]:
+    async def verdict(self, prompt: str, parse,
+                      decode=salvage_json_object) -> tuple[dict | None, str]:
         """(verdict, error). A failed verdict is left out, never backfilled:
         a made-up middle score would pull every number toward no effect."""
         error = ""
         for attempt in range(3):
             try:
-                data = salvage_json_object(await self.complete(prompt))
+                data = decode(await self.complete(prompt))
                 out = parse(data) if isinstance(data, dict) else None
                 if out is not None:
                     return out, ""

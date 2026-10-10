@@ -405,7 +405,7 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     # operator puts in `.env`.
     root = Path(__file__).resolve().parents[1]
     sources = [
-        root / "main.py", root / "try_chat.py", root / "quickstart.py",
+        root / "main.py", root / "quickstart.py",
         *sorted((root / "persona_agent").glob("*.py")),
         *sorted((root / "tools").glob("*.py")),
     ]
@@ -480,7 +480,7 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
           not levels(env={"LLM_API_KEY": "sk-x"}))
     check("preflight: settings the offline tools read are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
-                          "LAB_MODEL": "m", "REVIEWER_MODEL": "r",
+                          "REVIEWER_MODEL": "r",
                           "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1"}))
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",

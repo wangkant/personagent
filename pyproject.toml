@@ -37,7 +37,7 @@ classifiers = [
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-# Only for tools/prompt_lab.py and `evolution_benchmark.py --judge anthropic`, which score with another vendor.
+# Only for `evolution_benchmark.py --judge anthropic`, which scores with another vendor.
 judge = ["anthropic>=0.103,<1"]
 # What CI installs on top of the runtime dependencies.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]

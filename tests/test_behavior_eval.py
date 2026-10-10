@@ -1,4 +1,4 @@
-"""Tests for the behavioural eval (tools/behavior_eval.py).
+"""Tests for the behavioural eval (`personagent eval`).
 
 Every suite runs end to end against stub models: the agent's `_call_llm` and
 the judge's `complete` are replaced, everything between them is the real
@@ -192,6 +192,23 @@ def test_learning_outcomes_and_the_interval() -> None:
     check("no interval without data", be.wilson(0, 0) is None)
     lo, hi = be.wilson(8, 10)
     check("the interval brackets the rate", lo < 0.8 < hi and 0 <= lo and hi <= 1)
+
+
+def test_an_eval_home_ignores_the_real_persona_card(tmp, monkeypatch) -> None:
+    from persona_agent import agent as agent_module
+    real_home = tmp / "real"
+    real_home.mkdir()
+    (real_home / "persona.card.json").write_text(
+        json.dumps({"reply_style": {"max_chars": 20}}), encoding="utf-8")
+    monkeypatch.setattr(agent_module, "ROOT", real_home)
+    monkeypatch.setenv("PERSONA_CARD_FILE", "persona.card.json")
+    with be.deployment_root(tmp / "eval") as home:
+        check("the agent's persona files resolve under the eval home",
+              agent_module.ROOT == home and paths.ROOT == home)
+        check("the real card is not read", agent_module._load_persona_card() is None)
+    check("the real root and settings come back",
+          agent_module.ROOT == real_home and paths.ROOT == CHECKOUT_ROOT
+          and os.environ["PERSONA_CARD_FILE"] == "persona.card.json")
 
 
 # ---------------------------------------------------------------------------

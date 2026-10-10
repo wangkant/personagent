@@ -1,23 +1,16 @@
-"""tools/evolution_benchmark.py — quantify the self-evolution loop.
+"""Quantify the self-evolution loop.
 
-Drives the real Agent over synthetic train / held-out scenario sets across N
-rounds and two arms (evolve-on, evolve-off control), each in an isolated temp
-state dir, then exports blind held-out replies for an independent judge and
-plots mean score vs round.
+Drives the real Agent over synthetic train / held-out scenarios for N rounds
+in two arms (evolve-on, evolve-off control), each in an isolated state dir,
+then has the blind held-out replies scored and plots mean score per round.
 
-The judge must not be the model being measured, or the loop grades its own
-homework: `--judge export` writes a blind inbox for a human or a separate
-model to score; `--judge openai` (any OpenAI-compatible endpoint) and
-`--judge anthropic` route it to a named judge model. Point them at a model
-other than the one under test. None of them ever feeds the learning loop.
+The judge must not be the model under test: `--judge export` writes a blind
+inbox for a human or another model, `--judge openai` / `--judge anthropic`
+send it to a named judge model. No score ever feeds the learning loop.
 
-**What the evolve-on arm measures.** The agent's self-review proposes candidates
-and will not promote them unattended — a single automatic signal must never
-change behaviour (persona_agent/promotion.py). This harness therefore stubs the
-human gate: after each tick it promotes what was proposed, marked actor=
-"benchmark" in the ledger. So a curve here measures *the value of the material
-the loop drafts*, not the automatic path's willingness to adopt it. Nothing here
-is evidence about how much a deployment learns on its own.
+The evolve-on arm stubs the human gate: after each tick it promotes what was
+proposed (actor="benchmark" in the ledger). A curve therefore measures the
+material the loop drafts, not how much a deployment learns on its own.
 """
 from __future__ import annotations
 
@@ -39,7 +32,7 @@ from dotenv import load_dotenv
 from persona_agent import evolution  # noqa: E402
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL  # noqa: E402
 from persona_agent.endpoints import chat_completions_url  # noqa: E402
-from persona_agent.evals import NAME_UID, strip_pass_sentinel  # noqa: E402
+from persona_agent.evals import NAME_UID, Judge, strip_pass_sentinel  # noqa: E402
 from persona_agent.paths import seed_file  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
@@ -49,14 +42,8 @@ DATA = seed_file("benchmark")
 # Stored mode names; "owner" is the admin's.
 VALID_MODES = {"owner", "called", "followup", "judge"}
 
-# Ablation: a minimal style guide that keeps the chat framing but STRIPS every
-# anti-AI-tell rule the real STYLE_GUIDE encodes (no "banned markdown", no
-# "don't open with a name", no "don't list options", no length rhythm). With
-# it, the model falls back to its default assistant voice — service-desk tone,
-# bullet lists, over-explaining — so there is genuine AI-tell for the loop to
-# catch and re-learn. Nothing is added to induce failure; the failure is just
-# the absence of the style-as-code layer. Both arms share it; only the on-arm
-# additionally evolves, so the curve isolates what the loop re-derives.
+# Ablation: the chat framing without any of STYLE_GUIDE's anti-AI-tell rules,
+# so the default assistant voice shows through and the loop has tells to learn.
 WEAK_STYLE_GUIDE = (
     "<style>\n"
     "You're chatting in an IM group. Reply to the latest message.\n"
@@ -77,10 +64,6 @@ def load_scenarios(path: Path) -> list[dict]:
             raise ValueError(f"scenario {r.get('id')} has empty context")
         out.append(r)
     return out
-
-
-def scenario_families(scns: list[dict]) -> set[str]:
-    return {s["family"] for s in scns}
 
 
 def _parse_line(line: str, persona_name: str) -> dict:
@@ -117,22 +100,13 @@ async def drive_scenario(agent, scenario: dict, persona_name: str, group_id: str
 
 
 def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_enabled: bool):
-    """An Agent whose EVERY writable state path lives under state_dir, so a
-    benchmark run cannot touch the repo's real memory/eval/feedback files.
-
-    Model credentials come from the environment (the same vars main.py reads),
-    so a live run generates and self-evals against the configured endpoints.
-    They default to a fake key + the default endpoint, which is correct for the
-    tests — those stub `_call_llm`, so the key is never used."""
+    """An Agent with every writable state path under state_dir. Credentials come
+    from the environment, defaulting to a fake key (tests stub `_call_llm`)."""
     import os
     from persona_agent.agent import Agent
     from persona_agent.config_env import vision_endpoint_from_env
-    # Absolute, always: the Agent ctor re-anchors RELATIVE state paths under
-    # the repo's runtime/ dir (paths.resolve_runtime_state_file), so a relative
-    # --outdir would silently split one arm's state across two trees --
-    # ctor-resolved files under runtime/<outdir>/, post-ctor assignments under
-    # <outdir>/. Reads and writes would stay consistent per file, so nothing
-    # would crash while the isolation promise was broken quietly.
+    # Absolute: the ctor re-anchors relative state paths under runtime/, which
+    # would split one arm's state across two trees.
     state_dir = state_dir.resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     a = Agent(
@@ -145,8 +119,7 @@ def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_ena
         eval_enabled=eval_enabled, eval_file=str(state_dir / "eval.jsonl"),
         eval_model=os.getenv("EVAL_MODEL", ""),
         vision_model="",  # scenarios use [image: ...] markers, never real pixels
-        # The self-eval may route a Moonshot/Kimi model through the vision
-        # endpoint (learning.py), so it is passed even with vision off.
+        # The self-eval may route a Kimi model through the vision endpoint.
         vision_api_key=vision_endpoint_from_env()[0],
         vision_base_url=vision_endpoint_from_env()[1],
         stickers_dir=str(state_dir / "stickers"),
@@ -163,46 +136,22 @@ def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_ena
     a.examples_file = state_dir / f"examples.{lang}.jsonl"
     a._seen_msg_ids.clear()
     a.core_memory.clear()
-    # Web search is noise for a persona benchmark (and adds a decision call +
-    # an external fetch per generation). Stub it so every reply is pure
-    # persona-pipeline output. Both arms are stubbed identically, so this
-    # cannot bias the on-vs-off comparison.
+    # Web search is noise here; both arms are stubbed alike.
     async def _no_search(messages, hint=""):
         return ""
     a._decide_and_search = _no_search
-    # Force retrieval caches to reload from the (empty) redirected files. The
-    # evidence log, the candidate ledger and both promoted views are sidecars of
-    # examples_file's directory, so they followed the redirect above.
-    a._pairs_mtime = (-1.0, -1.0)
-    a._examples_mtime = (-1.0, -1.0)
-    a._pairs_cache = []
-    a._examples_cache = []
-    a._view_pairs_stamp = (-1.0, -1)
-    a._view_examples_stamp = (-1.0, -1)
-    a._view_pairs_cache = []
-    a._view_examples_cache = []
-    a._auto_examples_seen = set()
     return a
 
 
 def _count_feedback(agent) -> int:
-    """Pairs retrieval can actually see: the learned pool plus the promoted
-    view."""
+    """Pairs retrieval can see: the learned pool plus the promoted view."""
     return len(evolution.load_feedback_keys(
         [agent.feedback_file, agent.promoted_feedback_file]))
 
 
 def _promote_pending(agent) -> int:
-    """Stand in for the human gate, explicitly.
-
-    The agent's self-review proposes candidates and refuses to promote them on
-    its own — one unwitnessed automatic signal must not change behaviour (see
-    persona_agent/promotion.py). A benchmark of the learning loop needs the loop
-    to close, so this arm promotes what the tick proposed, the way an operator
-    would with `personagent learned promote`. Every promotion is a
-    lifecycle event in the ledger with actor="benchmark", so a run's state says
-    plainly that the corroboration requirement was bypassed by the harness and
-    the numbers are not evidence about the automatic path."""
+    """Stand in for the human gate: promote what the tick proposed, as
+    `personagent learned promote` would, recorded with actor="benchmark"."""
     from datetime import datetime
 
     ledger = agent.candidate_ledger
@@ -217,7 +166,7 @@ def _promote_pending(agent) -> int:
     return n
 
 
-async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_model: str):
+async def run_round(agent, train, holdout, persona_name, evolve_on: bool):
     if evolve_on:
         for scn in train:
             try:
@@ -226,23 +175,15 @@ async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_
                     "g1", scn["mode"], latest, caller_override=_caller)
                 reply = strip_pass_sentinel(reply)
                 if not reply:
-                    # Production never evaluates a PASS; neither does the
-                    # harness, or the loop learns from the sentinel.
+                    # Production never evaluates a PASS; neither does this.
                     print(f"  [train {scn['id']}] no reply (PASS)")
                     continue
-                # Self-eval writes eval.jsonl (the loop's learning signal).
-                # Real signature: _evaluate_reply(group_id, mode, user_msg,
-                # reply, sticker_files=None, intent="", ctx_msgs=None). Called
-                # directly (not _spawn) so eval.jsonl is on disk before
-                # _evolve_tick consumes it. ctx_msgs are the scenario context
-                # lines with <bot-name> substituted (the same "name: text" shape
-                # _evaluate_reply expects).
+                # Awaited, not spawned, so eval.jsonl is on disk before
+                # _evolve_tick reads it.
                 ctx = [ln.replace("<bot-name>", persona_name) for ln in scn["context"]]
                 await agent._evaluate_reply(
                     "g1", scn["mode"], latest, reply, intent=intent, ctx_msgs=ctx)
-                # Optional throttle between eval calls: a cross-vendor eval
-                # endpoint may rate-limit far below the tight
-                # benchmark loop. BENCH_EVAL_DELAY_S seconds keeps it under the cap.
+                # A cross-vendor eval endpoint may rate-limit this tight loop.
                 _delay = float(os.getenv("BENCH_EVAL_DELAY_S", "0"))
                 if _delay:
                     await asyncio.sleep(_delay)
@@ -263,13 +204,8 @@ async def run_round(agent, train, holdout, persona_name, evolve_on: bool, judge_
         except Exception as e:
             print(f"  [holdout {scn['id']}] error: {type(e).__name__}: {e}")
             reply = ""
-        # Context rides along for the judge. It is identical for both arms
-        # (same scenario), so exposing it leaks nothing about which arm wrote
-        # the reply -- while withholding it blinds the judge to exactly the
-        # tells that matter: a drafted letter answering a casual ask, a
-        # tutorial where a quip was expected. A reply-only judge rates a
-        # "Here you go: [drafted apology]" reply 5/5 ("like a friend offering
-        # a script").
+        # The context is the same for both arms, so it does not unblind the
+        # judge, and without it a drafted letter to a casual ask scores well.
         ctx = [ln.replace("<bot-name>", persona_name) for ln in scn["context"]]
         out.append({"scenario_id": scn["id"], "family": scn["family"],
                     "reply": reply, "context": ctx})
@@ -280,14 +216,9 @@ _STATE_MARKER = ".benchmark-state"
 
 
 def _reset_state_dir(state_dir: Path) -> None:
-    """Empty a benchmark arm's state directory — only if we created it.
-
-    `--outdir` is free-form, so a bare
-    `if state_dir.exists(): shutil.rmtree(state_dir)` would let
-    `run --outdir <anything>` recursively delete two subdirectories of
-    `<anything>` with no confirmation and no flag. A marker file is the
-    cheapest thing that distinguishes "the last run's scratch state" from
-    "a directory that happened to be named state-on"."""
+    """Empty a benchmark arm's state directory, only if a run created it:
+    `--outdir` is free-form, so the marker file guards against deleting
+    a directory that merely shares the name."""
     if state_dir.exists():
         if not (state_dir / _STATE_MARKER).is_file():
             raise SystemExit(
@@ -302,43 +233,29 @@ def _reset_state_dir(state_dir: Path) -> None:
 
 
 async def run_arm(train, holdout, persona_name, lang, rounds, evolve_on, state_dir,
-                  judge_model, seed_state="empty"):
+                  seed_state="empty"):
     _reset_state_dir(state_dir)
     agent = build_isolated_agent(state_dir, persona_name, lang, eval_enabled=evolve_on)
-    # Seed both arms identically (or start empty) AFTER build so the files
-    # survive the rmtree above; the agent's retrieval caches reload lazily by
-    # mtime, so files dropped in now are picked up on the first round.
+    # Seeded after the reset; the forced stamps make the first round load them.
     _seed_state_files(lang, seed_state, state_dir)
     agent._pairs_mtime = (-1.0, -1.0)
     agent._examples_mtime = (-1.0, -1.0)
     arm = "evolve-on" if evolve_on else "evolve-off"
     results = []
     # Round 0: baseline, no learning even on the on-arm.
-    base = await run_round(agent, train, holdout, persona_name, evolve_on=False, judge_model=judge_model)
+    base = await run_round(agent, train, holdout, persona_name, evolve_on=False)
     results.append({"round": 0, "feedback_pairs": _count_feedback(agent), "holdout": base})
     for k in range(1, rounds + 1):
-        rd = await run_round(agent, train, holdout, persona_name, evolve_on=evolve_on, judge_model=judge_model)
+        rd = await run_round(agent, train, holdout, persona_name, evolve_on=evolve_on)
         results.append({"round": k, "feedback_pairs": _count_feedback(agent), "holdout": rd})
         print(f"[{arm}] round {k}/{rounds}: feedback_pairs={_count_feedback(agent)}")
     return {"arm": arm, "rounds": results}
 
 
 def build_inbox(arms: list[dict], votes: int = 1):
-    """Build a blind inbox from arm results.
-
-    Returns (inbox, key_map) where:
-    - inbox: list of {"item_id", "reply"}; item_id is an opaque digest that
-      carries no arm/round/family/scenario_id.
-    - key_map: {item_id: {"arm", "round", "scenario_id", "family"}}
-    - Order shuffled deterministically by the opaque id, so neither the id nor
-      the position tells the judge which arm produced a reply.
-    - votes copies per reply with distinct opaque ids.
-
-    The blinding has to live in the identifier itself.  An item_id like
-    "evolve-on|0|ho001#v1" would hand the judge every reply with its arm
-    spelled out beside it, however the order is shuffled, and the scores it
-    produced could not be evidence of anything.
-    """
+    """(inbox, key_map): inbox items carry an opaque digest id and are sorted
+    by it, so neither id nor position reveals the arm; key_map maps each id
+    to its arm, round, scenario_id and family. `votes` copies per reply."""
     inbox: list[dict] = []
     key_map: dict[str, dict] = {}
     for arm in arms:
@@ -346,10 +263,7 @@ def build_inbox(arms: list[dict], votes: int = 1):
         for rd in arm["rounds"]:
             for h in rd["holdout"]:
                 if not (h.get("reply") or "").strip():
-                    # A PASS / empty reply is a refusal to speak, not text; the
-                    # judge sees replies without context and cannot score
-                    # silence. Skipped here, counted by _pass_counts so a
-                    # silence imbalance between arms stays visible.
+                    # Silence is not scored; _pass_counts reports it instead.
                     continue
                 base = f"{aname}|{rd['round']}|{h['scenario_id']}"
                 for v in range(1, votes + 1):
@@ -365,10 +279,7 @@ def build_inbox(arms: list[dict], votes: int = 1):
 
 
 def load_scores(path: Path) -> dict:
-    """Load scores from a JSONL file.
-
-    Returns {item_id: {"score", "reason"}}.
-    """
+    """{item_id: {"score", "reason"}} from a JSONL file."""
     out: dict[str, dict] = {}
     for ln in path.read_text(encoding="utf-8").splitlines():
         ln = ln.strip()
@@ -380,11 +291,8 @@ def load_scores(path: Path) -> dict:
 
 
 def aggregate(key_map: dict, scores: dict) -> dict:
-    """Aggregate scores by (arm, round) and (arm, round, family).
-
-    Raises ValueError if any inbox item lacks a score.
-    Returns {"by_round": {(arm, round): mean_score}, "by_family": {...}}.
-    """
+    """Mean scores by (arm, round) and (arm, round, family), plus warnings.
+    Raises ValueError if any inbox item lacks a score."""
     missing = [iid for iid in key_map if iid not in scores]
     if missing:
         raise ValueError(f"{len(missing)} inbox items have no score: {missing[:5]}")
@@ -405,13 +313,8 @@ def aggregate(key_map: dict, scores: dict) -> dict:
 
 
 def _measurement_warnings(all_scores: list[int]) -> list[str]:
-    """Flag runs whose numbers cannot support a conclusion.
-
-    A run where the judge answered 5 to all 56 items still produces four tidy
-    means and a plotted curve, and nothing in the output says the instrument
-    never moved. Zero variance means the comparison had no power to detect a
-    difference of any size, so the curve is decoration, not evidence.
-    """
+    """Flag runs whose scores cannot support a conclusion (no or near-zero
+    variance still yields a tidy curve)."""
     warnings: list[str] = []
     if not all_scores:
         return ["no scores at all"]
@@ -524,9 +427,7 @@ async def judge_anthropic(inbox: list[dict], model: str) -> dict:
             raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
             scores[it["item_id"]] = _parse_judge_json(raw)
         except Exception as e:
-            # Dropped, not backfilled: a fabricated neutral 3 pulls both arms
-            # together and manufactures the "no difference" result this
-            # benchmark exists to test for. aggregate refuses partial sets.
+            # Dropped, not backfilled: a made-up 3 pulls both arms together.
             print(f"  judge error {it['item_id']}: {e}")
             failures += 1
     if failures:
@@ -561,68 +462,45 @@ def _judge_item_prompt(item: dict) -> str:
     return f"{_JUDGE_RUBRIC}{ctx_block}Reply: {item['reply']}"
 
 
-def _parse_judge_json(raw: str) -> dict:
-    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
-    d = json.loads(raw)
+def _decode_judge_json(raw: str):
+    return json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip())
+
+
+def _judge_score(d: dict) -> dict:
     score = int(d["score"])
     if not 1 <= score <= 5:
         raise ValueError(f"score {score} out of range")
     return {"score": score, "reason": str(d.get("reason", ""))[:200]}
 
 
+def _parse_judge_json(raw: str) -> dict:
+    return _judge_score(_decode_judge_json(raw))
+
+
 async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
-    """Judge every reply with an OpenAI-compatible chat endpoint.
-
-    A failed call is left out of the returned mapping rather than backfilled
-    with a neutral 3: a fabricated middle score drags both arms toward each
-    other, which quietly manufactures the "no difference" result the benchmark
-    exists to test for. ``aggregate`` refuses to run on a partial score set, so
-    dropping the item surfaces the problem instead of averaging it away.
-    """
-    import httpx
-
+    """Judge every reply with an OpenAI-compatible chat endpoint. A failed
+    item is left out, never backfilled, and aggregate refuses a partial set."""
     base = (os.getenv("BENCH_JUDGE_BASE_URL")
             or os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)).rstrip("/")
     key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
     if not key:
         sys.exit("--judge openai needs BENCH_JUDGE_API_KEY or LLM_API_KEY")
-    url = chat_completions_url(base)
+    judge = Judge(model, chat_completions_url(base), key, timeout_s=60.0)
 
     scores: dict = {}
     failures: list[str] = []
     sem = asyncio.Semaphore(4)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        async def one(it: dict) -> None:
-            async with sem:
-                for attempt in range(3):
-                    try:
-                        r = await client.post(
-                            url,
-                            headers={"Authorization": f"Bearer {key}"},
-                            # Generous budget: a reasoning judge spends most of
-                            # it on hidden thinking tokens and emits nothing at
-                            # all if the cap lands mid-thought.
-                            json={"model": model, "max_tokens": 1200,
-                                  "temperature": 0,
-                                  "messages": [{"role": "user",
-                                                "content": _judge_item_prompt(it)}]})
-                        r.raise_for_status()
-                        body = r.json()["choices"][0]
-                        text = (body["message"].get("content") or "").strip()
-                        if not text and body.get("finish_reason") == "length":
-                            raise ValueError(
-                                "empty judge output, finish_reason=length "
-                                "(reasoning model? pick a non-reasoning judge)")
-                        scores[it["item_id"]] = _parse_judge_json(text)
-                        return
-                    except Exception as exc:  # noqa: BLE001 - reported, not swallowed
-                        if attempt == 2:
-                            failures.append(f"{it['item_id']}: {exc}")
-                        else:
-                            await asyncio.sleep(1.5 * (attempt + 1))
+    async def one(it: dict) -> None:
+        async with sem:
+            verdict, error = await judge.verdict(
+                _judge_item_prompt(it), _judge_score, decode=_decode_judge_json)
+        if verdict is None:
+            failures.append(f"{it['item_id']}: {error}")
+        else:
+            scores[it["item_id"]] = verdict
 
-        await asyncio.gather(*(one(it) for it in inbox))
+    await asyncio.gather(*(one(it) for it in inbox))
 
     if failures:
         print(f"\n  {len(failures)} of {len(inbox)} judge calls failed after retries:")
@@ -633,8 +511,7 @@ async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
 
 
 def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
-    # 'synthetic' copies the committed starter datasets so both arms begin
-    # identically; 'empty' starts from nothing.
+    # 'synthetic' copies the starter datasets; 'empty' starts from nothing.
     state_dir.mkdir(parents=True, exist_ok=True)
     if mode != "synthetic":
         return
@@ -647,11 +524,8 @@ def _seed_state_files(lang: str, mode: str, state_dir: Path) -> None:
 
 async def cmd_run(args) -> int:
     persona_name = os.getenv("PERSONA_NAME", "Robin") or "Robin"
-    # Style ablation: with the full STYLE_GUIDE the base persona already avoids
-    # AI-tell, so the loop has no failures to learn from and both arms sit at
-    # ceiling. `--style weak` swaps in a neutral style guide (module global,
-    # read at prompt-assembly time) so the model's default assistant voice
-    # shows through and the loop has real tells to re-learn. Both arms share it.
+    # With the full STYLE_GUIDE both arms sit at ceiling; prompt.py reads the
+    # module global at assembly time, so swapping it affects both arms.
     if args.style == "weak":
         import persona_agent.prompt as group_prompt
         group_prompt.STYLE_GUIDE = WEAK_STYLE_GUIDE
@@ -661,11 +535,7 @@ async def cmd_run(args) -> int:
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
     gen_model = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
-    # The judge belongs in meta.json for the same reason gen_model does: a
-    # score is only readable next to who produced it. Without it a finished
-    # run cannot be audited for the one failure this module's docstring calls
-    # disqualifying — the judge sharing a reward lineage with the model under
-    # test — so say it loudly here, before the arms spend anything.
+    # Refused before the arms spend anything; meta.json records the judge.
     if args.judge in ("anthropic", "openai") and not args.judge_model:
         sys.exit(f"--judge {args.judge} needs a model id: pass --judge-model, "
                  f"or set BENCH_JUDGE_MODEL in .env. There is no default, "
@@ -691,8 +561,7 @@ async def cmd_run(args) -> int:
     for evolve_on in (True, False):
         sd = out / ("state-on" if evolve_on else "state-off")
         arm = await run_arm(train, holdout, persona_name, args.lang, args.rounds,
-                            evolve_on, sd, judge_model=args.judge_model,
-                            seed_state=args.seed_state)
+                            evolve_on, sd, seed_state=args.seed_state)
         arms.append(arm)
     (out / "arms.json").write_text(json.dumps(arms, ensure_ascii=False, indent=2),
                                    encoding="utf-8", newline="\n")
@@ -713,7 +582,6 @@ async def cmd_run(args) -> int:
 
 def _ingest(out: Path) -> int:
     key_map = json.loads((out / "key_map.json").read_text(encoding="utf-8"))
-    # key_map JSON keys are strings; tuples were flattened — rebuild lookup.
     sp = out / "judge_scores.jsonl"
     if not sp.exists():
         print(f"error: {sp} not found. Score judge_inbox.jsonl first.")
@@ -742,14 +610,8 @@ def _ingest(out: Path) -> int:
 
 
 def _style_warnings(meta_path: Path, existing: list[str]) -> list[str]:
-    """Name the most likely cause when a ceiling run never had the ablation on.
-
-    `run` defaults to --style full, under which both arms sit at ceiling by
-    design -- the model already has every anti-AI-tell rule, so there is
-    nothing to learn and nothing for the judge to penalize. That output is
-    byte-for-byte indistinguishable from "the ablation does not work"; only
-    meta.json can tell them apart.
-    """
+    """Name the likely cause when a flagged run used --style full, where both
+    arms sit at ceiling by design; only meta.json tells that apart."""
     if not existing:
         return []
     try:
@@ -779,13 +641,8 @@ def _pass_counts(arms_path: Path) -> dict:
 
 
 def _pass_warnings(counts: dict) -> list[str]:
-    """Flag rounds where the arms' silence rates diverge enough to bias means.
-
-    Silent replies are excluded from judging, so the per-arm mean is computed
-    over a *different subset* of scenarios for each arm. If one arm goes quiet
-    on the hard scenarios, its mean rises for reasons that have nothing to do
-    with reply quality -- the comparison stops being like-for-like.
-    """
+    """Flag rounds where the arms' silence rates diverge: silent replies are
+    not judged, so each arm's mean would cover a different scenario subset."""
     warnings: list[str] = []
     rounds = sorted({r for (_a, r) in counts})
     for rnd in rounds:
@@ -804,12 +661,8 @@ def _pass_warnings(counts: dict) -> list[str]:
 
 
 def _arm_warnings(arms_path: Path) -> list[str]:
-    """Flag an evolve-on arm that never actually had anything to learn from.
-
-    If no round produced a feedback pair, the on-arm ran the same prompt
-    material as the control and the two arms are a comparison in name only --
-    a flat curve then says nothing about whether learning helps.
-    """
+    """Flag an evolve-on arm that produced no feedback pair, which makes it
+    the control under another name."""
     try:
         arms = json.loads(arms_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

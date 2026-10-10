@@ -4,7 +4,6 @@ from __future__ import annotations
 import re
 import runpy
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -154,14 +153,6 @@ def test_eval_runs_as_a_subcommand(capsys) -> None:
     out = capsys.readouterr().out
     assert out.startswith("usage: personagent eval")
     assert "--suite" in out
-
-
-def test_the_eval_shim_still_runs_from_a_checkout() -> None:
-    result = subprocess.run([sys.executable, str(ROOT / "tools" / "behavior_eval.py"), "--help"],
-                            capture_output=True, text=True, encoding="utf-8",
-                            errors="replace", timeout=120)
-    assert result.returncode == 0, result.stderr
-    assert "--allow-same-judge" in result.stdout
 
 
 def test_release_notes_come_from_the_changelog_section_of_the_tag() -> None:

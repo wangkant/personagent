@@ -9,6 +9,7 @@ a checkout reads its tracked data), else the copy shipped in the package.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -130,3 +131,32 @@ def read_jsonl(paths: Iterable[Path]) -> list[dict]:
             continue
         rows.extend(parse_jsonl(blob))
     return rows
+
+
+_ROOT_ENV = ("AGENT_HOME", "AGENT_RUNTIME_DIR", "PERSONA_FILE", "PERSONA_CARD_FILE")
+
+
+@contextlib.contextmanager
+def use_root(home: Path):
+    """Make `home` the deployment root for the block, then restore the old one.
+    ROOT is bound at import, so setting AGENT_HOME alone would not move it."""
+    global ROOT
+    # agent.py binds its own ROOT, which locates the persona text and card.
+    from . import agent as agent_module
+
+    home = Path(home)
+    saved_env = {key: os.environ.get(key) for key in _ROOT_ENV}
+    saved_roots = ROOT, agent_module.ROOT
+    ROOT = agent_module.ROOT = home
+    os.environ["AGENT_HOME"] = str(home)
+    for key in _ROOT_ENV[1:]:
+        os.environ.pop(key, None)
+    try:
+        yield home
+    finally:
+        ROOT, agent_module.ROOT = saved_roots
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value

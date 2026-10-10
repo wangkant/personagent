@@ -1,4 +1,4 @@
-"""tools/import_stickers_folder.py — bulk-import images from a folder into the sticker library and tag them immediately.
+"""Bulk-import images from a folder into the sticker library and tag them at once.
 
 Does not need group context: OCR + vision model infer semantics directly,
 which makes this good for cold-starting the library.
@@ -52,9 +52,7 @@ logger = logging.getLogger("import")
 
 
 def _atomic_write_json(path, obj) -> None:
-    """tmp+replace atomic write — a mid-write Ctrl-C/crash must not truncate
-    stickers.json, or the bot's next startup _load() silently falls back to an
-    empty library (all metadata lost)."""
+    """Atomic write: a truncated stickers.json would load as an empty library."""
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 
@@ -159,10 +157,6 @@ async def main():
     p.add_argument("src", help="source image folder")
     p.add_argument("--limit", type=int, default=0, help="import first N only (0 = all)")
     p.add_argument("--no-tag", action="store_true", help="copy only; skip tagging")
-    # Mirrors auto_reviewer.py's --dry-run: "calls no model and writes
-    # nothing". Without it every accepted file hits disk immediately and,
-    # unless --no-tag, costs one paid vision call, with no way to preview
-    # counts first.
     p.add_argument("--dry-run", action="store_true",
                    help="show what would be imported; calls no model and "
                         "writes nothing")
@@ -218,10 +212,7 @@ async def main():
             filename = f"auto/{md5}.{ext}"
 
             if args.dry_run:
-                # Same md5_index update the real path does below, so a second
-                # copy of a new image later in this same folder is counted as
-                # a dup instead of a second "new" — otherwise the preview
-                # count would overstate what a real run would import.
+                # Indexed as a real run would, so a later copy counts as a dup.
                 md5_index[md5] = filename
                 new_count += 1
                 if not args.no_tag:

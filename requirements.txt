@@ -2,7 +2,7 @@
 fastapi>=0.128,<1
 # A floor here keeps the resolver off the pydantic 1.x line.
 pydantic>=2.9,<3
-uvicorn[standard]>=0.34,<1
+uvicorn>=0.34,<1
 python-dotenv>=1.0,<2
 httpx>=0.27,<1
 # Direct, not transitive: ingestion.py's SSRF guard imports httpcore._backends.auto.
