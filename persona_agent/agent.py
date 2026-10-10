@@ -483,17 +483,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.examples_file = resolve_runtime_lang_file(
             "examples", "jsonl", self.agent_lang)
         self._examples_cache: list = []
-        self._examples_mtime: tuple = ()  # see _pool_stamp
-        # Append-aware reload bookkeeping for the RUNTIME file (see
-        # _read_jsonl_appended): its size and consumed-byte offset at the last
-        # read, plus a signature of the tail of that consumed prefix. The seed
-        # is read-only, so only the runtime side can grow incrementally.
-        # Setting _examples_mtime to anything that isn't the recorded tuple
-        # (the `= 0.0` idiom the tools and tests use) still forces a full
-        # reparse — the fast path is gated on a previous successful load.
-        self._examples_eof: int = 0
-        self._examples_offset: int = 0
-        self._examples_sig: bytes = b""
+        # A stamp from _pool_stamp; `= 0.0` forces the next reload.
+        self._examples_mtime: tuple = ()
         # In-memory dedup for runtime-appended examples: a frequent stock
         # phrase should only land in the pool once.
         self._auto_examples_seen: set[str] = set()
@@ -503,10 +494,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.feedback_file = resolve_runtime_lang_file(
             "feedback", "jsonl", self.agent_lang)
         self._pairs_cache: list = []
-        self._pairs_mtime: tuple = ()  # see _pool_stamp
-        self._pairs_eof: int = 0
-        self._pairs_offset: int = 0
-        self._pairs_sig: bytes = b""
+        self._pairs_mtime: tuple = ()
 
         self._lineage_registered_for: tuple | None = None
         self._view_examples_cache: list = []

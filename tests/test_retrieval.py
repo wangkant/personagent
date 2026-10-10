@@ -1,17 +1,13 @@
-"""Tests for few-shot retrieval and its append-aware dataset loading.
+"""Tests for few-shot retrieval and its hot-reloaded datasets.
 
 examples.jsonl / feedback.jsonl are read on the reply hot path and appended to
-by the offline tools, so the loader parses only the appended tail when it can
-prove the prefix is unchanged (see _read_jsonl_appended). That optimization is
-invisible when it works and silently corrupts the few-shot pool when it
-doesn't, so the reload cases below are the important half of this file: every
-one of them asserts the incrementally-maintained cache equals what a cold
-process would have loaded.
+by the offline tools; the pools reparse whenever a file's stamp changes, and
+the reload cases below check that what a running agent holds equals what a
+cold process would load.
 
 Retrieval has a third source: the materialized view of promoted candidates,
-which is where automatic learning now lands (tests/test_ledger.py owns the
-promotion rules; the case here checks it reaches the prompt without disturbing
-the append-aware loaders).
+which is where automatic learning lands (tests/test_ledger.py owns the
+promotion rules; the case here checks it reaches the prompt).
 
 Run from the repo root:
 
@@ -98,7 +94,7 @@ def bank_example(a: Agent, rec: dict) -> None:
     through the evidence ledger and lands in a separate promoted view (see
     tests/test_ledger.py). `tools/auto_reviewer.py` and `tools/prompt_lab.py`
     still write here, and this is their pattern: trim_pool + append. The cap and
-    the append-aware reload have to keep agreeing about the result, which is
+    the reload have to keep agreeing about the result, which is
     what the tests below check."""
     evolution.trim_pool(a.examples_file, max_auto=a.promote_max_examples,
                         is_auto=lambda r: "score" in r)
@@ -124,33 +120,8 @@ def cold_replies(tmp: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Reload: incremental vs. full must never disagree
+# Reload: a running agent sees what a cold load would
 # ---------------------------------------------------------------------------
-
-def test_append_is_incremental_and_matches_cold_load() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        write_jsonl(a.examples_file, [ex(f"r{i}") for i in range(20)])
-        a._reload_examples_if_stale()
-        check("reload: initial full load", len(a._examples_cache) == 20)
-        check("reload: offset lands on EOF for a newline-terminated file",
-              a._examples_offset == a._examples_eof == a.examples_file.stat().st_size)
-
-        append_jsonl(a.examples_file, [ex(f"r{i}") for i in range(20, 25)])
-        a._reload_examples_if_stale()
-        check("reload: append picked up", replies(a) == [f"r{i}" for i in range(25)])
-        check("reload: append result == cold load", replies(a) == cold_replies(tmp))
-        check("reload: append consumed the whole file",
-              a._examples_offset == a.examples_file.stat().st_size)
-
-        # Repeated appends must not duplicate or drop.
-        for i in range(25, 40):
-            append_jsonl(a.examples_file, [ex(f"r{i}")])
-            a._reload_examples_if_stale()
-        check("reload: 15 successive appends stay exact",
-              replies(a) == [f"r{i}" for i in range(40)] == cold_replies(tmp))
-
 
 def test_same_mtime_append_is_still_seen() -> None:
     """Filesystem mtime resolution is coarse enough that an append can land in
@@ -169,48 +140,6 @@ def test_same_mtime_append_is_still_seen() -> None:
         a._reload_examples_if_stale()
         check("reload: append with an unchanged mtime is still picked up",
               replies(a) == ["r0", "r1"])
-
-
-def test_torn_append_waits_for_its_newline() -> None:
-    """A line still being written must not be half-consumed and then lost."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        write_jsonl(a.examples_file, [ex(f"r{i}") for i in range(5)])
-        a._reload_examples_if_stale()
-
-        with a.examples_file.open("a", encoding="utf-8") as f:
-            f.write('{"scenario":"torn","mode":"called","context":[],"reply":"half')
-        os.utime(a.examples_file, None)
-        a._reload_examples_if_stale()
-        check("reload: torn tail not consumed", len(a._examples_cache) == 5)
-        check("reload: torn tail leaves offset short of EOF",
-              a._examples_offset < a._examples_eof)
-
-        with a.examples_file.open("a", encoding="utf-8") as f:
-            f.write('-line"}\n')
-        os.utime(a.examples_file, None)
-        a._reload_examples_if_stale()
-        check("reload: completed line picked up exactly once",
-              replies(a) == [f"r{i}" for i in range(5)] + ["half-line"])
-        check("reload: completed line == cold load", replies(a) == cold_replies(tmp))
-
-
-def test_atomic_replacement_does_not_reuse_a_matching_tail() -> None:
-    """An edited head plus an unchanged 64-byte tail is not an append."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        tail = ex("unchanged " * 30)
-        write_jsonl(a.examples_file, [ex("old"), tail])
-        a._reload_examples_if_stale()
-        replacement = tmp / "replacement.jsonl"
-        write_jsonl(replacement, [ex("new"), tail, ex("added")])
-        os.replace(replacement, a.examples_file)
-        a._reload_examples_if_stale()
-        check("reload: replaced file cannot append onto stale cached head",
-              replies(a) == ["new", "unchanged " * 30, "added"]
-              == cold_replies(tmp), repr(replies(a)))
 
 
 def test_atomic_replacement_with_preserved_metadata_is_seen() -> None:
@@ -322,13 +251,11 @@ def test_shrink_and_rewrite_fall_back_to_full_reload() -> None:
         check("reload: shrink triggers a full reload",
               replies(a) == [f"r{i}" for i in range(8)] == cold_replies(tmp))
 
-        # In-place rewrite that leaves the file LONGER with a different prefix:
-        # the only shape a blind seek-and-append would corrupt. The tail
-        # signature is what catches it.
+        # In-place rewrite that leaves the file longer with a different prefix.
         time.sleep(0.01)
         write_jsonl(a.examples_file, [ex(f"z{i}") for i in range(20)])
         a._reload_examples_if_stale()
-        check("reload: grown-but-rewritten file caught by the tail signature",
+        check("reload: grown-but-rewritten file reloaded",
               replies(a) == [f"z{i}" for i in range(20)] == cold_replies(tmp))
 
         # Same-size in-place rewrite (reordering), newer mtime.
@@ -346,8 +273,7 @@ def test_force_reload_and_malformed_lines() -> None:
         write_jsonl(a.examples_file, [ex(f"r{i}") for i in range(6)])
         a._reload_examples_if_stale()
 
-        # `_examples_mtime = 0.0` is the force-reload switch tools/ and tests
-        # use; it must still bypass the incremental path.
+        # `_examples_mtime = 0.0` is the force-reload switch tools/ and tests use.
         a._examples_cache = []
         a._examples_mtime = 0.0
         a._reload_examples_if_stale()
@@ -362,13 +288,10 @@ def test_force_reload_and_malformed_lines() -> None:
         check("reload: malformed line skipped, following line kept",
               replies(a) == [f"r{i}" for i in range(6)] + ["after_garbage"])
 
-        # A deleted runtime file resets the cache rather than serving stale
-        # entries, and clears the byte bookkeeping with it.
+        # A deleted runtime file resets the cache rather than serving stale entries.
         a.examples_file.unlink()
         a._reload_examples_if_stale()
-        check("reload: missing file clears the cache",
-              a._examples_cache == [] and a._examples_offset == 0
-              and a._examples_eof == 0 and a._examples_sig == b"")
+        check("reload: missing file clears the cache", a._examples_cache == [])
 
         # The seed alone must still load once the runtime file is gone.
         write_jsonl(a.examples_seed_file, [ex("seed_only")])
@@ -377,9 +300,8 @@ def test_force_reload_and_malformed_lines() -> None:
 
 
 def test_file_without_trailing_newline_is_fully_parsed() -> None:
-    """Hand-edited datasets may lack the final newline — that last entry must
-    still load (it just isn't claimed as consumed, so the next change re-reads
-    the file whole instead of double-counting the fragment)."""
+    """Hand-edited datasets may lack the final newline; that last entry must
+    still load."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
@@ -388,8 +310,6 @@ def test_file_without_trailing_newline_is_fully_parsed() -> None:
         a._reload_examples_if_stale()
         check("reload: newline-less final line still parsed",
               replies(a) == [f"r{i}" for i in range(4)])
-        check("reload: newline-less tail not claimed as consumed",
-              a._examples_offset < a._examples_eof)
 
         # Banking a new example must not glue itself onto that unterminated
         # last line — which would destroy a hand-curated entry AND the new one.
@@ -401,8 +321,8 @@ def test_file_without_trailing_newline_is_fully_parsed() -> None:
 
 
 def test_auto_example_dedup_set_tracks_appends() -> None:
-    """_auto_examples_seen gates runtime example banking; an incremental
-    reload has to extend it, not leave it stale."""
+    """_auto_examples_seen gates runtime example banking; a reload has to
+    extend it, not leave it stale."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
@@ -412,7 +332,7 @@ def test_auto_example_dedup_set_tracks_appends() -> None:
 
         append_jsonl(a.examples_file, [ex("second one")])
         a._reload_examples_if_stale()
-        check("dedup set: extended on incremental append",
+        check("dedup set: extended on append",
               a._auto_examples_seen == {"first one", "second one"})
 
         # A rewrite that removes an entry must drop it from the set too.
@@ -452,7 +372,7 @@ def test_feedback_pairs_reload() -> None:
                      [dict(ex("bad two"), rating="better", better="good two"),
                       dict(ex("skipped"), rating="worse")])
         a._reload_pairs_if_stale()
-        check("pairs: append filtered incrementally",
+        check("pairs: append filtered",
               [p["reply"] for p in a._pairs_cache] == ["bad reply", "bad two"])
 
 

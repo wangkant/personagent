@@ -14,7 +14,7 @@ from .paths import (
     read_jsonl,
 )
 from .pools import (
-    _read_jsonl_appended,
+    _parse_jsonl,
     _retrieval_fields,
 )
 from .storage import atomic_write_text
@@ -57,52 +57,30 @@ class DataViews:
             logger.warning("[Agent] %s save failed: %s", label, e)
 
     def _reload_examples_if_stale(self) -> None:
-        """Hot-reload the seed + runtime example pools.
-
-        The seed is read-only and the runtime file only ever grows, so the
-        common case (the agent just banked one of its own replies) parses the
-        appended tail alone instead of re-reading both files whole — see
-        _read_jsonl_appended. Any other shape, including a seed edit or the
-        pool-cap rewrite, falls back to a full reload."""
-        paths = (self.examples_seed_file, self.examples_file)
-        stamp = self._pool_stamp(paths)
+        """Hot-reload the seed + runtime example pools when either file changes."""
+        stamp = self._pool_stamp((self.examples_seed_file, self.examples_file))
         if stamp == self._examples_mtime:
             return
         try:
-            records, appended = self._read_pool_delta(
-                paths, "_examples", self._examples_mtime, stamp)
-            replies = {
+            records = self._read_pool(self.examples_seed_file, self.examples_file)
+            self._examples_cache = records
+            # Rebuilt from disk so a restart remembers which replies are pooled.
+            self._auto_examples_seen = {
                 r.get("reply", "").strip() for r in records
                 if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
-            if appended:
-                self._examples_cache.extend(records)
-                # Runtime dedup set: appends only add, so update in place.
-                self._auto_examples_seen.update(replies)
-            else:
-                self._examples_cache = records
-                # Rebuild runtime auto-append dedup set from on-disk replies so
-                # a restart doesn't forget which replies are already in the pool.
-                self._auto_examples_seen = replies
             self._examples_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] examples.jsonl reload failed: %s", e)
 
     def _reload_pairs_if_stale(self) -> None:
-        """Load preference pairs from the seed + runtime feedback pools
-        (rating=better only). Append-aware, same as _reload_examples_if_stale."""
-        paths = (self.feedback_seed_file, self.feedback_file)
-        stamp = self._pool_stamp(paths)
+        """Hot-reload the seed + runtime preference pairs (rating=better only)."""
+        stamp = self._pool_stamp((self.feedback_seed_file, self.feedback_file))
         if stamp == self._pairs_mtime:
             return
         try:
-            records, appended = self._read_pool_delta(
-                paths, "_pairs", self._pairs_mtime, stamp)
-            pairs = [r for r in records if self._is_better_pair(r)]
-            if appended:
-                self._pairs_cache.extend(pairs)
-            else:
-                self._pairs_cache = pairs
+            records = self._read_pool(self.feedback_seed_file, self.feedback_file)
+            self._pairs_cache = [r for r in records if self._is_better_pair(r)]
             self._pairs_mtime = stamp
         except Exception as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
@@ -340,11 +318,6 @@ class DataViews:
             rec["_seed"] = True  # ranked below what this deployment learned
         return rows
 
-    def _set_pool_pos(self, attr: str, eof: int, offset: int, sig: bytes) -> None:
-        setattr(self, attr + "_eof", eof)
-        setattr(self, attr + "_offset", offset)
-        setattr(self, attr + "_sig", sig)
-
     @staticmethod
     def _pool_stamp(paths, *, strict: bool = False) -> tuple:
         """Identity, nanosecond mtime and size per file, including replacements.
@@ -364,52 +337,15 @@ class DataViews:
                 out.append((0, 0, 0, 0))
         return tuple(out)
 
-    def _read_pool_delta(self, paths: tuple[Path, Path], attr: str,
-                         prev_stamp, stamp: tuple) -> tuple[list[dict], bool]:
-        """Read a (seed, runtime) retrieval pool, appended-tail-only when possible.
-
-        Returns ``(records, appended_only)``. When appended_only is True the
-        records are strictly new rows to be concatenated onto the existing
-        cache — safe because the cache is ordered seed-then-runtime and every
-        writer appends to the runtime file's tail.
-
-        The fast path needs a previous successful load whose seed is still
-        untouched; `prev_stamp` set to anything that isn't such a stamp (the
-        `= 0.0` force-reload idiom the tools and tests use) drops back to a
-        full read of both files. _read_jsonl_appended re-checks the runtime
-        prefix itself and falls back on its own if it has been rewritten.
-        """
-        seed_path, runtime_path = paths
-        can_append = (
-            isinstance(prev_stamp, tuple) and len(prev_stamp) == len(stamp)
-            and prev_stamp[0] == stamp[0]         # seed untouched
-            and prev_stamp[1][:2] == stamp[1][:2]  # same runtime file
-            and getattr(self, attr + "_sig")      # a prefix was consumed before
-            and runtime_path.exists()
-        )
-        if can_append:
-            records, appended, eof, offset, sig = _read_jsonl_appended(
-                runtime_path,
-                getattr(self, attr + "_eof"),
-                getattr(self, attr + "_offset"),
-                getattr(self, attr + "_sig"),
-                identity=prev_stamp[1][:2],
-            )
-            self._set_pool_pos(attr, eof, offset, sig)
-            if appended:
-                return self._tag_rows(records), True
-            # _read_jsonl_appended rejected the prefix and re-read the runtime
-            # file whole; the seed still has to be prepended.
-            return self._tag_rows(self._read_seed(seed_path) + records), False
-
-        seed_records = self._read_seed(seed_path)
-        if runtime_path.exists():
-            runtime_records, _, eof, offset, sig = _read_jsonl_appended(
-                runtime_path, 0, 0, b"")
-        else:
-            runtime_records, eof, offset, sig = [], 0, 0, b""
-        self._set_pool_pos(attr, eof, offset, sig)
-        return self._tag_rows(seed_records + runtime_records), False
+    @classmethod
+    def _read_pool(cls, seed: Path, runtime: Path) -> list:
+        """Seed rows then runtime rows, tagged. A runtime read error raises,
+        so the caller keeps its cache and retries on the next turn."""
+        try:
+            blob = runtime.read_bytes()
+        except FileNotFoundError:
+            blob = b""
+        return cls._tag_rows(cls._read_seed(seed) + _parse_jsonl(blob))
 
     def _reload_json_if_stale(self, path: Path, attr: str, parse,
                               name: str, unit: str) -> None:
