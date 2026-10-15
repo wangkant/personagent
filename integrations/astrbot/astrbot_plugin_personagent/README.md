@@ -1,9 +1,23 @@
 # astrbot_plugin_personagent
 
-An [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin that puts
-[personagent](https://github.com/wangkant/personagent) on every platform
-AstrBot supports. It forwards each allowed message to the agent and sends the
-agent's replies back.
+The [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin that hands
+messages to [personagent](https://github.com/wangkant/personagent). It
+forwards each allowed message to the agent and sends the agent's replies back.
+A Chinese version of this page is [README.zh-CN.md](README.zh-CN.md).
+
+## Do you need it?
+
+Not for QQ, WeChat, Telegram or Discord: personagent connects those itself,
+without AstrBot. Open its local page (`personagent`) and use **Connect apps**.
+
+You need this plugin when AstrBot carries the conversation:
+
+- **Other platforms added from personagent's own page** (KOOK, Feishu/Lark,
+  DingTalk, Slack, WeCom, Mattermost, Misskey and the advanced ones). The page
+  downloads and runs an AstrBot for you and installs this plugin in it; there
+  is nothing to do here.
+- **An AstrBot you already run**, with its own platforms and plugins. Install
+  the plugin as below.
 
 ## What it does
 
@@ -26,13 +40,12 @@ agent's replies back.
 The persona, memory, debounce and typing simulation all run in the agent. This
 plugin is a connector in the sense of the agent's
 [`docs/connectors.md`](https://github.com/wangkant/personagent/blob/main/docs/connectors.md): it translates, and
-decides nothing about what the persona says. A Chinese version of this page is
-[README.zh-CN.md](README.zh-CN.md).
+decides nothing about what the persona says.
 
-## Install
+## Install into your own AstrBot
 
 You need AstrBot, started at least once so its data directory exists, and
-personagent (`uv tool install personagent`, or a clone; see its README).
+personagent (`python -m pip install personagent`; see its README).
 
 ### With personagent's setup
 
@@ -41,16 +54,17 @@ personagent connect astrbot
 ```
 
 It asks for AstrBot's data directory (the folder holding `cmd_config.json`,
-`plugins/` and `config/`, which it looks for itself), whether AstrBot runs in
-Docker, and which chat app the bot joins. For QQ it also asks the bot account's
-number and the groups. It copies this plugin, generates a shared token and
-writes it to both sides, and writes the allowlists. `personagent init` offers
-the same step at its end; in a clone, `python quickstart.py` does too.
+`plugins/` and `config/`; it looks for one itself and offers to download
+AstrBot when it finds none), whether AstrBot runs in Docker, and which chat app
+the bot joins. For QQ through NapCat it also asks the bot account's number and
+the groups. It copies this plugin, generates a shared token and writes it to
+both sides, and writes the allowlists. `personagent init --terminal` offers the
+same step at its end.
 
 To skip all questions:
 
 ```bash
-personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ as well
+personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (NapCat) as well
 ```
 
 Without questions the first run leaves the allowlists **empty**: add them in
@@ -66,6 +80,13 @@ step with it. The questions offer the current allowlists as defaults, so
 Enter keeps them and `-` clears one.
 
 Then restart AstrBot and start the agent (see [Check it works](#check-it-works)).
+
+### From AstrBot's WebUI
+
+The plugin has its own repository,
+[astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent).
+Install it in AstrBot's WebUI by that address, set `connector_token` to the
+`CONNECTOR_TOKEN` in personagent's `.env`, and fill the allowlists as below.
 
 ### By hand
 
@@ -84,16 +105,18 @@ Then restart AstrBot and start the agent (see [Check it works](#check-it-works))
 
 The plugin is **default-deny**. With empty allowlists it forwards nothing, and
 AstrBot behaves as if the plugin were not installed. Use IDs as AstrBot shows
-them, without a platform prefix (`/sid` in a chat shows them). `*` in `groups`
-or `dm_users` forwards every conversation of that kind and marks it
+them (`/sid` in a chat shows them). A bare ID matches on every adapter;
+`qq_official:ID` matches on that adapter only, and `qq_official:*` forwards
+every conversation of that kind on it. A bare `*` in `groups` or `dm_users`
+forwards every conversation of that kind on every adapter and marks it
 `prefiltered: false`, so the agent's own `ACCESS_GROUPS` / `ACCESS_DM_USERS`
 decide alone: a platform with no entries there is refused (QQ groups excepted,
 which the agent answers unless `ACCESS_GROUPS` lists some).
 
 ### Check it works
 
-1. Start the agent: `personagent run` (from a clone: `start.bat`, `start.sh`,
-   or `.venv/bin/python main.py`). Its banner says `agent: on`.
+1. Start the agent: `personagent run` (the server alone). Its banner says
+   `agent: on`.
 2. Say the bot's name (the agent's `PERSONA_NAME`) in an allowed group.
 
 If nothing comes back, look for `personagent:` lines in AstrBot's log, open the
@@ -107,9 +130,9 @@ prints it too), and see [Troubleshooting](#troubleshooting).
 | `personagent_url` | string | `http://127.0.0.1:8080` | The agent's base URL; the plugin appends `/v1/events` and `/v1/outbox`. Must be loopback, or HTTPS with `connector_token` set. |
 | `connector_token` | string | `""` | Shared secret. Must match the agent's `CONNECTOR_TOKEN`. Required for any non-loopback `personagent_url`. |
 | `timeout_s` | int | `420` | Seconds to wait for each attempt. See [Timeouts](#timeouts). |
-| `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ through this plugin. |
-| `groups` | list | `[]` | Group IDs to forward. Empty forwards no groups; `*` forwards all of them unfiltered. |
-| `dm_users` | list | `[]` | Sender IDs whose DMs are forwarded. Empty forwards no DMs; `*` forwards all of them unfiltered. |
+| `excluded_platforms` | list | `["aiocqhttp"]` | Adapter names never forwarded. Remove `aiocqhttp` to route QQ (NapCat) through this plugin; see [QQ through NapCat](#qq-through-napcat). |
+| `groups` | list | `[]` | Group IDs to forward. Empty forwards no groups. `adapter:ID` or `adapter:*` limits an entry to one adapter; a bare `*` forwards all of them unfiltered. |
+| `dm_users` | list | `[]` | Sender IDs whose DMs are forwarded. Empty forwards no DMs. `adapter:ID` or `adapter:*` limits an entry to one adapter; a bare `*` forwards all of them unfiltered. |
 | `block_default` | bool | `true` | Stop AstrBot's pipeline when the agent claims the conversation. |
 | `forward_quoted_text` | bool | `true` | Send a quoted message's text and author along with its id, where the platform provides them. While on (and `quote_max_chars` is above 0), every event declares the `quote_text` capability. |
 | `quote_max_chars` | int | `200` | Longest quoted text sent; longer quotes are cut. |
@@ -174,10 +197,13 @@ Transport errors, invalid responses and conversations the agent turns away go
 on to AstrBot's normal pipeline. If the agent's response has no `owned` field,
 the plugin uses `handled` instead.
 
-## QQ through AstrBot
+## QQ through NapCat
 
-QQ goes through this plugin like any other platform, using AstrBot's
-`aiocqhttp` adapter and a OneBot v11 implementation such as NapCat.
+personagent connects QQ official bots itself, without AstrBot. This section is
+only for a QQ account run through NapCat (or another OneBot v11
+implementation) behind AstrBot's `aiocqhttp` adapter. When you add OneBot v11
+from personagent's own page, it removes `aiocqhttp` from `excluded_platforms`
+and sets `CONNECTOR_QQ_PLATFORMS` for you.
 
 1. Remove `aiocqhttp` from `excluded_platforms` and add the QQ groups to
    `groups`.
@@ -193,8 +219,8 @@ QQ goes through this plugin like any other platform, using AstrBot's
 
 `personagent connect astrbot <data dir> --qq` removes `aiocqhttp` from
 `excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS`; run without a folder, it
-also asks for `QQ_BOT_ID`. A step-by-step guide in Chinese is
-[docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+also asks for `QQ_BOT_ID`. A short section in Chinese covers this route:
+[docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#第三方路线astrbot--napcat).
 
 Do not skip `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Without it the agent files QQ
 chats under `aiocqhttp:`-prefixed ids. Its QQ-side actions then target groups

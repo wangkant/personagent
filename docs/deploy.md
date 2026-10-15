@@ -1,15 +1,17 @@
 # Deploying personagent
 
-[中文：从零部署到 QQ 群（NapCat + AstrBot + personagent）](deploy.zh-CN.md)
+[中文：部署、QQ 扫码直连和排查](deploy.zh-CN.md)
 
-The [user guide](guide.md) gets you to a first chat: installing, the
-[home folder](guide.md#install-and-the-home-folder), setup and starting the
-service. This guide covers what a live deployment needs, and what to check
-when the bot goes quiet.
+The [quick start](start.md) and the [user guide](guide.md) get you to a first
+chat: installing, the [home folder](guide.md#install-and-the-home-folder),
+setup on the local page and connecting a platform. This guide covers what a
+live deployment needs, and what to check when the bot goes quiet.
 
 ## The shortest config that works
 
-For `personagent chat`, one setting in `.env` (`personagent init` writes it):
+The local page (`personagent`, or `personagent init --terminal` for the
+terminal wizard) checks the key with one small request, then writes `.env` in
+the home folder. Chatting needs one setting:
 
 ```
 LLM_API_KEY=...
@@ -20,31 +22,42 @@ LLM_API_KEY=...
 local (Ollama, llama.cpp); the API address can be pasted the way the provider
 documents it, a root or a version base such as `.../v1` or `.../api/paas/v4`.
 Until you write a `persona.txt`, the bundled `data/persona.example.<lang>.txt`
-stands in, and until `PERSONA_NAME` is set (`personagent init` sets it), the
-character is called "bot".
+stands in, and until `PERSONA_NAME` is set (setup sets it), the character is
+called "bot".
 
-To run live behind AstrBot:
+The page also writes `PERSONA_NAME`, `AGENT_LANG` and a `CONNECTOR_TOKEN`.
+Platforms connected from the page need nothing more in `.env`; their
+credentials go to `<home>/platforms/` (`direct.json` for the platforms
+personagent connects itself, and the managed AstrBot's own config for the
+rest). Optional additions:
 
 ```
-LLM_API_KEY=...
-PERSONA_NAME=...                     # the name it answers to
-CONNECTOR_TOKEN=...                  # shared with the plugin; recommended, required across hosts
-ADMIN_IDS=telegram:12345             # optional: the admin's accounts, <platform>:<id>
-# QQ only
+ADMIN_IDS=telegram:12345             # the admin's accounts, <platform>:<id>
+# QQ through NapCat (OneBot) only
 QQ_BOT_ID=...                        # the bot account's number
 CONNECTOR_QQ_PLATFORMS=aiocqhttp
 ```
 
-`personagent connect astrbot` writes the connector lines for you. Everything
-else in `.env.example` has a working default: `SERVER_HOST` and `SERVER_PORT`
-are `127.0.0.1:8080`, `QQ_ONEBOT_URL` is blank (no NapCat HTTP server), and an
-empty `ACCESS_GROUPS` leaves every group to the plugin's allowlist.
+Keys stay on this machine; the model provider you choose sees the
+conversations. Everything else in `.env.example` has a working default: `SERVER_HOST` and
+`SERVER_PORT` are `127.0.0.1:8080`, `QQ_ONEBOT_URL` is blank (no NapCat HTTP
+server), and an empty `ACCESS_GROUPS` leaves every group to the connector.
 
 ## Running it
 
-Start it with `personagent run`, as [Go live](guide.md#go-live) describes,
-and keep it running: the connectors talk to it. `personagent doctor` checks
-the settings and probes every upstream service.
+`personagent` opens the local page, and while it is open it runs the agent,
+the process that holds the directly connected platforms, and the managed
+AstrBot when one is installed. Running `personagent` again reuses an open
+page. `personagent up` starts the same processes without a browser. Either
+way, those processes end with it however it ends (a job object on Windows, a
+process group elsewhere), and whatever an earlier crashed run left behind is
+stopped at the next start. Each writes its log to `<home>/runtime/desktop/`
+(`agent.log`, `direct.log`, `astrbot.log`).
+
+`personagent run` starts the agent alone, as [Run the service](guide.md#run-the-service)
+describes: use it when your own connectors (an AstrBot you run, Satori,
+Matrix) talk to it. `personagent doctor` checks the settings and probes every
+upstream service.
 
 **Settings renamed in 1.0.** A start refuses, with exit code 2, while any
 setting name that 1.0 retired is still set, and lists each as `OLD -> NEW`.
@@ -99,17 +112,53 @@ restart to issue a new one, which signs every browser out.
 `PERSONA_FILE` or `PERSONA_CARD_FILE` resolves under it too, so a persona kept
 elsewhere needs an absolute path.
 
-## Connecting through AstrBot
+## Connecting platforms
 
-AstrBot logs in to the platforms, and the plugin in
-`integrations/astrbot/astrbot_plugin_personagent/` posts each message to
-`POST /v1/events` and relays the replies in the response. It reaches
-the most platforms, and it is the one `personagent init` sets up. It also pulls
+Platforms are added under **Connect apps** on the local page. Credentials are
+checked against the platform before anything is saved; a refusal is shown and
+nothing is kept.
+
+**Connected by personagent itself.** QQ, personal WeChat, Telegram and
+Discord run in one "direct" process, with no AstrBot and no NapCat:
+
+| Platform | What you do | Limits |
+|---|---|---|
+| QQ (official bot) | scan a QR code with mobile QQ, which creates a bot or picks one you made; pasting AppID and AppSecret is the fallback | until the bot is certified, QQ lets it join only groups you own; group message permissions are set in QQ |
+| Personal WeChat | scan with WeChat (Tencent's iLink bot API) | one-to-one chats only: WeChat gives such bots no group messages |
+| Telegram | paste the token from @BotFather | |
+| Discord | paste the bot token, with Message Content Intent on | |
+
+**Through the managed AstrBot.** Every other platform goes through an AstrBot
+that personagent downloads (with its own Python 3.12 runtime) and runs
+headless: no dashboard and no second login. KOOK, Feishu/Lark (long
+connection), DingTalk (Stream mode), Slack (Socket Mode; the guide link
+pre-fills the app), WeCom AI bot (long connection), Mattermost and Misskey ask
+for one or two values. The advanced group needs a public address or other
+software: WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat)
+and Satori. LINE is not offered.
+
+On both paths a connected platform answers every group and DM the platform
+delivers to the bot, until `ACCESS_GROUPS` or `ACCESS_DM_USERS` lists an entry
+for that platform (see [personagent's own allowlists](#through-an-astrbot-you-already-run)).
+Ids arrive as `<platform>:<id>`: `qq_official:<openid>`, `weixin_oc:<id>`,
+`telegram:<id>`, `discord:<id>`. The official QQ bot sees openids, not QQ
+numbers. Connecting a platform directly removes an AstrBot connection of the
+same platform, so one bot is never served twice.
+
+## Through an AstrBot you already run
+
+AstrBot, NapCat (OneBot), Koishi (through the [Satori connector](../integrations/satori/README.md))
+and Matrix (through the [Matrix connector](../integrations/matrix/README.md)
+and mautrix bridges) are third-party bridges personagent works with. None of
+them is needed for QQ, WeChat, Telegram or Discord.
+
+AstrBot hands messages to personagent through a plugin in
+`integrations/astrbot/astrbot_plugin_personagent/`: it posts each message to
+`POST /v1/events`, relays the replies in the response, and pulls
 personagent's outbox (`outbox_enabled`, on by default), so the persona can
 speak first wherever the platform lets a bot do that; the plugin README has
-the table.
-
-Start AstrBot once so it creates its data folder (the one holding
+the table. The managed AstrBot gets the plugin automatically. For your own
+AstrBot, start it once so it creates its data folder (the one holding
 `cmd_config.json`, `plugins/` and `config/`), then:
 
 ```
@@ -120,22 +169,29 @@ personagent connect astrbot <AstrBot data dir>    # asks nothing
 It copies the plugin into `<data dir>/plugins/`, writes one `CONNECTOR_TOKEN`
 to both `.env` and the plugin config, and sets `personagent_url` to
 `http://127.0.0.1:<SERVER_PORT>` unless the plugin already has one it accepts
-(a loopback URL, tunnels included, or HTTPS). `--qq` takes `aiocqhttp` out of
-`excluded_platforms`; `--no-qq` puts it back; with neither, QQ routing stays as
-it is, and `CONNECTOR_QQ_PLATFORMS` follows whichever the plugin ends up
-doing. `--platform telegram|discord|slack|kook|lark --token <token>` also
-switches that adapter on in AstrBot's own config; an adapter entry that
-already exists keeps its other settings (proxy, base URL, polling) and gets
-only the new credentials. `--url https://...` sets
-an HTTPS address for the plugin to post to. The first run leaves the
-allowlists empty; rerunning keeps them, and any other excluded platforms.
-`personagent init` offers the same step at its end, and `python quickstart.py
---astrbot <dir>` still works in a clone.
+(a loopback URL, tunnels included, or HTTPS). Or install the plugin from
+AstrBot's WebUI by its repository address,
+`https://github.com/wangkant/astrbot_plugin_personagent`, and set its
+`connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`.
+
+`--qq` takes `aiocqhttp` out of `excluded_platforms`; `--no-qq` puts it back;
+with neither, QQ routing stays as it is, and `CONNECTOR_QQ_PLATFORMS` follows
+whichever the plugin ends up doing. `--platform
+qq_official|telegram|discord|slack|kook|lark --token <token>` also switches
+that adapter on in AstrBot's own config (Slack also takes `--app-token`, Lark
+and QQ `--app-id` and `--app-secret`); an adapter entry that already exists
+keeps its other settings (proxy, base URL, polling) and gets only the new
+credentials. `--url https://...` sets an HTTPS address for the plugin to post
+to. The first run leaves the allowlists empty; rerunning keeps them, and any
+other excluded platforms. `--install` downloads a managed AstrBot instead and
+`--start` starts it; `python quickstart.py --astrbot <dir>` still works in a
+clone.
 
 The plugin is default-deny: fill in `groups`, and for DMs `dm_users`, in
 AstrBot's WebUI (or answer the questions in `connect`); DMs are forwarded once
 `dm_users` is not empty (every key is in the
 [plugin README](../integrations/astrbot/astrbot_plugin_personagent/README.md)).
+The managed AstrBot opens each platform you connect with `<platform>:*`.
 Restart AstrBot, or reload plugins in its WebUI, after the plugin is installed.
 On the personagent side:
 
@@ -149,31 +205,32 @@ On the personagent side:
   and `ADMIN_NAME` their name.
   One person on every platform listed: they get the closer persona in groups
   and DMs, may manage what the bot remembers about a group, and may teach it
-  on their own. The platform is the adapter name AstrBot shows, and
-  `/sid` in a chat shows an id.
+  on their own. Through AstrBot the platform is the adapter name AstrBot
+  shows, and `/sid` in a chat shows an id.
 - `ACCESS_GROUPS` and `ACCESS_DM_USERS` let personagent gate a platform
   itself, in the same `<platform>:<id>` form. Each platform is gated on its
-  own: one with no entries is left to the plugin's allowlists, and one entry
+  own: one with no entries is left to the connector, and one entry
   restricts that platform to its entries. A turn personagent refuses goes
   back unclaimed, so AstrBot's own model may answer it.
 
 AstrBot in Docker or on another host: see
-[the user guide](guide.md#astrbot-in-docker-or-on-another-host).
+[the user guide](guide.md#bridges-you-run-yourself).
 
-## QQ through AstrBot
+### QQ through NapCat (OneBot)
 
-You need a second QQ account (not your own; see
-[DISCLAIMER.md](../DISCLAIMER.md)) in the target groups, logged in (usually
-by QR code, in a session that survives restarts) to a OneBot v11
+For a personal QQ account instead of an official bot: a second QQ account (not
+your own; see [DISCLAIMER.md](../DISCLAIMER.md)) in the target groups, logged
+in (usually by QR code, in a session that survives restarts) to a OneBot v11
 implementation connected to AstrBot's `aiocqhttp` adapter:
 [NapCat](https://github.com/NapNeko/NapCatQQ) (tested; it attaches to the
-QQ NT desktop client), LLOneBot or Lagrange. The step by step, in Chinese, is
-[deploy.zh-CN.md](deploy.zh-CN.md).
-Then remove `aiocqhttp` from the plugin's `excluded_platforms`, set
-`CONNECTOR_QQ_PLATFORMS=aiocqhttp` (`--qq` does both), and set `QQ_BOT_ID`
-(`personagent connect astrbot` asks for it).
+QQ NT desktop client), LLOneBot or Lagrange. On the managed AstrBot, add
+**Advanced > OneBot v11 (NapCat)** on the local page and point NapCat at
+`ws://127.0.0.1:6199/ws`; the [Chinese guide](deploy.zh-CN.md) walks through
+it. With your own AstrBot, remove `aiocqhttp` from the plugin's
+`excluded_platforms`, set `CONNECTOR_QQ_PLATFORMS=aiocqhttp` (`--qq` does
+both), and set `QQ_BOT_ID` (`personagent connect astrbot` asks for it).
 
-**`CONNECTOR_QQ_PLATFORMS` is not optional.** Without it, QQ ids arrive
+**`CONNECTOR_QQ_PLATFORMS` is not optional here.** Without it, QQ ids arrive
 namespaced (`aiocqhttp:123456`) and every conversation looks new. Memory,
 history and learned examples are keyed by the bare id, and the ledgers derive
 row ids from the conversation id, so the split cannot be repaired afterwards.
@@ -197,7 +254,8 @@ plus any group with traffic since the last restart, and replays @-mentions
 under an hour old. With the URL blank, `personagent doctor` shows the OneBot
 bridge as "not configured", not as a failure.
 
-**Lost on this path**, with no setting to bring it back:
+**Lost on every connector path** (direct, AstrBot or another connector), with
+no setting to bring it back:
 
 - the OCR fallback for images that no vision model described;
 - quote lookup through NapCat. Quotes resolve from personagent's own index of
@@ -206,28 +264,26 @@ bridge as "not configured", not as a failure.
 
 ## More than one platform
 
-Telegram, Discord, Slack, KOOK, Lark and the other AstrBot platforms connect
-the same way (`personagent connect astrbot <dir> --platform <kind> --token
-<token>` switches one of the first five on in AstrBot's config). Their
-ids are namespaced as `<platform>:<id>`, so they never collide with a QQ
-number. The connector's allowlists are their filter until `ACCESS_GROUPS` or
-`ACCESS_DM_USERS` lists an entry for that platform.
-
 Connectors can run side by side against one personagent, since each names its
-platform (`telegram:-1001234`, `matrix:!room:example.org`). Do not bring one
-chat in through two connectors, or every message arrives twice.
+platform (`telegram:-1001234`, `matrix:!room:example.org`): the direct
+process, AstrBot, Satori and Matrix at once. Do not bring one chat in through
+two connectors, or every message arrives twice. Namespaced ids never collide
+with a bare QQ number.
 
 Messages nobody asked for (proactive openers, the question asked after a
 rejection, the excuse when the model call fails in a group) reach a platform
 through a connector that pulls personagent's outbox. A DM's excuse goes back
-in the response to the request that brought the message. All three connectors here do, on
-platforms where a bot may send first; a connector of your own sends
-`connector_id`, `reply_handle` and `"capabilities": ["outbox"]` with its
-events and long-polls `/v1/outbox` (see [the connector protocol](connectors.md)).
+in the response to the request that brought the message. The direct process
+and the three connectors here all pull it, on platforms where a bot may send
+first (QQ rate-limits an official bot's unprompted messages, and a person can
+switch them off); a connector of your own sends `connector_id`,
+`reply_handle` and `"capabilities": ["outbox"]` with its events and
+long-polls `/v1/outbox` (see [the connector protocol](connectors.md)).
 Without one, personagent speaks only inside the request that brought a
 message: the proactive loops skip those conversations, and the question and
 the excuse are not sent. `PROACTIVE_PLATFORMS` limits where the proactive loop
-may speak first (`PROACTIVE_PLATFORMS=qq` keeps it on QQ), and
+may speak first (`PROACTIVE_PLATFORMS=qq_official` keeps it on the official
+QQ bot, `qq` on QQ through NapCat), and
 `CONNECTOR_OUTBOX_ENABLED=false` turns the outbox off altogether.
 
 To speak first in a DM without the outbox, your own scheduler (an AstrBot
@@ -238,7 +294,7 @@ plugin task, a cron entry) can post a DM event marked `"proactive": true`; see
 
 Keep `SERVER_HOST=127.0.0.1` when the connector and personagent share a machine (a
 container counts only with the host's network namespace or host networking).
-Otherwise:
+The local page and `personagent up` always do. Otherwise:
 
 1. Set `SERVER_HOST=0.0.0.0` (or `--host 0.0.0.0`) and `CONNECTOR_TOKEN`.
    Startup refuses a network bind without the token. It does not need
@@ -272,7 +328,7 @@ tunnel, even on one host.
   loopback.
   It returns 503 when a critical probe fails or cannot run: the chat models,
   or the OneBot bridge when `QQ_BOT_ID` is set, `QQ_ONEBOT_URL` is set and
-  `CONNECTOR_QQ_PLATFORMS` is not (QQ on the direct ingress).
+  `CONNECTOR_QQ_PLATFORMS` is not (QQ on the direct OneBot ingress).
 - `personagent doctor [--json]` runs the same probes plus the settings check,
   and exits non-zero in the same case.
 
@@ -302,16 +358,19 @@ tunnel, even on one host.
 Most common first. The dashboard (open the link `personagent run` or
 `personagent doctor` prints) shows most of these at a glance.
 
-1. **The connector forwards nothing.** In the AstrBot plugin, fill in
-   `groups` (and `dm_users` for DMs), and on QQ take `aiocqhttp` out of
-   `excluded_platforms`. The Satori and Matrix connectors have their
-   own allowlists in their `.env`; see their READMEs. The dashboard says
-   "nothing has arrived" when this is the case.
+1. **Nothing reaches it.** On the local page, check the platform is listed as
+   connected, and read `runtime/desktop/direct.log` or `astrbot.log`. The QQ
+   official bot must be in the group, and QQ decides which group messages it
+   receives; a personal WeChat bot never receives groups. In an AstrBot you
+   run, fill in the plugin's `groups` (and `dm_users` for DMs), and for NapCat
+   take `aiocqhttp` out of `excluded_platforms`. The Satori and Matrix
+   connectors have their own allowlists in their `.env`; see their READMEs.
+   The dashboard says "nothing has arrived" when this is the case.
 2. **The agent is off.** The banner at `personagent run` says `agent: OFF`,
-   why, and the fix: with no `LLM_API_KEY`, run `personagent init` (or set
-   `LLM_API_KEY`) and restart; with `AGENT_ENABLED=false`, set it to `true` in
-   `<home>/.env` and restart. Every event then gets `owned: false`, and the
-   first one logs a single ERROR line with the same advice.
+   why, and the fix: with no `LLM_API_KEY`, add a key on the local page (or
+   set `LLM_API_KEY`) and restart; with `AGENT_ENABLED=false`, set it to
+   `true` in `<home>/.env` and restart. Every event then gets `owned: false`,
+   and the first one logs a single ERROR line with the same advice.
 3. **AstrBot's own model answers instead.** The request failed, or
    personagent turned the message away (item 5), or the agent is off (item 2),
    and the plugin fell back.
@@ -329,10 +388,10 @@ Most common first. The dashboard (open the link `personagent run` or
    machine's offset otherwise. The dashboard shows the reason for each recent
    turn. To watch the same decision offline, `personagent chat --trigger 4`.
 5. **personagent's allowlists.** `ACCESS_GROUPS` and `ACCESS_DM_USERS`
-   (and a QQ DM needs the admin or an entry) apply behind AstrBot too. A
-   message they turn away goes back unclaimed, so AstrBot's own model answers
-   it; personagent logs each refused conversation once, at INFO, with the
-   setting that refused it, and the dashboard lists them.
+   (and a bare-id QQ DM needs the admin or an entry) apply on every path. A
+   message they turn away goes back unclaimed, so through AstrBot its own
+   model may answer it; personagent logs each refused conversation once, at
+   INFO, with the setting that refused it, and the dashboard lists them.
 6. **The model call fails.** A rejected key (401 or 403) or an empty balance
    (402 or an exhausted quota) logs one ERROR line naming the provider host and
    the setting to fix. Run `personagent doctor`: it sends a tiny request to
@@ -348,23 +407,25 @@ Most common first. The dashboard (open the link `personagent run` or
 8. **A BOM on `.env`.** The first setting's name carries it and never reaches
    the process, though the file looks fine in every editor. Startup and
    `personagent doctor` report it; re-save as UTF-8 without a BOM.
-9. **`QQ_BOT_ID` unset or wrong on QQ.** Through AstrBot, @-mentions still work
-   but the missed-mention sweep matches on it. On the direct ingress an
-   @-mention is never recognised: the bot starts cleanly, logs nothing, and
-   never answers one. `personagent doctor` warns when `QQ_BOT_ID` is empty and
-   other QQ settings are set.
-10. **It answers, but has forgotten what it learned.** QQ is arriving without
-    `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, or `PERSONA_NAME` or `PERSONA_VERSION`
-    changed, which starts a new character; the log warns when the old one's
-    promoted material is refused whole. Editing `persona.txt` does not: its
-    revisions under one `PERSONA_VERSION` share a learning scope
+9. **`QQ_BOT_ID` unset or wrong with NapCat.** Through AstrBot, @-mentions
+   still work but the missed-mention sweep matches on it. On the direct
+   OneBot ingress an @-mention is never recognised: the bot starts cleanly,
+   logs nothing, and never answers one. `personagent doctor` warns when
+   `QQ_BOT_ID` is empty and other QQ settings are set. The official QQ bot
+   does not use it.
+10. **It answers, but has forgotten what it learned.** NapCat QQ is arriving
+    without `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, or `PERSONA_NAME` or
+    `PERSONA_VERSION` changed, which starts a new character; the log warns
+    when the old one's promoted material is refused whole. Editing
+    `persona.txt` does not (the page's Persona box included): its revisions
+    under one `PERSONA_VERSION` share a learning scope
     (`runtime/persona_lineage.json`). To fold in rows learned under a persona
     hash the lineage does not list, run `personagent learned lineage adopt
     <hash>` (the hash is in the candidate's scope in `personagent learned show
     <id>`), then `personagent learned rebuild`. Changing `AGENT_LANG` also
     switches to that language's learned files in `runtime/`.
 
-Errors from `/v1/events`. The plugin logs the message; `code` is the
+Errors from `/v1/events`. The AstrBot plugin logs the message; `code` is the
 stable field a client can branch on.
 
 | Status | `code` | Message in AstrBot's log | Cause |
@@ -382,16 +443,17 @@ stable field a client can branch on.
 ## Legacy: the direct OneBot ingress
 
 NapCat's webhook can still post events to `POST /v1/onebot`, and personagent
-replies through `QQ_ONEBOT_URL`. The supported QQ route is AstrBot with
-`CONNECTOR_QQ_PLATFORMS=aiocqhttp`; this one is deprecated and stays through
-1.x. It warns once at first use and marks every response `Deprecation: true`.
-`launch.vbs`, which starts NapCat and then `main.py` on Windows, is deprecated
-with it.
+replies through `QQ_ONEBOT_URL`. This route is deprecated and stays through
+1.x; use the official QQ bot connection, or NapCat through AstrBot with
+`CONNECTOR_QQ_PLATFORMS=aiocqhttp`. It warns once at first use and marks
+every response `Deprecation: true`. `launch.vbs`, which starts NapCat and then
+`main.py` on Windows, is deprecated with it.
 
-To move over, connect NapCat to AstrBot's `aiocqhttp` adapter, run
-`personagent connect astrbot <AstrBot data dir> --qq`, fill in the
-allowlists, and turn off NapCat's HTTP client (keep its HTTP server). Memory
-and learning carry over, because `CONNECTOR_QQ_PLATFORMS` keeps the ids.
+To move to NapCat through AstrBot, add OneBot v11 (NapCat) on the local page
+(or run `personagent connect astrbot <AstrBot data dir> --qq` for your own
+AstrBot and fill in the allowlists), point NapCat's WebSocket client at it,
+and turn off NapCat's HTTP client (keep its HTTP server). Memory and learning
+carry over, because `CONNECTOR_QQ_PLATFORMS` keeps the ids.
 
 If you still run it:
 

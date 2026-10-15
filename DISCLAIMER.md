@@ -9,18 +9,22 @@ the risks that are easy to miss. It is not legal advice.
 
 ## Chat platforms and your accounts
 
-personagent never logs in to a chat platform. A connector does, and what
-that connector is decides your risk.
+personagent reaches a chat platform in one of two ways: it connects QQ
+official bots, personal WeChat, Telegram and Discord itself, and every other
+platform through a third-party bridge, usually the AstrBot it downloads and
+runs for you. What the connection logs in as decides your risk.
 
-- **Official bot APIs** (Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE,
-  the official QQ bot API and similar) are made for bots. You still have to
-  follow each platform's developer terms and rate limits.
+- **Official bot APIs** (the official QQ bot API, Tencent's iLink bot API for
+  personal WeChat, Telegram, Discord, Slack, KOOK, Feishu/Lark, DingTalk,
+  WeCom and similar) are made for bots. You still have to follow each
+  platform's developer terms and rate limits.
 - **Unofficial clients** log in as an ordinary user account and drive it by
   software. The platform does not sanction this, may forbid it in its terms,
   and can restrict, freeze or permanently ban the account. This covers:
   - **QQ through NapCat, LLOneBot, Lagrange or any other OneBot
-    implementation.** Tencent does not sanction them. The risk is highest from
-    cloud or overseas IP addresses.
+    implementation** (the advanced OneBot v11 option; an official QQ bot
+    needs none of it). Tencent does not sanction them. The risk is highest
+    from cloud or overseas IP addresses.
   - **WhatsApp, Signal, Messenger, Instagram, Google Messages and others
     through a mautrix bridge** (the Matrix connector). The bridge is an
     unofficial client of the network, and some of these networks name
@@ -32,8 +36,8 @@ If you use one, use a dedicated account you can afford to lose, never your
 main one, and run it from a home network rather than a cloud server where you
 can. Read the current terms of every network you connect: they change, and the
 account at stake is yours. Neither the author of personagent nor the
-maintainers of AstrBot, NapCat, Koishi, mautrix or any other project it works
-with accept liability for a lost or restricted account.
+maintainers of any third-party project it works with (AstrBot, NapCat, Koishi,
+mautrix and others) accept liability for a lost or restricted account.
 
 ## Tell people it is a bot
 
@@ -71,7 +75,8 @@ agree to any provider's terms; tell them where their messages go.
 ## What it stores on your machine
 
 Everything it keeps is under its home folder: settings and API keys in `.env`,
-and in `runtime/` the chat notes, the reactions it judged (quoted verbatim),
+bot credentials and the AstrBot it runs for you in `platforms/`, and in
+`runtime/` the chat notes, the reactions it judged (quoted verbatim),
 the ledger of what it learned, and the learned examples. Logs can hold
 conversation details if you set `SERVER_LOG_FILE`. Keep the folder private,
 never publish it or attach it to an issue, and back it up if you care about

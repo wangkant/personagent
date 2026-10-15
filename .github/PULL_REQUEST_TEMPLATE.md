@@ -9,7 +9,7 @@
 - [ ] `python -m pytest -q`
 - [ ] `ruff check . --select F401,F811,F821,F841`
 - [ ] A test for the new behaviour, or the reason there is none
-- [ ] `tools/package_smoke.py`, if packaging, the CLI or shipped files changed
+- [ ] `tools/package_smoke.py` and `tools/welcome_smoke.py`, if packaging, the CLI, the local page or shipped files changed
 
 ## Docs
 
@@ -18,5 +18,5 @@
 
 ## Checks
 
-- [ ] No keys, tokens, QQ numbers or real chat text in the diff
+- [ ] No keys, tokens, bot credentials, QQ numbers or real chat text in the diff
 - [ ] Code, comments and commit messages are in English

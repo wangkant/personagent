@@ -5,8 +5,12 @@ Connects [personagent](https://github.com/wangkant/personagent) to a
 a server such as [Koishi](https://koishi.chat) (with its `server-satori`
 plugin), Chronocat or LLOneBot logs in to the chat platforms, and a client like
 this one gets every message from every login over one websocket. So one
-process puts the persona on Telegram, Discord, KOOK, Lark, DingTalk, LINE, QQ
-(through OneBot) and anything else the server has an adapter for.
+process puts the persona on anything the server has an adapter for.
+
+Satori and Koishi are third-party software. personagent does not need them for
+QQ, WeChat, Telegram or Discord, which it connects itself, or for the
+platforms its local page sets up through AstrBot. Use this connector when you
+already run Koishi, or want a platform only Koishi reaches.
 
 The connector forwards each allowed message to the agent's
 `POST /v1/events` as a neutral event ([docs/connectors.md](../../docs/connectors.md))
@@ -47,8 +51,8 @@ for signing and the outbox loop.
    .venv/bin/python -m pip install -r integrations/satori/requirements.txt
    ```
 
-   With personagent installed by `uv tool` or `pipx`, make a venv beside the
-   copy instead:
+   With personagent installed from PyPI with pip (or run with uvx), make a
+   venv beside the copy instead:
 
    ```bash
    python -m venv connector-venv
@@ -127,12 +131,13 @@ it). Two cases need a thought:
   behind it) has QQ numbers as ids. To keep what the agent learned on an
   existing QQ deployment, add the platform to the agent's
   `CONNECTOR_QQ_PLATFORMS` (`CONNECTOR_QQ_PLATFORMS=onebot`): its ids are
-  then stored bare, like the direct QQ path, and the QQ entries of
+  then stored bare, as QQ numbers from NapCat are, and the QQ entries of
   `ACCESS_GROUPS` and `ACCESS_DM_USERS` apply to them. Do this only for a platform whose ids
   really are QQ numbers.
 - **The official QQ bot API** (Koishi's `adapter-qq`) calls its platform `qq`
   but uses openids, not QQ numbers. The connector renames it `qqbot` so it can
   never be mistaken for QQ numbers; `SATORI_PLATFORM_NAMES` overrides it.
+  personagent also connects official QQ bots itself, without Koishi.
 
 ## What works
 

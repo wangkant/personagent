@@ -9,13 +9,15 @@ produced** is worth far more than a feature request.
 ```bash
 git clone https://github.com/wangkant/personagent.git
 cd personagent
-python quickstart.py            # creates .venv, installs dependencies, runs `personagent init`
+python quickstart.py            # creates .venv, installs dependencies, opens the local page
 .venv/bin/python -m persona_agent chat    # Windows: .venv\Scripts\python.exe -m persona_agent chat
 ```
 
-In a clone the home folder is the clone itself: `.env`, `persona.txt` and
-`runtime/` sit next to `persona_agent/` and are gitignored. `pip install -e .`
-inside the venv also gives you the `personagent` command.
+`python quickstart.py --terminal` asks the setup questions in the terminal
+instead of opening the page. In a clone the home folder is the clone itself:
+`.env`, `persona.txt`, `runtime/` and `platforms/` sit next to
+`persona_agent/` and are gitignored. `pip install -e .` inside the venv also
+gives you the `personagent` command.
 
 `personagent chat` is a simulated group chat. It runs the persona, the reply
 triggers, the speak-or-stay-quiet gate, example retrieval, generation, the
@@ -45,8 +47,9 @@ runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, checks
 `start.sh` for syntax and its executable bit, and has a `package` job on Linux
 and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
 installs each into a clean venv outside the checkout, and runs
-`tools/package_smoke.py` against the installed command. CI compiles `.`;
-locally, name the directories so compileall skips `.venv`.
+`tools/package_smoke.py` and `tools/welcome_smoke.py` against the installed
+command. CI compiles `.`; locally, name the directories so compileall skips
+`.venv`.
 
 One file, or one test, for a fast loop:
 
@@ -55,23 +58,25 @@ python -m pytest tests/test_outbox.py
 python -m pytest tests/test_outbox.py -k long_poll
 ```
 
-### The package smoke test
+### The package smoke tests
 
 `tools/package_smoke.py` checks that an installed `personagent` command works
 with no checkout around it, offline: `--version`, `init --no-input`, `chat`
 against a stand-in model, `run` plus `GET /health`, and `doctor --json`, each
-in a throwaway home. Run it after a change to packaging, the CLI or the files
-a wheel ships:
+in a throwaway home. `tools/welcome_smoke.py` opens the installed local page,
+saves a key, chats and exits, using only localhost. Run both after a change
+to packaging, the CLI, the local page or the files a wheel ships:
 
 ```bash
 python -m pip install build
 python -m build
 python -m venv /tmp/smoke-env
 /tmp/smoke-env/bin/python -m pip install dist/*.whl     # Windows: Scripts\python.exe
-python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.0.0
+python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.1.0
+python tools/welcome_smoke.py --personagent /tmp/smoke-env/bin/personagent
 ```
 
-`--skip init` (or another step) leaves a step out.
+`--skip init` (or another step) leaves a package smoke step out.
 
 ### Writing a test
 
@@ -146,12 +151,17 @@ commands keep working:
 
 | Entry | What it is |
 |---|---|
-| `personagent` (`persona_agent/cli.py`) | The command: `init`, `connect`, `chat`, `demo`, `run`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
+| `personagent` (`persona_agent/cli.py`) | The command: `start` (the default), `up`, `init`, `chat`, `demo`, `run`, `connect`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
+| `persona_agent/welcome.py`, `static/welcome/` | The local page `personagent start` opens on 127.0.0.1: Chat, Connect apps, Character & settings, with its JSON API. A second `start` reuses an open page |
+| `persona_agent/connections.py` | The catalog of platforms the page can connect, and which go direct or through the managed AstrBot |
+| `persona_agent/direct/` | QQ official bots, personal WeChat, Telegram and Discord, connected by personagent itself in one process (`python -m persona_agent.direct`), with credentials in `platforms/direct.json` |
+| `persona_agent/astrbot_install.py` | The managed AstrBot for every other platform: downloaded into the home on its own Python 3.12, run headless with no dashboard |
+| `persona_agent/services.py` | The processes the page or `up` starts (agent, direct, managed AstrBot): they end with it, and what a crashed run left is stopped at the next start |
 | `persona_agent/home.py` | Where a deployment lives (`AGENT_HOME`, the checkout, the working folder, `~/personagent`) and where shipped files are found. Stdlib only |
 | `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `main.py` starts it |
-| `persona_agent/setup_wizard.py` | `init` and `connect`: bilingual questions, the key test, the AstrBot handshake. Stdlib only. `quickstart.py` makes the venv, then calls it |
+| `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: bilingual terminal questions, the key test, the handshake with an AstrBot you already run. Stdlib only. `quickstart.py` makes the venv, then opens the page or calls it |
 | `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo |
-| `persona_agent/dashboard.py`, `static/` | The local page at `/`, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
+| `persona_agent/dashboard.py`, `static/` | The dashboard at `/` of the agent service, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
 | `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval` |
 | `quickstart.py`, `start.sh`, `start.ps1`, `start.bat` | The clone route: set up, then start |
 
@@ -242,10 +252,12 @@ like.
 ## Documentation
 
 The English page is the source of truth. A page with a `*.zh-CN.md` twin
-(`README`, `docs/guide`, `DISCLAIMER`, the AstrBot plugin README) is
-written in natural Chinese for Chinese readers, not translated line by line:
-when you change a fact in one, change it in the other. `docs/deploy.zh-CN.md`
-is not a twin: it is a separate step-by-step QQ tutorial. Images in a README use
+(`README`, `docs/start`, `docs/guide`, `DISCLAIMER`, the AstrBot plugin
+README) is written in natural Chinese for Chinese readers, not translated line
+by line: when you change a fact in one, change it in the other.
+`docs/deploy.zh-CN.md` is not a twin: it is a separate Chinese step-by-step
+guide (install, QQ by scan, other platforms and troubleshooting), with
+NapCat and AstrBot as a closing third-party section. Images in a README use
 absolute `raw.githubusercontent.com` URLs so they render on PyPI.
 
 ## Releasing
@@ -298,9 +310,9 @@ workflow `release.yml`, environment `pypi`); that is set up once, on pypi.org.
 
 ## Privacy
 
-Never attach real group chat logs, QQ numbers or API keys to an issue.
-`.env`, `persona.txt`, `runtime/`, `eval.jsonl`, `memory.json` and the sticker
-library are gitignored for this reason; check `git status` before committing.
+Never attach real group chat logs, QQ numbers, platform credentials or API
+keys to an issue. `.env`, `persona.txt`, `runtime/`, `platforms/`,
+`eval.jsonl`, `memory.json` and the sticker library are gitignored for this reason; check `git status` before committing.
 The evidence log quotes real reactions verbatim, so it lives under `runtime/`
 with the rest. It stores only the structured verdict and a one-sentence
 reason, **never a model's chain of thought**. Don't add a field that would

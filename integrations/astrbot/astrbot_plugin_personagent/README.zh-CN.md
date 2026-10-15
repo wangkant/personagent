@@ -2,7 +2,16 @@
 
 [English](README.md) · **简体中文**
 
-这是一个 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 插件，把 [personagent](https://github.com/wangkant/personagent) 带进 AstrBot 支持的所有平台：QQ、Telegram、Discord、Slack、KOOK、飞书、钉钉、LINE、企业微信等。
+这是 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 把消息交给 [personagent](https://github.com/wangkant/personagent) 的插件：把允许的消息转发给 personagent，再把它的回复发回聊天里。
+
+## 你需要它吗
+
+QQ、微信、Telegram、Discord 用不到它：这几个由 personagent 自己连接，不经过 AstrBot。运行 `personagent` 打开本地页面，在「连接平台」里添加即可。
+
+下面两种情况才需要这个插件：
+
+- **在 personagent 页面里添加其他平台**（KOOK、飞书、钉钉、Slack、企业微信、Mattermost、Misskey，以及高级选项里的那些）。页面会替你下载并运行一个 AstrBot，并自动装好这个插件，这里什么都不用做。
+- **你自己已经在用的 AstrBot**，带着它自己的平台和插件。按下面的步骤安装。
 
 ## 它做什么
 
@@ -13,23 +22,23 @@
 
 人设、记忆、防抖和「打字」节奏都在 personagent 里，插件只负责翻译，不决定说什么。
 
-## 安装
+## 装进你自己的 AstrBot
 
-先启动一次 AstrBot，让它生成 data 文件夹（里面有 `cmd_config.json`、`plugins`、`config`），并装好 personagent（`uv tool install personagent`）。然后运行：
+先启动一次 AstrBot，让它生成 data 文件夹（里面有 `cmd_config.json`、`plugins`、`config`），并装好 personagent（`python -m pip install personagent`）。然后运行：
 
 ```bash
 personagent connect astrbot
 ```
 
-它会自己找 AstrBot 的 data 文件夹，复制插件，在两边写入同一个 `CONNECTOR_TOKEN`，并问你机器人进哪个平台、哪些群、管理员是谁。之后重启 AstrBot，运行 `personagent run`。
+它会自己找 AstrBot 的 data 文件夹（找不到时可以替你下载 AstrBot），复制插件，在两边写入同一个 `CONNECTOR_TOKEN`，并问你 AstrBot 是否在 Docker 里、机器人进哪个平台、哪些群、管理员是谁。`personagent init --terminal` 的最后一步也会问这些。之后重启 AstrBot，运行 `personagent run`（只启动服务本身）。
 
-不想回答问题的话：`personagent connect astrbot <data 文件夹>`，QQ 再加 `--qq`。这样第一次白名单是空的，要在 AstrBot 的网页里自己填 `groups`（群）和 `dm_users`（允许私聊的人）。
+不想回答问题的话：`personagent connect astrbot <data 文件夹>`，要经 NapCat 接 QQ 再加 `--qq`。这样第一次白名单是空的，要在 AstrBot 的网页里自己填 `groups`（群）和 `dm_users`（允许私聊的人）。
 
-插件**默认什么都不转发**：白名单为空时，AstrBot 就像没装这个插件。群号、用户 ID 按 AstrBot 显示的写，不带平台前缀（在聊天里发 `/sid` 可以看到）。
+也可以在 AstrBot 的网页里按仓库地址 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent) 安装，再把 `connector_token` 设成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`，并填好白名单。
 
 手动安装：把本文件夹复制到 `<AstrBot data>/plugins/astrbot_plugin_personagent/`，重启 AstrBot，在网页里填设置。
 
-完整的 QQ 部署步骤（NapCat、AstrBot、personagent 从零开始）见 [docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
+插件**默认什么都不转发**：白名单为空时，AstrBot 就像没装这个插件。群号、用户 ID 按 AstrBot 显示的写（在聊天里发 `/sid` 可以看到）。不带前缀的 ID 对所有适配器都生效；写成 `qq_official:ID` 只对这个适配器生效，`qq_official:*` 放行这个适配器上的全部会话。
 
 ## 设置
 
@@ -38,9 +47,9 @@ personagent connect astrbot
 | `personagent_url` | `http://127.0.0.1:8080` | personagent 的地址，插件会自己加 `/v1/events` 和 `/v1/outbox`。只能是本机地址，或者设了 `connector_token` 的 HTTPS 地址。 |
 | `connector_token` | 空 | 共享密钥，必须和 personagent 的 `CONNECTOR_TOKEN` 一致。地址不是本机时必填。 |
 | `timeout_s` | `420` | 每次请求最多等多少秒。要大于 personagent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`，见下文。 |
-| `excluded_platforms` | `["aiocqhttp"]` | 不转发的适配器。要接 QQ，就把 `aiocqhttp` 从里面删掉。 |
-| `groups` | 空 | 要转发的群 ID。空 = 一个都不转发；`*` = 全部转发，交给 personagent 的 `ACCESS_GROUPS` 决定。 |
-| `dm_users` | 空 | 允许私聊的发送者 ID。空 = 不转发私聊；`*` = 全部转发。 |
+| `excluded_platforms` | `["aiocqhttp"]` | 不转发的适配器。要经 NapCat 接 QQ，就把 `aiocqhttp` 从里面删掉，见下面「经 NapCat 接 QQ」。 |
+| `groups` | 空 | 要转发的群 ID。空 = 一个都不转发；`适配器:ID` 或 `适配器:*` 只对一个适配器生效；单独的 `*` = 全部转发，交给 personagent 的 `ACCESS_GROUPS` 决定。 |
+| `dm_users` | 空 | 允许私聊的发送者 ID。空 = 不转发私聊；`适配器:ID` 或 `适配器:*` 只对一个适配器生效；单独的 `*` = 全部转发，交给 personagent 的 `ACCESS_DM_USERS` 决定。 |
 | `block_default` | 开 | personagent 接管会话后，不再让 AstrBot 自带的模型回答。 |
 | `forward_quoted_text` | 开 | 有人引用消息时，把被引用的文字和作者一起发给 personagent。 |
 | `quote_max_chars` | `200` | 被引用的文字最多发多少字。 |
@@ -49,9 +58,9 @@ personagent connect astrbot
 | `outbox_wait_s` | `25` | 每次拉取最多等多久（最多 30 秒）。 |
 | `connector_id` | 空 | 这个 AstrBot 在 personagent 眼里的名字。留空会自动生成并保存；两个 AstrBot 连同一个 personagent 时要取不同的名字。 |
 
-## 接 QQ
+## 经 NapCat 接 QQ
 
-QQ 走 AstrBot 的 `aiocqhttp` 适配器，加 NapCat 这类 OneBot v11 实现。
+QQ 官方机器人由 personagent 自己连接，不需要 AstrBot。这一节只适用于用 NapCat（或其他 OneBot v11 实现）登录 QQ 号、经 AstrBot 的 `aiocqhttp` 适配器接入的情况。在 personagent 页面里添加 OneBot v11 时，删掉 `aiocqhttp` 和写 `CONNECTOR_QQ_PLATFORMS` 这两件事会自动完成。
 
 1. 在 `excluded_platforms` 里删掉 `aiocqhttp`，把 QQ 群号填进 `groups`。
 2. personagent 的 `.env` 里要有 `CONNECTOR_QQ_PLATFORMS=aiocqhttp` 和 `QQ_BOT_ID`（机器人小号的 QQ 号）。**不能省**：少了前者，所有 QQ 会话都会被当成新会话，学到的东西对不上，而且事后改不回来。`personagent connect astrbot <data 文件夹> --qq` 会替你写好。
@@ -59,6 +68,8 @@ QQ 走 AstrBot 的 `aiocqhttp` 适配器，加 NapCat 这类 OneBot v11 实现�
 4. QQ 的号还受 personagent 自己的设置约束：`ACCESS_GROUPS` 里写了 QQ 群，就只放行写了的；QQ 私聊必须来自 `ADMIN_IDS` 或 `ACCESS_DM_USERS`。之后新增 QQ 群，要同时加进插件的 `groups` 和 `ACCESS_GROUPS`。
 
 NapCat 的 HTTP 服务是可选的：开了，`QQ_ONEBOT_URL` 填它的地址，personagent 能补回离线期间漏掉的 @。
+
+这条路线的简要步骤见 [docs/deploy.zh-CN.md 的「第三方路线：AstrBot + NapCat」](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#第三方路线astrbot--napcat)。
 
 AstrBot 在很繁忙的 QQ 群里使用前，先看两个 AstrBot 自己的设置，它们在插件之前就生效：`platform_settings.rate_limit` 默认每 60 秒 30 条，超过的会被延迟；`content_safety.internal_keywords` 默认开启，会悄悄丢掉命中关键词的消息。
 

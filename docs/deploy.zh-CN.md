@@ -1,194 +1,75 @@
-# 高级部署：通过 OneBot 和 NapCat 接入个人 QQ
+# 部署 personagent：QQ 扫码直连，以及排查
 
 [English](deploy.md) · **简体中文**
 
-新用户可先用[简明入门](start.zh-CN.md)中的 QQ 官方机器人扫码路线，不需要 NapCat。本文保留给需要个人 QQ 小号和 OneBot 的用户。
-
-这篇是写给 Windows 上的 QQ 用户的，按顺序做完，就能让一个机器人小号在你的 QQ 群里开口。需要三个程序一起运行：
+这篇按顺序带你把角色放进 QQ 群：装好、填 key、用手机 QQ 扫码。personagent 自己连接 QQ 官方机器人，不需要 AstrBot，也不需要 NapCat 和 QQ 小号。微信、Telegram、Discord 同样由它直接连接；想用个人 QQ 小号的，见后面的[第三方路线：AstrBot + NapCat](#第三方路线astrbot--napcat)。
 
 ```text
-QQ 群  ⇄  NapCat（登录 QQ）  ⇄  AstrBot（装着 personagent 插件）  ⇄  personagent  ⇄  AI 模型
+QQ 群  ⇄  personagent（直连进程 + 角色服务）  ⇄  AI 模型
 ```
 
-personagent 自己不登录 QQ。NapCat 负责登录，AstrBot 负责转发，personagent 负责决定说不说、说什么。
-
-每一步都写了「你应该看到」，对不上就先别往下走，直接翻到最后的[机器人不说话](#机器人不说话)。
+每一步都写了「你应该看到」，对不上就先别往下走，直接翻到[机器人不说话](#机器人不说话)。
 
 ## 开始之前
 
-- 一个 Windows 10 或 11 的电脑，能一直开着（关机或关掉窗口，机器人就停了）。
-- **一个专门给机器人用的 QQ 小号**，并且已经加进目标群。不要用你自己的主号：NapCat 不是腾讯官方的客户端，号有被限制甚至封禁的风险。详见 [DISCLAIMER.zh-CN.md](../DISCLAIMER.zh-CN.md)。
-- 一个 AI 服务的 API key。DeepSeek、硅基流动、阿里云百炼、智谱、Kimi、火山方舟都可以，注册后在它们的控制台里创建。
-- 一部登录着小号的手机，用来扫码。
+- 一台能一直开着的电脑（Windows、macOS、Linux 都行），装有 Python 3.10 到 3.14。关掉 personagent，机器人就停了。
+- 一个 AI 服务的 API key。DeepSeek、硅基流动、阿里云百炼、智谱、Kimi、火山方舟等都可以，在它们的控制台里创建。
+- 一部登着你自己 QQ 的手机，用来扫码。
 
-## 第一部分：装 personagent
+## 第一步：安装并打开
 
-**1. 装 uv。** uv 是装 Python 程序的工具，它会自己下载合适的 Python。打开 PowerShell，运行：
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```sh
+python -m pip install personagent
+personagent
 ```
 
-关掉 PowerShell 再重新打开，运行 `uv --version`。你应该看到一行版本号。
+装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；从 Git 仓库运行用 `python quickstart.py`。
 
-**2. 装 personagent。**
+你应该看到浏览器打开一个本地页面，有三个视图：「开始聊天」「连接平台」「角色与设置」。再运行一次 `personagent` 会复用已经打开的页面。
 
-```powershell
-uv tool install personagent
-personagent --version
-```
+> 想把数据放在别的盘：`personagent --home D:\personagent`。之后每条命令都带上同样的 `--home`。不加的话，数据放在用户目录下的 `personagent` 文件夹。
 
-你应该看到已安装的 personagent 版本号。如果提示找不到命令，运行 `uv tool update-shell`，再重开一次 PowerShell。
+## 第二步：填 key，选角色
 
-**3. 做第一次设置。**
+在「角色与设置」里选模型服务（10 个预设，另有「其他」可填任何兼容 OpenAI 的地址），粘贴 API key，再选名字和性格。保存时它会发一个很小的请求验证 key，不通过就什么都不存。
 
-```powershell
-personagent init
-```
+你应该能在「开始聊天」里和角色聊几句，它用你选的性格回话。
 
-它会先问语言（中文系统默认中文），然后依次问：用哪家 AI 服务、模型名、API key（可选择显示，默认隐藏）、机器人的名字、选一个性格。输完 key 它会立刻发一个很小的请求测试，你应该看到「可以用。」。如果失败，它会告诉你访问了哪个地址、HTTP 状态码和可能的原因，然后让你重试。
+「人设」框里是 `persona.txt`，就是角色正在用的人设。改完点保存，角色服务会重启，它学到的东西保留。
 
-到「现在连接 AstrBot 吗？」这一步先选**否**（直接回车），最后选择在终端里聊几句。你应该看到机器人用你选的性格回话。
+## 第三步：扫码连接 QQ
 
-> 想把数据放在别的盘：每条命令都加上 `--home`，放在命令前后都行，例如 `personagent --home D:\personagent init` 或 `personagent init --home D:\personagent`，之后的 `chat`、`connect`、`run` 都要带上同样的 `--home`。不加的话，数据放在 `C:\Users\你的用户名\personagent`。
+1. 打开「连接平台」，选 **QQ**。
+2. 页面出现二维码。用手机 QQ 扫码并确认：会新建一个机器人，或者选一个你已有的，密钥由 personagent 自己取回。扫不了码的话，也可以在 [QQ 开放平台](https://q.qq.com/qqbot/openclaw/login.html)创建机器人，把 AppID 和 AppSecret 粘贴进来。
+3. 程序先确认 QQ 接受了这个机器人，再保存。QQ 拒绝的话，页面会提示，什么都不保存。
 
-在终端里它是怎么判断「该说还是该安静」的，可以先运行 `personagent demo --lang zh` 看一遍（用写好的脚本演，不调用模型、不花钱，一分钟）。
+你应该看到 QQ 列在页面上方，显示已连接。
 
-## 第二部分：装 AstrBot
+**把机器人拉进群。** 在手机 QQ 里找到这个机器人，私聊它，或把它加进群。能进哪些群由 QQ 决定：机器人通过认证之前，QQ 只让它进你自己当群主的群。它在群里能收到哪些消息，也在 QQ 里设置。认证等账号上的事见 [QQ 机器人官方指南](https://bot.q.qq.com/wiki/bot_new_product-intro/)。
 
-推荐直接让 personagent 下载并安装；也可以继续使用 AstrBot 自己的启动器或 uv 部署。
+**测试。** 在群里发一句带机器人名字的话（比如 `小夏，你好`），或者 @ 它。你应该在几秒到十几秒内看到回复。
 
-### 方法 A：由 personagent 自动安装
+## 其他平台
 
-```powershell
-personagent connect astrbot --install
-personagent connect astrbot --start
-```
+都在「连接平台」里添加，凭据先拿到平台验证，通过了才保存。
 
-第一条会自动下载 AstrBot、准备 Python 3.12 运行环境并装好 personagent 插件；第二条启动它。文件保存在 personagent 数据目录的 `platforms` 子目录下。连接群和账号的设置仍在后面的步骤完成；用此方式安装后，无需另找下载地址。
+- **personagent 直接连接**：QQ、个人微信、Telegram、Discord。个人微信用手机微信扫码登录（腾讯的 iLink 机器人接口），只能私聊，微信不会把群消息交给这类机器人。Telegram 粘贴 @BotFather 给的 token；Discord 粘贴机器人 token，并打开 Message Content Intent。
+- **经托管的 AstrBot**：其余平台。第一次连接时，personagent 会下载 AstrBot 和独立的 Python 3.12，在后台运行，没有网页后台，也没有第二个账号要登录。粘贴一两项就能连的：KOOK、飞书（长连接）、钉钉（Stream 模式）、Slack（Socket Mode，页面上的链接会预填好应用）、企业微信智能机器人（长连接）、Mattermost、Misskey。「高级」里的需要公网地址或另外的软件：企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori。LINE 暂不提供。
 
-也可以运行 `personagent connect astrbot` 跟着向导安装，并填写群号和账号设置。
+连好的平台，群聊和私聊都会回复。想只放行一部分，在 `.env` 里写 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`（格式 `平台:ID`，见[英文部署指南](deploy.md#through-an-astrbot-you-already-run)）。
 
-这样装的 AstrBot 不开网页后台，也没有密码要记：它的平台在 personagent 本地页面的「连接平台」里添加，NapCat 用「高级 → OneBot v11（NapCat）」，端口默认 `6199`。下面「确认 AstrBot 跑起来了」和第四部分第 1 步里打开 AstrBot 网页的操作，只适用于方法 B 和 C。
+## 日常使用
 
-### 方法 B：启动器（点安装包）
+- 每次开机后运行 `personagent`。页面开着期间，角色服务、直连进程和托管的 AstrBot 都在运行；已经连好的平台会自动恢复。不想开浏览器，用 `personagent up`，效果一样。
+- 由它启动的进程会跟着它一起结束，不管它是怎么结束的；上次异常退出留下的进程，下次启动时会先被停掉。
+- 所有数据在一个主目录里：`.env`（设置）、`persona.txt`（人设）、`runtime/`（学到的东西和日志）、`platforms/`（托管的 AstrBot 和直连平台的凭据 `direct.json`）。key 只存在这台电脑上；对话会发给你选的模型服务。
+- 想直接改 `.env` 的话，用记事本改，保存为 UTF-8（不带 BOM），再重启 `personagent`。
+- 更新：`python -m pip install -U personagent`（用 uv 装的就 `uv tool upgrade personagent`）。从 0.x 升级上来的，如果启动时说有旧设置名，运行 `personagent doctor --fix`，它会把 `.env` 里的旧名字换成新的（原文件另存为 `.env.bak`）。
+- 命令行：`personagent init --terminal`（终端里的设置向导）、`chat`（终端里聊）、`demo`（不需要 key 的演示）、`run`（只启动角色服务）、`doctor`（检查设置和各项服务）、`learned`（查看和撤回学到的东西）、`eval`（评测）。
 
-1. 打开 [AstrBotDevs/astrbot-launcher 的 Releases](https://github.com/AstrBotDevs/astrbot-launcher/releases)，下载 `AstrBot.Launcher_x64-setup.exe`（ARM 电脑下 `arm64` 版）。
-2. 运行安装包，装好后打开启动器，按它的界面创建并启动一个 AstrBot。
+## 管理面板
 
-### 方法 C：uv 命令行
-
-```powershell
-uv tool install astrbot --python 3.12
-mkdir D:\astrbot
-cd D:\astrbot
-astrbot init
-astrbot run
-```
-
-`astrbot init` 只在第一次运行。**以后每次都要在 `D:\astrbot` 这个文件夹里运行 `astrbot run`**，它的数据就放在这个文件夹的 `data` 里。
-
-### 确认 AstrBot 跑起来了（方法 B、C）
-
-你应该在日志里看到 `管理面板已启动，可访问`，后面跟着几个链接。浏览器打开其中的 `http://localhost:6185`：
-
-- 用户名 `astrbot`，密码是日志里打印的随机初始密码（只有第一次启动才有）。
-- 登录后马上去改密码。
-
-AstrBot 第一次启动时会生成 `data` 文件夹，里面有 `cmd_config.json`、`plugins`、`config`。**后面要用到这个 `data` 文件夹。**不确定它在哪的话，在文件资源管理器里搜 `cmd_config.json`。
-
-> AstrBot 的界面和命令以[它的官方文档](https://docs.astrbot.app)为准，版本更新后可能有出入。
-
-## 第三部分：装 NapCat，登录小号
-
-1. 打开 [NapCatQQ 的 Releases](https://github.com/NapNeko/NapCatQQ/releases)，下载 Windows 一键包 `NapCat.Shell.Windows.OneKey.zip`，解压到一个固定的文件夹。
-2. 运行里面的 `NapCatInstaller.exe`，等它自动配置完。然后进入生成的 `NapCat.XXXX.Shell` 文件夹，按 [NapCat 文档](https://napneko.github.io/guide/boot/Shell)的说明启动（一键包是运行 `napcat.bat`）。
-3. 启动后窗口里会打印一行 `WebUi User Panel Url: http://127.0.0.1:6099/webui?token=...`。在浏览器里打开它。
-4. 在网页里选择扫码登录，用手机上的**小号**扫码确认。
-
-你应该看到 NapCat 的网页上显示小号已登录。
-
-先不要配「网络配置」，等 AstrBot 那边准备好。
-
-## 第四部分：让 AstrBot 和 NapCat 连起来
-
-**1. 在 AstrBot 里添加 QQ。** 打开 AstrBot 的网页（`http://localhost:6185`）：
-
-1. 点左边栏的「机器人」，再点「创建机器人」。
-2. 协议选「OneBot v11」。
-3. 填写：ID 随便起（比如 `napcat`）；勾选「启用」；「反向 WebSocket 主机地址」填 `0.0.0.0`；「反向 WebSocket 端口」保持默认的 `6199`；「反向 Websocket Token」留空。
-4. 保存。
-
-**2. 在 NapCat 里指向 AstrBot。** 回到 NapCat 的网页：
-
-1. 点「网络配置」，再点「新建」，选「WebSockets 客户端」。
-2. 勾选「启用」。
-3. 「URL」填 `ws://127.0.0.1:6199/ws`。
-4. 「心跳间隔」和「重连间隔」都建议改成 `1000`（毫秒）。
-5. 保存。
-
-你应该看到：在 AstrBot 网页的「数据与日志」→「日志」里出现蓝色的 `aiocqhttp(OneBot v11) 适配器已连接`。
-
-如果几秒后日志里变成适配器已关闭，说明连接超时：检查地址和端口有没有写错、AstrBot 有没有在运行、防火墙有没有拦住 6199 端口。
-
-> AstrBot 在 Docker 里的话，`127.0.0.1` 指的是容器自己，地址要换成对应的主机地址，见本文最后的[用 Docker 的话](#用-docker-的话)。
-
-## 第五部分：把 personagent 接上 AstrBot
-
-> 也可以在 AstrBot 的 WebUI 里，用插件仓库地址 `https://github.com/wangkant/astrbot_plugin_personagent` 安装插件，再把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。下面的命令会把这些全部自动做好，推荐用它。
-
-回到 PowerShell：
-
-```powershell
-personagent connect astrbot
-```
-
-它会问下面几个问题，每个问题后面都有说明，直接回车就是用方括号里的默认值：
-
-1. **AstrBot 文件夹**：它会自己找，找到就直接回车；找不到就填第二部分里说的那个 `data` 文件夹（或者它的上一级）。这个文件夹里必须有 `cmd_config.json`，没有说明 AstrBot 还没启动过。
-2. **AstrBot 是在 Docker 里运行的吗？** 按实际情况选。
-3. **机器人要进哪个聊天平台？** 选 `1. QQ（通过 NapCat）`。
-4. **机器人自己的 QQ 号**：小号的 QQ 号。
-5. **要加入的 QQ 群号**：多个用逗号隔开。群号在群资料里看。
-6. **你自己的 QQ 号**：你的主号，就是管理员。机器人和管理员最熟，管理员随时可以私聊它，也可以管理它记住的内容。不想设就回车。
-7. **机器人怎么称呼你**。
-8. **还允许谁私聊机器人**：填 QQ 号，逗号隔开；暂时没有就回车。
-
-你应该看到 `AstrBot 插件已安装` 和 `插件设置已写入`，最后它会打印接下来要做的事。这一步做了三件事：把插件复制进 AstrBot 的 `plugins` 文件夹，在 personagent 的 `.env` 和插件配置里写进同一个 `CONNECTOR_TOKEN`（两边用它互相确认身份），并把你填的群号写进两边的白名单。
-
-然后**重启 AstrBot**（关掉再开；或者在 AstrBot 网页的插件页重载插件），让它加载插件。你应该在插件页看到 `astrbot_plugin_personagent`，它的设置里 `groups` 是你刚才填的群号。
-
-## 第六部分：启动并测试
-
-**1. 启动 personagent，并一直开着。**
-
-```powershell
-personagent run
-```
-
-你应该看到类似这样的几行：
-
-```text
-personagent 1.0.0
-  listening:  http://127.0.0.1:8080
-  home:       C:\Users\你的用户名\personagent
-  dashboard:  http://127.0.0.1:8080/?token=...
-  agent:      on (model deepseek-flash, lang zh)
-```
-
-`dashboard` 那一行是管理面板的专用链接，`token=` 后面是一长串随机字符，第 3 步要用。
-
-如果最后一行是 `agent: OFF`，后面会写原因和办法，多半是没填 API key：重新运行 `personagent init`，再重启。
-
-如果它一句话就退出了，也会写原因：同一个文件夹里已经有一个 personagent 在跑、`8080` 端口被占用，或者 `.env` 里还有 1.0 改掉的旧设置名（每个一行 `旧名 -> 新名`，运行 `personagent doctor --fix` 就能改好）。按它说的处理。
-
-**2. 在群里测试。** 用你的主号（或别的号）在目标群里发一句 `小夏，你好`（换成机器人的名字）。你应该在几秒到十几秒内看到小号回复。
-
-**3. 打开控制面板。** 把 `dashboard` 那一行的整条链接（带着 `?token=...`）复制到浏览器里打开。你应该看到服务在运行、连接器一栏有记录、群里刚才那条消息的「说话原因」。
-
-面板只能用这条带令牌的链接打开，直接输 `http://127.0.0.1:8080/` 会提示你去找链接；`CONNECTOR_TOKEN` 也打不开它。打开过一次，这个浏览器一年内都不用再输。找不到链接了就运行 `personagent doctor`，最后一行就是。想在别的电脑上看，用 SSH 隧道，或者把 `SERVER_HOST` 设成这台电脑的局域网或 Tailscale 地址（这时必须同时设 `CONNECTOR_TOKEN`）。面板里不会显示密钥。
-
-现在你有三个窗口要一直开着：NapCat、AstrBot、personagent。
+管理面板显示服务状态、收到的消息、每一轮说或不说的原因，以及它学到的东西。它只能用带令牌的专用链接打开：运行 `personagent doctor`，输出里有 `dashboard` 那一行（`personagent run` 启动时也会打印）。打开过一次，这个浏览器一年内都不用再输。直接输 `http://127.0.0.1:8080/` 会提示你去找链接；`CONNECTOR_TOKEN` 也打不开它。面板里不会显示密钥。想在别的电脑上看，用 SSH 隧道，或者把 `SERVER_HOST` 设成这台电脑的局域网或 Tailscale 地址（这时必须同时设 `CONNECTOR_TOKEN`）。
 
 ## 它怎么学习
 
@@ -196,64 +77,72 @@ personagent 1.0.0
 
 学到的所有东西都记在只追加的账本里，随时可以撤销：
 
-- 在控制面板里，每一条学到的东西后面有「采纳」「拒绝」「撤回」按钮（点两下确认）。同一条回复已经有改写在用时，「采纳」会换成「替换」。
+- 在管理面板里，每一条学到的东西后面有「采纳」「拒绝」「撤回」按钮（点两下确认）。同一条回复已经有改写在用时，「采纳」会换成「替换」。
 - 或者用命令：`personagent learned list`、`personagent learned show <编号>`、`personagent learned rollback <编号>`。
 
 想让它更保守，在 `.env` 里加 `PROMOTE_MIN_SPEAKERS=2`：要两个不同的人都同意才会改。
 
 在群里对它说 `小夏 记住 …`、`小夏 忘掉 …`、`小夏 你都记得什么` 可以直接管理它的记忆；`小夏 学到了什么` 会列出它学到的东西。命令要放在消息开头；以「吗」「呢」「没」等结尾的问句（比如 `小夏 记住了吗`）只是聊天，`小夏 忘掉这个` 等于「算了」，什么都不删。每条笔记会记下是谁记的、说的是谁；不针对某个人的笔记全群可见，列出来时标着「来自某某」。
 
-## 日常使用
-
-- 每次开机后，要重新启动三个：NapCat、AstrBot、`personagent run`。
-- `.env`（设置）和 `persona.txt`（人设）都在 personagent 的数据文件夹里，也就是 `personagent run` 启动时打印的 `home` 那一行。用记事本改，保存为 UTF-8。
-- 改了 `.env` 或 `persona.txt`，重启 `personagent run`。改了 AstrBot 或插件的设置，重启 AstrBot。
-- 更新：`uv tool upgrade personagent`。从 0.x 升级上来的，`personagent run` 如果说有旧设置名，运行 `personagent doctor --fix` 把 `.env` 里的旧名字换成新的（原文件另存为 `.env.bak`）。
-- 改人设不会清空它学到的东西。
+改人设不会清空它学到的东西。
 
 ## 机器人不说话
 
-按顺序排查，越靠前越常见。先看 `personagent run` 的窗口，再看 AstrBot 网页里的日志，再看控制面板（用 `personagent run` 打印的 `dashboard` 链接打开），它会直接告诉你「还没收到任何消息」「消息被拒绝了」或者「收到了但没说话」。
+按顺序排查，越靠前越常见。先看管理面板，它会直接告诉你「还没收到任何消息」「消息被拒绝了」或者「收到了但没说话」；再看主目录 `runtime/desktop/` 下的日志：`agent.log`（角色服务）、`direct.log`（QQ、微信、Telegram、Discord）、`astrbot.log`（其他平台）。
 
-1. **AstrBot 没把消息交出来。** 在 AstrBot 网页里打开 personagent 插件的设置，确认 `groups` 里有这个群号；私聊要在 `dm_users` 里填发送者的 QQ 号。再确认 `excluded_platforms` 里没有 `aiocqhttp`（有就删掉）。
-2. **personagent 没开，或者没有 key。** 看 `personagent run` 那一行 `agent:`。是 `OFF` 的话，后面写着原因和办法：没有 key 就重新运行 `personagent init`，或者在 `.env` 里填 `LLM_API_KEY`；是 `AGENT_ENABLED=false` 就把它改成 `true`。改完重启。
-3. **回话的不是机器人，是 AstrBot 自带的模型（口气突然变了）。** 说明 AstrBot 没连上 personagent，或者 personagent 拒绝了这条消息。看 AstrBot 的日志：
+1. **消息没送到。** 在「连接平台」里确认这个平台显示已连接。QQ 机器人要已经在群里，群里能收到哪些消息由 QQ 的设置决定；个人微信只能私聊。走第三方 AstrBot 的，见[那一节的排查](#第三方路线排查)。
+2. **角色服务没开，或者没有 key。** 在「角色与设置」里重新填 key 并保存。`.env` 里写了 `AGENT_ENABLED=false` 的话，改成 `true` 再重启。
+3. **它没被叫到。** 在群里它只回应带它名字（`PERSONA_NAME`）或者 @ 它的消息。别的时候，它要等群里聊够 `CHAT_TRIGGER_COUNT` 条（默认 30 条）才会考虑插话，而且考虑了也可能选择不说。凌晨 2 点到 7 点它更不爱插话：`AGENT_LANG=zh` 时按北京时间算，想换时区就在 `.env` 里设 `PERSONA_TZ_OFFSET_HOURS`。先用名字叫它测试。
+4. **被 personagent 自己的白名单挡了。** `.env` 里的 `ACCESS_GROUPS`、`ACCESS_DM_USERS` 只要写了某个平台的条目，这个平台就只放行写了的。被挡的会话，`agent.log` 里会记一行，管理面板里也有。
+5. **模型调用失败。** key 无效、余额用完，`agent.log` 里会有一行 ERROR，写着是哪个服务、该改哪个设置。运行 `personagent doctor` 会向每个模型发一个很小的请求，直接看到状态码。
+6. **设置写错了。** 写错的设置名不会报错，只是悄悄用默认值。`personagent doctor` 和启动日志会列出不认识的设置名。
+7. **`.env` 带了 BOM。** 用记事本另存时选错了编码，第一行设置会失效。`personagent doctor` 会报告，改成「UTF-8」（不带 BOM）重新保存。
+8. **说话了，但忘了学过的东西。** 改了 `PERSONA_NAME` 或 `PERSONA_VERSION` 会让它当作新角色；在「人设」框里改人设不会。
+
+还不行，就在 [Issues](https://github.com/wangkant/personagent/issues) 里提问，附上 `personagent doctor` 的输出（先把 key 和账号打码）。
+
+## 第三方路线：AstrBot + NapCat
+
+AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 mautrix 桥接 WhatsApp、Signal 等）是 personagent 可以配合的第三方桥接，连 QQ、微信、Telegram、Discord 都用不到它们。只有想用**个人 QQ 小号**而不是官方机器人时，才需要 NapCat。
+
+注意：NapCat 不是腾讯官方的客户端，小号有被限制甚至封禁的风险。不要用你自己的主号，详见 [DISCLAIMER.zh-CN.md](../DISCLAIMER.zh-CN.md)。
+
+### 用托管的 AstrBot（推荐）
+
+1. 按 [NapCat 文档](https://napneko.github.io/)装好 NapCat，用手机上的**小号**扫码登录。
+2. 在 personagent 页面的「连接平台」里选「高级 → OneBot v11（NapCat）」，端口默认 `6199`。
+3. 在 NapCat 的网页里点「网络配置」→「新建」→「WebSockets 客户端」，勾选「启用」，URL 填 `ws://127.0.0.1:6199/ws`，保存。
+
+托管的 AstrBot 会自动装好 personagent 插件，并写好 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`。这条路上 NapCat 也要一直开着。
+
+### 用你自己的 AstrBot
+
+插件 `astrbot_plugin_personagent` 只是 AstrBot 把消息交给 personagent 的方式。两种装法：
+
+- 运行 `personagent connect astrbot`，按提示选 QQ（通过 NapCat），填小号的 QQ 号、群号和你自己的 QQ 号。它会把插件复制进 AstrBot 的 `plugins` 文件夹，在两边写进同一个 `CONNECTOR_TOKEN`，写好白名单和 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`。不确定 AstrBot 的 `data` 文件夹在哪，就搜 `cmd_config.json`。
+- 或者在 AstrBot 的 WebUI 里，用仓库地址 `https://github.com/wangkant/astrbot_plugin_personagent` 安装插件，再把插件设置里的 `connector_token` 填成 personagent `.env` 里的 `CONNECTOR_TOKEN`。
+
+装好后重启 AstrBot（或在插件页重载插件），然后用 `personagent run` 启动角色服务并一直开着。在 AstrBot 里添加 OneBot v11 机器人（反向 WebSocket 端口 `6199`），NapCat 照上面第 3 步指向它。AstrBot 的界面以[它的官方文档](https://docs.astrbot.app)为准。
+
+AstrBot 在 Docker 里的话，`127.0.0.1` 指的是容器自己，插件会拒绝发往其他地址的明文 `http://`。二选一：给 AstrBot（和同一个 compose 里的 NapCat）用主机网络（`network_mode: host`，`docker run` 用 `--network host`；Docker Desktop 需要 4.34 以上，并打开 `Enable host networking`）；或者给 personagent 一个 HTTPS 地址，再运行 `personagent connect astrbot <data 文件夹> --url https://你的地址`。
+
+### 第三方路线排查
+
+1. **AstrBot 没把消息交出来。** 在插件设置里确认 `groups` 里有这个群号；私聊要在 `dm_users` 里填发送者的 QQ 号。再确认 `excluded_platforms` 里没有 `aiocqhttp`。
+2. **回话的是 AstrBot 自带的模型（口气突然变了）。** 看 AstrBot 的日志：
    - `refusing unsafe personagent_url`：插件里的 `personagent_url` 不对。在同一台电脑上就用 `http://127.0.0.1:8080`。
    - `agent refused the request (403)`：两边的 `CONNECTOR_TOKEN` 不一致，或者两台电脑的时钟差了五分钟以上。重新运行 `personagent connect astrbot` 会把两边改成同一个。
-   - `timed out waiting for the agent`：模型太慢。插件的 `timeout_s` 默认 420 秒，够 personagent 默认设置下最坏的 360 秒；如果你调大过 `LLM_TIMEOUT_S` 或 `LLM_MAX_RETRIES`，就把 `timeout_s` 也调大，或者把它们调回来。
+   - `timed out waiting for the agent`：模型太慢。插件的 `timeout_s` 默认 420 秒，够 personagent 默认设置下最坏的 360 秒；调大过 `LLM_TIMEOUT_S` 或 `LLM_MAX_RETRIES` 的话，把 `timeout_s` 也调大。
    - `agent request failed`：personagent 没在运行，或者地址、端口写错了。
-4. **它没被叫到。** 在群里它只回应带它名字（`PERSONA_NAME`）或者 @ 它的消息。别的时候，它要等群里聊够 `CHAT_TRIGGER_COUNT` 条（默认 30 条）才会考虑插话，而且考虑了也可能选择不说。凌晨 2 点到 7 点它更不爱插话：`AGENT_LANG=zh` 时按北京时间算，想换时区就在 `.env` 里设 `PERSONA_TZ_OFFSET_HOURS`。先用名字叫它测试。
-5. **QQ 群或私聊被 personagent 自己的白名单挡了。** `.env` 里的 `ACCESS_GROUPS`、`ACCESS_DM_USERS` 只要写了 QQ 号，就只放行写了的。QQ 私聊还必须来自管理员（`ADMIN_IDS`）或在 `ACCESS_DM_USERS` 里。被挡的会话，personagent 的窗口里会记一行，控制面板里也有。
-6. **模型调用失败。** key 无效、余额用完，窗口里会有一行 ERROR，写着是哪个服务、该改哪个设置。运行 `personagent doctor` 会向每个模型发一个很小的请求，直接看到状态码。
-7. **设置写错了。** 写错的设置名不会报错，只是悄悄用默认值。`personagent doctor` 和启动日志会列出不认识的设置名。
-8. **`.env` 带了 BOM。** 用记事本另存为 UTF-8 时选错了编码，第一行设置会失效。`personagent doctor` 会报告，改成「UTF-8」（不带 BOM）重新保存。
-9. **`QQ_BOT_ID` 没填或填错。** 应该是小号的 QQ 号。
-10. **说话了，但忘了学过的东西。** QQ 的会话必须用 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`（`personagent connect astrbot` 在你选了 QQ 时会替你写好）。少了它，所有 QQ 会话都会被当成新会话。改了 `PERSONA_NAME` 或 `PERSONA_VERSION` 也会让它当作新角色。
+3. **QQ 私聊被挡。** 经 NapCat 来的 QQ 私聊，必须来自管理员（`ADMIN_IDS`）或在 `ACCESS_DM_USERS` 里。
+4. **`QQ_BOT_ID` 没填或填错。** 应该是小号的 QQ 号。
+5. **忘了学过的东西。** 经 NapCat 的 QQ 会话必须有 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`，少了它所有 QQ 会话都会被当成新会话。
 
-还不行，就在 [Issues](https://github.com/wangkant/personagent/issues) 里提问，附上 `personagent doctor` 的输出（先把 key 和 QQ 号打码）。
+**NapCat 的 HTTP 服务**是可选的。开了之后，personagent 还能补回它离线期间漏掉的 @：在 NapCat 里打开 HTTP 服务，并在 `.env` 里写 `QQ_ONEBOT_URL=http://127.0.0.1:3000`（端口按 NapCat 里设的）和 `QQ_BOT_ID`（小号的 QQ 号）。
 
-## 其他情况
+**旧的直连方式。** NapCat 直接把事件发给 personagent 的 `/v1/onebot` 这条路已经不推荐，但在 1.x 里仍然能用，需要在 `.env` 里写 `QQ_ONEBOT_URL`（没有它机器人只收不回；`personagent doctor` 会提醒）。改用 AstrBot 后，要把 NapCat 里指向 `/v1/onebot` 的 HTTP 客户端关掉，否则每条消息会收到两遍。学到的记忆会保留。
 
-### 用 Docker 的话
-
-在容器里，`127.0.0.1` 指的是容器自己，所以 AstrBot 访问不到你电脑上的 personagent，而插件会拒绝发往其他地址的明文 `http://`。二选一：
-
-1. 给 AstrBot 用主机网络：在 compose 文件里把 `ports:` 和 `networks:` 换成 `network_mode: host`（`docker run` 用 `--network host`），然后重建容器。Docker Desktop 需要 4.34 以上版本，并在 设置 > Resources > Network 里打开 `Enable host networking`。同一个文件里的 NapCat 也要用主机网络，它的 WebSocket 地址就是 `ws://127.0.0.1:6199/ws`。
-2. 给 personagent 一个 HTTPS 地址（反向代理或隧道），再运行 `personagent connect astrbot <data 文件夹> --url https://你的地址`。
-
-### 别的聊天平台
-
-Telegram、Discord、Slack、KOOK、飞书等走同样的路：`personagent connect astrbot <data 文件夹> --platform telegram --token <机器人 token>`。不同平台的支持情况见 [插件 README](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md)。
-
-### NapCat 的 HTTP 服务
-
-NapCat 的 HTTP 服务在这条路上是可选的。不开也能正常聊天；开了之后，personagent 还能补回它离线期间漏掉的 @。要开的话，在 NapCat 里打开 HTTP 服务，并在 `.env` 里写 `QQ_ONEBOT_URL=http://127.0.0.1:3000`（端口按 NapCat 里设的）。
-
-### 旧的直连方式
-
-NapCat 直接把事件发给 personagent 的 `/v1/onebot` 这条路已经不推荐，但在 1.x 里仍然能用。还在用的话，`.env` 里要写上 `QQ_ONEBOT_URL`（它现在默认留空，没有它机器人只收不回；`personagent doctor` 会提醒）。如果你以前用的是它，改成本文的方式后，要把 NapCat 里指向 `/v1/onebot` 的 HTTP 客户端关掉，否则每条消息会收到两遍。你学到的记忆会保留。
-
-### 其他文档
+## 其他文档
 
 - [英文版部署指南](deploy.md)：所有设置、对外暴露端口、错误码。
 - [AstrBot 插件说明](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md)

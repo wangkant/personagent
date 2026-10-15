@@ -4,12 +4,14 @@
 
 ## Open it
 
-This branch is the 1.1 development preview. Install its current source:
+Install personagent from PyPI and open it:
 
 ```sh
-python -m pip install https://github.com/wangkant/personagent/archive/refs/heads/main.zip
-python -m persona_agent
+python -m pip install personagent
+personagent
 ```
+
+With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
 With a source ZIP on Windows, double-click `start.bat`. It prepares its own Python environment and opens the same page. In a clone, `python quickstart.py` does the same.
 
@@ -26,19 +28,21 @@ Your character replies in the page. Settings are saved, so the next launch goes 
 ## Bring it to other apps
 
 1. Click **Connect apps** and pick one. Once connected, your character replies to that app's group chats and DMs.
-   - **Scan to connect**: personal WeChat. Click **Get a QR code** and confirm in WeChat. It chats one to one; WeChat does not hand group messages to these bots.
-   - **Paste one or two values**: QQ, Telegram, Discord, KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost and Misskey. The page says which values to copy from the app's console; everything else uses defaults. For QQ, scan on [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html) to create a bot, then copy its AppID and AppSecret.
+   - **Scan to connect**: QQ and personal WeChat. Click **Get a QR code** and confirm on your phone.
+     - QQ: scan with mobile QQ. It creates a bot or uses one you already made, and personagent fetches its keys. For a bot made on [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html), **Paste values instead** takes its AppID and AppSecret.
+     - WeChat: scan with WeChat. It chats one to one; WeChat does not hand group messages to these bots.
+   - **Paste one or two values**: Telegram (a token from @BotFather), Discord (a bot token, with Message Content Intent on), KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost and Misskey. The page says which values to copy from the app's console; everything else uses defaults.
    - **Advanced**: WeCom apps, WeChat Official Accounts and QQ webhooks need a public address that forwards to their callback port; OneBot v11 (NapCat) and Satori need other software running on this computer.
-2. QQ, WeChat, Telegram and Discord are connected by personagent itself. For the other apps, the first connection downloads AstrBot and a separate Python 3.12 runtime; keep the page open. AstrBot runs in the background with no dashboard to sign in to.
-3. The app saves the credentials, starts both services and waits a few seconds to confirm the app accepted the connection. If it refused, the page says so and nothing is saved.
+2. QQ, WeChat, Telegram and Discord are connected by personagent itself. The other apps go through AstrBot, a third-party bridge: the first such connection downloads it with a separate Python 3.12 runtime, so keep the page open. It runs in the background with no dashboard to sign in to.
+3. personagent checks the credentials with the app before saving them. If the app refuses them, the page says so and nothing is saved.
 4. Connected apps are listed at the top of the page, where you can set one up again or disconnect it.
 
-For QQ, find the bot in mobile QQ → Contacts → Bots, then chat privately or add it to a group you own. This uses QQ Official Bot, so no NapCat or personal QQ bot account is required. QQ decides where the bot may go: an uncertified bot is for its admin, in groups the admin owns, with no sandbox to set up; it sees @-messages unless the group owner turns on receiving all messages on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification and the rest of the account side.
+For QQ, find the bot in mobile QQ → Contacts → Bots, then chat privately or add it to a group you own. This uses QQ Official Bot, so no personal QQ account or extra software is needed. QQ decides where the bot may go: until it is certified, it can join only groups its admin owns, with no sandbox to set up. It sees @-messages unless the group owner turns on receiving all messages on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification and the rest of the account side.
 
-An expired code can be requested again. A failed download can be retried without repeating model setup. Only the app you connect gets the platform-scoped permission; other adapters stay under their existing allowlists. LINE is not offered, because AstrBot only receives LINE callbacks through its dashboard.
+An expired code can be requested again. A failed download can be retried without repeating model setup. Only the app you connect gets the platform-scoped permission; other adapters stay under their existing allowlists. LINE is not offered, because AstrBot only receives LINE callbacks through its dashboard, which personagent does not run.
 
 ## Next time
 
-Open personagent again. Your settings are kept, and connected apps resume automatically. Opening it a second time reuses the running page. **Quit** closes the app and stops only the processes it started. Keep its launch window open while using it.
+Open personagent again. Your settings are kept, and connected apps resume automatically. Opening it a second time reuses the running page. Keep its launch window open while using it. The processes it started stop with it, whether you click **Quit** or the window closes; anything left by a crash is stopped at the next start.
 
-Advanced users can use `personagent start --terminal`, `personagent init --terminal`, `personagent up`, or the existing `chat`, `run` and `connect` commands. Existing `.env`, edited persona files and learned memories are kept. Other platforms remain in the [full guide](guide.md).
+Advanced users can use `personagent start --terminal`, `personagent init --terminal`, `personagent up`, or the `chat`, `demo` (no key needed), `run` and `connect` commands. Existing `.env`, edited persona files and learned memories are kept. Other platforms remain in the [full guide](guide.md).

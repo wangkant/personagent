@@ -2,50 +2,67 @@
 
 **English** · [简体中文](guide.zh-CN.md)
 
-Everything you need to set personagent up, run it in your chats, teach it and look after it. The [README](../README.md) is the short version.
+Everything you need to set personagent up, put it in your chats, teach it and look after it. The [README](../README.md) is the short version, and the [getting-started guide](start.md) is the page-by-page walkthrough.
 
 1. [Install and the home folder](#install-and-the-home-folder)
-2. [See it first: the demo](#see-it-first-the-demo)
-3. [Set it up](#set-it-up)
-4. [Chat in the terminal](#chat-in-the-terminal)
-5. [Go live](#go-live)
-6. [Make it your character](#make-it-your-character)
-7. [Put it in a chat](#put-it-in-a-chat): [AstrBot](#connect-through-astrbot) · [QQ](#qq) · [Docker or another host](#astrbot-in-docker-or-on-another-host) · [Speaking first](#speaking-first)
-8. [Teach it](#teach-it)
-9. [The dashboard](#the-dashboard)
-10. [Measure it](#measure-it)
-11. [How it works](#how-it-works)
-12. [Privacy and consent](#privacy-and-consent)
-13. [Troubleshooting](#troubleshooting)
-14. [Upgrading from 0.x](#upgrading-from-0x)
+2. [The local page](#the-local-page)
+3. [See it first: the demo](#see-it-first-the-demo)
+4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
+5. [Make it your character](#make-it-your-character)
+6. [Put it in a chat](#put-it-in-a-chat): [QQ, WeChat, Telegram, Discord](#qq-wechat-telegram-and-discord) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
+7. [Teach it](#teach-it)
+8. [The dashboard](#the-dashboard)
+9. [Measure it](#measure-it)
+10. [How it works](#how-it-works)
+11. [Privacy and consent](#privacy-and-consent)
+12. [Troubleshooting](#troubleshooting)
+13. [Upgrading from 0.x](#upgrading-from-0x)
+14. [Status and other docs](#status-and-other-docs)
 
 ## Install and the home folder
 
-New users can follow the [short getting-started guide](start.md): open the local page, add a model key and chat, then connect QQ with a scan. The sections below also cover terminal and server workflows.
+```sh
+python -m pip install personagent
+personagent
+```
+
+`personagent` opens [the local page](#the-local-page) in your browser. Other routes:
 
 | Route | Command |
 |---|---|
-| Run without installing | `uvx personagent <command>` |
+| Run without installing | `uvx personagent` (comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you) |
 | A permanent `personagent` command | `uv tool install personagent` or `pipx install personagent` |
-| Into an environment you already have | `pip install personagent` |
+| Windows, from the source ZIP | unpack it and double-click `start.bat` |
 | From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
 
-personagent runs on Python 3.10–3.14. `uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you; install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS, Linux) or `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows). `quickstart.py` creates `.venv`, installs the dependencies and runs the same setup as `personagent init`. No Git? Download the [ZIP](https://github.com/wangkant/personagent/archive/refs/heads/main.zip); it unpacks to `personagent-main`.
+personagent runs on Python 3.10–3.14. `start.bat` and `quickstart.py` create `.venv`, install the dependencies and open the same page.
 
-The **home folder** holds the settings (`.env`), the character (`persona.txt`) and what it learns (`runtime/`). It is the first of:
+The **home folder** holds the settings (`.env`), the character (`persona.txt`), what it learns (`runtime/`) and the chat platforms (`platforms/`: the managed AstrBot and `direct.json`, the credentials of the platforms personagent connects itself). It is the first of:
 
 1. the folder you give with `--home DIR` (before or after the command: `personagent chat --home D:\bot`) or `AGENT_HOME`;
 2. the clone, when you run from one;
 3. the current folder, if it holds both `.env` and `persona.txt`;
-4. `~/personagent`, which `personagent init` creates.
+4. `~/personagent`, created on first setup.
 
 To run several characters from one install, give each its own home.
 
 This guide writes commands as `personagent ...`. Put `uvx` in front if you did not install it. In a clone, `.venv/bin/python -m persona_agent ...` (Windows: `.venv\Scripts\python.exe -m persona_agent ...`) does the same.
 
+## The local page
+
+`personagent` (or `personagent start`) serves a page on this computer only and opens it in the browser. It has three views:
+
+- **Chat**: a one-to-one chat with the real character in the browser, answered by the same agent that serves your chat platforms.
+- **Connect apps**: put it in QQ, WeChat, Telegram, Discord and the other platforms; see [Put it in a chat](#put-it-in-a-chat).
+- **Character & settings**: pick a model service (DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenRouter, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request before saving it. Once set up, the **Persona** box holds `persona.txt`; **Save persona** restarts the agent with the new text and keeps what it learned.
+
+Running `personagent` again reuses the page that is already open. `--no-browser` prints the link instead of opening it.
+
+The page starts the agent, and the connected platforms with it, in the background. Keep its window open while you use it. Whatever it started ends with it, however it ends: **Quit**, Ctrl+C or a closed window (a job object on Windows, a process group elsewhere). If an earlier run crashed and left something running, the next start stops it first.
+
 ## See it first: the demo
 
-`personagent demo` plays three scenes on a scripted model: which group messages it skips and why, learning from a correction, and a stranger failing to plant an instruction. Name one scene to play only that one (`quiet`, `teach` or `troll`), and add `--lang zh` for the Chinese version.
+`personagent demo` plays three scenes on a scripted model, with no key needed: which group messages it skips and why, learning from a correction, and a stranger failing to plant an instruction. Name one scene to play only that one (`quiet`, `teach` or `troll`), and add `--lang zh` for the Chinese version.
 
 This is `personagent demo teach`, trimmed. The model's lines are scripted; the ledger and the promotion rule are the real code:
 
@@ -73,20 +90,37 @@ This is `personagent demo teach`, trimmed. The model's lines are scripted; the l
 
 Asked about a laptop that died mid-demo, Nova offered a fix before this exchange and sympathy after it. The demo is scripted even when a key is set, so every run is the same and costs nothing. `personagent demo --online` plays it on your own model, which costs tokens and varies from run to run.
 
-## Set it up
+## Terminal commands
 
-`personagent`, `personagent start` and interactive `personagent init` open browser setup and chat. The terminal menu remains available with `personagent start --terminal`.
+Everything the page does can also be done from a terminal, which suits servers and scripts.
 
-`personagent init --terminal` walks through three steps, in English or Chinese, and explains each term in a line:
+| Command | Does |
+|---|---|
+| `personagent start` | open the local page (`--terminal` for a menu in the terminal instead) |
+| `personagent init` | set up a home; `--terminal` asks the questions in the terminal, `--no-input` takes flags |
+| `personagent chat` | a simulated group chat in the terminal |
+| `personagent demo` | the scripted demo above |
+| `personagent run` | the service alone, for connectors you run yourself |
+| `personagent up` | the service, the platforms personagent connects itself and the managed AstrBot, together |
+| `personagent connect astrbot` | connect an AstrBot (`--install` to download a managed one, `--start` to start it) |
+| `personagent doctor` | check the setup and every service it depends on |
+| `personagent learned` | review, promote or roll back what it learned |
+| `personagent eval` | measure speaking, persona and learning |
 
-- **The AI service.** DeepSeek, SiliconFlow, Alibaba Bailian (Qwen), Zhipu GLM, Moonshot (Kimi), Volcengine Ark (Doubao), OpenRouter, OpenAI, Google Gemini, Ollama on this computer, or any other OpenAI-compatible service. The default is DeepSeek's `deepseek-flash`. For Ollama, name a model you have already pulled; no key is needed.
-- **The key.** Choose whether to show it in this terminal; the default is hidden. When reconfiguring, choosing to show also reveals the saved key so you can check it. The key is tested with one tiny request. If the test fails, it shows the address it called, the HTTP status and a likely fix.
+Each takes `--help`.
+
+### Set up in the terminal
+
+`personagent init --terminal` asks the same things as the page, in English or Chinese, and explains each term in a line:
+
+- **The AI service.** The same presets as the page. The default is DeepSeek's `deepseek-flash`. For Ollama, name a model you have already pulled; no key is needed.
+- **The key.** Hidden by default; you can choose to show it, which also reveals the saved key when reconfiguring. It is tested with one small request; if that fails, it shows the address it called, the HTTP status and a likely fix.
 - **The character.** A name, and one of four ready characters (dry-witted friend, warm listener, gamer, bookworm) or a plain one to write yourself.
-- **Chat apps.** Optional; skip it the first time. See [Put it in a chat](#put-it-in-a-chat).
+- **AstrBot.** Optional; skip it the first time. See [Bridges you run yourself](#bridges-you-run-yourself).
 
 To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona` (and `--base-url` for `--provider other`); `personagent init --help` lists them. Run without a terminal and without any of these flags, `personagent init` skips the questions, says so, and exits with code 2.
 
-## Chat in the terminal
+### Chat in the terminal
 
 `personagent chat` puts you in a simulated group chat with the character. A plain line is group chat, and it tells you whether it would join in and why. A line with its name is a call:
 
@@ -125,15 +159,15 @@ Alex> Nova, you there?
   [error: the model provider refused the key or the account (HTTP 401); check LLM_API_KEY, then run `personagent doctor`]
 ```
 
-## Go live
+### Run the service
 
-`personagent run` starts the service the connectors talk to, at `http://127.0.0.1:8080`, with [the dashboard](#the-dashboard) at the same address. It prints the version, the address, the home folder, the dashboard's private link and whether the agent is on. Keep it running, then [put it in a chat](#put-it-in-a-chat). `--host` and `--port` override `SERVER_HOST` and `SERVER_PORT`.
+`personagent run` starts only the service the connectors talk to, at `http://127.0.0.1:8080`, with [the dashboard](#the-dashboard) at the same address. It prints the version, the address, the home folder, the dashboard's private link and whether the agent is on. `--host` and `--port` override `SERVER_HOST` and `SERVER_PORT`. Use it when you run the connector yourself.
 
-From a clone, start it with `start.bat` (Windows, double-click), `start.ps1`, `start.sh`, or `.venv/bin/python main.py`. If there is no `.env` yet, the launchers run the setup first.
+`personagent up` starts the service together with every platform connected from the page or by `connect astrbot --install`, without a browser. Ctrl+C stops them all. Each one's log is in `runtime/desktop/` in the home folder.
 
 ## Make it your character
 
-`persona.txt` in the home folder is the character. Edit it any time and restart. Say who they are, how they usually talk, and what they do in the situations you care about; concrete habits work better than asking the model to "sound natural":
+`persona.txt` in the home folder is the character. Edit it in the page's **Persona** box, or in any editor and restart. Say who they are, how they usually talk, and what they do in the situations you care about; concrete habits work better than asking the model to "sound natural":
 
 ```text
 Your name is Nova. You chat with friends about films and cooking.
@@ -160,34 +194,59 @@ To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`
 
 ## Put it in a chat
 
-personagent never logs in to a chat account. A connector does: it passes each message to personagent and carries the reply back.
+Open **Connect apps** on the local page and pick a platform. The page asks only for what you copy from the platform's own console, checks it against the platform before saving it, starts the connection and waits a few seconds to see that the platform accepted it. If the platform refuses, the page says so and nothing is saved. Connected platforms are listed at the top, where you can set one up again or disconnect it, and they start again whenever the page or `personagent up` starts.
 
 ```text
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 ```
 
-| Connector | Reaches |
+A connector logs in to the platform, passes each message to personagent and carries the reply back. There are three kinds.
+
+### QQ, WeChat, Telegram and Discord
+
+personagent connects these itself, in one background process, with no AstrBot and no NapCat:
+
+| Platform | What you do |
 |---|---|
-| [AstrBot plugin](../integrations/astrbot/astrbot_plugin_personagent/README.md) | QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, WeChat official accounts |
-| [Satori](../integrations/satori/README.md) | whatever your Koishi or other Satori server is logged in to |
-| [Matrix](../integrations/matrix/README.md) | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram and Google Messages |
+| QQ | Scan the code with mobile QQ and confirm: it creates an official QQ bot, or uses one you already made, and personagent fetches its keys. **Paste values instead** takes the AppID and AppSecret of a bot made on [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html). |
+| WeChat (personal) | Scan the code with WeChat and confirm the login. It uses Tencent's iLink bot API and chats one to one only: WeChat gives these bots no group messages. |
+| Telegram | Create a bot with [@BotFather](https://t.me/BotFather) and paste its token. |
+| Discord | In the [Developer Portal](https://discord.com/developers/applications), copy the bot token and turn on Message Content Intent. |
 
-Anything else can connect through the [connector protocol](connectors.md): one signed HTTP request per message. Several connectors can serve one personagent at once. The [deployment guide](deploy.md) covers running it for real, and a [Chinese step-by-step guide](deploy.zh-CN.md) covers QQ from zero.
+For QQ, find the bot in mobile QQ under Contacts → Bots, then chat privately or add it to a group. Until the bot is certified, QQ lets it join only groups you own. Which group messages it receives is set in QQ, on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification.
 
-### Connect through AstrBot
+The credentials are kept in `platforms/direct.json` in the home folder.
 
-1. Run `personagent connect astrbot`, or say yes to the AstrBot step of `personagent init --terminal`. When no installation is found, the setup offers to download AstrBot and its own Python 3.12 automatically. You can also point it at an existing installation.
-2. Choose the chat app and allowed groups (send `/sid` in a group to see its id). The setup installs the plugin and writes one shared `CONNECTOR_TOKEN` to both sides.
-3. Run `personagent run` and keep it running. For the managed install, start AstrBot in another terminal with `personagent connect astrbot --start`; otherwise restart your existing AstrBot or reload its plugins.
-4. Say the bot's name in one of those groups.
+### Other platforms, through the managed AstrBot
 
-The managed install lives under `<home>/platforms/`: `astrbot/` holds its data and `tools/` holds its isolated runtime. It does not require a global `uv` or change personagent's Python. The first start prints AstrBot's initial dashboard password; later starts keep your password. QQ still needs NapCat and account login; platform credentials are supplied by you.
+For everything else, the first connection downloads [AstrBot](https://docs.astrbot.app) and its own Python 3.12 runtime into `platforms/` in the home folder (keep the page open meanwhile), then runs it in the background. It has no dashboard and no second login; it does not need a global `uv` or change personagent's Python. Connecting a platform from the page lets that platform's groups and DMs reach the character; the allowlists of other platforms are left as they were.
 
-For an unattended installation, use `personagent connect astrbot --install`, optionally with `--platform telegram --token <bot token>`. No groups or DMs are allowed until configured. A failed download can be retried with the same command. Existing configuration is kept.
+| Group | Platforms | You give |
+|---|---|---|
+| Paste one or two values | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | a token, an app id and secret, or a server address and token. Feishu uses long connection and DingTalk Stream mode, so no public address is needed. For Slack, the link on the page creates the app with Socket Mode, scopes and events set; add an app-level token with `connections:write`, install it and paste both tokens. Create the WeCom AI bot with long connection. |
+| Advanced | WeCom app, WeChat Official Account, QQ (webhook) | a public address that forwards to the callback port shown |
+| Advanced | OneBot v11 (NapCat), Satori | other software running on this computer: NapCat pointed at `ws://127.0.0.1:<port>/ws`, or a Satori server |
 
-The plugin also has its own repository, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent), so it can be installed from AstrBot's WebUI by that address; then set its `connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`.
+LINE is not offered: AstrBot receives LINE callbacks only through its dashboard.
 
-The plugin forwards a group only when it is in the plugin's `groups`, and DMs only from `dm_users`; both can be changed in AstrBot's WebUI. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin.
+From a terminal, `personagent connect astrbot --install` downloads the same managed AstrBot and connects it; add `--platform telegram --token <bot token>` to switch on a platform at the same time. No groups or DMs are allowed until configured. A failed download can be retried with the same command, and existing configuration is kept. `personagent connect astrbot --start` starts it, or `personagent up` starts it with everything else.
+
+### Bridges you run yourself
+
+These are third-party projects personagent works with. None of them is needed for QQ, WeChat, Telegram or Discord.
+
+| Bridge | Reaches |
+|---|---|
+| An [AstrBot](https://docs.astrbot.app) you already run | its platforms |
+| [NapCat](https://github.com/NapNeko/NapCatQQ) (OneBot v11), through AstrBot | QQ with a personal QQ account |
+| [Koishi](https://koishi.chat) or another Satori server, through the [Satori connector](../integrations/satori/README.md) | whatever that server is logged in to |
+| [Matrix](../integrations/matrix/README.md), through mautrix bridges | Matrix rooms, and WhatsApp, Signal, Messenger, Instagram and Google Messages |
+
+Anything else can connect through the [connector protocol](connectors.md): one signed HTTP request per message. Several connectors can serve one personagent at once. The [deployment guide](deploy.md) covers running it for real.
+
+**An AstrBot you already run.** AstrBot hands messages to personagent through a small plugin, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent) (the managed AstrBot gets it automatically). `personagent connect astrbot` finds your AstrBot, or takes its folder as an argument, installs the plugin, writes one shared `CONNECTOR_TOKEN` to both sides and asks which groups to allow (send `/sid` in a group to see its id). Or install the plugin from AstrBot's WebUI by its repository address and set its `connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`. Then run `personagent run`, and restart AstrBot or reload its plugins.
+
+The plugin forwards a group only when it is in its `groups`, and DMs only from `dm_users`; both can be changed in AstrBot's WebUI. Restart personagent after editing `.env`, and AstrBot after changing a platform or the plugin.
 
 With AstrBot's folder given, nothing is asked, and a platform can be switched on from its token:
 
@@ -195,28 +254,19 @@ With AstrBot's folder given, nothing is asked, and a platform can be switched on
 personagent connect astrbot <AstrBot data dir> --platform telegram --token <bot token>
 ```
 
-`--platform` accepts `telegram`, `discord`, `slack`, `kook` and `lark` (Slack also takes `--app-token`, Lark `--app-id` and `--app-secret`). On an adapter already set up in AstrBot it changes only the credentials and keeps the rest, such as a proxy or base URL. `--qq` routes QQ through AstrBot; `personagent connect --help` lists the rest.
+`--platform` accepts `telegram`, `discord`, `slack`, `kook`, `lark` and `qq_official` (Slack also takes `--app-token`; Lark and QQ take `--app-id` and `--app-secret`). On an adapter already set up in AstrBot it changes only the credentials and keeps the rest, such as a proxy or base URL. `personagent connect --help` lists the rest.
 
-### QQ
+**QQ through NapCat.** For a personal QQ account instead of an official bot: NapCat logs in with the account and connects to AstrBot's `aiocqhttp` (OneBot v11) adapter, with its reverse WebSocket at `ws://127.0.0.1:6199/ws`. Choosing QQ in `personagent connect astrbot` (or passing `--qq` with a folder) removes `aiocqhttp` from the plugin's `excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory. NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional; with it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline. The [Chinese step-by-step guide](deploy.zh-CN.md#第三方路线astrbot--napcat) has a short section on this route. Third-party QQ clients put the account at risk; read the [disclaimer](../DISCLAIMER.md).
 
-QQ goes through NapCat, logged in with the bot's QQ account and connected to AstrBot's `aiocqhttp` (OneBot v11) adapter.
+The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. It replies through `QQ_ONEBOT_URL`, so set that if you still use it; `personagent doctor` warns when the route looks configured without it. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
-- Choose QQ in `personagent connect astrbot`. It asks for the bot's QQ number, the group numbers and your own, removes `aiocqhttp` from the plugin's `excluded_platforms`, and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory.
-- In AstrBot's WebUI, add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's reverse WebSocket at `ws://127.0.0.1:6199/ws`.
-- NapCat's HTTP server (`QQ_ONEBOT_URL`, blank by default) is optional. With it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline.
-- The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. It replies through `QQ_ONEBOT_URL`, so set that if you still use it; `personagent doctor` warns when the route looks configured without it. Never run it alongside AstrBot forwarding, or every message arrives twice.
-
-### AstrBot in Docker, or on another host
-
-The plugin posts only to the same host (or a container sharing its network), or to an HTTPS address with `connector_token` set. Plain `http://` anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead.
-
-`personagent connect astrbot` asks whether AstrBot runs in Docker. The fix is host networking for the AstrBot container (`network_mode: host` in its compose file, or `docker run --network host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or an HTTPS address for personagent, given with `--url https://...`. A NapCat container in the same compose file needs host networking too, so that `ws://127.0.0.1:6199/ws` still reaches AstrBot.
+**AstrBot in Docker, or on another host.** The plugin posts only to the same host (or a container sharing its network), or to an HTTPS address with `connector_token` set. Plain `http://` anywhere else, such as `http://host.docker.internal:8080`, is refused and logged as `refusing unsafe personagent_url`, and AstrBot's own model answers instead. Give the AstrBot container host networking (`network_mode: host` in its compose file, or `docker run --network host`; on Docker Desktop 4.34 or later, also turn on "Enable host networking"), or give personagent an HTTPS address with `--url https://...`. A NapCat container in the same compose file needs host networking too.
 
 personagent listens on `127.0.0.1:8080` (a blank `SERVER_HOST` means the same). Listening on a network address (`--host 0.0.0.0` or `SERVER_HOST`) requires `CONNECTOR_TOKEN`. Set it before you add a proxy or tunnel, even on one machine: a tunnel can make outside requests look local. [Exposing the endpoints](deploy.md#exposing-the-endpoints) has the rest.
 
 ### Speaking first
 
-Some messages answer nobody: openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails in a group (in a DM it goes back in the response to the message that was waiting). personagent queues them in an outbox, and the three connectors above pull and send them on platforms that let a bot speak first (not QQ's official bot API, WeChat official accounts or WeCom smart bots). `PROACTIVE_PLATFORMS=qq` keeps openers on QQ. See the [deployment guide](deploy.md#more-than-one-platform).
+Some messages answer nobody: openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse when the model fails in a group (in a DM it goes back in the response to the message that was waiting). personagent queues them in an outbox, and the connectors pull and send them on platforms that let a bot speak first (not WeChat official accounts or WeCom smart bots; QQ rate-limits an official bot's unprompted messages, and a person can switch them off). `PROACTIVE_PLATFORMS=qq_official` keeps openers on the official QQ bot, and `qq` on QQ through NapCat. See the [deployment guide](deploy.md#more-than-one-platform).
 
 ## Teach it
 
@@ -306,7 +356,7 @@ Editing `persona.txt` keeps what it learned. Changing `PERSONA_NAME` or `PERSONA
 
 ## The dashboard
 
-`personagent run` also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject, roll back or replace. Each conversation reads like the chat itself: who said what, the bot's replies, a note wherever it chose to stay quiet and why, a struck-through reply where it was corrected, and what it learned from that, right under it.
+The service also serves a local page at `http://127.0.0.1:8080/` that shows whether it is running and receiving messages, why it spoke or stayed quiet, and what it learned with the evidence behind each change, with buttons to promote, reject, roll back or replace. Each conversation reads like the chat itself: who said what, the bot's replies, a note wherever it chose to stay quiet and why, a struck-through reply where it was corrected, and what it learned from that, right under it.
 
 It opens only through its private link, which `personagent run` prints when it starts and `personagent doctor` prints on its last line:
 
@@ -352,7 +402,7 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 ## Privacy and consent
 
-Everything personagent stores stays on your machine, in the home folder: `.env`, `persona.txt`, `persona.card.json` and `runtime/`. In a clone none of it is committed to Git. It can hold credentials and real conversations, so back it up and keep it private.
+Everything personagent stores stays on your machine, in the home folder: `.env` with your keys, `persona.txt`, `persona.card.json`, `runtime/` and `platforms/` with the platform credentials. In a clone none of it is committed to Git. It can hold credentials and real conversations, so back it up and keep it private. The local page never puts the key in browser storage.
 
 The dashboard opens only through its private link with the token (see [the dashboard](#the-dashboard)); anyone who has the link and can reach the service can use it, so keep the link as private as `.env`. It never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
@@ -364,23 +414,25 @@ The model provider does see conversations:
 - When the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
 - With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples are sent to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
-Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Third-party QQ clients put the account at risk; read the [disclaimer](../DISCLAIMER.md).
+Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](../DISCLAIMER.md).
 
 ## Troubleshooting
 
 **Start with `personagent doctor`.** It checks the configuration, naming misspelled and renamed settings, and probes each service personagent depends on, then prints the dashboard's link. The probes send tiny requests and may cost a little credit. `--json` prints the same as JSON, and `--fix` renames settings retired in 1.0.
 
+**A platform will not connect.** The page says why when the platform refuses the credentials; check them in the platform's console, and for Discord that Message Content Intent is on. An expired QR code can be requested again, and a failed AstrBot download retried. The logs of what the page or `personagent up` started are in `runtime/desktop/` in the home folder.
+
 **It runs but never replies.** The three most common causes:
 
-1. The agent is off. The `personagent run` banner then says `OFF` and names the cause, usually a missing `LLM_API_KEY`: run `personagent init`.
-2. Nothing arrives. Open [the dashboard](#the-dashboard) through the link the banner printed; if nothing has arrived, the connector is not forwarding or not reaching personagent. The AstrBot plugin forwards only the `groups` and `dm_users` it lists (and on QQ, `aiocqhttp` must not be in its `excluded_platforms`); check also its `personagent_url`, and that `CONNECTOR_TOKEN` is the same on both sides.
+1. The agent is off. The `personagent run` banner then says `OFF` and names the cause, usually a missing `LLM_API_KEY`: set the key on the local page or run `personagent init`.
+2. Nothing arrives. Open [the dashboard](#the-dashboard) through the link `personagent doctor` prints; if nothing has arrived, the connector is not forwarding or not reaching personagent. On QQ, check which group messages the bot receives in QQ itself. With an AstrBot you run, the plugin forwards only the `groups` and `dm_users` it lists (and for NapCat, `aiocqhttp` must not be in its `excluded_platforms`); check also its `personagent_url`, and that `CONNECTOR_TOKEN` is the same on both sides.
 3. It was not called. Call it by name (`PERSONA_NAME`, matched as a whole word). In a group it considers joining in only after `CHAT_TRIGGER_COUNT` messages (30), and only when the gate says a person would.
 
 The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet).
 
 **Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `/health/details` probes the services too, and requires an `X-Personagent-Token` header once a token is configured.
 
-**It will not start.** `personagent run` stops with one sentence saying why: the port is taken, another personagent runs from the same home folder, a network address is set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 is still set (one `OLD -> NEW` line each; `personagent doctor --fix` renames them).
+**It will not start.** `personagent run` stops with one sentence saying why: the port is taken, another personagent runs from the same home folder, a network address is set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 is still set (one `OLD -> NEW` line each; `personagent doctor --fix` renames them). The page and `personagent up` pick a free port when 8080 is taken.
 
 **A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`; booleans are `true` / `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window. Blank (the default) means UTC+8 with `AGENT_LANG=zh` and this machine's time zone otherwise; set a number to choose another.
 
@@ -388,4 +440,12 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 1.0 renamed most settings, and personagent will not start while an old name is still set: it lists each one as `OLD -> NEW`, and `personagent doctor --fix` renames them in `.env`. The changelog's [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) has every step. Memory and what it learned carry over.
 
+## Status and other docs
+
+personagent 1.1.0 is on PyPI. QQ is the most exercised platform, through AstrBot in 1.0 and directly since 1.1. The WeChat, Telegram and Discord connections check credentials against the real services and are otherwise tested against stand-ins; the Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus jobs that install the package and drive the command and the local page.
+
 Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are for running from a clone; [tools.md](tools.md) describes them.
+
+- [Getting started](start.md) · [Deployment guide](deploy.md) · [Chinese step-by-step guide (QQ by scan, and troubleshooting)](deploy.zh-CN.md)
+- Connectors: [AstrBot plugin](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [protocol](connectors.md)
+- [Every setting](../.env.example) · [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md)

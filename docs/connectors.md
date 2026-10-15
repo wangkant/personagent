@@ -10,20 +10,20 @@ Connectors in this repository:
 
 | Connector | Reaches | Path |
 |---|---|---|
-| AstrBot plugin | every AstrBot adapter: QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, ... | `integrations/astrbot/` |
-| Satori | every Satori implementation (Koishi and others): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, email, ... | `integrations/satori/` |
-| Matrix | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages, ... | `integrations/matrix/` |
-| Built in | QQ official bots, personal WeChat (iLink), Telegram and Discord, run by the local page as `python -m persona_agent.direct` | `persona_agent/direct/` |
+| Direct | QQ official bots, personal WeChat (iLink), Telegram and Discord, with no other software; the local page and `personagent up` run it as one process, `python -m persona_agent.direct` | `persona_agent/direct/` |
+| AstrBot plugin | the platforms of AstrBot, a third-party bridge. The AstrBot that personagent manages for KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 and the rest gets it automatically; for an AstrBot you already run, `personagent connect astrbot` sets it up, or install it from AstrBot's WebUI and set `connector_token` | `integrations/astrbot/` |
+| Satori | every Satori implementation (Koishi and others, third-party): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, email, ... | `integrations/satori/` |
+| Matrix | Matrix rooms, and through third-party mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages, ... | `integrations/matrix/` |
 
-A new connector needs only this page and an HTTP client. The Python helper in
-`integrations/sdk/personagent_connector.py` signs requests and runs the outbox
-loop for you; it takes the base URL, the token and the connector's
-`connector_id`, and needs `httpx`.
+All four speak the protocol on this page. A new one needs only this page and an
+HTTP client. The Python helper in `integrations/sdk/personagent_connector.py`
+signs requests and runs the outbox loop for you; it takes the base URL, the
+token and the connector's `connector_id`, and needs `httpx`.
 
 ## Configuration
 
-The three connectors use the same names, so a setting means the same thing in
-each:
+The direct connector is configured by the local page. The other three use the
+same names, so a setting means the same thing in each:
 
 | Meaning | Satori | Matrix | AstrBot plugin key |
 |---|---|---|---|

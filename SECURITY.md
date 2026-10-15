@@ -47,6 +47,11 @@ them is a vulnerability.
 - **The SSRF guard.** Every fetch of a link, share card or image goes through
   one guard: public addresses only, every address a name resolves to checked,
   redirects checked at each hop.
+- **The local page.** `personagent start` serves it on 127.0.0.1 only. Its
+  API needs the token in the link the command opens (a new one each run),
+  and refuses a host other than `localhost`, `127.0.0.1` or `::1`, an
+  `Origin` other than the page's own, and forwarding headers. It sends a
+  strict content security policy.
 - **The dashboard.** Every request needs its own token, from
   `<runtime>/dashboard.token` (owner-only): the HttpOnly, `SameSite=Strict`
   cookie its private link sets, or the `X-Personagent-Dashboard-Token`
@@ -56,12 +61,15 @@ them is a vulnerability.
   strict content security policy, masks credentials in URLs it shows, and
   never shows a value whose name ends in `_KEY`, `_TOKEN`, `_SECRET` or
   `PASSWORD`.
-- **Secrets in `.env`.** API keys and tokens live in the home folder's `.env`.
-  Setup narrows its permissions where the operating system allows it.
+- **Secrets in the home folder.** API keys and tokens live in `.env`, and the
+  credentials of QQ, WeChat, Telegram and Discord bots in
+  `platforms/direct.json`. Both are made owner-only where the operating
+  system allows it.
   Anything that leaks them to a log, a response, a connector or another user is
   a vulnerability.
-- **The AstrBot plugin.** It refuses plain `http://` to anything but loopback,
-  and delivers outbox messages only to a conversation it has itself seen.
+- **The AstrBot plugin**, which hands AstrBot's messages to personagent. It
+  refuses plain `http://` to anything but loopback, and delivers outbox
+  messages only to a conversation it has itself seen.
 - **What it learns.** Planting an instruction or a memory in the bot from a chat
   without the corroboration the learning rule asks for, or making a change
   that the ledger cannot undo, is in scope.
@@ -74,7 +82,8 @@ them is a vulnerability.
 - Anything that needs control of the machine or of `.env`, or a connector that
   already holds the token.
 - Denial of service by a connector that holds the token.
-- Flaws in AstrBot, NapCat, Koishi, a model provider or another dependency:
+- Flaws in a chat platform's API, in third-party bridges such as AstrBot,
+  NapCat, Koishi or mautrix, in a model provider or in another dependency:
   report those upstream.
 
 ## Running it safely
