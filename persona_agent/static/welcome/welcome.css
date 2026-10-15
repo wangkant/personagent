@@ -113,17 +113,12 @@ a:hover {
   text-decoration: none;
 }
 .brand-mark {
-  background: var(--ink);
-  color: #fff;
-  width: 22px;
-  height: 22px;
   display: grid;
-  place-items: center;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  padding-bottom: 2px;
+  color: var(--ink);
+}
+.brand-mark svg {
+  width: 24px;
+  height: 24px;
 }
 .nav {
   width: 100%;
@@ -953,6 +948,10 @@ details[open] summary {
   max-width: 440px;
   margin: 10px auto 12px;
 }
+.panel-switch {
+  display: block;
+  margin: 10px auto 0;
+}
 #panel-done .secondary {
   margin-top: 14px;
 }
@@ -989,10 +988,6 @@ details[open] summary {
 #qr-box p {
   font-size: 13px;
   color: var(--muted);
-}
-#qr-box a {
-  font-size: 13px;
-  display: block;
 }
 #qr-box .quiet {
   margin: 9px auto;

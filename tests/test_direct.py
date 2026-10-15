@@ -202,6 +202,65 @@ def test_weixin_login_shows_the_code_and_returns_the_bot_token():
     assert values["weixin_oc_token"] == "bt" and values["weixin_oc_account_id"] == "b@im.bot"
 
 
+def _seal(secret: str, key: str) -> str:
+    import base64
+    import os
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    iv = os.urandom(12)
+    return base64.b64encode(iv + AESGCM(base64.b64decode(key)).encrypt(iv, secret.encode(), None)).decode()
+
+
+def test_qq_bind_shows_a_fresh_page_when_one_expires_and_unseals_the_secret():
+    keys, polls = [], []
+
+    def handler(request):
+        body = json.loads(request.content)
+        assert request.headers["Accept"] == "application/json"
+        if request.url.path == "/lite/create_bind_task":
+            keys.append(body["key"])
+            return httpx.Response(200, json={"retcode": 0, "data": {"task_id": f"t{len(keys)}"}})
+        assert request.url.path == "/lite/poll_bind_result"
+        polls.append(body["task_id"])
+        if body["task_id"] == "t1":
+            return httpx.Response(200, json={"retcode": 0, "data": {"status": 3}})
+        if len(polls) < 3:
+            return httpx.Response(200, json={"retcode": 0, "data": {"status": 1, "bot_appid": "0"}})
+        return httpx.Response(200, json={"retcode": 0, "data": {
+            "status": 2, "bot_appid": "102030", "user_openid": "o1",
+            "bot_encrypt_secret": _seal("the-secret", keys[-1])}})
+    shown = []
+    qq.asyncio.sleep, real_sleep = (lambda s: real_sleep(0)), qq.asyncio.sleep
+    try:
+        values = run(qq.bind(mock(handler), shown.append))
+    finally:
+        qq.asyncio.sleep = real_sleep
+    assert values == {"appid": "102030", "secret": "the-secret"}
+    assert [url.split("task_id=")[1].split("&")[0] for url in shown] == ["t1", "t2"]
+    assert all(url.startswith("https://q.qq.com/qqbot/openclaw/connect.html?") for url in shown)
+    # Each page has its own key, and none of them is ever shown.
+    assert len(set(keys)) == 2 and not any(k in u for k in keys for u in shown)
+
+
+def test_qq_bind_refuses_an_answer_it_cannot_open_or_a_portal_error():
+    def sealed_for_another_key(request):
+        if request.url.path == "/lite/create_bind_task":
+            return httpx.Response(200, json={"retcode": 0, "data": {"task_id": "t"}})
+        other = __import__("base64").b64encode(bytes(32)).decode()
+        return httpx.Response(200, json={"retcode": 0, "data": {
+            "status": 2, "bot_appid": "1", "bot_encrypt_secret": _seal("x", other)}})
+
+    def portal_error(request):
+        return httpx.Response(200, json={"retcode": 100, "msg": "busy"})
+    qq.asyncio.sleep, real_sleep = (lambda s: real_sleep(0)), qq.asyncio.sleep
+    try:
+        for handler in (sealed_for_another_key, portal_error):
+            with pytest.raises(qq.BindFailed):
+                run(qq.bind(mock(handler), lambda url: None))
+    finally:
+        qq.asyncio.sleep = real_sleep
+
+
 def test_weixin_keeps_context_tokens_and_echoes_them_when_replying(tmp_path):
     sent = []
     updates = iter([{"ret": 0, "get_updates_buf": "c1", "msgs": [

@@ -171,6 +171,19 @@ def test_connecting_requires_the_scope_and_valid_fields_before_any_work(client, 
                        ).status_code == 200
     workspace._future.result(timeout=5)
     assert jobs[-1] == ("scan", conn.platform("weixin_oc"))
+    # QQ scans unless the page says the values were pasted; WeChat has nothing to paste.
+    assert client.post(url, headers=HEADERS, json={"platform": "qq_official", "allowConversations": True}
+                       ).status_code == 200
+    workspace._future.result(timeout=5)
+    assert jobs[-1] == ("scan", conn.platform("qq_official"))
+    pasted = {"platform": "qq_official", "mode": "paste", "values": {"appid": "102", "secret": "s"},
+              "allowConversations": True}
+    assert client.post(url, headers=HEADERS, json=pasted).status_code == 200
+    workspace._future.result(timeout=5)
+    assert jobs[-1] == ("connect", conn.platform("qq_official"), {"appid": "102", "secret": "s"})
+    response = client.post(url, headers=HEADERS, json={"platform": "weixin_oc", "mode": "paste",
+                                                        "allowConversations": True})
+    assert response.status_code == 400 and response.json()["error"] == "invalid_platform"
 
 
 def test_a_wechat_scan_stores_the_token_where_the_page_never_returns_it(workspace, monkeypatch):
@@ -192,6 +205,30 @@ def test_a_wechat_scan_stores_the_token_where_the_page_never_returns_it(workspac
     summary = workspace.summary()
     assert summary["platforms"] == ["weixin_oc"] and summary["platformStatus"]["weixin_oc"] == "paused"
     assert "wx-private-token" not in json.dumps(summary)
+
+
+def test_a_qq_scan_keeps_the_bound_bot_and_hands_it_over_from_astrbot(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+    conn.save_entry(data, {"id": "qq_official", "type": "qq_official", "enable": True})
+    from persona_agent.direct import qq
+
+    async def bind(client, show):
+        show("https://q.qq.com/qqbot/openclaw/connect.html?task_id=t1&_wv=2")
+        assert workspace.job["stage"] == "scan" and workspace.job["qrImage"].startswith("data:image/png")
+        return {"appid": "102", "secret": "qq-private-secret"}
+    monkeypatch.setattr(qq, "bind", bind)
+    workspace.job = {"state": "working", "stage": "prepare", "platform": "qq_official"}
+    workspace._scan_direct(conn.platform("qq_official"))
+    assert direct_base.load_credentials(workspace.home)["qq_official"] == {
+        "appid": "102", "secret": "qq-private-secret"}
+    assert conn.connected(data) == []
+    assert "qq-private-secret" not in json.dumps(workspace.summary())
+
+    async def refused(client, show):
+        raise qq.BindFailed("expired")
+    monkeypatch.setattr(qq, "bind", refused)
+    with pytest.raises(RuntimeError, match="scan_failed"):
+        workspace._scan_direct(conn.platform("qq_official"))
 
 
 def test_a_failed_scan_saves_nothing(workspace, monkeypatch):

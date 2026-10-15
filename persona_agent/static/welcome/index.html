@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>personagent</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22%231c1c1a%22 d=%22M8.5 3.5h7a5.5 5.5 0 0 1 5.5 5.5v3a5.5 5.5 0 0 1-5.5 5.5h-4.6l-4.2 3.4a.6.6 0 0 1-1-.47v-3.3A5.5 5.5 0 0 1 3 12V9a5.5 5.5 0 0 1 5.5-5.5z%22/%3E%3Crect x=%228.6%22 y=%228.6%22 width=%222%22 height=%223.4%22 rx=%221%22 fill=%22%23fff%22/%3E%3Crect x=%2213.4%22 y=%228.6%22 width=%222%22 height=%223.4%22 rx=%221%22 fill=%22%23fff%22/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/assets/welcome.css" />
     <script src="/assets/welcome.js" defer></script>
   </head>
@@ -12,7 +13,7 @@
     <div class="shell">
       <aside class="sidebar">
         <a class="brand" href="#"
-          ><span class="brand-mark">p</span>personagent</a
+          ><span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8.5 3.5h7a5.5 5.5 0 0 1 5.5 5.5v3a5.5 5.5 0 0 1-5.5 5.5h-4.6l-4.2 3.4a.6.6 0 0 1-1-.47v-3.3A5.5 5.5 0 0 1 3 12V9a5.5 5.5 0 0 1 5.5-5.5z"/><rect x="8.6" y="8.6" width="2" height="3.4" rx="1" fill="#fff"/><rect x="13.4" y="8.6" width="2" height="3.4" rx="1" fill="#fff"/></svg></span>personagent</a
         >
         <nav aria-label="Navigation">
           <button class="nav active" data-view="chat">
@@ -294,6 +295,12 @@
               <button class="primary full" type="submit" id="panel-submit">
                 连接
               </button>
+              <button
+                type="button"
+                class="quiet panel-switch"
+                id="panel-mode"
+                hidden
+              ></button>
               <p class="footnote" data-t="scope">
                 连接后，角色会回复这个平台上的群聊和私聊。
               </p>
@@ -302,13 +309,6 @@
               <div id="qr-box" hidden>
                 <img id="qr-image" alt="QR code" />
                 <p id="scan-help"></p>
-                <a
-                  id="qr-link"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-t="openQQ"
-                  >在浏览器打开授权页面 ↗</a
-                >
               </div>
               <div id="progress-spinner" class="spinner"></div>
               <h2 id="progress-title"></h2>

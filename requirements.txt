@@ -15,3 +15,5 @@ ddgs>=9,<10
 websockets>=13,<16
 # Draws the WeChat login QR code for the local page (with Pillow, above).
 qrcode>=7.4,<9
+# Unseals the bot secret QQ's scan-to-bind flow returns (AES-GCM).
+cryptography>=44,<52

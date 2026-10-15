@@ -231,7 +231,8 @@ class Workspace:
                 args = ()
             elif action in ("scan", "connect", "disconnect"):
                 spec = conn.platform(kind)
-                if (action == "scan") != (spec.group == conn.SCAN) and action != "disconnect":
+                # A scan platform may also take pasted values, if it has fields.
+                if action == "scan" and spec.group != conn.SCAN or action == "connect" and not spec.fields:
                     raise ValueError("invalid_platform")
                 args = (spec, conn.clean_values(spec, values or {})) if action == "connect" else (spec,)
             else:
@@ -373,7 +374,10 @@ class Workspace:
 
     def _scan_direct(self, spec: conn.Platform) -> None:
         import httpx
-        from .direct import weixin
+        from .direct import qq, weixin
+
+        scan, failed = ((qq.bind, qq.BindFailed) if spec.kind == "qq_official"
+                        else (weixin.login, weixin.LoginFailed))
 
         def show(content: str) -> None:
             import base64
@@ -387,7 +391,7 @@ class Workspace:
 
         async def login() -> dict:
             async with httpx.AsyncClient() as client:
-                task = asyncio.create_task(weixin.login(client, show))
+                task = asyncio.create_task(scan(client, show))
                 while not task.done():
                     if self._cancelled or self._closed:
                         task.cancel()
@@ -396,7 +400,7 @@ class Workspace:
                 return task.result()
         try:
             values = asyncio.run(login())
-        except weixin.LoginFailed:
+        except failed:
             raise RuntimeError("scan_failed") from None
         except (httpx.HTTPError, ValueError):
             raise RuntimeError("network_failed") from None
@@ -575,8 +579,9 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         if payload.get("allowConversations") is not True:
             raise ValueError("permission_required")
         kind = str(payload.get("platform") or "")
-        action = "scan" if conn.platform(kind).group == conn.SCAN else "connect"
-        workspace.start_job(action, kind, payload.get("values") or {})
+        # A scan platform takes pasted values only when the page says so.
+        scan = conn.platform(kind).group == conn.SCAN and payload.get("mode") != "paste"
+        workspace.start_job("scan" if scan else "connect", kind, payload.get("values") or {})
         return {"ok": True}
 
     @app.post("/api/platforms/disconnect")

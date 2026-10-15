@@ -78,7 +78,9 @@ const translations = {
     paused: "已暂停",
     connectingState: "连接中",
     failedState: "连接失败",
-    openQQ: "在浏览器打开授权页面 ↗",
+    pasteInstead: "改为手动填写",
+    scanInstead: "改回扫码",
+    pasteNote: "在平台后台创建机器人后，把下面几项复制过来。",
     cancel: "取消",
     startServices: "一键启动",
     stopServices: "暂停运行",
@@ -92,7 +94,7 @@ const translations = {
       "首次使用会下载 AstrBot 和所需运行环境，可能需要几分钟。保持页面打开即可，不需要手动操作。",
     scanTitle: "用手机扫一下。",
     scanHint: "确认后会自动保存并启动。二维码过期可以重新获取。",
-    scanHelp_qq_official: "用手机 QQ 扫码，并确认创建或绑定机器人。",
+    scanHelp_qq_official: "用手机 QQ 扫码，确认新建或选用一个机器人。",
     scanHelp_weixin_oc: "用手机微信扫码，并确认登录。",
     startTitle: "正在连接你的角色…",
     startHint: "正在启动角色服务和聊天平台，很快就好。",
@@ -231,7 +233,9 @@ const translations = {
     paused: "Paused",
     connectingState: "Connecting",
     failedState: "Failed",
-    openQQ: "Open the authorization page ↗",
+    pasteInstead: "Paste values instead",
+    scanInstead: "Scan instead",
+    pasteNote: "Create the bot in the platform's console, then copy these values here.",
     cancel: "Cancel",
     startServices: "Start everything",
     stopServices: "Pause",
@@ -246,7 +250,7 @@ const translations = {
     scanTitle: "Scan with your phone.",
     scanHint:
       "After you confirm, everything is saved and started. An expired code can be refreshed.",
-    scanHelp_qq_official: "Scan with mobile QQ and confirm creating or binding the bot.",
+    scanHelp_qq_official: "Scan with mobile QQ and confirm a new bot or one you made.",
     scanHelp_weixin_oc: "Scan with WeChat and confirm the login.",
     startTitle: "Connecting your character…",
     startHint: "Starting the character service and chat platform.",
@@ -313,6 +317,7 @@ let lang = navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
 let state = null,
   catalog = null,
   selected = null,
+  pasting = false,
   fresh = false,
   panelError = "",
   view = "chat",
@@ -648,13 +653,19 @@ function buildFields(keep = false) {
       return chip;
     }),
   );
-  $("panel-note").textContent = pick(item.note);
-  $("panel-note").hidden = !pick(item.note);
+  // A scan platform with fields can take pasted values instead.
+  const scanning = item.group === "scan" && !pasting;
+  const note = item.group === "scan" && pasting ? t("pasteNote") : pick(item.note);
+  $("panel-note").textContent = note;
+  $("panel-note").hidden = !note;
   $("panel-guide").href = item.guide || "#";
-  $("panel-guide").hidden = !item.guide;
-  $("panel-howto").hidden = !pick(item.note) && !item.guide;
+  $("panel-guide").hidden = !item.guide || scanning;
+  $("panel-howto").hidden = !note && $("panel-guide").hidden;
+  $("panel-mode").hidden = item.group !== "scan" || !item.fields.length;
+  $("panel-mode").textContent = t(pasting ? "scanInstead" : "pasteInstead");
   const box = $("panel-fields");
   box.replaceChildren();
+  box.hidden = scanning;
   for (const field of item.fields) {
     const label = document.createElement("label");
     label.htmlFor = `field-${field.key}`;
@@ -667,13 +678,11 @@ function buildFields(keep = false) {
     input.type = field.secret ? "password" : "text";
     if (field.kind === "port") input.inputMode = "numeric";
     input.placeholder = field.default;
-    input.required = field.required && !field.default;
+    input.required = field.required && !field.default && !scanning;
     input.value = kept[field.key] || "";
     box.append(label, input);
   }
-  $("panel-submit").textContent = t(
-    item.group === "scan" ? "getQr" : "connectNow",
-  );
+  $("panel-submit").textContent = t(scanning ? "getQr" : "connectNow");
 }
 function openPanel(kind) {
   const job = state.job;
@@ -682,6 +691,7 @@ function openPanel(kind) {
     return;
   }
   selected = kind;
+  pasting = false;
   // Back to a platform whose job is still running: keep watching it.
   fresh = job.state === "working" && job.platform === kind;
   panelError = "";
@@ -790,14 +800,6 @@ function renderStatus() {
     job.qrImage.startsWith("data:image/png;base64,")
   )
     $("qr-image").src = job.qrImage;
-  try {
-    const url = new URL(job.qrUrl);
-    $("qr-link").hidden =
-      url.protocol !== "https:" || url.hostname !== "q.qq.com";
-    if (!$("qr-link").hidden) $("qr-link").href = url.href;
-  } catch {
-    $("qr-link").hidden = true;
-  }
 }
 async function poll() {
   if (ended) return;
@@ -994,13 +996,15 @@ async function disconnect(kind) {
 $("platform-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const values = {};
-  for (const input of $("panel-fields").querySelectorAll("input"))
-    values[input.name] = input.value;
+  if (!$("panel-fields").hidden)
+    for (const input of $("panel-fields").querySelectorAll("input"))
+      values[input.name] = input.value;
   panelError = "";
   try {
     await api("platforms/connect", {
       platform: selected,
       values,
+      mode: pasting ? "paste" : "",
       allowConversations: true,
     });
     fresh = true;
@@ -1009,6 +1013,12 @@ $("platform-form").addEventListener("submit", async (event) => {
     panelError = t(error.message);
     renderStatus();
   }
+});
+$("panel-mode").addEventListener("click", () => {
+  pasting = !pasting;
+  panelError = "";
+  buildFields(true);
+  renderStatus();
 });
 for (const id of ["panel-back", "panel-finish"])
   $(id).addEventListener("click", () => {

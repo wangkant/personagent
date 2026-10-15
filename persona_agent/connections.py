@@ -14,7 +14,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from .astrbot_install import AstrBotInstallation
 
@@ -57,6 +57,23 @@ def _port(default: int) -> Field:
                  kind="port", default=str(default))
 
 
+# Slack's documented pre-filled app link: Socket Mode on, and the scopes and
+# events AstrBot's Slack adapter uses, so only the two tokens are left.
+_SLACK_MANIFEST = {
+    "display_information": {"name": "personagent"},
+    "features": {"bot_user": {"display_name": "personagent", "always_online": True},
+                 "app_home": {"messages_tab_enabled": True, "messages_tab_read_only_enabled": False}},
+    "oauth_config": {"scopes": {"bot": [
+        "app_mentions:read", "chat:write", "users:read", "files:read", "files:write",
+        "channels:history", "groups:history", "im:history", "mpim:history",
+        "channels:read", "groups:read", "im:read", "mpim:read", "im:write"]}},
+    "settings": {"event_subscriptions": {"bot_events": [
+        "app_mention", "message.channels", "message.groups", "message.im", "message.mpim"]},
+        "socket_mode_enabled": True, "org_deploy_enabled": False, "token_rotation_enabled": False},
+}
+SLACK_NEW_APP = ("https://api.slack.com/apps?new_app=1&manifest_json="
+                 + quote(json.dumps(_SLACK_MANIFEST, separators=(",", ":")), safe=""))
+
 # Callbacks go to the adapter's own port: the unified mode would route them
 # through the dashboard, which the managed AstrBot does not run.
 _OWN_PORT = {"unified_webhook_mode": False, "callback_server_host": "0.0.0.0"}
@@ -67,11 +84,13 @@ PLATFORMS: tuple[Platform, ...] = (
                    "WeChat does not deliver group messages to it.",
                    "用微信扫码，登录一个个人微信机器人。它只能私聊，微信不会把群消息交给它。"),
              groups=False),
-    Platform("qq_official", ("QQ", "QQ"), KEY,
+    # Scanned through QQ's bind flow; the fields are for a bot made elsewhere.
+    Platform("qq_official", ("QQ", "QQ"), SCAN,
              (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret")),
              guide="https://q.qq.com/qqbot/openclaw/login.html",
-             note=("Scan on QQ's page to create a bot, then copy its AppID and AppSecret here.",
-                   "在 QQ 官方页面扫码创建机器人，再把 AppID 和 AppSecret 复制到这里。")),
+             note=("Scan with mobile QQ and confirm: it creates a bot, or uses one you made, and "
+                   "personagent gets its keys by itself.",
+                   "用手机 QQ 扫码并确认：会新建一个机器人，或用你已有的，密钥由 personagent 自动取回。")),
     Platform("telegram", ("Telegram", "Telegram"), KEY,
              (_token("telegram_token", "Bot token", "机器人 Token"),),
              {"start_message": "", "telegram_command_register": False,
@@ -105,9 +124,11 @@ PLATFORMS: tuple[Platform, ...] = (
              (_token("bot_token", "Bot token (xoxb-…)", "Bot Token（xoxb-…）"),
               _token("app_token", "App token (xapp-…)", "App Token（xapp-…）")),
              {"slack_connection_mode": "socket"},
-             guide="https://api.slack.com/apps",
-             note=("Turn on Socket Mode; no public address needed.",
-                   "打开 Socket Mode，不需要公网地址。")),
+             guide=SLACK_NEW_APP,
+             note=("The link creates the app with Socket Mode, scopes and events set. Then add an "
+                   "app-level token with connections:write, install the app, and paste both tokens.",
+                   "下面的链接会创建一个已设好 Socket Mode、权限和事件的应用。之后生成一个带 "
+                   "connections:write 的 App-Level Token，安装到工作区，再把两个 Token 粘贴过来。")),
     Platform("wecom_ai_bot", ("WeCom AI bot", "企业微信智能机器人"), KEY,
              (_plain("wecomaibot_ws_bot_id", "Bot ID", "Bot ID"),
               _token("wecomaibot_ws_secret", "Secret", "Secret")),

@@ -8,13 +8,16 @@ switch off."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import collections
 import json
 import logging
+import os
 import random
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -38,6 +41,69 @@ FRESH = {4004, 4006, 4007}
 # An @ of the bot can arrive both as a group @-message and as a plain group
 # message with one id; the plain copy waits this long for the @ copy.
 AT_GRACE_S = 1.5
+
+# Scan to bind, as Tencent's MIT-licensed qqbot-agent-sdk does it
+# (onboard.py): mobile QQ creates or picks a bot when someone confirms the
+# page, and the portal returns its secret sealed with a key only we hold.
+PORTAL = "https://q.qq.com"
+BIND_PAGE = PORTAL + "/qqbot/openclaw/connect.html?task_id={task}&_wv=2"
+BIND_TTL_S = 300
+BIND_REFRESHES = 3
+BIND_POLL_S = 2
+
+
+class BindFailed(Exception):
+    """A scan that did not end in a bot: expired, refused or unreadable."""
+
+
+async def _portal(client: httpx.AsyncClient, path: str, payload: dict) -> dict:
+    # Without Accept the portal answers with an anti-bot page, not JSON.
+    response = await client.post(PORTAL + path, json=payload, timeout=10,
+                                 headers={"Accept": "application/json"})
+    response.raise_for_status()
+    answer = response.json()
+    if answer.get("retcode") != 0:
+        raise BindFailed(f"retcode {answer.get('retcode')}")
+    return answer.get("data") or {}
+
+
+def _unseal(sealed: str, key: str) -> str:
+    """AES-256-GCM: a 12-byte IV, then the ciphertext and its 16-byte tag."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    raw = base64.b64decode(sealed)
+    return AESGCM(base64.b64decode(key)).decrypt(raw[:12], raw[12:], None).decode("utf-8")
+
+
+async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
+    """Show bind pages through `show(url)` until someone confirms one in
+    mobile QQ; returns the values to store."""
+    loop = asyncio.get_running_loop()
+    for _ in range(BIND_REFRESHES + 1):
+        key = base64.b64encode(os.urandom(32)).decode()
+        task = str((await _portal(client, "/lite/create_bind_task", {"key": key})).get("task_id") or "")
+        if not task:
+            raise BindFailed("no task")
+        show(BIND_PAGE.format(task=quote(task)))
+        deadline = loop.time() + BIND_TTL_S
+        while loop.time() < deadline:
+            await asyncio.sleep(BIND_POLL_S)
+            try:
+                result = await _portal(client, "/lite/poll_bind_result", {"task_id": task})
+            except (httpx.HTTPError, ValueError):
+                continue    # one lost poll; the deadline still holds
+            if result.get("status") == 2:
+                appid = str(result.get("bot_appid") or "")
+                sealed = str(result.get("bot_encrypt_secret") or "")
+                if not appid.strip("0") or not sealed:
+                    raise BindFailed("no credentials")
+                try:
+                    return {"appid": appid, "secret": _unseal(sealed, key)}
+                except Exception:
+                    raise BindFailed("unreadable secret") from None
+            if result.get("status") == 3:
+                break       # expired: show a new page
+    raise BindFailed("expired")
 
 
 class QQ(Platform):

@@ -6,15 +6,16 @@ import pytest
 from persona_agent import connections as conn
 
 
-def test_every_platform_is_listed_once_and_scan_platforms_ask_for_nothing():
+def test_every_platform_is_listed_once_and_only_scan_platforms_may_ask_for_nothing():
     kinds = [p.kind for p in conn.PLATFORMS]
     assert len(kinds) == len(set(kinds))
-    assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"weixin_oc"}
+    assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"weixin_oc", "qq_official"}
     assert {p.kind for p in conn.PLATFORMS if conn.is_direct(p.kind)} == {
         "qq_official", "weixin_oc", "telegram", "discord"}
     for item in conn.PLATFORMS:
         assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED)
-        assert (item.group == conn.SCAN) == (not item.fields)
+        # A scan platform's fields, if any, are for a bot made elsewhere.
+        assert item.fields or item.group == conn.SCAN
         assert all(f.required for f in item.fields) or item.group == conn.ADVANCED
     # LINE always routes callbacks through AstrBot's dashboard, which does not run.
     assert "line" not in kinds
@@ -77,3 +78,18 @@ def test_scope_opens_and_closes_one_platform_only():
     assert cfg == {"groups": ["123", "discord:*", "telegram:*"], "dm_users": ["telegram:*"]}
     conn.scope(cfg, "telegram", allow=False)
     assert cfg == {"groups": ["123", "discord:*"], "dm_users": []}
+
+
+def test_the_slack_guide_creates_an_app_with_socket_mode_and_what_the_adapter_reads():
+    from urllib.parse import parse_qs, urlsplit
+    import json
+
+    link = urlsplit(conn.platform("slack").guide)
+    query = parse_qs(link.query)
+    assert (link.scheme, link.netloc, link.path) == ("https", "api.slack.com", "/apps")
+    assert query["new_app"] == ["1"]
+    manifest = json.loads(query["manifest_json"][0])
+    assert manifest["settings"]["socket_mode_enabled"] is True
+    assert {"app_mention", "message.im", "message.channels"} <= set(
+        manifest["settings"]["event_subscriptions"]["bot_events"])
+    assert {"chat:write", "app_mentions:read", "im:history"} <= set(manifest["oauth_config"]["scopes"]["bot"])
