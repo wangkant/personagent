@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The page turns on the optional features.** A **More features** card in settings turns on Tavily search (DuckDuckGo stays the free default), image understanding (with the chat service's key or another endpoint) and speaking first on chosen apps. A blank key keeps the saved one, a key is never sent to an address it was not saved for, none is returned to the page, and saving restarts a running agent.
 - **A getting-started bar** in the Chat view points a new user to connecting an app until one is connected, and can be closed.
 
+### Security
+
+- **A value saved to `.env` can no longer write a line of its own.** A name or key holding U+2028, a vertical tab or another line break other than `
+` was written bare and later split into a new line, which could set `LLM_BASE_URL` and send the saved key elsewhere. Such values are quoted now, `.env` is split into lines the way dotenv splits it, and a `#` after any whitespace is quoted too.
+- **The page refuses `${...}` in what it saves.** dotenv expands it, even inside quotes, so `${LLM_API_KEY}` typed as a vision key or a name would have become the chat key.
+
 ## [1.1.0] — 2026-10-15
 
 personagent 1.1 lives in a local page and joins chats on its own: add one model key in the browser, chat with the character there, and connect it from the same page. QQ, WeChat, Telegram and Discord are connected by personagent itself; the other platforms go through an AstrBot that it installs and runs with no dashboard of its own.

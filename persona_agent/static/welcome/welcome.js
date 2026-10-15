@@ -523,7 +523,7 @@ function showView(next) {
   $("features-card").hidden = !(setup && state.configured);
   if (setup && state.configured) {
     loadPersona();
-    fillFeatures();
+    if (!featuresDirty) fillFeatures();
   }
   if (next === "chat" && state.configured) $("message").focus();
 }
@@ -780,8 +780,13 @@ function renderConnected(connected, working) {
 }
 // ---- the optional features, on the settings screen
 const GS_KEY = "personagent-getting-started-closed";
+// Edits in the features card survive a re-render until they are saved.
+let featuresDirty = false,
+  gettingStartedClosed = false;
 function fillFeatures() {
   const features = state.features;
+  featuresDirty = false;
+  delete $("tavily-clear").dataset.clear;
   $("search-state").textContent = t(features.search === "tavily" ? "searchTavily" : "searchFree");
   $("tavily-key").value = "";
   $("tavily-key").placeholder = t(features.search === "tavily" ? "tavilyKeep" : "tavilyNew");
@@ -818,6 +823,7 @@ function featureFields() {
   $("proactive-fields").hidden = !$("proactive-on").checked || !state.platforms.length;
 }
 function closedGettingStarted() {
+  if (gettingStartedClosed) return true;
   try {
     return localStorage.getItem(GS_KEY) === "1";
   } catch {
@@ -1000,7 +1006,8 @@ $("features-save").addEventListener("click", async () => {
     state = await api("features", {
       search: {
         tavilyKey: $("tavily-key").value,
-        clear: $("tavily-clear").dataset.clear === "1",
+        // A key typed after "back to free search" wins over the clear.
+        clear: $("tavily-clear").dataset.clear === "1" && !$("tavily-key").value.trim(),
       },
       vision: {
         enabled: $("vision-on").checked,
@@ -1032,8 +1039,12 @@ $("gs-close").addEventListener("click", () => {
   try {
     localStorage.setItem(GS_KEY, "1");
   } catch {}
+  gettingStartedClosed = true;
   $("getting-started").hidden = true;
 });
+$("features-card").addEventListener("input", () => (featuresDirty = true));
+$("features-card").addEventListener("change", () => (featuresDirty = true));
+$("tavily-key").addEventListener("input", () => delete $("tavily-clear").dataset.clear);
 $("persona-text").addEventListener("input", personaEdited);
 $("persona-undo").addEventListener("click", () => {
   $("persona-text").value = personaShown;

@@ -167,8 +167,16 @@ class Workspace:
             lang = "zh" if payload.get("lang") == "zh" else "en"
             name = str(payload.get("name") or sw.DEFAULT_NAMES[lang]).strip()
             character = str(payload.get("character") or "warm-listener")
-            if not name or len(name) > 64 or character not in (*sw.PERSONA_KEYS, "custom"):
+            if (not name or len(name) > 64 or _expands(name)
+                    or character not in (*sw.PERSONA_KEYS, "custom")):
                 raise ValueError("invalid_character")
+            # dotenv would read ${VAR} back as another setting, a key included.
+            if _expands(key):
+                raise ValueError("key_required")
+            if _expands(base):
+                raise ValueError("invalid_url")
+            if _expands(model):
+                raise ValueError("model_required")
             try:
                 probe = sw.probe_key(base, key, model, timeout=20)
             except Exception:
@@ -231,7 +239,7 @@ class Workspace:
                 values["TAVILY_API_KEY"] = tavily
             if vision.get("enabled"):
                 model = str(vision.get("model") or "").strip()
-                if not model or len(model) > 256 or any(c.isspace() for c in model):
+                if not model or len(model) > 256 or any(c.isspace() for c in model) or _expands(model):
                     raise ValueError("model_required")
                 if vision.get("sameAsChat"):
                     base, key = old.get("LLM_BASE_URL", ""), old.get("LLM_API_KEY", "")
@@ -249,8 +257,13 @@ class Workspace:
             platforms = proactive.get("platforms") or []
             if not isinstance(platforms, list) or any(str(p) not in PLATFORM_KINDS for p in platforms):
                 raise ValueError("invalid_feature")
+            # The page offers only connected apps: an entry it could not show
+            # (qq for NapCat, an app connected later) is kept, or an empty
+            # list would widen the restriction to every platform.
+            offered = set(self.summary()["platforms"])
+            kept = [p for p in sw.split_ids(old.get("PROACTIVE_PLATFORMS", "")) if p not in offered]
             values["PROACTIVE_ENABLED"] = "true" if proactive.get("enabled") else "false"
-            values["PROACTIVE_PLATFORMS"] = ",".join(dict.fromkeys(str(p) for p in platforms))
+            values["PROACTIVE_PLATFORMS"] = ",".join(dict.fromkeys(kept + [str(p) for p in platforms]))
             sw.write_env(self.env, values)
             self._restart_agent()
             return self.summary()
@@ -533,10 +546,16 @@ class Workspace:
         self.worker.shutdown(wait=False, cancel_futures=True)
 
 
+def _expands(text: str) -> bool:
+    """Would dotenv read `text` back as another setting? It expands ${VAR}
+    even inside quotes, so ${LLM_API_KEY} saved as a vision key is the chat key."""
+    return "${" in str(text)
+
+
 def _key(value) -> str:
-    """A pasted key: one token, no spaces or line breaks."""
+    """A pasted key: one token, no spaces, line breaks or ${...}."""
     text = str(value or "").strip()
-    if len(text) > 4096 or any(c.isspace() for c in text):
+    if len(text) > 4096 or any(c.isspace() for c in text) or _expands(text):
         raise ValueError("invalid_feature")
     return text
 
@@ -545,7 +564,8 @@ def _endpoint(value) -> str:
     """An OpenAI-compatible base URL: https, or http only on this computer."""
     base = str(value or "").strip()
     parsed = urlsplit(base)
-    if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password:
+    if (parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username
+            or parsed.password or _expands(base)):
         raise ValueError("invalid_url")
     if parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("https_required")

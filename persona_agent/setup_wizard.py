@@ -478,10 +478,17 @@ def _say(text: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 def env_literal(value) -> str:
-    """`value` as one .env right-hand side that dotenv reads back unchanged."""
+    """`value` as one .env right-hand side that dotenv reads back unchanged.
+
+    Single quotes keep it whole: a '#' after any whitespace would start a
+    comment, and a line break of any kind (U+2028 included) must not let a
+    value write a line of its own. dotenv expands ${VAR} even inside quotes,
+    so callers taking values from outside refuse it."""
     text = str(value)
-    if (text != text.strip() or text.startswith("#") or " #" in text
-            or any(ch in text for ch in "\"'\n\r")):
+    if (text != text.strip() or text.startswith("#")
+            or re.search(r"\s#", text)
+            or any(ch in "\"'" or (ch.isspace() and ch != " ") or not ch.isprintable() and ch != " "
+                   for ch in text)):
         return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
     return text
 
@@ -490,7 +497,11 @@ def set_env_values(env_text: str, values: dict) -> str:
     """`env_text` with every uncommented KEY= line of a key in `values`
     rewritten (dotenv reads the last one, so all of them); keys not present
     are appended. Comments and order are kept."""
-    lines = env_text.splitlines()
+    # Lines as dotenv splits them; str.splitlines also breaks at U+2028 and
+    # friends, which would turn part of a quoted value into a line of its own.
+    lines = re.split(r"\r\n|\n|\r", env_text) if env_text else []
+    if lines and lines[-1] == "":
+        lines.pop()
     found = set()
     for i, line in enumerate(lines):
         m = re.match(r"^([A-Z][A-Z0-9_]*)=", line)

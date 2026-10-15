@@ -475,6 +475,14 @@ def test_features_keep_keys_out_of_state_and_never_forward_one(client, workspace
                        ({"search": {"tavilyKey": "has space"}}, "invalid_feature")):
         response = client.post(url, headers=HEADERS, json=bad)
         assert response.status_code == 400 and response.json()["error"] == error, bad
+    # dotenv would expand ${...} into another setting, the chat key included.
+    for bad, error in (({"search": {"tavilyKey": "${LLM_API_KEY}"}}, "invalid_feature"),
+                       ({"vision": {"enabled": True, "model": "vl", "baseUrl": "https://x.example/v1",
+                                    "apiKey": "${LLM_API_KEY}"}}, "invalid_feature")):
+        response = client.post(url, headers=HEADERS, json=bad)
+        assert response.status_code == 400 and response.json()["error"] == error, bad
+    response = client.post("/api/config", headers=HEADERS, json={"apiKey": "k", "name": "${LLM_API_KEY}"})
+    assert response.status_code == 400 and response.json()["error"] == "invalid_character"
     cleared = client.post(url, headers=HEADERS, json={"search": {"clear": True}}).json()
     assert cleared["features"]["search"] == "free" and not cleared["features"]["vision"]["enabled"]
     assert workspace.config()["VISION_API_KEY"] == "chat-key"   # off keeps the key for next time
