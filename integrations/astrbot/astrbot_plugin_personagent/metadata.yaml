@@ -12,7 +12,7 @@ desc: |
   The way AstrBot hands messages to personagent, for platforms personagent does not connect itself.
   Needs the personagent service: `python -m pip install personagent`, then `personagent connect astrbot`,
   which installs and configures this plugin for you.
-version: 1.1.0
+version: 1.2.0
 author: Qiankang Wang
 repo: https://github.com/wangkant/astrbot_plugin_personagent
 astrbot_version: ">=4.25,<5"

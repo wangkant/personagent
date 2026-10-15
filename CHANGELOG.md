@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-15
+
+The local page turns on web search, image understanding and speaking first, points a new user to connecting an app, and no value saved to `.env` can reach past its own line or name another setting.
+
 ### Added
 
 - **The page turns on the optional features.** A **More features** card in settings turns on Tavily search (DuckDuckGo stays the free default), image understanding (with the chat service's key or another endpoint) and speaking first on chosen apps. A blank key keeps the saved one, a key is never sent to an address it was not saved for, none is returned to the page, and saving restarts a running agent.
@@ -13,8 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **A value saved to `.env` can no longer write a line of its own.** A name or key holding U+2028, a vertical tab or another line break other than `
-` was written bare and later split into a new line, which could set `LLM_BASE_URL` and send the saved key elsewhere. Such values are quoted now, `.env` is split into lines the way dotenv splits it, and a `#` after any whitespace is quoted too.
+- **A value saved to `.env` can no longer write a line of its own.** A name or key holding U+2028, a vertical tab or another line break other than `\n` was written bare and later split into a new line, which could set `LLM_BASE_URL` and send the saved key elsewhere. Such values are quoted now, `.env` is split into lines the way dotenv splits it, and a `#` after any whitespace is quoted too.
 - **The page refuses `${...}` in what it saves.** dotenv expands it, even inside quotes, so `${LLM_API_KEY}` typed as a vision key or a name would have become the chat key.
 
 ## [1.1.0] — 2026-10-15
@@ -352,7 +355,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/wangkant/personagent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wangkant/personagent/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/wangkant/personagent/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/wangkant/personagent/compare/v1.0.0...v1.0.1
