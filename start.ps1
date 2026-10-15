@@ -48,7 +48,7 @@ $pySource = $venvPy
 # suspend Stop and read $LASTEXITCODE instead.
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" > $null 2>&1
+& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs, websockets, qrcode, cryptography" > $null 2>&1
 $depsOk = ($LASTEXITCODE -eq 0)
 $ErrorActionPreference = $prevEAP
 if (-not $depsOk) {

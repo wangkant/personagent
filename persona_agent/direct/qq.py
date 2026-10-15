@@ -69,15 +69,23 @@ async def _portal(client: httpx.AsyncClient, path: str, payload: dict) -> dict:
 
 def _unseal(sealed: str, key: str) -> str:
     """AES-256-GCM: a 12-byte IV, then the ciphertext and its 16-byte tag."""
+    from cryptography.exceptions import InvalidTag
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    raw = base64.b64decode(sealed)
-    return AESGCM(base64.b64decode(key)).decrypt(raw[:12], raw[12:], None).decode("utf-8")
+    try:
+        raw = base64.b64decode(sealed, validate=True)
+        return AESGCM(base64.b64decode(key)).decrypt(raw[:12], raw[12:], None).decode("utf-8")
+    except (InvalidTag, ValueError):
+        # binascii.Error and UnicodeDecodeError are ValueErrors too.
+        raise BindFailed("unreadable secret") from None
 
 
 async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
     """Show bind pages through `show(url)` until someone confirms one in
     mobile QQ; returns the values to store."""
+    # Missing, it would fail only after someone confirmed, losing that bot's secret.
+    import cryptography.hazmat.primitives.ciphers.aead  # noqa: F401
+
     loop = asyncio.get_running_loop()
     for _ in range(BIND_REFRESHES + 1):
         key = base64.b64encode(os.urandom(32)).decode()
@@ -97,10 +105,7 @@ async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
                 sealed = str(result.get("bot_encrypt_secret") or "")
                 if not appid.strip("0") or not sealed:
                     raise BindFailed("no credentials")
-                try:
-                    return {"appid": appid, "secret": _unseal(sealed, key)}
-                except Exception:
-                    raise BindFailed("unreadable secret") from None
+                return {"appid": appid, "secret": _unseal(sealed, key)}
             if result.get("status") == 3:
                 break       # expired: show a new page
     raise BindFailed("expired")

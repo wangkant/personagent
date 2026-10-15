@@ -30,6 +30,7 @@ from .direct import base as direct_base
 from . import setup_wizard as sw
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
+from .settings import normalize_lang
 from .storage import FileLock, LockUnavailable, atomic_write_text
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
@@ -187,7 +188,7 @@ class Workspace:
             if path.is_file():
                 return {"text": path.read_text(encoding="utf-8").strip()}
             values = self.config()
-            lang = "zh" if values.get("AGENT_LANG") == "zh" else "en"
+            lang = "zh" if normalize_lang(values.get("AGENT_LANG")) == "zh" else "en"
             text = sw.persona_text(sw.TEMPLATE, name=values.get("PERSONA_NAME") or sw.DEFAULT_NAMES[lang],
                                    lang=lang, admin_name=values.get("ADMIN_NAME", ""),
                                    admin_relationship=values.get("ADMIN_RELATIONSHIP", ""))

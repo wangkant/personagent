@@ -702,7 +702,7 @@ _TYPOGRAPHY_MAP = {
 # exponent ('2¹⁰' is 2^10, not 2^1^0) and a fraction after a digit is a mixed
 # number ('1½' is 1 1/2, not 11/2).
 _SUPERSCRIPT_RUN_RE = re.compile(r"[\u00b9\u00b2\u00b3\u2070\u2074-\u2079]{2,}")
-_MIXED_FRACTION_RE = re.compile(r"(?<=\d)(?=[\u00bc-\u00be\u2150-\u215f\u2189])")
+_MIXED_FRACTION_RE = re.compile(r"(?<=[\d\u00b9\u00b2\u00b3\u2070\u2074-\u2079\u2080-\u2089])(?=[\u00bc-\u00be\u2150-\u215f\u2189])")
 
 
 def _spell_number_runs(text: str) -> str:

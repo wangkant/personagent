@@ -2922,7 +2922,9 @@ def test_the_map_does_not_misstate_a_number() -> None:
             ("5 ± 0.1 mm", "5 +/- 0.1 mm", "plus-minus"),
             ("≈3 km away", "~3 km away", "approximately"),
             ("like ≠ love", "like != love", "not equal keeps its meaning"),
-            ("等了1½小时", "等了1 1/2小时", "zh mixed number")]:
+            ("等了1½小时", "等了1 1/2小时", "zh mixed number"),
+            ("x²½ cups", "x^2 1/2 cups", "a fraction after an exponent stays apart"),
+            ("₂½ ok", "2 1/2 ok", "a fraction after an index stays apart")]:
         lang = "zh" if why.startswith("zh") else "en"
         out = TP._sanitize_reply(raw, lang)
         check(f"a number reads as itself: {why}", out == expected,

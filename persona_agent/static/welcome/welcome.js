@@ -496,6 +496,7 @@ async function loadPersona() {
     const { text } = await api("persona");
     personaShown = text;
     $("persona-text").value = text;
+    $("persona-error").hidden = true;
     personaEdited();
   } catch (error) {
     $("persona-error").textContent = t(error.message);
@@ -899,6 +900,8 @@ $("persona-save").addEventListener("click", async () => {
   $("persona-error").hidden = true;
   $("persona-save").disabled = true;
   $("persona-save").textContent = t("personaSaving");
+  // The save waits for the agent to restart; edits made meanwhile would be lost.
+  $("persona-text").readOnly = true;
   const text = $("persona-text").value;
   try {
     state = await api("persona", { text });
@@ -914,6 +917,7 @@ $("persona-save").addEventListener("click", async () => {
     $("persona-error").hidden = false;
   } finally {
     personaSaving = false;
+    $("persona-text").readOnly = false;
     $("persona-save").disabled = false;
     $("persona-save").textContent = t("personaSave");
   }
@@ -935,6 +939,11 @@ $("settings-form").addEventListener("submit", async (event) => {
       character: $("character").value,
       lang,
     });
+    // A chosen personality rewrote persona.txt: drop the box's old text.
+    if ($("character").value !== "custom") {
+      personaShown = null;
+      $("persona-text").value = "";
+    }
     populate();
     renderStatus();
     showView("chat");

@@ -59,7 +59,7 @@ def ensure_deps(venv: Path) -> None:
     # `python -m pip`: venvs made by some tools (uv) have no pip.exe shim.
     py = str(_venv_python(venv))
     try:
-        if subprocess.call([py, "-c", "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs"],
+        if subprocess.call([py, "-c", "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs, websockets, qrcode, cryptography"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
             return
     except OSError:

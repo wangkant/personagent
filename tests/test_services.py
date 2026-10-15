@@ -17,9 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Stands in for a service: says which process it is and how it was run, then waits.
 PROBE = """\
-import os, sys, time
+import os, subprocess, sys, time
+# A service that started a process of its own, which must end with it.
+grand = (subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "probe_child-grandchild"])
+         if float(sys.argv[2]) else None)
 with open(sys.argv[1] + ".tmp", "w") as out:
-    out.write(f"{os.getpid()} {__name__}")
+    out.write(f"{os.getpid()} {__name__} {grand.pid if grand else 0}")
 os.replace(sys.argv[1] + ".tmp", sys.argv[1])
 time.sleep(float(sys.argv[2]))
 sys.exit(3)
@@ -177,17 +180,19 @@ def test_children_end_with_the_app_when_it_is_killed(tmp_path):
     env = _probe_env(tmp_path)
     out = tmp_path / "out.txt"
     app = subprocess.Popen([sys.executable, "-c", APP, str(tmp_path), str(out)], cwd=ROOT, env=env)
-    pid = None
+    pids = []
     try:
-        # The interpreter running the probe: under a venv's python.exe, its grandchild.
-        pid = int(_probe_says(out)[0])
+        # The interpreter running the probe (under a venv's python.exe, a
+        # grandchild of the app) and the process the probe started.
+        said = _probe_says(out)
+        pids = [int(said[0]), int(said[2])]
         # What closing its console window does: the app ends without its exit path.
         app.kill()
         app.wait(timeout=30)
-        assert _gone(pid)
+        assert all(_gone(pid) for pid in pids)
     finally:
         app.kill()
-        if pid is not None:
+        for pid in pids:
             _kill(pid)
 
 
@@ -232,9 +237,10 @@ def test_a_leftover_child_is_stopped_with_what_it_started(tmp_path):
     # As the app starts a child on POSIX: leading its own process group.
     process = subprocess.Popen(argv, cwd=tmp_path, env=env, start_new_session=os.name != "nt",
                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-    pid = None
+    pids = []
     try:
-        pid = int(_probe_says(out)[0])
+        said = _probe_says(out)
+        pids = [int(said[0]), int(said[2])]
         desktop = home / "runtime" / "desktop"
         desktop.mkdir(parents=True)
         (desktop / "children-1.json").write_text(json.dumps({
@@ -242,9 +248,9 @@ def test_a_leftover_child_is_stopped_with_what_it_started(tmp_path):
             "children": {"probe": {"pid": process.pid, "argv": argv}}}), encoding="utf-8")
         assert svc.stop_leftovers(home) == ["probe"]
         process.wait(timeout=15)
-        assert _gone(pid)
+        assert all(_gone(pid) for pid in pids)
         assert not (desktop / "children-1.json").exists()
     finally:
         process.kill()
-        if pid is not None:
+        for pid in pids:
             _kill(pid)

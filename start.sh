@@ -30,7 +30,7 @@ if [ ! -x ".venv/bin/python" ]; then
 fi
 PY=".venv/bin/python"
 
-if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; then
+if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs, websockets, qrcode, cryptography" 2>/dev/null; then
   echo "installing dependencies..."
   "$PY" -m pip install -r requirements.txt -q
 fi

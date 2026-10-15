@@ -29,13 +29,16 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # -m module ...`: the module runs as -m would run it, and the child's process
 # group is ended once the app is gone, however the app ended.
 _GUARD = """\
-import os, runpy, signal, sys, threading, time
+import os, runpy, signal, subprocess, sys, threading, time
+# Run from outside the group: a SIGTERM to its own group would end this
+# process before the SIGKILL for whatever ignored the SIGTERM.
+REAPER = ("import contextlib, os, signal, sys, time; g = int(sys.argv[1])\\n"
+          "with contextlib.suppress(OSError): os.killpg(g, signal.SIGTERM); time.sleep(10); "
+          "os.killpg(g, signal.SIGKILL)")
 def guard(app):
     while os.getppid() == app:
         time.sleep(1)
-    os.killpg(0, signal.SIGTERM)
-    time.sleep(10)
-    os.killpg(0, signal.SIGKILL)
+    subprocess.Popen([sys.executable, "-c", REAPER, str(os.getpgid(0))], start_new_session=True)
 threading.Thread(target=guard, args=(int(sys.argv[1]),), daemon=True).start()
 del sys.argv[:3]
 runpy.run_module(sys.argv[0], run_name="__main__", alter_sys=True)
@@ -180,6 +183,17 @@ def _end(pid: int, command: str) -> None:
             if _command_line(pid) != command:
                 return
             time.sleep(0.1)
+
+
+def _signal_child(process, force: bool = False) -> None:
+    """Terminate (or kill) a child; on POSIX its whole group, since it leads one."""
+    if os.name != "nt":
+        try:
+            os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)
+            return
+        except (OSError, AttributeError, TypeError):
+            pass    # gone already, or not a real process
+    process.kill() if force else process.terminate()
 
 
 def stop_leftovers(home: Path) -> list[str]:
@@ -401,11 +415,11 @@ class Services:
         with self._lock:
             process = self.processes.pop(name, None)
             if process is not None and process.poll() is None:
-                process.terminate()
+                _signal_child(process)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
-                    process.kill()
+                    _signal_child(process, force=True)
                     process.wait(timeout=5)
             if self._launched.pop(name, None) is not None:
                 self._record()
