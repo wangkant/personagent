@@ -547,63 +547,6 @@ details[open] summary {
 .side-card .field-note {
   margin: 0 0 12px;
 }
-.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.two-col label {
-  margin-top: 4px;
-}
-.owner-ids {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.owner-ids li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 6px 10px;
-  font-size: 13px;
-}
-.owner-ids li + li {
-  border-top: 1px solid var(--line);
-}
-.owner-ids .owner-empty {
-  color: var(--muted);
-}
-.owner-platform {
-  color: var(--ink);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-.owner-ids code {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 12px;
-}
-.owner-add {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.owner-add select {
-  width: 160px;
-  flex-shrink: 0;
-}
-.owner-add .secondary {
-  height: 36px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
 .card-actions {
   display: flex;
   justify-content: flex-end;
@@ -693,15 +636,6 @@ label.check input {
   height: 14px;
   border: 1.5px solid var(--line-strong);
   border-radius: 50%;
-}
-.gs-step.done {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-.gs-step.done .gs-check {
-  border-color: var(--ok);
-  background: var(--ok);
-  box-shadow: inset 0 0 0 2px var(--side);
 }
 .gs-close {
   margin-left: auto;
@@ -1327,15 +1261,6 @@ label.check input {
   }
   .connected-head {
     flex-wrap: wrap;
-  }
-  .two-col {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .owner-add {
-    flex-wrap: wrap;
-  }
-  .owner-add select {
-    width: 100%;
   }
   .getting-started {
     flex-wrap: wrap;

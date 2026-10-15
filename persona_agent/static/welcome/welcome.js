@@ -32,21 +32,7 @@ const translations = {
     personaUndo: "撤销修改",
     personaSaved: "人设已保存，角色已按新人设重新启动。",
     invalid_persona: "人设不能为空，也不能超过 4000 字。",
-    ownerTitle: "你",
-    ownerHint: "角色把你当作主人：对你更亲近，也只有你能直接教它、管它记住的东西。",
-    ownerName: "它怎么称呼你",
-    ownerRelation: "你们的关系",
-    ownerRelations: "朋友,哥哥,姐姐,弟弟,妹妹,同学,室友,老板,搭档",
-    ownerAccounts: "你在各平台的账号",
-    ownerAccountsHint: "扫码连接 QQ 或微信时，会自动把扫码的人记成主人。",
-    ownerNone: "还没有。连接平台时扫码，或在下面添加。",
-    ownerIdPlaceholder: "你在这个平台上的 ID",
-    napcat: "QQ（NapCat）",
-    add: "添加",
-    remove: "移除",
     save: "保存",
-    ownerSaved: "已保存，角色已按新的设置重新启动。",
-    invalid_owner: "名字和关系最多 32 个字，账号 ID 只能是字母、数字和 _ . @ -。",
     featuresTitle: "更多功能",
     searchTitle: "联网搜索",
     searchHint: "遇到不熟的事会先查一下。默认用 DuckDuckGo，不需要密钥；填 Tavily 的密钥会更稳定。",
@@ -65,7 +51,6 @@ const translations = {
     featuresSaved: "已保存，角色已按新的设置重新启动。",
     invalid_feature: "这里有一项填得不对，检查一下密钥和平台。",
     gsTitle: "开始使用",
-    gsOwner: "告诉它你是谁",
     gsPlatform: "连接一个平台",
     close: "关闭",
     model: "模型名称",
@@ -221,21 +206,7 @@ const translations = {
     personaUndo: "Undo changes",
     personaSaved: "Persona saved. The character restarted with it.",
     invalid_persona: "The persona can't be empty or longer than 4,000 characters.",
-    ownerTitle: "You",
-    ownerHint: "The character treats you as its owner: closer to you, and only you can teach it directly or manage what it remembers.",
-    ownerName: "What it calls you",
-    ownerRelation: "What you are to it",
-    ownerRelations: "friend,brother,sister,classmate,roommate,boss,partner",
-    ownerAccounts: "Your accounts",
-    ownerAccountsHint: "Scanning to connect QQ or WeChat makes whoever scanned the owner there.",
-    ownerNone: "None yet. Scan when you connect an app, or add one below.",
-    ownerIdPlaceholder: "Your id on this platform",
-    napcat: "QQ (NapCat)",
-    add: "Add",
-    remove: "Remove",
     save: "Save",
-    ownerSaved: "Saved. The character restarted with it.",
-    invalid_owner: "Name and relationship take up to 32 characters; an account id takes letters, digits and _ . @ -.",
     featuresTitle: "More features",
     searchTitle: "Web search",
     searchHint: "It looks up what it does not know. DuckDuckGo needs no key; a Tavily key is more reliable.",
@@ -254,7 +225,6 @@ const translations = {
     featuresSaved: "Saved. The character restarted with it.",
     invalid_feature: "Something here is not right; check the keys and apps.",
     gsTitle: "Getting started",
-    gsOwner: "Tell it who you are",
     gsPlatform: "Connect an app",
     close: "Close",
     model: "Model name",
@@ -550,11 +520,9 @@ function showView(next) {
         : "chat",
   );
   $("persona-card").hidden = !(setup && state.configured);
-  $("owner-card").hidden = !(setup && state.configured);
   $("features-card").hidden = !(setup && state.configured);
   if (setup && state.configured) {
     loadPersona();
-    fillOwner();
     fillFeatures();
   }
   if (next === "chat" && state.configured) $("message").focus();
@@ -810,70 +778,8 @@ function renderConnected(connected, working) {
     list.append(row);
   }
 }
-// ---- the owner and the optional features, on the settings screen
-let ownerIds = [];
+// ---- the optional features, on the settings screen
 const GS_KEY = "personagent-getting-started-closed";
-function ownerPlatformName(kind) {
-  return kind === "qq" ? t("napcat") : platformName(kind);
-}
-function renderOwnerIds() {
-  const list = $("owner-ids");
-  list.replaceChildren();
-  if (!ownerIds.length) {
-    const empty = document.createElement("li");
-    empty.className = "owner-empty";
-    empty.textContent = t("ownerNone");
-    list.append(empty);
-  }
-  ownerIds.forEach((entry, index) => {
-    const [kind, ...rest] = entry.split(":");
-    const row = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "owner-platform";
-    name.textContent = ownerPlatformName(kind);
-    const id = document.createElement("code");
-    id.textContent = rest.join(":");
-    id.title = rest.join(":");
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "quiet";
-    remove.textContent = t("remove");
-    remove.addEventListener("click", () => {
-      ownerIds.splice(index, 1);
-      renderOwnerIds();
-    });
-    row.append(badge(kind === "qq" ? "aiocqhttp" : kind, "small"), name, id, remove);
-    list.append(row);
-  });
-}
-function fillOwner() {
-  const owner = state.owner || { name: "", relationship: "", ids: [] };
-  $("owner-name").value = owner.name;
-  $("owner-relationship").value = owner.relationship;
-  $("owner-relations").replaceChildren(
-    ...t("ownerRelations")
-      .split(",")
-      .map((word) => Object.assign(document.createElement("option"), { value: word })),
-  );
-  ownerIds = [...owner.ids];
-  // Connected apps first, then the rest the page knows, then NapCat's QQ.
-  const kinds = [
-    ...state.platforms,
-    ...catalog.platforms.map((p) => p.id).filter((k) => !state.platforms.includes(k)),
-    "qq",
-  ];
-  $("owner-platform").replaceChildren(
-    ...kinds.map((kind) =>
-      Object.assign(document.createElement("option"), {
-        value: kind,
-        textContent: ownerPlatformName(kind),
-      }),
-    ),
-  );
-  $("owner-id").placeholder = t("ownerIdPlaceholder");
-  $("owner-error").hidden = true;
-  renderOwnerIds();
-}
 function fillFeatures() {
   const features = state.features;
   $("search-state").textContent = t(features.search === "tavily" ? "searchTavily" : "searchFree");
@@ -919,12 +825,8 @@ function closedGettingStarted() {
   }
 }
 function renderGettingStarted() {
-  const owner = Boolean(state.owner && (state.owner.name || state.owner.ids.length));
-  const platform = state.platforms.length > 0;
   $("getting-started").hidden =
-    !state.configured || (owner && platform) || closedGettingStarted();
-  $("gs-owner").classList.toggle("done", owner);
-  $("gs-platform").classList.toggle("done", platform);
+    !state.configured || state.platforms.length > 0 || closedGettingStarted();
   $("gs-close").setAttribute("aria-label", t("close"));
 }
 function renderStatus() {
@@ -1084,33 +986,6 @@ $("show-key").addEventListener("click", async () => {
     toast(t(error.message));
   }
 });
-$("owner-add").addEventListener("click", () => {
-  const id = $("owner-id").value.trim();
-  if (!id) return;
-  const entry = `${$("owner-platform").value}:${id}`;
-  if (!ownerIds.includes(entry)) ownerIds.push(entry);
-  $("owner-id").value = "";
-  renderOwnerIds();
-});
-$("owner-save").addEventListener("click", async () => {
-  $("owner-error").hidden = true;
-  $("owner-save").disabled = true;
-  try {
-    state = await api("profile", {
-      name: $("owner-name").value,
-      relationship: $("owner-relationship").value,
-      ids: ownerIds,
-    });
-    renderStatus();
-    fillOwner();
-    toast(t("ownerSaved"));
-  } catch (error) {
-    $("owner-error").textContent = t(error.message);
-    $("owner-error").hidden = false;
-  } finally {
-    $("owner-save").disabled = false;
-  }
-});
 for (const id of ["vision-on", "vision-same", "proactive-on"])
   $(id).addEventListener("change", featureFields);
 $("tavily-clear").addEventListener("click", () => {
@@ -1151,10 +1026,6 @@ $("features-save").addEventListener("click", async () => {
   } finally {
     $("features-save").disabled = false;
   }
-});
-$("gs-owner").addEventListener("click", () => {
-  showView("settings");
-  $("owner-card").scrollIntoView({ block: "start" });
 });
 $("gs-platform").addEventListener("click", () => showView("platforms"));
 $("gs-close").addEventListener("click", () => {

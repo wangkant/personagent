@@ -449,23 +449,6 @@ def test_moving_a_platform_off_astrbot_restarts_it_and_disconnecting_clears_both
     assert not state.exists()
 
 
-def test_the_owner_is_saved_checked_and_shown(client, workspace, monkeypatch):
-    sw.write_env(workspace.env, {"LLM_API_KEY": "key"})
-    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
-    url = "/api/profile"
-    saved = client.post(url, headers=HEADERS, json={
-        "name": " 小乐 ", "relationship": "朋友",
-        "ids": ["qq_official:ABC123", "weixin_oc:o9@im.wechat", "qq_official:ABC123"]}).json()
-    assert saved["owner"] == {"name": "小乐", "relationship": "朋友",
-                              "ids": ["qq_official:ABC123", "weixin_oc:o9@im.wechat"]}
-    assert workspace.config()["ADMIN_IDS"] == "qq_official:ABC123,weixin_oc:o9@im.wechat"
-    for bad in ({"name": "x" * 33}, {"relationship": "a\nb"}, {"ids": ["nowhere:1"]},
-                {"ids": ["telegram:has space"]}, {"ids": ["telegram"]}, {"ids": "qq:1"}):
-        response = client.post(url, headers=HEADERS, json=bad)
-        assert response.status_code == 400 and response.json()["error"] == "invalid_owner", bad
-    assert workspace.config()["ADMIN_NAME"] == "小乐"
-
-
 def test_features_keep_keys_out_of_state_and_never_forward_one(client, workspace, monkeypatch):
     sw.write_env(workspace.env, {"LLM_API_KEY": "chat-key", "LLM_BASE_URL": "https://api.example.com/v1"})
     monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
@@ -495,29 +478,3 @@ def test_features_keep_keys_out_of_state_and_never_forward_one(client, workspace
     cleared = client.post(url, headers=HEADERS, json={"search": {"clear": True}}).json()
     assert cleared["features"]["search"] == "free" and not cleared["features"]["vision"]["enabled"]
     assert workspace.config()["VISION_API_KEY"] == "chat-key"   # off keeps the key for next time
-
-
-def test_whoever_scans_becomes_the_owner_there_unless_one_is_set(workspace, monkeypatch):
-    sw.write_env(workspace.env, {"LLM_API_KEY": "key", "ADMIN_IDS": "telegram:42"})
-    from persona_agent.direct import qq, weixin
-    stopped = []
-    monkeypatch.setattr(workspace.services, "stop", lambda name: stopped.append(name))
-
-    async def bind(client, show):
-        return {"appid": "102", "secret": "s", "owner": "OPENID1"}
-
-    async def login(client, show):
-        return {"weixin_oc_token": "t", "weixin_oc_user_id": "u1@im.wechat"}
-    monkeypatch.setattr(qq, "bind", bind)
-    monkeypatch.setattr(weixin, "login", login)
-    workspace._scan_direct(conn.platform("qq_official"))
-    workspace._scan_direct(conn.platform("weixin_oc"))
-    assert workspace.config()["ADMIN_IDS"] == "telegram:42,qq_official:OPENID1,weixin_oc:u1@im.wechat"
-    assert "owner" not in direct_base.load_credentials(workspace.home)["qq_official"]
-    assert stopped == ["agent", "agent"]
-
-    async def another(client, show):
-        return {"appid": "103", "secret": "s2", "owner": "OPENID2"}
-    monkeypatch.setattr(qq, "bind", another)
-    workspace._scan_direct(conn.platform("qq_official"))
-    assert "OPENID2" not in workspace.config()["ADMIN_IDS"]

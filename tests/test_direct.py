@@ -235,8 +235,7 @@ def test_qq_bind_shows_a_fresh_page_when_one_expires_and_unseals_the_secret():
         values = run(qq.bind(mock(handler), shown.append))
     finally:
         qq.asyncio.sleep = real_sleep
-    # The owner is whoever confirmed: their DMs to the bot come from that openid.
-    assert values == {"appid": "102030", "secret": "the-secret", "owner": "o1"}
+    assert values == {"appid": "102030", "secret": "the-secret"}
     assert [url.split("task_id=")[1].split("&")[0] for url in shown] == ["t1", "t2"]
     assert all(url.startswith("https://q.qq.com/qqbot/openclaw/connect.html?") for url in shown)
     # Each page has its own key, and none of them is ever shown.
