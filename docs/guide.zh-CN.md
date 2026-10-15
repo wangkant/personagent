@@ -56,7 +56,7 @@ personagent
 
 - **开始聊天**：在浏览器里和真实的角色一对一聊天，回复它的就是给聊天平台服务的同一个 agent。
 - **连接平台**：把它接进 QQ、微信、Telegram、Discord 和其他平台，见[接进聊天平台](#接进聊天平台)。
-- **角色与设置**：选模型服务（DeepSeek、硅基流动、阿里云百炼、智谱 GLM、月之暗面 Kimi、火山方舟、OpenRouter、OpenAI、Google Gemini、Ollama，或者其他兼容 OpenAI 接口的服务），填 API Key，选名字和现成性格。点「验证并开始聊天」会先用一个很小的请求测试 Key，通过才保存。设置好之后，「人设」框里就是 `persona.txt`；点「保存人设」会用新内容重启 agent，学到的东西保留。
+- **角色与设置**：选模型服务（DeepSeek、硅基流动、阿里云百炼、智谱 GLM、月之暗面 Kimi、火山方舟、OpenRouter、OpenAI、Google Gemini、Ollama，或者其他兼容 OpenAI 接口的服务），填 API Key，选名字和现成性格。点「验证并开始聊天」会先用一个很小的请求测试 Key，通过才保存。设置好之后，「人设」框里就是 `persona.txt`；点「保存人设」会用新内容重启 agent，学到的东西保留。「更多功能」里可以开 Tavily 搜索（默认是免费的 DuckDuckGo）、看懂图片，以及在选定的平台上偶尔主动说话。连上第一个平台之前，「开始聊天」上方会有一条「开始使用」提示。
 
 再次运行 `personagent` 会复用已经打开的页面。加 `--no-browser` 只打印链接，不打开浏览器。
 

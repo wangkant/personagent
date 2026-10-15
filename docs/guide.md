@@ -54,7 +54,7 @@ This guide writes commands as `personagent ...`. Put `uvx` in front if you did n
 
 - **Chat**: a one-to-one chat with the real character in the browser, answered by the same agent that serves your chat platforms.
 - **Connect apps**: put it in QQ, WeChat, Telegram, Discord and the other platforms; see [Put it in a chat](#put-it-in-a-chat).
-- **Character & settings**: pick a model service (DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenRouter, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request before saving it. Once set up, the **Persona** box holds `persona.txt`; **Save persona** restarts the agent with the new text and keeps what it learned.
+- **Character & settings**: pick a model service (DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenRouter, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request before saving it. Once set up, the **Persona** box holds `persona.txt`; **Save persona** restarts the agent with the new text and keeps what it learned. **More features** turns on Tavily search (DuckDuckGo is the free default), image understanding and speaking first on the apps you pick. Until an app is connected, the Chat view shows a short getting-started bar.
 
 Running `personagent` again reuses the page that is already open. `--no-browser` prints the link instead of opening it.
 

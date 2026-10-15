@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The page turns on the optional features.** A **More features** card in settings turns on Tavily search (DuckDuckGo stays the free default), image understanding (with the chat service's key or another endpoint) and speaking first on chosen apps. A blank key keeps the saved one, a key is never sent to an address it was not saved for, none is returned to the page, and saving restarts a running agent.
+- **A getting-started bar** in the Chat view points a new user to connecting an app until one is connected, and can be closed.
+
 ## [1.1.0] — 2026-10-15
 
 personagent 1.1 lives in a local page and joins chats on its own: add one model key in the browser, chat with the character there, and connect it from the same page. QQ, WeChat, Telegram and Discord are connected by personagent itself; the other platforms go through an AstrBot that it installs and runs with no dashboard of its own.

@@ -34,7 +34,7 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
-The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. Running `personagent` again reuses a page that is already open.
+The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open.
 
 Want QQ? Open **Connect apps**, pick QQ and scan the code with mobile QQ: it creates a bot or picks one you already made, and personagent connects to QQ itself. Pasting the AppID and AppSecret is the fallback. Until the bot is certified, QQ lets it join only groups you own, and which group messages it receives is set in QQ.
 
