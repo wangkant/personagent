@@ -12,21 +12,18 @@
     <div class="shell">
       <aside class="sidebar">
         <a class="brand" href="#"
-          ><span class="brand-mark">p.</span>personagent</a
+          ><span class="brand-mark">p</span>personagent</a
         >
-        <div class="sidebar-caption" data-t="space">你的角色空间</div>
         <nav aria-label="Navigation">
           <button class="nav active" data-view="chat">
-            <span aria-hidden="true">◌</span><span data-t="chat">开始聊天</span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9.5L5 20v-3.5H4z"/></svg><span data-t="chat">开始聊天</span>
           </button>
           <button class="nav" data-view="platforms">
-            <span aria-hidden="true">↗</span
-            ><span data-t="platforms">连接平台</span
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M16.75 13.5v6.5M13.5 16.75H20"/></svg><span data-t="platforms">连接平台</span
             ><span id="platforms-dot" class="dot" hidden></span>
           </button>
           <button class="nav" data-view="settings">
-            <span aria-hidden="true">⚙</span
-            ><span data-t="settings">角色与设置</span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-t="settings">角色与设置</span>
           </button>
         </nav>
         <div class="sidebar-bottom">
@@ -50,15 +47,13 @@
           </div>
         </header>
         <section id="setup-view" class="page setup-page">
-          <div class="eyebrow" data-t="firstStep">从一句你好开始</div>
-          <h1 data-t="hero">让角色，走进你的日常。</h1>
+          <h1 data-t="hero">设置你的角色</h1>
           <p class="lead" data-t="intro">
-            填入一个模型密钥，就能开始聊天。其余的，我们已经准备好了。
+            填一个模型密钥就能开始聊天，其他都有默认值。
           </p>
           <div class="setup-grid">
             <form id="settings-form" class="card setup-card">
               <div class="card-heading">
-                <span class="step-number">01</span>
                 <div>
                   <h2 data-t="modelTitle">连接一个模型</h2>
                   <p data-t="modelHint">角色通过你选择的模型服务与你聊天。</p>
@@ -132,12 +127,11 @@
             </form>
             <div class="preview-column">
               <div class="character-preview">
-                <div class="preview-dots"></div>
-                <div class="avatar big" aria-hidden="true">✳</div>
-                <div class="eyebrow" data-t="yourCharacter">你的第一个角色</div>
+                <div class="avatar big" id="preview-avatar" aria-hidden="true"></div>
+                <div class="eyebrow" data-t="yourCharacter">预览</div>
                 <h2 id="preview-name">小夏</h2>
                 <p data-t="previewText">
-                  会认真听你说，也有自己的性格。先聊几句，再慢慢熟悉。
+                  性格决定它说话的语气。
                 </p>
                 <div class="sample-bubble" data-t="sample">
                   今天怎么样？有什么想和我说的吗？
@@ -147,7 +141,6 @@
                 </div>
               </div>
               <div class="small-note">
-                <span aria-hidden="true">↗</span>
                 <div>
                   <strong data-t="qqLater">也可以把它带到 QQ</strong>
                   <p data-t="qqLaterHint">
@@ -160,10 +153,10 @@
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">
-            <div class="avatar" aria-hidden="true">✳</div>
+            <div class="avatar" id="chat-avatar" aria-hidden="true"></div>
             <div>
               <h2 id="chat-name"></h2>
-              <p data-t="chatHint">在这里，先自在地聊几句。</p>
+              <p data-t="chatHint">本机对话</p>
             </div>
             <button class="quiet" id="reset-chat" data-t="newChat">
               新对话
@@ -171,9 +164,9 @@
           </div>
           <div id="messages" role="log" aria-live="polite">
             <div class="chat-empty" id="chat-empty">
-              <div class="empty-flower" aria-hidden="true">✳</div>
+              <div class="avatar big" id="empty-avatar" aria-hidden="true"></div>
               <h1 id="chat-greeting"></h1>
-              <p data-t="emptyHint">一个简单的问候，就是故事的开始。</p>
+              <p data-t="emptyHint">说点什么，开始聊天。</p>
               <div class="suggestions">
                 <button data-prompt="hello" data-t="promptHello">
                   你好，认识一下？</button
@@ -196,12 +189,9 @@
           </div>
         </section>
         <section id="platforms-view" class="page platforms-page" hidden>
-          <div class="eyebrow" data-t="bringAlong">
-            把熟悉的角色，带到熟悉的地方
-          </div>
           <h1 id="platforms-title"></h1>
           <p class="lead" data-t="platformsIntro">
-            选一个平台，扫码或填一两项。下载、配置和启动都会自动完成。
+            扫码或填一两项即可，下载、配置和启动都会自动完成。
           </p>
           <div id="connected-card" class="card connected-card" hidden>
             <div class="connected-head">
