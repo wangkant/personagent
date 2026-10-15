@@ -24,6 +24,8 @@
 
 ## 安装和主目录
 
+新用户推荐先看[简明入门](start.zh-CN.md)：打开本地页面，填模型 Key 就能聊天，再通过扫码接入 QQ。下面同时保留命令行和服务器的用法。
+
 | 方式 | 命令 |
 |---|---|
 | 不安装，直接运行 | `uvx personagent <命令>` |
@@ -80,10 +82,12 @@
 
 ## 设置
 
-`personagent init` 大约问 8 个问题，先选语言，之后全程中文，每个术语都附一句解释：
+直接运行 `personagent`、`personagent start` 或交互式 `personagent init` 会打开浏览器中的设置和聊天页面。原有终端菜单可用 `personagent start --terminal` 打开。
+
+`personagent init --terminal` 分三步配置，先选语言，之后全程中文，每个术语都附一句解释：
 
 - **AI 服务。** DeepSeek、硅基流动、阿里云百炼（通义千问）、智谱 GLM、月之暗面 Kimi、火山方舟（豆包）、OpenRouter、OpenAI、Google Gemini、本机运行的 Ollama，或者其他兼容 OpenAI 接口的服务。默认是 DeepSeek 的 `deepseek-flash`。用 Ollama 时填一个已经下载好的模型，不需要 Key。
-- **API Key。** 输入时不显示，填完会用一个很小的请求测一下。不通的话，会告诉你请求了哪个地址、返回了什么状态码，以及大概该怎么改。
+- **API Key。** 可选择在当前终端显示，默认隐藏；重新配置时选择显示，也能核对已保存的 Key。填完会用一个很小的请求测一下。不通的话，会告诉你请求了哪个地址、返回了什么状态码，以及大概该怎么改。
 - **角色。** 起个名字（中文默认叫小夏），再从四个现成性格里挑一个（毒舌损友、温柔倾听者、游戏搭子、文艺书虫），或者先放一个朴素的角色，以后自己写。
 - **聊天平台。** 可选，第一次可以跳过，见[接进聊天平台](#接进聊天平台)。
 
@@ -194,10 +198,14 @@ personagent 从不登录聊天账号，登录由连接器负责：它把每条�
 
 ### 经 AstrBot 接入
 
-1. 安装 [AstrBot](https://docs.astrbot.app)（用它的启动器、Docker，或者 `uv tool install astrbot`），先启动一次，在它的 WebUI 里添加你要用的聊天平台。
-2. 运行 `personagent connect astrbot`，或者在 `personagent init` 里选择连接 AstrBot。它会找到 AstrBot 的文件夹，问机器人进哪个平台、哪些群（在群里发 `/sid` 能看到群 ID），装好插件，并在两边写入同一个 `CONNECTOR_TOKEN`。
-3. 运行 `personagent run` 并保持开着，然后重启 AstrBot，或在它的 WebUI 里重载插件。
+1. 运行 `personagent connect astrbot`，或者在 `personagent init --terminal` 里选择连接 AstrBot。没找到已安装的程序时，向导会提供自动下载，连同所需的 Python 3.12 一起准备好；也可以填写已有 AstrBot 的文件夹。
+2. 选择聊天平台、允许进入的群（在群里发 `/sid` 能看到群 ID），向导会装好插件，并在两边写入同一个 `CONNECTOR_TOKEN`。
+3. 运行 `personagent run` 并保持开着。在另一个终端里运行 `personagent connect astrbot --start` 启动自动安装的 AstrBot；自己部署的 AstrBot 则重启或重载插件。
 4. 在其中一个群里叫它的名字。
+
+自动安装的内容放在 `<home>/platforms/`：`astrbot/` 保存 AstrBot 数据，`tools/` 保存独立运行环境。不需要提前安装全局 uv，也不会更换 personagent 的 Python。首次启动会打印 AstrBot 管理面板的初始密码，之后保留已设置的密码。QQ 仍需安装 NapCat 并登录，其他平台的机器人凭据也需自行提供。
+
+无人值守安装可用 `personagent connect astrbot --install`，还能加 `--platform telegram --token <bot token>`。默认不放行任何群或私聊，需另外配置；下载失败可用同一条命令重试，已有设置会保留。
 
 插件也有独立仓库 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent)，可以在 AstrBot 的 WebUI 里填这个地址安装；这样装的话，要把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。插件自己的说明见[插件 README](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md)。
 

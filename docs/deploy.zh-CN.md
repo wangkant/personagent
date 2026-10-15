@@ -1,6 +1,8 @@
-# 从零部署：让机器人在 QQ 群里说话
+# 高级部署：通过 OneBot 和 NapCat 接入个人 QQ
 
 [English](deploy.md) · **简体中文**
+
+新用户可先用[简明入门](start.zh-CN.md)中的 QQ 官方机器人扫码路线，不需要 NapCat。本文保留给需要个人 QQ 小号和 OneBot 的用户。
 
 这篇是写给 Windows 上的 QQ 用户的，按顺序做完，就能让一个机器人小号在你的 QQ 群里开口。需要三个程序一起运行：
 
@@ -36,7 +38,7 @@ uv tool install personagent
 personagent --version
 ```
 
-你应该看到 `personagent 1.0.0`。如果提示找不到命令，运行 `uv tool update-shell`，再重开一次 PowerShell。
+你应该看到已安装的 personagent 版本号。如果提示找不到命令，运行 `uv tool update-shell`，再重开一次 PowerShell。
 
 **3. 做第一次设置。**
 
@@ -44,7 +46,7 @@ personagent --version
 personagent init
 ```
 
-它会先问语言（中文系统默认中文），然后依次问：用哪家 AI 服务、模型名、API key（输入时屏幕上不显示，这是正常的）、机器人的名字、选一个性格。输完 key 它会立刻发一个很小的请求测试，你应该看到「可以用。」。如果失败，它会告诉你访问了哪个地址、HTTP 状态码和可能的原因，然后让你重试。
+它会先问语言（中文系统默认中文），然后依次问：用哪家 AI 服务、模型名、API key（可选择显示，默认隐藏）、机器人的名字、选一个性格。输完 key 它会立刻发一个很小的请求测试，你应该看到「可以用。」。如果失败，它会告诉你访问了哪个地址、HTTP 状态码和可能的原因，然后让你重试。
 
 到「现在连接 AstrBot 吗？」这一步先选**否**（直接回车），最后选择在终端里聊几句。你应该看到机器人用你选的性格回话。
 
@@ -54,14 +56,25 @@ personagent init
 
 ## 第二部分：装 AstrBot
 
-AstrBot 有两种装法，选一种。
+推荐直接让 personagent 下载并安装；也可以继续使用 AstrBot 自己的启动器或 uv 部署。
 
-### 方法 A：启动器（点安装包）
+### 方法 A：由 personagent 自动安装
+
+```powershell
+personagent connect astrbot --install
+personagent connect astrbot --start
+```
+
+第一条会自动下载 AstrBot、准备 Python 3.12 运行环境并装好 personagent 插件；第二条启动它。文件保存在 personagent 数据目录的 `platforms` 子目录下。连接群和账号的设置仍在后面的步骤完成；用此方式安装后，无需另找下载地址。
+
+也可以运行 `personagent connect astrbot` 跟着向导安装，并填写群号和账号设置。
+
+### 方法 B：启动器（点安装包）
 
 1. 打开 [AstrBotDevs/astrbot-launcher 的 Releases](https://github.com/AstrBotDevs/astrbot-launcher/releases)，下载 `AstrBot.Launcher_x64-setup.exe`（ARM 电脑下 `arm64` 版）。
 2. 运行安装包，装好后打开启动器，按它的界面创建并启动一个 AstrBot。
 
-### 方法 B：uv 命令行
+### 方法 C：uv 命令行
 
 ```powershell
 uv tool install astrbot --python 3.12

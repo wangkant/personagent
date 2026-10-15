@@ -427,6 +427,18 @@ def test_listed_ids_are_prefiltered_and_a_wildcard_is_not():
     assert _capture_event(excluded, _Event(module, private=False)) == {}
 
 
+def test_scoped_platform_grants_do_not_open_other_platforms():
+    module = _import_plugin()
+    plugin = _plugin_instance(module, {"groups": ["qq_official:*"], "dm_users": ["qq_official:*"]})
+    for private in (False, True):
+        qq = _Event(module, private=private, platform="qq_official")
+        assert _capture_event(plugin, qq)["prefiltered"] is True
+        telegram = _Event(module, private=private, platform="telegram")
+        assert _capture_event(plugin, telegram) == {}
+    excluded = _plugin_instance(module, {"groups": ["qq_official:*"], "excluded_platforms": ["qq_official"]})
+    assert _capture_event(excluded, _Event(module, private=False, platform="qq_official")) == {}
+
+
 def test_signed_request_uses_canonical_body_and_replay_headers():
     module = _import_plugin()
     plugin = _plugin_instance(

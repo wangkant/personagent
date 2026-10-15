@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# personagent - start the service from a checkout (Linux/macOS)
+# personagent - open local setup and chat from a checkout (Linux/macOS)
 set -e
 cd "$(dirname "$0")"
 
@@ -16,20 +16,6 @@ if [ ! -x ".venv/bin/python" ]; then
   fi
 fi
 
-# Not set up yet: run the setup wizard instead of a server that cannot answer.
-if [ ! -f ".env" ] && [ -z "${LLM_API_KEY:-}" ]; then
-  if [ ! -t 0 ]; then
-    echo "error: personagent is not set up here yet (no .env). Run: python3 quickstart.py" >&2
-    exit 1
-  fi
-  echo "No .env yet: starting the setup wizard (quickstart.py)."
-  if [ -x ".venv/bin/python" ]; then SETUP_PY=".venv/bin/python"; else SETUP_PY="$BASE_PY"; fi
-  "$SETUP_PY" quickstart.py
-  if [ ! -f ".env" ]; then
-    exit 1
-  fi
-fi
-
 if [ ! -x ".venv/bin/python" ]; then
   echo "creating project virtual environment..."
   if ! "$BASE_PY" -m venv .venv; then
@@ -39,10 +25,17 @@ if [ ! -x ".venv/bin/python" ]; then
 fi
 PY=".venv/bin/python"
 
+if [ ! -t 0 ] && [ ! -f ".env" ] && [ -z "${LLM_API_KEY:-}" ]; then
+  echo "error: setup is needed. Run python3 quickstart.py in a terminal to open the welcome page." >&2
+  exit 1
+fi
+
 if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; then
   echo "installing dependencies..."
   "$PY" -m pip install -r requirements.txt -q
 fi
 
-# main.py loads .env before resolving SERVER_HOST / SERVER_PORT.
-exec "$PY" main.py
+if [ -t 0 ] && [ "$#" -eq 0 ]; then
+  exec "$PY" -m persona_agent start
+fi
+exec "$PY" main.py "$@"

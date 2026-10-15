@@ -117,6 +117,7 @@ jobs:
         run: |
           VERSION=$(python -c "import persona_agent; print(persona_agent.__version__)")
           python tools/package_smoke.py --personagent "$WHEEL_BIN/personagent" --version "$VERSION"
+          python tools/welcome_smoke.py --personagent "$WHEEL_BIN/personagent"
       - name: Install the sdist into a clean venv and import it from outside the checkout
         run: |
           python -m venv "$RUNNER_TEMP/sdistenv"

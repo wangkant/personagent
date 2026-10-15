@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>personagent</title>
+    <link rel="stylesheet" href="/assets/welcome.css" />
+    <script src="/assets/welcome.js" defer></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#"
+          ><span class="brand-mark">p.</span>personagent</a
+        >
+        <div class="sidebar-caption" data-t="space">你的角色空间</div>
+        <nav aria-label="Navigation">
+          <button class="nav active" data-view="chat">
+            <span aria-hidden="true">◌</span><span data-t="chat">开始聊天</span>
+          </button>
+          <button class="nav" data-view="qq">
+            <span aria-hidden="true">↗</span><span data-t="qq">连接 QQ</span
+            ><span id="qq-dot" class="dot" hidden></span>
+          </button>
+          <button class="nav" data-view="settings">
+            <span aria-hidden="true">⚙</span
+            ><span data-t="settings">角色与设置</span>
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <span class="local-dot"></span
+          ><span data-t="local">运行在你的电脑上</span
+          ><small id="version"></small>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div>
+            <span id="page-label" data-t="welcome">欢迎来到 personagent</span>
+          </div>
+          <div class="top-actions">
+            <select id="language" aria-label="Language">
+              <option value="zh">中文</option>
+              <option value="en">English</option></select
+            ><span class="status-pill" id="service-status" data-t="localReady"
+              >本地应用已就绪</span
+            ><button class="quiet" id="exit" data-t="exit">退出</button>
+          </div>
+        </header>
+        <section id="setup-view" class="page setup-page">
+          <div class="eyebrow" data-t="firstStep">从一句你好开始</div>
+          <h1 data-t="hero">让角色，走进你的日常。</h1>
+          <p class="lead" data-t="intro">
+            填入一个模型密钥，就能开始聊天。其余的，我们已经准备好了。
+          </p>
+          <div class="setup-grid">
+            <form id="settings-form" class="card setup-card">
+              <div class="card-heading">
+                <span class="step-number">01</span>
+                <div>
+                  <h2 data-t="modelTitle">连接一个模型</h2>
+                  <p data-t="modelHint">角色通过你选择的模型服务与你聊天。</p>
+                </div>
+              </div>
+              <label for="provider" data-t="provider">模型服务</label
+              ><select id="provider"></select>
+              <div class="label-line">
+                <label for="api-key">API Key</label
+                ><a
+                  id="key-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-t="getKey"
+                  >去获取密钥 ↗</a
+                >
+              </div>
+              <div class="key-field">
+                <input
+                  id="api-key"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="sk-…"
+                /><button type="button" id="show-key" data-t="show">
+                  显示
+                </button>
+              </div>
+              <p class="field-note" data-t="keyNote">
+                密钥保存在本机；聊天内容会发送给你选择的模型服务。
+              </p>
+              <details id="advanced">
+                <summary data-t="advanced">更多设置</summary>
+                <label for="model" data-t="model">模型名称</label
+                ><input id="model" autocomplete="off" /><label for="base-url"
+                  >API Base URL</label
+                ><input id="base-url" type="url" autocomplete="off" />
+              </details>
+              <details id="character-details">
+                <summary data-t="characterOptions">
+                  给角色换个名字或性格
+                </summary>
+                <label for="character-name" data-t="name">角色名字</label
+                ><input
+                  id="character-name"
+                  maxlength="64"
+                  autocomplete="off"
+                /><label for="character" data-t="character">性格</label
+                ><select id="character"></select>
+                <p
+                  class="field-note"
+                  id="custom-note"
+                  hidden
+                  data-t="customKept"
+                >
+                  已有的人设会保留；选择新性格才会替换它。
+                </p>
+              </details>
+              <div id="form-error" class="error" role="alert" hidden></div>
+              <button
+                type="submit"
+                class="primary full"
+                id="save"
+                data-t="saveStart"
+              >
+                验证并开始聊天 →
+              </button>
+              <p class="footnote" data-t="testNote">
+                会用一个很小的请求验证密钥，可能产生少量模型费用。
+              </p>
+            </form>
+            <div class="preview-column">
+              <div class="character-preview">
+                <div class="preview-dots"></div>
+                <div class="avatar big" aria-hidden="true">✳</div>
+                <div class="eyebrow" data-t="yourCharacter">你的第一个角色</div>
+                <h2 id="preview-name">小夏</h2>
+                <p data-t="previewText">
+                  会认真听你说，也有自己的性格。先聊几句，再慢慢熟悉。
+                </p>
+                <div class="sample-bubble" data-t="sample">
+                  今天怎么样？有什么想和我说的吗？
+                </div>
+                <div class="preview-caption" data-t="changeLater">
+                  名字和性格，随时都能改。
+                </div>
+              </div>
+              <div class="small-note">
+                <span aria-hidden="true">↗</span>
+                <div>
+                  <strong data-t="qqLater">也可以把它带到 QQ</strong>
+                  <p data-t="qqLaterHint">
+                    先聊起来。想接入 QQ 时，点一下连接，再用手机扫码。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="chat-view" class="page chat-page" hidden>
+          <div class="chat-heading">
+            <div class="avatar" aria-hidden="true">✳</div>
+            <div>
+              <h2 id="chat-name"></h2>
+              <p data-t="chatHint">在这里，先自在地聊几句。</p>
+            </div>
+            <button class="quiet" id="reset-chat" data-t="newChat">
+              新对话
+            </button>
+          </div>
+          <div id="messages" role="log" aria-live="polite">
+            <div class="chat-empty" id="chat-empty">
+              <div class="empty-flower" aria-hidden="true">✳</div>
+              <h1 id="chat-greeting"></h1>
+              <p data-t="emptyHint">一个简单的问候，就是故事的开始。</p>
+              <div class="suggestions">
+                <button data-prompt="hello" data-t="promptHello">
+                  你好，认识一下？</button
+                ><button data-prompt="day" data-t="promptDay">
+                  今天过得怎么样？</button
+                ><button data-prompt="film" data-t="promptFilm">
+                  推荐一部周末看的电影吧
+                </button>
+              </div>
+            </div>
+          </div>
+          <form id="chat-form" class="composer">
+            <label class="sr-only" for="message" data-t="message"
+              >输入消息</label
+            ><textarea id="message" rows="1" maxlength="8000"></textarea
+            ><button type="submit" id="send" aria-label="Send">↑</button>
+          </form>
+          <div class="composer-note" data-t="composerNote">
+            Enter 发送 · Shift + Enter 换行
+          </div>
+        </section>
+        <section id="qq-view" class="page qq-page" hidden>
+          <div class="eyebrow" data-t="bringAlong">
+            把熟悉的角色，带到熟悉的地方
+          </div>
+          <h1 id="qq-title"></h1>
+          <p class="lead" data-t="qqIntro">
+            通过 QQ 官方机器人直接连接，无需 NapCat，也不用填写端口。
+          </p>
+          <div class="card qq-card">
+            <div class="connection-steps">
+              <div id="stage-install">
+                <span>1</span><strong data-t="prepare">自动准备组件</strong>
+              </div>
+              <i></i>
+              <div id="stage-scan">
+                <span>2</span><strong data-t="scan">手机 QQ 扫码</strong>
+              </div>
+              <i></i>
+              <div id="stage-ready">
+                <span>3</span><strong data-t="connected">开始使用</strong>
+              </div>
+            </div>
+            <div id="qq-idle">
+              <div class="qq-symbol" aria-hidden="true">↗</div>
+              <h2 data-t="oneScan">剩下的，只需一次扫码。</h2>
+              <p data-t="qqScope">
+                连接后，角色会回复这个 QQ 官方机器人收到的群聊和私聊。
+              </p>
+              <button class="primary" id="connect-qq" data-t="connectQQ">
+                连接 QQ，获取二维码
+              </button>
+              <p class="field-note" data-t="groupNote">
+                添加到群聊需要你是群主；群消息范围由 QQ 的机器人设置控制。
+              </p>
+            </div>
+            <div id="qq-progress" hidden>
+              <div id="qr-box" hidden>
+                <img id="qr-image" alt="QQ QR code" />
+                <p data-t="scanHelp">
+                  用手机 QQ 扫码，并确认创建或绑定机器人。
+                </p>
+                <a
+                  id="qr-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-t="openQQ"
+                  >在浏览器打开授权页面 ↗</a
+                ><button class="quiet" id="cancel-qq" data-t="cancel">
+                  取消
+                </button>
+              </div>
+              <div id="progress-spinner" class="spinner"></div>
+              <h2 id="progress-title"></h2>
+              <p id="progress-hint"></p>
+            </div>
+            <div id="qq-ready" hidden>
+              <div class="success-mark" aria-hidden="true">✓</div>
+              <h2 data-t="qqDone">已经连接，去 QQ 打个招呼吧。</h2>
+              <p data-t="qqDoneHint">
+                在手机 QQ 的「联系人 →
+                机器人」找到它，开始私聊，或把它添加到你管理的群。
+              </p>
+              <button
+                class="primary"
+                id="start-services"
+                data-t="startServices"
+              >
+                一键启动</button
+              ><button class="quiet" id="stop-services" data-t="stopServices">
+                暂停运行
+              </button>
+            </div>
+            <div id="qq-error" class="error" role="alert" hidden></div>
+            <button class="secondary" id="retry-qq" hidden data-t="retry">
+              重试
+            </button>
+          </div>
+          <p class="qq-footer" data-t="keepOpen">
+            使用期间保持应用运行即可。关闭程序时，会一并停止由它启动的服务。
+          </p>
+        </section>
+        <div id="toast" role="status" hidden></div>
+        <div id="closed" class="closed-overlay" hidden>
+          <div class="card">
+            <h2 data-t="closed">应用已关闭</h2>
+            <p data-t="closedHint">再次运行 personagent，即可回到这里。</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

@@ -14,6 +14,10 @@ from persona_agent import __version__
 
 # name -> (module, function, one-line help). The function takes (argv, prog).
 COMMANDS = {
+    "start": ("persona_agent.welcome", "main",
+              "open setup and chat in your browser"),
+    "up": ("persona_agent.services", "main",
+           "start personagent and the installed chat platform together"),
     "init": ("persona_agent.setup_wizard", "main",
              "set up a home: model, key, character, language"),
     "chat": ("persona_agent.chat", "run",
@@ -49,7 +53,8 @@ def _parser() -> argparse.ArgumentParser:
         prog="personagent",
         description="A character for your group chats that knows when to stay "
                     "quiet, and learns from being corrected.",
-        epilog="Start with `personagent init`, then `personagent chat`.")
+        epilog="Run `personagent` to open local setup and chat, or "
+               "`personagent start --no-browser` to print the local link.")
     p.add_argument("--version", action="version", version=f"personagent {__version__}")
     p.add_argument("--home", metavar="DIR",
                    help="the folder holding .env, persona.txt and runtime/ "
@@ -89,6 +94,8 @@ def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
 def main(argv: list[str] | None = None) -> int:
     p = _parser()
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
+    if not args.command and sys.stdin is not None and sys.stdin.isatty():
+        args.command = "start"
     if not args.command:
         p.print_help()
         print()

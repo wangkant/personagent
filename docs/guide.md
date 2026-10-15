@@ -21,6 +21,8 @@ Everything you need to set personagent up, run it in your chats, teach it and lo
 
 ## Install and the home folder
 
+New users can follow the [short getting-started guide](start.md): open the local page, add a model key and chat, then connect QQ with a scan. The sections below also cover terminal and server workflows.
+
 | Route | Command |
 |---|---|
 | Run without installing | `uvx personagent <command>` |
@@ -73,10 +75,12 @@ Asked about a laptop that died mid-demo, Nova offered a fix before this exchange
 
 ## Set it up
 
-`personagent init` asks about eight questions, in English or Chinese, and explains each term in a line:
+`personagent`, `personagent start` and interactive `personagent init` open browser setup and chat. The terminal menu remains available with `personagent start --terminal`.
+
+`personagent init --terminal` walks through three steps, in English or Chinese, and explains each term in a line:
 
 - **The AI service.** DeepSeek, SiliconFlow, Alibaba Bailian (Qwen), Zhipu GLM, Moonshot (Kimi), Volcengine Ark (Doubao), OpenRouter, OpenAI, Google Gemini, Ollama on this computer, or any other OpenAI-compatible service. The default is DeepSeek's `deepseek-flash`. For Ollama, name a model you have already pulled; no key is needed.
-- **The key.** It is hidden while you type, then tested with one tiny request. If the test fails, it shows the address it called, the HTTP status and a likely fix.
+- **The key.** Choose whether to show it in this terminal; the default is hidden. When reconfiguring, choosing to show also reveals the saved key so you can check it. The key is tested with one tiny request. If the test fails, it shows the address it called, the HTTP status and a likely fix.
 - **The character.** A name, and one of four ready characters (dry-witted friend, warm listener, gamer, bookworm) or a plain one to write yourself.
 - **Chat apps.** Optional; skip it the first time. See [Put it in a chat](#put-it-in-a-chat).
 
@@ -172,10 +176,14 @@ Anything else can connect through the [connector protocol](connectors.md): one s
 
 ### Connect through AstrBot
 
-1. Install [AstrBot](https://docs.astrbot.app) (its launcher, Docker, or `uv tool install astrbot`), start it once, and add your chat platform in its WebUI.
-2. Run `personagent connect astrbot`, or say yes to the AstrBot step of `personagent init`. It finds AstrBot's folder, asks which chat app and which groups the bot may join (send `/sid` in a group to see its id), installs the plugin, and writes one shared `CONNECTOR_TOKEN` to both sides.
-3. Run `personagent run` and keep it running, then restart AstrBot or reload its plugins.
+1. Run `personagent connect astrbot`, or say yes to the AstrBot step of `personagent init --terminal`. When no installation is found, the setup offers to download AstrBot and its own Python 3.12 automatically. You can also point it at an existing installation.
+2. Choose the chat app and allowed groups (send `/sid` in a group to see its id). The setup installs the plugin and writes one shared `CONNECTOR_TOKEN` to both sides.
+3. Run `personagent run` and keep it running. For the managed install, start AstrBot in another terminal with `personagent connect astrbot --start`; otherwise restart your existing AstrBot or reload its plugins.
 4. Say the bot's name in one of those groups.
+
+The managed install lives under `<home>/platforms/`: `astrbot/` holds its data and `tools/` holds its isolated runtime. It does not require a global `uv` or change personagent's Python. The first start prints AstrBot's initial dashboard password; later starts keep your password. QQ still needs NapCat and account login; platform credentials are supplied by you.
+
+For an unattended installation, use `personagent connect astrbot --install`, optionally with `--platform telegram --token <bot token>`. No groups or DMs are allowed until configured. A failed download can be retried with the same command. Existing configuration is kept.
 
 The plugin also has its own repository, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent), so it can be installed from AstrBot's WebUI by that address; then set its `connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`.
 

@@ -21,12 +21,12 @@
   },
   "groups": {
     "type": "list",
-    "description": "Group IDs to forward. Default-deny: an empty list forwards no groups. \"*\" forwards every group, and the agent's ACCESS_GROUPS decides alone (a platform other than QQ with no entries there is refused).",
+    "description": "Group IDs to forward. Empty forwards none. A platform-qualified ID such as qq_official:ID scopes it to one adapter; qq_official:* explicitly delegates that platform to the character. The global * forwards all platforms and makes the agent's ACCESS_GROUPS decide alone.",
     "default": []
   },
   "dm_users": {
     "type": "list",
-    "description": "Sender IDs whose direct messages are forwarded. Default-deny: an empty list forwards no DMs. \"*\" forwards every DM, and the agent's ACCESS_DM_USERS decides alone (a platform with no entries there is refused).",
+    "description": "DM sender IDs to forward. Empty forwards none. A platform-qualified ID such as qq_official:ID scopes it to one adapter; qq_official:* explicitly delegates that platform to the character. The global * forwards all platforms and makes the agent's ACCESS_DM_USERS decide alone.",
     "default": []
   },
   "block_default": {

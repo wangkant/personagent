@@ -16,25 +16,28 @@
 
 personagent is a character for your group chats: pick one or write your own, and run it on any OpenAI-compatible model. It lives where your group already is: QQ, Telegram, Discord and a dozen more through [AstrBot](https://github.com/AstrBotDevs/AstrBot), anything [Koishi](https://koishi.chat) reaches through [Satori](https://satori.chat), and [Matrix](https://matrix.org) with its bridges to WhatsApp and Signal.
 
-For one-on-one chats with less setup, try [**Charune**](https://www.charune.com/), which runs on personagent.
+Start in a local browser chat. Add one model key, say hello, then connect QQ with a phone scan when you want to bring the character into a group.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/readme-chat.png" alt="The dashboard's chat view: messages it let pass with the reason, replies when it was called, and a corrected reply struck through with the better wording it learned and a Roll back button" width="760">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Local browser chat, settings and QQ connection in one app" width="960">
 </p>
 
-<p align="center"><em>The dashboard's chat view: where it stayed quiet and why, where it was called, and a corrected reply struck through above the better wording it learned, on record, with Roll back.</em></p>
+<p align="center"><em>Setup, character chat and QQ connection in one local page. Screenshot uses a local test model.</em></p>
 
-## Try it in one minute
+## Start here
 
-```bash
-uvx personagent demo    # watch it stay quiet and learn; no key, nothing to configure
-uvx personagent init    # pick a model service, paste its key, pick a character
-uvx personagent chat    # talk to it in a simulated group chat
+This branch contains the **1.1 development preview**. Until it is released on PyPI, install the current source:
+
+```sh
+python -m pip install https://github.com/wangkant/personagent/archive/refs/heads/main.zip
+python -m persona_agent
 ```
 
-`uvx` comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you. Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS, Linux) or `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+The browser opens automatically. Paste your model API key and click **Verify & start chatting**. The model and character have defaults; advanced settings are optional. An existing setup opens straight into chat.
 
-To install it with pipx or pip, or run it from a clone, see the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#install-and-the-home-folder).
+Want QQ? Click **Connect QQ**, then scan with mobile QQ. The app downloads AstrBot and its runtime, saves the credentials and starts both services. This route uses QQ Official Bot and **does not need NapCat**. Adding the bot to a group requires you to own the group.
+
+On Windows, you can also download the source ZIP and double-click `start.bat`. Reopening it resumes your setup; quitting stops the services it started. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md). Terminal commands and other platforms remain in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
 ## Why personagent
 
@@ -60,7 +63,7 @@ Every change is on record, and any of them can be rolled back.
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>It is easy to start, and lives where your group is.</strong><br>
-A setup in English or Chinese with 11 model services, and a demo that needs no key.<br>
+Browser setup and chat in English or Chinese, with 11 model services and optional advanced settings.<br>
 AstrBot, Koishi or Matrix carry it into your chats, and a local dashboard shows what it did.
 </td>
 </tr>
@@ -72,13 +75,9 @@ AstrBot, Koishi or Matrix carry it into your chats, and a local dashboard shows 
 
 ## Put it in your group
 
-The shortest path, through AstrBot:
+For QQ, use **Connect QQ** in the local page, scan, and add the official bot to your group. The app keeps both services running and starts them again the next time you open it.
 
-1. Install personagent for good with `uv tool install personagent` (or `pipx install personagent`), and run `personagent init` if you have not yet.
-2. Install [AstrBot](https://docs.astrbot.app) (its launcher, Docker, or `uv tool install astrbot`), start it once, and add your chat platform in its WebUI.
-3. Run `personagent connect astrbot`. It finds AstrBot's folder, asks which chat app and which groups the bot may join (send `/sid` in a group to see its id), installs the plugin, and writes one shared `CONNECTOR_TOKEN` to both sides.
-4. Run `personagent run` and keep it running, then restart AstrBot or reload its plugins.
-5. Say the bot's name in one of those groups.
+For Telegram, Discord, an existing AstrBot or OneBot/NapCat, use `personagent connect astrbot`. The terminal setup can reuse your platform credentials and installs the personagent plugin. `personagent up` starts the agent and its managed AstrBot together; separate `run` commands remain available for servers.
 
 The plugin also has its own repository, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent), so you can install it from AstrBot's WebUI by that address. QQ, Docker, Koishi, Matrix and the rest are in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), the [deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.md) and the [Chinese step-by-step guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md), which covers QQ from zero.
 
@@ -91,7 +90,7 @@ The plugin also has its own repository, [astrbot_plugin_personagent](https://git
 | Corroboration before a change | Two agreeing reactions from one chat, one strong | Not built in | Optional human check of learned expressions | Not documented | Not documented |
 | Audit trail and rollback | Append-only ledgers; rollback from the terminal or dashboard | Not built in | Not documented | Not documented | Not documented |
 | Published behavioural eval | Speak, persona and learning suites ([below](https://github.com/wangkant/personagent#measured)) | Not documented | Not documented | Not documented | Not documented |
-| Setup and admin | Terminal setup; local dashboard | WebUI, desktop launcher | WebUI, one-click launcher | Koishi console | CLI, web client |
+| Setup and admin | Browser setup and chat; local dashboard | WebUI, desktop launcher | WebUI, one-click launcher | Koishi console | CLI, web client |
 | Where it runs | Python service behind AstrBot, Koishi (Satori) or Matrix | Python app, 18+ platforms | Python app, QQ via NapCat | Koishi plugin | TypeScript (Bun); Discord, Telegram, Slack and more |
 | Licence | MIT | AGPL-3.0 | GPL-3.0 | AGPL-3.0 | MIT |
 

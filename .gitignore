@@ -32,6 +32,7 @@ Thumbs.db
 
 # Runtime / scraped data (PII: QQ numbers, group IDs, chat snippets)
 runtime/
+platforms/
 eval.jsonl
 memory.json
 core_memory.json

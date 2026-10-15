@@ -58,6 +58,12 @@ def ensure_venv() -> Path:
 def ensure_deps(venv: Path) -> None:
     # `python -m pip`: venvs made by some tools (uv) have no pip.exe shim.
     py = str(_venv_python(venv))
+    try:
+        if subprocess.call([py, "-c", "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+            return
+    except OSError:
+        pass  # the install step below provides the bootstrap's usual advice
     _info("installing dependencies (pip install -r requirements.txt) ...")
     try:
         # Best effort: an old pip that works must not stop the bootstrap.
@@ -75,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=PROG, parents=[setup_wizard.init_parser(PROG, add_help=False)],
         description="Set up a checkout: create .venv, install requirements.txt, then "
-                    "ask for the AI service, key and character (as `personagent init`). "
+                    "open browser setup and chat. Use --terminal for the terminal wizard. "
                     "Without a terminal, or with --no-input, nothing is asked.",
         epilog="Re-running is safe: existing files are kept, and the questions offer "
                "your current answers.")
@@ -109,6 +115,10 @@ def main(argv: list[str] | None = None) -> int:
     venv = ensure_venv()
     ensure_deps(venv)
     python = str(_venv_python(venv))
+    flags = any((args.provider, args.base_url, args.model, args.key_env,
+                 args.name, args.lang, args.persona, args.astrbot))
+    if not args.terminal and not args.no_input and not flags and sys.stdin.isatty():
+        return subprocess.call([python, "-m", "persona_agent", "start"], cwd=ROOT)
     if args.astrbot:
         home = homes.find_home()
         setup_wizard.apply_flags(home, args)

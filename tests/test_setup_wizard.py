@@ -303,7 +303,7 @@ def test_a_first_run_in_english(monkeypatch, tmp_path, capsys) -> None:
     check("first run: where the key comes from", "platform.deepseek.com/api_keys" in out)
     check("first run: the chat is handed over",
           any(c[0] == "chat" and c[1][-1] == "chat" for c in calls), repr(calls))
-    check("first run: eight questions to a terminal chat", len(script.prompts) == 8,
+    check("first run: nine questions including key visibility", len(script.prompts) == 9,
           "\n".join(script.prompts))
     check("first run: no English-only jargon left",
           "OpenAI-compatible" not in "".join(script.prompts))
@@ -608,7 +608,7 @@ def test_uvx_is_named_whatever_the_cache_folder(monkeypatch, tmp_path) -> None:
 
 def test_a_base_url_without_its_scheme_is_asked_again(monkeypatch) -> None:
     answers = iter([str(len(sw.PROVIDERS)), "api.example.com", "https://api.example.com",
-                    "some-model", "sk-test-123456"])
+                    "some-model", "n", "sk-test-123456"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     current = dict.fromkeys(("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"), "")
     values = sw.step_model(current)

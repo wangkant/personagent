@@ -147,7 +147,9 @@ class LauncherTests(unittest.TestCase):
                 ["main.py"],
             )
 
-    def test_vbs_launcher_quotes_editable_directories(self) -> None:
+    def test_vbs_launcher_uses_its_own_directory_without_manual_paths(self) -> None:
         source = (ROOT / "launch.vbs").read_text(encoding="ascii")
-        self.assertIn('cd /d """ & NAPCAT_DIR & """', source)
-        self.assertIn('cd /d """ & AGENT_DIR & """', source)
+        self.assertIn("GetParentFolderName(WScript.ScriptFullName)", source)
+        self.assertIn('shell.Run """" & folder & "\\start.bat" & """"', source)
+        self.assertNotIn("NAPCAT_DIR", source)
+        self.assertNotIn("C:\\path", source)

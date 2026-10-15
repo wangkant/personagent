@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `personagent`, `start` and interactive `init` open a local browser page: add one model key, verify it and chat with the real character. Defaults cover the provider, model and persona; optional settings stay collapsed. Existing configuration and edited personas are kept.
+- QQ Official Bot setup is a single page action: download AstrBot and its isolated runtime, display a QQ QR code, save the confirmed credentials, install the plugin and start both services. No NapCat is needed for this route; QQ group ownership and message permissions remain with the user.
+- The local page shows connection progress and retries, keeps recent browser chat locally, resumes a connected bot on the next launch, reuses an already running page and stops only owned processes on exit. API routes require a per-launch capability, reject cross-origin/proxy requests, and never include keys in ordinary state responses.
+- API keys can be shown explicitly in the page or terminal wizard. Changing a model endpoint requires re-entering its key rather than forwarding the old one automatically.
+- `init` and `connect astrbot` offer to download a missing AstrBot with an isolated Python 3.12 runtime. `connect astrbot --install` also works without prompts, and `connect astrbot --start` runs the managed installation.
+- `personagent up` starts the managed services together. `start --terminal`, `init --terminal`, headless flags and the existing server/connector commands remain available.
+- Windows and POSIX launchers open the same welcome page interactively; the Windows VBS launcher no longer needs editable directory or QQ account constants. The installed browser flow is smoke-tested in CI on Windows and Linux.
+
 ## [1.0.2] — 2026-10-12
 
 A smaller, faster codebase with the same behaviour: the package and tools are about 4,700 lines shorter, mostly comments that restated the code, duplicated helpers and scripts that only forwarded to a `personagent` command.

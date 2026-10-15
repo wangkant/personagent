@@ -14,23 +14,26 @@
 
 personagent 是放进群聊里的一个角色：选一个现成的性格或自己写一个，接上任意 OpenAI 兼容的模型就能用。它经 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 进 QQ、Telegram、Discord 等十几个平台，也能经 [Koishi](https://koishi.chat)（[Satori](https://satori.chat)）或 [Matrix](https://matrix.org) 接入。
 
-想用它一对一聊天，可以试试 [**Charune**](https://www.charune.com/)，它的对话引擎就是 personagent。
+先在本地页面里聊天，填一个模型 Key 就能开始。想把角色带到 QQ，再用手机扫一次码。
 
-![管理面板的聊天视图：沉默的原因、被叫到的回复、划掉的旧回复和它学会的说法](https://raw.githubusercontent.com/wangkant/personagent/main/assets/readme-chat.zh-CN.png)
+![本地页面：角色聊天、设置和 QQ 连接集中在同一处](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg)
 
-<sub>管理面板里的一段群聊：它在哪儿没开口、为什么，在哪儿被叫到；被纠正的那句划掉，下面挂着它学会的更好说法。每一处都有记录，点「撤回」就能撤掉。</sub>
+<sub>设置、聊天和 QQ 连接都在同一个本地页面里。截图使用本机模拟模型。</sub>
 
-## 一分钟试用
+## 从这里开始
 
-```bash
-uvx personagent demo --lang zh   # 看它怎么不插嘴、怎么被教会；不要 Key，什么都不用配
-uvx personagent init             # 选模型服务、填 Key、挑一个性格
-uvx personagent chat             # 在终端里的模拟群聊中和它说话
+当前分支是 **1.1 开发预览版**。发布到 PyPI 前，用下面两条命令安装当前源码：
+
+```sh
+python -m pip install https://github.com/wangkant/personagent/archive/refs/heads/main.zip
+python -m persona_agent
 ```
 
-`uvx` 来自 [uv](https://docs.astral.sh/uv/)，它会自己下载 Python。安装 uv：macOS / Linux 运行 `curl -LsSf https://astral.sh/uv/install.sh | sh`，Windows 运行 `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`。
+浏览器会自动打开。填入模型 API Key，点「验证并开始聊天」即可。模型和角色已有默认值，其他设置可以先不管。已经配置过的话，直接进入聊天。
 
-想用 pipx、pip 安装或者从源码运行，见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#安装和主目录)。
+想进 QQ，点「连接 QQ」，再用手机 QQ 扫码。程序会自动下载 AstrBot、准备运行环境、保存凭据，并一起启动。走的是 **QQ 官方机器人，不需要 NapCat**；把机器人加进群，需要你是该群的群主。
+
+Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。下次打开会沿用配置；退出应用会一起停止它启动的服务。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)。命令行和其他平台的用法保留在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)中。
 
 ## 为什么用它
 
@@ -69,14 +72,11 @@ uvx personagent chat             # 在终端里的模拟群聊中和它说话
 
 ## 接进你的 QQ 群
 
-personagent 自己不登录 QQ：[NapCat](https://github.com/NapNeko/NapCatQQ) 登录机器人的 QQ 小号，AstrBot 转发消息，personagent 决定说不说、说什么。
+打开本地页面的「连接 QQ」，扫码确认创建或绑定官方机器人。在手机 QQ「联系人 → 机器人」里找到它，即可私聊或添加到你管理的群。组件安装、角色连接和服务启动都自动完成，下次打开应用会恢复运行。
 
-1. 安装 [AstrBot](https://docs.astrbot.app)（用它的启动器、Docker，或者 `uv tool install astrbot`），先启动一次。
-2. 安装 NapCat，用机器人的 QQ 号登录（建议用小号）。
-3. 运行 `personagent connect astrbot`，聊天平台选 QQ，再填机器人的 QQ 号、要加入的群号和你自己的 QQ 号。它会找到 AstrBot 的文件夹、装好插件，并在两边写入同一个 `CONNECTOR_TOKEN`。
-4. 在 AstrBot 的 WebUI 里添加 QQ（OneBot v11 / aiocqhttp）平台，再把 NapCat 的反向 WebSocket 指向 `ws://127.0.0.1:6199/ws`。
-5. 运行 `personagent run` 并保持开着，然后重启 AstrBot，或在它的 WebUI 里重载插件。
-6. 在群里说「小夏，你好」（换成你起的名字）。
+在 QQ 的群机器人设置里选择它能获取的消息范围，按需要开启主动发言。这部分由 QQ 控制，应用不会代替你修改群权限。
+
+已有 AstrBot、Telegram、Discord 或 OneBot/NapCat 的用户仍可使用 `personagent connect astrbot`。`personagent up` 可同时运行角色服务和托管的 AstrBot；服务器也可继续分别启动。
 
 插件也有独立仓库 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent)，可以在 AstrBot 的 WebUI 里填这个地址安装，再把插件设置里的 `connector_token` 填成 personagent 的 `CONNECTOR_TOKEN`。从零开始、每一步都写明会看到什么，见[中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)；Telegram、Discord 等其他平台和 Docker 部署，见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）。
 

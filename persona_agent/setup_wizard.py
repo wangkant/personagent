@@ -116,10 +116,12 @@ _TEXT: dict[str, tuple[str, str]] = {
     "ollama_model": ("Use a model you have pulled; `ollama list` shows them.",
                      "填已经下载好的模型，`ollama list` 可以查看。"),
     "key_where": ("Create an API key here: {url}", "在这里创建 API key：{url}"),
-    "key_prompt": ("API key (hidden while you type or paste; then press Enter)",
-                   "API key（输入或粘贴时不显示，完成后回车）"),
-    "key_keep": ("API key (Enter keeps {masked}; hidden while you type)",
-                 "API key（回车保留 {masked}；输入时不显示）"),
+    "key_prompt": ("API key (paste it, then press Enter)",
+                   "API key（粘贴后按回车）"),
+    "key_visible": ("Show the API key in this terminal?", "在这个终端里显示 API Key 吗？"),
+    "key_current": ("Current API key: {value}", "当前 API Key：{value}"),
+    "key_keep": ("API key (Enter keeps {masked})",
+                 "API key（回车保留 {masked}）"),
     "key_got": ("key {masked}", "已记下 {masked}"),
     "testing": ("Testing the key with one tiny request to {url}",
                 "用一个很小的请求测试密钥：{url}"),
@@ -170,10 +172,40 @@ _TEXT: dict[str, tuple[str, str]] = {
     "persona_written": ("persona.txt written ({what})", "已写入 persona.txt（{what}）"),
     # chat apps / AstrBot
     "connect_intro": (
-        "Optional: put the bot in groups on QQ, Telegram, Discord and more. That goes\n"
-        "through AstrBot, a separate chat-bot program you install first: https://docs.astrbot.app",
-        "可选：让机器人进 QQ、Telegram、Discord 等平台的群。这需要先装好\n"
-        "AstrBot（另一个聊天机器人程序）：https://docs.astrbot.app"),
+        "Optional: put the bot in groups on QQ, Telegram, Discord and more through AstrBot.\n"
+        "Already installed? Use it. Otherwise this setup can download and install it for you.",
+        "可选：通过 AstrBot 接进 QQ、Telegram、Discord 等聊天平台。\n"
+        "已经装过就直接连接；还没有的话，可以在这里自动下载安装。"),
+    "astrbot_install_q": ("Download and install AstrBot now? (includes Python 3.12 if needed)",
+                          "现在自动下载安装 AstrBot 吗？（需要时会一并下载 Python 3.12）"),
+    "astrbot_installing": ("Installing AstrBot in {path}. The first download may take a few minutes.",
+                           "正在把 AstrBot 安装到 {path}，首次下载可能需要几分钟。"),
+    "astrbot_install_failed": ("AstrBot installation failed: {error}\n"
+                               "Your agent settings are saved. Retry with `personagent connect astrbot --install`.",
+                               "AstrBot 安装未完成：{error}\n"
+                               "已保留机器人设置。可运行 `personagent connect astrbot --install` 重试。"),
+    "astrbot_start": ("Start the installed AstrBot in another terminal:",
+                      "在另一个终端里启动已安装的 AstrBot："),
+    "start_title": ("personagent · Start", "personagent · 开始使用"),
+    "start_status": ("Character: {name}  |  API key: {masked}", "角色：{name}  |  API Key：{masked}"),
+    "start_unset": ("not set up", "尚未配置"),
+    "start_menu": ("1. Chat (first time: set up your model and character)\n"
+                   "2. Model, API key and character settings\n"
+                   "3. Install / connect a chat platform (AstrBot)\n"
+                   "4. Start the installed AstrBot\n"
+                   "5. Start the personagent service for chat platforms\n"
+                   "6. Watch the offline demo (no API key needed)\n"
+                   "0. Exit",
+                   "1. 开始聊天（首次使用会先配置模型和角色）\n"
+                   "2. 设置模型、API Key 和角色\n"
+                   "3. 安装 / 连接聊天平台（AstrBot）\n"
+                   "4. 启动已安装的 AstrBot\n"
+                   "5. 启动 personagent 聊天平台服务\n"
+                   "6. 观看离线演示（无需 API Key）\n"
+                   "0. 退出"),
+    "start_choose": ("Choose 0–6", "请选择 0–6"),
+    "start_failed": ("The command exited with code {code}. You can retry from this menu.",
+                     "命令退出，状态码 {code}。可在菜单中重新操作。"),
     "connect_q": ("Connect to AstrBot now? (No = chat in this terminal only)",
                   "现在连接 AstrBot 吗？（否 = 只在终端里聊天）"),
     "astrbot_explain": ("AstrBot folder = the one holding cmd_config.json: AstrBot's data folder or the one above it.",
@@ -796,10 +828,13 @@ def astrbot_roots() -> list[Path]:
     """Where AstrBot keeps its root: ASTRBOT_ROOT, the desktop app's
     ~/.astrbot, or a folder its launcher, source checkout or `astrbot init` made."""
     user = Path.home()
+    from persona_agent.astrbot_install import AstrBotInstallation
+
     roots = []
     configured = os.environ.get(ASTRBOT_ROOT_VAR, "").strip()
     if configured:
         roots.append(Path(configured).expanduser())
+    roots.append(AstrBotInstallation(homes.find_home()).root)
     roots.append(user / ".astrbot")
     for base in (homes.find_home().parent, homes.CHECKOUT.parent, Path.cwd(), user,
                  user / "Desktop", user / "Documents"):
@@ -908,10 +943,9 @@ def retired_astrbot_config_path(data_dir: Path) -> Path:
 
 
 def _write_json(path: Path, data: dict) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    from persona_agent.storage import atomic_write_text
+
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=4) + "\n")
     return path
 
 
@@ -979,6 +1013,8 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
 # AstrBot platform adapters this setup can switch on, in AstrBot's own config
 # shape (its 4.x template); only the credential fields are filled in.
 PLATFORMS = {
+    "qq_official": (("appid", ("QQ bot AppID", "QQ 官方机器人 AppID")),
+                    ("secret", ("QQ bot AppSecret", "QQ 官方机器人 AppSecret"))),
     "telegram": (("telegram_token", ("Telegram bot token (from @BotFather)",
                                      "Telegram 机器人 token（找 @BotFather 创建）")),),
     "discord": (("discord_token", ("Discord bot token (Developer Portal > Bot)",
@@ -991,8 +1027,10 @@ PLATFORMS = {
              ("app_secret", ("Lark / Feishu app secret", "飞书 / Lark App Secret"))),
 }
 PLATFORM_LABELS = {"telegram": "Telegram", "discord": "Discord", "slack": "Slack",
-                   "kook": "KOOK", "lark": "Lark / Feishu"}
+                   "kook": "KOOK", "lark": "Lark / Feishu", "qq_official": "QQ 官方机器人"}
 _PLATFORM_DEFAULTS = {
+    "qq_official": {"enable_group_c2c": True, "enable_guild_direct_message": True,
+                    "use_markdown": True},
     "telegram": {"start_message": "", "telegram_api_base_url": "https://api.telegram.org/bot",
                  "telegram_file_base_url": "https://api.telegram.org/file/bot",
                  "telegram_command_register": False, "telegram_command_auto_refresh": False,
@@ -1052,7 +1090,8 @@ def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
 def flag_platform_creds(kind: str, token: str = "", app_token: str = "", app_id: str = "",
                         app_secret: str = "") -> dict:
     """The credential fields of `kind` from the command-line flags."""
-    return {"telegram": {"telegram_token": token}, "discord": {"discord_token": token},
+    return {"qq_official": {"appid": app_id, "secret": app_secret},
+            "telegram": {"telegram_token": token}, "discord": {"discord_token": token},
             "slack": {"bot_token": token, "app_token": app_token},
             "kook": {"kook_bot_token": token},
             "lark": {"app_id": app_id, "app_secret": app_secret}}.get(kind, {})
@@ -1187,17 +1226,20 @@ def step_model(current: dict, retry: bool = False) -> dict:
     model = ask(t("model"), default=(current["LLM_MODEL"] if same and current["LLM_MODEL"]
                                      else provider.model), required=True)
 
+    visible = provider.needs_key and ask_yn(t("key_visible"), default_yes=False)
     if not provider.needs_key:
         api_key = current["LLM_API_KEY"] if same and current["LLM_API_KEY"] else "ollama"
     elif same and current["LLM_API_KEY"]:
         masked = mask_secret(current["LLM_API_KEY"])
+        if visible:
+            _say(t("key_current", value=current["LLM_API_KEY"]))
         api_key = ask(t("key_keep", masked=masked), default=current["LLM_API_KEY"],
-                      shown_default="", secret=True)
+                      shown_default="", secret=not visible)
         _say(t("key_got", masked=mask_secret(api_key)))
     else:
         if provider.key_url:
             _say(t("key_where", url=provider.key_url))
-        api_key = ask(t("key_prompt"), required=True, secret=True)
+        api_key = ask(t("key_prompt"), required=True, secret=not visible)
         _say(t("key_got", masked=mask_secret(api_key)))
     return {"LLM_BASE_URL": base_url, "LLM_MODEL": model, "LLM_API_KEY": api_key,
             "_provider": provider.key}
@@ -1264,6 +1306,25 @@ def _raw_id(entry: str) -> str:
     return entry.split(":", 1)[1] if ":" in entry else entry
 
 
+def _install_astrbot(home: Path) -> Path:
+    from persona_agent.astrbot_install import AstrBotInstallation, install_astrbot
+
+    _say(t("astrbot_installing", path=AstrBotInstallation(home).root))
+    return install_astrbot(home)
+
+
+def _astrbot_start_steps(launcher: Launcher, data_dir: Path) -> None:
+    from persona_agent.astrbot_install import AstrBotInstallation
+
+    managed = AstrBotInstallation(launcher.home).root / "data"
+    if _resolved(data_dir) == _resolved(managed):
+        _say(t("astrbot_start"))
+        for line in launcher.shown("connect astrbot --start"):
+            _say(f"     {line}")
+    else:
+        _say(t("next_restart"))
+
+
 def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
     """Connect to AstrBot. Writes the plugin and its config; returns what the
     next steps need, or None when skipped."""
@@ -1271,13 +1332,21 @@ def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
     if not ask_yn(t("connect_q"), default_yes=False):
         return None
     guess = find_astrbot_data()
-    _say(t("astrbot_explain"))
-    while True:
-        raw = ask(t("astrbot_dir"), default=str(guess) if guess else "", required=True)
-        data_dir = resolve_astrbot_data(Path(raw))
-        if data_dir:
-            break
-        _say(t("astrbot_bad", path=Path(raw).expanduser()))
+    data_dir = None
+    if guess is None and ask_yn(t("astrbot_install_q"), default_yes=True):
+        try:
+            data_dir = _install_astrbot(env_path.parent)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            _say(t("astrbot_install_failed", error=exc))
+            return None
+    if data_dir is None:
+        _say(t("astrbot_explain"))
+        while True:
+            raw = ask(t("astrbot_dir"), default=str(guess) if guess else "", required=True)
+            data_dir = resolve_astrbot_data(Path(raw))
+            if data_dir:
+                break
+            _say(t("astrbot_bad", path=Path(raw).expanduser()))
     existing = read_astrbot_config(data_dir)
 
     url_override = ""
@@ -1385,7 +1454,8 @@ def finish(launcher: Launcher, home: Path, *, name: str, has_key: bool,
         for line in launcher.shown("run"):
             _say(f"     {line}")
         n += 1
-        _say(f"{n}. " + t("next_restart"))
+        _say(f"{n}.")
+        _astrbot_start_steps(launcher, astrbot["data_dir"])
         n += 1
         if astrbot["kind"] == "qq":
             _say(f"{n}. " + t("next_qq"))
@@ -1530,6 +1600,7 @@ def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
                     "optionally AstrBot. Asks questions in a terminal.")
     p.add_argument("--no-input", action="store_true",
                    help="ask nothing; use the flags below and keep everything else")
+    p.add_argument("--terminal", action="store_true", help="use the terminal setup wizard instead of the welcome page")
     p.add_argument("--provider", choices=PROVIDER_KEYS, help="an AI service preset")
     p.add_argument("--base-url", help="the service's API address (needed with --provider other)")
     p.add_argument("--model", help="the model id (default: the preset's)")
@@ -1560,6 +1631,11 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
     home = homes.find_home()
     launcher = Launcher(python=python or sys.executable, home=home)
     tty = sys.stdin is not None and sys.stdin.isatty()
+    flags = any((args.provider, args.base_url, args.model, args.key_env,
+                 args.name, args.lang, args.persona))
+    if tty and not args.no_input and not getattr(args, "terminal", False) and not flags:
+        from persona_agent.welcome import main as welcome_main
+        return welcome_main([], prog)
     if args.no_input or not tty:
         if not args.no_input:
             set_lang(args.lang or detect_lang())
@@ -1596,6 +1672,11 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
     p.add_argument("target", choices=("astrbot",))
     p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
                    help="AstrBot's folder (its data folder or the one above it)")
+    action = p.add_mutually_exclusive_group()
+    action.add_argument("--install", action="store_true",
+                        help="download and initialise AstrBot under this agent home, then connect it")
+    action.add_argument("--start", action="store_true",
+                        help="start the AstrBot installed under this agent home")
     qq = p.add_mutually_exclusive_group()
     qq.add_argument("--qq", dest="qq", action="store_const", const=True,
                     help="route QQ through AstrBot too")
@@ -1648,7 +1729,8 @@ def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
     print("  1. " + t("next_run"))
     for line in launcher.shown("run"):
         print(f"       {line}")
-    print("  2. " + t("next_restart"))
+    print("  2.")
+    _astrbot_start_steps(launcher, found)
     return 0
 
 
@@ -1658,6 +1740,33 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
     home = homes.find_home()
     env_path = home / ".env"
     set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
+    if args.data_dir and (args.install or args.start):
+        raise SystemExit("--install and --start use the managed folder; omit DATA_DIR")
+    if args.start:
+        if args.qq is not None or args.platform or args.url or any(
+                (args.token, args.app_token, args.app_id, args.app_secret)):
+            raise SystemExit("--start cannot be combined with connection settings")
+        from persona_agent.astrbot_install import start_astrbot
+
+        try:
+            return start_astrbot(home)
+        except OSError as exc:
+            raise SystemExit(str(exc)) from None
+    if args.install:
+        # Validate adapter flags before a potentially large download.
+        creds = flag_platform_creds(args.platform or "", args.token, args.app_token,
+                                    args.app_id, args.app_secret)
+        if args.platform:
+            try:
+                astrbot_platform_entry(args.platform, creds)
+            except ValueError as exc:
+                raise SystemExit(f"platform not written: {exc}") from None
+        if args.url and not personagent_url_accepted(args.url, "token"):
+            raise SystemExit(t("url_refused"))
+        try:
+            args.data_dir = str(_install_astrbot(home))
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise SystemExit(t("astrbot_install_failed", error=exc)) from None
     if args.data_dir:
         creds = flag_platform_creds(args.platform or "", args.token, args.app_token,
                                     args.app_id, args.app_secret)
@@ -1681,3 +1790,43 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
         print()
         return 130
     return 0
+
+
+def start_main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
+    """A small front door; each action runs in a fresh process to reload settings."""
+    argparse.ArgumentParser(prog=prog, description="Open the personagent start menu").parse_args(argv)
+    _prepare_output()
+    if sys.stdin is None or not sys.stdin.isatty():
+        print("Open this menu in a terminal: personagent start")
+        return 2
+    home = homes.find_home()
+    launcher = Launcher(python=sys.executable, home=home)
+    try:
+        while True:
+            env = home / ".env"
+            set_lang(env_get(env, "AGENT_LANG") or os.getenv("AGENT_LANG") or detect_lang())
+            _header(t("start_title"))
+            _say(t("folder", path=home))
+            key = env_get(env, "LLM_API_KEY")
+            _say(t("start_status", name=env_get(env, "PERSONA_NAME") or t("start_unset"),
+                   masked=mask_secret(key) if key else t("start_unset")))
+            _say(t("start_menu"))
+            choice = ask(t("start_choose"), default="1")
+            if choice == "0":
+                return 0
+            commands = {"1": ["chat"], "2": ["init", "--terminal"], "3": ["connect", "astrbot"],
+                        "4": ["connect", "astrbot", "--start"], "5": ["run"],
+                        "6": ["demo", "--offline", "--lang", _lang]}
+            if choice not in commands:
+                continue
+            if choice in ("1", "5") and not key:
+                code = subprocess.call([*launcher.argv("init"), "--terminal"], cwd=launcher.cwd())
+                if code or not env_get(env, "LLM_API_KEY"):
+                    continue
+            command, *extra = commands[choice]
+            code = subprocess.call([*launcher.argv(command), *extra], cwd=launcher.cwd())
+            if code:
+                _say(t("start_failed", code=code))
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return 130

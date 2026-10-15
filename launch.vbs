@@ -1,45 +1,7 @@
-' Optional one-click launcher for Windows.
-'
-' DEPRECATED, like the direct OneBot ingress it starts (/v1/onebot); both keep
-' working throughout 1.x. The supported path is AstrBot, which manages the QQ
-' client itself, with personagent started by start.bat. See docs/deploy.md.
-'
-' What it does:
-'   1. Starts NapCat (your OneBot v11 client) in a minimized cmd window
-'   2. Waits a few seconds for NapCat to come up
-'   3. Starts main.py in another minimized cmd window
-'
-' Both windows stay open after launch (cmd /k) so you can see logs / errors.
-' Both are minimized without stealing focus (intWindowStyle = 7).
-'
-' SETUP:
-'   1. Edit the three values below (QQ_BOT_ID, NAPCAT_DIR, AGENT_DIR) to match
-'      your local install.
-'   2. Double-click this .vbs (or pin a shortcut to it on the desktop).
-'
-' Notes:
-'   - File is pure ASCII on purpose; .vbs with non-ASCII characters needs a
-'     UTF-8 BOM or cscript will silently fail to start it on some locales.
-'   - NapCat's launcher-user.bat takes the bot's QQ number as its first arg.
-'     If you use a different OneBot client, adjust the NapCat line accordingly.
-
+' personagent - open the same welcome page as start.bat.
 Option Explicit
-
-' ---- EDIT THESE ----
-Const QQ_BOT_ID      = "0000000000"
-Const NAPCAT_DIR  = "C:\path\to\NapCat.Shell"
-Const AGENT_DIR   = "C:\path\to\personagent"
-' --------------------
-
-Dim WS
-Set WS = CreateObject("WScript.Shell")
-
-' Launch NapCat (7 = minimized, no focus)
-WS.Run "cmd /k cd /d """ & NAPCAT_DIR & """ && launcher-user.bat " & QQ_BOT_ID, 7, False
-
-' Give NapCat ~3s to come up before the agent starts hitting its HTTP API
-WScript.Sleep 3000
-
-' Launch the agent. Prefer the .venv that quickstart.py creates; fall back to a
-' global python so this works whether or not the venv flow was used.
-WS.Run "cmd /k cd /d """ & AGENT_DIR & """ && set PYTHONIOENCODING=utf-8 && (if exist .venv\Scripts\python.exe (.venv\Scripts\python.exe main.py) else (python main.py))", 7, False
+Dim shell, files, folder
+Set shell = CreateObject("WScript.Shell")
+Set files = CreateObject("Scripting.FileSystemObject")
+folder = files.GetParentFolderName(WScript.ScriptFullName)
+shell.Run """" & folder & "\start.bat" & """", 1, False

@@ -1,4 +1,4 @@
-# personagent - start the service from a checkout (Windows)
+# personagent - open local setup and chat from a checkout (Windows)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
@@ -15,6 +15,11 @@ $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
 }
 $venvPy = Join-Path $PSScriptRoot $venvRelative
 $basePy = $null
+if ([Console]::IsInputRedirected -and -not (Test-Path (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
+    Write-Host "error: setup is needed. Run 'python quickstart.py' in a terminal to open the welcome page." -ForegroundColor Red
+    exit 1
+}
+
 if (-not (Test-Path $venvPy)) {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
@@ -27,19 +32,6 @@ if (-not (Test-Path $venvPy)) {
         exit 1
     }
     $basePy = $py.Source
-}
-
-# Not set up yet: run the setup wizard instead of a server that cannot answer.
-if (-not (Test-Path (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
-    if ([Console]::IsInputRedirected) {
-        Write-Host "error: personagent is not set up here yet (no .env). Run 'python quickstart.py' first." -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "No .env yet: starting the setup wizard (quickstart.py)." -ForegroundColor Yellow
-    $setupPy = if (Test-Path $venvPy) { $venvPy } else { $basePy }
-    & $setupPy quickstart.py
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    if (-not (Test-Path (Join-Path $PSScriptRoot '.env'))) { exit 1 }
 }
 
 if (-not (Test-Path $venvPy)) {
@@ -69,6 +61,9 @@ if (-not $depsOk) {
 $env:PYTHONIOENCODING = 'utf-8'
 
 Write-Host ""
-# main.py loads .env before resolving SERVER_HOST / SERVER_PORT.
-& $pySource main.py
+if (-not [Console]::IsInputRedirected -and $args.Count -eq 0) {
+    & $pySource -m persona_agent start
+} else {
+    & $pySource main.py @args
+}
 exit $LASTEXITCODE

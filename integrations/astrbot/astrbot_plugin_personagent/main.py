@@ -538,7 +538,9 @@ class PersonagentConnector(Star):
         if platform in self._excluded():
             return False
         allow = self._listed("groups" if is_group else "dm_users")
-        return "*" in allow or (conversation_id if is_group else sender_id) in allow
+        raw_id = conversation_id if is_group else sender_id
+        return ("*" in allow or raw_id in allow or f"{platform}:{raw_id}" in allow
+                or f"{platform}:*" in allow)
 
     @staticmethod
     def _is_chat_message(platform: str, raw) -> bool:
