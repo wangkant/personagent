@@ -69,6 +69,8 @@ personagent connect astrbot --start
 
 也可以运行 `personagent connect astrbot` 跟着向导安装，并填写群号和账号设置。
 
+这样装的 AstrBot 不开网页后台，也没有密码要记：它的平台在 personagent 本地页面的「连接平台」里添加，NapCat 用「高级 → OneBot v11（NapCat）」，端口默认 `6199`。下面「确认 AstrBot 跑起来了」和第四部分第 1 步里打开 AstrBot 网页的操作，只适用于方法 B 和 C。
+
 ### 方法 B：启动器（点安装包）
 
 1. 打开 [AstrBotDevs/astrbot-launcher 的 Releases](https://github.com/AstrBotDevs/astrbot-launcher/releases)，下载 `AstrBot.Launcher_x64-setup.exe`（ARM 电脑下 `arm64` 版）。
@@ -86,7 +88,7 @@ astrbot run
 
 `astrbot init` 只在第一次运行。**以后每次都要在 `D:\astrbot` 这个文件夹里运行 `astrbot run`**，它的数据就放在这个文件夹的 `data` 里。
 
-### 确认 AstrBot 跑起来了
+### 确认 AstrBot 跑起来了（方法 B、C）
 
 你应该在日志里看到 `管理面板已启动，可访问`，后面跟着几个链接。浏览器打开其中的 `http://localhost:6185`：
 

@@ -21,19 +21,22 @@ The key stays on your computer. Chat messages go to the model service you select
 
 Your character replies in the page. Settings are saved, so the next launch goes straight to chat.
 
-## Bring it to QQ
+## Bring it to other apps
 
-1. Click **Connect QQ**. The page explains that this delegates the official bot's group chats and DMs to your character.
-2. The app downloads AstrBot and a separate Python 3.12 runtime as needed. Keep the page open.
-3. Scan the displayed code with mobile QQ and confirm creation or binding. Credentials are saved and both services start automatically.
-4. Find the bot in mobile QQ → Contacts → Bots. Chat privately or add it to a group you own.
+1. Click **Connect apps** and pick one. Once connected, your character replies to that app's group chats and DMs.
+   - **Scan to connect**: QQ and personal WeChat. Click **Get a QR code** and confirm on your phone.
+   - **Paste one or two values**: Telegram, Discord, KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost and Misskey. The page says which values to copy from the app's console; everything else uses defaults.
+   - **Advanced**: WeCom apps, WeChat Official Accounts and QQ webhooks need a public address that forwards to their callback port; OneBot v11 (NapCat) and Satori need other software running on this computer.
+2. The first connection downloads AstrBot and a separate Python 3.12 runtime. Keep the page open. AstrBot runs in the background with no dashboard to sign in to.
+3. The app saves the credentials, starts both services and waits a few seconds to confirm the app accepted the connection. If it refused, the page says so and nothing is saved.
+4. Connected apps are listed at the top of the page, where you can set one up again or disconnect it.
 
-This uses QQ Official Bot, so no NapCat or personal QQ bot account is required. QQ controls which groups you can add it to and which messages it can see; currently adding it to a group requires you to own the group. [AstrBot's official QQ guide](https://github.com/AstrBotDevs/AstrBot/wiki/en-platform-qqofficial-websockets) covers those account-side steps.
+For QQ, find the bot in mobile QQ → Contacts → Bots, then chat privately or add it to a group you own. This uses QQ Official Bot, so no NapCat or personal QQ bot account is required. QQ controls which groups you can add it to and which messages it can see; currently adding it to a group requires you to own the group. [AstrBot's official QQ guide](https://github.com/AstrBotDevs/AstrBot/wiki/en-platform-qqofficial-websockets) covers those account-side steps.
 
-An expired code can be requested again. A failed download can be retried without repeating model setup. Only QQ Official Bot gets the platform-scoped permission; other adapters stay under their existing allowlists.
+An expired code can be requested again. A failed download can be retried without repeating model setup. Only the app you connect gets the platform-scoped permission; other adapters stay under their existing allowlists. LINE is not offered, because AstrBot only receives LINE callbacks through its dashboard.
 
 ## Next time
 
-Open personagent again. Your settings are kept, and a connected QQ bot's services resume automatically. Opening it a second time reuses the running page. **Quit** closes the app and stops only the processes it started. Keep its launch window open while using it.
+Open personagent again. Your settings are kept, and connected apps resume automatically. Opening it a second time reuses the running page. **Quit** closes the app and stops only the processes it started. Keep its launch window open while using it.
 
 Advanced users can use `personagent start --terminal`, `personagent init --terminal`, `personagent up`, or the existing `chat`, `run` and `connect` commands. Existing `.env`, edited persona files and learned memories are kept. Other platforms remain in the [full guide](guide.md).

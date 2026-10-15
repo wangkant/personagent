@@ -19,9 +19,10 @@
           <button class="nav active" data-view="chat">
             <span aria-hidden="true">◌</span><span data-t="chat">开始聊天</span>
           </button>
-          <button class="nav" data-view="qq">
-            <span aria-hidden="true">↗</span><span data-t="qq">连接 QQ</span
-            ><span id="qq-dot" class="dot" hidden></span>
+          <button class="nav" data-view="platforms">
+            <span aria-hidden="true">↗</span
+            ><span data-t="platforms">连接平台</span
+            ><span id="platforms-dot" class="dot" hidden></span>
           </button>
           <button class="nav" data-view="settings">
             <span aria-hidden="true">⚙</span
@@ -194,84 +195,95 @@
             Enter 发送 · Shift + Enter 换行
           </div>
         </section>
-        <section id="qq-view" class="page qq-page" hidden>
+        <section id="platforms-view" class="page platforms-page" hidden>
           <div class="eyebrow" data-t="bringAlong">
             把熟悉的角色，带到熟悉的地方
           </div>
-          <h1 id="qq-title"></h1>
-          <p class="lead" data-t="qqIntro">
-            通过 QQ 官方机器人直接连接，无需 NapCat，也不用填写端口。
+          <h1 id="platforms-title"></h1>
+          <p class="lead" data-t="platformsIntro">
+            选一个平台，扫码或填一两项。下载、配置和启动都会自动完成。
           </p>
-          <div class="card qq-card">
-            <div class="connection-steps">
-              <div id="stage-install">
-                <span>1</span><strong data-t="prepare">自动准备组件</strong>
-              </div>
-              <i></i>
-              <div id="stage-scan">
-                <span>2</span><strong data-t="scan">手机 QQ 扫码</strong>
-              </div>
-              <i></i>
-              <div id="stage-ready">
-                <span>3</span><strong data-t="connected">开始使用</strong>
+          <div id="connected-card" class="card connected-card" hidden>
+            <div class="connected-head">
+              <h2 data-t="connectedTitle">已连接的平台</h2>
+              <div>
+                <button
+                  class="secondary"
+                  id="start-services"
+                  data-t="startServices"
+                >
+                  一键启动</button
+                ><button class="quiet" id="stop-services" data-t="stopServices">
+                  暂停运行
+                </button>
               </div>
             </div>
-            <div id="qq-idle">
-              <div class="qq-symbol" aria-hidden="true">↗</div>
-              <h2 data-t="oneScan">剩下的，只需一次扫码。</h2>
-              <p data-t="qqScope">
-                连接后，角色会回复这个 QQ 官方机器人收到的群聊和私聊。
-              </p>
-              <button class="primary" id="connect-qq" data-t="connectQQ">
-                连接 QQ，获取二维码
+            <ul id="connected-list"></ul>
+            <div id="services-error" class="error" role="alert" hidden></div>
+          </div>
+          <div id="platform-groups">
+            <h3 class="group-title" data-t="groupScan">扫码就能连</h3>
+            <div class="tiles" data-group="scan"></div>
+            <h3 class="group-title" data-t="groupKey">粘贴一两项</h3>
+            <div class="tiles" data-group="key"></div>
+            <details id="advanced-platforms">
+              <summary data-t="groupAdvanced">
+                高级：需要公网地址或本机其他软件
+              </summary>
+              <div class="tiles" data-group="advanced"></div>
+            </details>
+          </div>
+          <div id="platform-panel" class="card platform-card" hidden>
+            <button class="quiet back" id="panel-back" data-t="back">
+              ← 返回
+            </button>
+            <h2 id="panel-title"></h2>
+            <p id="panel-note" class="panel-note"></p>
+            <a
+              id="panel-guide"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-t="guide"
+              >去平台后台获取 ↗</a
+            >
+            <form id="platform-form">
+              <div id="panel-fields"></div>
+              <div id="panel-error" class="error" role="alert" hidden></div>
+              <button class="primary full" type="submit" id="panel-submit">
+                连接
               </button>
-              <p class="field-note" data-t="groupNote">
-                添加到群聊需要你是群主；群消息范围由 QQ 的机器人设置控制。
+              <p class="footnote" data-t="scope">
+                连接后，角色会回复这个平台上的群聊和私聊。
               </p>
-            </div>
-            <div id="qq-progress" hidden>
+            </form>
+            <div id="panel-progress" hidden>
               <div id="qr-box" hidden>
-                <img id="qr-image" alt="QQ QR code" />
-                <p data-t="scanHelp">
-                  用手机 QQ 扫码，并确认创建或绑定机器人。
-                </p>
+                <img id="qr-image" alt="QR code" />
+                <p id="scan-help"></p>
                 <a
                   id="qr-link"
                   target="_blank"
                   rel="noopener noreferrer"
                   data-t="openQQ"
                   >在浏览器打开授权页面 ↗</a
-                ><button class="quiet" id="cancel-qq" data-t="cancel">
-                  取消
-                </button>
+                >
               </div>
               <div id="progress-spinner" class="spinner"></div>
               <h2 id="progress-title"></h2>
               <p id="progress-hint"></p>
-            </div>
-            <div id="qq-ready" hidden>
-              <div class="success-mark" aria-hidden="true">✓</div>
-              <h2 data-t="qqDone">已经连接，去 QQ 打个招呼吧。</h2>
-              <p data-t="qqDoneHint">
-                在手机 QQ 的「联系人 →
-                机器人」找到它，开始私聊，或把它添加到你管理的群。
-              </p>
-              <button
-                class="primary"
-                id="start-services"
-                data-t="startServices"
-              >
-                一键启动</button
-              ><button class="quiet" id="stop-services" data-t="stopServices">
-                暂停运行
+              <button class="quiet" id="cancel-platform" data-t="cancel">
+                取消
               </button>
             </div>
-            <div id="qq-error" class="error" role="alert" hidden></div>
-            <button class="secondary" id="retry-qq" hidden data-t="retry">
-              重试
-            </button>
+            <div id="panel-done" hidden>
+              <div class="success-mark" aria-hidden="true">✓</div>
+              <h2 id="done-title"></h2>
+              <button class="secondary" id="panel-finish" data-t="backToList">
+                返回平台列表
+              </button>
+            </div>
           </div>
-          <p class="qq-footer" data-t="keepOpen">
+          <p class="platforms-footer" data-t="keepOpen">
             使用期间保持应用运行即可。关闭程序时，会一并停止由它启动的服务。
           </p>
         </section>

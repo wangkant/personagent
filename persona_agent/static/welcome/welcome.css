@@ -609,80 +609,121 @@ details[open] summary {
   color: #9a9f93;
   margin-top: 10px;
 }
-.qq-page {
+.platforms-page {
   padding-top: 62px;
-  text-align: center;
   max-width: 1000px;
 }
-.qq-card {
-  padding: 30px;
-  max-width: 720px;
-  margin: 32px auto 0;
+.platforms-page > .eyebrow,
+.platforms-page > h1,
+.platforms-page > .lead {
+  text-align: center;
 }
-.connection-steps {
+.connected-card {
+  padding: 20px 26px;
+  margin-bottom: 26px;
+}
+.connected-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 25px;
+}
+.connected-head h2 {
+  font-size: 15px;
+  margin: 0;
+}
+#connected-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+#connected-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+#connected-list strong {
+  flex: 1;
+  font-weight: 550;
+}
+.group-title {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 26px 0 12px;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.tile {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   text-align: left;
 }
-.connection-steps > div {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #a1a898;
-  white-space: nowrap;
+.tile:hover {
+  border-color: #c5d3b9;
+  transform: translateY(-1px);
 }
-.connection-steps span {
-  border: 1px solid var(--line);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
+.tile strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tile-tag {
   font-size: 10px;
-}
-.connection-steps strong {
-  font-size: 10px;
-  font-weight: 500;
-}
-.connection-steps i {
-  height: 1px;
-  background: var(--line);
-  flex: 1;
-}
-.connection-steps .active {
   color: var(--green);
 }
-.connection-steps .active span {
+.tile.on {
   background: var(--soft);
-  border-color: #c5d3b9;
 }
-.qq-symbol {
-  font-size: 45px;
-  color: #7e956c;
-  margin: 35px auto 20px;
+#advanced-platforms {
+  margin-top: 26px;
 }
-#qq-idle > p,
-#qq-ready > p,
-#qq-progress > p {
+.platform-card {
+  padding: 26px 30px 30px;
+  max-width: 620px;
+  margin: 0 auto;
+}
+.platform-card .back {
+  margin: -6px 0 8px -8px;
+}
+.panel-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 4px;
+}
+#panel-guide {
+  font-size: 11px;
+}
+#panel-progress,
+#panel-done {
+  text-align: center;
+}
+#panel-progress > p {
   font-size: 12px;
   color: var(--muted);
   max-width: 460px;
-  margin: 13px auto 22px;
+  margin: 13px auto 12px;
 }
-.qq-card h2 {
-  font-size: 21px;
-  font-weight: 500;
+#panel-done .secondary {
+  margin-top: 12px;
 }
-.qq-card .field-note {
-  font-size: 10px !important;
-  margin: 22px auto 4px !important;
-}
-.qq-footer {
+.platforms-footer {
   font-size: 10px;
   color: #8d9586;
+  text-align: center;
   max-width: 650px;
   margin: 23px auto;
 }
@@ -696,10 +737,6 @@ details[open] summary {
   border-radius: 50%;
   font-size: 28px;
   margin: 32px auto 25px;
-}
-#qq-ready .quiet {
-  display: block;
-  margin: 12px auto 0;
 }
 #qr-box {
   padding-top: 25px;
@@ -745,9 +782,6 @@ details[open] summary {
   line-height: 1.8;
   padding: 12px 14px;
   border-radius: 9px;
-  margin-top: 16px;
-}
-.qq-card > .secondary {
   margin-top: 16px;
 }
 #toast {
@@ -890,7 +924,7 @@ details[open] summary {
   .chat-page {
     height: calc(100dvh - 66px);
   }
-  .qq-page {
+  .platforms-page {
     padding-top: 36px;
   }
   h1 {
@@ -899,18 +933,11 @@ details[open] summary {
   .lead {
     font-size: 12px;
   }
-  .connection-steps {
-    gap: 6px;
-  }
-  .connection-steps strong {
-    font-size: 9px;
-  }
-  .qq-card {
+  .platform-card {
     padding: 23px 18px;
   }
-  .connection-steps span {
-    width: 20px;
-    height: 20px;
+  .tiles {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
   .chat-empty {
     padding-top: 8vh;
@@ -940,19 +967,19 @@ details[open] summary {
   .setup-card {
     padding: 20px;
   }
-  .connection-steps strong {
-    max-width: 62px;
-    white-space: normal;
-    line-height: 1.5;
+  .connected-head {
+    flex-wrap: wrap;
   }
-  .connection-steps > div {
-    gap: 5px;
+  #connected-list li {
+    flex-wrap: wrap;
   }
-  .connection-steps i {
-    min-width: 4px;
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
-  .qq-card h2 {
-    font-size: 18px;
+  .tile {
+    min-height: 54px;
+    padding: 13px;
   }
   .chat-page {
     padding-bottom: 16px;

@@ -1,6 +1,10 @@
-"""An optional AstrBot installation under the agent home, using its own Python."""
+"""An optional AstrBot installation under the agent home, using its own Python.
+
+personagent's own page sets this AstrBot up, so it runs without its web
+dashboard: there is no second login or password to manage."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import venv
@@ -68,23 +72,34 @@ def install_astrbot(home: Path) -> Path:
                         "from astrbot.core.config.astrbot_config import AstrBotConfig; "
                         "AstrBotConfig(config_path='data/cmd_config.json')"],
                        check=True, cwd=installation.root, env=env)
-        # Config creation can generate a password in a short-lived process.
-        # Let the first real start print a fresh one through AstrBot's CLI.
-        (installation.root / ".initial-dashboard-login").touch()
     if not (data / "cmd_config.json").is_file():
         raise OSError(f"AstrBot did not create {data / 'cmd_config.json'}")
+    hide_dashboard(data)
     return data
+
+
+def hide_dashboard(data: Path) -> dict:
+    """Turn the managed AstrBot's dashboard off and keep it on loopback should
+    it ever be turned back on. Returns the main config as written."""
+    from .storage import atomic_write_text
+
+    path = data / "cmd_config.json"
+    cfg = json.loads(path.read_text(encoding="utf-8-sig"))  # AstrBot writes a BOM
+    dashboard = cfg.get("dashboard")
+    if not isinstance(dashboard, dict):
+        dashboard = cfg["dashboard"] = {}
+    if dashboard.get("enable") is not False or dashboard.get("host") != "127.0.0.1":
+        dashboard.update({"enable": False, "host": "127.0.0.1"})
+        atomic_write_text(path, json.dumps(cfg, ensure_ascii=False, indent=4) + "\n")
+    # Installs before 1.1 printed a dashboard password on their first start.
+    (data.parent / ".initial-dashboard-login").unlink(missing_ok=True)
+    return cfg
 
 
 def start_astrbot(home: Path) -> int:
     installation = AstrBotInstallation(home.resolve())
     if not installation.executable.is_file():
         raise FileNotFoundError("AstrBot is not installed; run personagent connect astrbot --install")
-    marker = installation.root / ".initial-dashboard-login"
-    argv = [str(installation.executable), "run"]
-    if marker.is_file():
-        argv.append("--reset-password")
-    code = subprocess.call(argv, cwd=installation.root, env=installation.environment())
-    if code == 0:
-        marker.unlink(missing_ok=True)
-    return code
+    hide_dashboard(installation.root / "data")
+    return subprocess.call([str(installation.executable), "run"],
+                           cwd=installation.root, env=installation.environment())

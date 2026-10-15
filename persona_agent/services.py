@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -14,8 +14,10 @@ import urllib.error
 import urllib.request
 
 from . import home as homes
-from .astrbot_install import AstrBotInstallation
+from .astrbot_install import AstrBotInstallation, hide_dashboard
 from .setup_wizard import env_get, write_env
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class Services:
@@ -24,6 +26,7 @@ class Services:
         self.processes: dict[str, subprocess.Popen] = {}
         self._lock = threading.RLock()
         self._shutdown = False
+        self.astrbot_log_offset = 0
 
     def running(self, name: str) -> bool:
         process = self.processes.get(name)
@@ -91,6 +94,24 @@ class Services:
                         cwd=cwd, env=env)
             self._ready("agent", self.agent_url + "/health")
 
+    def _started(self, name: str, needle: bytes, offset: int, timeout: float = 90) -> None:
+        """Wait for `needle` in what the child has logged since `offset`."""
+        log = self.home / "runtime" / "desktop" / f"{name}.log"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with log.open("rb") as stream:
+                    stream.seek(offset)
+                    if needle in stream.read():
+                        return
+            except OSError:
+                pass
+            if not self.running(name):
+                raise RuntimeError(f"{name} could not start; see runtime/desktop/{name}.log")
+            time.sleep(0.3)
+        self.stop(name)
+        raise RuntimeError(f"{name} did not become ready; retry from the start page")
+
     def start_astrbot(self) -> None:
         with self._lock:
             if self._shutdown:
@@ -100,25 +121,40 @@ class Services:
             installation = AstrBotInstallation(self.home)
             if not installation.python.is_file():
                 raise RuntimeError("Install the chat platform first")
-            argv = [str(installation.python), "-m", "astrbot.cli.__main__", "run"]
-            marker = installation.root / ".initial-dashboard-login"
-            if marker.is_file():
-                argv.append("--reset-password")
-            cfg = json.loads((installation.root / "data/cmd_config.json").read_text(encoding="utf-8-sig"))
-            port = int(cfg.get("dashboard", {}).get("port") or 6185)
-            with socket.socket() as sock:
-                try:
-                    sock.bind(("127.0.0.1", port))
-                except OSError:
-                    sock.bind(("127.0.0.1", 0))
-                chosen = sock.getsockname()[1]
-            # This is our own managed instance; keep its dashboard local.
-            from .setup_wizard import _write_json
-            cfg.setdefault("dashboard", {}).update({"host": "127.0.0.1", "port": chosen})
-            _write_json(installation.root / "data/cmd_config.json", cfg)
-            self._spawn("astrbot", argv, cwd=installation.root, env=installation.environment())
-            self._ready("astrbot", f"http://127.0.0.1:{chosen}/", timeout=60)
-            marker.unlink(missing_ok=True)
+            hide_dashboard(installation.root / "data")
+            log = self.home / "runtime" / "desktop" / "astrbot.log"
+            offset = log.stat().st_size if log.is_file() else 0
+            self._spawn("astrbot", [str(installation.python), "-m", "astrbot.cli.__main__", "run"],
+                        cwd=installation.root, env=installation.environment())
+            # No dashboard to poll: AstrBot logs this once its adapters are loaded.
+            self._started("astrbot", b"AstrBot started.", offset)
+            self.astrbot_log_offset = offset
+
+    def restart_astrbot(self) -> int:
+        """Reload AstrBot's platform list, which it reads only when it starts.
+        Returns where this run's output starts in its log."""
+        with self._lock:
+            self.stop("astrbot")
+            self.start_astrbot()
+            return self.astrbot_log_offset
+
+    def logged(self, name: str, offset: int, pattern: re.Pattern, seconds: float) -> bool:
+        """Whether `name` logs a line matching `pattern` (colour codes removed)
+        after `offset`, within `seconds` or until it exits."""
+        log = self.home / "runtime" / "desktop" / f"{name}.log"
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                with log.open("rb") as stream:
+                    stream.seek(offset)
+                    text = _ANSI.sub("", stream.read().decode("utf-8", "replace"))
+            except OSError:
+                text = ""
+            if any(pattern.search(line) for line in text.splitlines()):
+                return True
+            if time.monotonic() >= deadline or not self.running(name):
+                return False
+            time.sleep(0.5)
 
     def stop(self, name: str) -> None:
         with self._lock:

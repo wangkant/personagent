@@ -46,7 +46,8 @@ def test_install_initialise_and_repeat_without_redownloading(monkeypatch, tmp_pa
     assert data == installation.root / "data"
     assert installer.install_astrbot(tmp_path) == data
     assert len(calls) == 4
-    assert (installation.root / ".initial-dashboard-login").is_file()
+    dashboard = sw._read_json(data / "cmd_config.json")["dashboard"]
+    assert dashboard == {"enable": False, "host": "127.0.0.1"}
 
 
 def test_an_interrupted_install_is_retried(monkeypatch, tmp_path):
@@ -66,19 +67,21 @@ def test_an_interrupted_install_is_retried(monkeypatch, tmp_path):
     assert not (installation.root / "data/cmd_config.json").exists()
 
 
-def test_first_start_prints_a_password_and_later_starts_keep_it(monkeypatch, tmp_path):
+def test_start_runs_without_a_dashboard_or_password(monkeypatch, tmp_path):
     installation = installer.AstrBotInstallation(tmp_path)
     _touch(installation.executable)
+    _touch(installation.root / "data/cmd_config.json",
+           '{"dashboard": {"enable": true, "host": "0.0.0.0", "port": 6185}}')
     marker = installation.root / ".initial-dashboard-login"
-    _touch(marker)
+    _touch(marker)  # left by an install from before 1.1
     calls = []
     monkeypatch.setattr(installer.subprocess, "call", lambda argv, **kw: calls.append((argv, kw)) or 0)
     assert installer.start_astrbot(tmp_path) == 0
-    assert calls[0][0][-1] == "--reset-password"
+    assert calls[0][0][-1] == "run"
     assert calls[0][1]["cwd"] == installation.root
     assert not marker.exists()
-    installer.start_astrbot(tmp_path)
-    assert calls[1][0][-1] == "run"
+    dashboard = sw._read_json(installation.root / "data/cmd_config.json")["dashboard"]
+    assert dashboard == {"enable": False, "host": "127.0.0.1", "port": 6185}
 
 
 def test_missing_install_has_an_actionable_error(tmp_path):

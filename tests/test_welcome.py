@@ -1,4 +1,4 @@
-"""First-run setup, browser chat boundary, and scoped QQ onboarding."""
+"""First-run setup, browser chat boundary, and scoped platform connections."""
 from __future__ import annotations
 
 import json
@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
 
+from persona_agent import connections as conn
 from persona_agent import setup_wizard as sw
 from persona_agent import welcome
 
@@ -104,47 +105,126 @@ def test_large_and_malformed_posts_are_rejected(client):
     assert client.post("/api/config", headers=HEADERS, content="{").status_code == 400
 
 
-def test_qq_requires_the_explicit_scope_and_setup_first(client, workspace, monkeypatch):
-    calls = []
-    monkeypatch.setattr(workspace, "start_job", lambda kind: calls.append(kind))
-    assert client.post("/api/qq", headers=HEADERS, json={}).status_code == 400
-    assert calls == []
-    assert client.post("/api/qq", headers=HEADERS, json={"allowConversations": True}).status_code == 200
-    assert calls == ["qq"]
-
-
-def test_qq_credentials_are_written_without_being_returned(workspace, monkeypatch):
-    root = welcome.AstrBotInstallation(workspace.home).root
-    data = root / "data"
+def _managed(workspace, monkeypatch, template=None):
+    """A managed AstrBot that is already installed, with a fixed template."""
+    data = welcome.AstrBotInstallation(workspace.home).root / "data"
     data.mkdir(parents=True)
     sw._write_json(data / "cmd_config.json", {"platform": []})
     sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "existing-token"})
     monkeypatch.setattr(welcome, "install_astrbot", lambda home: data)
+    monkeypatch.setattr(conn, "astrbot_template", lambda installation, kind: dict(template or {}))
+    return data
+
+
+def test_connecting_requires_the_scope_and_valid_fields_before_any_work(client, workspace, monkeypatch):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "key"})
+    jobs = []
+    monkeypatch.setattr(workspace, "_job", lambda *args: jobs.append(args))
+    url = "/api/platforms/connect"
+    telegram = {"platform": "telegram", "values": {"telegram_token": "bot:token"}}
+    assert client.post(url, headers=HEADERS, json=telegram).json()["error"] == "permission_required"
+    for payload, error in (({"platform": "nowhere"}, "invalid_platform"),
+                           ({"platform": "telegram", "values": {}}, "field_required"),
+                           ({"platform": "mattermost", "values": {"mattermost_url": "ftp://x",
+                                                                 "mattermost_bot_token": "t"}},
+                            "invalid_field")):
+        response = client.post(url, headers=HEADERS, json={**payload, "allowConversations": True})
+        assert response.status_code == 400 and response.json()["error"] == error
+    assert jobs == []
+    response = client.post(url, headers=HEADERS, json={**telegram, "allowConversations": True})
+    assert response.status_code == 200
+    workspace._future.result(timeout=5)
+    assert jobs == [("connect", conn.platform("telegram"), {"telegram_token": "bot:token"})]
+    assert client.post(url, headers=HEADERS, json={"platform": "qq_official", "allowConversations": True}
+                       ).status_code == 200
+    workspace._future.result(timeout=5)
+    assert jobs[-1] == ("scan", conn.platform("qq_official"))
+
+
+def test_scanned_credentials_are_written_without_being_returned(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch,
+                    {"id": "default", "type": "qq_official", "enable": True, "appid": "",
+                     "secret": "", "use_markdown": True})
 
     class Process:
         def __init__(self, argv, **kwargs):
-            Path(argv[-1]).write_text(json.dumps({"appid": "app-123", "secret": "qq-private-secret"}), encoding="utf-8")
+            assert argv[2] == "qq_official"
+            Path(argv[-1]).write_text(json.dumps({"appid": "app-123", "secret": "qq-private-secret"}),
+                                      encoding="utf-8")
         def wait(self, timeout):
             return 0
     monkeypatch.setattr(welcome.subprocess, "Popen", Process)
-    workspace._bind_qq()
-    cfg = sw._read_json(data / "cmd_config.json")
-    assert cfg["platform"][0]["type"] == "qq_official"
-    assert cfg["platform"][0]["secret"] == "qq-private-secret"
+    workspace._scan(conn.platform("qq_official"))
+    entry = sw._read_json(data / "cmd_config.json")["platform"][0]
+    assert entry == {"id": "qq_official", "type": "qq_official", "enable": True,
+                     "appid": "app-123", "secret": "qq-private-secret", "use_markdown": True}
     plugin = sw.read_astrbot_config(data)
     assert plugin["groups"] == ["qq_official:*"]
     assert plugin["dm_users"] == ["qq_official:*"]
-    assert "qq-private-secret" not in json.dumps(workspace.summary())
+    summary = workspace.summary()
+    assert summary["platforms"] == ["qq_official"]
+    assert "qq-private-secret" not in json.dumps(summary)
     assert workspace._login_dir is None
-    assert not list((workspace.home / "runtime/desktop").glob("qq-login-*/result.json"))
+    assert not list((workspace.home / "runtime/desktop").glob("login-*/result.json"))
+
+
+def test_a_failed_scan_saves_nothing(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+
+    class Process:
+        def __init__(self, argv, **kwargs):
+            pass
+        def wait(self, timeout):
+            return 1
+    monkeypatch.setattr(welcome.subprocess, "Popen", Process)
+    with pytest.raises(RuntimeError, match="scan_failed"):
+        workspace._scan(conn.platform("weixin_oc"))
+    assert sw._read_json(data / "cmd_config.json")["platform"] == []
+
+
+def test_each_platform_keeps_astrbot_defaults_and_opens_only_itself(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch,
+                    {"id": "telegram", "type": "telegram", "enable": True, "telegram_token": "",
+                     "start_message": "Hello, I'm AstrBot!", "telegram_command_register": True,
+                     "telegram_polling_restart_delay": 5.0})
+    workspace._connect(conn.platform("telegram"), {"telegram_token": "bot:token"})
+    monkeypatch.setattr(conn, "astrbot_template", lambda installation, kind: {})
+    workspace._connect(conn.platform("discord"), {"discord_token": "discord-token"})
+    entries = {p["id"]: p for p in sw._read_json(data / "cmd_config.json")["platform"]}
+    assert entries["telegram"]["telegram_token"] == "bot:token"
+    assert entries["telegram"]["start_message"] == ""
+    assert entries["telegram"]["telegram_command_register"] is False
+    assert entries["telegram"]["telegram_polling_restart_delay"] == 5.0
+    assert entries["discord"]["discord_command_register"] is False
+    assert sw.read_astrbot_config(data)["groups"] == ["telegram:*", "discord:*"]
+    assert workspace.summary()["platforms"] == ["telegram", "discord"]
+
+    workspace._disconnect(conn.platform("telegram"))
+    assert [p["id"] for p in sw._read_json(data / "cmd_config.json")["platform"]] == ["discord"]
+    plugin = sw.read_astrbot_config(data)
+    assert plugin["groups"] == ["discord:*"] and plugin["dm_users"] == ["discord:*"]
+
+
+def test_onebot_is_the_one_platform_read_as_bare_qq_numbers(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+    workspace._connect(conn.platform("aiocqhttp"), conn.clean_values(conn.platform("aiocqhttp"), {}))
+    entry = sw._read_json(data / "cmd_config.json")["platform"][0]
+    assert entry["ws_reverse_host"] == "127.0.0.1" and entry["ws_reverse_port"] == 6199
+    assert "aiocqhttp" not in sw.read_astrbot_config(data)["excluded_platforms"]
+    assert sw.env_get(workspace.env, "CONNECTOR_QQ_PLATFORMS") == "aiocqhttp"
+    workspace._disconnect(conn.platform("aiocqhttp"))
+    assert "aiocqhttp" in sw.read_astrbot_config(data)["excluded_platforms"]
+    assert sw.env_get(workspace.env, "CONNECTOR_QQ_PLATFORMS") == ""
 
 
 def test_a_failed_background_job_returns_to_a_retryable_state(workspace, monkeypatch):
     sw.write_env(workspace.env, {"LLM_API_KEY": "still-kept"})
-    monkeypatch.setattr(workspace, "_bind_qq", lambda: (_ for _ in ()).throw(RuntimeError("private")))
-    workspace.start_job("qq")
+    monkeypatch.setattr(workspace, "_connect", lambda *a: (_ for _ in ()).throw(RuntimeError("private")))
+    workspace.start_job("connect", "telegram", {"telegram_token": "bot:token"})
     workspace._future.result(timeout=5)
-    assert workspace.job == {"state": "error", "stage": "", "error": "setup_failed"}
+    assert workspace.job["state"] == "error" and workspace.job["error"] == "setup_failed"
+    assert workspace.job["platform"] == "telegram"
+    assert "private" not in json.dumps(workspace.summary())
     assert workspace.config()["LLM_API_KEY"] == "still-kept"
 
 
@@ -183,3 +263,33 @@ def test_shutdown_stops_only_owned_services(client, workspace, monkeypatch):
     monkeypatch.setattr(workspace.services, "shutdown", lambda: stopped.append(True))
     assert client.post("/api/exit", headers=HEADERS, json={}).status_code == 200
     assert stopped and workspace._closed
+
+
+def test_credentials_the_platform_refuses_are_rolled_back(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    monkeypatch.setattr(workspace.services, "restart_astrbot", lambda: 0)
+    seen = []
+    def logged(name, offset, pattern, seconds):
+        seen.append(pattern.pattern)
+        return True
+    monkeypatch.setattr(workspace.services, "logged", logged)
+    workspace.start_job("connect", "telegram", {"telegram_token": "bot:refused-secret"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["state"] == "error" and workspace.job["error"] == "platform_rejected"
+    assert "telegram" in seen[0]
+    assert sw._read_json(data / "cmd_config.json")["platform"] == []
+    assert "telegram:*" not in sw.read_astrbot_config(data)["groups"]
+    assert "refused-secret" not in json.dumps(workspace.summary())
+
+
+def test_an_accepted_connection_ends_ready(workspace, monkeypatch):
+    _managed(workspace, monkeypatch)
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    monkeypatch.setattr(workspace.services, "restart_astrbot", lambda: 0)
+    monkeypatch.setattr(workspace.services, "logged", lambda *a: False)
+    workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
+    workspace._future.result(timeout=5)
+    assert workspace.job == {"state": "ready", "stage": "ready", "error": "", "action": "connect",
+                             "platform": "kook"}
+    assert workspace.summary()["platforms"] == ["kook"]

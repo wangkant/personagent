@@ -46,3 +46,47 @@ def test_agent_launcher_uses_fresh_configuration_and_never_puts_keys_in_argv(tmp
     assert kwargs["env"]["LLM_API_KEY"] == "fresh-secret"
     assert kwargs["env"]["AGENT_HOME"] == str(tmp_path)
     assert int(sw.env_get(tmp_path / ".env", "SERVER_PORT")) > 0
+
+
+def test_astrbot_starts_without_its_dashboard_and_waits_for_its_own_log(tmp_path, monkeypatch):
+    from persona_agent.astrbot_install import AstrBotInstallation
+
+    installation = AstrBotInstallation(tmp_path)
+    installation.python.parent.mkdir(parents=True)
+    installation.python.write_text("", encoding="utf-8")
+    data = installation.root / "data"
+    data.mkdir(parents=True)
+    sw._write_json(data / "cmd_config.json", {"dashboard": {"enable": True, "host": "0.0.0.0"}})
+    log = tmp_path / "runtime" / "desktop" / "astrbot.log"
+    log.parent.mkdir(parents=True)
+    log.write_bytes(b"AstrBot started.\n")   # from an earlier run: must not count
+    services = Services(tmp_path)
+    launches = []
+
+    class Process:
+        def poll(self):
+            return None
+        def terminate(self):
+            pass
+        def wait(self, timeout):
+            return 0
+
+    def spawn(name, argv, **kwargs):
+        launches.append(argv)
+        services.processes[name] = Process()
+        with log.open("ab") as stream:
+            stream.write(b"loading adapters\n")
+    offset = log.stat().st_size
+    spawn("astrbot", [])
+    with pytest.raises(RuntimeError, match="did not become ready"):
+        services._started("astrbot", b"AstrBot started.", offset, timeout=0.5)
+    assert "astrbot" not in services.processes
+
+    def spawn_and_start(name, argv, **kwargs):
+        spawn(name, argv, **kwargs)
+        with log.open("ab") as stream:
+            stream.write(b"[INFO] AstrBot started.\n")
+    monkeypatch.setattr(services, "_spawn", spawn_and_start)
+    services.start_astrbot()
+    assert "--reset-password" not in launches[-1]
+    assert sw._read_json(data / "cmd_config.json")["dashboard"] == {"enable": False, "host": "127.0.0.1"}

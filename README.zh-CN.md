@@ -14,11 +14,11 @@
 
 personagent 是放进群聊里的一个角色：选一个现成的性格或自己写一个，接上任意 OpenAI 兼容的模型就能用。它经 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 进 QQ、Telegram、Discord 等十几个平台，也能经 [Koishi](https://koishi.chat)（[Satori](https://satori.chat)）或 [Matrix](https://matrix.org) 接入。
 
-先在本地页面里聊天，填一个模型 Key 就能开始。想把角色带到 QQ，再用手机扫一次码。
+先在本地页面里聊天，填一个模型 Key 就能开始。想把角色带到 QQ、微信、Telegram 等平台，扫一次码或填一两项就行。
 
-![本地页面：角色聊天、设置和 QQ 连接集中在同一处](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg)
+![本地页面：角色聊天、设置和平台连接集中在同一处](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg)
 
-<sub>设置、聊天和 QQ 连接都在同一个本地页面里。截图使用本机模拟模型。</sub>
+<sub>设置、聊天和平台连接都在同一个本地页面里。截图使用本机模拟模型。</sub>
 
 ## 从这里开始
 
@@ -70,13 +70,15 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。下次打开�
 - 改人设不会丢掉它学到的东西。
 - 效果是量过的，数字见[效果评测](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)。
 
-## 接进你的 QQ 群
+## 接进你的群
 
-打开本地页面的「连接 QQ」，扫码确认创建或绑定官方机器人。在手机 QQ「联系人 → 机器人」里找到它，即可私聊或添加到你管理的群。组件安装、角色连接和服务启动都自动完成，下次打开应用会恢复运行。
+打开本地页面的「连接平台」。QQ 和个人微信用手机扫码；Telegram、Discord、飞书、钉钉、Slack 等从平台后台复制一两项填进去。AstrBot 由应用自动安装和运行，没有另一个后台要登录；组件安装、角色连接和服务启动都自动完成，下次打开应用会恢复运行。
+
+QQ 扫码确认创建或绑定官方机器人后，在手机 QQ「联系人 → 机器人」里找到它，即可私聊或添加到你管理的群。
 
 在 QQ 的群机器人设置里选择它能获取的消息范围，按需要开启主动发言。这部分由 QQ 控制，应用不会代替你修改群权限。
 
-已有 AstrBot、Telegram、Discord 或 OneBot/NapCat 的用户仍可使用 `personagent connect astrbot`。`personagent up` 可同时运行角色服务和托管的 AstrBot；服务器也可继续分别启动。
+已经自己部署了 AstrBot，或想在终端里设置，仍可使用 `personagent connect astrbot`。`personagent up` 可同时运行角色服务和托管的 AstrBot；服务器也可继续分别启动。
 
 插件也有独立仓库 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent)，可以在 AstrBot 的 WebUI 里填这个地址安装，再把插件设置里的 `connector_token` 填成 personagent 的 `CONNECTOR_TOKEN`。从零开始、每一步都写明会看到什么，见[中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)；Telegram、Discord 等其他平台和 Docker 部署，见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）。
 

@@ -16,13 +16,13 @@
 
 personagent is a character for your group chats: pick one or write your own, and run it on any OpenAI-compatible model. It lives where your group already is: QQ, Telegram, Discord and a dozen more through [AstrBot](https://github.com/AstrBotDevs/AstrBot), anything [Koishi](https://koishi.chat) reaches through [Satori](https://satori.chat), and [Matrix](https://matrix.org) with its bridges to WhatsApp and Signal.
 
-Start in a local browser chat. Add one model key, say hello, then connect QQ with a phone scan when you want to bring the character into a group.
+Start in a local browser chat. Add one model key, say hello, then connect QQ, WeChat, Telegram or another app with a phone scan or one or two values when you want to bring the character into a group.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Local browser chat, settings and QQ connection in one app" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Local browser chat, settings and app connections in one page" width="960">
 </p>
 
-<p align="center"><em>Setup, character chat and QQ connection in one local page. Screenshot uses a local test model.</em></p>
+<p align="center"><em>Setup, character chat and app connections in one local page. Screenshot uses a local test model.</em></p>
 
 ## Start here
 
@@ -75,9 +75,9 @@ AstrBot, Koishi or Matrix carry it into your chats, and a local dashboard shows 
 
 ## Put it in your group
 
-For QQ, use **Connect QQ** in the local page, scan, and add the official bot to your group. The app keeps both services running and starts them again the next time you open it.
+Use **Connect apps** in the local page. QQ and WeChat take a phone scan; Telegram, Discord, Feishu, DingTalk, Slack and the rest take one or two values from the platform's own console. The app installs and runs AstrBot for you, with no second dashboard to sign in to, keeps both services running and starts them again the next time you open it. For QQ, add the official bot to your group once it is connected.
 
-For Telegram, Discord, an existing AstrBot or OneBot/NapCat, use `personagent connect astrbot`. The terminal setup can reuse your platform credentials and installs the personagent plugin. `personagent up` starts the agent and its managed AstrBot together; separate `run` commands remain available for servers.
+For an AstrBot you already run, or to set things up from the terminal, use `personagent connect astrbot`. The terminal setup can reuse your platform credentials and installs the personagent plugin. `personagent up` starts the agent and its managed AstrBot together; separate `run` commands remain available for servers.
 
 The plugin also has its own repository, [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent), so you can install it from AstrBot's WebUI by that address. QQ, Docker, Koishi, Matrix and the rest are in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), the [deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.md) and the [Chinese step-by-step guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md), which covers QQ from zero.
 
