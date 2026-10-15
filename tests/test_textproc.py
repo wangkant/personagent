@@ -2854,3 +2854,93 @@ def test_drift_logging_is_bounded_and_a_missing_reply_is_said(caplog) -> None:
     check("an object with no reply yields nothing", out[0] == "")
     check("...and says so once, naming the key the text went to",
           len(said) == 1 and "'response'" in said[0], repr(said))
+
+# ---------------------------------------------------------------------------
+# Number forms and math signs: spelled in ASCII, never a dropped reply
+# ---------------------------------------------------------------------------
+
+#: The families the map covers, derived from unicodedata by the test below.
+_NUMBER_FAMILIES = (
+    (0x0080, 0x00FF, "No", "Latin-1 superscripts and fractions"),
+    (0x0080, 0x00FF, "Sm", "Latin-1 math signs"),
+    (0x2070, 0x209F, "No", "superscript and subscript digits"),
+    (0x2150, 0x218F, "No", "Number Forms fractions"),
+)
+
+#: Every member's declared spelling, plus the two Mathematical Operators named
+#: one by one (like U+2212: that block is notation, not a family to map).
+_NUMBER_SPELLINGS = {
+    0x00B9: "^1", 0x00B2: "^2", 0x00B3: "^3",
+    **{0x2070 + i: f"^{i}" for i in (0, 4, 5, 6, 7, 8, 9)},
+    **{0x2080 + i: str(i) for i in range(10)},
+    0x00BC: "1/4", 0x00BD: "1/2", 0x00BE: "3/4",
+    0x2150: "1/7", 0x2151: "1/9", 0x2152: "1/10", 0x2153: "1/3",
+    0x2154: "2/3", 0x2155: "1/5", 0x2156: "2/5", 0x2157: "3/5",
+    0x2158: "4/5", 0x2159: "1/6", 0x215A: "5/6", 0x215B: "1/8",
+    0x215C: "3/8", 0x215D: "5/8", 0x215E: "7/8", 0x215F: "1/",
+    0x2189: "0/3",
+    0x00AC: "~", 0x00B1: "+/-", 0x00D7: "x", 0x00F7: "/",
+    0x2248: "~", 0x2260: "!=",
+}
+
+
+def test_every_number_form_is_spelled_not_silenced() -> None:
+    """Each member survives MAPPED, under en and under zh. Mapping, not
+    widening: the spellings are ASCII the whitelist already took."""
+    scanned = {c for lo, hi, cat, _name in _NUMBER_FAMILIES
+               for c in range(lo, hi + 1)
+               if unicodedata.category(chr(c)) == cat}
+    check("the scan found the number families at all", len(scanned) >= 40,
+          str(len(scanned)))
+    check("every member the scan found has a declared spelling",
+          scanned | {0x2248, 0x2260} == set(_NUMBER_SPELLINGS),
+          "undeclared: " + ", ".join(
+              f"U+{c:04X}" for c in sorted(scanned - set(_NUMBER_SPELLINGS))))
+    for c, sub in sorted(_NUMBER_SPELLINGS.items()):
+        out = TP._sanitize_reply(f"about {chr(c)} each", "en")
+        check(f"a number form is spelled, not silenced (U+{c:04X}, en)",
+              out == f"about {sub} each", repr(out))
+        out_zh = TP._sanitize_reply(f"大概{chr(c)}吧", "zh")
+        check(f"...and under zh (U+{c:04X})", out_zh == f"大概{sub}吧",
+              repr(out_zh))
+
+
+def test_the_map_does_not_misstate_a_number() -> None:
+    """Per character, '1½' would read 11/2 and '2¹⁰' would read 2^1^0. A
+    fraction after a digit is a mixed number and a superscript run is one
+    exponent, so both are spelled as the number they are."""
+    for raw, expected, why in [
+            ("the room is 20m² or so", "the room is 20m^2 or so", "a unit"),
+            ("about 10⁶ people", "about 10^6 people",
+             "a power of ten from the other superscript block"),
+            ("2¹⁰ is 1024", "2^10 is 1024", "a superscript run is ONE exponent"),
+            ("x³⁰", "x^30", "a run crossing both superscript blocks"),
+            ("wait 1½ hours", "wait 1 1/2 hours", "a mixed number, not 11/2"),
+            ("2⅓ cups", "2 1/3 cups", "a Number Forms fraction after a digit"),
+            ("add ½ cup", "add 1/2 cup", "a bare fraction takes no space"),
+            ("H₂O and CO₂", "H2O and CO2", "subscripts are indices, spelled flat"),
+            ("5 ± 0.1 mm", "5 +/- 0.1 mm", "plus-minus"),
+            ("≈3 km away", "~3 km away", "approximately"),
+            ("like ≠ love", "like != love", "not equal keeps its meaning"),
+            ("等了1½小时", "等了1 1/2小时", "zh mixed number")]:
+        lang = "zh" if why.startswith("zh") else "en"
+        out = TP._sanitize_reply(raw, lang)
+        check(f"a number reads as itself: {why}", out == expected,
+              f"{raw!r} -> {out!r}, wanted {expected!r}")
+
+
+def test_a_superscript_unit_is_delivered_not_dropped() -> None:
+    """A unit with a superscript is delivered with no refusal label, and the
+    whitelist itself still refuses '²': the fix is the map, and
+    `_SYMBOL_ALLOWED` did not move."""
+    raw = "这屋子不大，二十来m²，一个人住刚好"
+    check("a square-metre reply is delivered, not dropped",
+          TP._sanitize_reply_with_reason(raw, "zh")
+          == ("这屋子不大，二十来m^2，一个人住刚好", ""),
+          repr(TP._sanitize_reply_with_reason(raw, "zh")))
+    check("...under the en build too",
+          TP._sanitize_reply(raw, "en") == "这屋子不大，二十来m^2，一个人住刚好",
+          repr(TP._sanitize_reply(raw, "en")))
+    ok, reason = TP._validate_reply_safe(raw, "zh")
+    check("the whitelist was not widened: the validator alone still refuses ²",
+          not ok and "U+00B2" in reason, repr((ok, reason)))

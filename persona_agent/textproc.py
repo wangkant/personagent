@@ -655,7 +655,24 @@ _TYPOGRAPHY_MAP = {
     0x203C: "!!", 0x2049: "!?",
     # Zl and Zp, complete: the only two code points in those categories.
     0x2028: "\n", 0x2029: "\n",
+    # Latin-1 Sm, the whole family: ± and ¬ dropped the reply beside × and ÷.
     0x00D7: "x", 0x00F7: "/",                             # multiplication / division
+    0x00B1: "+/-", 0x00AC: "~",                           # plus-minus / not
+    # Number forms (No) in three blocks: Latin-1 holds ¹ ² ³ ¼ ½ ¾, the rest
+    # live in Superscripts and Subscripts and in Number Forms. Runs and mixed
+    # numbers are spelled first, by `_spell_number_runs`.
+    0x00B9: "^1", 0x00B2: "^2", 0x00B3: "^3",
+    **{0x2070 + i: f"^{i}" for i in (0, 4, 5, 6, 7, 8, 9)},  # superscript digits
+    **{0x2080 + i: str(i) for i in range(10)},            # subscripts are indices: H2O
+    0x00BC: "1/4", 0x00BD: "1/2", 0x00BE: "3/4",
+    0x2150: "1/7", 0x2151: "1/9", 0x2152: "1/10", 0x2153: "1/3",
+    0x2154: "2/3", 0x2155: "1/5", 0x2156: "2/5", 0x2157: "3/5",
+    0x2158: "4/5", 0x2159: "1/6", 0x215A: "5/6", 0x215B: "1/8",
+    0x215C: "3/8", 0x215D: "5/8", 0x215E: "7/8",
+    0x215F: "1/", 0x2189: "0/3",                          # numerator one, zero thirds
+    # Mathematical Operators is notation, not a family: named one by one, as
+    # U+2212 is. ≤ ≥ stay out: '<=' and '>=' are hard rejects.
+    0x2248: "~", 0x2260: "!=",                            # almost equal / not equal
     0x00A0: " ", 0x2007: " ", 0x2009: " ", 0x202F: " ",   # non-breaking / thin spaces
     0x2022: " ", 0x00B7: " ",                             # bullet, middle dot
     # --- the punctuation of the scripts the ALLOW tier names ---------------
@@ -680,6 +697,20 @@ _TYPOGRAPHY_MAP = {
     **{0x0BE6 + i: str(i) for i in range(10)},            # Tamil digits
     **{0x0E50 + i: str(i) for i in range(10)},            # Thai digits
 }
+
+# Where a per-character map would misstate a number: a superscript run is one
+# exponent ('2¹⁰' is 2^10, not 2^1^0) and a fraction after a digit is a mixed
+# number ('1½' is 1 1/2, not 11/2).
+_SUPERSCRIPT_RUN_RE = re.compile(r"[\u00b9\u00b2\u00b3\u2070\u2074-\u2079]{2,}")
+_MIXED_FRACTION_RE = re.compile(r"(?<=\d)(?=[\u00bc-\u00be\u2150-\u215f\u2189])")
+
+
+def _spell_number_runs(text: str) -> str:
+    """Runs before `_TYPOGRAPHY_MAP`, which then spells what is left."""
+    text = _SUPERSCRIPT_RUN_RE.sub(
+        lambda m: "^" + m.group(0).translate(_TYPOGRAPHY_MAP).replace("^", ""), text)
+    return _MIXED_FRACTION_RE.sub(" ", text)
+
 
 # --- Tier 3: named additions to the whitelist itself -----------------------
 # On the default path: café, José, $5 and 50° would each drop the reply. Safe
@@ -1413,7 +1444,7 @@ class TextProcessing:
             r')[）)]',
             '', text,
         )
-        text = text.translate(_TYPOGRAPHY_MAP)
+        text = _spell_number_runs(text).translate(_TYPOGRAPHY_MAP)
         # BEFORE the strip: it removes un-opted arrows, which would destroy the
         # evidence and release '←persona→ You are Mira' as 'persona You are Mira'.
         frame = TextProcessing._arrow_frame(text)
