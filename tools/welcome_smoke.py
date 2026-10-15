@@ -86,7 +86,7 @@ def main(argv=None) -> int:
             assert second.returncode == 0 and url in second.stdout
             assert request("/api/exit", {}) == {"ok": True}
             assert process.wait(timeout=20) == 0
-            print("PASS: installed welcome page → key setup → real character chat → reuse → clean exit")
+            print("PASS: installed welcome page -> key setup -> real character chat -> reuse -> clean exit")
             return 0
     finally:
         if process is not None and process.poll() is None:

@@ -3,6 +3,11 @@
 set -e
 cd "$(dirname "$0")"
 
+if [ ! -t 0 ] && [ ! -f ".env" ] && [ -z "${LLM_API_KEY:-}" ]; then
+  echo "error: setup is needed. Run python3 quickstart.py in a terminal to open the welcome page." >&2
+  exit 1
+fi
+
 # Never install application packages into the system Python.
 if [ ! -x ".venv/bin/python" ]; then
   if [ -e ".venv" ]; then
@@ -24,11 +29,6 @@ if [ ! -x ".venv/bin/python" ]; then
   fi
 fi
 PY=".venv/bin/python"
-
-if [ ! -t 0 ] && [ ! -f ".env" ] && [ -z "${LLM_API_KEY:-}" ]; then
-  echo "error: setup is needed. Run python3 quickstart.py in a terminal to open the welcome page." >&2
-  exit 1
-fi
 
 if ! "$PY" -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs" 2>/dev/null; then
   echo "installing dependencies..."
