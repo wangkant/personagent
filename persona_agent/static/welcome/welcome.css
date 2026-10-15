@@ -503,6 +503,45 @@ details[open] summary {
   color: var(--muted);
   margin: 2px 0;
 }
+.persona-card {
+  margin-top: 20px;
+  padding: 24px;
+}
+.persona-card label {
+  margin: 0;
+}
+.persona-card .field-note {
+  margin: 0 0 12px;
+}
+#persona-text {
+  display: block;
+  width: 100%;
+  min-height: 260px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.75;
+  resize: vertical;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.persona-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.persona-count {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
 .chat-page {
   height: calc(100vh - 48px);
   padding-top: 16px;

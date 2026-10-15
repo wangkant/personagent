@@ -85,6 +85,38 @@ def test_custom_persona_and_unrelated_settings_survive_editing(client, workspace
     assert workspace.config()["ADMIN_IDS"] == "qq:7"
 
 
+def test_the_persona_is_shown_as_the_agent_reads_it_and_edits_become_its_own(client, workspace, monkeypatch):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "key", "PERSONA_NAME": "Mira", "AGENT_LANG": "en"})
+    persona = workspace.home / "persona.txt"
+    # No persona.txt yet: the agent fills in the bundled template, and so does the page.
+    assert "Mira" in client.get("/api/persona", headers=HEADERS).json()["text"]
+    assert not persona.exists()
+    restarts = []
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: restarts.append(True))
+    state = client.post("/api/persona", headers=HEADERS,
+                        json={"text": "  Your name is Mira. You only talk about tea.\r\n"}).json()
+    assert persona.read_text(encoding="utf-8") == "Your name is Mira. You only talk about tea.\n"
+    assert state["character"] == "custom" and restarts == [True]
+    assert client.get("/api/persona", headers=HEADERS).json()["text"] == "Your name is Mira. You only talk about tea."
+    for bad in ("   ", "x" * (welcome.PERSONA_LIMIT + 1)):
+        response = client.post("/api/persona", headers=HEADERS, json={"text": bad})
+        assert response.status_code == 400 and response.json()["error"] == "invalid_persona"
+    assert "tea" in persona.read_text(encoding="utf-8") and restarts == [True]
+
+
+def test_a_saved_persona_restarts_only_an_agent_that_was_running(workspace, monkeypatch):
+    running, calls = {"agent": True}, []
+    monkeypatch.setattr(workspace.services, "running", lambda name: running.get(name, False))
+    monkeypatch.setattr(workspace.services, "stop", lambda name: calls.append(("stop", name)))
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: calls.append(("start", "agent")))
+    workspace.save_persona("First")
+    assert calls == [("stop", "agent"), ("start", "agent")]
+    running["agent"], calls[:] = False, []
+    workspace.save_persona("Second")
+    assert calls == [("stop", "agent")]
+    assert (workspace.home / "persona.txt").read_text(encoding="utf-8") == "Second\n"
+
+
 def test_unknown_provider_or_insecure_remote_url_is_rejected(client):
     for fields in ({"provider": "unknown"}, {"baseUrl": "http://remote.example/v1"},
                    {"baseUrl": "https://user:password@remote.example/v1"}):

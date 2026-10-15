@@ -25,6 +25,13 @@ const translations = {
     character: "性格",
     customKept: "已有的人设会保留；选择新性格才会替换它。",
     custom: "保留我自己写的人设",
+    personaTitle: "人设",
+    personaHint: "写它是谁、怎么说话、在意什么。保存后马上生效，它学到的东西会保留。",
+    personaSave: "保存人设",
+    personaSaving: "正在保存…",
+    personaUndo: "撤销修改",
+    personaSaved: "人设已保存，角色已按新人设重新启动。",
+    invalid_persona: "人设不能为空，也不能超过 4000 字。",
     model: "模型名称",
     saveStart: "验证并开始聊天 →",
     saveAgain: "保存并返回聊天 →",
@@ -168,6 +175,14 @@ const translations = {
     customKept:
       "Your edited character stays as it is unless you choose a new personality.",
     custom: "Keep my own character",
+    personaTitle: "Persona",
+    personaHint:
+      "Who it is, how it talks and what it cares about. Saving applies it right away and keeps what it has learned.",
+    personaSave: "Save persona",
+    personaSaving: "Saving…",
+    personaUndo: "Undo changes",
+    personaSaved: "Persona saved. The character restarted with it.",
+    invalid_persona: "The persona can't be empty or longer than 4,000 characters.",
     model: "Model name",
     saveStart: "Verify & start chatting →",
     saveAgain: "Save & return to chat →",
@@ -393,8 +408,7 @@ function updateNames() {
     name: state?.name || name,
   });
 }
-function populate() {
-  options($("provider"), catalog.providers, state.provider);
+function characterOptions() {
   const chars = [...catalog.characters];
   if (state.character === "custom")
     chars.push({
@@ -403,6 +417,10 @@ function populate() {
     });
   options($("character"), chars, state.character);
   $("custom-note").hidden = state.character !== "custom";
+}
+function populate() {
+  options($("provider"), catalog.providers, state.provider);
+  characterOptions();
   $("character-name").value = state.name || (lang === "zh" ? "小夏" : "Nova");
   $("api-key").value = "";
   $("api-key").type = "password";
@@ -454,7 +472,30 @@ function showView(next) {
         ? "platforms"
         : "chat",
   );
+  $("persona-card").hidden = !(setup && state.configured);
+  if (setup && state.configured) loadPersona();
   if (next === "chat" && state.configured) $("message").focus();
+}
+// The persona as last loaded or saved; edits are compared with it.
+let personaShown = null,
+  personaSaving = false;
+function personaEdited() {
+  const text = $("persona-text").value;
+  $("persona-count").textContent = `${Array.from(text).length} / 4000`;
+  $("persona-undo").hidden = personaShown === null || text === personaShown;
+}
+async function loadPersona() {
+  // Keep unsaved edits when the page is opened again.
+  if (personaShown !== null && $("persona-text").value !== personaShown) return;
+  try {
+    const { text } = await api("persona");
+    personaShown = text;
+    $("persona-text").value = text;
+    personaEdited();
+  } catch (error) {
+    $("persona-error").textContent = t(error.message);
+    $("persona-error").hidden = false;
+  }
 }
 const pick = (pair) => pair[lang === "zh" ? 1 : 0];
 const spec = (kind) => catalog?.platforms.find((p) => p.id === kind);
@@ -842,6 +883,37 @@ $("show-key").addEventListener("click", async () => {
     }
   } catch (error) {
     toast(t(error.message));
+  }
+});
+$("persona-text").addEventListener("input", personaEdited);
+$("persona-undo").addEventListener("click", () => {
+  $("persona-text").value = personaShown;
+  $("persona-error").hidden = true;
+  personaEdited();
+});
+$("persona-save").addEventListener("click", async () => {
+  if (personaSaving) return;
+  personaSaving = true;
+  $("persona-error").hidden = true;
+  $("persona-save").disabled = true;
+  $("persona-save").textContent = t("personaSaving");
+  const text = $("persona-text").value;
+  try {
+    state = await api("persona", { text });
+    personaShown = text.trim();
+    $("persona-text").value = personaShown;
+    personaEdited();
+    // The file is now the user's own, so a saved form must not replace it.
+    characterOptions();
+    renderStatus();
+    toast(t("personaSaved"));
+  } catch (error) {
+    $("persona-error").textContent = t(error.message);
+    $("persona-error").hidden = false;
+  } finally {
+    personaSaving = false;
+    $("persona-save").disabled = false;
+    $("persona-save").textContent = t("personaSave");
   }
 });
 $("settings-form").addEventListener("submit", async (event) => {

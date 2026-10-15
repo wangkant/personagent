@@ -150,6 +150,40 @@
               </div>
             </div>
           </div>
+          <div id="persona-card" class="card persona-card" hidden>
+            <label for="persona-text">
+              <h2 data-t="personaTitle">人设</h2>
+            </label>
+            <p class="field-note" data-t="personaHint">
+              写它是谁、怎么说话、在意什么。保存后马上生效，它学到的东西会保留。
+            </p>
+            <textarea
+              id="persona-text"
+              rows="12"
+              maxlength="4000"
+              spellcheck="false"
+            ></textarea>
+            <div id="persona-error" class="error" role="alert" hidden></div>
+            <div class="persona-actions">
+              <span id="persona-count" class="persona-count"></span>
+              <button
+                type="button"
+                class="quiet"
+                id="persona-undo"
+                data-t="personaUndo"
+                hidden
+              >
+                撤销修改</button
+              ><button
+                type="button"
+                class="primary"
+                id="persona-save"
+                data-t="personaSave"
+              >
+                保存人设
+              </button>
+            </div>
+          </div>
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">

@@ -35,6 +35,9 @@ from .storage import FileLock, LockUnavailable, atomic_write_text
 ASSETS = Path(__file__).with_name("static") / "welcome"
 TOKEN_HEADER = "x-personagent-setup-token"
 MAX_BODY = 16_384
+# Characters; the shipped personas are under 800, and 4000 CJK characters
+# still fit in MAX_BODY.
+PERSONA_LIMIT = 4000
 # How long a new adapter has to fail loudly before it counts as connected.
 REJECT_WINDOW = 12
 # How long a direct platform may take to accept a new session.
@@ -164,12 +167,43 @@ class Workspace:
                 sw.write_persona(self.home, character, name=name, lang=lang,
                                  admin_name=old.get("ADMIN_NAME", ""),
                                  admin_relationship=old.get("ADMIN_RELATIONSHIP", ""))
-            was_running = self.services.running("agent")
-            self.services.stop("agent")
-            if was_running:
-                self.services.start_agent()
-                if self.services.running("astrbot"):
-                    self._connect_plugin()
+            self._restart_agent()
+            return self.summary()
+
+    def _restart_agent(self) -> None:
+        """A running agent reads its settings and persona only as it starts."""
+        was_running = self.services.running("agent")
+        self.services.stop("agent")
+        if was_running:
+            self.services.start_agent()
+            if self.services.running("astrbot"):
+                self._connect_plugin()
+
+    def persona(self) -> dict:
+        """The persona the agent runs on: persona.txt, else the bundled
+        template filled in the way the agent fills it."""
+        with self._lock:
+            path = self.home / "persona.txt"
+            if path.is_file():
+                return {"text": path.read_text(encoding="utf-8").strip()}
+            values = self.config()
+            lang = "zh" if values.get("AGENT_LANG") == "zh" else "en"
+            text = sw.persona_text(sw.TEMPLATE, name=values.get("PERSONA_NAME") or sw.DEFAULT_NAMES[lang],
+                                   lang=lang, admin_name=values.get("ADMIN_NAME", ""),
+                                   admin_relationship=values.get("ADMIN_RELATIONSHIP", ""))
+            return {"text": text.strip()}
+
+    def save_persona(self, text: str) -> dict:
+        """Write `text` as persona.txt and restart a running agent on it.
+        What the character learned is kept: it is not part of the file."""
+        text = text.replace("\r\n", "\n").strip()
+        if not text or len(text) > PERSONA_LIMIT:
+            raise ValueError("invalid_persona")
+        with self._lock:
+            if self._future is not None and not self._future.done():
+                raise ValueError("busy")
+            atomic_write_text(self.home / "persona.txt", text + "\n")
+            self._restart_agent()
             return self.summary()
 
     def history(self) -> dict:
@@ -492,7 +526,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
                    "model_required", "invalid_character", "key_rejected", "model_unreachable",
                    "permission_required", "invalid_message", "invalid_platform",
-                   "field_required", "invalid_field"}
+                   "field_required", "invalid_field", "invalid_persona"}
         error = str(exc)
         return JSONResponse({"error": error if error in allowed else "generic"}, status_code=400)
 
@@ -520,6 +554,15 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/config")
     async def config(request: Request):
         return await asyncio.to_thread(workspace.save, await body(request))
+
+    @app.get("/api/persona")
+    async def persona():
+        return await asyncio.to_thread(workspace.persona)
+
+    @app.post("/api/persona")
+    async def save_persona(request: Request):
+        payload = await body(request)
+        return await asyncio.to_thread(workspace.save_persona, str(payload.get("text") or ""))
 
     @app.post("/api/key")
     async def reveal(request: Request):

@@ -17,6 +17,8 @@ With a source ZIP on Windows, double-click `start.bat`. It prepares its own Pyth
 
 Choose a model service, paste its API key and click **Verify & start chatting**. DeepSeek and a warm listener character are selected initially. You can change the name, personality, model and API address under optional settings.
 
+Once it is set up, **Character & settings** also has a **Persona** box with the text the character runs on. Rewrite who it is and how it talks, then click **Save persona**: it applies at once, and what the character has learned is kept.
+
 The key stays on your computer. Chat messages go to the model service you select; verification and chat may incur that service's usual charges. Click **Show** if you need to check the key. It is not included in status responses or stored in browser storage.
 
 Your character replies in the page. Settings are saved, so the next launch goes straight to chat.
