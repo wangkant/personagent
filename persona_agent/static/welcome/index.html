@@ -185,6 +185,123 @@
               </button>
             </div>
           </div>
+          <div id="owner-card" class="card side-card" hidden>
+            <h2 data-t="ownerTitle">你</h2>
+            <p class="field-note" data-t="ownerHint">
+              角色把你当作主人：对你更亲近，也只有你能直接教它、管它记住的东西。
+            </p>
+            <div class="two-col">
+              <div>
+                <label for="owner-name" data-t="ownerName">它怎么称呼你</label
+                ><input id="owner-name" maxlength="32" autocomplete="off" />
+              </div>
+              <div>
+                <label for="owner-relationship" data-t="ownerRelation">你们的关系</label
+                ><input
+                  id="owner-relationship"
+                  maxlength="32"
+                  autocomplete="off"
+                  list="owner-relations"
+                /><datalist id="owner-relations"></datalist>
+              </div>
+            </div>
+            <label for="owner-id" data-t="ownerAccounts">你在各平台的账号</label>
+            <ul id="owner-ids" class="owner-ids"></ul>
+            <div class="owner-add">
+              <select id="owner-platform" aria-label="Platform"></select
+              ><input id="owner-id" autocomplete="off" spellcheck="false" /><button
+                type="button"
+                class="secondary"
+                id="owner-add"
+                data-t="add"
+              >
+                添加
+              </button>
+            </div>
+            <p class="field-note" data-t="ownerAccountsHint">
+              扫码连接 QQ 或微信时，会自动把扫码的人记成主人。
+            </p>
+            <div id="owner-error" class="error" role="alert" hidden></div>
+            <div class="card-actions">
+              <button type="button" class="primary" id="owner-save" data-t="save">
+                保存
+              </button>
+            </div>
+          </div>
+          <div id="features-card" class="card side-card" hidden>
+            <h2 data-t="featuresTitle">更多功能</h2>
+            <div class="feature">
+              <div class="feature-head">
+                <strong data-t="searchTitle">联网搜索</strong
+                ><span id="search-state" class="feature-state"></span>
+              </div>
+              <p class="field-note" data-t="searchHint">
+                遇到不熟的事会先查一下。默认用 DuckDuckGo，不需要密钥；填 Tavily 的密钥会更稳定。
+              </p>
+              <input
+                id="tavily-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Tavily API Key"
+              />
+              <button type="button" class="quiet" id="tavily-clear" data-t="tavilyClear" hidden>
+                改回免费搜索
+              </button>
+            </div>
+            <div class="feature">
+              <label class="check"
+                ><input type="checkbox" id="vision-on" /><span data-t="visionTitle"
+                  >看懂图片</span
+                ></label
+              >
+              <p class="field-note" data-t="visionHint">
+                收到图片和表情包时，用一个能看图的模型描述它；不开时只认图里的文字。
+              </p>
+              <div id="vision-fields" hidden>
+                <label for="vision-model" data-t="visionModel">看图模型</label
+                ><input id="vision-model" autocomplete="off" spellcheck="false" />
+                <label class="check"
+                  ><input type="checkbox" id="vision-same" /><span data-t="visionSame"
+                    >和聊天用同一个服务和密钥</span
+                  ></label
+                >
+                <div id="vision-own" hidden>
+                  <label for="vision-base">API Base URL</label
+                  ><input id="vision-base" type="url" autocomplete="off" />
+                  <label for="vision-key">API Key</label
+                  ><input
+                    id="vision-key"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="feature">
+              <label class="check"
+                ><input type="checkbox" id="proactive-on" /><span data-t="proactiveTitle"
+                  >偶尔主动说话</span
+                ></label
+              >
+              <p class="field-note" data-t="proactiveHint">
+                群聊或私聊安静一阵后，它可能会主动开个话题，次数很少。
+              </p>
+              <div id="proactive-fields" hidden>
+                <p class="field-note" data-t="proactivePlatforms">
+                  只在这些平台上（都不勾就是全部）：
+                </p>
+                <div id="proactive-platforms" class="checks"></div>
+              </div>
+            </div>
+            <div id="features-error" class="error" role="alert" hidden></div>
+            <div class="card-actions">
+              <button type="button" class="primary" id="features-save" data-t="save">
+                保存
+              </button>
+            </div>
+          </div>
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">
@@ -196,6 +313,16 @@
             <button class="quiet" id="reset-chat" data-t="newChat">
               新对话
             </button>
+          </div>
+          <div id="getting-started" class="getting-started" hidden>
+            <span class="gs-title" data-t="gsTitle">开始使用</span
+            ><button type="button" class="gs-step" id="gs-owner">
+              <span class="gs-check" aria-hidden="true"></span
+              ><span data-t="gsOwner">告诉它你是谁</span></button
+            ><button type="button" class="gs-step" id="gs-platform">
+              <span class="gs-check" aria-hidden="true"></span
+              ><span data-t="gsPlatform">连接一个平台</span></button
+            ><button type="button" class="quiet gs-close" id="gs-close">×</button>
           </div>
           <div id="messages" role="log" aria-live="polite">
             <div class="chat-empty" id="chat-empty">

@@ -82,7 +82,8 @@ def _unseal(sealed: str, key: str) -> str:
 
 async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
     """Show bind pages through `show(url)` until someone confirms one in
-    mobile QQ; returns the values to store."""
+    mobile QQ; returns the values to store, and as "owner" the openid of
+    whoever confirmed, which is how their own DMs to the bot are addressed."""
     # Missing, it would fail only after someone confirmed, losing that bot's secret.
     import cryptography.hazmat.primitives.ciphers.aead  # noqa: F401
 
@@ -105,7 +106,8 @@ async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
                 sealed = str(result.get("bot_encrypt_secret") or "")
                 if not appid.strip("0") or not sealed:
                     raise BindFailed("no credentials")
-                return {"appid": appid, "secret": _unseal(sealed, key)}
+                return {"appid": appid, "secret": _unseal(sealed, key),
+                        "owner": str(result.get("user_openid") or "")}
             if result.get("status") == 3:
                 break       # expired: show a new page
     raise BindFailed("expired")

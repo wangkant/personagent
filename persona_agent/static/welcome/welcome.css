@@ -537,6 +537,176 @@ details[open] summary {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.side-card {
+  margin-top: 20px;
+  padding: 24px;
+}
+.side-card h2 {
+  margin-bottom: 4px;
+}
+.side-card .field-note {
+  margin: 0 0 12px;
+}
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.two-col label {
+  margin-top: 4px;
+}
+.owner-ids {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.owner-ids li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.owner-ids li + li {
+  border-top: 1px solid var(--line);
+}
+.owner-ids .owner-empty {
+  color: var(--muted);
+}
+.owner-platform {
+  color: var(--ink);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.owner-ids code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.owner-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.owner-add select {
+  width: 160px;
+  flex-shrink: 0;
+}
+.owner-add .secondary {
+  height: 36px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.feature {
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.feature:first-of-type {
+  border-top: 0;
+  padding-top: 8px;
+}
+.feature-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.feature-head strong {
+  font-weight: 500;
+}
+.feature-state {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.feature .field-note {
+  margin: 4px 0 8px;
+}
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+label.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+#vision-fields label.check {
+  margin-top: 12px;
+}
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.checks label.check {
+  font-size: 13px;
+}
+.getting-started {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--side);
+  font-size: 13px;
+}
+.gs-title {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.gs-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.gs-step:hover {
+  background: var(--hover);
+}
+.gs-check {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+.gs-step.done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.gs-step.done .gs-check {
+  border-color: var(--ok);
+  background: var(--ok);
+  box-shadow: inset 0 0 0 2px var(--side);
+}
+.gs-close {
+  margin-left: auto;
+  font-size: 16px;
+}
 .chat-page {
   height: calc(100vh - 48px);
   padding-top: 16px;
@@ -1156,6 +1326,18 @@ details[open] summary {
     padding: 14px 16px 20px;
   }
   .connected-head {
+    flex-wrap: wrap;
+  }
+  .two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .owner-add {
+    flex-wrap: wrap;
+  }
+  .owner-add select {
+    width: 100%;
+  }
+  .getting-started {
     flex-wrap: wrap;
   }
   #connected-list li {

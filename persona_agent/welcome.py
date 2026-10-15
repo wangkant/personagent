@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 import importlib.util
 import json
 from pathlib import Path
+import re
 import secrets
 import socket
 import subprocess
@@ -24,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__, home as homes
+from . import channels
 from . import connections as conn
 from . import direct
 from .direct import base as direct_base
@@ -39,6 +41,11 @@ MAX_BODY = 16_384
 # Characters; the shipped personas are under 800, and 4000 CJK characters
 # still fit in MAX_BODY.
 PERSONA_LIMIT = 4000
+# What the owner section takes: short one-line text, and "<platform>:<id>"
+# accounts on a platform the page knows, or QQ through NapCat.
+OWNER_TEXT_LIMIT = 32
+OWNER_PLATFORMS = frozenset(p.kind for p in conn.PLATFORMS) | {"qq"}
+ACCOUNT_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@-]{0,127}")
 # How long a new adapter has to fail loudly before it counts as connected.
 REJECT_WINDOW = 12
 # How long a direct platform may take to accept a new session.
@@ -117,7 +124,25 @@ class Workspace:
                     "platformInstalled": installation.python.is_file(),
                     "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
-                    "platformRunning": self.services.running("astrbot") or direct_on, "job": job}
+                    "platformRunning": self.services.running("astrbot") or direct_on, "job": job,
+                    "owner": {"name": values.get("ADMIN_NAME", ""),
+                              "relationship": values.get("ADMIN_RELATIONSHIP", ""),
+                              "ids": sw.split_ids(values.get("ADMIN_IDS", ""))},
+                    "features": self._features(values)}
+
+    @staticmethod
+    def _features(values: dict) -> dict:
+        """The optional features, with no key in them."""
+        vision_key, vision_base = values.get("VISION_API_KEY", ""), values.get("VISION_BASE_URL", "")
+        same = bool(vision_base) and (vision_base.rstrip("/") == values.get("LLM_BASE_URL", "").rstrip("/")
+                                      and vision_key == values.get("LLM_API_KEY", ""))
+        return {"search": "tavily" if values.get("TAVILY_API_KEY") else "free",
+                "vision": {"enabled": bool(values.get("VISION_MODEL")), "model": values.get("VISION_MODEL", ""),
+                           "sameAsChat": same, "baseUrl": "" if same else vision_base,
+                           "keyHint": sw.mask_secret(vision_key) if vision_key and not same else ""},
+                "proactive": {"enabled": values.get("PROACTIVE_ENABLED", "").strip().lower()
+                              in ("1", "true", "yes", "on"),
+                              "platforms": sw.split_ids(values.get("PROACTIVE_PLATFORMS", ""))}}
 
     def save(self, payload: dict) -> dict:
         with self._lock:
@@ -193,6 +218,82 @@ class Workspace:
                                    lang=lang, admin_name=values.get("ADMIN_NAME", ""),
                                    admin_relationship=values.get("ADMIN_RELATIONSHIP", ""))
             return {"text": text.strip()}
+
+    def save_profile(self, payload: dict) -> dict:
+        """Who the owner is: how the character addresses them, what they are
+        to it, and their accounts, which the character treats as its owner's."""
+        name = _one_line(payload.get("name"), OWNER_TEXT_LIMIT, "invalid_owner")
+        relationship = _one_line(payload.get("relationship"), OWNER_TEXT_LIMIT, "invalid_owner")
+        raw = payload.get("ids") or []
+        if not isinstance(raw, list) or len(raw) > 20:
+            raise ValueError("invalid_owner")
+        ids: list[str] = []
+        for item in raw:
+            platform, sep, uid = str(item).strip().partition(":")
+            if not sep or platform not in OWNER_PLATFORMS or not ACCOUNT_ID.fullmatch(uid):
+                raise ValueError("invalid_owner")
+            if f"{platform}:{uid}" not in ids:
+                ids.append(f"{platform}:{uid}")
+        with self._lock:
+            if self._future is not None and not self._future.done():
+                raise ValueError("busy")
+            sw.write_env(self.env, {"ADMIN_NAME": name, "ADMIN_RELATIONSHIP": relationship,
+                                    "ADMIN_IDS": ",".join(ids)})
+            self._restart_agent()
+            return self.summary()
+
+    def save_features(self, payload: dict) -> dict:
+        """Web search, image understanding and speaking first. A key left
+        blank keeps the saved one; none is ever returned."""
+        search = payload.get("search") or {}
+        vision = payload.get("vision") or {}
+        proactive = payload.get("proactive") or {}
+        if not all(isinstance(part, dict) for part in (search, vision, proactive)):
+            raise ValueError("invalid_feature")
+        with self._lock:
+            if self._future is not None and not self._future.done():
+                raise ValueError("busy")
+            old = self.config()
+            values: dict[str, str] = {}
+            tavily = _key(search.get("tavilyKey"))
+            if search.get("clear"):
+                values["TAVILY_API_KEY"] = ""
+            elif tavily:
+                values["TAVILY_API_KEY"] = tavily
+            if vision.get("enabled"):
+                model = str(vision.get("model") or "").strip()
+                if not model or len(model) > 256 or any(c.isspace() for c in model):
+                    raise ValueError("model_required")
+                if vision.get("sameAsChat"):
+                    base, key = old.get("LLM_BASE_URL", ""), old.get("LLM_API_KEY", "")
+                else:
+                    base = _endpoint(vision.get("baseUrl"))
+                    key = _key(vision.get("apiKey"))
+                    # A key is never forwarded to an address it was not saved for.
+                    if not key and base.rstrip("/") == old.get("VISION_BASE_URL", "").rstrip("/"):
+                        key = old.get("VISION_API_KEY", "")
+                    if not key:
+                        raise ValueError("key_required")
+                values.update(VISION_MODEL=model, VISION_BASE_URL=base, VISION_API_KEY=key)
+            else:
+                values["VISION_MODEL"] = ""
+            platforms = proactive.get("platforms") or []
+            if not isinstance(platforms, list) or any(str(p) not in OWNER_PLATFORMS for p in platforms):
+                raise ValueError("invalid_feature")
+            values["PROACTIVE_ENABLED"] = "true" if proactive.get("enabled") else "false"
+            values["PROACTIVE_PLATFORMS"] = ",".join(dict.fromkeys(str(p) for p in platforms))
+            sw.write_env(self.env, values)
+            self._restart_agent()
+            return self.summary()
+
+    def _claim_owner(self, kind: str, uid: str) -> None:
+        """Whoever scanned becomes the owner on that platform, unless it
+        already has one; the job starts the agent again to read it."""
+        ids = sw.split_ids(self.config().get("ADMIN_IDS", ""))
+        if not ACCOUNT_ID.fullmatch(uid) or any(channels.platform_of(i) == kind for i in ids):
+            return
+        sw.write_env(self.env, {"ADMIN_IDS": ",".join(ids + [f"{kind}:{uid}"])})
+        self.services.stop("agent")
 
     def save_persona(self, text: str) -> dict:
         """Write `text` as persona.txt and restart a running agent on it.
@@ -405,7 +506,10 @@ class Workspace:
             raise RuntimeError("scan_failed") from None
         except (httpx.HTTPError, ValueError):
             raise RuntimeError("network_failed") from None
+        owner = values.pop("owner", "") if spec.kind == "qq_official" else values.get("weixin_oc_user_id", "")
         self._store_direct(spec, values)
+        if owner:
+            self._claim_owner(spec.kind, str(owner))
 
     def _disconnect_direct(self, spec: conn.Platform) -> None:
         direct_base.remove_credentials(self.home, spec.kind)
@@ -472,6 +576,32 @@ class Workspace:
         self.worker.shutdown(wait=False, cancel_futures=True)
 
 
+def _one_line(value, limit: int, error: str) -> str:
+    text = str(value or "").strip()
+    if len(text) > limit or any(c in text for c in "\r\n\t\x00"):
+        raise ValueError(error)
+    return text
+
+
+def _key(value) -> str:
+    """A pasted key: one token, no spaces or line breaks."""
+    text = str(value or "").strip()
+    if len(text) > 4096 or any(c.isspace() for c in text):
+        raise ValueError("invalid_feature")
+    return text
+
+
+def _endpoint(value) -> str:
+    """An OpenAI-compatible base URL: https, or http only on this computer."""
+    base = str(value or "").strip()
+    parsed = urlsplit(base)
+    if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("invalid_url")
+    if parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
+        raise ValueError("https_required")
+    return base.rstrip("/")
+
+
 def create_app(home: Path, token: str, *, workspace: Workspace | None = None) -> FastAPI:
     workspace = workspace or Workspace(home)
 
@@ -531,7 +661,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
                    "model_required", "invalid_character", "key_rejected", "model_unreachable",
                    "permission_required", "invalid_message", "invalid_platform",
-                   "field_required", "invalid_field", "invalid_persona"}
+                   "field_required", "invalid_field", "invalid_persona", "invalid_owner",
+                   "invalid_feature"}
         error = str(exc)
         return JSONResponse({"error": error if error in allowed else "generic"}, status_code=400)
 
@@ -559,6 +690,14 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/config")
     async def config(request: Request):
         return await asyncio.to_thread(workspace.save, await body(request))
+
+    @app.post("/api/profile")
+    async def save_profile(request: Request):
+        return await asyncio.to_thread(workspace.save_profile, await body(request))
+
+    @app.post("/api/features")
+    async def save_features(request: Request):
+        return await asyncio.to_thread(workspace.save_features, await body(request))
 
     @app.get("/api/persona")
     async def persona():
