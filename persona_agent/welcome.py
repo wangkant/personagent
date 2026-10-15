@@ -29,7 +29,7 @@ from . import direct
 from .direct import base as direct_base
 from . import setup_wizard as sw
 from .astrbot_install import AstrBotInstallation, install_astrbot
-from .services import Services
+from .services import Services, stop_leftovers
 from .storage import FileLock, LockUnavailable, atomic_write_text
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
@@ -621,6 +621,9 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     token = secrets.token_urlsafe(32)
     sock = socket.socket()
     try:
+        stopped = stop_leftovers(home)
+        if stopped:
+            print(f"Stopped what an earlier personagent left running: {', '.join(stopped)}.")
         sock.bind(("127.0.0.1", args.port))
         sock.listen(128)
         port = sock.getsockname()[1]
