@@ -40,6 +40,8 @@ class Platform:
     settings: dict = field(default_factory=dict)
     guide: str = ""
     note: tuple[str, str] = ("", "")
+    # The platform delivers group chats to this kind of bot, not only DMs.
+    groups: bool = True
 
 
 def _token(key: str, en: str, zh: str) -> Field:
@@ -63,7 +65,8 @@ PLATFORMS: tuple[Platform, ...] = (
     Platform("weixin_oc", ("WeChat", "个人微信"), SCAN,
              note=("Scan with WeChat to log in a personal WeChat bot. It chats one to one; "
                    "WeChat does not deliver group messages to it.",
-                   "用微信扫码，登录一个个人微信机器人。它只能私聊，微信不会把群消息交给它。")),
+                   "用微信扫码，登录一个个人微信机器人。它只能私聊，微信不会把群消息交给它。"),
+             groups=False),
     Platform("qq_official", ("QQ", "QQ"), KEY,
              (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret")),
              guide="https://q.qq.com/qqbot/openclaw/login.html",
@@ -183,7 +186,7 @@ def is_direct(kind: str) -> bool:
 def catalog() -> list[dict]:
     """What the page shows; no stored value is part of it."""
     return [{"id": p.kind, "name": list(p.name), "group": p.group, "guide": p.guide,
-             "note": list(p.note), "direct": is_direct(p.kind),
+             "note": list(p.note), "direct": is_direct(p.kind), "groups": p.groups,
              "fields": [{"key": f.key, "label": list(f.label), "secret": f.secret,
                          "required": f.required, "kind": f.kind, "default": f.default}
                         for f in p.fields]}

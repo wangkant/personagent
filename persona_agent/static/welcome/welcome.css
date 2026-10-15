@@ -619,8 +619,8 @@ details[open] summary {
   text-align: center;
 }
 .connected-card {
-  padding: 20px 26px;
-  margin-bottom: 26px;
+  padding: 20px 24px 12px;
+  margin-bottom: 30px;
 }
 .connected-head {
   display: flex;
@@ -634,78 +634,234 @@ details[open] summary {
 }
 #connected-list {
   list-style: none;
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   padding: 0;
 }
 #connected-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 0;
   border-top: 1px solid var(--line);
   font-size: 13px;
 }
 #connected-list strong {
   flex: 1;
-  font-weight: 550;
+  font-weight: 600;
+}
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 10px 4px 9px;
+  border-radius: 20px;
+  background: var(--soft);
+  color: var(--green);
+  white-space: nowrap;
+}
+.state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4f9a5c;
+  box-shadow: 0 0 0 3px #4f9a5c26;
+}
+.state[data-state="connecting"] {
+  background: #f6eedb;
+  color: #8a6a1f;
+}
+.state[data-state="connecting"]::before {
+  background: #d8a52b;
+  box-shadow: 0 0 0 3px #d8a52b2e;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.state[data-state="failed"] {
+  background: #f9ece5;
+  color: var(--error);
+}
+.state[data-state="failed"]::before {
+  background: var(--error);
+  box-shadow: 0 0 0 3px #a7432f26;
+}
+.state[data-state="paused"] {
+  background: #efeee7;
+  color: var(--muted);
+}
+.state[data-state="paused"]::before {
+  background: #a9ab9f;
+  box-shadow: none;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.badge {
+  --brand: var(--green);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, #fffdf8);
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent);
+}
+.badge.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.badge.big {
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  font-size: 24px;
+}
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 28px 0 12px;
 }
 .group-title {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 1px;
+  color: var(--ink);
+  font-weight: 650;
+  margin: 0;
+}
+.group-hint {
+  font-size: 11px;
   color: var(--muted);
-  font-weight: 600;
-  margin: 26px 0 12px;
+  margin: 0;
+  line-height: 1.5;
 }
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
   gap: 12px;
 }
 .tile {
+  --brand: var(--green);
+  position: relative;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px 14px;
   min-height: 72px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 12px;
   text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .tile:hover {
-  border-color: #c5d3b9;
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--brand) 12%, transparent);
   transform: translateY(-1px);
 }
-.tile strong {
+.tile:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  outline-offset: 2px;
+}
+.tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tile-text strong {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
+}
+.tile-text small {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-tag:empty {
+  display: none;
 }
 .tile-tag {
-  font-size: 10px;
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  font-size: 9.5px;
+  font-weight: 600;
   color: var(--green);
+  background: var(--soft);
+  border-radius: 20px;
+  padding: 2px 8px;
 }
 .tile.on {
-  background: var(--soft);
+  border-color: color-mix(in srgb, var(--brand) 30%, var(--line));
+  background: color-mix(in srgb, var(--brand) 5%, var(--paper));
 }
 #advanced-platforms {
-  margin-top: 26px;
+  margin-top: 28px;
+}
+#advanced-platforms .tiles {
+  margin-top: 4px;
 }
 .platform-card {
-  padding: 26px 30px 30px;
+  --brand: var(--green);
+  padding: 22px 30px 30px;
   max-width: 620px;
   margin: 0 auto;
+  border-top: 3px solid color-mix(in srgb, var(--brand) 55%, var(--line));
 }
 .platform-card .back {
-  margin: -6px 0 8px -8px;
+  margin: 0 0 10px -8px;
 }
-.panel-note {
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.panel-head h2 {
+  font-size: 20px;
+  margin: 0 0 7px;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chips span {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+  background: color-mix(in srgb, var(--brand) 9%, #fffdf8);
+  border-radius: 20px;
+  padding: 3px 9px;
+}
+.howto {
+  background: #f4f2ea;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+}
+.howto p {
   font-size: 12px;
-  color: var(--muted);
-  margin: 4px 0 4px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 0 0 4px;
 }
 #panel-guide {
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand) 75%, var(--ink));
 }
 #panel-progress,
 #panel-done {
@@ -937,7 +1093,7 @@ details[open] summary {
     padding: 23px 18px;
   }
   .tiles {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   }
   .chat-empty {
     padding-top: 8vh;
@@ -974,12 +1130,15 @@ details[open] summary {
     flex-wrap: wrap;
   }
   .tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
   .tile {
-    min-height: 54px;
-    padding: 13px;
+    min-height: 60px;
+    padding: 10px 12px;
+  }
+  .panel-head h2 {
+    font-size: 18px;
   }
   .chat-page {
     padding-bottom: 16px;

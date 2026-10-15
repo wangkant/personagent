@@ -51,7 +51,14 @@ const translations = {
       "选一个平台，扫码或填一两项。下载、配置和启动都会自动完成，不需要再登录别的后台。",
     connectedTitle: "已连接的平台",
     groupScan: "扫码就能连",
+    groupScanHint: "用手机确认一下就好，什么都不用填。",
     groupKey: "粘贴一两项",
+    groupKeyHint: "从平台后台复制，页面会告诉你复制哪一项。",
+    howScan: "扫码",
+    howPaste: "粘贴 {n} 项",
+    howAdvanced: "需要额外准备",
+    reachAll: "群聊和私聊",
+    reachDm: "仅私聊",
     groupAdvanced: "高级：需要公网地址或本机其他软件",
     back: "← 返回",
     guide: "去平台后台获取 ↗",
@@ -193,7 +200,14 @@ const translations = {
       "Pick an app, then scan or paste one or two values. Downloading, setup and starting happen on their own, with no other dashboard to sign in to.",
     connectedTitle: "Connected apps",
     groupScan: "Scan to connect",
+    groupScanHint: "Confirm on your phone. Nothing to fill in.",
     groupKey: "Paste one or two values",
+    groupKeyHint: "Copy them from the app's console; the page says which.",
+    howScan: "Scan",
+    howPaste: "Paste {n}",
+    howAdvanced: "Needs setup",
+    reachAll: "Groups and DMs",
+    reachDm: "DMs only",
     groupAdvanced: "Advanced: needs a public address or other software",
     back: "← Back",
     guide: "Get these from the app's console ↗",
@@ -448,6 +462,48 @@ function showView(next) {
 const pick = (pair) => pair[lang === "zh" ? 1 : 0];
 const spec = (kind) => catalog?.platforms.find((p) => p.id === kind);
 const platformName = (kind) => (spec(kind) ? pick(spec(kind).name) : kind);
+// Each platform's mark: a short monogram in its own colour.
+const MARKS = {
+  qq_official: ["Q", "#1aa6e6"],
+  weixin_oc: ["微", "#07a85a"],
+  telegram: ["T", "#229ed9"],
+  discord: ["D", "#5865f2"],
+  kook: ["K", "#4f9a1c"],
+  lark: ["飞", "#3370ff"],
+  dingtalk: ["钉", "#1677ff"],
+  slack: ["S", "#7b2a7d"],
+  wecom_ai_bot: ["企", "#0a7fe0"],
+  mattermost: ["M", "#1e4f9c"],
+  misskey: ["Mi", "#6f9a00"],
+  wecom: ["企", "#0a7fe0"],
+  weixin_official_account: ["公", "#07a85a"],
+  qq_official_webhook: ["Q", "#1aa6e6"],
+  aiocqhttp: ["N", "#d6528f"],
+  satori: ["Sa", "#7a5af8"],
+};
+function brand(node, kind) {
+  const [glyph, colour] = MARKS[kind] || [kind.slice(0, 1).toUpperCase(), "#365a43"];
+  node.style.setProperty("--brand", colour);
+  return glyph;
+}
+function badge(kind, size = "") {
+  const node = document.createElement("span");
+  node.className = `badge ${size}`.trim();
+  node.setAttribute("aria-hidden", "true");
+  node.textContent = brand(node, kind);
+  return node;
+}
+function describe(item) {
+  const how =
+    item.group === "scan"
+      ? t("howScan")
+      : item.group === "advanced"
+        ? t("howAdvanced")
+        : t("howPaste", {
+            n: String(item.fields.filter((f) => f.required).length),
+          });
+  return [how, t(item.groups ? "reachAll" : "reachDm")];
+}
 function tiles() {
   for (const box of document.querySelectorAll(".tiles")) {
     box.replaceChildren();
@@ -457,11 +513,17 @@ function tiles() {
       button.type = "button";
       button.className = "tile";
       button.dataset.platform = item.id;
+      brand(button, item.id);
+      const text = document.createElement("span");
+      text.className = "tile-text";
       const name = document.createElement("strong");
       name.textContent = pick(item.name);
+      const line = document.createElement("small");
+      line.textContent = describe(item).join(" · ");
+      text.append(name, line);
       const tag = document.createElement("span");
       tag.className = "tile-tag";
-      button.append(name, tag);
+      button.append(badge(item.id), text, tag);
       button.addEventListener("click", () => openPanel(item.id));
       box.append(button);
     }
@@ -474,10 +536,20 @@ function buildFields(keep = false) {
     for (const input of $("panel-fields").querySelectorAll("input"))
       kept[input.name] = input.value;
   $("panel-title").textContent = pick(item.name);
+  $("panel-badge").textContent = brand($("panel-badge"), item.id);
+  brand($("platform-panel"), item.id);
+  $("panel-chips").replaceChildren(
+    ...describe(item).map((label) => {
+      const chip = document.createElement("span");
+      chip.textContent = label;
+      return chip;
+    }),
+  );
   $("panel-note").textContent = pick(item.note);
   $("panel-note").hidden = !pick(item.note);
   $("panel-guide").href = item.guide || "#";
   $("panel-guide").hidden = !item.guide;
+  $("panel-howto").hidden = !pick(item.note) && !item.guide;
   const box = $("panel-fields");
   box.replaceChildren();
   for (const field of item.fields) {
@@ -521,13 +593,15 @@ function renderConnected(connected, working) {
     const name = document.createElement("strong");
     name.textContent = platformName(kind);
     const status = document.createElement("span");
-    status.className = "status-pill";
+    const current = (state.platformStatus || {})[kind] || "paused";
+    status.className = "state";
+    status.dataset.state = current;
     status.textContent = t(
       {
         running: "running",
         connecting: "connectingState",
         failed: "failedState",
-      }[(state.platformStatus || {})[kind]] || "paused",
+      }[current] || "paused",
     );
     const again = document.createElement("button");
     again.className = "quiet";
@@ -539,7 +613,7 @@ function renderConnected(connected, working) {
     remove.textContent = t("disconnect");
     remove.disabled = working;
     remove.addEventListener("click", () => disconnect(kind));
-    row.append(name, status, again, remove);
+    row.append(badge(kind, "small"), name, status, again, remove);
     list.append(row);
   }
 }

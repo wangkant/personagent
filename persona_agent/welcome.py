@@ -94,9 +94,10 @@ class Workspace:
             status = {}
             for kind in platforms:
                 if kind in stored:
-                    state = states.get(kind, {}).get("state") if direct_on else "paused"
-                    status[kind] = {"connected": "running", "connecting": "connecting",
-                                    "paused": "paused"}.get(state or "connecting", "failed")
+                    # A refusal outlives the runner, which exits once nothing is left to run.
+                    state = states.get(kind, {}).get("state")
+                    status[kind] = ("failed" if state in ("refused", "error") else "paused" if not direct_on
+                                    else "running" if state == "connected" else "connecting")
                 else:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
             return {"version": __version__, "configured": bool(values.get("LLM_API_KEY")),

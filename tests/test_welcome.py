@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
@@ -344,3 +343,12 @@ def test_an_accepted_connection_ends_ready(workspace, monkeypatch):
     assert workspace.job == {"state": "ready", "stage": "ready", "error": "", "action": "connect",
                              "platform": "kook"}
     assert workspace.summary()["platforms"] == ["kook"]
+
+
+def test_a_refused_direct_platform_shows_as_failed_even_after_the_runner_exits(workspace, monkeypatch):
+    direct_base.save_credentials(workspace.home, "telegram", {"telegram_token": "t"})
+    direct_base.save_credentials(workspace.home, "discord", {"discord_token": "d"})
+    direct_base.Status(workspace.home).set("telegram", "refused", "token_rejected")
+    monkeypatch.setattr(workspace.services, "running", lambda name: False)
+    assert workspace.summary()["platformStatus"] == {"telegram": "failed", "discord": "paused"}
+    assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == ["weixin_oc"]

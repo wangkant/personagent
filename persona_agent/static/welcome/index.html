@@ -222,9 +222,19 @@
             <div id="services-error" class="error" role="alert" hidden></div>
           </div>
           <div id="platform-groups">
-            <h3 class="group-title" data-t="groupScan">扫码就能连</h3>
+            <div class="group-head">
+              <h3 class="group-title" data-t="groupScan">扫码就能连</h3>
+              <p class="group-hint" data-t="groupScanHint">
+                用手机确认一下就好，什么都不用填。
+              </p>
+            </div>
             <div class="tiles" data-group="scan"></div>
-            <h3 class="group-title" data-t="groupKey">粘贴一两项</h3>
+            <div class="group-head">
+              <h3 class="group-title" data-t="groupKey">粘贴一两项</h3>
+              <p class="group-hint" data-t="groupKeyHint">
+                从平台后台复制，页面会告诉你复制哪一项。
+              </p>
+            </div>
             <div class="tiles" data-group="key"></div>
             <details id="advanced-platforms">
               <summary data-t="groupAdvanced">
@@ -237,15 +247,23 @@
             <button class="quiet back" id="panel-back" data-t="back">
               ← 返回
             </button>
-            <h2 id="panel-title"></h2>
-            <p id="panel-note" class="panel-note"></p>
-            <a
-              id="panel-guide"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t="guide"
-              >去平台后台获取 ↗</a
-            >
+            <div class="panel-head">
+              <span id="panel-badge" class="badge big" aria-hidden="true"></span>
+              <div>
+                <h2 id="panel-title"></h2>
+                <div id="panel-chips" class="chips"></div>
+              </div>
+            </div>
+            <div id="panel-howto" class="howto">
+              <p id="panel-note"></p>
+              <a
+                id="panel-guide"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-t="guide"
+                >去平台后台获取 ↗</a
+              >
+            </div>
             <form id="platform-form">
               <div id="panel-fields"></div>
               <div id="panel-error" class="error" role="alert" hidden></div>
