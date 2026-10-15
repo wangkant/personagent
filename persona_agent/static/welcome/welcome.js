@@ -579,7 +579,8 @@ function openPanel(kind) {
     return;
   }
   selected = kind;
-  fresh = false;
+  // Back to a platform whose job is still running: keep watching it.
+  fresh = job.state === "working" && job.platform === kind;
   panelError = "";
   buildFields();
   renderStatus();

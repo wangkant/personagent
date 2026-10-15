@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from typing import Callable, Optional
 
 from . import home as homes
 from .astrbot_install import AstrBotInstallation, hide_dashboard
@@ -175,10 +176,13 @@ class Services:
             self._spawn("direct", [sys.executable, "-m", "persona_agent.direct", "--home", str(self.home)],
                         cwd=cwd, env=env)
 
-    def restart_direct(self) -> None:
-        """Pick up added or removed platforms."""
+    def restart_direct(self, between: Optional[Callable[[], None]] = None) -> None:
+        """Pick up added or removed platforms; `between` runs while nothing
+        is running, so it can clear state the old process would write back."""
         with self._lock:
             self.stop("direct")
+            if between is not None:
+                between()
             self.start_direct()
 
     def stop(self, name: str) -> None:
@@ -225,11 +229,19 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
             services.start_astrbot()
             started.append("astrbot")
         services.start_direct()
-        if services.running("direct"):
-            started.append("direct")
-        print(f"personagent is running ({', '.join(started)}). Press Ctrl+C to stop.")
+        names = started + (["direct"] if services.running("direct") else [])
+        print(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop.")
+        direct_running = services.running("direct")
+        # The direct process ends on its own when every platform in it was
+        # refused; the agent and AstrBot keep running without it.
         while all(services.running(name) for name in started):
+            if direct_running and not services.running("direct"):
+                direct_running = False
+                print("The directly connected platforms stopped; see runtime/desktop/direct.log.",
+                      file=sys.stderr)
             time.sleep(0.5)
+        stopped = next(name for name in started if not services.running(name))
+        print(f"{stopped} stopped; see runtime/desktop/{stopped}.log.", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 0

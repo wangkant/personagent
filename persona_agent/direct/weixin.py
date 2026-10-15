@@ -134,13 +134,16 @@ class Weixin(Platform):
         atomic_write_text(self.state_path, json.dumps(
             {"cursor": self.cursor, "contexts": self.contexts}, ensure_ascii=False))
 
-    async def call(self, path: str, body: dict, timeout: float = CALL_TIMEOUT_S) -> dict:
+    async def call(self, path: str, body: dict, timeout: float = CALL_TIMEOUT_S, *,
+                   long_poll: bool = False) -> dict:
         try:
             response = await self.client.post(f"{self.base}/ilink/bot/{path}",
                                               headers=post_headers(self.token),
                                               json={**body, "base_info": base_info()}, timeout=timeout)
-        except httpx.TimeoutException:
-            return {"ret": 0}       # a long poll that ran out is an empty answer
+        except httpx.ReadTimeout:
+            if long_poll:
+                return {"ret": 0}   # a long poll that ran out is an empty answer
+            raise ConnectionError(f"{path}: ReadTimeout") from None
         except httpx.HTTPError as exc:
             raise ConnectionError(f"{path}: {type(exc).__name__}") from None
         if response.status_code in (401, 403):
@@ -169,15 +172,20 @@ class Weixin(Platform):
         timeout, failures, announced = POLL_TIMEOUT_S, 0, False
         while True:
             try:
-                answer = await self.call("getupdates", {"get_updates_buf": self.cursor}, timeout + 10)
+                answer = await self.call("getupdates", {"get_updates_buf": self.cursor}, timeout + 10,
+                                         long_poll=True)
             except ConnectionError as exc:
                 logger.warning("weixin: %s", exc)
+                self.dropped()
+                announced = False
                 await backoff_sleep(failures)
                 failures += 1
                 continue
             if answer.get("ret") not in (0, None) or answer.get("errcode") not in (0, None):
                 logger.warning("weixin: getupdates answered ret=%s errcode=%s",
                                answer.get("ret"), answer.get("errcode"))
+                self.dropped()
+                announced = False
                 await backoff_sleep(failures)
                 failures += 1
                 continue
@@ -212,10 +220,11 @@ class Weixin(Platform):
         texts: list[str] = []
         for item in message.get("item_list") or []:
             kind = item.get("type")
-            reference = item.get("ref_msg") or {}
-            quoted = (reference.get("message_item") or {}).get("text_item") or {}
+            quoted_item = (item.get("ref_msg") or {}).get("message_item") or {}
+            quoted = quoted_item.get("text_item") or {}
             if quoted.get("text"):
-                segments.append({"type": "reply", "message_id": str(reference.get("msg_id") or ""),
+                quoted_id = quoted_item.get("message_id") or quoted_item.get("msg_id") or ""
+                segments.append({"type": "reply", "message_id": str(quoted_id),
                                  "text": str(quoted["text"]), "sender_id": "", "sender_name": ""})
             if kind == 1:
                 text = str((item.get("text_item") or {}).get("text") or "")
@@ -254,14 +263,18 @@ class Weixin(Platform):
             text = str(item.get("text") or "").strip() if item.get("type") == "text" else ""
             if not text:
                 continue        # images need the encrypted CDN upload, not done here
-            for piece in split_text(text, MAX_TEXT):
-                answer = await self.call("sendmessage", {"msg": {
-                    "from_user_id": "", "to_user_id": target, "client_id": secrets.token_hex(16),
-                    "message_type": 2, "message_state": 2,
-                    "context_token": self.contexts.get(target, ""),
-                    "item_list": [{"type": 1, "text_item": {"text": piece}}]}})
-                if answer.get("ret") not in (0, None):
-                    raise ConnectionError(f"sendmessage: {answer.get('ret')}")
+            try:
+                for piece in split_text(text, MAX_TEXT):
+                    answer = await self.call("sendmessage", {"msg": {
+                        "from_user_id": "", "to_user_id": target, "client_id": secrets.token_hex(16),
+                        "message_type": 2, "message_state": 2,
+                        "context_token": self.contexts.get(target, ""),
+                        "item_list": [{"type": 1, "text_item": {"text": piece}}]}})
+                    if answer.get("ret") not in (0, None):
+                        raise ConnectionError(f"sendmessage: {answer.get('ret')}")
+            except (ConnectionError, Refused) as exc:
+                logger.warning("weixin: sending stopped after %d item(s) (%s)", sent, exc)
+                break
             sent += 1
         return sent
 

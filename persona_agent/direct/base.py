@@ -153,6 +153,10 @@ class Platform:
         self.values = values
         self.bot_id = ""
 
+    def dropped(self) -> None:
+        """Called when the connection is lost and being retried; the bridge
+        replaces it to show the platform as connecting again."""
+
     async def check(self) -> str:
         """Prove the credentials work and learn the bot's own id; raises
         Refused when the platform turns them down."""
@@ -179,7 +183,8 @@ class Platform:
 
 async def backoff_sleep(attempt: int) -> None:
     first, last = RETRY_S
-    await asyncio.sleep(min(first * (2 ** attempt), last))
+    # The exponent is capped: a long outage would otherwise overflow the float.
+    await asyncio.sleep(min(first * (2 ** min(attempt, 16)), last))
 
 
 class Bridge:
@@ -213,9 +218,13 @@ class Bridge:
             if not items:
                 return
             try:
-                await self.platform.send(target, items)
+                sent = await self.platform.send(target, items)
             except Exception as exc:
                 logger.warning("%s: a reply was not sent: %s", self.platform.kind, type(exc).__name__)
+                return
+            if sent < len(items):
+                logger.warning("%s: %d of %d reply items were not sent", self.platform.kind,
+                               len(items) - sent, len(items))
 
     async def deliver(self, delivery: dict) -> tuple[str, int]:
         try:
@@ -226,11 +235,33 @@ class Bridge:
         sent = await self.platform.send(target, items)
         return ("sent" if sent == len(items) else "partial" if sent else "failed"), sent
 
+    async def _receive(self, stop: asyncio.Event) -> None:
+        """Run the platform until stopped, starting it again after anything
+        but a refusal: a network blip at startup must not end it for good."""
+        kind = self.platform.kind
+        failures = 0
+
+        def connected() -> None:
+            nonlocal failures
+            failures = 0
+            self.status.set(kind, "connected")
+        self.platform.dropped = lambda: self.status.set(kind, "connecting")
+        while not stop.is_set():
+            try:
+                await self.platform.run(self.on_event, connected)
+                return
+            except Refused:
+                raise
+            except Exception as exc:
+                logger.warning("%s: connection failed (%s); retrying", kind, type(exc).__name__)
+                self.status.set(kind, "connecting", type(exc).__name__)
+                await backoff_sleep(failures)
+                failures += 1
+
     async def run(self, stop: asyncio.Event) -> None:
         kind = self.platform.kind
         self.status.set(kind, "connecting")
-        receiving = asyncio.create_task(self.platform.run(
-            self.on_event, lambda: self.status.set(kind, "connected")))
+        receiving = asyncio.create_task(self._receive(stop))
         outbox = asyncio.create_task(self.agent.run_outbox(self.deliver, stop=stop))
         stopping = asyncio.create_task(stop.wait())
         try:

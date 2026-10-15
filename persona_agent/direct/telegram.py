@@ -18,6 +18,8 @@ API = "https://api.telegram.org"
 POLL_S = 50
 # sendMessage takes 4096 characters after entity parsing; plain text is sent.
 MAX_TEXT = 4096
+# A mention prefix is cut to this, so the first piece still fits MAX_TEXT.
+MAX_NAME = 60
 
 
 def utf16_len(text: str) -> int:
@@ -79,9 +81,12 @@ class Telegram(Platform):
             try:
                 updates = await self.call("getUpdates", json={
                     "offset": offset, "timeout": POLL_S, "allowed_updates": ["message"]})
+                if failures:
+                    connected()     # back after a drop
                 failures = 0
             except ConnectionError as exc:
                 logger.warning("telegram: %s", exc)
+                self.dropped()
                 await backoff_sleep(failures)
                 failures += 1
                 continue
@@ -91,7 +96,7 @@ class Telegram(Platform):
                 if isinstance(message, dict):
                     event = await self.event(message)
                     if event:
-                        await on_event(event, str(message["chat"]["id"]))
+                        await on_event(event, event["reply_handle"])
 
     async def event(self, message: dict) -> dict | None:
         sender = message.get("from") or {}
@@ -143,7 +148,7 @@ class Telegram(Platform):
                 "sender_id": uid, "sender_name": name,
                 "message_id": str(message.get("message_id")), "sent_at": int(message.get("date") or 0),
                 "addressed": addressed, "text": text, "segments": segments,
-                "reply_handle": str(chat.get("id"))}
+                "reply_handle": _handle(chat.get("id"), message)}
 
     async def _photo(self, sizes: Any) -> dict | None:
         if not isinstance(sizes, list) or not sizes:
@@ -169,29 +174,41 @@ class Telegram(Platform):
         return handle
 
     async def send(self, target: str, items: list) -> int:
+        chat, _, thread = target.partition("/")
+        where: dict = {"chat_id": chat, **({"message_thread_id": int(thread)} if thread else {})}
         sent = 0
         for item in items:
-            if item.get("type") == "image" and item.get("b64"):
-                await self.call("sendPhoto", data={"chat_id": target}, files={
-                    "photo": ("image", base64.b64decode(item["b64"]))})
-            elif item.get("type") == "text" and str(item.get("text") or "").strip():
-                pieces = split_text(str(item["text"]), MAX_TEXT - 80)
-                mention = raw_id(item.get("mention_user_id"), self.kind)
-                for i, piece in enumerate(pieces):
-                    payload: dict = {"chat_id": target, "text": piece}
-                    name = self.names.get(mention)
-                    if i == 0 and mention and name:
-                        payload["text"] = f"{name} {piece}"
-                        payload["entities"] = [{"type": "text_mention", "offset": 0,
-                                                "length": utf16_len(name), "user": {"id": int(mention)}}]
-                    await self.call("sendMessage", json=payload)
-            else:
-                continue
+            try:
+                if item.get("type") == "image" and item.get("b64"):
+                    await self.call("sendPhoto", data=where, files={
+                        "photo": ("image", base64.b64decode(item["b64"]))})
+                elif item.get("type") == "text" and str(item.get("text") or "").strip():
+                    pieces = split_text(str(item["text"]), MAX_TEXT - MAX_NAME - 20)
+                    mention = raw_id(item.get("mention_user_id"), self.kind)
+                    for i, piece in enumerate(pieces):
+                        payload: dict = {**where, "text": piece}
+                        name = self.names.get(mention, "")[:MAX_NAME]
+                        if i == 0 and mention and name:
+                            payload["text"] = f"{name} {piece}"
+                            payload["entities"] = [{"type": "text_mention", "offset": 0,
+                                                    "length": utf16_len(name), "user": {"id": int(mention)}}]
+                        await self.call("sendMessage", json=payload)
+                else:
+                    continue
+            except (ConnectionError, Refused) as exc:
+                logger.warning("telegram: sending stopped after %d item(s) (%s)", sent, exc)
+                break
             sent += 1
         return sent
 
     async def close(self) -> None:
         await self.client.aclose()
+
+
+def _handle(chat_id: Any, message: dict) -> str:
+    """Where replies go: the chat, and the forum topic the message was in."""
+    thread = message.get("message_thread_id") if message.get("is_topic_message") else None
+    return f"{chat_id}/{thread}" if thread else str(chat_id)
 
 
 def _entity_text(text: str, entity: dict) -> str:

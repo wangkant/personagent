@@ -23,11 +23,17 @@ def platform_for(kind: str, values: dict, home: Path) -> Platform:
         return Discord(values)
     if kind == "weixin_oc":
         from .weixin import Weixin
-        return Weixin(values, state=home / "platforms" / "direct-state" / "weixin_oc.json")
+        return Weixin(values, state=state_path(home, kind))
     if kind == "qq_official":
         from .qq import QQ
         return QQ(values)
     raise ValueError(f"no direct connector for {kind!r}")
+
+
+def state_path(home: Path, kind: str) -> Path:
+    """What a platform keeps between runs (WeChat: its cursor and reply
+    tokens). It belongs to one login and goes when that login does."""
+    return home / "platforms" / "direct-state" / f"{kind}.json"
 
 
 #: The catalog ids personagent connects without AstrBot.

@@ -347,3 +347,215 @@ def test_qq_replies_passively_while_allowed_then_actively():
     assert bot.target({"reply_handle": "c2c:U"}) == ("c2c", "U")
     with pytest.raises(base.Unsupported):
         bot.target({"reply_handle": "elsewhere"})
+
+
+# ---------------------------------------------------------------- review fixes
+
+def no_wait(monkeypatch):
+    async def instant(seconds):
+        await asyncio.sleep(0)
+    monkeypatch.setattr(base, "backoff_sleep", instant)
+
+
+def test_a_network_blip_at_startup_is_retried_and_only_a_refusal_ends_it(tmp_path, monkeypatch):
+    no_wait(monkeypatch)
+    status = base.Status(tmp_path)
+    attempts = []
+
+    class Flaky(FakePlatform):
+        async def run(self, on_event, connected):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise ConnectionError("getMe: ConnectTimeout")
+            connected()
+            self.dropped()
+            raise base.Refused("token_rejected")
+
+    class Agent(FakeAgent):
+        async def run_outbox(self, deliver, stop=None):
+            await stop.wait()
+    run(base.Bridge(Flaky(), Agent(), status).run(asyncio.Event()))
+    assert len(attempts) == 2
+    final = base.read_status(tmp_path)["telegram"]
+    assert final["state"] == "refused" and final["detail"] == "token_rejected"
+
+
+def test_backoff_never_overflows(monkeypatch):
+    waits = []
+
+    async def record(seconds):
+        waits.append(seconds)
+    monkeypatch.setattr(base.asyncio, "sleep", record)
+    run(base.backoff_sleep(5000))
+    assert waits == [base.RETRY_S[1]]
+
+
+def test_a_send_that_fails_midway_reports_what_went_out():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 2:
+            return httpx.Response(500, json={"ok": False, "error_code": 500})
+        return httpx.Response(200, json={"ok": True, "result": {}})
+    bot = telegram.Telegram({"telegram_token": "t"}, client=mock(handler))
+    items = [{"type": "text", "text": "one"}, {"type": "text", "text": "two"}, {"type": "text", "text": "three"}]
+    assert run(bot.send("-100", items)) == 1
+
+
+def test_telegram_replies_in_the_forum_topic_and_keeps_long_names_inside_the_limit():
+    bot = telegram.Telegram({"telegram_token": "t"}, client=mock(lambda r: httpx.Response(500)))
+    bot.bot_id, bot.username = "7000", "NovaBot"
+    event = run(bot.event(tg_message(is_topic_message=True, message_thread_id=12)))
+    assert event["reply_handle"] == "-100/12"
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True, "result": {}})
+    bot.client = mock(handler)
+    bot.names["42"] = "N" * 300
+    run(bot.send("-100/12", [{"type": "text", "text": "x" * 5000, "mention_user_id": "telegram:42"}]))
+    assert len(sent) == 2
+    assert all(p["chat_id"] == "-100" and p["message_thread_id"] == 12 for p in sent)
+    assert all(len(p["text"]) <= telegram.MAX_TEXT for p in sent)
+
+
+def test_discord_keeps_its_session_resumable_and_survives_an_html_429():
+    socket = Socket([{"op": 10, "d": {"heartbeat_interval": 45000}}, {"op": 7}])
+    closed = []
+
+    async def close(code=1000):
+        closed.append(code)
+    socket.close = close
+    bot = discord.Discord({"discord_token": "tok"}, client=mock(discord_rest),
+                          connect=lambda url: asyncio.sleep(0, socket))
+    run(bot._session("wss://x", False, None, lambda: None))
+    assert closed and not {1000, 1001} & set(closed)
+
+    answers = iter([httpx.Response(429, text="<html>slow down</html>", headers={"retry-after": "0"}),
+                    httpx.Response(200, json={"id": "900", "username": "nova"})])
+    bot = discord.Discord({"discord_token": "tok"}, client=mock(lambda r: next(answers)))
+    assert run(bot.check()) == "nova"
+
+
+def test_weixin_only_treats_a_long_poll_timeout_as_empty(tmp_path):
+    def handler(request):
+        raise httpx.ReadTimeout("slow", request=request)
+    bot = weixin.Weixin({"weixin_oc_token": "bt"}, state=tmp_path / "s.json", client=mock(handler))
+    bot.contexts["u@im.wechat"] = "ctx"
+    assert run(bot.call("getupdates", {}, long_poll=True)) == {"ret": 0}
+    assert run(bot.send("u@im.wechat", [{"type": "text", "text": "hi"}])) == 0
+
+
+def test_weixin_reads_the_quoted_message_id_from_the_quoted_item():
+    bot = weixin.Weixin({"weixin_oc_token": "bt"}, client=mock(lambda r: httpx.Response(500)))
+    event = bot.event({"from_user_id": "u@im.wechat", "message_id": 2, "item_list": [
+        {"type": 1, "text_item": {"text": "yes"},
+         "ref_msg": {"message_item": {"msg_id": "77", "text_item": {"text": "earlier"}}}}]})
+    assert event["segments"][0] == {"type": "reply", "message_id": "77", "text": "earlier",
+                                    "sender_id": "", "sender_name": ""}
+
+
+def test_qq_tells_an_outage_from_wrong_credentials_and_never_resends_after_a_read_timeout():
+    bot = qq.QQ({"appid": "1", "secret": "good"}, client=mock(lambda r: httpx.Response(502, json={})))
+    with pytest.raises(ConnectionError):
+        run(bot.access_token())
+    hosts = []
+
+    def handler(request):
+        if request.url.path.endswith("getAppAccessToken"):
+            return httpx.Response(200, json={"access_token": "qq-token", "expires_in": "7200"})
+        hosts.append(request.url.host)
+        raise httpx.ReadTimeout("slow", request=request)
+    bot = qq.QQ({"appid": "1", "secret": "good"}, client=mock(handler))
+    assert run(bot.send(("c2c", "U"), [{"type": "text", "text": "hi"}])) == 0
+    assert len(hosts) == 1
+
+
+def test_qq_starts_a_fresh_session_after_an_invalid_session_close():
+    socket = Socket([{"op": 10, "d": {"heartbeat_interval": 41250}}], close_code=4006)
+    bot = qq.QQ({"appid": "1", "secret": "good"}, client=mock(qq_rest([])),
+                connect=lambda url: asyncio.sleep(0, socket))
+    bot.session_id, bot.seq = "old", 9
+    run(bot._session("wss://x", None, lambda: None))
+    assert socket.sent[0]["op"] == 6 and bot.session_id == "" and bot.seq is None
+
+
+def test_qq_lets_the_at_copy_of_a_group_message_through_as_addressed(monkeypatch):
+    monkeypatch.setattr(qq, "AT_GRACE_S", 0.05)
+    bot = qq.QQ({"appid": "1", "secret": "good"}, client=mock(qq_rest([])))
+    plain = {"id": "m9", "group_openid": "G", "content": "nova 在吗", "timestamp": "2026-10-14T10:00:00+08:00",
+             "author": {"member_openid": "U"}}
+    seen = []
+
+    async def on_event(event, target):
+        seen.append(event)
+
+    async def scenario():
+        await bot._dispatch("GROUP_MESSAGE_CREATE", plain, on_event, lambda: None)
+        await bot._dispatch("GROUP_AT_MESSAGE_CREATE", plain, on_event, lambda: None)
+        await asyncio.sleep(0.1)
+        await bot._dispatch("GROUP_MESSAGE_CREATE", dict(plain, id="m10"), on_event, lambda: None)
+        await asyncio.sleep(0.1)
+    run(scenario())
+    assert [(e["message_id"], e["addressed"]) for e in seen] == [("m9", True), ("m10", False)]
+
+
+def test_telegram_and_wechat_report_connected_again_after_a_drop(tmp_path, monkeypatch):
+    async def instant(seconds):
+        await asyncio.sleep(0)
+    monkeypatch.setattr(telegram, "backoff_sleep", instant)
+    monkeypatch.setattr(weixin, "backoff_sleep", instant)
+
+    tg_answers = iter([{"ok": True, "result": {"id": 7000, "username": "NovaBot"}},   # getMe
+                       {"ok": True, "result": True},                                   # deleteWebhook
+                       None,                                                           # a drop
+                       {"ok": True, "result": []},                                     # recovered
+                       {"ok": False, "error_code": 401}])                              # then stop
+
+    def tg(request):
+        answer = next(tg_answers)
+        if answer is None:
+            raise httpx.ConnectError("down", request=request)
+        return httpx.Response(200 if answer.get("ok") else 401, json=answer)
+    states = []
+    bot = telegram.Telegram({"telegram_token": "t"}, client=mock(tg))
+    bot.dropped = lambda: states.append("connecting")
+    with pytest.raises(base.Refused):
+        run(bot.run(None, lambda: states.append("connected")))
+    assert states == ["connected", "connecting", "connected"]
+
+    wx_answers = iter([{"ret": 0}, None, {"ret": 0, "msgs": []}, {"ret": -14}])  # notifystart first
+
+    def wx(request):
+        answer = next(wx_answers)
+        if answer is None:
+            raise httpx.ConnectError("down", request=request)
+        return httpx.Response(200, json=answer)
+    states.clear()
+    bot = weixin.Weixin({"weixin_oc_token": "bt"}, state=tmp_path / "s.json", client=mock(wx))
+    bot.dropped = lambda: states.append("connecting")
+    with pytest.raises(base.Refused):
+        run(bot.run(None, lambda: states.append("connected")))
+    assert states == ["connecting", "connected"]
+
+
+def test_qq_lets_held_plain_messages_out_before_a_later_at_message(monkeypatch):
+    monkeypatch.setattr(qq, "AT_GRACE_S", 5)
+    bot = qq.QQ({"appid": "1", "secret": "good"}, client=mock(qq_rest([])))
+    base_message = {"group_openid": "G", "timestamp": "2026-10-14T10:00:00+08:00",
+                    "author": {"member_openid": "U"}}
+    seen = []
+
+    async def on_event(event, target):
+        seen.append(event["message_id"])
+
+    async def scenario():
+        await bot._dispatch("GROUP_MESSAGE_CREATE", dict(base_message, id="p1", content="hi"),
+                            on_event, lambda: None)
+        await bot._dispatch("GROUP_AT_MESSAGE_CREATE", dict(base_message, id="a2", content="nova?"),
+                            on_event, lambda: None)
+    run(scenario())
+    assert seen == ["p1", "a2"]
+    assert bot.passive[("group", "G")][0] == "a2" and not bot.held

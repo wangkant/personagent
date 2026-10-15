@@ -50,7 +50,11 @@ class Discord(Platform):
             except httpx.HTTPError as exc:
                 raise ConnectionError(f"{path}: {type(exc).__name__}") from None
             if response.status_code == 429:
-                await asyncio.sleep(float(response.json().get("retry_after") or 2))
+                try:
+                    wait = float(response.json().get("retry_after") or 2)
+                except ValueError:      # Cloudflare's own limit answers in HTML
+                    wait = float(response.headers.get("retry-after") or 5)
+                await asyncio.sleep(wait)
                 continue
             if response.status_code == 401:
                 raise Refused("token_rejected")
@@ -85,6 +89,7 @@ class Discord(Platform):
                 raise
             except Exception as exc:
                 logger.warning("discord: gateway dropped (%s)", type(exc).__name__)
+                self.dropped()
                 await backoff_sleep(failures)
                 failures += 1
 
@@ -137,7 +142,8 @@ class Discord(Platform):
             if heartbeat is not None:
                 heartbeat.cancel()
             code = getattr(socket, "close_code", None)
-            await socket.close()
+            # Closing with 1000 or 1001 would end the session; 4000 keeps it resumable.
+            await socket.close(4000)
             if code in FATAL:
                 raise Refused(FATAL[code])
             if code in FRESH:
@@ -211,18 +217,22 @@ class Discord(Platform):
     async def send(self, target: str, items: list) -> int:
         sent = 0
         for item in items:
-            if item.get("type") == "image" and item.get("b64"):
-                await self.rest("POST", f"/channels/{target}/messages", data={"payload_json": "{}"},
-                                files={"files[0]": ("image.png", base64.b64decode(item["b64"]))})
-            elif item.get("type") == "text" and str(item.get("text") or "").strip():
-                mention = raw_id(item.get("mention_user_id"), self.kind)
-                for i, piece in enumerate(split_text(str(item["text"]), MAX_TEXT - 40)):
-                    lead = f"<@{mention}> " if i == 0 and mention else ""
-                    await self.rest("POST", f"/channels/{target}/messages", json={
-                        "content": lead + piece,
-                        "allowed_mentions": {"parse": [], "users": [mention] if lead else []}})
-            else:
-                continue
+            try:
+                if item.get("type") == "image" and item.get("b64"):
+                    await self.rest("POST", f"/channels/{target}/messages", data={"payload_json": "{}"},
+                                    files={"files[0]": ("image.png", base64.b64decode(item["b64"]))})
+                elif item.get("type") == "text" and str(item.get("text") or "").strip():
+                    mention = raw_id(item.get("mention_user_id"), self.kind)
+                    for i, piece in enumerate(split_text(str(item["text"]), MAX_TEXT - 40)):
+                        lead = f"<@{mention}> " if i == 0 and mention else ""
+                        await self.rest("POST", f"/channels/{target}/messages", json={
+                            "content": lead + piece,
+                            "allowed_mentions": {"parse": [], "users": [mention] if lead else []}})
+                else:
+                    continue
+            except (ConnectionError, Refused) as exc:
+                logger.warning("discord: sending stopped after %d item(s) (%s)", sent, exc)
+                break
             sent += 1
         return sent
 

@@ -62,6 +62,10 @@ class Workspace:
         self._future = None
         self._closed = False
         self._cancelled = False
+        # Set when a job took a platform away from AstrBot, which then needs a restart.
+        self._astrbot_changed = False
+        # A platform whose saved state belongs to a login that just ended.
+        self._stale_state = ""
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
         saved = sw._read_json(self._history_path)
         self._conversation = str(saved.get("conversation") or secrets.token_hex(12))[:64]
@@ -204,6 +208,8 @@ class Workspace:
             self.job = {"state": "working", "stage": stage, "error": "", "action": action,
                         "platform": kind}
             self._cancelled = False
+            self._astrbot_changed = False
+            self._stale_state = ""
             self._future = self.worker.submit(self._job, action, *args)
 
     def _job(self, action: str, *args) -> None:
@@ -227,7 +233,9 @@ class Workspace:
                 self._connect_plugin()
                 if self._closed:
                     return
-                if action == "start" or own:
+                if own and self._astrbot_changed:
+                    self.services.restart_astrbot()
+                elif action == "start" or own:
                     self.services.start_astrbot()
                 else:
                     # AstrBot reads its platform list only when it starts.
@@ -242,7 +250,7 @@ class Workspace:
             else:
                 self.services.stop("astrbot")
             if own:
-                self.services.restart_direct()
+                self.services.restart_direct(between=self._clear_stale_state)
                 if action != "disconnect":
                     self._await_direct(args[0])
             else:
@@ -302,10 +310,16 @@ class Workspace:
     # ---- platforms personagent connects itself
 
     def _store_direct(self, spec: conn.Platform, values: dict) -> None:
+        self._stale_state = spec.kind
         direct_base.save_credentials(self.home, spec.kind, values)
-        # One bot cannot be polled twice: drop an AstrBot connection of the same platform.
+        self._release_from_astrbot(spec)
+
+    def _release_from_astrbot(self, spec: conn.Platform) -> None:
+        """One bot cannot be served twice: drop an AstrBot connection of the
+        same platform, made before personagent connected it itself."""
         if spec.kind in conn.connected(AstrBotInstallation(self.home).root / "data"):
             self._disconnect(spec)
+            self._astrbot_changed = True
 
     def _connect_direct(self, spec: conn.Platform, values: dict) -> None:
         platform = direct.platform_for(spec.kind, values, self.home)
@@ -356,6 +370,14 @@ class Workspace:
 
     def _disconnect_direct(self, spec: conn.Platform) -> None:
         direct_base.remove_credentials(self.home, spec.kind)
+        self._stale_state = spec.kind
+        self._release_from_astrbot(spec)
+
+    def _clear_stale_state(self) -> None:
+        """Run between stopping and starting the direct process: the old
+        process would otherwise write the ended login's state back."""
+        if self._stale_state:
+            direct.state_path(self.home, self._stale_state).unlink(missing_ok=True)
 
     def _await_direct(self, spec: conn.Platform) -> None:
         """Wait for the new session to be accepted; a refusal is rolled back."""

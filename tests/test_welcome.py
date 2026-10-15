@@ -190,7 +190,8 @@ def _direct_job(workspace, monkeypatch, platform, states):
     sw.write_env(workspace.env, {"LLM_API_KEY": "key"})
     monkeypatch.setattr(welcome.direct, "platform_for", lambda kind, values, home: platform)
     monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
-    monkeypatch.setattr(workspace.services, "restart_direct", lambda: None)
+    monkeypatch.setattr(workspace.services, "restart_direct",
+                        lambda between=None: between() if between else None)
     monkeypatch.setattr(workspace.services, "running", lambda name: name == "direct")
     monkeypatch.setattr(direct_base, "read_status", lambda home: next(states))
     monkeypatch.setattr(welcome.time, "sleep", lambda s: None)
@@ -352,3 +353,28 @@ def test_a_refused_direct_platform_shows_as_failed_even_after_the_runner_exits(w
     monkeypatch.setattr(workspace.services, "running", lambda name: False)
     assert workspace.summary()["platformStatus"] == {"telegram": "failed", "discord": "paused"}
     assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == ["weixin_oc"]
+
+
+def test_moving_a_platform_off_astrbot_restarts_it_and_disconnecting_clears_both(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+    conn.save_entry(data, {"id": "telegram", "type": "telegram", "enable": True})
+    conn.save_entry(data, {"id": "kook", "type": "kook", "enable": True})
+    states = iter([{"telegram": {"state": "connected"}}] * 5)
+    _direct_job(workspace, monkeypatch, FakeDirect(), states)
+    calls = []
+    monkeypatch.setattr(workspace.services, "restart_astrbot", lambda: calls.append("restart") or 0)
+    monkeypatch.setattr(workspace.services, "start_astrbot", lambda: calls.append("start"))
+    workspace.start_job("connect", "telegram", {"telegram_token": "123:abc"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["state"] == "ready", workspace.job
+    assert calls == ["restart"] and conn.connected(data) == ["kook"]
+
+    # A WeChat bot connected through AstrBot before direct connections existed.
+    conn.save_entry(data, {"id": "weixin_oc", "type": "weixin_oc", "enable": True})
+    state = welcome.direct.state_path(workspace.home, "weixin_oc")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text("{}", encoding="utf-8")
+    workspace._disconnect_direct(conn.platform("weixin_oc"))
+    assert conn.connected(data) == ["kook"] and state.exists()      # the old process may still run
+    workspace._clear_stale_state()
+    assert not state.exists()
