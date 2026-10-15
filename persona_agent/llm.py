@@ -185,19 +185,22 @@ class ModelCalls:
             payload["max_completion_tokens"] = payload.pop("max_tokens")
         if ("temperature", url, model) in quirks:
             payload.pop("temperature", None)
+        if ("reasoning", url, model) in quirks and payload.get("reasoning") == {"enabled": False}:
+            payload["reasoning"] = {"effort": "minimal"}
 
     def _remember_refusal(self, url: str, model: str, field: str) -> None:
         self._api_quirks[(field, url, model)] = False if field == "thinking" else True
-        instead = ("sending max_completion_tokens instead"
-                   if field == "max_tokens" else "leaving it out")
+        instead = {"max_tokens": "sending max_completion_tokens instead",
+                   "reasoning": "asking for the lowest effort instead"}.get(field, "leaving it out")
         logger.info("[Agent] %s does not take `%s` for model %s; %s from now on",
                     _host(url) or url, field, model, instead)
 
     async def _post_chat(self, url: str, key: str, payload: dict, *,
                          timeout: float):
         """POST one chat completion and return the response, unraised. A 400
-        refusing a field (`thinking`, `max_tokens`, `temperature`) is retried
-        without it, and the endpoint's answer remembered."""
+        refusing a field (`thinking`, `max_tokens`, `temperature`, or
+        `reasoning` off) is retried without it, and the endpoint's answer
+        remembered."""
         self._apply_quirks(url, payload)
         model = str(payload.get("model") or "")
         asking = ("thinking" in payload

@@ -1159,6 +1159,59 @@ async def test_a_reasoning_model_gets_the_spelling_it_takes(tmp: Path) -> None:
     check("...with no 400 at all", sent == [["max_completion_tokens"]], repr(sent))
 
 
+async def test_a_model_that_must_reason_is_asked_for_the_lowest_effort(tmp: Path) -> None:
+    """Some OpenRouter models refuse `reasoning: {enabled: false}` with "Reasoning
+    is mandatory". The call is retried once at the lowest effort instead of
+    failing, and that model is asked that way from then on."""
+    agent = isolated_agent(tmp)
+    agent.base_url = "https://openrouter.ai/api/v1"
+    agent.model = agent.llm_fallback_model = agent.llm_judge_model = "z-ai/glm-5.3-flash"
+    sent: list = []
+
+    class _Resp:
+        def __init__(self, status: int, text: str = "") -> None:
+            self.status_code, self.text = status, text
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"{self.status_code} bad request")
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    class _OpenRouter:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            sent.append(json.get("reasoning"))
+            if json.get("reasoning") == {"enabled": False}:
+                return _Resp(400, '{"error": {"message": "Reasoning is mandatory for '
+                                  'this endpoint and cannot be disabled."}}')
+            return _Resp(200)
+
+    agent._http = lambda **kw: _OpenRouter()
+
+    async def gate() -> str:
+        return await agent._call_llm(
+            "sys", [{"role": "user", "content": "hi"}], model="z-ai/glm-5.3-flash",
+            max_tokens=200, enable_search=False, disable_thinking=True)
+
+    check("the gate answers on a model that must reason", await gate() == "ok")
+    check("...after one retry at the lowest effort",
+          sent == [{"enabled": False}, {"effort": "minimal"}], repr(sent))
+    sent.clear()
+    check("the next call asks that way the first time", await gate() == "ok")
+    check("...with no 400 at all", sent == [{"effort": "minimal"}], repr(sent))
+    payload = {"model": "m", "reasoning": {"effort": "minimal"}}
+    check("only a switched-off `reasoning` is rewritten",
+          adapt_rejected_payload(payload, "Reasoning is mandatory") == ""
+          and payload["reasoning"] == {"effort": "minimal"}, repr(payload))
+
+
 async def test_an_exhausted_balance_is_fatal_and_said_once(tmp: Path, caplog) -> None:
     """A 402 is the account, not the network: no retries, no failover to a
     model on the same account, and one operator line naming the host and the

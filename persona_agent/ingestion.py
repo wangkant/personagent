@@ -28,6 +28,7 @@ import httpx
 from httpcore._backends.auto import AutoBackend
 
 from .config_env import env_int
+from .endpoints import adapt_rejected_payload
 from .connector import current_sink
 from .textproc import (_detect_image_mime, _truncate_framed, apply_k2_quirks,
                        salvage_json_object, strip_json_fences)
@@ -1157,7 +1158,9 @@ class ContentIngestion:
     ) -> tuple[httpx.Response | None, Exception | None]:
         """POST one image prompt, retrying `retryable` statuses (and transport
         errors when `retry_errors`, else they raise) with exponential backoff.
-        Returns the last response (None if every try raised) and the last error."""
+        A 400 refusing a field is resent at once in the spelling the endpoint
+        takes. Returns the last response (None if every try raised) and the
+        last error."""
         payload = {
             "model": self.vision_model,
             "messages": [{
@@ -1174,13 +1177,18 @@ class ContentIngestion:
         r = None
         last_exc = None
         async with self._http(timeout=30) as c:
+            async def send() -> httpx.Response:
+                return await c.post(
+                    f"{self.vision_base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.vision_api_key}"},
+                    json=dict(payload),
+                )
             for attempt in range(attempts):
                 try:
-                    r = await c.post(
-                        f"{self.vision_base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.vision_api_key}"},
-                        json=payload,
-                    )
+                    r = await send()
+                    if (getattr(r, "status_code", 200) in (400, 422)
+                            and adapt_rejected_payload(payload, str(getattr(r, "text", "") or ""))):
+                        r = await send()
                 except Exception as e:
                     if not retry_errors:
                         raise

@@ -108,11 +108,15 @@ def adapt_rejected_payload(payload: dict, error_text: str) -> str:
     `thinking` (DeepSeek's switch) and `temperature` are dropped, and
     `max_tokens` becomes `max_completion_tokens` (OpenAI's reasoning models),
     only when the error refuses the field itself, not its value, and not a
-    model whose name contains it."""
+    model whose name contains it. OpenRouter's `reasoning` switch, refused by
+    a model that must reason, asks for the lowest effort instead."""
     text = (error_text or "").lower()
     model = str(payload.get("model") or "").lower()
     if model:
         text = re.sub(rf"(?<!\w){re.escape(model)}(?!\w)", " ", text)
+    if payload.get("reasoning") == {"enabled": False} and "reasoning is mandatory" in text:
+        payload["reasoning"] = {"effort": "minimal"}
+        return "reasoning"
     if "thinking" in payload and _refuses_field(text, "thinking"):
         payload.pop("thinking")
         return "thinking"
