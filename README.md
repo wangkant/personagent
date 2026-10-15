@@ -14,15 +14,15 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a></p>
 
-personagent is a character for your group chats: pick one or write your own, and run it on any OpenAI-compatible model. It lives where your group already is: QQ, Telegram, Discord and a dozen more through [AstrBot](https://github.com/AstrBotDevs/AstrBot), anything [Koishi](https://koishi.chat) reaches through [Satori](https://satori.chat), and [Matrix](https://matrix.org) with its bridges to WhatsApp and Signal.
+personagent is a character for your group chats: pick one or write your own, and run it on any OpenAI-compatible model. It lives where your group already is: QQ, WeChat, Telegram and Discord connect directly; Feishu, DingTalk, Slack and a dozen more go through [AstrBot](https://github.com/AstrBotDevs/AstrBot), which it installs and runs for you; anything [Koishi](https://koishi.chat) reaches comes through [Satori](https://satori.chat); and [Matrix](https://matrix.org) brings its bridges to WhatsApp and Signal.
 
 Start in a local browser chat. Add one model key, say hello, then connect QQ, WeChat, Telegram or another app with a phone scan or one or two values when you want to bring the character into a group.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Local browser chat, settings and app connections in one page" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps screen of the local page, with every platform it can join" width="960">
 </p>
 
-<p align="center"><em>Setup, character chat and app connections in one local page. Screenshot uses a local test model.</em></p>
+<p align="center"><em>Connect apps, in the same local page as setup and the character chat. Screenshot from a throwaway setup with a local test model.</em></p>
 
 ## Start here
 
@@ -35,7 +35,7 @@ python -m persona_agent
 
 The browser opens automatically. Paste your model API key and click **Verify & start chatting**. The model and character have defaults; advanced settings are optional. An existing setup opens straight into chat.
 
-Want QQ? Click **Connect QQ**, then scan with mobile QQ. The app downloads AstrBot and its runtime, saves the credentials and starts both services. This route uses QQ Official Bot and **does not need NapCat**. Adding the bot to a group requires you to own the group.
+Want QQ? Open **Connect apps** and pick QQ. Scan [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html) with mobile QQ to create an official bot, then paste its AppID and AppSecret. personagent checks them and connects to QQ itself, with **no AstrBot and no NapCat**. Until the bot is certified, QQ lets you add it only to groups you own.
 
 On Windows, you can also download the source ZIP and double-click `start.bat`. Reopening it resumes your setup; quitting stops the services it started. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md). Terminal commands and other platforms remain in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
@@ -64,7 +64,7 @@ Every change is on record, and any of them can be rolled back.
 <td valign="top">
 <strong>It is easy to start, and lives where your group is.</strong><br>
 Browser setup and chat in English or Chinese, with 11 model services and optional advanced settings.<br>
-AstrBot, Koishi or Matrix carry it into your chats, and a local dashboard shows what it did.
+It joins QQ, WeChat, Telegram and Discord by itself and the rest through AstrBot, Koishi or Matrix; a local dashboard shows what it did.
 </td>
 </tr>
 </table>
@@ -91,7 +91,7 @@ The plugin also has its own repository, [astrbot_plugin_personagent](https://git
 | Audit trail and rollback | Append-only ledgers; rollback from the terminal or dashboard | Not built in | Not documented | Not documented | Not documented |
 | Published behavioural eval | Speak, persona and learning suites ([below](https://github.com/wangkant/personagent#measured)) | Not documented | Not documented | Not documented | Not documented |
 | Setup and admin | Browser setup and chat; local dashboard | WebUI, desktop launcher | WebUI, one-click launcher | Koishi console | CLI, web client |
-| Where it runs | Python service behind AstrBot, Koishi (Satori) or Matrix | Python app, 18+ platforms | Python app, QQ via NapCat | Koishi plugin | TypeScript (Bun); Discord, Telegram, Slack and more |
+| Where it runs | Python service; QQ, WeChat, Telegram and Discord directly, the rest behind AstrBot, Koishi (Satori) or Matrix | Python app, 18+ platforms | Python app, QQ via NapCat | Koishi plugin | TypeScript (Bun); Discord, Telegram, Slack and more |
 | Licence | MIT | AGPL-3.0 | GPL-3.0 | AGPL-3.0 | MIT |
 
 From each project's documentation, October 2026. "Not documented" means we found no description of it, not that it cannot be done; AstrBot's plugin market has learning plugins, one with a review queue and rollback.
@@ -140,7 +140,7 @@ Everything personagent stores stays on your machine, in its home folder. The mod
 
 ## Status
 
-personagent is at 1.0, and QQ through AstrBot is its most exercised route. Other AstrBot platforms use the same plugin, the Satori and Matrix connectors are tested against stand-ins, and CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus a job that installs the package and runs the command.
+The release on PyPI is 1.0.2; `main` is the 1.1 preview described here. QQ is the most exercised platform, through AstrBot in 1.0 and now directly. The WeChat, Telegram and Discord connections check credentials against the real services before saving and are otherwise tested against stand-ins; other AstrBot platforms use the same plugin, and the Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus jobs that install the package and drive the command and the local page.
 
 ## License
 
@@ -149,5 +149,7 @@ personagent is at 1.0, and QQ through AstrBot is its most exercised route. Other
 ## Acknowledgements
 
 - [AstrBot](https://github.com/AstrBotDevs/AstrBot), [satori-python](https://github.com/RF-Tar-Railt/satori-python) with [Koishi](https://koishi.chat), and [matrix-nio](https://github.com/matrix-nio/matrix-nio) with the [mautrix bridges](https://docs.mau.fi/bridges/) carry personagent onto chat platforms, and [NapCat](https://github.com/NapNeko/NapCatQQ) onto QQ.
+- QQ, WeChat, Telegram and Discord are reached through their own documented APIs, WeChat as described in Tencent's [openclaw-weixin protocol notes](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md); [websockets](https://github.com/python-websockets/websockets) runs the QQ and Discord gateways and [python-qrcode](https://github.com/lincolnloop/python-qrcode) draws the WeChat login code.
+- Platform logos on the local page come from [Simple Icons](https://github.com/simple-icons/simple-icons), [SVG Logos](https://github.com/gilbarbara/logos), [IconPark](https://github.com/bytedance/IconPark), [MingCute](https://github.com/Richard9394/MingCute) and [TDesign Icons](https://github.com/Tencent/tdesign-icons), plus KOOK's and OneBot's own; each logo is its owner's trademark.
 - [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls, and [uv](https://github.com/astral-sh/uv) and [pipx](https://github.com/pypa/pipx) install it in one line.
 - Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707); the lorebook and output filters follow [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info and regex extensions.

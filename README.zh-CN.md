@@ -12,13 +12,13 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <b>简体中文</b></p>
 
-personagent 是放进群聊里的一个角色：选一个现成的性格或自己写一个，接上任意 OpenAI 兼容的模型就能用。它经 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 进 QQ、Telegram、Discord 等十几个平台，也能经 [Koishi](https://koishi.chat)（[Satori](https://satori.chat)）或 [Matrix](https://matrix.org) 接入。
+personagent 是放进群聊里的一个角色：选一个现成的性格或自己写一个，接上任意 OpenAI 兼容的模型就能用。QQ、微信、Telegram、Discord 由它直接连接；飞书、钉钉、Slack 等十几个平台经 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入，AstrBot 由它自动安装和运行；也能经 [Koishi](https://koishi.chat)（[Satori](https://satori.chat)）或 [Matrix](https://matrix.org) 接入。
 
 先在本地页面里聊天，填一个模型 Key 就能开始。想把角色带到 QQ、微信、Telegram 等平台，扫一次码或填一两项就行。
 
-![本地页面：角色聊天、设置和平台连接集中在同一处](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg)
+![本地页面的「连接平台」：能接入的平台一目了然](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg)
 
-<sub>设置、聊天和平台连接都在同一个本地页面里。截图使用本机模拟模型。</sub>
+<sub>「连接平台」和设置、角色聊天在同一个本地页面里。截图来自一个临时环境，使用本机模拟模型。</sub>
 
 ## 从这里开始
 
@@ -31,7 +31,7 @@ python -m persona_agent
 
 浏览器会自动打开。填入模型 API Key，点「验证并开始聊天」即可。模型和角色已有默认值，其他设置可以先不管。已经配置过的话，直接进入聊天。
 
-想进 QQ，点「连接 QQ」，再用手机 QQ 扫码。程序会自动下载 AstrBot、准备运行环境、保存凭据，并一起启动。走的是 **QQ 官方机器人，不需要 NapCat**；把机器人加进群，需要你是该群的群主。
+想进 QQ，打开「连接平台」选 QQ。先用手机 QQ 扫 [QQ 官方页面](https://q.qq.com/qqbot/openclaw/login.html)创建一个官方机器人，再把它的 AppID 和 AppSecret 填进来。personagent 校验后直接连接 QQ，**不需要 AstrBot，也不需要 NapCat**。机器人通过认证之前，QQ 只允许把它加进你自己是群主的群。
 
 Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。下次打开会沿用配置；退出应用会一起停止它启动的服务。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)。命令行和其他平台的用法保留在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)中。
 
@@ -59,8 +59,8 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。下次打开�
     <td width="220"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="拿着本子准备聊天的兔子" width="220"></td>
     <td>
       <b>上手快，你的群在哪它就去哪</b><br>
-      设置向导中英文都有，11 种模型服务可选；看演示不要 Key。<br>
-      经 AstrBot、Koishi、Matrix 接进你已经在用的群。<br>
+      在浏览器里设置和聊天，中英文都有，11 种模型服务可选。<br>
+      QQ、微信、Telegram、Discord 直接连接，其他平台经 AstrBot、Koishi、Matrix 接进你已经在用的群。<br>
       自带一个本地管理面板。
     </td>
   </tr>
@@ -91,8 +91,8 @@ QQ 机器人连好后，在手机 QQ「联系人 → 机器人」里找到它，
 | 改动前要求多方佐证 | 同一聊天两条一致反应，其中一条为强 | 没有内置 | 可选人工审核学到的表达 | 文档未提及 | 文档未提及 |
 | 审计记录与撤销 | 只追加的账本；终端或面板里撤销 | 没有内置 | 文档未提及 | 文档未提及 | 文档未提及 |
 | 公开的行为评测 | 开口、人设、学习三项（[见下文](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)） | 文档未提及 | 文档未提及 | 文档未提及 | 文档未提及 |
-| 配置与管理 | 终端设置向导；本地管理面板 | WebUI、桌面启动器 | WebUI、一键启动器 | Koishi 控制台 | 命令行、网页客户端 |
-| 运行方式 | Python 服务，接在 AstrBot、Koishi（Satori）或 Matrix 后面 | Python 程序，18 个以上平台 | Python 程序，QQ 走 NapCat | Koishi 插件 | TypeScript（Bun）；Discord、Telegram、Slack 等 |
+| 配置与管理 | 浏览器设置和聊天；本地管理面板 | WebUI、桌面启动器 | WebUI、一键启动器 | Koishi 控制台 | 命令行、网页客户端 |
+| 运行方式 | Python 服务；QQ、微信、Telegram、Discord 直接连接，其他接在 AstrBot、Koishi（Satori）或 Matrix 后面 | Python 程序，18 个以上平台 | Python 程序，QQ 走 NapCat | Koishi 插件 | TypeScript（Bun）；Discord、Telegram、Slack 等 |
 | 许可证 | MIT | AGPL-3.0 | GPL-3.0 | AGPL-3.0 | MIT |
 
 以上依据各项目 2026 年 10 月的文档。“文档未提及”指我们没找到相关说明，不代表做不到；AstrBot 插件市场里有学习类插件，其中一个带审核队列和回滚。
@@ -145,7 +145,7 @@ personagent 存的一切，包括设置、人设、记忆和账本，都在你�
 
 ## 项目状态
 
-1.0。QQ（经 AstrBot）是跑得最多的路线，AstrBot 的其他平台走同一个插件；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试。
+PyPI 上的正式版是 1.0.2；`main` 是这里介绍的 1.1 预览版。QQ 是跑得最多的平台，1.0 经 AstrBot，现在直接连接。微信、Telegram、Discord 的直连会在保存前向真实服务校验凭据，其余部分在模拟环境里测试；AstrBot 的其他平台走同一个插件，Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有任务安装软件包，跑命令和本地页面。
 
 ## 许可证
 
@@ -154,6 +154,8 @@ personagent 存的一切，包括设置、人设、记忆和账本，都在你�
 ## 致谢
 
 - [AstrBot](https://github.com/AstrBotDevs/AstrBot)、[satori-python](https://github.com/RF-Tar-Railt/satori-python) 与 [Koishi](https://koishi.chat)、[matrix-nio](https://github.com/matrix-nio/matrix-nio) 与 [mautrix 桥接](https://docs.mau.fi/bridges/) 把 personagent 带到各个聊天平台，[NapCat](https://github.com/NapNeko/NapCatQQ) 负责 QQ。
+- QQ、微信、Telegram、Discord 走各自公开的接口，微信依据腾讯的 [openclaw-weixin 协议说明](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md)；[websockets](https://github.com/python-websockets/websockets) 负责 QQ 和 Discord 的网关连接，[python-qrcode](https://github.com/lincolnloop/python-qrcode) 生成微信登录二维码。
+- 本地页面里的平台图标来自 [Simple Icons](https://github.com/simple-icons/simple-icons)、[SVG Logos](https://github.com/gilbarbara/logos)、[IconPark](https://github.com/bytedance/IconPark)、[MingCute](https://github.com/Richard9394/MingCute) 和 [TDesign Icons](https://github.com/Tencent/tdesign-icons)，以及 KOOK 和 OneBot 自己的图标；各图标是其所有者的商标。
 - [FastAPI](https://github.com/fastapi/fastapi) 和 [httpx](https://github.com/encode/httpx) 支撑服务本身和模型调用，[uv](https://github.com/astral-sh/uv) 和 [pipx](https://github.com/pypa/pipx) 让它一行命令就能装好。
 - 从反应中学习的思路借鉴了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)。
 - 世界书与输出过滤器参考了 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info 与正则扩展。

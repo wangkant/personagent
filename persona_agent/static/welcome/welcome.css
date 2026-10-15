@@ -740,10 +740,14 @@ details[open] summary {
   font-weight: 600;
   letter-spacing: -0.3px;
 }
-.badge svg {
+.badge svg,
+.badge img {
   width: 18px;
   height: 18px;
   fill: currentColor;
+}
+.badge img {
+  border-radius: 4px;
 }
 .badge.small {
   width: 28px;
@@ -751,7 +755,8 @@ details[open] summary {
   border-radius: 7px;
   font-size: 11.5px;
 }
-.badge.small svg {
+.badge.small svg,
+.badge.small img {
   width: 15px;
   height: 15px;
 }
@@ -761,7 +766,8 @@ details[open] summary {
   border-radius: 10px;
   font-size: 16px;
 }
-.badge.big svg {
+.badge.big svg,
+.badge.big img {
   width: 22px;
   height: 22px;
 }
