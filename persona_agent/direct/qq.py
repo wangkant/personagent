@@ -1,0 +1,245 @@
+"""QQ official bots through the documented API v2
+(https://bot.q.qq.com/wiki/develop/api-v2/): an app access token, the
+WebSocket gateway for C2C and group messages, and the v2 send endpoints.
+
+Replies to a message are passive (carry its msg_id) while QQ allows them;
+anything else is an active message, which QQ rate-limits and a person can
+switch off."""
+from __future__ import annotations
+
+import asyncio
+import collections
+import json
+import logging
+import random
+import time
+from datetime import datetime
+from typing import Any
+
+import httpx
+
+from .base import Platform, Refused, Unsupported, backoff_sleep, split_text
+
+logger = logging.getLogger("personagent.direct.qq")
+
+# Unified since 2026-08-10; the older hosts still answer and are tried second.
+TOKEN_URLS = ("https://api.bot.qq.com/app/getAppAccessToken", "https://bots.qq.com/app/getAppAccessToken")
+API_HOSTS = ("https://api.bot.qq.com", "https://api.sgroup.qq.com")
+GROUP_AND_C2C_EVENT = 1 << 25
+# QQ states no text limit, only an error when one is exceeded.
+MAX_TEXT = 2000
+# How long a message can be replied to passively, and how many times.
+PASSIVE_S = {"group": 5 * 60, "c2c": 60 * 60}
+PASSIVE_REPLIES = {"group": 5, "c2c": 4}
+FATAL = {4914: "bot_offline", 4915: "bot_banned", 4013: "invalid_intents", 4014: "intents_not_allowed"}
+
+
+class QQ(Platform):
+    kind = "qq_official"
+    capabilities = ("outbox",)
+
+    def __init__(self, values: dict, *, client: httpx.AsyncClient | None = None, connect=None):
+        super().__init__(values)
+        self.app_id = str(values.get("appid") or "")
+        self.secret = str(values.get("secret") or "")
+        self.client = client or httpx.AsyncClient(timeout=30)
+        self._connect = connect
+        self.token, self.token_until = "", 0.0
+        self.api = API_HOSTS[0]
+        self.session_id, self.seq = "", None
+        self.seen: collections.deque[str] = collections.deque(maxlen=512)
+        # (scene, id) -> [msg_id, received monotonic, replies used]
+        self.passive: dict[tuple[str, str], list] = {}
+
+    async def access_token(self) -> str:
+        if self.token and time.monotonic() < self.token_until:
+            return self.token
+        last_error = "unreachable"
+        for url in TOKEN_URLS:
+            try:
+                response = await self.client.post(url, json={"appId": self.app_id, "clientSecret": self.secret})
+                answer = response.json()
+            except (httpx.HTTPError, ValueError):
+                continue
+            if answer.get("access_token"):
+                self.token = str(answer["access_token"])
+                # QQ hands out a new token in its last 60 seconds.
+                self.token_until = time.monotonic() + max(60, int(answer.get("expires_in") or 7200) - 60)
+                return self.token
+            last_error = "app_rejected"
+            break
+        if last_error == "app_rejected":
+            raise Refused("app_rejected")
+        raise ConnectionError("token endpoint unreachable")
+
+    async def rest(self, method: str, path: str, **kwargs) -> Any:
+        token = await self.access_token()
+        headers = {"Authorization": f"QQBot {token}"}
+        for host in (self.api, *[h for h in API_HOSTS if h != self.api]):
+            try:
+                response = await self.client.request(method, host + path, headers=headers, **kwargs)
+            except httpx.HTTPError:
+                continue
+            self.api = host
+            if response.status_code == 401:
+                self.token = ""
+                raise ConnectionError(f"{path}: 401")
+            if response.status_code >= 400:
+                try:
+                    code = response.json().get("code") or response.status_code
+                except ValueError:
+                    code = response.status_code
+                raise ConnectionError(f"{path}: {code}")
+            return response.json() if response.content else None
+        raise ConnectionError(f"{path}: unreachable")
+
+    async def check(self) -> str:
+        if not self.app_id or not self.secret:
+            raise Refused("app_rejected")
+        await self.access_token()
+        return self.app_id
+
+    async def _open(self, url: str):
+        if self._connect is not None:
+            return await self._connect(url)
+        import websockets
+
+        return await websockets.connect(url, max_size=None, open_timeout=30)
+
+    async def run(self, on_event, connected) -> None:
+        await self.check()
+        failures = 0
+        while True:
+            try:
+                gateway = (await self.rest("GET", "/gateway/bot"))["url"]
+                await self._session(gateway, on_event, connected)
+                failures = 0
+            except Refused:
+                raise
+            except Exception as exc:
+                logger.warning("qq: gateway dropped (%s)", type(exc).__name__)
+                await backoff_sleep(failures)
+                failures += 1
+
+    async def _session(self, url: str, on_event, connected) -> None:
+        socket = await self._open(url)
+        heartbeat = None
+        try:
+            hello = json.loads(await socket.recv())
+            interval = hello["d"]["heartbeat_interval"] / 1000
+
+            async def beat() -> None:
+                while True:
+                    await asyncio.sleep(interval)
+                    await socket.send(json.dumps({"op": 1, "d": self.seq}))
+
+            heartbeat = asyncio.create_task(beat())
+            token = await self.access_token()
+            if self.session_id:
+                await socket.send(json.dumps({"op": 6, "d": {
+                    "token": f"QQBot {token}", "session_id": self.session_id, "seq": self.seq}}))
+            else:
+                await socket.send(json.dumps({"op": 2, "d": {
+                    "token": f"QQBot {token}", "intents": GROUP_AND_C2C_EVENT,
+                    "shard": [0, 1], "properties": {}}}))
+            async for raw in socket:
+                frame = json.loads(raw)
+                if frame.get("s") is not None:
+                    self.seq = frame["s"]
+                op = frame.get("op")
+                if op == 7:
+                    return
+                if op == 9:
+                    self.session_id, self.seq = "", None
+                    await asyncio.sleep(1 + 4 * random.random())
+                    return
+                if op == 0:
+                    await self._dispatch(frame.get("t"), frame.get("d") or {}, on_event, connected)
+        finally:
+            if heartbeat is not None:
+                heartbeat.cancel()
+            code = getattr(socket, "close_code", None)
+            await socket.close()
+            if code in FATAL:
+                raise Refused(FATAL[code])
+            if code == 4004:        # the token lapsed: get a new one and start over
+                self.token, self.session_id, self.seq = "", "", None
+
+    async def _dispatch(self, name: str, data: dict, on_event, connected) -> None:
+        if name == "READY":
+            self.session_id = str(data.get("session_id") or "")
+            self.bot_id = str((data.get("user") or {}).get("id") or self.app_id)
+            connected()
+        elif name == "RESUMED":
+            connected()
+        elif name in ("C2C_MESSAGE_CREATE", "GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"):
+            mid = str(data.get("id") or "")
+            # QQ may push one message more than once, and an @ both ways.
+            if not mid or mid in self.seen:
+                return
+            self.seen.append(mid)
+            event, target = self.event(name, data)
+            if event:
+                self.passive[target] = [mid, time.monotonic(), 0]
+                await on_event(event, target)
+
+    def event(self, name: str, data: dict) -> tuple[dict | None, tuple[str, str]]:
+        author = data.get("author") or {}
+        is_dm = name == "C2C_MESSAGE_CREATE"
+        uid = str(author.get("user_openid") if is_dm else author.get("member_openid") or author.get("id") or "")
+        target = ("c2c", uid) if is_dm else ("group", str(data.get("group_openid") or ""))
+        if not uid or author.get("bot"):
+            return None, target
+        text = str(data.get("content") or "").strip()
+        segments: list[dict] = []
+        if text:
+            segments.append({"type": "text", "text": text})
+        for attachment in data.get("attachments") or []:
+            url = str(attachment.get("url") or "")
+            if url.startswith("//"):
+                url = "https:" + url
+            if str(attachment.get("content_type") or "").startswith("image/") and url.startswith("http"):
+                segments.append({"type": "image", "url": url})
+            else:
+                segments.append({"type": "text", "text": f"(sent a file: {attachment.get('filename', '')})"})
+        if not segments:
+            return None, target
+        try:
+            sent_at = int(datetime.fromisoformat(str(data.get("timestamp"))).timestamp())
+        except ValueError:
+            sent_at = int(time.time())
+        handle = f"{target[0]}:{target[1]}"
+        return ({"conversation_type": "dm" if is_dm else "group",
+                 **({} if is_dm else {"conversation_id": target[1]}),
+                 "sender_id": uid, "sender_name": str(author.get("username") or ""),
+                 "message_id": str(data.get("id")), "sent_at": sent_at,
+                 "addressed": name != "GROUP_MESSAGE_CREATE", "text": text, "segments": segments,
+                 "reply_handle": handle}, target)
+
+    def target(self, delivery: dict) -> tuple[str, str]:
+        scene, _, ident = str(delivery.get("reply_handle") or "").partition(":")
+        if scene not in ("group", "c2c") or not ident:
+            raise Unsupported()
+        return scene, ident
+
+    async def send(self, target: tuple[str, str], items: list) -> int:
+        scene, ident = target
+        path = f"/v2/groups/{ident}/messages" if scene == "group" else f"/v2/users/{ident}/messages"
+        sent = 0
+        for item in items:
+            text = str(item.get("text") or "").strip() if item.get("type") == "text" else ""
+            if not text:
+                continue        # images need QQ's media upload first, not done here
+            for piece in split_text(text, MAX_TEXT):
+                body: dict = {"msg_type": 0, "content": piece}
+                passive = self.passive.get(target)
+                if (passive and time.monotonic() - passive[1] < PASSIVE_S[scene]
+                        and passive[2] < PASSIVE_REPLIES[scene]):
+                    passive[2] += 1
+                    body.update({"msg_id": passive[0], "msg_seq": passive[2]})
+                await self.rest("POST", path, json=body)
+            sent += 1
+        return sent
+
+    async def close(self) -> None:
+        await self.client.aclose()

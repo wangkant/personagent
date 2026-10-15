@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from persona_agent import connections as conn
+from persona_agent.direct import base as direct_base
 from persona_agent import setup_wizard as sw
 from persona_agent import welcome
 
@@ -135,51 +136,101 @@ def test_connecting_requires_the_scope_and_valid_fields_before_any_work(client, 
     assert response.status_code == 200
     workspace._future.result(timeout=5)
     assert jobs == [("connect", conn.platform("telegram"), {"telegram_token": "bot:token"})]
-    assert client.post(url, headers=HEADERS, json={"platform": "qq_official", "allowConversations": True}
+    assert client.post(url, headers=HEADERS, json={"platform": "weixin_oc", "allowConversations": True}
                        ).status_code == 200
     workspace._future.result(timeout=5)
-    assert jobs[-1] == ("scan", conn.platform("qq_official"))
+    assert jobs[-1] == ("scan", conn.platform("weixin_oc"))
 
 
-def test_scanned_credentials_are_written_without_being_returned(workspace, monkeypatch):
-    data = _managed(workspace, monkeypatch,
-                    {"id": "default", "type": "qq_official", "enable": True, "appid": "",
-                     "secret": "", "use_markdown": True})
+def test_a_wechat_scan_stores_the_token_where_the_page_never_returns_it(workspace, monkeypatch):
+    data = _managed(workspace, monkeypatch)
+    # A WeChat bot connected through AstrBot before is handed over, not polled twice.
+    conn.save_entry(data, {"id": "weixin_oc", "type": "weixin_oc", "enable": True})
+    from persona_agent.direct import weixin
 
-    class Process:
-        def __init__(self, argv, **kwargs):
-            assert argv[2] == "qq_official"
-            Path(argv[-1]).write_text(json.dumps({"appid": "app-123", "secret": "qq-private-secret"}),
-                                      encoding="utf-8")
-        def wait(self, timeout):
-            return 0
-    monkeypatch.setattr(welcome.subprocess, "Popen", Process)
-    workspace._scan(conn.platform("qq_official"))
-    entry = sw._read_json(data / "cmd_config.json")["platform"][0]
-    assert entry == {"id": "qq_official", "type": "qq_official", "enable": True,
-                     "appid": "app-123", "secret": "qq-private-secret", "use_markdown": True}
-    plugin = sw.read_astrbot_config(data)
-    assert plugin["groups"] == ["qq_official:*"]
-    assert plugin["dm_users"] == ["qq_official:*"]
+    async def login(client, show):
+        show("https://scan.example/q")
+        assert workspace.job["stage"] == "scan"
+        assert workspace.job["qrImage"].startswith("data:image/png;base64,")
+        return {"weixin_oc_token": "wx-private-token", "weixin_oc_account_id": "b@im.bot"}
+    monkeypatch.setattr(weixin, "login", login)
+    workspace.job = {"state": "working", "stage": "prepare", "platform": "weixin_oc"}
+    workspace._scan_direct(conn.platform("weixin_oc"))
+    assert direct_base.load_credentials(workspace.home)["weixin_oc"]["weixin_oc_token"] == "wx-private-token"
+    assert conn.connected(data) == []
     summary = workspace.summary()
-    assert summary["platforms"] == ["qq_official"]
-    assert "qq-private-secret" not in json.dumps(summary)
-    assert workspace._login_dir is None
-    assert not list((workspace.home / "runtime/desktop").glob("login-*/result.json"))
+    assert summary["platforms"] == ["weixin_oc"] and summary["platformStatus"]["weixin_oc"] == "paused"
+    assert "wx-private-token" not in json.dumps(summary)
 
 
 def test_a_failed_scan_saves_nothing(workspace, monkeypatch):
-    data = _managed(workspace, monkeypatch)
+    from persona_agent.direct import weixin
 
-    class Process:
-        def __init__(self, argv, **kwargs):
-            pass
-        def wait(self, timeout):
-            return 1
-    monkeypatch.setattr(welcome.subprocess, "Popen", Process)
+    async def login(client, show):
+        raise weixin.LoginFailed("expired")
+    monkeypatch.setattr(weixin, "login", login)
     with pytest.raises(RuntimeError, match="scan_failed"):
-        workspace._scan(conn.platform("weixin_oc"))
-    assert sw._read_json(data / "cmd_config.json")["platform"] == []
+        workspace._scan_direct(conn.platform("weixin_oc"))
+    assert direct_base.load_credentials(workspace.home) == {}
+
+
+class FakeDirect:
+    def __init__(self, refusal=None):
+        self.refusal = refusal
+
+    async def check(self):
+        if self.refusal:
+            raise self.refusal
+        return "bot"
+
+    async def close(self):
+        pass
+
+
+def _direct_job(workspace, monkeypatch, platform, states):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "key"})
+    monkeypatch.setattr(welcome.direct, "platform_for", lambda kind, values, home: platform)
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    monkeypatch.setattr(workspace.services, "restart_direct", lambda: None)
+    monkeypatch.setattr(workspace.services, "running", lambda name: name == "direct")
+    monkeypatch.setattr(direct_base, "read_status", lambda home: next(states))
+    monkeypatch.setattr(welcome.time, "sleep", lambda s: None)
+
+
+def test_a_direct_platform_is_checked_then_kept_once_it_connects(workspace, monkeypatch):
+    states = iter([{}, {"telegram": {"state": "connecting"}}, {"telegram": {"state": "connected"}}]
+                  + [{"telegram": {"state": "connected"}}] * 5)
+    _direct_job(workspace, monkeypatch, FakeDirect(), states)
+    workspace.start_job("connect", "telegram", {"telegram_token": "123:abc"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["state"] == "ready", workspace.job
+    assert direct_base.load_credentials(workspace.home) == {"telegram": {"telegram_token": "123:abc"}}
+    summary = workspace.summary()
+    assert summary["platforms"] == ["telegram"] and summary["platformStatus"] == {"telegram": "running"}
+
+
+def test_a_direct_platform_refused_up_front_is_never_stored(workspace, monkeypatch):
+    _direct_job(workspace, monkeypatch, FakeDirect(direct_base.Refused("token_rejected")), iter([]))
+    workspace.start_job("connect", "telegram", {"telegram_token": "123:abc"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["error"] == "token_rejected"
+    assert direct_base.load_credentials(workspace.home) == {}
+
+
+def test_a_direct_platform_refused_after_login_is_rolled_back_with_its_reason(workspace, monkeypatch):
+    states = iter([{"discord": {"state": "refused", "detail": "message_content_intent_off"}}] * 3)
+    _direct_job(workspace, monkeypatch, FakeDirect(), states)
+    workspace.start_job("connect", "discord", {"discord_token": "tok"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["error"] == "message_content_intent_off"
+    assert direct_base.load_credentials(workspace.home) == {}
+
+
+def test_an_unreachable_platform_is_reported_as_a_network_problem(workspace, monkeypatch):
+    _direct_job(workspace, monkeypatch, FakeDirect(ConnectionError("getMe: ConnectTimeout")), iter([]))
+    workspace.start_job("connect", "telegram", {"telegram_token": "123:abc"})
+    workspace._future.result(timeout=5)
+    assert workspace.job["error"] == "network_failed"
 
 
 def test_each_platform_keeps_astrbot_defaults_and_opens_only_itself(workspace, monkeypatch):
@@ -220,10 +271,10 @@ def test_onebot_is_the_one_platform_read_as_bare_qq_numbers(workspace, monkeypat
 def test_a_failed_background_job_returns_to_a_retryable_state(workspace, monkeypatch):
     sw.write_env(workspace.env, {"LLM_API_KEY": "still-kept"})
     monkeypatch.setattr(workspace, "_connect", lambda *a: (_ for _ in ()).throw(RuntimeError("private")))
-    workspace.start_job("connect", "telegram", {"telegram_token": "bot:token"})
+    workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
     workspace._future.result(timeout=5)
     assert workspace.job["state"] == "error" and workspace.job["error"] == "setup_failed"
-    assert workspace.job["platform"] == "telegram"
+    assert workspace.job["platform"] == "kook"
     assert "private" not in json.dumps(workspace.summary())
     assert workspace.config()["LLM_API_KEY"] == "still-kept"
 
@@ -274,12 +325,12 @@ def test_credentials_the_platform_refuses_are_rolled_back(workspace, monkeypatch
         seen.append(pattern.pattern)
         return True
     monkeypatch.setattr(workspace.services, "logged", logged)
-    workspace.start_job("connect", "telegram", {"telegram_token": "bot:refused-secret"})
+    workspace.start_job("connect", "kook", {"kook_bot_token": "refused-secret"})
     workspace._future.result(timeout=5)
     assert workspace.job["state"] == "error" and workspace.job["error"] == "platform_rejected"
-    assert "telegram" in seen[0]
+    assert "kook" in seen[0]
     assert sw._read_json(data / "cmd_config.json")["platform"] == []
-    assert "telegram:*" not in sw.read_astrbot_config(data)["groups"]
+    assert "kook:*" not in sw.read_astrbot_config(data)["groups"]
     assert "refused-secret" not in json.dumps(workspace.summary())
 
 

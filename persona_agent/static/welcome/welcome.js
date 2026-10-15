@@ -65,6 +65,8 @@ const translations = {
     disconnecting: "正在断开 {platform}…",
     isConnected: "已连接",
     paused: "已暂停",
+    connectingState: "连接中",
+    failedState: "连接失败",
     openQQ: "在浏览器打开授权页面 ↗",
     cancel: "取消",
     startServices: "一键启动",
@@ -83,6 +85,8 @@ const translations = {
     scanHelp_weixin_oc: "用手机微信扫码，并确认登录。",
     startTitle: "正在连接你的角色…",
     startHint: "正在启动角色服务和聊天平台，很快就好。",
+    prepareTitle: "正在获取二维码…",
+    prepareHint: "马上就好。",
     checkTitle: "正在确认 {platform} 接受了连接…",
     checkHint: "如果平台拒绝了这些凭据，会在这里告诉你，不会保存。",
     doneTitle: "{platform} 已连接，去打个招呼吧。",
@@ -113,6 +117,16 @@ const translations = {
     scan_failed: "扫码没有完成或二维码已过期，请重新获取。",
     platform_rejected:
       "平台没有接受这次连接，所以没有保存。请检查填写的内容（和平台后台的设置）后重试。",
+    token_rejected: "平台说这个 Token 不对，没有保存。请重新复制完整的 Token。",
+    app_rejected: "QQ 说 AppID 或 AppSecret 不对，没有保存。请到 QQ 开放平台重新复制。",
+    bot_in_use: "这个机器人正被别的程序使用（或设置了 Webhook）。先停掉那个程序再连接。",
+    message_content_intent_off:
+      "Discord 拒绝了：请在开发者后台的 Bot 页面打开 Message Content Intent，保存后重试。",
+    intents_not_allowed: "QQ 没有给这个机器人收群聊和私聊消息的权限。",
+    session_expired: "登录已失效，请重新扫码。",
+    bot_offline: "这个 QQ 机器人已下架。",
+    bot_banned: "这个 QQ 机器人已被封禁。",
+    network_failed: "连不上这个平台的服务器。Telegram、Discord 在国内通常需要代理。",
     field_required: "请填写所有必填项。",
     invalid_field: "有一项格式不对，请检查地址或端口。",
     invalid_platform: "暂不支持这个平台。",
@@ -193,6 +207,8 @@ const translations = {
     disconnecting: "Disconnecting {platform}…",
     isConnected: "Connected",
     paused: "Paused",
+    connectingState: "Connecting",
+    failedState: "Failed",
     openQQ: "Open the authorization page ↗",
     cancel: "Cancel",
     startServices: "Start everything",
@@ -212,6 +228,8 @@ const translations = {
     scanHelp_weixin_oc: "Scan with WeChat and confirm the login.",
     startTitle: "Connecting your character…",
     startHint: "Starting the character service and chat platform.",
+    prepareTitle: "Getting a QR code…",
+    prepareHint: "Just a moment.",
     checkTitle: "Checking that {platform} accepts the connection…",
     checkHint:
       "If the app refuses these credentials, you'll see it here and nothing is saved.",
@@ -247,6 +265,16 @@ const translations = {
     scan_failed: "The scan didn't finish or the code expired. Get a new code.",
     platform_rejected:
       "The app refused the connection, so nothing was saved. Check what you entered and the app's console settings, then retry.",
+    token_rejected: "The app says this token is wrong, so nothing was saved. Copy the whole token again.",
+    app_rejected: "QQ says the AppID or AppSecret is wrong, so nothing was saved. Copy them again from QQ's console.",
+    bot_in_use: "Another program is using this bot (or a webhook is set). Stop it, then connect again.",
+    message_content_intent_off:
+      "Discord refused: turn on Message Content Intent on the Bot page of the developer portal, save, and retry.",
+    intents_not_allowed: "QQ has not given this bot permission to receive group and direct messages.",
+    session_expired: "The login has expired. Scan again.",
+    bot_offline: "This QQ bot has been taken offline.",
+    bot_banned: "This QQ bot has been banned.",
+    network_failed: "Couldn't reach this app's servers. Check your network or proxy.",
     field_required: "Fill in every required field.",
     invalid_field: "One value isn't valid. Check the address or port.",
     invalid_platform: "This app isn't supported.",
@@ -494,7 +522,13 @@ function renderConnected(connected, working) {
     name.textContent = platformName(kind);
     const status = document.createElement("span");
     status.className = "status-pill";
-    status.textContent = t(state.platformRunning ? "running" : "paused");
+    status.textContent = t(
+      {
+        running: "running",
+        connecting: "connectingState",
+        failed: "failedState",
+      }[(state.platformStatus || {})[kind]] || "paused",
+    );
     const again = document.createElement("button");
     again.className = "quiet";
     again.textContent = t("reconnect");
@@ -562,7 +596,11 @@ function renderStatus() {
   $("progress-spinner").hidden = scan;
   const late = job.stage === "start" || job.stage === "check";
   $("cancel-platform").hidden = late;
-  const step = scan ? "scan" : late ? job.stage : "install";
+  const step = scan
+    ? "scan"
+    : late || job.stage === "prepare"
+      ? job.stage
+      : "install";
   $("progress-title").textContent = t(`${step}Title`, {
     platform: platformName(selected),
   });

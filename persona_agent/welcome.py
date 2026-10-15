@@ -1,5 +1,6 @@
 """Local, capability-protected setup, chat and platform connections. No account
-is needed to open it, and the managed AstrBot behind it has no login of its own."""
+is needed to open it. QQ, WeChat, Telegram and Discord are connected directly;
+the other platforms go through a managed AstrBot with no login of its own."""
 from __future__ import annotations
 
 import argparse
@@ -8,13 +9,10 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import importlib.util
 import json
-import os
 from pathlib import Path
 import secrets
-import shutil
 import socket
 import subprocess
-import tempfile
 import threading
 import time
 from urllib.parse import urlsplit
@@ -27,6 +25,8 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__, home as homes
 from . import connections as conn
+from . import direct
+from .direct import base as direct_base
 from . import setup_wizard as sw
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services
@@ -37,6 +37,11 @@ TOKEN_HEADER = "x-personagent-setup-token"
 MAX_BODY = 16_384
 # How long a new adapter has to fail loudly before it counts as connected.
 REJECT_WINDOW = 12
+# How long a direct platform may take to accept a new session.
+DIRECT_WINDOW = 40
+# Refusals a direct platform names, which the page explains one by one.
+NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_content_intent_off",
+                  "intents_not_allowed", "session_expired", "bot_offline", "bot_banned"}
 
 
 def _connector_type():
@@ -55,8 +60,6 @@ class Workspace:
         self._lock = threading.RLock()
         self._chat_lock = asyncio.Lock()
         self._future = None
-        self._login = None
-        self._login_dir: Path | None = None
         self._closed = False
         self._cancelled = False
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
@@ -82,11 +85,20 @@ class Workspace:
             card = self.home / "persona.txt"
             origin = sw.shipped_persona(card.read_text(encoding="utf-8")) if card.is_file() else None
             job = dict(self.job)
-            if self._login_dir and job["state"] == "working":
-                progress = sw._read_json(self._login_dir / "progress.json")
-                if progress.get("status") == "scan":
-                    job.update({"stage": "scan", "qrImage": progress.get("qrImage", ""),
-                                "qrUrl": progress.get("qrUrl", "")})
+            via_astrbot = conn.connected(installation.root / "data")
+            stored = direct_base.load_credentials(self.home)
+            states = direct_base.read_status(self.home)
+            direct_on = self.services.running("direct")
+            platforms = [p.kind for p in conn.PLATFORMS
+                         if p.kind in stored or (p.kind in via_astrbot and p.kind not in stored)]
+            status = {}
+            for kind in platforms:
+                if kind in stored:
+                    state = states.get(kind, {}).get("state") if direct_on else "paused"
+                    status[kind] = {"connected": "running", "connecting": "connecting",
+                                    "paused": "paused"}.get(state or "connecting", "failed")
+                else:
+                    status[kind] = "running" if self.services.running("astrbot") else "paused"
             return {"version": __version__, "configured": bool(values.get("LLM_API_KEY")),
                     "provider": known.key if known else ("other" if values.get("LLM_BASE_URL") else "deepseek"),
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
@@ -94,9 +106,9 @@ class Workspace:
                     "name": values.get("PERSONA_NAME", ""), "lang": values.get("AGENT_LANG", ""),
                     "character": origin[0] if origin else ("custom" if card.is_file() else "warm-listener"),
                     "platformInstalled": installation.python.is_file(),
-                    "platforms": conn.connected(installation.root / "data"),
+                    "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
-                    "platformRunning": self.services.running("astrbot"), "job": job}
+                    "platformRunning": self.services.running("astrbot") or direct_on, "job": job}
 
     def save(self, payload: dict) -> dict:
         with self._lock:
@@ -185,16 +197,20 @@ class Workspace:
                 args = (spec, conn.clean_values(spec, values or {})) if action == "connect" else (spec,)
             else:
                 raise ValueError("invalid_action")
-            stage = "start" if action in ("start", "disconnect") else "install"
+            own = bool(args) and conn.is_direct(kind)
+            stage = ("start" if action in ("start", "disconnect") else
+                     "prepare" if own and action == "scan" else "check" if own else "install")
             self.job = {"state": "working", "stage": stage, "error": "", "action": action,
                         "platform": kind}
             self._cancelled = False
             self._future = self.worker.submit(self._job, action, *args)
 
     def _job(self, action: str, *args) -> None:
+        own = bool(args) and conn.is_direct(args[0].kind)
         try:
-            if action == "scan":
-                self._scan(*args)
+            if own:
+                {"scan": self._scan_direct, "connect": self._connect_direct,
+                 "disconnect": self._disconnect_direct}[action](*args)
             elif action == "connect":
                 self._connect(*args)
             elif action == "disconnect":
@@ -210,7 +226,7 @@ class Workspace:
                 self._connect_plugin()
                 if self._closed:
                     return
-                if action == "start":
+                if action == "start" or own:
                     self.services.start_astrbot()
                 else:
                     # AstrBot reads its platform list only when it starts.
@@ -224,13 +240,20 @@ class Workspace:
                             raise RuntimeError("platform_rejected")
             else:
                 self.services.stop("astrbot")
+            if own:
+                self.services.restart_direct()
+                if action != "disconnect":
+                    self._await_direct(args[0])
+            else:
+                self.services.start_direct()
             self.job = {**self.job, "state": "ready", "stage": "ready", "error": ""}
         except Exception as exc:
             if not self._closed:
                 # Detailed dependency logs stay on disk; do not return secrets.
+                reason = str(exc)
                 error = ("download_failed" if isinstance(exc, subprocess.CalledProcessError)
-                         else "scan_failed" if str(exc) in ("scan_failed", "qr_expired")
-                         else "platform_rejected" if str(exc) == "platform_rejected"
+                         else reason if reason in NAMED_REFUSALS
+                         or reason in ("scan_failed", "platform_rejected", "network_failed")
                          else "service_failed" if self.job.get("stage") == "start"
                          else "setup_failed")
                 self.job = ({"state": "idle", "stage": "", "error": ""} if self._cancelled else
@@ -275,51 +298,82 @@ class Workspace:
         self._connect_plugin()
         sw.write_astrbot_config(data, conn.scope(sw.read_astrbot_config(data), spec.kind, allow=False))
 
-    def _scan(self, spec: conn.Platform) -> None:
-        installation = AstrBotInstallation(self.home)
-        data = self._install()
-        # A running adapter could hold the account the new login replaces.
-        self.services.stop("astrbot")
-        runtime = self.home / "runtime" / "desktop"
-        runtime.mkdir(parents=True, exist_ok=True)
-        temporary = Path(tempfile.mkdtemp(prefix="login-", dir=runtime))
-        self._login_dir = temporary
-        try:
-            fd = os.open(runtime / "platform-login.log", os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
-            with os.fdopen(fd, "ab") as log:
-                with self._lock:
-                    if self._closed or self._cancelled:
-                        raise RuntimeError("cancelled")
-                    self._login = subprocess.Popen([
-                        str(installation.python), str(Path(__file__).with_name("platform_login.py")),
-                        spec.kind, str(temporary / "progress.json"), str(temporary / "result.json")],
-                        cwd=installation.root, env=installation.environment(), stdin=subprocess.DEVNULL,
-                        stdout=log, stderr=subprocess.STDOUT,
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    # ---- platforms personagent connects itself
+
+    def _store_direct(self, spec: conn.Platform, values: dict) -> None:
+        direct_base.save_credentials(self.home, spec.kind, values)
+        # One bot cannot be polled twice: drop an AstrBot connection of the same platform.
+        if spec.kind in conn.connected(AstrBotInstallation(self.home).root / "data"):
+            self._disconnect(spec)
+
+    def _connect_direct(self, spec: conn.Platform, values: dict) -> None:
+        platform = direct.platform_for(spec.kind, values, self.home)
+
+        async def check() -> None:
             try:
-                code = self._login.wait(timeout=330)
-            except subprocess.TimeoutExpired:
-                self._login.terminate()
-                self._login.wait(timeout=10)
-                raise RuntimeError("qr_expired") from None
-            if self._closed or self._cancelled:
-                raise RuntimeError("cancelled")
-            if code:
-                raise RuntimeError("scan_failed")
-            credentials = sw._read_json(temporary / "result.json")
-            if not credentials:
-                raise RuntimeError("scan_failed")
-            self._add(data, spec, credentials)
-        finally:
-            self._login = None
-            self._login_dir = None
-            shutil.rmtree(temporary, ignore_errors=True)
+                await platform.check()
+            finally:
+                await platform.close()
+        try:
+            asyncio.run(check())
+        except direct_base.Refused as exc:
+            raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "platform_rejected") from None
+        except ConnectionError:
+            raise RuntimeError("network_failed") from None
+        self._store_direct(spec, values)
+
+    def _scan_direct(self, spec: conn.Platform) -> None:
+        import httpx
+        from .direct import weixin
+
+        def show(content: str) -> None:
+            import base64
+            import io
+            import qrcode
+
+            image = io.BytesIO()
+            qrcode.make(content).save(image, format="PNG")
+            self.job = {**self.job, "stage": "scan", "qrUrl": content,
+                        "qrImage": "data:image/png;base64," + base64.b64encode(image.getvalue()).decode()}
+
+        async def login() -> dict:
+            async with httpx.AsyncClient() as client:
+                task = asyncio.create_task(weixin.login(client, show))
+                while not task.done():
+                    if self._cancelled or self._closed:
+                        task.cancel()
+                        raise RuntimeError("cancelled")
+                    await asyncio.sleep(0.3)
+                return task.result()
+        try:
+            values = asyncio.run(login())
+        except weixin.LoginFailed:
+            raise RuntimeError("scan_failed") from None
+        except (httpx.HTTPError, ValueError):
+            raise RuntimeError("network_failed") from None
+        self._store_direct(spec, values)
+
+    def _disconnect_direct(self, spec: conn.Platform) -> None:
+        direct_base.remove_credentials(self.home, spec.kind)
+
+    def _await_direct(self, spec: conn.Platform) -> None:
+        """Wait for the new session to be accepted; a refusal is rolled back."""
+        deadline = time.monotonic() + DIRECT_WINDOW
+        self._stage("check")
+        while time.monotonic() < deadline and not self._closed:
+            state = direct_base.read_status(self.home).get(spec.kind, {})
+            if state.get("state") == "connected":
+                return
+            if state.get("state") in ("refused", "error") or not self.services.running("direct"):
+                detail = str(state.get("detail") or "")
+                self._disconnect_direct(spec)
+                self.services.restart_direct()
+                raise RuntimeError(detail if detail in NAMED_REFUSALS else "platform_rejected")
+            time.sleep(0.5)
+        # Still connecting: kept, and the page shows it as connecting.
 
     def cancel(self) -> None:
         self._cancelled = True
-        login = self._login
-        if login is not None and login.poll() is None:
-            login.terminate()
 
     async def chat(self, text: str) -> dict:
         if not self.config().get("LLM_API_KEY"):
@@ -352,9 +406,6 @@ class Workspace:
     def close(self) -> None:
         with self._lock:
             self._closed = True
-            login = self._login
-            if login is not None and login.poll() is None:
-                login.terminate()
         self.services.shutdown()
         self.worker.shutdown(wait=False, cancel_futures=True)
 

@@ -11,3 +11,7 @@ httpcore>=1.0,<2
 Pillow>=10.4,<13
 # The no-key web search backend (DuckDuckGo).
 ddgs>=9,<10
+# Discord's and QQ's gateways for the platforms personagent connects itself.
+websockets>=13,<16
+# Draws the WeChat login QR code for the local page (with Pillow, above).
+qrcode>=7.4,<9

@@ -75,7 +75,7 @@ AstrBot, Koishi or Matrix carry it into your chats, and a local dashboard shows 
 
 ## Put it in your group
 
-Use **Connect apps** in the local page. QQ and WeChat take a phone scan; Telegram, Discord, Feishu, DingTalk, Slack and the rest take one or two values from the platform's own console. The app installs and runs AstrBot for you, with no second dashboard to sign in to, keeps both services running and starts them again the next time you open it. For QQ, add the official bot to your group once it is connected.
+Use **Connect apps** in the local page. WeChat takes a phone scan; QQ, Telegram, Discord, Feishu, DingTalk, Slack and the rest take one or two values from the platform's own console. QQ, WeChat, Telegram and Discord are connected by personagent itself; for the others the app installs and runs AstrBot for you, with no second dashboard to sign in to. Everything starts again the next time you open the app. For QQ, add the official bot to your group once it is connected; WeChat bots chat one to one only.
 
 For an AstrBot you already run, or to set things up from the terminal, use `personagent connect astrbot`. The terminal setup can reuse your platform credentials and installs the personagent plugin. `personagent up` starts the agent and its managed AstrBot together; separate `run` commands remain available for servers.
 

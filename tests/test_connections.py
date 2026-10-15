@@ -9,7 +9,9 @@ from persona_agent import connections as conn
 def test_every_platform_is_listed_once_and_scan_platforms_ask_for_nothing():
     kinds = [p.kind for p in conn.PLATFORMS]
     assert len(kinds) == len(set(kinds))
-    assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"qq_official", "weixin_oc"}
+    assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"weixin_oc"}
+    assert {p.kind for p in conn.PLATFORMS if conn.is_direct(p.kind)} == {
+        "qq_official", "weixin_oc", "telegram", "discord"}
     for item in conn.PLATFORMS:
         assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED)
         assert (item.group == conn.SCAN) == (not item.fields)

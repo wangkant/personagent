@@ -1,6 +1,6 @@
 # Connector protocol
 
-personagent never talks to a chat platform itself. A **connector** does: it
+The agent never talks to a chat platform itself. A **connector** does: it
 logs in to one platform (or to a framework that covers many), turns each
 incoming message into a neutral event, posts it to personagent, and delivers
 what comes back. Everything platform-specific lives in the connector; the
@@ -13,6 +13,7 @@ Connectors in this repository:
 | AstrBot plugin | every AstrBot adapter: QQ, Telegram, Discord, Slack, KOOK, Lark, DingTalk, LINE, WeCom, Mattermost, Misskey, ... | `integrations/astrbot/` |
 | Satori | every Satori implementation (Koishi and others): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, email, ... | `integrations/satori/` |
 | Matrix | Matrix rooms, and through mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages, ... | `integrations/matrix/` |
+| Built in | QQ official bots, personal WeChat (iLink), Telegram and Discord, run by the local page as `python -m persona_agent.direct` | `persona_agent/direct/` |
 
 A new connector needs only this page and an HTTP client. The Python helper in
 `integrations/sdk/personagent_connector.py` signs requests and runs the outbox

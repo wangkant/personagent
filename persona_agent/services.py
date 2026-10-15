@@ -156,6 +156,31 @@ class Services:
                 return False
             time.sleep(0.5)
 
+    def start_direct(self) -> None:
+        """The platforms personagent connects itself, in one process; nothing
+        to start when none is stored."""
+        from .direct.base import load_credentials, status_path
+
+        with self._lock:
+            if self._shutdown:
+                raise RuntimeError("application_closed")
+            if self.running("direct") or not load_credentials(self.home):
+                return
+            status_path(self.home).unlink(missing_ok=True)
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "1"
+            for key in ("PYTHONHOME", "PYTHONPATH"):
+                env.pop(key, None)
+            cwd = homes.CHECKOUT if homes.is_checkout() else self.home
+            self._spawn("direct", [sys.executable, "-m", "persona_agent.direct", "--home", str(self.home)],
+                        cwd=cwd, env=env)
+
+    def restart_direct(self) -> None:
+        """Pick up added or removed platforms."""
+        with self._lock:
+            self.stop("direct")
+            self.start_direct()
+
     def stop(self, name: str) -> None:
         with self._lock:
             process = self.processes.pop(name, None)
@@ -168,7 +193,7 @@ class Services:
                     process.wait(timeout=5)
 
     def close(self) -> None:
-        for name in ("astrbot", "agent"):
+        for name in ("direct", "astrbot", "agent"):
             self.stop(name)
 
     def shutdown(self) -> None:
@@ -178,7 +203,7 @@ class Services:
 
 
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
-    argparse.ArgumentParser(prog=prog, description="Start personagent and the managed AstrBot together").parse_args(argv)
+    argparse.ArgumentParser(prog=prog, description="Start personagent and its connected platforms together").parse_args(argv)
     home = homes.find_home()
     if not env_get(home / ".env", "LLM_API_KEY"):
         print("Open personagent start to finish setup first.")
@@ -190,14 +215,20 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
             import secrets
             write_env(home / ".env", {"CONNECTOR_TOKEN": secrets.token_urlsafe(32)})
         services.start_agent()
-        data = AstrBotInstallation(home).root / "data"
-        values = {}
-        connect_astrbot(home / ".env", values, data_dir=data, qq=None,
-                        groups=None, dm_users=None)
-        write_env(home / ".env", values)
-        services.start_astrbot()
-        print("personagent + AstrBot are running. Press Ctrl+C to stop both.")
-        while all(services.running(name) for name in ("agent", "astrbot")):
+        started = ["agent"]
+        installation = AstrBotInstallation(home)
+        if installation.python.is_file():
+            values = {}
+            connect_astrbot(home / ".env", values, data_dir=installation.root / "data", qq=None,
+                            groups=None, dm_users=None)
+            write_env(home / ".env", values)
+            services.start_astrbot()
+            started.append("astrbot")
+        services.start_direct()
+        if services.running("direct"):
+            started.append("direct")
+        print(f"personagent is running ({', '.join(started)}). Press Ctrl+C to stop.")
+        while all(services.running(name) for name in started):
             time.sleep(0.5)
         return 1
     except KeyboardInterrupt:

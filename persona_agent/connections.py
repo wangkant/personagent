@@ -1,9 +1,11 @@
-"""The chat platforms the local page can connect, through the managed AstrBot.
+"""The chat platforms the local page can connect.
 
-Each platform asks only for what its owner must copy from the platform's own
-console; every other adapter setting comes from AstrBot's template for that
-adapter, so a new AstrBot release brings its own defaults. Platforms that
-need a public callback address are kept apart as advanced.
+QQ, WeChat, Telegram and Discord are connected by personagent itself
+(persona_agent.direct); the rest go through the managed AstrBot. Each
+platform asks only for what its owner must copy from the platform's own
+console; for AstrBot every other adapter setting comes from its template for
+that adapter, so a new AstrBot release brings its own defaults. Platforms
+that need a public callback address are kept apart as advanced.
 """
 from __future__ import annotations
 
@@ -58,12 +60,15 @@ def _port(default: int) -> Field:
 _OWN_PORT = {"unified_webhook_mode": False, "callback_server_host": "0.0.0.0"}
 
 PLATFORMS: tuple[Platform, ...] = (
-    Platform("qq_official", ("QQ", "QQ"), SCAN, guide="https://q.qq.com/qqbot/",
-             note=("Scan with mobile QQ to create or bind an official bot.",
-                   "用手机 QQ 扫码，创建或绑定一个官方机器人。")),
     Platform("weixin_oc", ("WeChat", "个人微信"), SCAN,
-             note=("Scan with WeChat to log in a personal WeChat bot.",
-                   "用微信扫码，登录一个个人微信机器人。")),
+             note=("Scan with WeChat to log in a personal WeChat bot. It chats one to one; "
+                   "WeChat does not deliver group messages to it.",
+                   "用微信扫码，登录一个个人微信机器人。它只能私聊，微信不会把群消息交给它。")),
+    Platform("qq_official", ("QQ", "QQ"), KEY,
+             (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret")),
+             guide="https://q.qq.com/qqbot/openclaw/login.html",
+             note=("Scan on QQ's page to create a bot, then copy its AppID and AppSecret here.",
+                   "在 QQ 官方页面扫码创建机器人，再把 AppID 和 AppSecret 复制到这里。")),
     Platform("telegram", ("Telegram", "Telegram"), KEY,
              (_token("telegram_token", "Bot token", "机器人 Token"),),
              {"start_message": "", "telegram_command_register": False,
@@ -168,10 +173,17 @@ _TEMPLATE_CODE = (
 )
 
 
+def is_direct(kind: str) -> bool:
+    """Connected by personagent itself rather than through AstrBot."""
+    from .direct import KINDS
+
+    return kind in KINDS
+
+
 def catalog() -> list[dict]:
     """What the page shows; no stored value is part of it."""
     return [{"id": p.kind, "name": list(p.name), "group": p.group, "guide": p.guide,
-             "note": list(p.note),
+             "note": list(p.note), "direct": is_direct(p.kind),
              "fields": [{"key": f.key, "label": list(f.label), "secret": f.secret,
                          "required": f.required, "kind": f.kind, "default": f.default}
                         for f in p.fields]}
