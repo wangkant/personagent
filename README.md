@@ -36,8 +36,6 @@ With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separ
 
 The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open.
 
-Want QQ? Open **Connect apps**, pick QQ and scan the code with mobile QQ: it creates a bot or picks one you already made, and personagent connects to QQ itself. Pasting the AppID and AppSecret is the fallback. Until the bot is certified, QQ lets it join only groups you own, and which group messages it receives is set in QQ.
-
 On Windows you can also download the source ZIP and double-click `start.bat`; from a clone, run `python quickstart.py`. Python 3.10–3.14. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md); terminal commands and connectors are in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
 ## Why personagent
@@ -76,26 +74,17 @@ It joins QQ, WeChat, Telegram and Discord by itself and a dozen more apps from t
 
 ## Put it in your group
 
-Use **Connect apps** in the local page. Credentials are checked before they are saved.
+Open **Connect apps** in the local page. It groups the apps like this:
 
-- **Connected by personagent itself:** QQ official bots (scan with mobile QQ), personal WeChat (scan with your phone; one-to-one chats only, since WeChat gives such bots no group messages), Telegram (a BotFather token) and Discord (a bot token, with Message Content Intent on).
-- **One or two values:** KOOK, Feishu/Lark (long connection), DingTalk (Stream mode), Slack (Socket Mode; the guide link pre-fills the app), WeCom AI bot (long connection), Mattermost and Misskey.
-- **Advanced** (needs a public address or other software): WeCom app, WeChat Official Account, QQ webhook, OneBot v11 and Satori.
+| On the page | Apps | What you need |
+|---|---|---|
+| Scan to connect | QQ, personal WeChat | Your phone. WeChat bots get one-to-one chats only |
+| Paste one or two values | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which |
+| Advanced | WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat), Satori | A public address, or other software on this computer |
 
-The second and third groups run through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) that personagent downloads, with its own Python 3.12, and runs in the background: no dashboard, no second login.
+Credentials are checked before they are saved, and connected apps start again each time the page opens. personagent connects QQ, WeChat, Telegram and Discord itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background, with nothing else to open. On a server, `personagent up` starts the character and every connected app without a browser.
 
-Whatever the page or `personagent up` starts stops with it, however it ends, and anything a crashed run left behind is stopped at the next start. Everything you connected starts again the next time you open it.
-
-From the terminal: `personagent up` runs the agent, the direct connections and the managed AstrBot together; `init --terminal` is the terminal setup; `chat` talks to the character in the terminal; `demo` shows it without a key; `run` starts the server alone; `doctor` checks the setup; `learned` reviews what it learned; `eval` measures it.
-
-## Third-party platforms
-
-personagent also works with bridges you may already run. None of them is needed for QQ, WeChat, Telegram or Discord.
-
-- **AstrBot:** for an AstrBot you already run, `personagent connect astrbot` installs the [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent) plugin, which hands AstrBot's messages to personagent. You can also install it from AstrBot's WebUI by that address and set its `connector_token` to personagent's `CONNECTOR_TOKEN`.
-- **NapCat**, or another OneBot v11 implementation, under Advanced in **Connect apps**.
-- **[Koishi](https://koishi.chat)**, through the [Satori](https://satori.chat) connector.
-- **[Matrix](https://matrix.org)**, and through mautrix bridges WhatsApp, Signal and more.
+**Already running a bot framework?** For your own AstrBot, `personagent connect astrbot` installs the plugin and the shared token; for one on another machine, upload `astrbot_plugin_personagent.zip` from the [latest release](https://github.com/wangkant/personagent/releases/latest) under **Install from File** on its plugin page. [Koishi](https://koishi.chat) joins through the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md), and [Matrix](https://matrix.org), with WhatsApp and Signal behind mautrix bridges, through the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
 
 Setup for each is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat) and the [deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.md); the [Chinese step-by-step guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md) covers QQ from zero.
 
@@ -159,8 +148,6 @@ Everything personagent stores stays on your machine, in one home folder: `.env` 
 
 ## Acknowledgements
 
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot), [satori-python](https://github.com/RF-Tar-Railt/satori-python) with [Koishi](https://koishi.chat), and [matrix-nio](https://github.com/matrix-nio/matrix-nio) with the [mautrix bridges](https://docs.mau.fi/bridges/) carry personagent onto chat platforms, and [NapCat](https://github.com/NapNeko/NapCatQQ) through OneBot v11.
-- QQ, WeChat, Telegram and Discord are reached through their own documented APIs, WeChat as described in Tencent's [openclaw-weixin protocol notes](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md); [websockets](https://github.com/python-websockets/websockets) runs the QQ and Discord gateways [python-qrcode](https://github.com/lincolnloop/python-qrcode) draws the QQ and WeChat login codes, and [cryptography](https://github.com/pyca/cryptography) opens the bot secret QQ returns sealed.
-- Platform logos on the local page come from [Simple Icons](https://github.com/simple-icons/simple-icons), [SVG Logos](https://github.com/gilbarbara/logos), [IconPark](https://github.com/bytedance/IconPark), [MingCute](https://github.com/Richard9394/MingCute) and [TDesign Icons](https://github.com/Tencent/tdesign-icons), plus KOOK's and OneBot's own; each logo is its owner's trademark.
-- [FastAPI](https://github.com/fastapi/fastapi) and [httpx](https://github.com/encode/httpx) run the service and its model calls, and [uv](https://github.com/astral-sh/uv) runs it with `uvx personagent`.
-- Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707); the lorebook and output filters follow [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info and regex extensions.
+- Chat platforms are reached through [AstrBot](https://github.com/AstrBotDevs/AstrBot), [NapCat](https://github.com/NapNeko/NapCatQQ), [Koishi](https://koishi.chat) with [satori-python](https://github.com/RF-Tar-Railt/satori-python), and [matrix-nio](https://github.com/matrix-nio/matrix-nio) with the [mautrix bridges](https://docs.mau.fi/bridges/); the WeChat connection follows Tencent's [openclaw-weixin protocol notes](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md).
+- Platform logos on the local page come from [Simple Icons](https://github.com/simple-icons/simple-icons), [SVG Logos](https://github.com/gilbarbara/logos), [IconPark](https://github.com/bytedance/IconPark), [MingCute](https://github.com/Richard9394/MingCute) and [TDesign Icons](https://github.com/Tencent/tdesign-icons); each logo is its owner's trademark.
+- Learning from reactions draws on [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415), [Alexa self-learning](https://arxiv.org/abs/1911.02557) and [BlenderBot 3x](https://arxiv.org/abs/2306.04707); the lorebook follows [SillyTavern](https://github.com/SillyTavern/SillyTavern)'s World Info.

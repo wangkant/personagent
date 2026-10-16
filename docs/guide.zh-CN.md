@@ -263,7 +263,7 @@ LINE 暂不提供，因为 AstrBot 只能经它的管理后台接收 LINE 的回
 
 其他平台可以按[连接器协议](connectors.md)（英文）接入：每条消息一个签名的 HTTP 请求。一个 personagent 可以同时接多个连接器。长期运行要注意的事见[部署指南](deploy.md)（英文）。
 
-**你已经在运行的 AstrBot。** AstrBot 通过一个小插件 [astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent) 把消息交给 personagent（托管的 AstrBot 会自动装上）。`personagent connect astrbot` 会找到你的 AstrBot（也可以把它的文件夹作为参数传进去），装好插件，在两边写入同一个 `CONNECTOR_TOKEN`，再问要放行哪些群（在群里发 `/sid` 能看到群 ID）。也可以在 AstrBot 的 WebUI 里填插件仓库地址安装，再把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。然后运行 `personagent run`，重启 AstrBot 或重载插件。
+**你已经在运行的 AstrBot。** AstrBot 通过一个小插件 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) 把消息交给 personagent，插件随 personagent 一起安装（托管的 AstrBot 会自动装上）。`personagent connect astrbot` 会找到你的 AstrBot（也可以把它的文件夹作为参数传进去），装好插件，在两边写入同一个 `CONNECTOR_TOKEN`，再问要放行哪些群（在群里发 `/sid` 能看到群 ID）。AstrBot 在另一台机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，再把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。然后运行 `personagent run`，重启 AstrBot 或重载插件。升级 personagent 后，重新运行一次 `connect astrbot`，或上传新版 zip（AstrBot 4.29 起会直接替换旧版）。
 
 插件只转发 `groups` 里列出的群，私聊只转发 `dm_users` 里的人，两项都可以在 AstrBot 的 WebUI 里改。改了 `.env` 要重启 personagent，改了平台或插件要重启 AstrBot。
 

@@ -120,7 +120,7 @@ AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 
 插件 `astrbot_plugin_personagent` 只是 AstrBot 把消息交给 personagent 的方式。两种装法：
 
 - 运行 `personagent connect astrbot`，按提示选 QQ（通过 NapCat），填小号的 QQ 号、群号和你自己的 QQ 号。它会把插件复制进 AstrBot 的 `plugins` 文件夹，在两边写进同一个 `CONNECTOR_TOKEN`，写好白名单和 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`。不确定 AstrBot 的 `data` 文件夹在哪，就搜 `cmd_config.json`。
-- 或者在 AstrBot 的 WebUI 里，用仓库地址 `https://github.com/wangkant/astrbot_plugin_personagent` 安装插件，再把插件设置里的 `connector_token` 填成 personagent `.env` 里的 `CONNECTOR_TOKEN`。
+- 或者从 personagent 的[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，再把插件设置里的 `connector_token` 填成 personagent `.env` 里的 `CONNECTOR_TOKEN`。AstrBot 不在这台电脑上时用这种。
 
 装好后重启 AstrBot（或在插件页重载插件），然后用 `personagent run` 启动角色服务并一直开着。在 AstrBot 里添加 OneBot v11 机器人（反向 WebSocket 端口 `6199`），NapCat 照上面第 3 步指向它。AstrBot 的界面以[它的官方文档](https://docs.astrbot.app)为准。
 

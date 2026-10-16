@@ -83,10 +83,12 @@ Then restart AstrBot and start the agent (see [Check it works](#check-it-works))
 
 ### From AstrBot's WebUI
 
-The plugin has its own repository,
-[astrbot_plugin_personagent](https://github.com/wangkant/astrbot_plugin_personagent).
-Install it in AstrBot's WebUI by that address, set `connector_token` to the
-`CONNECTOR_TOKEN` in personagent's `.env`, and fill the allowlists as below.
+Download `astrbot_plugin_personagent.zip` from the
+[latest personagent release](https://github.com/wangkant/personagent/releases/latest)
+and upload it under **Install from File** on AstrBot's plugin page. Then set
+`connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`, and fill
+the allowlists as below. To update, upload the newer release's zip the same
+way (AstrBot 4.29 and later replace the installed copy).
 
 ### By hand
 

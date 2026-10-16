@@ -14,7 +14,6 @@ desc: |
   which installs and configures this plugin for you.
 version: 1.2.0
 author: Qiankang Wang
-repo: https://github.com/wangkant/astrbot_plugin_personagent
 astrbot_version: ">=4.25,<5"
 support_platforms:
   - aiocqhttp

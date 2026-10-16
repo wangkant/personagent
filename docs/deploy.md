@@ -169,10 +169,13 @@ personagent connect astrbot <AstrBot data dir>    # asks nothing
 It copies the plugin into `<data dir>/plugins/`, writes one `CONNECTOR_TOKEN`
 to both `.env` and the plugin config, and sets `personagent_url` to
 `http://127.0.0.1:<SERVER_PORT>` unless the plugin already has one it accepts
-(a loopback URL, tunnels included, or HTTPS). Or install the plugin from
-AstrBot's WebUI by its repository address,
-`https://github.com/wangkant/astrbot_plugin_personagent`, and set its
-`connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`.
+(a loopback URL, tunnels included, or HTTPS). For an AstrBot on another
+machine, download `astrbot_plugin_personagent.zip` from the
+[latest release](https://github.com/wangkant/personagent/releases/latest),
+upload it under **Install from File** on AstrBot's plugin page, and set its
+`connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`. After
+upgrading personagent, rerun `connect astrbot` or upload the new zip (AstrBot
+4.29 and later replace the installed copy).
 
 `--qq` takes `aiocqhttp` out of `excluded_platforms`; `--no-qq` puts it back;
 with neither, QQ routing stays as it is, and `CONNECTOR_QQ_PLATFORMS` follows

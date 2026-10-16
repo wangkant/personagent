@@ -293,15 +293,10 @@ order, so a release page never advertises a version PyPI lacks:
 2. **pypi** publishes that build to PyPI by trusted publishing (no token is
    stored), through the GitHub environment named `pypi`.
 3. **github-release** creates the GitHub Release for the tag, attaches the
-   sdist and the wheel, and uses the changelog section as its notes.
-
-After a release, publish the AstrBot plugin to its own repository, which
-AstrBot's plugin market installs from:
-
-```bash
-git subtree split --prefix integrations/astrbot/astrbot_plugin_personagent -b plugin-split
-git push git@github.com:wangkant/astrbot_plugin_personagent.git plugin-split:main
-```
+   sdist and the wheel, and uses the changelog section as its notes. It also
+   attaches `astrbot_plugin_personagent.zip`, the plugin folder packed by
+   `git archive`, for AstrBot's **Install from File**. The plugin has no
+   repository of its own.
 
 Running the workflow by hand from a branch only builds the files and uploads
 them as an artifact; run it from a tag to release. PyPI must have a trusted

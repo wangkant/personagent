@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The AstrBot plugin no longer has a repository of its own.** It ships inside personagent as before, where `personagent connect astrbot` and the managed AstrBot install it from, and each GitHub Release now carries `astrbot_plugin_personagent.zip` for AstrBot's **Install from File**. Its `metadata.yaml` drops the `repo` link, so AstrBot's update button no longer points at the removed repository; to update, rerun `connect astrbot` or upload the newer zip (AstrBot 4.29 and later replace the installed copy).
+
 ## [1.2.0] — 2026-10-15
 
 The local page turns on web search, image understanding and speaking first, points a new user to connecting an app, and no value saved to `.env` can reach past its own line or name another setting.
