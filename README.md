@@ -101,46 +101,39 @@ Setup for each is in the [user guide](https://github.com/wangkant/personagent/bl
 
 ## How it compares
 
-| | personagent | AstrBot (built in) | MaiBot | Koishi ChatLuna character | ElizaOS |
-|---|---|---|---|---|---|
-| Joining in unasked | A model judges whether a person would chime in | Optional "active reply" at random (10%; off by default) | A planner model, paced by a frequency setting | Rule triggers: interval, activity, idle | A model picks respond, ignore or stop |
-| Learns from reactions to its own replies | Yes: corrections, rejections, accepted retries | Not built in | Learns expressions and slang from the chat; from reactions, not documented | Not documented | Not documented |
-| Corroboration before a change | Two agreeing reactions from one chat, one strong | Not built in | Optional human check of learned expressions | Not documented | Not documented |
-| Audit trail and rollback | Append-only ledgers; rollback from the terminal or dashboard | Not built in | Not documented | Not documented | Not documented |
-| Published behavioural eval | Speak, persona and learning suites ([below](https://github.com/wangkant/personagent#measured)) | Not documented | Not documented | Not documented | Not documented |
-| Setup and admin | Browser setup and chat; local dashboard | WebUI, desktop launcher | WebUI, one-click launcher | Koishi console | CLI, web client |
-| Where it runs | Python service; QQ, WeChat, Telegram and Discord directly, the rest through a managed AstrBot, or behind Koishi (Satori) or Matrix | Python app, 18+ platforms | Python app, QQ via NapCat | Koishi plugin | TypeScript (Bun); Discord, Telegram, Slack and more |
-| Licence | MIT | AGPL-3.0 | GPL-3.0 | AGPL-3.0 | MIT |
+The projects people usually weigh it against, going by each one's documentation in October 2026:
 
-From each project's documentation, October 2026. "Not documented" means we found no description of it, not that it cannot be done; AstrBot's plugin market has learning plugins, one with a review queue and rollback.
+- **AstrBot** (AGPL-3.0) is a bot framework for 18+ platforms, with a WebUI and a large plugin market. It can reply unasked at random (10% of the time, off by default) and leaves learning to plugins.
+- **MaiBot** (GPL-3.0) is a character bot for QQ, through NapCat, with a WebUI and a one-click launcher. A planner model decides how often it talks, and it picks up expressions and slang from the chat.
+- **ChatLuna's character plugin** for Koishi (AGPL-3.0) joins in on rules: a fixed interval, how busy the chat is, or how long it has gone quiet.
+- **ElizaOS** (MIT) is an agent framework in TypeScript for Discord, Telegram, Slack and more, where a model decides whether to respond.
 
-Another project may fit better if you want a one-click desktop app with every setting in a WebUI (MaiBot, AstrBot), a large plugin ecosystem, or slang learning, sticker packs and image memory as headline features (MaiBot, AstrBot's plugins). personagent does not replace AstrBot or Koishi: it can run behind one you already have, so you keep its platforms and plugins and add a character that holds back and learns on the record.
+What personagent has built in, where the others leave it to plugins or don't describe it: it learns from how people react to its replies (corrections, rejections, retries they accepted); a change needs two agreeing reactions from the same chat, one of them strong; every change is logged and can be rolled back; and how it behaves is measured in a published eval ([below](https://github.com/wangkant/personagent#measured)).
+
+Where they are ahead: desktop apps with every setting in a WebUI, big plugin ecosystems, and slang, sticker packs and image memory. If you already run AstrBot or Koishi, you don't have to choose: personagent can run behind either one as the character.
 
 ## Measured
 
-`personagent eval` runs the real agent on labelled cases in English and Chinese and writes a report with every case and its verdict:
+`personagent eval` runs the real agent on labelled cases and keeps every case, reply and verdict. The last published run, on 2026-10-03, tested `deepseek/deepseek-v4.1-flash` through OpenRouter, with `openai/gpt-4.1-mini` as the judge:
 
 | | English | Chinese |
 |---|---|---|
-| Model under test | `deepseek/deepseek-v4.1-flash` (OpenRouter) | `deepseek/deepseek-v4.1-flash` (OpenRouter) |
-| Judge | `openai/gpt-4.1-mini` | `openai/gpt-4.1-mini` |
-| Date | 2026-10-03 | 2026-10-03 |
-| Speak: accuracy | 92% (22/24) | 88% (21/24) |
-| Speak: spoke when it should stay quiet | 2/11 | 3/11 |
-| Speak: stayed quiet when it should speak | 0/13 | 0/13 |
-| Persona: judge picked it over a plain assistant (95% CI) | 18/18 (82–100%) | 17/18 (74–99%) |
-| Learning: promoted or held as expected (k/n) | 10/10 | 10/10 |
-| Learning: next reply changed after promotion | 1 of 2 (the other 4 promoted probes already passed) | 0 of 2 (the other 4 promoted probes already passed) |
-| Learning: regressions | 0 of 6 | 1 of 6 |
+| Spoke when it should, stayed quiet when it should | 22 of 24 | 21 of 24 |
+| Judge picked its reply over a plain assistant's | 18 of 18 | 17 of 18 |
+| Corrections applied or turned down as they should be | 10 of 10 | 10 of 10 |
 
-The reports, with every case, reply and verdict, are in [docs/evals/2026-10-03](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-03). What "picked over a plain assistant" looks like, from the same run (same model, same message):
+- Every speaking miss was a line that named it in passing, like "it's Nova-5G now, same password" about the wifi. It never ignored a message meant for it.
+- All six corrections that held up were applied, and the troll, bystander and walk-away cases were all turned down. Most applied ones changed little, since the model already answered those in character; one Chinese reply got worse after its correction.
 
-| Message | personagent | Plain assistant |
-|---|---|---|
-| "can you help me write a cover letter for a barista job" (DM) | nah that's not really my thing, i'd just make you sound like a robot / what's the shop? a good one down your way or just anywhere hiring | Happy to help! Here's a solid template you can adapt — just swap out the bracketed parts. **[Your Name]** ... |
-| "tips for a first date? it's tomorrow" | honestly just ask real questions and actually listen, that's most of it / where you taking them? | You got this, Taylor! Keep it simple: pick something low-pressure (coffee, walk, casual bite), dress like a slightly sharper version of yourself, ... |
+The same message, from the same run and the same model:
 
-One run on one model is a sample, so expect some noise between runs; the persona and learning suites are scored by a judge that is a different model from the one being measured. The [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#measure-it) explains each suite, the misses and how to run it yourself.
+**riley (DM):** can you help me write a cover letter for a barista job
+
+| personagent | Plain assistant |
+|---|---|
+| nah that's not really my thing, i'd just make you sound like a robot<br><br>what's the shop? a good one down your way or just anywhere hiring | Happy to help! Here's a solid template you can adapt — just swap out the bracketed parts.<br><br>**[Your Name]** … |
+
+One run on one model is a sample, so expect some noise between runs. The reports are in [docs/evals/2026-10-03](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-03), and the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#measure-it) explains each suite and how to run it yourself.
 
 ## Documentation
 

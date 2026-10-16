@@ -389,8 +389,8 @@ The latest published results are in the [README](../README.md#measured), and the
 
 - Most misses in `speak` are lines that name the bot in passing ("the wifi is called Nova-5G now"): a name counts as a call, so it answers.
 - The judge's 1–5 rubric scores were all at the ceiling with this judge, so they are left out.
-- The learning probes show little because the model already answered most of them in character before any correction. The policy row is the one that matters: it promoted every correction that held up and none of the troll, bystander or walk-away cases.
-- One run on one model is a sample, so expect some noise between runs; the persona row gives its 95% interval.
+- The learning probes show little because the model already answered most of them in character before any correction. The corrections row is the one that matters: it promoted every correction that held up and none of the troll, bystander or walk-away cases.
+- One run on one model is a sample, so expect some noise between runs; the persona report gives its 95% interval.
 
 ## How it works
 
