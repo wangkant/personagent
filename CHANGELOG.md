@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-10-17
+
+The AstrBot plugin comes as a zip on each GitHub Release instead of from a repository of its own, and the README is shorter.
+
 ### Changed
 
 - **The AstrBot plugin no longer has a repository of its own.** It ships inside personagent as before, where `personagent connect astrbot` and the managed AstrBot install it from, and each GitHub Release now carries `astrbot_plugin_personagent.zip` for AstrBot's **Install from File**. Its `metadata.yaml` drops the `repo` link, so AstrBot's update button no longer points at the removed repository; to update, rerun `connect astrbot` or upload the newer zip (AstrBot 4.29 and later replace the installed copy; on older versions, uninstall it first). An AstrBot on another machine also needs `personagent_url` set to an HTTPS address for personagent, as before.
@@ -359,7 +363,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/wangkant/personagent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/wangkant/personagent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wangkant/personagent/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/wangkant/personagent/compare/v1.0.1...v1.0.2

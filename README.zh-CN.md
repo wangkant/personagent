@@ -139,7 +139,7 @@ personagent 存的一切都在你自己机器上的一个主目录里：放 Key 
 
 ## 项目状态
 
-1.2.0 已发布到 PyPI（2026-10-15）。QQ 是跑得最多的平台，1.0 经 AstrBot，1.1 起直接连接。微信、Telegram、Discord 的直连会在保存前向真实服务校验凭据，其余部分在模拟环境里测试；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有任务安装软件包，跑命令和本地页面。
+1.2.1 已发布到 PyPI（2026-10-17）。QQ 是跑得最多的平台，1.0 经 AstrBot，1.1 起直接连接。微信、Telegram、Discord 的直连会在保存前向真实服务校验凭据，其余部分在模拟环境里测试；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有任务安装软件包，跑命令和本地页面。
 
 ## 许可证
 
