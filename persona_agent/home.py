@@ -1,7 +1,4 @@
-"""Where a deployment lives, decided before any setting is read.
-
-Stdlib only, so the setup wizard can import it before the dependencies exist.
-"""
+"""Where a deployment lives, decided before any setting is read. Stdlib only."""
 from __future__ import annotations
 
 import os

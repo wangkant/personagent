@@ -12,11 +12,11 @@ cd personagent
 python -m venv .venv
 . .venv/bin/activate              # Windows: .venv\Scripts\activate
 python -m pip install -e ".[dev]"
-personagent                       # opens the local page
-personagent chat
+python -m persona_agent           # opens the local page
+python -m persona_agent chat
 ```
 
-`personagent init --terminal` asks the setup questions in the terminal
+`python -m persona_agent init --terminal` asks the setup questions in the terminal
 instead of opening the page. In a clone the home folder is the clone itself:
 `.env`, `persona.txt`, `runtime/` and `platforms/` sit next to
 `persona_agent/` and are gitignored. On Windows, `start.bat` does the same
@@ -47,8 +47,7 @@ stub the model and the transport. Run these before opening a PR.
 
 The ruff line catches dead and undefined names. It is not a style gate. CI
 runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, and
-has a `package` job on Linux
-and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
+has a `package` job on Linux and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
 installs each into a clean venv outside the checkout, and runs
 `tools/package_smoke.py` and `tools/welcome_smoke.py` against the installed
 command. CI compiles `.`; locally, name the directories so compileall skips

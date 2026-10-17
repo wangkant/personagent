@@ -35,7 +35,7 @@ personagent
 | 不安装，直接运行 | `uvx personagent`（来自 [uv](https://docs.astral.sh/uv/)，它会自己下载合适的 Python） |
 | 装成常驻的 `personagent` 命令 | `uv tool install personagent` 或 `pipx install personagent` |
 | Windows，用源码 ZIP | 解压后双击 `start.bat` |
-| 从源码 | `git clone https://github.com/wangkant/personagent.git`、`cd personagent`、`pip install -e .`、`personagent` |
+| 从源码 | `git clone https://github.com/wangkant/personagent.git`、`cd personagent`，然后 `python -m venv .venv`，再运行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`（Windows 上是 `.venv\Scripts\python.exe`） |
 
 支持 Python 3.10–3.14。`pip` 下载慢可以加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。`start.bat` 会创建 `.venv`、安装依赖（`pyproject.toml` 变了会重新安装），然后打开同一个页面。
 

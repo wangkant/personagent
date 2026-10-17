@@ -15,49 +15,62 @@ $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
 }
 $venvPy = Join-Path $PSScriptRoot $venvRelative
 $basePy = $null
-if ([Console]::IsInputRedirected -and -not (Test-Path (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
+if ([Console]::IsInputRedirected -and -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
     Write-Host "error: setup is needed. Double-click start.bat to open the setup page." -ForegroundColor Red
     exit 1
 }
 
-if (-not (Test-Path $venvPy)) {
+if (-not (Test-Path -LiteralPath $venvPy)) {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
     if (-not $py) {
         Write-Host "error: python / python3 not found. Install Python 3.10 or newer, then start this again." -ForegroundColor Red
         exit 1
     }
-    if (Test-Path (Join-Path $PSScriptRoot '.venv')) {
+    if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.venv')) {
         Write-Error "Incomplete .venv. Move it aside, then start this again."
         exit 1
     }
     $basePy = $py.Source
 }
 
-if (-not (Test-Path $venvPy)) {
+if (-not (Test-Path -LiteralPath $venvPy)) {
     & $basePy -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    if (-not (Test-Path $venvPy)) {
+    if (-not (Test-Path -LiteralPath $venvPy)) {
         throw "Virtual environment creation did not produce $venvRelative"
     }
 }
 $pySource = $venvPy
 
-# Install again whenever pyproject.toml changed, so a pull that brings a new
-# dependency installs it. PS 5.1 trap: under Stop, a native command writing to
-# stderr is a terminating error, so suspend Stop and read $LASTEXITCODE.
+# Install again when the dependency list changed, so a pull that brings a new
+# dependency installs it; a version bump alone needs no network.
+$project = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'pyproject.toml') -Raw
+$deps = [regex]::Match($project, '(?ms)^dependencies = \[.*?^\]').Value
+if (-not $deps) { $deps = $project }
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$wanted = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($deps))) -replace '-', ''
 $stamp = Join-Path $PSScriptRoot '.venv/.personagent-installed'
-$wanted = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'pyproject.toml') -Algorithm SHA256).Hash
-$installed = if (Test-Path $stamp) { (Get-Content -LiteralPath $stamp -Raw).Trim() } else { '' }
+$installed = if (Test-Path -LiteralPath $stamp) { "$(Get-Content -LiteralPath $stamp -Raw)".Trim() } else { '' }
 if ($installed -ne $wanted) {
     Write-Host "installing dependencies..." -ForegroundColor Yellow
+    # PS 5.1 trap: under Stop, a native command writing to stderr is a
+    # terminating error, so suspend Stop and read $LASTEXITCODE.
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+    # Best effort: the pip of Python 3.10.0-3.10.2 cannot install a project editable.
+    & $pySource -m pip install -q --upgrade "pip>=21.3" > $null 2>&1
     & $pySource -m pip install -e $PSScriptRoot -q
     $code = $LASTEXITCODE
     $ErrorActionPreference = $prevEAP
-    if ($code -ne 0) { exit $code }
-    Set-Content -LiteralPath $stamp -Value $wanted -Encoding ascii
+    if ($code -eq 0) {
+        Set-Content -LiteralPath $stamp -Value $wanted -Encoding ascii
+    } elseif ($installed) {
+        Write-Host "warning: could not update the dependencies (check the network or proxy); starting with the installed ones." -ForegroundColor Yellow
+    } else {
+        Write-Host "error: installing the dependencies failed. Check the network connection and proxy settings, then start this again." -ForegroundColor Red
+        exit $code
+    }
 }
 
 # Avoid mojibake for non-ASCII console output on Windows

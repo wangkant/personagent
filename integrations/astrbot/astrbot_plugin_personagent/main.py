@@ -72,14 +72,14 @@ _HANDLES_KEY = "reply_handles"
 # Retry policy for _post_to_agent. Only statuses where resending the exact
 # same bytes is safe get a retry: 500 is the agent failing after accepting
 # the envelope, and 429 is the agent's admission gate, which runs before
-# envelope verification (see connector_events in the agent's main.py), so a
+# envelope verification (see connector_events in persona_agent/server.py), so a
 # 429 never burns a nonce and is always safe to resend. 400/403/413 mean the
 # envelope or body itself is the problem -- resending unchanged bytes would
 # just fail the same way again.
 _RETRYABLE_STATUSES = frozenset({429, 500})
 _RETRY_BACKOFFS_S = (0.3, 0.8)
 # The agent rejects a signed envelope once its timestamp is older than this
-# (ReplayGuard in the agent's main.py). A retry reuses the original signed
+# (ReplayGuard in persona_agent/server.py). A retry reuses the original signed
 # timestamp rather than re-signing, so each retry must START well inside this
 # window (the age is checked on arrival).
 _REPLAY_WINDOW_S = 300

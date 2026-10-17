@@ -23,7 +23,7 @@ python -m pip install personagent
 personagent
 ```
 
-装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；从 Git 仓库运行先 `pip install -e .`，再运行 `personagent`。
+装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；从 Git 仓库运行见[简明入门](start.zh-CN.md)。
 
 你应该看到浏览器打开一个本地页面，有三个视图：「开始聊天」「连接平台」「角色与设置」。再运行一次 `personagent` 会复用已经打开的页面。
 

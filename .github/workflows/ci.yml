@@ -28,6 +28,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install dependencies
         run: python -m pip install -e . "pytest>=8,<10"
       # Dead and undefined names only, not a style gate; re-exports carry `# noqa: F401`.
@@ -53,6 +54,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install dependencies
         run: python -m pip install -e . "pytest>=8,<10"
       - name: Run the test suite
@@ -80,11 +82,26 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Build the sdist and the wheel, then check their metadata
         run: |
           python -m pip install "build>=1.2,<2" "twine>=6,<8"
           python -m build
           python -m twine check --strict dist/*
+      - name: Check the wheel ships every tracked shared file
+        # hatchling skips what .gitignore names, even when it is tracked.
+        run: |
+          python - <<'EOF'
+          import glob, subprocess, zipfile
+          prefix = "persona_agent/_bundled/"
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          shipped = {n[len(prefix):] for n in names if n.startswith(prefix)}
+          tracked = set(subprocess.run(
+              ["git", "ls-files", "data", ".env.example", "integrations/astrbot/astrbot_plugin_personagent"],
+              capture_output=True, text=True, check=True).stdout.split())
+          assert tracked and tracked <= shipped, sorted(tracked - shipped)
+          print(len(tracked), "tracked shared files are in the wheel")
+          EOF
       - name: Editable install
         run: |
           python -m pip install -e .

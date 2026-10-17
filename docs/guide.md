@@ -33,7 +33,7 @@ personagent
 | Run without installing | `uvx personagent` (comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you) |
 | A permanent `personagent` command | `uv tool install personagent` or `pipx install personagent` |
 | Windows, from the source ZIP | unpack it and double-click `start.bat` |
-| From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `pip install -e .`, `personagent` |
+| From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python -m venv .venv`, then `.venv/bin/python -m pip install -e .` and `.venv/bin/python -m persona_agent` (on Windows, `.venv\Scripts\python.exe`) |
 
 personagent runs on Python 3.10–3.14. `start.bat` creates `.venv`, installs the dependencies (again whenever `pyproject.toml` changes) and opens the same page.
 

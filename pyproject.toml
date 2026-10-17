@@ -71,10 +71,13 @@ Changelog = "https://github.com/wangkant/personagent/blob/main/CHANGELOG.md"
 # The checkout's shared files ship inside the package as persona_agent/_bundled,
 # where home.resource() finds them in an installed copy.
 [tool.hatch.build.targets.sdist]
+# The version PyPI took for 1.2.1; hatchling defaults to a newer one.
+core-metadata-version = "2.4"
 only-include = ["persona_agent", "data", ".env.example",
                 "integrations/astrbot/astrbot_plugin_personagent"]
 
 [tool.hatch.build.targets.wheel]
+core-metadata-version = "2.4"
 only-include = ["persona_agent", "data", "integrations/astrbot/astrbot_plugin_personagent"]
 # An editable install imports the checkout itself, which reads these files in place.
 dev-mode-dirs = ["."]

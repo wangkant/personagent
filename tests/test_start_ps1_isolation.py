@@ -154,3 +154,33 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(self._server_started(),
                          "a failed dependency install must not start the server")
+
+    def _venv_with_stamp(self, stamp: str) -> Path:
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(self.repo / ".venv")],
+            check=True, capture_output=True, timeout=180,
+        )
+        path = self.repo / ".venv" / ".personagent-installed"
+        path.write_text(stamp, encoding="ascii")
+        return path
+
+    def test_an_empty_stamp_installs_again_instead_of_failing(self) -> None:
+        stamp = self._venv_with_stamp("")
+
+        result = self._run(path=self._path_with_real_python(),
+                           pythonpath=str(self._fake_pip(exit_code=0)))
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(self._server_started())
+        self.assertTrue(stamp.read_text(encoding="ascii").strip())
+
+    def test_a_failed_update_after_a_good_install_still_starts(self) -> None:
+        """Offline after a pull: the dependencies installed before still run it."""
+        self._venv_with_stamp("an-earlier-dependency-list")
+
+        result = self._run(path=self._path_with_real_python(),
+                           pythonpath=str(self._fake_pip(exit_code=8)))
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("could not update", result.stdout + result.stderr)
+        self.assertTrue(self._server_started())
