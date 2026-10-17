@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-10-17
+
+personagent says when a newer version is out, and the repository keeps only what a user opens at its root.
+
 ### Added
 
 - **personagent says when a newer version is out.** The local page and `personagent up` ask pypi.org at most once a day, in the background, and an hour later after a failed attempt; `personagent doctor` asks then and there when the last answer is a day old. The Chat view then shows a notice with the command for how this copy was installed (pip, uv's venvs, uvx, uv tool, pipx, or `git pull` plus a reinstall in a clone), with a link to the release notes; closing it hides it until the next start, and the sidebar keeps a link to bring it back. The terminal prints the same line. The request carries only personagent's version number, and `UPDATE_CHECK_ENABLED=false` turns the check off.
@@ -379,7 +383,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/wangkant/personagent/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/wangkant/personagent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/wangkant/personagent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wangkant/personagent/compare/v1.0.2...v1.1.0
