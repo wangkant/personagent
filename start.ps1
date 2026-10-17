@@ -7,7 +7,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   personagent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Reuse quickstart's venv; a global interpreter is only used to create it.
+# The checkout's own venv; a global interpreter is only used to create it.
 $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
     '.venv/Scripts/python.exe'
 } else {
@@ -16,7 +16,7 @@ $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
 $venvPy = Join-Path $PSScriptRoot $venvRelative
 $basePy = $null
 if ([Console]::IsInputRedirected -and -not (Test-Path (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
-    Write-Host "error: setup is needed. Run 'python quickstart.py' in a terminal to open the welcome page." -ForegroundColor Red
+    Write-Host "error: setup is needed. Double-click start.bat to open the setup page." -ForegroundColor Red
     exit 1
 }
 
@@ -24,11 +24,11 @@ if (-not (Test-Path $venvPy)) {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
     if (-not $py) {
-        Write-Host "error: python / python3 not found. Install Python 3.10 or newer, then run 'python quickstart.py'." -ForegroundColor Red
+        Write-Host "error: python / python3 not found. Install Python 3.10 or newer, then start this again." -ForegroundColor Red
         exit 1
     }
     if (Test-Path (Join-Path $PSScriptRoot '.venv')) {
-        Write-Error "Incomplete .venv. Repair it with quickstart.py or move it aside."
+        Write-Error "Incomplete .venv. Move it aside, then start this again."
         exit 1
     }
     $basePy = $py.Source
@@ -43,18 +43,21 @@ if (-not (Test-Path $venvPy)) {
 }
 $pySource = $venvPy
 
-# Dependency check. PS 5.1 traps: `2>$null` on a native command becomes a
-# terminating error under Stop, and `$?` goes false on any stderr output, so
-# suspend Stop and read $LASTEXITCODE instead.
-$prevEAP = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-& $pySource -c "import fastapi, uvicorn, dotenv, httpx, PIL, ddgs, websockets, qrcode, cryptography" > $null 2>&1
-$depsOk = ($LASTEXITCODE -eq 0)
-$ErrorActionPreference = $prevEAP
-if (-not $depsOk) {
+# Install again whenever pyproject.toml changed, so a pull that brings a new
+# dependency installs it. PS 5.1 trap: under Stop, a native command writing to
+# stderr is a terminating error, so suspend Stop and read $LASTEXITCODE.
+$stamp = Join-Path $PSScriptRoot '.venv/.personagent-installed'
+$wanted = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'pyproject.toml') -Algorithm SHA256).Hash
+$installed = if (Test-Path $stamp) { (Get-Content -LiteralPath $stamp -Raw).Trim() } else { '' }
+if ($installed -ne $wanted) {
     Write-Host "installing dependencies..." -ForegroundColor Yellow
-    & $pySource -m pip install -r requirements.txt -q
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $pySource -m pip install -e $PSScriptRoot -q
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($code -ne 0) { exit $code }
+    Set-Content -LiteralPath $stamp -Value $wanted -Encoding ascii
 }
 
 # Avoid mojibake for non-ASCII console output on Windows
@@ -64,6 +67,6 @@ Write-Host ""
 if (-not [Console]::IsInputRedirected -and $args.Count -eq 0) {
     & $pySource -m persona_agent start
 } else {
-    & $pySource main.py @args
+    & $pySource -m persona_agent run @args
 }
 exit $LASTEXITCODE

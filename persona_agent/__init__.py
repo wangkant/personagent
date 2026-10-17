@@ -36,7 +36,7 @@ Supporting modules, pure logic with no agent state:
 - config_env the one way to read a setting out of the environment
 
 Entry points are the `personagent` command (cli.py): init, chat, demo, run,
-connect, doctor, learned, eval; main.py at the repo root is a shim.
+connect, doctor, learned, eval.
 Read-only seed datasets ship with the package (paths.seed_file); everything
 the agent learns at runtime goes to <home>/runtime/ (paths.ROOT is the home).
 """

@@ -4,9 +4,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import stat
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,16 +15,22 @@ ROOT = Path(__file__).resolve().parent.parent
 
 class LauncherTests(unittest.TestCase):
     def _fake_python_modules(self, root: Path) -> Path:
+        """A `pip` that installs nothing, and a `persona_agent` in the
+        checkout that records how the launcher started it."""
         modules = root / "fake_modules"
-        for name in ("fastapi", "dotenv", "httpx", "PIL", "ddgs", "uvicorn"):
-            package = modules / name
-            package.mkdir(parents=True)
-            (package / "__init__.py").write_text("", encoding="utf-8")
-        (root / "repo with spaces" / "main.py").write_text(
+        pip = modules / "pip"
+        pip.mkdir(parents=True)
+        (pip / "__init__.py").write_text("", encoding="utf-8")
+        (pip / "__main__.py").write_text("", encoding="utf-8")
+        package = root / "repo with spaces" / "persona_agent"
+        package.mkdir()
+        (package / "__init__.py").write_text("", encoding="utf-8")
+        (package / "__main__.py").write_text(
             "import json, os, sys\n"
             "from pathlib import Path\n"
             "Path(os.environ['LAUNCHER_CAPTURE']).write_text(\n"
-            "    json.dumps({'cwd': os.getcwd(), 'host': os.getenv('SERVER_HOST'), 'port': os.getenv('SERVER_PORT')}),\n"
+            "    json.dumps({'cwd': os.getcwd(), 'host': os.getenv('SERVER_HOST'),\n"
+            "                'port': os.getenv('SERVER_PORT'), 'argv': sys.argv[1:]}),\n"
             "    encoding='utf-8')\n",
             encoding="utf-8",
         )
@@ -34,7 +38,7 @@ class LauncherTests(unittest.TestCase):
 
     def _windows_repo(self, *, configured: bool = True) -> tuple[Path, Path, dict]:
         """A copy of the Windows launchers in a path with spaces, plus the env
-        that makes its dependency probe pass without installing anything."""
+        that makes its dependency install succeed without installing anything."""
         if not (shutil.which("powershell") or shutil.which("pwsh")):
             self.skipTest("PowerShell is not installed")
         temp = tempfile.TemporaryDirectory()
@@ -46,7 +50,7 @@ class LauncherTests(unittest.TestCase):
         caller.mkdir()
         shutil.copy2(ROOT / "start.ps1", repo / "start.ps1")
         shutil.copy2(ROOT / "start.bat", repo / "start.bat")
-        (repo / "requirements.txt").write_text("", encoding="utf-8")
+        (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
         if configured:
             (repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
         modules = self._fake_python_modules(base)
@@ -71,7 +75,7 @@ class LauncherTests(unittest.TestCase):
         result = self._run(self._powershell(repo), cwd=caller, env=env)
         combined = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, combined)
-        self.assertIn("quickstart.py", combined)
+        self.assertIn("start.bat", combined)
         self.assertFalse(Path(env["LAUNCHER_CAPTURE"]).exists(),
                          "a server without configuration must not start")
 
@@ -92,6 +96,9 @@ class LauncherTests(unittest.TestCase):
         recorded = json.loads(capture.read_text(encoding="utf-8"))
         self.assertEqual(Path(recorded["cwd"]).resolve(), repo.resolve())
         self.assertEqual((recorded["host"], recorded["port"]), ("127.0.0.2", "8123"))
+        # Without a console it runs the service, as `personagent run`.
+        self.assertEqual(recorded["argv"], ["run"])
+        self.assertTrue((repo / ".venv" / ".personagent-installed").is_file())
 
     def test_windows_scripts_are_crlf(self) -> None:
         bat = (ROOT / "start.bat").read_bytes()
@@ -99,57 +106,5 @@ class LauncherTests(unittest.TestCase):
         self.assertIn(b"-ExecutionPolicy Bypass", bat)
         self.assertIn(b'"%~dp0start.ps1"', bat)
         attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
-        for pattern in ("*.bat", "*.cmd", "*.vbs"):
+        for pattern in ("*.bat", "*.cmd"):
             self.assertIn(f"{pattern} text eol=crlf", attributes)
-
-    @unittest.skipIf(os.name == "nt", "POSIX launcher behavior runs on Unix CI")
-    def test_posix_launcher_is_executable_and_honors_configured_host(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo = Path(temp) / "repo with spaces"
-            python = repo / ".venv" / "bin" / "python"
-            python.parent.mkdir(parents=True)
-            launcher = repo / "start.sh"
-            shutil.copy2(ROOT / "start.sh", launcher)
-            (repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
-            capture = repo / "capture.json"
-            python.write_text(
-                f"#!{sys.executable}\n"
-                "import json, os, sys\n"
-                "from pathlib import Path\n"
-                "if sys.argv[1:] == ['main.py']:\n"
-                "    Path(os.environ['LAUNCHER_CAPTURE']).write_text(\n"
-                "        json.dumps({'cwd': os.getcwd(), 'argv': sys.argv[1:]}),\n"
-                "        encoding='utf-8')\n",
-                encoding="utf-8",
-            )
-            python.chmod(python.stat().st_mode | stat.S_IXUSR)
-            env = os.environ.copy()
-            env.update(
-                {
-                    "SERVER_HOST": "127.0.0.2",
-                    "SERVER_PORT": "8123",
-                    "LAUNCHER_CAPTURE": str(capture),
-                }
-            )
-            result = subprocess.run(
-                [str(launcher)],
-                cwd=repo.parent,
-                env=env,
-                text=True,
-                capture_output=True,
-                timeout=60,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            recorded = json.loads(capture.read_text(encoding="utf-8"))
-            self.assertEqual(Path(recorded["cwd"]).resolve(), repo.resolve())
-            self.assertEqual(
-                recorded["argv"],
-                ["main.py"],
-            )
-
-    def test_vbs_launcher_uses_its_own_directory_without_manual_paths(self) -> None:
-        source = (ROOT / "launch.vbs").read_text(encoding="ascii")
-        self.assertIn("GetParentFolderName(WScript.ScriptFullName)", source)
-        self.assertIn('shell.Run """" & folder & "\\start.bat" & """"', source)
-        self.assertNotIn("NAPCAT_DIR", source)
-        self.assertNotIn("C:\\path", source)

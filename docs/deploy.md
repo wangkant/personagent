@@ -190,8 +190,7 @@ keeps its other settings (proxy, base URL, polling) and gets only the new
 credentials. `--url https://...` sets an HTTPS address for the plugin to post
 to. The first run leaves the allowlists empty; rerunning keeps them, and any
 other excluded platforms. `--install` downloads a managed AstrBot instead and
-`--start` starts it; `python quickstart.py --astrbot <dir>` still works in a
-clone.
+`--start` starts it.
 
 The plugin is default-deny: fill in `groups`, and for DMs `dm_users`, in
 AstrBot's WebUI (or answer the questions in `connect`); DMs are forwarded once
@@ -225,7 +224,7 @@ AstrBot in Docker or on another host: see
 ### QQ through NapCat (OneBot)
 
 For a personal QQ account instead of an official bot: a second QQ account (not
-your own; see [DISCLAIMER.md](../DISCLAIMER.md)) in the target groups, logged
+your own; see [DISCLAIMER.md](DISCLAIMER.md)) in the target groups, logged
 in (usually by QR code, in a session that survives restarts) to a OneBot v11
 implementation connected to AstrBot's `aiocqhttp` adapter:
 [NapCat](https://github.com/NapNeko/NapCatQQ) (tested; it attaches to the
@@ -454,8 +453,7 @@ NapCat's webhook can still post events to `POST /v1/onebot`, and personagent
 replies through `QQ_ONEBOT_URL`. This route is deprecated and stays through
 1.x; use the official QQ bot connection, or NapCat through AstrBot with
 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. It warns once at first use and marks
-every response `Deprecation: true`. `launch.vbs`, which starts NapCat and then
-`main.py` on Windows, is deprecated with it.
+every response `Deprecation: true`.
 
 To move to NapCat through AstrBot, add OneBot v11 (NapCat) on the local page
 (or run `personagent connect astrbot <AstrBot data dir> --qq` for your own

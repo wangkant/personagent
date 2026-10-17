@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md)
 
-personagent 是 [MIT 许可证](LICENSE)下的自由软件。它能让一个 AI 角色出现在聊天里，而运行它的是你：它说什么、在哪里说、用哪些账号，都由你负责。这一页列出容易被忽略的风险，不构成法律意见。
+personagent 是 [MIT 许可证](../LICENSE)下的自由软件。它能让一个 AI 角色出现在聊天里，而运行它的是你：它说什么、在哪里说、用哪些账号，都由你负责。这一页列出容易被忽略的风险，不构成法律意见。
 
 ## 聊天平台和你的账号
 
@@ -11,7 +11,7 @@ personagent 接入聊天平台有两种方式：QQ 官方机器人、个人微�
 - **官方机器人接口**（QQ 官方机器人接口、腾讯给个人微信用的 iLink 机器人接口、Telegram、Discord、Slack、KOOK、飞书、钉钉、企业微信等）本来就是给机器人用的。你仍然要遵守各平台的开发者条款和频率限制。
 - **非官方客户端**是以普通用户账号登录，再用软件去操作它。平台不认可这种做法，条款里可能明文禁止，账号可能被限制、冻结甚至永久封禁。包括：
   - **通过 NapCat、LLOneBot、Lagrange 等 OneBot 实现接入 QQ**（高级选项 OneBot v11；QQ 官方机器人用不到它）。腾讯并不认可它们。从云服务器或海外 IP 登录时风险最高。
-  - **通过 mautrix 桥接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**（Matrix 连接器）。桥接是这些网络的非官方客户端，其中一些网络的条款明确提到自动发消息。详见 [Matrix 连接器里的说明](integrations/matrix/README.md#terms-of-each-network)（英文）。
+  - **通过 mautrix 桥接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**（Matrix 连接器）。桥接是这些网络的非官方客户端，其中一些网络的条款明确提到自动发消息。详见 [Matrix 连接器里的说明](../integrations/matrix/README.md#terms-of-each-network)（英文）。
   - 其他任何以真人账号登录的方式。
 
 如果你用了其中一种，请用一个**专门的、丢了不心疼的小号**，不要用主号；能在家里的网络上运行，就不要放在云服务器上。接入每个网络之前，先读它现行的条款：条款会变，押上的是你自己的账号。personagent 的作者，以及它配合使用的任何第三方项目（AstrBot、NapCat、Koishi、mautrix 等）的维护者，对账号丢失或受限不承担任何责任。
@@ -38,4 +38,4 @@ personagent 接入聊天平台有两种方式：QQ 官方机器人、个人微�
 
 ## 不提供担保
 
-本软件按「现状」提供，不附带任何明示或暗示的担保。因使用本软件产生的任何索赔、损害或损失，作者概不负责。详见 [LICENSE](LICENSE)。
+本软件按「现状」提供，不附带任何明示或暗示的担保。因使用本软件产生的任何索赔、损害或损失，作者概不负责。详见 [LICENSE](../LICENSE)。

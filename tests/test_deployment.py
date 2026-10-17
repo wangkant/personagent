@@ -3,7 +3,6 @@ import io
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -133,15 +132,14 @@ class DeploymentTests(unittest.TestCase):
                              want[:-len("/chat/completions")] + "/embeddings")
 
 
-    def test_main_honors_dotenv_and_environment_precedence(self):
+    def test_the_server_honors_dotenv_and_environment_precedence(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            shutil.copyfile(ROOT / 'main.py', root / 'main.py')
             (root / '.env').write_text('SERVER_HOST=127.0.0.2\nSERVER_PORT=8129\n', encoding='utf-8')
-            code = ("import runpy, uvicorn, json; "
+            code = ("import uvicorn, json; "
                     "uvicorn.Server.run=lambda self, *a, **k: print(json.dumps("
                     "{'host': self.config.host, 'port': self.config.port})); "
-                    "runpy.run_path('main.py', run_name='__main__')")
+                    "from persona_agent.server import main; main()")
             env = {**os.environ, 'PYTHONPATH': str(ROOT), 'AGENT_HOME': temp}
             for key in ('SERVER_HOST', 'SERVER_PORT', 'PYTHON_DOTENV_DISABLED'):
                 env.pop(key, None)

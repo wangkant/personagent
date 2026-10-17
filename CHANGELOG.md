@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **personagent says when a newer version is out.** The local page and `personagent up` ask pypi.org at most once a day, in the background, and an hour later after a failed attempt; `personagent doctor` asks then and there when the last answer is a day old. The Chat view then shows a notice with the command for how this copy was installed (pip, uv's venvs, uvx, uv tool, pipx, or `git pull` plus a reinstall in a clone), with a link to the release notes; closing it hides it until the next start, and the sidebar keeps a link to bring it back. The terminal prints the same line. The request carries only personagent's version number, and `UPDATE_CHECK_ENABLED=false` turns the check off.
 
+### Changed
+
+- **The repository root holds only what a user opens.** `CONTRIBUTING.md` and `SECURITY.md` moved to `.github/` (GitHub still shows them), and the disclaimers to `docs/`. The build uses hatchling, with the dependencies and the pytest settings in `pyproject.toml`; `requirements.txt`, `setup.py`, `MANIFEST.in` and `pytest.ini` are gone, and the wheel ships the same files as before.
+- **`start.bat` installs with `pip install -e .`**, and again whenever `pyproject.toml` changes, so a pull that adds a dependency installs it. With arguments, or without a console, it runs `personagent run` with them, as `main.py` did.
+
+### Removed
+
+- `quickstart.py`: in a clone, run `pip install -e .`, then `personagent` (or double-click `start.bat` on Windows). `personagent connect astrbot DATA_DIR` takes the flags `quickstart.py --astrbot` took.
+- `main.py`: `personagent run`, or `python -m persona_agent run` in a clone.
+- `start.sh`: install with pip or uv, or run `pip install -e .` in a clone.
+- `launch.vbs`, deprecated since 1.0: double-click `start.bat`.
+
 ## [1.2.1] — 2026-10-17
 
 The AstrBot plugin comes as a zip on each GitHub Release instead of from a repository of its own, and the README is shorter.

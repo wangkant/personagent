@@ -13,7 +13,7 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
-With a source ZIP on Windows, double-click `start.bat`. It prepares its own Python environment and opens the same page. In a clone, `python quickstart.py` does the same.
+With a source ZIP on Windows, double-click `start.bat`. It prepares its own Python environment and opens the same page. In a clone, run `pip install -e .`, then `personagent`.
 
 ## Add a key and chat
 

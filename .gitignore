@@ -1,6 +1,6 @@
 # Secrets / local config
 .env
-# quickstart's atomic-replace temporary. It holds the same API keys .env does,
+# The setup wizard's atomic-replace temporary. It holds the same API keys .env does,
 # and the interruption that atomicity exists for is exactly what leaves it
 # behind — where `git add -A` would stage it.
 .env.tmp
@@ -56,5 +56,5 @@ logs/
 benchmark_runs/
 teacher_stats.json
 
-# Single-instance guard written at the deployment root (main.py)
+# Single-instance guard written at the deployment root
 .personagent.instance.lock

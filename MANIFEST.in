@@ -1,7 +1,0 @@
-# What setup.py bundles into the wheel, so a wheel built from the sdist has it too.
-include requirements.txt .env.example
-graft data
-graft integrations/astrbot/astrbot_plugin_personagent
-# The sdist builds the package; the test suite runs from a checkout.
-prune tests
-global-exclude *.py[cod]

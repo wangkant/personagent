@@ -13,7 +13,7 @@ personagent
 
 装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。
 
-Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。程序会准备独立环境并打开同一个本地页面。从 Git 仓库运行则用 `python quickstart.py`。
+Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。程序会准备独立环境并打开同一个本地页面。从 Git 仓库运行则先 `pip install -e .`，再运行 `personagent`。
 
 ## 填 Key，开始聊天
 

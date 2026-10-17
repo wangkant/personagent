@@ -1,7 +1,4 @@
-"""`personagent init` and `personagent connect`: set up a home, in English or Chinese.
-
-Stdlib only, so quickstart.py can run it before the dependencies are installed.
-"""
+"""`personagent init` and `personagent connect`: set up a home, in English or Chinese."""
 from __future__ import annotations
 
 import argparse
@@ -1635,8 +1632,7 @@ def _prepare_output() -> None:
 def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         confirm_rerun: bool = False, args: argparse.Namespace | None = None,
         strict_skip: bool = False) -> int:
-    """`init` with an interpreter of choice: quickstart passes its .venv's,
-    and the flags it has already parsed."""
+    """`init` with an interpreter of choice, and flags already parsed."""
     _prepare_output()
     args = args if args is not None else init_parser(prog).parse_args(argv)
     home = homes.find_home()

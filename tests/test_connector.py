@@ -690,7 +690,7 @@ async def test_a_connector_mention_reaches_a_bot_without_a_qq_number(
     an @ of QQ_BOT_ID, and _is_at_me gave up when QQ_BOT_ID was blank. What still
     answered was an accident: the empty id equalled the empty QQ_BOT_ID, so the
     @ rendered as the bot's name and the name check fired. With PERSONA_NAME
-    blank too, as `quickstart.py --astrbot` leaves it, a Telegram persona
+    blank too, as `connect astrbot DATA_DIR` leaves it, a Telegram persona
     never heard a mention at all, and an @ of any empty id read as the bot's
     name. The self mention now has an id of its own whenever QQ_BOT_ID is
     blank."""

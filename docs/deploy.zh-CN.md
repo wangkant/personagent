@@ -23,7 +23,7 @@ python -m pip install personagent
 personagent
 ```
 
-装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；从 Git 仓库运行用 `python quickstart.py`。
+装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；从 Git 仓库运行先 `pip install -e .`，再运行 `personagent`。
 
 你应该看到浏览器打开一个本地页面，有三个视图：「开始聊天」「连接平台」「角色与设置」。再运行一次 `personagent` 会复用已经打开的页面。
 
@@ -105,7 +105,7 @@ personagent
 
 AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 mautrix 桥接 WhatsApp、Signal 等）是 personagent 可以配合的第三方桥接，连 QQ、微信、Telegram、Discord 都用不到它们。只有想用**个人 QQ 小号**而不是官方机器人时，才需要 NapCat。
 
-注意：NapCat 不是腾讯官方的客户端，小号有被限制甚至封禁的风险。不要用你自己的主号，详见 [DISCLAIMER.zh-CN.md](../DISCLAIMER.zh-CN.md)。
+注意：NapCat 不是腾讯官方的客户端，小号有被限制甚至封禁的风险。不要用你自己的主号，详见 [DISCLAIMER.zh-CN.md](DISCLAIMER.zh-CN.md)。
 
 ### 用托管的 AstrBot（推荐）
 
@@ -146,4 +146,4 @@ AstrBot 在 Docker 里的话，`127.0.0.1` 指的是容器自己，插件会拒�
 
 - [英文版部署指南](deploy.md)：所有设置、对外暴露端口、错误码。
 - [AstrBot 插件说明](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md)
-- [免责声明](../DISCLAIMER.zh-CN.md)
+- [免责声明](DISCLAIMER.zh-CN.md)

@@ -1,8 +1,7 @@
 """The AstrBot handshake (plugin copy, config merge, shared token) and
-quickstart's flags."""
+`personagent connect astrbot DATA_DIR`'s flags."""
 from __future__ import annotations
 
-import contextlib
 import io
 import json
 import os
@@ -10,7 +9,6 @@ import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import quickstart
 from persona_agent import setup_wizard as sw
 
 from helpers import check
@@ -291,13 +289,11 @@ def _astrbot_data(root: Path) -> Path:
     return data
 
 
-def _flag_run(monkeypatch, tmp_path, argv: list[str]) -> int:
-    """Run main() down the `--astrbot` path without a venv or pip."""
+def _flag_run(monkeypatch, tmp_path, argv):
+    """Run `personagent connect astrbot` with flags, so nothing is asked."""
     monkeypatch.setenv("AGENT_HOME", str(tmp_path))
-    monkeypatch.setattr(quickstart, "ensure_venv", lambda: tmp_path / ".venv")
-    monkeypatch.setattr(quickstart, "ensure_deps", lambda _venv: None)
     with redirect_stdout(io.StringIO()):
-        return quickstart.main(argv)
+        return sw.connect_main(argv)
 
 
 def test_the_astrbot_flag_can_be_rerun(monkeypatch, tmp_path) -> None:
@@ -306,12 +302,12 @@ def test_the_astrbot_flag_can_be_rerun(monkeypatch, tmp_path) -> None:
     data = _astrbot_data(tmp_path / "astrbot")
     (tmp_path / ".env").write_text("LLM_API_KEY=sk-x\n", encoding="utf-8")
 
-    _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data), "--qq"])
+    _flag_run(monkeypatch, tmp_path, ["astrbot", str(data), "--qq"])
     cfg = sw.read_astrbot_config(data)
     cfg.update(groups=["123"], dm_users=["456"])
     sw.write_astrbot_config(data, cfg)
 
-    _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data.parent)])
+    _flag_run(monkeypatch, tmp_path, ["astrbot", str(data.parent)])
     cfg = sw.read_astrbot_config(data)
     check("flag rerun: AstrBot's root folder is accepted too", cfg.get("connector_token"))
     check("flag rerun: allowlists kept", cfg["groups"] == ["123"]
@@ -320,59 +316,26 @@ def test_the_astrbot_flag_can_be_rerun(monkeypatch, tmp_path) -> None:
     check("flag rerun: native ids kept",
           sw.env_get(tmp_path / ".env", "CONNECTOR_QQ_PLATFORMS") == "aiocqhttp")
 
-    _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data), "--no-qq"])
+    _flag_run(monkeypatch, tmp_path, ["astrbot", str(data), "--no-qq"])
     cfg = sw.read_astrbot_config(data)
     check("flag: --no-qq excludes aiocqhttp", cfg["excluded_platforms"] == ["aiocqhttp"], repr(cfg))
     check("flag: --no-qq clears native ids",
           sw.env_get(tmp_path / ".env", "CONNECTOR_QQ_PLATFORMS") == "")
 
-    _flag_run(monkeypatch, tmp_path, ["--astrbot", str(data), "--platform", "telegram",
+    _flag_run(monkeypatch, tmp_path, ["astrbot", str(data), "--platform", "telegram",
                                       "--token", "123:abc"])
     platforms = json.loads((data / "cmd_config.json").read_text(encoding="utf-8"))["platform"]
     check("flag: --platform writes the adapter",
           [p["telegram_token"] for p in platforms] == ["123:abc"], repr(platforms))
 
-    for bad in (["--astrbot", str(data), "--qq", "--no-qq"], ["--qq"],
-                ["--astrbot", str(tmp_path / "nowhere")], ["--bogus"]):
+    for bad in (["astrbot", str(data), "--qq", "--no-qq"], ["astrbot", "--qq"],
+                ["astrbot", str(tmp_path / "nowhere")], ["astrbot", "--bogus"]):
         try:
             _flag_run(monkeypatch, tmp_path, bad)
             raised = False
         except SystemExit:
             raised = True
         check(f"flag: {bad[-1]} is refused", raised)
-
-
-def test_flags_are_checked_before_anything_is_installed(monkeypatch) -> None:
-    """--help and a bad flag must not create .venv or run pip."""
-    installed: list = []
-    monkeypatch.setattr(quickstart, "ensure_venv", lambda: installed.append("venv"))
-    monkeypatch.setattr(quickstart, "ensure_deps", lambda _venv: installed.append("pip"))
-    for argv in (["--help"], ["--provider", "nope"], ["--platform", "telegram"]):
-        try:
-            with redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                quickstart.main(argv)
-        except SystemExit:
-            pass
-        check(f"quickstart {argv[0]}: nothing installed", not installed, repr(installed))
-
-
-def test_quickstart_hands_the_wizard_its_venv(monkeypatch, tmp_path) -> None:
-    """The questions run with the .venv's interpreter, so the chat it offers
-    has the dependencies."""
-    seen: dict = {}
-    monkeypatch.setattr(quickstart, "ensure_venv", lambda: tmp_path / ".venv")
-    monkeypatch.setattr(quickstart, "ensure_deps", lambda _venv: None)
-
-    def fake_run(argv, prog, **kwargs):
-        seen.update(kwargs, prog=prog)
-        return 0
-
-    monkeypatch.setattr(sw, "run", fake_run)
-    quickstart.main(["--no-input", "--name", "Mika"])
-    check("quickstart: the .venv python is passed on",
-          seen["python"] == str(quickstart._venv_python(tmp_path / ".venv")), repr(seen))
-    check("quickstart: a re-run is confirmed first", seen["confirm_rerun"] is True)
-    check("quickstart: its parsed flags are passed on", seen["args"].name == "Mika")
 
 
 def test_agent_home_divergence_warning(monkeypatch, tmp_path) -> None:
@@ -402,7 +365,7 @@ def test_agent_home_divergence_warning(monkeypatch, tmp_path) -> None:
     check("agent_home: silent when it resolves to this home", said() == "", said())
 
 
-def test_quickstart_set_env_values() -> None:
+def test_set_env_values() -> None:
     """The wizard's .env writer must fill existing keys in place, preserve
     comments (so .env keeps doubling as the annotated reference), skip
     commented-out keys, and append keys that don't exist yet."""

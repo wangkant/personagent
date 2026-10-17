@@ -4,7 +4,6 @@
 # Windows scripts are CRLF: cmd.exe and some Windows Script Host locales misread LF.
 *.bat text eol=crlf
 *.cmd text eol=crlf
-*.vbs text eol=crlf
 
 # Image / binary assets: never apply line-ending or diff conversion.
 *.png binary

@@ -39,7 +39,7 @@ jobs:
           fi
       - name: Run the test suite
         run: |
-          python -m pip install -r requirements.txt "pytest>=8,<10"
+          python -m pip install -e . "pytest>=8,<10"
           python -m pytest -q
       - name: Check the tag and take its notes from CHANGELOG.md
         if: startsWith(github.ref, 'refs/tags/v')

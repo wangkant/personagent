@@ -29,11 +29,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt "pytest>=8,<10"
-      - name: Validate POSIX launcher syntax and executable bit
-        run: |
-          bash -n start.sh
-          test -x start.sh
+        run: python -m pip install -e . "pytest>=8,<10"
       # Dead and undefined names only, not a style gate; re-exports carry `# noqa: F401`.
       - name: Lint for dead and undefined names
         run: |
@@ -58,7 +54,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt "pytest>=8,<10"
+        run: python -m pip install -e . "pytest>=8,<10"
       - name: Run the test suite
         run: |
           python -m pytest -q

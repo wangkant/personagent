@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md)
 
-personagent is free software under the [MIT License](LICENSE). It puts an AI
+personagent is free software under the [MIT License](../LICENSE). It puts an AI
 character in chats, and you are the one who runs it: what it says, where it
 says it, and which accounts it uses are your responsibility. This page lists
 the risks that are easy to miss. It is not legal advice.
@@ -29,7 +29,7 @@ runs for you. What the connection logs in as decides your risk.
     through a mautrix bridge** (the Matrix connector). The bridge is an
     unofficial client of the network, and some of these networks name
     automated messaging in their terms. See
-    [the Matrix connector's notes](integrations/matrix/README.md#terms-of-each-network).
+    [the Matrix connector's notes](../integrations/matrix/README.md#terms-of-each-network).
   - Anything else that logs in as a person.
 
 If you use one, use a dedicated account you can afford to lose, never your
@@ -92,4 +92,4 @@ change is in an append-only ledger that you can review and undo with
 
 The software is provided "as is", without warranty of any kind, express or
 implied. The authors are not liable for any claim, damage or loss arising from
-its use. See [LICENSE](LICENSE).
+its use. See [LICENSE](../LICENSE).

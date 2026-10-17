@@ -27,7 +27,7 @@ body:
         - uv tool install personagent
         - pipx install personagent
         - pip install personagent
-        - git clone (quickstart.py)
+        - git clone
         - Downloaded ZIP
         - Other
     validations:

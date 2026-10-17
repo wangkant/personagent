@@ -32,7 +32,7 @@ personagent
 
 浏览器会打开一个本地页面，分三栏：「开始聊天」「连接平台」「角色与设置」。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。模型服务有 10 种预设，也可以选其他 OpenAI 兼容服务；角色有名字和性格预设。「人设」框里就是 `persona.txt`，保存后会重启角色服务，学到的东西不会丢。「更多功能」里可以开联网搜索、看图和主动说话。再次运行 `personagent` 会沿用已经打开的页面。
 
-Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；克隆了仓库的话运行 `python quickstart.py`。需要 Python 3.10–3.14。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令行和连接器的用法在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)里。
+Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；克隆了仓库的话先运行 `pip install -e .`，再运行 `personagent`。需要 Python 3.10–3.14。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令行和连接器的用法在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)里。
 
 ## 为什么用它
 
@@ -129,9 +129,9 @@ personagent 自带、而它们交给插件或文档里没写的：从别人对�
 - [连接器协议](https://github.com/wangkant/personagent/blob/main/docs/connectors.md)（英文）：给别的平台自己写连接器
 - [工具脚本](https://github.com/wangkant/personagent/blob/main/docs/tools.md)（英文）：`tools/` 里给源码版用的脚本
 - [更新日志](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（英文），含[从 0.4 升级](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04)的完整清单
-- [贡献指南](https://github.com/wangkant/personagent/blob/main/CONTRIBUTING.md)（英文）
-- [安全策略](https://github.com/wangkant/personagent/blob/main/SECURITY.md)（英文）：怎么私下报告漏洞
-- [免责声明](https://github.com/wangkant/personagent/blob/main/DISCLAIMER.zh-CN.md)
+- [贡献指南](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md)（英文）
+- [安全策略](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md)（英文）：怎么私下报告漏洞
+- [免责声明](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.zh-CN.md)
 
 ## 隐私
 

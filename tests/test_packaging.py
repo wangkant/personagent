@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 import runpy
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -36,48 +35,36 @@ def test_the_classifiers_match_a_stable_release() -> None:
     assert 'requires-python = ">=3.10"' in text
 
 
-def test_requirements_txt_is_the_single_dependency_list() -> None:
-    assert 'dependencies = { file = ["requirements.txt"] }' in _pyproject()
-    lines = [ln.strip() for ln in (ROOT / "requirements.txt").read_text(
-        encoding="utf-8").splitlines() if ln.strip()]
-    # setuptools reads full-line comments only; a trailing one breaks the build.
-    assert all(ln.startswith("#") or "#" not in ln for ln in lines), lines
-    requirements = [ln for ln in lines if not ln.startswith("#")]
+def _dependencies() -> list[str]:
+    block = re.search(r"^dependencies = \[(.*?)^\]", _pyproject(), re.MULTILINE | re.DOTALL).group(1)
+    return re.findall(r'^\s*"([^"]+)",', block, re.MULTILINE)
+
+
+def test_the_dependencies_have_floors_and_stay_on_pydantic_2() -> None:
+    requirements = _dependencies()
     assert any(re.fullmatch(r"pydantic>=2[.\d]*,<3", ln) for ln in requirements), requirements
     assert all(">=" in ln for ln in requirements), "every dependency has a floor"
 
 
-def _bundled_by_setup(root: Path = ROOT) -> set[str]:
-    hook = runpy.run_path(str(ROOT / "setup.py"), run_name="setup_under_test")
-    return {rel.as_posix() for _src, rel in hook["bundled_files"](root)}
+def test_the_wheel_bundles_the_shared_files_under_bundled() -> None:
+    """hatchling maps data/, the AstrBot plugin and .env.example under
+    persona_agent/_bundled, where home.resource() looks in an installed copy;
+    CI installs the built wheel and reads them back."""
+    text = _pyproject()
+    plugin = PLUGIN.relative_to(ROOT).as_posix()
+    for source in ("data", plugin):
+        assert f'"{source}" = "persona_agent/_bundled/{source}"' in text, source
+    assert '".env.example" = "persona_agent/_bundled/.env.example"' in text
+    wheel = re.search(r"^\[tool\.hatch\.build\.targets\.wheel\]\n(.*?)\n\n", text,
+                      re.MULTILINE | re.DOTALL).group(1)
+    for included in ("persona_agent", "data", plugin):
+        assert f'"{included}"' in wheel, included
 
 
-def test_the_wheel_bundles_every_tracked_shared_file() -> None:
-    bundled = _bundled_by_setup()
-    tracked = subprocess.run(
-        ["git", "ls-files", "data", ".env.example", PLUGIN.relative_to(ROOT).as_posix()],
-        cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
-    if tracked.returncode != 0:
-        pytest.skip("not a git checkout")
-    expected = set(tracked.stdout.split())
-    assert expected and expected <= bundled, sorted(expected - bundled)
-    for wanted in (".env.example", "data/persona.example.en.txt",
-                   "data/evals/speak.en.jsonl", "data/benchmark/scenarios.train.en.jsonl",
-                   "integrations/astrbot/astrbot_plugin_personagent/main.py",
-                   "integrations/astrbot/astrbot_plugin_personagent/metadata.yaml"):
-        assert wanted in bundled, wanted
-
-
-def test_the_wheel_leaves_bytecode_caches_out(tmp_path: Path) -> None:
-    plugin = tmp_path / "integrations" / "astrbot" / "astrbot_plugin_personagent"
-    (plugin / "__pycache__").mkdir(parents=True)
-    (plugin / "main.py").write_text("", encoding="utf-8")
-    (plugin / "__pycache__" / "main.cpython-312.pyc").write_bytes(b"x")
-    (plugin / "stale.pyc").write_bytes(b"x")
-    (tmp_path / "data").mkdir()
-    (tmp_path / "data" / "seed.jsonl").write_text("{}\n", encoding="utf-8")
-    assert _bundled_by_setup(tmp_path) == {
-        "data/seed.jsonl", "integrations/astrbot/astrbot_plugin_personagent/main.py"}
+def test_the_wheel_leaves_bytecode_caches_out() -> None:
+    # hatchling skips what .gitignore ignores.
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "__pycache__/" in ignored and "*.pyc" in ignored
 
 
 def test_resource_reads_the_checkout_here_and_the_bundle_when_installed(

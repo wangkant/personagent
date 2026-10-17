@@ -1,11 +1,9 @@
 """start.ps1 failure contracts, exercised on Windows.
 
-`test_start_sh_isolation.py` covers the POSIX launcher's refusal paths, but it
-is skipped on `nt`, and `test_launchers.py` only drives start.ps1's happy path
-(repository root, SERVER_HOST/SERVER_PORT). So the Windows launcher's two refusals — it will
-not touch an incomplete `.venv`, and it will not start the server after a
-failed dependency install — were guaranteed by reading the script, on the one
-platform where the script is the only one that runs.
+`test_launchers.py` only drives start.ps1's happy path (repository root,
+SERVER_HOST/SERVER_PORT). The refusals here — it will not touch an incomplete
+`.venv`, and it will not start the server after a failed dependency install —
+would otherwise be guaranteed only by reading the script.
 
 No network and no real `pip install`: the interpreter is a genuine venv (a
 copied `python.exe` is not viable on Windows, which needs the real PE plus its
@@ -47,13 +45,16 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.repo = self.base / "repo with spaces"
         self.repo.mkdir()
         shutil.copy2(ROOT / "start.ps1", self.repo / "start.ps1")
-        (self.repo / "requirements.txt").write_text("", encoding="utf-8")
+        (self.repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
         (self.repo / ".env").write_text("LLM_API_KEY=sk-test\n", encoding="utf-8")
         # Proves the server was never reached: start.ps1's last act is
-        # `& $pySource main.py`, so this file existing means it got that far.
-        (self.repo / "main.py").write_text(
+        # `-m persona_agent`, so this file existing means it got that far.
+        package = self.repo / "persona_agent"
+        package.mkdir()
+        (package / "__init__.py").write_text("", encoding="utf-8")
+        (package / "__main__.py").write_text(
             "from pathlib import Path\n"
-            "Path(__file__).with_name('SERVER_STARTED').write_text('x')\n",
+            "Path(__file__).parent.with_name('SERVER_STARTED').write_text('x')\n",
             encoding="utf-8",
         )
 
@@ -102,17 +103,15 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(".venv", result.stdout + result.stderr)
         self.assertEqual(marker.read_text(encoding="utf-8"), "existing user files")
-        # The refusal is the point: a half-built .venv must be repaired by
-        # quickstart.py or moved aside, never silently rebuilt over.
+        # The refusal is the point: a half-built .venv must be moved aside,
+        # never silently rebuilt over.
         self.assertFalse((venv / "Scripts" / "python.exe").exists())
         self.assertFalse(self._server_started())
 
     def test_missing_python_is_reported_before_the_incomplete_venv(self) -> None:
-        """start.ps1 checks for an interpreter BEFORE it checks the .venv;
-        start.sh checks them the other way round. Both refuse, and neither
-        touches the .venv, but the message a Windows operator gets for a
-        machine with both problems is "python / python3 not found". The two
-        launchers differ here on purpose — do not "fix" this to match."""
+        """start.ps1 checks for an interpreter BEFORE it checks the .venv, so
+        a machine with both problems is told "python / python3 not found", and
+        the .venv is left alone."""
         venv = self.repo / ".venv"
         venv.mkdir()
         marker = venv / "keep.txt"
@@ -134,7 +133,7 @@ class StartPs1IsolationTests(unittest.TestCase):
         combined = result.stdout + result.stderr
 
         self.assertNotEqual(result.returncode, 0, combined)
-        self.assertIn("quickstart.py", combined)
+        self.assertIn("start.bat", combined)
         self.assertFalse((self.repo / ".venv").exists(),
                          "nothing is installed before the setup has run")
         self.assertFalse(self._server_started())

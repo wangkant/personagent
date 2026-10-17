@@ -9,15 +9,18 @@ produced** is worth far more than a feature request.
 ```bash
 git clone https://github.com/wangkant/personagent.git
 cd personagent
-python quickstart.py            # creates .venv, installs dependencies, opens the local page
-.venv/bin/python -m persona_agent chat    # Windows: .venv\Scripts\python.exe -m persona_agent chat
+python -m venv .venv
+. .venv/bin/activate              # Windows: .venv\Scripts\activate
+python -m pip install -e ".[dev]"
+personagent                       # opens the local page
+personagent chat
 ```
 
-`python quickstart.py --terminal` asks the setup questions in the terminal
+`personagent init --terminal` asks the setup questions in the terminal
 instead of opening the page. In a clone the home folder is the clone itself:
 `.env`, `persona.txt`, `runtime/` and `platforms/` sit next to
-`persona_agent/` and are gitignored. `pip install -e .` inside the venv also
-gives you the `personagent` command.
+`persona_agent/` and are gitignored. On Windows, `start.bat` does the same
+setup from a double-click.
 
 `personagent chat` is a simulated group chat. It runs the persona, the reply
 triggers, the speak-or-stay-quiet gate, example retrieval, generation, the
@@ -36,15 +39,15 @@ With the venv active, run the checks CI runs:
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ruff check . --select F401,F811,F821,F841
-python -m compileall -q persona_agent main.py quickstart.py tools tests integrations
+python -m compileall -q persona_agent tools tests integrations
 ```
 
 The suite takes about a minute and needs no network or API key: the tests
 stub the model and the transport. Run these before opening a PR.
 
 The ruff line catches dead and undefined names. It is not a style gate. CI
-runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, checks
-`start.sh` for syntax and its executable bit, and has a `package` job on Linux
+runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, and
+has a `package` job on Linux
 and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
 installs each into a clean venv outside the checkout, and runs
 `tools/package_smoke.py` and `tools/welcome_smoke.py` against the installed
@@ -82,9 +85,9 @@ python tools/welcome_smoke.py --personagent /tmp/smoke-env/bin/personagent
 
 - A test is a module-level `test_*` function in `tests/test_*.py`. pytest
   finds it; nothing needs registering.
-- `pytest.ini` puts the repo root and `tools/` on the import path, so tests
-  import `persona_agent`, the root shims and the CLI tools the way a
-  deployment does.
+- The pytest settings in `pyproject.toml` put the repo root and `tools/` on
+  the import path, so tests import `persona_agent` and the CLI tools the way
+  a deployment does.
 - `tests/conftest.py` provides the `tmp` fixture (a per-test scratch
   directory), runs each `async def` test on its own event loop, and skips
   the 5 s bare-call debounce unless a test is marked `bare_call_wait`.
@@ -158,12 +161,12 @@ commands keep working:
 | `persona_agent/astrbot_install.py` | The managed AstrBot for every other platform: downloaded into the home on its own Python 3.12, run headless with no dashboard |
 | `persona_agent/services.py` | The processes the page or `up` starts (agent, direct, managed AstrBot): they end with it, and what a crashed run left is stopped at the next start |
 | `persona_agent/home.py` | Where a deployment lives (`AGENT_HOME`, the checkout, the working folder, `~/personagent`) and where shipped files are found. Stdlib only |
-| `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `main.py` starts it |
-| `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: bilingual terminal questions, the key test, the handshake with an AstrBot you already run. Stdlib only. `quickstart.py` makes the venv, then opens the page or calls it |
+| `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `personagent run` starts it |
+| `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: bilingual terminal questions, the key test, the handshake with an AstrBot you already run |
 | `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo |
 | `persona_agent/dashboard.py`, `static/` | The dashboard at `/` of the agent service, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
 | `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval` |
-| `quickstart.py`, `start.sh`, `start.ps1`, `start.bat` | The clone route: set up, then start |
+| `start.bat`, `start.ps1` | Windows from a source ZIP or a clone: make `.venv`, install, then start |
 
 The rest of the package:
 
@@ -197,7 +200,7 @@ The rest of the package:
 | `persona_agent/reactions.py` | Reaction attribution and adjudicator prompts (pure logic) |
 | `persona_agent/evolution.py` | Low-score eval → diagnosis → BAD/OK pair, dedup, pool trimming (pure logic) |
 | `persona_agent/endpoints.py` | Which OpenAI-compatible endpoint serves a model name (the fallback may have its own), and base-URL spelling |
-| `persona_agent/connector.py` | Translating a `/v1/events` event to the internal shape, and the reply sink ([docs/connectors.md](docs/connectors.md) has the schema) |
+| `persona_agent/connector.py` | Translating a `/v1/events` event to the internal shape, and the reply sink ([docs/connectors.md](../docs/connectors.md) has the schema) |
 | `persona_agent/outbox.py` | Messages no request is waiting for: each connector conversation's reply handle, and the queue a connector pulls from `/v1/outbox` |
 | `persona_agent/channels.py` | The one place conversation, memory and learning keys are derived from an event |
 | `persona_agent/access.py` | Who the admin is and who is admitted, per platform: `ADMIN_IDS`, `ACCESS_GROUPS` and `ACCESS_DM_USERS` (pure logic) |
@@ -206,7 +209,7 @@ The rest of the package:
 | `persona_agent/storage.py` | File locks, atomic replace, locked JSONL appends and rotation |
 | `persona_agent/paths.py` | Deployment root (`AGENT_HOME`), runtime-dir isolation, seed lookup, JSONL reading |
 | `persona_agent/health.py`, `preflight.py` | Dependency probes; startup config check (missing or misspelled keys) |
-| `tools/` | Offline scripts that are not part of the package; [docs/tools.md](docs/tools.md) lists them |
+| `tools/` | Offline scripts that are not part of the package; [docs/tools.md](../docs/tools.md) lists them |
 
 New behaviour goes in the module that owns the concern. If a change needs
 state from two mixins, it probably belongs in `agent.py`.
@@ -252,7 +255,7 @@ like.
 ## Documentation
 
 The English page is the source of truth. A page with a `*.zh-CN.md` twin
-(`README`, `docs/start`, `docs/guide`, `DISCLAIMER`, the AstrBot plugin
+(`README`, `docs/start`, `docs/guide`, `docs/DISCLAIMER`, the AstrBot plugin
 README) is written in natural Chinese for Chinese readers, not translated line
 by line: when you change a fact in one, change it in the other.
 `docs/deploy.zh-CN.md` is not a twin: it is a separate Chinese step-by-step

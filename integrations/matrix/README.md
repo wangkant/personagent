@@ -236,7 +236,7 @@ the account at stake is yours.
   messages.
 
 Use a dedicated account you can afford to lose, only in conversations where
-people know they are talking to a bot, and see [DISCLAIMER.md](../../DISCLAIMER.md).
+people know they are talking to a bot, and see [DISCLAIMER.md](../../docs/DISCLAIMER.md).
 
 ## End-to-end encryption
 

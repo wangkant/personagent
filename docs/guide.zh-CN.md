@@ -35,9 +35,9 @@ personagent
 | 不安装，直接运行 | `uvx personagent`（来自 [uv](https://docs.astral.sh/uv/)，它会自己下载合适的 Python） |
 | 装成常驻的 `personagent` 命令 | `uv tool install personagent` 或 `pipx install personagent` |
 | Windows，用源码 ZIP | 解压后双击 `start.bat` |
-| 从源码 | `git clone https://github.com/wangkant/personagent.git`、`cd personagent`、`python quickstart.py` |
+| 从源码 | `git clone https://github.com/wangkant/personagent.git`、`cd personagent`、`pip install -e .`、`personagent` |
 
-支持 Python 3.10–3.14。`pip` 下载慢可以加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。`start.bat` 和 `quickstart.py` 会创建 `.venv`、安装依赖，然后打开同一个页面。
+支持 Python 3.10–3.14。`pip` 下载慢可以加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。`start.bat` 会创建 `.venv`、安装依赖（`pyproject.toml` 变了会重新安装），然后打开同一个页面。
 
 **主目录**放着设置（`.env`）、人设（`persona.txt`）、它学到的东西（`runtime/`）和聊天平台（`platforms/`：托管的 AstrBot，以及 `direct.json`，即 personagent 直接连接的平台的凭据），按下面的顺序取第一个：
 
@@ -286,7 +286,7 @@ personagent connect astrbot <AstrBot data 目录> --platform telegram --token <b
 
 完整说明见 `personagent connect --help`。
 
-**经 NapCat 接个人 QQ。** 想用个人 QQ 号而不是官方机器人时：NapCat 用这个号登录，连到 AstrBot 的 `aiocqhttp`（OneBot v11）适配器，反向 WebSocket 指向 `ws://127.0.0.1:6199/ws`。在 `personagent connect astrbot` 里选 QQ（或者带着文件夹加 `--qq`），会把 `aiocqhttp` 从插件的 `excluded_platforms` 里去掉，并设置 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`，让 QQ 会话保持同样的身份和记忆。NapCat 的 HTTP 服务（`QQ_ONEBOT_URL`）可开可不开；开着并设置了 `QQ_BOT_ID` 时，personagent 能补回离线期间漏掉的 @。[中文部署教程](deploy.zh-CN.md#第三方路线astrbot--napcat)里有这条路线的简要步骤。QQ 第三方协议客户端有封号风险，详见[免责声明](../DISCLAIMER.zh-CN.md)。
+**经 NapCat 接个人 QQ。** 想用个人 QQ 号而不是官方机器人时：NapCat 用这个号登录，连到 AstrBot 的 `aiocqhttp`（OneBot v11）适配器，反向 WebSocket 指向 `ws://127.0.0.1:6199/ws`。在 `personagent connect astrbot` 里选 QQ（或者带着文件夹加 `--qq`），会把 `aiocqhttp` 从插件的 `excluded_platforms` 里去掉，并设置 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`，让 QQ 会话保持同样的身份和记忆。NapCat 的 HTTP 服务（`QQ_ONEBOT_URL`）可开可不开；开着并设置了 `QQ_BOT_ID` 时，personagent 能补回离线期间漏掉的 @。[中文部署教程](deploy.zh-CN.md#第三方路线astrbot--napcat)里有这条路线的简要步骤。QQ 第三方协议客户端有封号风险，详见[免责声明](DISCLAIMER.zh-CN.md)。
 
 OneBot 直连入口（`/v1/onebot`）已废弃，1.x 期间保留。它要靠 `QQ_ONEBOT_URL` 发回复，还在用的话记得填上；看起来在用这条路却没填时，`personagent doctor` 会提醒。不要和 AstrBot 转发同时用，否则每条消息都会收到两次。
 
@@ -437,7 +437,7 @@ personagent 保存的一切都在你自己的机器上，在主目录里：存�
 - 模型决定查资料时，搜索词会发给 Tavily（设置了 `TAVILY_API_KEY` 时）或 DuckDuckGo。
 - 设置了 `EMBEDDING_MODEL` 时，正在回复的消息、记忆和检索用的示例会发给向量接口（`EMBEDDING_BASE_URL`，留空时为 `LLM_BASE_URL`）。
 
-接入真实聊天前，请告诉群友这是机器人，并征得他们同意处理其消息。详见[免责声明](../DISCLAIMER.zh-CN.md)。
+接入真实聊天前，请告诉群友这是机器人，并征得他们同意处理其消息。详见[免责声明](DISCLAIMER.zh-CN.md)。
 
 ## 常见问题
 
@@ -467,8 +467,8 @@ personagent 保存的一切都在你自己的机器上，在主目录里：存�
 
 personagent 1.2.1 已发布到 PyPI。QQ 是跑得最多的平台：1.0 经 AstrBot，1.1 起由 personagent 直接连接。微信、Telegram 和 Discord 的连接会拿凭据去真实服务核对，其余部分在模拟环境里测试；Satori 和 Matrix 连接器在模拟环境里测试。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有几项检查会安装软件包，并实际运行命令和本地页面。
 
-OneBot 直连入口（`/v1/onebot`）和 `launch.vbs` 已废弃，1.x 期间保留。`tools/` 里的脚本给源码版用，说明见[工具脚本](tools.md)（英文）。
+OneBot 直连入口（`/v1/onebot`）已废弃，1.x 期间保留。`tools/` 里的脚本给源码版用，说明见[工具脚本](tools.md)（英文）。
 
 - [简明入门](start.zh-CN.md) · [部署指南](deploy.md)（英文） · [中文部署教程：QQ 扫码直连和排查](deploy.zh-CN.md)
 - 连接器：[AstrBot 插件](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [协议](connectors.md)（后三个为英文）
-- [全部设置](../.env.example) · [更新日志](../CHANGELOG.md) · [贡献指南](../CONTRIBUTING.md) · [安全策略](../SECURITY.md)（英文）
+- [全部设置](../.env.example) · [更新日志](../CHANGELOG.md) · [贡献指南](../.github/CONTRIBUTING.md) · [安全策略](../.github/SECURITY.md)（英文）

@@ -108,7 +108,7 @@ def test_numeric_config_parser_is_bounded() -> None:
           parser("SERVER_PORT", "70000", 8080, minimum=1, maximum=65535) == 8080)
     check("numeric config: valid value accepted",
           parser("SERVER_PORT", "9000", 8080, minimum=1, maximum=65535) == 9000)
-    check("numeric config: main.py no longer has a second copy",
+    check("numeric config: the server has no second copy",
           not hasattr(main_module, "_parse_int_config"))
 
 
@@ -394,11 +394,9 @@ def test_every_setting_the_code_reads_is_in_the_template() -> None:
     `os.environ.get` and the `config_env` readers."""
     import ast
 
-    # `tools/` and the root entry points too: the tools read settings the
-    # operator puts in `.env`.
+    # `tools/` too: the tools read settings the operator puts in `.env`.
     root = Path(__file__).resolve().parents[1]
     sources = [
-        root / "main.py", root / "quickstart.py",
         *sorted((root / "persona_agent").glob("*.py")),
         *sorted((root / "tools").glob("*.py")),
     ]

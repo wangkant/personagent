@@ -39,7 +39,7 @@ them is a vulnerability.
   program on this machine. A request carrying `Origin`, a `Sec-Fetch-Site`
   other than `none`, a foreign `Host`, or a proxy header (`X-Forwarded-For`,
   `Forwarded`, `Via`, `X-Real-IP` and the others listed in
-  [docs/deploy.md](docs/deploy.md#exposing-the-endpoints)) is refused, which
+  [docs/deploy.md](../docs/deploy.md#exposing-the-endpoints)) is refused, which
   stops a web page or a tunnel from reaching them. A blank `SERVER_HOST` means
   `127.0.0.1`. A network bind (`SERVER_HOST=0.0.0.0`) will not start without
   `CONNECTOR_TOKEN`, and on it the deprecated `/v1/onebot` route is off
@@ -78,7 +78,7 @@ them is a vulnerability.
 
 - A model saying something wrong or rude.
 - Account restrictions on a chat platform that a connector causes; see
-  [DISCLAIMER.md](DISCLAIMER.md).
+  [DISCLAIMER.md](../docs/DISCLAIMER.md).
 - Anything that needs control of the machine or of `.env`, or a connector that
   already holds the token.
 - Denial of service by a connector that holds the token.
@@ -88,6 +88,6 @@ them is a vulnerability.
 
 ## Running it safely
 
-See [Exposing the endpoints](docs/deploy.md#exposing-the-endpoints) before you
+See [Exposing the endpoints](../docs/deploy.md#exposing-the-endpoints) before you
 reach it from another machine, and the guide's
-[privacy section](docs/guide.md#privacy-and-consent) for what to keep private.
+[privacy section](../docs/guide.md#privacy-and-consent) for what to keep private.

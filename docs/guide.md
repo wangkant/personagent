@@ -33,9 +33,9 @@ personagent
 | Run without installing | `uvx personagent` (comes with [uv](https://docs.astral.sh/uv/), which fetches Python for you) |
 | A permanent `personagent` command | `uv tool install personagent` or `pipx install personagent` |
 | Windows, from the source ZIP | unpack it and double-click `start.bat` |
-| From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python quickstart.py` |
+| From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `pip install -e .`, `personagent` |
 
-personagent runs on Python 3.10–3.14. `start.bat` and `quickstart.py` create `.venv`, install the dependencies and open the same page.
+personagent runs on Python 3.10–3.14. `start.bat` creates `.venv`, installs the dependencies (again whenever `pyproject.toml` changes) and opens the same page.
 
 The **home folder** holds the settings (`.env`), the character (`persona.txt`), what it learns (`runtime/`) and the chat platforms (`platforms/`: the managed AstrBot and `direct.json`, the credentials of the platforms personagent connects itself). It is the first of:
 
@@ -258,7 +258,7 @@ personagent connect astrbot <AstrBot data dir> --platform telegram --token <bot 
 
 `--platform` accepts `telegram`, `discord`, `slack`, `kook`, `lark` and `qq_official` (Slack also takes `--app-token`; Lark and QQ take `--app-id` and `--app-secret`). On an adapter already set up in AstrBot it changes only the credentials and keeps the rest, such as a proxy or base URL. `personagent connect --help` lists the rest.
 
-**QQ through NapCat.** For a personal QQ account instead of an official bot: NapCat logs in with the account and connects to AstrBot's `aiocqhttp` (OneBot v11) adapter, with its reverse WebSocket at `ws://127.0.0.1:6199/ws`. Choosing QQ in `personagent connect astrbot` (or passing `--qq` with a folder) removes `aiocqhttp` from the plugin's `excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory. NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional; with it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline. The [Chinese step-by-step guide](deploy.zh-CN.md#第三方路线astrbot--napcat) has a short section on this route. Third-party QQ clients put the account at risk; read the [disclaimer](../DISCLAIMER.md).
+**QQ through NapCat.** For a personal QQ account instead of an official bot: NapCat logs in with the account and connects to AstrBot's `aiocqhttp` (OneBot v11) adapter, with its reverse WebSocket at `ws://127.0.0.1:6199/ws`. Choosing QQ in `personagent connect astrbot` (or passing `--qq` with a folder) removes `aiocqhttp` from the plugin's `excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS=aiocqhttp`, so QQ chats keep the same identities and memory. NapCat's HTTP server (`QQ_ONEBOT_URL`) is optional; with it and `QQ_BOT_ID`, personagent catches up on mentions it missed while offline. The [Chinese step-by-step guide](deploy.zh-CN.md#第三方路线astrbot--napcat) has a short section on this route. Third-party QQ clients put the account at risk; read the [disclaimer](DISCLAIMER.md).
 
 The direct OneBot route (`/v1/onebot`) is deprecated and kept through 1.x. It replies through `QQ_ONEBOT_URL`, so set that if you still use it; `personagent doctor` warns when the route looks configured without it. Never run it alongside AstrBot forwarding, or every message arrives twice.
 
@@ -418,7 +418,7 @@ The model provider does see conversations:
 - When the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
 - With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples are sent to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
-Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](../DISCLAIMER.md).
+Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](DISCLAIMER.md).
 
 ## Troubleshooting
 
@@ -448,8 +448,8 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 personagent 1.2.1 is on PyPI. QQ is the most exercised platform, through AstrBot in 1.0 and directly since 1.1. The WeChat, Telegram and Discord connections check credentials against the real services and are otherwise tested against stand-ins; the Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus jobs that install the package and drive the command and the local page.
 
-Through 1.x, the direct OneBot route (`/v1/onebot`) and `launch.vbs` are deprecated but kept. The scripts in `tools/` are for running from a clone; [tools.md](tools.md) describes them.
+Through 1.x, the direct OneBot route (`/v1/onebot`) is deprecated but kept. The scripts in `tools/` are for running from a clone; [tools.md](tools.md) describes them.
 
 - [Getting started](start.md) · [Deployment guide](deploy.md) · [Chinese step-by-step guide (QQ by scan, and troubleshooting)](deploy.zh-CN.md)
 - Connectors: [AstrBot plugin](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [protocol](connectors.md)
-- [Every setting](../.env.example) · [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md)
+- [Every setting](../.env.example) · [Changelog](../CHANGELOG.md) · [Contributing](../.github/CONTRIBUTING.md) · [Security policy](../.github/SECURITY.md)

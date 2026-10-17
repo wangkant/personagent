@@ -1,14 +1,12 @@
-"""Setup and install edge cases: .env quoting, provider switches, AstrBot entries, commands, quickstart."""
+"""Setup and install edge cases: .env quoting, provider switches, AstrBot entries, commands."""
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
 from dotenv import dotenv_values
 
-import quickstart
 from persona_agent import setup_wizard as sw
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,20 +130,6 @@ def test_a_python_path_with_spaces_is_runnable_in_powershell(monkeypatch) -> Non
     monkeypatch.setenv("PROMPT", "$P$G")
     assert sw._program(path) == f'"{path}"', "cmd.exe takes the quoted path as it is"
     assert sw._program("C:\\py\\python.exe") == "C:\\py\\python.exe"
-
-
-def test_a_failed_pip_install_ends_with_advice_not_a_traceback(monkeypatch, tmp_path: Path) -> None:
-    def fail(cmd, **kw):
-        raise subprocess.CalledProcessError(1, cmd)
-
-    monkeypatch.setattr(quickstart.subprocess, "check_call", fail)
-    with pytest.raises(SystemExit) as stop:
-        quickstart.ensure_deps(tmp_path / ".venv")
-    assert "network" in str(stop.value) and "python quickstart.py" in str(stop.value)
-    monkeypatch.setattr(quickstart, "ROOT", tmp_path)
-    with pytest.raises(SystemExit) as stop:
-        quickstart.ensure_venv()
-    assert "python quickstart.py" in str(stop.value)
 
 
 def test_release_is_gated_on_main_and_the_tests() -> None:
