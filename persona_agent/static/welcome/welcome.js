@@ -863,18 +863,21 @@ function closedUpdate(version) {
   }
 }
 function renderUpdate() {
-  const update = state.update;
+  // The bar lives in the chat view, which a page still in setup does not show.
+  const update = state.configured ? state.update : null;
+  // Rewriting unchanged text on every poll would drop a selection in it.
+  const set = (id, text) => {
+    if ($(id).textContent !== text) $(id).textContent = text;
+  };
   $("update-link").hidden = !update;
   $("update-bar").hidden = !update || closedUpdate(update.version);
   if (!update) return;
-  $("update-link").textContent = t("updateLink", { version: update.version });
-  $("update-title").textContent = t("updateTitle", { version: update.version });
+  set("update-link", t("updateLink", { version: update.version }));
+  set("update-title", t("updateTitle", { version: update.version }));
   $("update-notes").href = update.url;
-  $("update-how").textContent = t(
-    !update.command ? "updateDownload" : update.opens ? "updateOpens" : "updateRun",
-  );
+  set("update-how", t(!update.command ? "updateDownload" : update.opens ? "updateOpens" : "updateRun"));
   $("update-command-row").hidden = !update.command;
-  $("update-command").textContent = update.command;
+  set("update-command", update.command);
   $("update-close").setAttribute("aria-label", t("close"));
 }
 function renderStatus() {

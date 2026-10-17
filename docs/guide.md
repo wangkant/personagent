@@ -58,7 +58,7 @@ This guide writes commands as `personagent ...`. Put `uvx` in front if you did n
 
 Running `personagent` again reuses the page that is already open. `--no-browser` prints the link instead of opening it.
 
-When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation (pip, uvx, uv tool, pipx or a Git clone), and the terminal prints the same line; closing the notice hides that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` say so too. The check asks pypi.org at most once a day, in the background; `UPDATE_CHECK_ENABLED=false` turns it off.
+When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation (pip, uvx, uv tool, pipx or a Git clone), and the terminal prints the same line; closing the notice hides it until the next start, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` say so too. The page and `up` ask pypi.org at most once a day, in the background; `doctor` asks then and there when the last answer is a day old. `UPDATE_CHECK_ENABLED=false` turns it off.
 
 The page starts the agent, and the connected platforms with it, in the background. Keep its window open while you use it. Whatever it started ends with it, however it ends: **Quit**, Ctrl+C or a closed window (a job object on Windows, a process group elsewhere). If an earlier run crashed and left something running, the next start stops it first.
 

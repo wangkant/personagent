@@ -71,6 +71,7 @@ def _free_port() -> int:
 def _env() -> dict:
     env = {k: v for k, v in os.environ.items() if not k.startswith(_SCRUBBED_PREFIXES)}
     env["PYTHONIOENCODING"] = "utf-8"
+    env["UPDATE_CHECK_ENABLED"] = "false"  # offline: no question to PyPI either
     return env
 
 

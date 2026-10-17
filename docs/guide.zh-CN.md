@@ -60,7 +60,7 @@ personagent
 
 再次运行 `personagent` 会复用已经打开的页面。加 `--no-browser` 只打印链接，不打开浏览器。
 
-PyPI 上有更新版本时，「开始聊天」上方会出现一条提示，给出适合你这种安装方式的更新命令（pip、uvx、uv tool、pipx 或 Git 克隆），终端里也会打印同样一行；关掉提示只隐藏这个版本，点版本号下面的「新版本 N」可以再打开。`personagent up` 和 `personagent doctor` 也会提醒。检查在后台进行，每天最多问 pypi.org 一次；`UPDATE_CHECK_ENABLED=false` 可以关掉。
+PyPI 上有更新版本时，「开始聊天」页里会出现一条提示，给出适合你这种安装方式的更新命令（pip、uvx、uv tool、pipx 或 Git 克隆），终端里也会打印同样一行；关掉后到下次启动前不再显示，点版本号下面的「新版本 N」可以再打开。`personagent up` 和 `personagent doctor` 也会提醒。页面和 `up` 在后台检查，每天最多问 pypi.org 一次；`doctor` 在上次结果超过一天时当场问一次。`UPDATE_CHECK_ENABLED=false` 可以关掉。
 
 页面会在后台启动 agent 和已连接的平台。使用期间保持它的窗口开着。它启动的进程都会随它一起结束，不管是点「退出」、按 Ctrl+C 还是直接关窗口（Windows 上用作业对象，其他系统用进程组）。如果上一次运行崩溃、留下了进程，下次启动时会先把它们停掉。
 

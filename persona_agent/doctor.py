@@ -23,6 +23,9 @@ service marked critical is down. Each service probe sends one tiny request
 with your credentials and spends a small amount of credit: safe to run while
 the agent is live, but not a no-op.
 
+When the last answer is a day old, it also asks pypi.org whether a newer
+personagent is out (UPDATE_CHECK_ENABLED=false skips that).
+
   --json    same checks, one JSON object on stdout instead of the table
   --fix     rename retired settings in .env to their new names (saves .env.bak)
 """
@@ -122,13 +125,14 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
 
 
 def update_notice() -> dict | None:
-    """A newer release on PyPI, asked now; None without one or with the check off."""
+    """A newer release on PyPI, asked now only when the last answer is stale;
+    None without one or with the check off."""
     from persona_agent import updates
 
     found = home.find_home()
     if not updates.enabled(found):
         return None
-    return updates.notice(found, updates.check(found))
+    return updates.notice(found, updates.check(found, timeout=10.0) if updates.stale(found) else None)
 
 
 def dashboard_link() -> str:

@@ -464,7 +464,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         services.start_direct()
         names = started + (["direct"] if services.running("direct") else [])
         print(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop.")
-        notice = updates.line(updates.notice(home))
+        notice = updates.line(updates.notice(home), sub="up")
         if notice:
             print(notice)
         direct_running = services.running("direct")

@@ -681,7 +681,7 @@ label.check input {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
-  white-space: nowrap;
+  white-space: pre;
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--fill);

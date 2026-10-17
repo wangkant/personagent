@@ -336,7 +336,9 @@ tunnel, even on one host.
   or the OneBot bridge when `QQ_BOT_ID` is set, `QQ_ONEBOT_URL` is set and
   `CONNECTOR_QQ_PLATFORMS` is not (QQ on the direct OneBot ingress).
 - `personagent doctor [--json]` runs the same probes plus the settings check,
-  and exits non-zero in the same case.
+  and exits non-zero in the same case. When the last update check is a day old
+  it also asks pypi.org for the newest version (`UPDATE_CHECK_ENABLED=false`
+  skips that).
 
 ## Costs
 
