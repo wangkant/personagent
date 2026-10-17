@@ -52,6 +52,14 @@ const translations = {
     invalid_feature: "这里有一项填得不对，检查一下密钥和平台。",
     gsTitle: "开始使用",
     gsPlatform: "连接一个平台",
+    updateLink: "新版本 {version}",
+    updateTitle: "personagent {version} 已发布",
+    updateNotes: "更新内容 ↗",
+    updateRun: "退出 personagent，运行下面这条命令，再重新打开。",
+    updateOpens: "退出 personagent，再用下面这条命令打开新版。",
+    updateDownload: "在更新内容页下载新版源码，解压后覆盖这个文件夹。",
+    copy: "复制",
+    copied: "已复制",
     close: "关闭",
     model: "模型名称",
     saveStart: "验证并开始聊天 →",
@@ -226,6 +234,14 @@ const translations = {
     invalid_feature: "Something here is not right; check the keys and apps.",
     gsTitle: "Getting started",
     gsPlatform: "Connect an app",
+    updateLink: "{version} available",
+    updateTitle: "personagent {version} is out",
+    updateNotes: "What's new ↗",
+    updateRun: "Quit personagent, run this command, then open it again.",
+    updateOpens: "Quit personagent, then open the new version with this command.",
+    updateDownload: "Download the new source from the release page and unpack it over this folder.",
+    copy: "Copy",
+    copied: "Copied",
     close: "Close",
     model: "Model name",
     saveStart: "Verify & start chatting →",
@@ -835,10 +851,37 @@ function renderGettingStarted() {
     !state.configured || state.platforms.length > 0 || closedGettingStarted();
   $("gs-close").setAttribute("aria-label", t("close"));
 }
+// ---- a newer release on PyPI; closing its notice hides that version only
+const UPDATE_KEY = "personagent-update-closed";
+let updateClosed = "";
+function closedUpdate(version) {
+  if (updateClosed === version) return true;
+  try {
+    return localStorage.getItem(UPDATE_KEY) === version;
+  } catch {
+    return false;
+  }
+}
+function renderUpdate() {
+  const update = state.update;
+  $("update-link").hidden = !update;
+  $("update-bar").hidden = !update || closedUpdate(update.version);
+  if (!update) return;
+  $("update-link").textContent = t("updateLink", { version: update.version });
+  $("update-title").textContent = t("updateTitle", { version: update.version });
+  $("update-notes").href = update.url;
+  $("update-how").textContent = t(
+    !update.command ? "updateDownload" : update.opens ? "updateOpens" : "updateRun",
+  );
+  $("update-command-row").hidden = !update.command;
+  $("update-command").textContent = update.command;
+  $("update-close").setAttribute("aria-label", t("close"));
+}
 function renderStatus() {
   if (!state) return;
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
+  renderUpdate();
   $("service-status").textContent = t(
     state.agentRunning ? "running" : "localReady",
   );
@@ -1041,6 +1084,30 @@ $("gs-close").addEventListener("click", () => {
   } catch {}
   gettingStartedClosed = true;
   $("getting-started").hidden = true;
+});
+$("update-link").addEventListener("click", () => {
+  updateClosed = "";
+  try {
+    localStorage.removeItem(UPDATE_KEY);
+  } catch {}
+  showView("chat");
+  renderUpdate();
+});
+$("update-close").addEventListener("click", () => {
+  updateClosed = state.update ? state.update.version : "";
+  try {
+    localStorage.setItem(UPDATE_KEY, updateClosed);
+  } catch {}
+  $("update-bar").hidden = true;
+});
+$("update-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("update-command").textContent);
+    $("update-copy").textContent = t("copied");
+    setTimeout(() => ($("update-copy").textContent = t("copy")), 2000);
+  } catch {
+    getSelection().selectAllChildren($("update-command"));
+  }
 });
 $("features-card").addEventListener("input", () => (featuresDirty = true));
 $("features-card").addEventListener("change", () => (featuresDirty = true));

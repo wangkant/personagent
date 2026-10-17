@@ -641,6 +641,54 @@ label.check input {
   margin-left: auto;
   font-size: 16px;
 }
+.update-link {
+  flex-basis: 100%;
+  margin-left: 14px;
+  text-align: left;
+  font-size: 11px;
+  color: var(--ok);
+}
+.update-link:hover {
+  text-decoration: underline;
+}
+.update-bar {
+  margin-top: 12px;
+  padding: 6px 8px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--side);
+  font-size: 13px;
+}
+.update-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.update-head strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.update-bar p {
+  margin: 4px 0 8px;
+  color: var(--muted);
+}
+.update-command {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.update-command code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--ink);
+  font: 12px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  user-select: all;
+}
 .chat-page {
   height: calc(100vh - 48px);
   padding-top: 16px;

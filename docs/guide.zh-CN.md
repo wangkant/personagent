@@ -60,6 +60,8 @@ personagent
 
 再次运行 `personagent` 会复用已经打开的页面。加 `--no-browser` 只打印链接，不打开浏览器。
 
+PyPI 上有更新版本时，「开始聊天」上方会出现一条提示，给出适合你这种安装方式的更新命令（pip、uvx、uv tool、pipx 或 Git 克隆），终端里也会打印同样一行；关掉提示只隐藏这个版本，点版本号下面的「新版本 N」可以再打开。`personagent up` 和 `personagent doctor` 也会提醒。检查在后台进行，每天最多问 pypi.org 一次；`UPDATE_CHECK_ENABLED=false` 可以关掉。
+
 页面会在后台启动 agent 和已连接的平台。使用期间保持它的窗口开着。它启动的进程都会随它一起结束，不管是点「退出」、按 Ctrl+C 还是直接关窗口（Windows 上用作业对象，其他系统用进程组）。如果上一次运行崩溃、留下了进程，下次启动时会先把它们停掉。
 
 ## 先看演示
@@ -424,6 +426,8 @@ personagent eval --suite all --lang zh --limit 6
 personagent 保存的一切都在你自己的机器上，在主目录里：存着密钥的 `.env`、`persona.txt`、`persona.card.json`、`runtime/`，以及存着平台凭据的 `platforms/`。源码版里这些文件不会提交到 Git。它们可能包含密钥和真实对话，请备份并妥善保管。本地页面从不把 Key 写进浏览器存储。
 
 管理面板只能通过带令牌的专用链接打开（见[管理面板](#管理面板)）；谁拿到链接、又能连上服务，谁就能用，所以链接要像 `.env` 一样保管好。面板从不显示 API Key 和 token。`DASHBOARD_ENABLED=false` 可以关掉它。
+
+本地页面、`personagent up` 和 `personagent doctor` 每天会向 pypi.org 查一次最新版本号，请求里只带 personagent 自己的版本号，不带别的。`UPDATE_CHECK_ENABLED=false` 可以关掉。
 
 模型供应商会看到对话内容：
 

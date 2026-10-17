@@ -58,6 +58,8 @@ This guide writes commands as `personagent ...`. Put `uvx` in front if you did n
 
 Running `personagent` again reuses the page that is already open. `--no-browser` prints the link instead of opening it.
 
+When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation (pip, uvx, uv tool, pipx or a Git clone), and the terminal prints the same line; closing the notice hides that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` say so too. The check asks pypi.org at most once a day, in the background; `UPDATE_CHECK_ENABLED=false` turns it off.
+
 The page starts the agent, and the connected platforms with it, in the background. Keep its window open while you use it. Whatever it started ends with it, however it ends: **Quit**, Ctrl+C or a closed window (a job object on Windows, a process group elsewhere). If an earlier run crashed and left something running, the next start stops it first.
 
 ## See it first: the demo
@@ -405,6 +407,8 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 Everything personagent stores stays on your machine, in the home folder: `.env` with your keys, `persona.txt`, `persona.card.json`, `runtime/` and `platforms/` with the platform credentials. In a clone none of it is committed to Git. It can hold credentials and real conversations, so back it up and keep it private. The local page never puts the key in browser storage.
 
 The dashboard opens only through its private link with the token (see [the dashboard](#the-dashboard)); anyone who has the link and can reach the service can use it, so keep the link as private as `.env`. It never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
+
+Once a day the local page, `personagent up` and `personagent doctor` ask pypi.org for the newest version number; the request carries personagent's own version and nothing else. `UPDATE_CHECK_ENABLED=false` stops it.
 
 The model provider does see conversations:
 

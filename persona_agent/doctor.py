@@ -75,6 +75,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             "retired_settings": [{"old": o, "new": n, "where": w} for o, n, w in retired],
             "services": results,
             "dashboard": dashboard_link(),
+            "update": update_notice(),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     print("=" * 64)
@@ -113,7 +114,21 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     link = dashboard_link()
     if link:
         print(f"dashboard: {link}")
+    from persona_agent.updates import line
+    notice = line(update_notice())
+    if notice:
+        print(notice)
     return 0 if services_ok and not retired else 1
+
+
+def update_notice() -> dict | None:
+    """A newer release on PyPI, asked now; None without one or with the check off."""
+    from persona_agent import updates
+
+    found = home.find_home()
+    if not updates.enabled(found):
+        return None
+    return updates.notice(found, updates.check(found))
 
 
 def dashboard_link() -> str:

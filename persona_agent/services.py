@@ -440,7 +440,9 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     if not env_get(home / ".env", "LLM_API_KEY"):
         print("Open personagent start to finish setup first.")
         return 2
+    from . import updates
     from .setup_wizard import connect_astrbot
+    updates.refresh_soon(home)
     stopped = stop_leftovers(home)
     if stopped:
         print(f"Stopped what an earlier personagent left running: {', '.join(stopped)}.")
@@ -462,6 +464,9 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         services.start_direct()
         names = started + (["direct"] if services.running("direct") else [])
         print(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop.")
+        notice = updates.line(updates.notice(home))
+        if notice:
+            print(notice)
         direct_running = services.running("direct")
         # The direct process ends on its own when every platform in it was
         # refused; the agent and AstrBot keep running without it.

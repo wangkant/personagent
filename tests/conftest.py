@@ -21,6 +21,12 @@ def _no_bare_call_wait(request: pytest.FixtureRequest,
         monkeypatch.setattr("persona_agent.turns.BARE_CALL_DEBOUNCE_S", 0.0)
 
 
+@pytest.fixture(autouse=True)
+def _no_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test asks PyPI; tests/test_updates.py turns the check back on."""
+    monkeypatch.setenv("UPDATE_CHECK_ENABLED", "false")
+
+
 @pytest.fixture
 def tmp(tmp_path: Path) -> Path:
     """The per-test scratch directory the suites take as `tmp`.

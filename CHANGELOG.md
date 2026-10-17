@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **personagent says when a newer version is out.** The local page, `personagent up` and `personagent doctor` ask pypi.org at most once a day, in the background, and an hour later after a failed attempt. The Chat view then shows a notice with the command for how this copy was installed (pip, uvx, uv tool, pipx, or `git pull` in a clone), with a link to the release notes; closing it hides that version, and the sidebar keeps a link to bring it back. The terminal prints the same line. The request carries only personagent's version number, and `UPDATE_CHECK_ENABLED=false` turns the check off.
+
 ## [1.2.1] — 2026-10-17
 
 The AstrBot plugin comes as a zip on each GitHub Release instead of from a repository of its own, and the README is shorter.

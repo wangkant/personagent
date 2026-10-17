@@ -30,7 +30,8 @@
         <div class="sidebar-bottom">
           <span class="local-dot"></span
           ><span data-t="local">运行在你的电脑上</span
-          ><small id="version"></small>
+          ><small id="version"></small
+          ><button type="button" class="update-link" id="update-link" hidden></button>
         </div>
       </aside>
       <main>
@@ -277,6 +278,19 @@
               <span class="gs-check" aria-hidden="true"></span
               ><span data-t="gsPlatform">连接一个平台</span></button
             ><button type="button" class="quiet gs-close" id="gs-close">×</button>
+          </div>
+          <div id="update-bar" class="update-bar" role="status" hidden>
+            <div class="update-head">
+              <strong id="update-title"></strong
+              ><a id="update-notes" target="_blank" rel="noopener noreferrer" data-t="updateNotes"
+                >更新内容 ↗</a
+              ><button type="button" class="quiet gs-close" id="update-close">×</button>
+            </div>
+            <p id="update-how"></p>
+            <div class="update-command" id="update-command-row">
+              <code id="update-command"></code
+              ><button type="button" class="quiet" id="update-copy" data-t="copy">复制</button>
+            </div>
           </div>
           <div id="messages" role="log" aria-live="polite">
             <div class="chat-empty" id="chat-empty">

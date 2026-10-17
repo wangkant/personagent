@@ -28,6 +28,7 @@ from . import connections as conn
 from . import direct
 from .direct import base as direct_base
 from . import setup_wizard as sw
+from . import updates
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
 from .settings import normalize_lang
@@ -110,7 +111,9 @@ class Workspace:
                                     else "running" if state == "connected" else "connecting")
                 else:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
-            return {"version": __version__, "configured": bool(values.get("LLM_API_KEY")),
+            updates.refresh_soon(self.home)
+            return {"version": __version__, "update": updates.notice(self.home),
+                    "configured": bool(values.get("LLM_API_KEY")),
                     "provider": known.key if known else ("other" if values.get("LLM_BASE_URL") else "deepseek"),
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
@@ -783,6 +786,9 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         url = f"http://127.0.0.1:{port}/#token={token}"
         atomic_write_text(info, json.dumps({"url": url}))
         print(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop.", flush=True)
+        notice = updates.line(updates.notice(home))
+        if notice:
+            print(notice, flush=True)
         if not args.no_browser:
             timer = threading.Timer(0.8, webbrowser.open, args=(url,))
             timer.daemon = True

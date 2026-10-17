@@ -135,7 +135,7 @@ personagent 自带、而它们交给插件或文档里没写的：从别人对�
 
 ## 隐私
 
-personagent 存的一切都在你自己机器上的一个主目录里：放 Key 的 `.env`、`persona.txt`、`runtime/`，以及放托管 AstrBot 和直连平台凭据的 `platforms/`。模型服务商会看到对话内容；接入真实的群之前，请告诉群友这是机器人，并征得他们同意。哪些内容会发给谁，见[使用手册的隐私一节](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#隐私与知情同意)。
+personagent 存的一切都在你自己机器上的一个主目录里：放 Key 的 `.env`、`persona.txt`、`runtime/`，以及放托管 AstrBot 和直连平台凭据的 `platforms/`。模型服务商会看到对话内容；personagent 每天会向 pypi.org 查一次有没有新版本（`UPDATE_CHECK_ENABLED=false` 可以关掉）；接入真实的群之前，请告诉群友这是机器人，并征得他们同意。哪些内容会发给谁，见[使用手册的隐私一节](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#隐私与知情同意)。
 
 ## 项目状态
 
