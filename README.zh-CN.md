@@ -79,9 +79,9 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`；克隆了仓�
 | 粘贴一两项 | Telegram、Discord、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说复制哪一项 |
 | 高级 | 企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公网地址，或本机的其他软件 |
 
-填的内容先校验，通过才保存；连好的平台以后每次打开页面都会自动连上。QQ、微信、Telegram、Discord 由 personagent 直接连接，其余平台经它在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入，不用另外打开什么。在服务器上不开浏览器的话，`personagent up` 会启动角色和所有连好的平台。
+填的内容先校验，通过才保存；连好的平台以后每次启动 personagent 都会自动连上。QQ、微信、Telegram、Discord 由 personagent 直接连接，其余平台经它在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入，不用另外打开什么。在服务器上不开浏览器的话，`personagent up` 会启动角色和所有连好的平台。
 
-**已经在用别的机器人框架？** 自己部署的 AstrBot，运行 `personagent connect astrbot` 就会装好插件、配好口令；AstrBot 在别的机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在它插件页的「从文件安装」上传。[Koishi](https://koishi.chat) 经 [Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md)（英文）接入，[Matrix](https://matrix.org)（可经 mautrix 桥接 WhatsApp、Signal）经 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md)（英文）接入。
+**已经在用 AstrBot、Koishi 或 Matrix？** 这台电脑上的 AstrBot，运行 `personagent connect astrbot` 就会装好插件、配好口令。AstrBot 在别的机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在它插件页的「从文件安装」上传，再按下面的手册填好口令和 personagent 的 HTTPS 地址。[Koishi](https://koishi.chat) 经 [Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md)（英文）接入，[Matrix](https://matrix.org)（可经 mautrix 桥接 WhatsApp、Signal）经 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md)（英文）接入。
 
 具体做法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）；[中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)从零讲 QQ，每一步都写明会看到什么。
 
@@ -147,6 +147,6 @@ personagent 存的一切都在你自己机器上的一个主目录里：放 Key 
 
 ## 致谢
 
-- 平台接入靠 [AstrBot](https://github.com/AstrBotDevs/AstrBot)、[NapCat](https://github.com/NapNeko/NapCatQQ)、[Koishi](https://koishi.chat) 与 [satori-python](https://github.com/RF-Tar-Railt/satori-python)、[matrix-nio](https://github.com/matrix-nio/matrix-nio) 与 [mautrix 桥接](https://docs.mau.fi/bridges/)；微信直连依据腾讯的 [openclaw-weixin 协议说明](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md)。
-- 本地页面的平台图标来自 [Simple Icons](https://github.com/simple-icons/simple-icons)、[SVG Logos](https://github.com/gilbarbara/logos)、[IconPark](https://github.com/bytedance/IconPark)、[MingCute](https://github.com/Richard9394/MingCute) 和 [TDesign Icons](https://github.com/Tencent/tdesign-icons)，商标归各自所有者。
+- 其余平台接入靠 [AstrBot](https://github.com/AstrBotDevs/AstrBot)、[NapCat](https://github.com/NapNeko/NapCatQQ)、[Koishi](https://koishi.chat) 与 [satori-python](https://github.com/RF-Tar-Railt/satori-python)、[matrix-nio](https://github.com/matrix-nio/matrix-nio) 与 [mautrix 桥接](https://docs.mau.fi/bridges/)；微信直连依据腾讯的 [openclaw-weixin 协议说明](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol.md)。
+- 本地页面的平台图标来自 [Simple Icons](https://github.com/simple-icons/simple-icons)、[SVG Logos](https://github.com/gilbarbara/logos)、[IconPark](https://github.com/bytedance/IconPark)、[MingCute](https://github.com/Richard9394/MingCute) 和 [TDesign Icons](https://github.com/Tencent/tdesign-icons)，以及 KOOK 和 OneBot 自己的图标，商标归各自所有者。
 - 从反应中学习借鉴了 [Self-Feeding Chatbot](https://arxiv.org/abs/1901.05415)、[Alexa self-learning](https://arxiv.org/abs/1911.02557) 和 [BlenderBot 3x](https://arxiv.org/abs/2306.04707)；世界书参考了 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的 World Info。

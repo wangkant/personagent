@@ -299,7 +299,7 @@ order, so a release page never advertises a version PyPI lacks:
    repository of its own.
 
 Running the workflow by hand from a branch only builds the files and uploads
-them as an artifact; run it from a tag to release. PyPI must have a trusted
+them as artifacts; run it from a tag to release. PyPI must have a trusted
 publisher for this repository (owner `wangkant`, repository `personagent`,
 workflow `release.yml`, environment `pypi`); that is set up once, on pypi.org.
 

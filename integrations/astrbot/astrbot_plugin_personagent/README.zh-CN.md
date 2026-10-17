@@ -34,7 +34,7 @@ personagent connect astrbot
 
 不想回答问题的话：`personagent connect astrbot <data 文件夹>`，要经 NapCat 接 QQ 再加 `--qq`。这样第一次白名单是空的，要在 AstrBot 的网页里自己填 `groups`（群）和 `dm_users`（允许私聊的人）。
 
-也可以从 personagent 的[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，再把 `connector_token` 设成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`，并填好白名单。升级时上传新版 zip 即可（AstrBot 4.29 起会直接替换旧版）。
+也可以从 personagent 的[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，再把 `connector_token` 设成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`，并填好白名单；AstrBot 和 personagent 不在同一台电脑上时，`personagent_url` 要填 HTTPS 地址（见下面「AstrBot 在 Docker 里」）。升级时上传新版 zip：AstrBot 4.29 起会直接替换旧版，更早的版本先卸载旧插件（别勾「同时删除插件配置文件」）。
 
 手动安装：把本文件夹复制到 `<AstrBot data>/plugins/astrbot_plugin_personagent/`，重启 AstrBot，在网页里填设置。
 

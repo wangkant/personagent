@@ -263,7 +263,7 @@ LINE 暂不提供，因为 AstrBot 只能经它的管理后台接收 LINE 的回
 
 其他平台可以按[连接器协议](connectors.md)（英文）接入：每条消息一个签名的 HTTP 请求。一个 personagent 可以同时接多个连接器。长期运行要注意的事见[部署指南](deploy.md)（英文）。
 
-**你已经在运行的 AstrBot。** AstrBot 通过一个小插件 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) 把消息交给 personagent，插件随 personagent 一起安装（托管的 AstrBot 会自动装上）。`personagent connect astrbot` 会找到你的 AstrBot（也可以把它的文件夹作为参数传进去），装好插件，在两边写入同一个 `CONNECTOR_TOKEN`，再问要放行哪些群（在群里发 `/sid` 能看到群 ID）。AstrBot 在另一台机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，再把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`。然后运行 `personagent run`，重启 AstrBot 或重载插件。升级 personagent 后，重新运行一次 `connect astrbot`，或上传新版 zip（AstrBot 4.29 起会直接替换旧版）。
+**你已经在运行的 AstrBot。** AstrBot 通过一个小插件 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.zh-CN.md) 把消息交给 personagent，插件随 personagent 一起安装（托管的 AstrBot 会自动装上）。`personagent connect astrbot` 会找到你的 AstrBot（也可以把它的文件夹作为参数传进去），装好插件，在两边写入同一个 `CONNECTOR_TOKEN`，再问要放行哪些群（在群里发 `/sid` 能看到群 ID）。AstrBot 在另一台机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页的「从文件安装」上传，把插件设置里的 `connector_token` 填成 personagent 的 `.env` 里的 `CONNECTOR_TOKEN`，`personagent_url` 填成 personagent 的 HTTPS 地址（见下面「AstrBot 跑在 Docker 里或另一台机器上」）。然后运行 `personagent run`，重启 AstrBot 或重载插件。升级 personagent 后，重新运行一次 `connect astrbot`，或上传新版 zip：AstrBot 4.29 起会直接替换旧版；更早的版本要先卸载旧插件，卸载时别勾「同时删除插件配置文件」，设置就会保留。
 
 插件只转发 `groups` 里列出的群，私聊只转发 `dm_users` 里的人，两项都可以在 AstrBot 的 WebUI 里改。改了 `.env` 要重启 personagent，改了平台或插件要重启 AstrBot。
 
@@ -288,7 +288,7 @@ personagent connect astrbot <AstrBot data 目录> --platform telegram --token <b
 
 OneBot 直连入口（`/v1/onebot`）已废弃，1.x 期间保留。它要靠 `QQ_ONEBOT_URL` 发回复，还在用的话记得填上；看起来在用这条路却没填时，`personagent doctor` 会提醒。不要和 AstrBot 转发同时用，否则每条消息都会收到两次。
 
-**AstrBot 跑在 Docker 里或另一台机器上。** 插件只会发往同一台机器（或共享网络的容器），或者设置了 `connector_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe personagent_url`，随后由 AstrBot 自己的模型回复。解决办法有两个：给 AstrBot 容器开 host 网络（compose 文件里写 `network_mode: host`，`docker run` 用 `--network host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，用 `--url https://...` 传入。同一个 compose 文件里的 NapCat 容器也要开 host 网络。
+**AstrBot 跑在 Docker 里或另一台机器上。** 插件只会发往同一台机器（或共享网络的容器），或者设置了 `connector_token` 的 HTTPS 地址。发往其他地方的明文 `http://`（例如 `http://host.docker.internal:8080`）会被拒绝，日志记为 `refusing unsafe personagent_url`，随后由 AstrBot 自己的模型回复。解决办法有两个：给 AstrBot 容器开 host 网络（compose 文件里写 `network_mode: host`，`docker run` 用 `--network host`；Docker Desktop 4.34 及以上还要打开 “Enable host networking”），或者给 personagent 一个 HTTPS 地址，填进插件的 `personagent_url`（`connect astrbot --url https://...` 会替你写好）。同一个 compose 文件里的 NapCat 容器也要开 host 网络。
 
 personagent 默认监听 `127.0.0.1:8080`（`SERVER_HOST` 留空也是这个）。要监听网络地址（`--host 0.0.0.0` 或 `SERVER_HOST`），必须设置 `CONNECTOR_TOKEN`。加反向代理或隧道之前就先把它设好，哪怕都在一台机器上：隧道会让外面来的请求看起来像本机发的。其余要求见[暴露服务地址](deploy.md#exposing-the-endpoints)（英文）。
 

@@ -87,8 +87,12 @@ Download `astrbot_plugin_personagent.zip` from the
 [latest personagent release](https://github.com/wangkant/personagent/releases/latest)
 and upload it under **Install from File** on AstrBot's plugin page. Then set
 `connector_token` to the `CONNECTOR_TOKEN` in personagent's `.env`, and fill
-the allowlists as below. To update, upload the newer release's zip the same
-way (AstrBot 4.29 and later replace the installed copy).
+the allowlists as below. When AstrBot is not on the same computer as
+personagent, `personagent_url` must be an HTTPS address (see
+[Where the agent can run](#where-the-agent-can-run)). To update, upload the
+newer release's zip the same way: AstrBot 4.29 and later replace the
+installed copy, and on older versions you uninstall it first, leaving
+**Also delete plugin configuration file** unticked.
 
 ### By hand
 
