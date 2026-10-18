@@ -395,27 +395,30 @@ The local page answers only on this computer. On a server without the local page
 
 ## Measure it
 
-`personagent eval` runs the real agent on labelled cases in English and Chinese (`data/evals/`). It writes a JSON report with every case and its verdict to `benchmark_runs/` in the home folder, or to the path you give with `--out`.
+`personagent eval` runs the real agent on labelled cases in English and Chinese (`data/evals/`). It writes a JSON report with every case, reply and verdict to `benchmark_runs/` in the home folder, or to the path you give with `--out`.
 
 | Suite | Measures |
 |---|---|
-| `speak` | Whether it talks when it should: accuracy, speaking when it should stay quiet, and staying quiet when it should speak (24 cases per language) |
-| `persona` | Whether it sounds like the character: a judge model scores each reply, flags assistant phrasing, and picks blind between its reply and a plain assistant's from the same model (18 cases) |
-| `learning` | Whether the promotion rule decides as expected, and whether a promoted correction changes the next reply in that chat (10 scenarios per language, including a troll, a bystander, a bystander the bot asks back, and a correction the person walks away from) |
+| `speak` | Whether it talks when it should. 60 group-chat moments per language: 20 where nobody names it, 20 right after it spoke, and 20 where its name appears, half of each labelled quiet. Many of the quiet ones name it in passing: a wifi called Nova-5G, a remark about it to someone else. No judge: a reply is right or wrong against the label. |
+| `persona` | Whether personagent plays the character better than the same model given only the character text as its system prompt. 40 moments per language, 22 in a group and 18 in DMs. A judge model sees both replies blind, once with each reply first. A reply wins when both picks agree on it; when they disagree, the moment is a split and counts half. |
+| `learning` | Whether the promotion rule decides as expected, and whether a promoted correction changes a later reply in that chat. 20 scenarios per language. Some teach a group convention the model can't guess, such as what the group calls a place. Others must be held: a bystander's correction, a troll's, one the person walks away from. A probe message runs before and after each correction, and the judge says whether the reply follows the taught behaviour. |
 
 ```bash
 personagent eval --suite speak
-personagent eval --suite all --lang zh --limit 6
+personagent eval --suite all --lang zh --repeat 5
 ```
+
+`--repeat N` tries every case N times, each time in a fresh deployment, so you can see how much a result moves between tries. The 95% intervals count each case once: five tries of 60 cases are still 60 cases' worth of evidence. `--limit N` runs N cases per suite, spread across modes and labels.
 
 The persona and learning suites need a judge model that differs from the model being measured. Set `BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it. Without a separate judge, these suites refuse to run. `--allow-same-judge` runs them anyway and marks the report. The learning suite never promotes anything itself, and its expectations follow your promotion settings. Under a policy stricter than the defaults, every scenario is expected to be held. Every run calls your models and works on a throwaway copy of the state. `--keep` keeps the copy and prints where it is.
 
-The latest published results are in the [README](../README.md#measured). The reports behind them, with every case, reply and verdict, are in [evals/2026-10-03](evals/2026-10-03). Some notes on reading them:
+`--rejudge REPORT` judges a kept report's replies again with the `BENCH_JUDGE_MODEL` you set now, without calling the model under test, and writes the result beside the original. The replies, the baselines and what the promotion policy did stay as they were. Judges disagree more than you might expect, so this is a cheap way to check a result.
 
-- Most misses in `speak` are lines that mention the bot's name in passing, such as "the wifi is called Nova-5G now". A name counts as a call, so it answers.
-- With this judge, the 1–5 rubric scores were all at the ceiling, so the results leave them out.
-- The learning probes show little, because the model already answered most of them in character before any correction. The corrections row is the one that matters. It promoted every correction that held up and none of the troll, bystander or walk-away cases.
-- One run on one model is a sample, so expect some variation between runs. The persona report gives its 95% interval.
+The latest published results are in the [README](../README.md#measured). The reports behind them, with every case, every reply and both judges' verdicts, are in [evals/2026-10-18](evals/2026-10-18). A few notes on reading them:
+
+- In `speak`, most misses are lines where its name means something else, such as a cinema or a puppy, or where someone tells someone else what it said. A name counts as a call, and the model seldom overrides that.
+- In `persona`, a split means the judge picked whichever reply came first (or second) both times. The published verdicts are Claude Opus 5.5's. It judged outside `personagent eval`, in batches, as each report's `rejudged` field records. Each pair's `earlier` field keeps the verdict of the first judge, Claude Haiku 5.5.
+- In `learning`, the policy row and the probe rows answer different questions. The policy row asks whether the rule promoted the right corrections. The probe rows ask whether a promoted correction changed a later reply. The `not_promoted` probe row is the noise floor, since nothing about its prompt changed.
 
 ## How it works
 

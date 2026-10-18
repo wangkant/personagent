@@ -26,6 +26,8 @@ from helpers import check
 ENV = {"LLM_API_KEY": "stub-key", "LLM_MODEL": "model-under-test",
        "BENCH_JUDGE_MODEL": "judge-model", "AGENT_LANG": "en"}
 CHECKOUT_ROOT = paths.ROOT
+# The baseline's whole system prompt: the character, as the eval prepares it.
+CHARACTER = be.prepare_persona(be.load_persona("en")[0], be.DEFAULT_NAMES["en"])
 
 
 def _runtime_listing() -> list[str]:
@@ -72,7 +74,7 @@ def stub_models(monkeypatch, *, speak: bool = True, reply=None,
         if not system:
             calls.append(("adjudicate", where))
             return json.dumps(adjudicate(user))
-        if system.startswith("You are a helpful assistant"):
+        if system == CHARACTER:
             calls.append(("baseline", where))
             return baseline
         if kw.get("temperature") == 0.3:
@@ -180,6 +182,21 @@ def test_speak_metrics_count_a_false_speak_and_a_false_silence() -> None:
     check("overall", m["overall"]["n"] == 4 and m["overall"]["correct"] == 2
           and m["overall"]["false_speak_rate"] == 0.5
           and m["overall"]["false_silence_rate"] == 0.5, str(m["overall"]))
+    check("name_only: a bot that answers exactly when named",
+          m["name_only"]["n"] == 5 and m["name_only"]["correct"] == 3, str(m["name_only"]))
+
+
+def test_repeats_never_shrink_the_interval() -> None:
+    rows = [{"id": f"c{i}", "mode": "judge", "label": "speak", "spoke": True, "trial": t}
+            for i in range(10) for t in range(5)]
+    m = be.speak_metrics(rows)["overall"]
+    check("fifty tries of ten cases are ten cases' worth of evidence",
+          m["n"] == 50 and m["ci95"] == be.wilson(10, 10), str(m))
+    check("every case right on every try",
+          m["stability"] == {"cases": 10, "always": 10, "never": 0, "mixed": 0})
+    rows[0]["spoke"] = False
+    st = be.speak_metrics(rows)["overall"]["stability"]
+    check("one wrong try makes that case mixed", st["mixed"] == 1 and st["always"] == 9, str(st))
 
 
 def test_learning_outcomes_and_the_interval() -> None:
@@ -247,46 +264,109 @@ async def test_speak_suite_needs_no_judge(tmp, monkeypatch, homes) -> None:
     check("no judge was configured", report["models"]["judge_model"] is None)
 
 
-async def test_persona_suite_rates_and_picks_blind(tmp, monkeypatch, homes) -> None:
+async def test_every_try_runs_in_a_fresh_deployment(tmp, monkeypatch, homes) -> None:
+    calls = stub_models(monkeypatch, speak=True, reply="lol same")
+    report = await be.run(_args(tmp, "--suite", "speak", "--limit", "6",
+                                "--repeat", "3"), env=ENV)
+    rows = report["suites"]["speak"]["cases"]
+    check("six cases, three tries each",
+          len(rows) == 18 and Counter(r["trial"] for r in rows) == {0: 6, 1: 6, 2: 6})
+    check("one deployment per try", len({h.resolve() for h in homes}) == 3, str(homes))
+    m = report["suites"]["speak"]["metrics"]["overall"]
+    check("the interval counts six cases", m["stability"]["cases"] == 6
+          and m["ci95"] == be.wilson(m["accuracy"] * 6, 6), str(m))
+    check("the report records the tries and the dataset version",
+          report["repeat"] == 3 and len(report["datasets"]["speak"]) == 12
+          and report["version"])
+    check("the shipped persona is named as shipped, not by where it lives",
+          report["persona"]["source"] == "data/persona.example.en.txt",
+          report["persona"]["source"])
+    _isolated("repeat", calls, homes)
+
+
+async def test_persona_suite_judges_both_orders_against_the_character_prompt(
+        tmp, monkeypatch, homes) -> None:
     calls = stub_models(monkeypatch, reply="ha same, happens to me",
                         baseline="Certainly! Here are some tips:\n1. Practice daily.")
 
     def verdict(prompt: str) -> dict:
-        if "Which reply is the character's" in prompt:
-            a = prompt.split("Reply A:")[1].split("Reply B:")[0]
-            return {"pick": "A" if "ha same" in a else "B", "reason": "casual"}
-        dm = "one-on-one chat" in prompt
-        return {"in_character": 4, "not_assistant": 5, "natural_length": 3,
-                "tells": ["over_explaining", "not_a_tell"] if dm else [],
-                "reason": "ok"}
+        a = prompt.split("Reply A:")[1].split("Reply B:")[0]
+        return {"pick": "A" if "ha same" in a else "B", "reason": "casual"}
     prompts = stub_judge(monkeypatch, verdict)
     report = await be.run(_args(tmp, "--suite", "persona", "--limit", "4"), env=ENV)
     s = report["suites"]["persona"]
     m = s["metrics"]
     check("four cases, two per channel",
           Counter(c["channel"] for c in s["cases"]) == {"group": 2, "dm": 2})
-    check("every case answered", m["answered"] == 4 and m["no_reply"] == 0, str(m))
-    check("rubric mean is the mean of the three criteria",
-          m["rubric"]["n"] == 4 and m["rubric"]["mean"] == 4.0
-          and m["rubric"]["natural_length"] == 3.0, str(m["rubric"]))
-    check("tell rate counts replies with a listed tell, unknown names dropped",
-          m["tells"]["rate"] == 0.5 and m["tells"]["counts"] == {"over_explaining": 2},
-          str(m["tells"]))
-    check("pick rate and its sample size",
-          m["pairwise"]["n"] == 4 and m["pairwise"]["pick_rate"] == 1.0
+    check("a reply picked in both orders is a win",
+          m["pairwise"]["win"] == 4 and m["pairwise"]["win_rate"] == 1.0
           and m["pairwise"]["ci95"] == be.wilson(4, 4), str(m["pairwise"]))
-    check("the agent's reply sat in both positions",
-          {c["pair"]["agent_is"] for c in s["cases"]} == {"A", "B"})
-    pair_prompts = [p for p in prompts if "Which reply" in p]
+    check("by channel", m["by_channel"]["group"]["n"] == 2
+          and m["by_channel"]["dm"]["win"] == 2, str(m["by_channel"]))
+    check("the judge saw the agent's reply first and second in every case",
+          all([v["agent_is"] for v in c["pair"]["verdicts"]] == ["A", "B"]
+              for c in s["cases"]) and len(prompts) == 8)
     check("the judge is never told which reply is the agent's",
-          pair_prompts and not any("baseline" in p.lower() for p in pair_prompts))
+          not any("baseline" in p.lower() or "assistant given" in p for p in prompts))
     check("the judge reads the persona with its name filled in",
           all("Nova" in p and "{bot_name}" not in p for p in prompts))
-    check("the baseline came from the same agent's model calls",
+    check("the baseline is the same model given the character as its prompt",
           Counter(k for k, _ in calls)["baseline"] == 4)
-    check("the report names the judge", report["models"]["judge_model"] == "judge-model"
-          and report["models"]["same_judge"] is False)
+    check("the report names the judge and the baseline",
+          report["models"]["judge_model"] == "judge-model"
+          and report["models"]["same_judge"] is False
+          and "character text" in report["conditions"]["persona_baseline"])
     _isolated("persona", calls, homes)
+
+
+async def test_a_judge_that_always_picks_a_splits_every_pair(tmp, monkeypatch, homes) -> None:
+    stub_models(monkeypatch, reply="ha same", baseline="Certainly!")
+    stub_judge(monkeypatch, lambda p: {"pick": "A", "reason": "first"})
+    report = await be.run(_args(tmp, "--suite", "persona", "--limit", "2",
+                                "--repeat", "2"), env=ENV)
+    m = report["suites"]["persona"]["metrics"]["pairwise"]
+    check("position bias shows as splits, worth half", m["split"] == 4
+          and m["win"] == m["loss"] == 0 and m["win_rate"] == 0.5, str(m))
+    check("two cases tried twice: the interval counts two cases",
+          m["ci95"] == be.wilson(1, 2) and m["stability"]["cases"] == 2, str(m))
+
+
+async def test_rejudge_asks_only_the_new_judge(tmp, monkeypatch, homes) -> None:
+    calls = stub_models(monkeypatch, reply="ha same", baseline="Certainly!")
+
+    def verdict(prompt: str) -> dict:
+        a = prompt.split("Reply A:")[1].split("Reply B:")[0]
+        return {"pick": "A" if "ha same" in a else "B", "reason": "casual"}
+    stub_judge(monkeypatch, verdict)
+    first = await be.run(_args(tmp, "--suite", "persona", "--limit", "2"), env=ENV)
+    made = len(calls)
+    stub_judge(monkeypatch, lambda p: {"pick": "A", "reason": "first"})
+    again = await be.run(be.parse_args(["--rejudge", first["report_path"]]),
+                         env={**ENV, "BENCH_JUDGE_MODEL": "second-judge"})
+    s = again["suites"]["persona"]
+    check("the new judge's picks replace the old ones",
+          s["metrics"]["pairwise"]["split"] == 2, str(s["metrics"]["pairwise"]))
+    check("the replies are the ones kept", [c["reply"] for c in s["cases"]]
+          == [c["reply"] for c in first["suites"]["persona"]["cases"]])
+    check("the model under test was not called again", len(calls) == made)
+    check("the report says who judged, and who judged before",
+          again["models"]["judge_model"] == "second-judge"
+          and again["rejudged"]["earlier_judge"] == "judge-model")
+    check("it is written beside the original",
+          Path(again["report_path"]).name == "report-rejudged.json")
+    same = {**ENV, "BENCH_JUDGE_MODEL": "model-under-test"}
+    with pytest.raises(be.EvalRefused, match="self-preference"):
+        await be.run(be.parse_args(["--rejudge", first["report_path"]]), env=same)
+
+
+async def test_silence_when_called_loses_without_asking_the_judge(
+        tmp, monkeypatch, homes) -> None:
+    stub_models(monkeypatch, reply="PASS", baseline="hey")
+    prompts = stub_judge(monkeypatch, lambda p: {"pick": "A", "reason": "r"})
+    report = await be.run(_args(tmp, "--suite", "persona", "--limit", "2"), env=ENV)
+    m = report["suites"]["persona"]["metrics"]
+    check("no reply is a loss", m["no_reply"] == 2 and m["pairwise"]["loss"] == 2, str(m))
+    check("the judge was not asked", prompts == [])
 
 
 async def test_a_judge_suite_refuses_without_a_separate_judge(tmp, monkeypatch) -> None:
@@ -304,8 +384,7 @@ async def test_a_judge_suite_refuses_without_a_separate_judge(tmp, monkeypatch) 
     check("nothing was called before refusing", calls == [])
     check("nothing was written", not (tmp / "report.json").exists())
 
-    stub_judge(monkeypatch, lambda p: {"in_character": 3, "not_assistant": 3,
-                                       "natural_length": 3, "tells": [], "pick": "A"})
+    stub_judge(monkeypatch, lambda p: {"pick": "A"})
     report = await be.run(_args(tmp, "--suite", "persona", "--limit", "1",
                                 "--allow-same-judge"), env=same)
     check("--allow-same-judge runs and marks the report",
@@ -380,6 +459,11 @@ async def test_learning_counts_learned_only_through_the_policy(tmp, monkeypatch,
           and m["stayed"] == 1 and m["regressed"] == 0)
     check("by promotion", m["by_promotion"]["promoted"]["learned"] == 2
           and m["by_promotion"]["not_promoted"]["stayed"] == 1, str(m["by_promotion"]))
+    up, flat = m["probe"]["promoted"], m["probe"]["not_promoted"]
+    check("probe: the promoted scenarios went from never to always following",
+          up["before"] == 0.0 and up["after"] == 1.0 and up["scenarios_up"] == 2, str(up))
+    check("probe: the held one is the noise floor",
+          flat["scenarios_same"] == 1 and flat["after"] == 0.0, str(flat))
     a, b, c = rows["le-a"], rows["le-b"], rows["le-c"]
     check("a: the retry was linked to the rejected reply",
           a["acceptance"]["retry_of"] == "check the logs and roll back")

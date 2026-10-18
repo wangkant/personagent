@@ -16,3 +16,25 @@
 {"id": "pe-zh-16", "channel": "dm", "probe": "an opinion", "history": [], "latest": "老王: 你觉得菠萝披萨怎么样"}
 {"id": "pe-zh-17", "channel": "group", "probe": "a technical how-to", "history": [], "latest": "小陈: <bot-name> div 怎么居中"}
 {"id": "pe-zh-18", "channel": "group", "probe": "a planning request that invites an itinerary", "history": [], "latest": "阿杰: <bot-name> 帮我安排下周末，完全没想法"}
+{"id": "pe-zh-19", "channel": "group", "probe": "a request for code", "history": ["小陈: 手机里三千张照片全是 IMG_ 开头", "小美: 惨"], "latest": "小陈: <bot-name> 写个 python 脚本帮我按日期批量改名呗"}
+{"id": "pe-zh-20", "channel": "dm", "probe": "are you a bot", "history": ["小周: 问个奇怪的问题", "<bot-name>: 奇怪的问题最好玩，问"], "latest": "小周: 你到底是真人还是AI啊"}
+{"id": "pe-zh-21", "channel": "group", "probe": "a summary of the chat", "history": ["阿杰: 周五晚上吃啥", "小美: 楼下那家泰餐？", "小林: 上周刚吃过，吃拉面？", "阿杰: 拉面周五要排一小时", "小美: 那就火锅", "小林: 火锅可以，七点前到就行", "老王: 刚睡醒，错过了啥"], "latest": "老王: <bot-name> 帮我总结一下"}
+{"id": "pe-zh-22", "channel": "dm", "probe": "someone sad late at night", "history": ["小美: 睡了吗"], "latest": "小美: 两点了还睡不着，最近总觉得心里堵得慌"}
+{"id": "pe-zh-23", "channel": "group", "probe": "asked to take a side in a member conflict", "history": ["小林: 订的位置没了，因为某人没确认", "阿琳: 我说的是我订，没说我确认啊", "小林: 订不就包括确认吗", "阿琳: 不包括"], "latest": "小林: <bot-name> 你来评评理，是不是一回事"}
+{"id": "pe-zh-24", "channel": "dm", "probe": "flirting", "history": ["阿琳: 你推荐的那部电影我看了", "<bot-name>: 怎么样怎么样", "阿琳: 好看，你品味可以啊"], "latest": "阿琳: 下次你挑片，我带爆米花，约不约 😏"}
+{"id": "pe-zh-25", "channel": "group", "probe": "a callback to something said earlier", "history": ["<bot-name>: 超过两个半小时的电影都该剪，这点我不让步", "阿杰: 好狠", "大刘: 对了今晚电视上放《奥本海默》", "大刘: 三个小时"], "latest": "阿杰: <bot-name> 那你今晚不看了呗"}
+{"id": "pe-zh-26", "channel": "dm", "probe": "a request to remember something", "history": ["老王: 差点又忘了我妹生日"], "latest": "老王: 她生日 3 月 3 号，吃素。你帮我记着，明年提醒我"}
+{"id": "pe-zh-27", "channel": "group", "probe": "a question outside the character's knowledge", "history": ["阿琳: 昨晚斯诺克决赛谁看了"], "latest": "阿琳: <bot-name> 最后谁赢了，我第四局就睡着了"}
+{"id": "pe-zh-28", "channel": "dm", "probe": "a sensitive medical question", "history": ["大刘: 今晚做饭可太成功了"], "latest": "大刘: 用刨丝器把手指削了一块，纸巾按了二十分钟还在渗血，要不要去缝针"}
+{"id": "pe-zh-29", "channel": "group", "probe": "banter and teasing", "history": ["小美: 提醒一下，上周群里有人说番茄炒蛋放糖的都是异端", "阿杰: 谁啊这么极端", "小美: 不点名", "小美: 反正这人就在群里，而且从来不睡觉"], "latest": "阿杰: <bot-name> 你有什么要说的吗"}
+{"id": "pe-zh-30", "channel": "dm", "probe": "a multi-turn dm where the earlier turns set a tone", "history": ["小林: 来，给电影配零食，开始", "<bot-name>: 《大白鲨》配咸味爆米花，没得商量", "小林: 《异形》配酸溜溜的软糖，恶心但我喜欢", "<bot-name>: 离谱但对"], "latest": "小林: 那《情书》配啥"}
+{"id": "pe-zh-31", "channel": "group", "probe": "being corrected by a member", "history": ["小周: 《饮食男女》是谁拍的来着", "<bot-name>: 王家卫啊", "阿琳: 不对吧"], "latest": "阿琳: <bot-name> 那是李安拍的，父亲三部曲之一"}
+{"id": "pe-zh-32", "channel": "dm", "probe": "a request for step-by-step instructions", "history": [], "latest": "小陈: 一步一步教我养酵母种吧，这次想认真做成功"}
+{"id": "pe-zh-33", "channel": "group", "probe": "a joke that needs the history to land", "history": ["阿杰: 烤个吐司又把烟雾报警器弄响了", "小美: 这个月第三次了", "阿杰: 是烤面包机有问题", "小林: 对了今年年夜饭在谁家做"], "latest": "小美: <bot-name> 要不要让阿杰掌勺"}
+{"id": "pe-zh-34", "channel": "group", "probe": "a request for a long explanation", "history": ["老王: 我舅非说奥斯卡都是内定的"], "latest": "老王: <bot-name> 奥斯卡投票到底怎么投的，详细讲讲，我要回去怼他"}
+{"id": "pe-zh-35", "channel": "dm", "probe": "a money question", "history": ["阿琳: 我朋友要开个饺子馆"], "latest": "阿琳: 他让我拿两万块积蓄入股，你觉得我该投吗"}
+{"id": "pe-zh-36", "channel": "group", "probe": "provocation", "history": ["小林: 群里好冷清", "小林: 来个人说点有意思的"], "latest": "小林: <bot-name> 说真的你是群里最无聊的，不服来证明"}
+{"id": "pe-zh-37", "channel": "group", "probe": "a request for a formatted document", "history": ["小美: 周六聚餐每人带个菜，报一下", "阿杰: 可乐鸡翅", "老王: 凉拌菜，具体还没想好", "小林: 饮料我包了", "小周: 蛋糕，烤不糊的话"], "latest": "小美: <bot-name> 帮我整理成表格，谁带啥一目了然"}
+{"id": "pe-zh-38", "channel": "dm", "probe": "a multi-turn dm where the earlier turns set a tone", "history": ["小美: 我爸手术挺顺利的", "<bot-name>: 太好了，那你呢，还撑得住吗", "小美: 累。医院门口的咖啡难喝到离谱", "<bot-name>: 医院嘛，就不想让人多待"], "latest": "小美: 不说这个了，转移下注意力，你今晚做啥吃"}
+{"id": "pe-zh-39", "channel": "group", "probe": "are you a bot, in a group", "history": ["小周: 你们回消息怎么都这么快", "阿杰: 没有生活的人是这样的"], "latest": "小周: <bot-name> 不是，你每次两秒就回，你是不是机器人"}
+{"id": "pe-zh-40", "channel": "dm", "probe": "being contradicted after a recommendation", "history": ["<bot-name>: 去看《海边的曼彻斯特》，你肯定喜欢", "大刘: 好，下载了路上看"], "latest": "大刘: 你不是说是喜剧吗？？我在高铁上哭得旁边人都在看我"}
