@@ -19,6 +19,10 @@
           <button class="nav active" data-view="chat">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9.5L5 20v-3.5H4z"/></svg><span data-t="chat">开始聊天</span>
           </button>
+          <button class="nav" data-view="activity">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h4l2.5-6.5 4 13 2.5-6.5h4"/></svg><span data-t="activity">动态</span
+            ><span id="activity-dot" class="dot review" hidden></span>
+          </button>
           <button class="nav" data-view="platforms">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M16.75 13.5v6.5M13.5 16.75H20"/></svg><span data-t="platforms">连接平台</span
             ><span id="platforms-dot" class="dot" hidden></span>
@@ -316,6 +320,22 @@
           </form>
           <div class="composer-note" data-t="composerNote">
             Enter 发送 · Shift + Enter 换行
+          </div>
+        </section>
+        <section id="activity-view" class="page activity-page" hidden>
+          <h1 data-t="activity">动态</h1>
+          <p class="lead" data-t="activityLead">
+            它在哪些群和私聊里，最近说了什么，学到了什么。
+          </p>
+          <div id="activity-empty" class="activity-empty" hidden>
+            <p id="activity-empty-text"></p>
+            <button type="button" class="secondary" id="activity-connect" data-t="activityConnect">
+              去连接平台
+            </button>
+          </div>
+          <div id="activity-body" class="activity" hidden>
+            <ul id="activity-chats" class="activity-chats" aria-label="Chats"></ul>
+            <div id="activity-chat" class="activity-chat"></div>
           </div>
         </section>
         <section id="platforms-view" class="page platforms-page" hidden>

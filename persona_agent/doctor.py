@@ -77,7 +77,6 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             ],
             "retired_settings": [{"old": o, "new": n, "where": w} for o, n, w in retired],
             "services": results,
-            "dashboard": dashboard_link(),
             "update": update_notice(),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
@@ -114,9 +113,9 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print("RESULT: services OK, but retired settings must be renamed.")
     else:
         print("RESULT: all critical services OK.")
-    link = dashboard_link()
-    if link:
-        print(f"dashboard: {link}")
+    off = activity_off()
+    if off:
+        print(off)
     from persona_agent.updates import line
     notice = line(update_notice())
     if notice:
@@ -135,17 +134,14 @@ def update_notice() -> dict | None:
     return updates.notice(found, updates.check(found, timeout=10.0) if updates.stale(found) else None)
 
 
-def dashboard_link() -> str:
-    """The dashboard's URL with its token, '' when the dashboard is off."""
-    from persona_agent import dashboard
-    from persona_agent.config_env import env_bool, env_int, env_str
+def activity_off() -> str:
+    """Why the local page's Activity view is empty, '' while it is on."""
+    from persona_agent.config_env import env_bool
 
-    if not env_bool("DASHBOARD_ENABLED", True):
+    if env_bool("DASHBOARD_ENABLED", True):
         return ""
-    # Created here too, so the link works from the service's first start on.
-    dashboard.load_token(create=True)
-    return dashboard.link(env_str("SERVER_HOST", "127.0.0.1"),
-                          env_int("SERVER_PORT", 8080, minimum=1, maximum=65535))
+    return ("activity: off (DASHBOARD_ENABLED=false), so the local page's "
+            "Activity view shows nothing")
 
 
 if __name__ == "__main__":

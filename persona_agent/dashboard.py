@@ -1,25 +1,21 @@
-"""The operator's page: is it running, why did it speak, what has it learned.
+"""The Activity API: is it running, why did it speak, what has it learned.
 
-``GET /`` serves a static page (persona_agent/static/) whose data comes from
-``/api/dashboard/...``. Everything is read-only except promote, reject and roll
-back, which go through the candidate ledger the way ``personagent learned``
-does, rebuild the retrieval views, and record the actor ``dashboard``.
+The local page's Activity view (persona_agent/welcome.py) reads
+``/api/dashboard/...`` server to server. Everything is read-only except
+promote, reject and roll back, which go through the candidate ledger the way
+``personagent learned`` does, rebuild the retrieval views, and record the
+actor ``dashboard``.
 
-Every request needs the dashboard's own secret, from any client: the cookie
-that opening ``/?token=<token>`` sets, or the header
-``X-Personagent-Dashboard-Token``. The token lives in
-``<runtime>/dashboard.token``; the startup banner and ``personagent doctor``
-print the link. A browser must also name a host that a DNS-rebinding page
-cannot (localhost, an IP address, or SERVER_HOST). A state-changing call is a
-POST that also carries ``X-Personagent-Dashboard: 1`` and, when the browser
-sends an Origin, the page's own origin.
+Every request needs the header ``X-Personagent-Dashboard-Token`` with the
+secret in ``<runtime>/dashboard.token``, which the service creates when it
+starts. A state-changing call is a POST that also carries
+``X-Personagent-Dashboard: 1``, ``Content-Type: application/json`` and, when
+an Origin is sent, the service's own origin. ``GET /`` only says where the
+Activity view is.
 """
 from __future__ import annotations
 
 import functools
-import hashlib
-import html
-import ipaddress
 import json
 import logging
 import os
@@ -29,11 +25,10 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
-                               RedirectResponse, Response)
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (__version__, access, candidates, channels, decision_log,
                evidence, home, lineage, preflight, promotion)
@@ -43,28 +38,15 @@ from .storage import atomic_write_text
 
 logger = logging.getLogger("bot")
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
-_ASSETS = {
-    "app.js": "text/javascript; charset=utf-8",
-    "app.css": "text/css; charset=utf-8",
-    "mark.svg": "image/svg+xml",
-    "empty-chats.webp": "image/webp",
-    "listening.webp": "image/webp",
-    "learned-notebook.webp": "image/webp",
-}
 WRITE_HEADER = "x-personagent-dashboard"
 TOKEN_HEADER = "x-personagent-dashboard-token"
 TOKEN_FILE = "dashboard.token"
 ACTOR = "dashboard"
 _MAX_BODY = 4096
 _STARTED = time.time()
-_COOKIE_MAX_AGE = 365 * 86400
 # Newest first; the rest of a long list is counted, not sent every poll.
 LIST_LIMIT = 50
 
-_PAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
-             "img-src 'self' data:; connect-src 'self'; base-uri 'none'; "
-             "form-action 'none'; frame-ancestors 'none'; object-src 'none'")
 _DATA_CSP = "default-src 'none'; frame-ancestors 'none'"
 
 # Every setting with one of these endings holds a credential (LLM_API_KEY,
@@ -100,9 +82,9 @@ def _server():
 
 # ---------------------------------------------------------------- access ----
 
-def _harden(response: Response, csp: str = _DATA_CSP) -> Response:
+def _harden(response: Response) -> Response:
     headers = response.headers
-    headers["Content-Security-Policy"] = csp
+    headers["Content-Security-Policy"] = _DATA_CSP
     headers["X-Content-Type-Options"] = "nosniff"
     headers["Referrer-Policy"] = "no-referrer"
     headers["X-Frame-Options"] = "DENY"
@@ -114,13 +96,6 @@ def _harden(response: Response, csp: str = _DATA_CSP) -> Response:
 
 def _refused(status: int, code: str, message: str) -> Response:
     return _harden(_server()._error(status, code, message))
-
-
-def _refused_page(status: int, code: str, message: str) -> Response:
-    """A refusal a person reads in the browser tab: plain text, both languages."""
-    text = _PAGE_REFUSALS.get(code)
-    body = text() if text else message
-    return _harden(PlainTextResponse(body, status_code=status))
 
 
 def token_path() -> Path:
@@ -169,29 +144,9 @@ def load_token(*, create: bool = False) -> str:
     return text
 
 
-def cookie_name(token: str) -> str:
-    # Named per token: two services on one host differ only by port, which
-    # cookies ignore, so a shared name would sign one out of the other.
-    return "personagent_dashboard_" + hashlib.sha256(token.encode()).hexdigest()[:12]
-
-
-def link(host: str, port: int) -> str:
-    """The URL that opens the dashboard of a service listening on host:port."""
-    token = load_token()
-    if not token:
-        return ""
-    value = str(host or "").strip().strip("[]")
-    if value in ("", "0.0.0.0"):
-        value = "127.0.0.1"
-    elif value == "::":
-        value = "::1"
-    shown = f"[{value}]" if ":" in value else value
-    return f"http://{shown}:{port}/?token={token}"
-
-
 @functools.lru_cache(maxsize=None)
 def _cli() -> str:
-    """How this install spells `personagent`, for the commands the page names."""
+    """How this install spells `personagent`, for the commands it names."""
     from .setup_wizard import Launcher
     try:
         return Launcher(python=sys.executable, home=ROOT).shown("")[-1].strip()
@@ -199,86 +154,33 @@ def _cli() -> str:
         return "personagent"
 
 
-_PAGE_REFUSALS = {
-    "dashboard_token": lambda: (
-        "This dashboard opens only through its private link. Open the dashboard "
-        f"link that `{_cli()} run` printed when it started, or run "
-        f"`{_cli()} doctor` to print it again.\n\n"
-        "这个面板只能通过它的专用链接打开。请打开 "
-        f"`{_cli()} run` 启动时打印的面板链接，或者运行 `{_cli()} doctor` 再打印一次。\n"),
-    "wrong_token": lambda: (
-        "This link's token is not this dashboard's: it may belong to another "
-        f"personagent, or the token was replaced. Run `{_cli()} doctor` to print "
-        "the current link.\n\n"
-        "这个链接里的令牌不属于这个面板：可能是另一个 personagent 的，或者令牌已经换了。"
-        f"运行 `{_cli()} doctor` 打印现在的链接。\n"),
-    "foreign_host": lambda: (
-        "This dashboard opens at localhost, an IP address, or SERVER_HOST, not "
-        "at another host name, so that no website can pose as this computer. "
-        "Open the link with an IP address, or through an SSH tunnel to "
-        "127.0.0.1.\n\n"
-        "这个面板只在 localhost、IP 地址或 SERVER_HOST 上打开，不接受别的主机名，"
-        "以免有网站冒充这台电脑。请用 IP 地址打开链接，或者通过 SSH 隧道连到 127.0.0.1。\n"),
-}
-
-
-def _host_ok(request: Request) -> bool:
-    """A Host a DNS-rebinding page cannot send: localhost, an IP address, or
-    the host this service listens on. Such a page always sends its own name."""
-    srv = _server()
-    raw = request.headers.get("host")
-    if not raw:
-        return False
-    name = srv._host_header_name(raw)
-    if name in ("localhost", str(srv._LISTEN["host"]).strip().strip("[]").lower()):
-        return True
-    try:
-        ipaddress.ip_address(name)
-    except ValueError:
-        return False
-    return True
-
-
-def _same_origin(origin: str, request: Request, by_header: bool) -> bool:
+def _same_origin(origin: str, request: Request) -> bool:
     parts = urlsplit(origin.strip())
     if parts.scheme not in ("http", "https") or not parts.netloc:
         return False
-    hosts = {request.headers.get("host", "").strip().lower()}
-    if by_header:
-        # A reverse proxy may rewrite Host; the browser still names the public one.
-        hosts.add(request.headers.get("x-forwarded-host", "").strip().lower())
+    # A reverse proxy may rewrite Host; the caller still names the public one.
+    hosts = {request.headers.get(name, "").strip().lower()
+             for name in ("host", "x-forwarded-host")}
     return parts.netloc.lower() in hosts - {""}
 
 
-def _problem(request: Request, *, data: bool = True,
-             write: bool = False) -> tuple[int, str, str] | None:
+def _problem(request: Request, *, write: bool = False) -> tuple[int, str, str] | None:
     """(status, code, message) for a request the dashboard must not answer."""
-    srv = _server()
     expected = load_token()
     supplied = request.headers.get(TOKEN_HEADER)
-    if supplied is not None:
-        if not expected or not srv._ct_equal(supplied, expected):
-            return 403, "wrong_token", "wrong dashboard token"
-        by_header = True
-    else:
-        cookie = request.cookies.get(cookie_name(expected)) if expected else None
-        if cookie is None or not srv._ct_equal(cookie, expected):
-            return (401, "dashboard_token",
-                    "open the dashboard through its link with the token, or "
-                    "send X-Personagent-Dashboard-Token")
-        if not _host_ok(request):
-            return (403, "foreign_host",
-                    "open the dashboard by localhost, an IP address or SERVER_HOST")
-        by_header = False
+    if supplied is None:
+        return 401, "dashboard_token", "send X-Personagent-Dashboard-Token"
+    if not expected or not _server()._ct_equal(supplied, expected):
+        return 403, "wrong_token", "wrong dashboard token"
     site = request.headers.get("sec-fetch-site", "").strip().lower()
-    if data and site in ("cross-site", "same-site"):
+    if site in ("cross-site", "same-site"):
         return 403, "cross_site", "cross-site request refused"
     if write:
         if request.headers.get(WRITE_HEADER, "").strip() != "1":
             return (403, "missing_header",
                     "state-changing calls need X-Personagent-Dashboard: 1")
         origin = request.headers.get("origin")
-        if origin is not None and not _same_origin(origin, request, by_header):
+        if origin is not None and not _same_origin(origin, request):
             return 403, "foreign_origin", "cross-origin request refused"
         ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
         if ctype != "application/json":
@@ -286,35 +188,10 @@ def _problem(request: Request, *, data: bool = True,
     return None
 
 
-def _check(request: Request, *, data: bool = True,
-           write: bool = False) -> Response | None:
+def _check(request: Request, *, write: bool = False) -> Response | None:
     """The refusal for a request the dashboard must not answer, else None."""
-    problem = _problem(request, data=data, write=write)
+    problem = _problem(request, write=write)
     return None if problem is None else _refused(*problem)
-
-
-def _sign_in(request: Request, supplied: str) -> Response:
-    """Trade the link's token for a cookie, and take the token out of the address bar."""
-    expected = load_token()
-    if not _host_ok(request):
-        return _refused_page(403, "foreign_host", "")
-    if not expected or not _server()._ct_equal(supplied, expected):
-        return _refused_page(403, "wrong_token", "")
-    rest = [(k, v) for k, v in request.query_params.multi_items() if k != "token"]
-    target = "./" + (f"?{urlencode(rest)}" if rest else "")
-    if request.headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
-        # A Strict cookie rides no request of a chain another site started,
-        # a 303's included; a refresh from this page starts a new one.
-        response: Response = HTMLResponse(
-            '<!doctype html><meta charset="utf-8">'
-            f'<meta http-equiv="refresh" content="0; url={html.escape(target)}">'
-            f'<a href="{html.escape(target)}">personagent</a>')
-    else:
-        response = RedirectResponse(target, status_code=303)
-    response.set_cookie(cookie_name(expected), expected, max_age=_COOKIE_MAX_AGE,
-                        path="/", httponly=True, samesite="strict",
-                        secure=request.url.scheme == "https")
-    return _harden(response, _PAGE_CSP)
 
 
 # --------------------------------------------------------------- secrets ----
@@ -887,32 +764,18 @@ def apply_action(agent, cid: str, action: str, reason: str = "") -> tuple[int, d
 
 # ----------------------------------------------------------------- routes ---
 
-def _asset(name: str, content_type: str, csp: str = _DATA_CSP) -> Response:
-    try:
-        body = (STATIC_DIR / name).read_bytes()
-    except OSError:
-        return _refused(404, "not_found", "not found")
-    return _harden(Response(body, media_type=content_type), csp)
+def _pointer() -> str:
+    return (
+        "personagent is running. Its Activity view is in the local page: run "
+        f"`{_cli()}` on this computer to open it. On a server, "
+        f"`{_cli()} learned` reviews what it learned.\n\n"
+        "personagent 正在运行。「动态」在本地页面里：在这台电脑上运行 "
+        f"`{_cli()}` 打开。在服务器上，用 `{_cli()} learned` 查看它学到了什么。\n")
 
 
 @router.get("/", include_in_schema=False)
-async def dashboard_page(request: Request, token: str | None = None):
-    if token is not None:
-        return _sign_in(request, token)
-    problem = _problem(request, data=False)
-    if problem is not None:
-        return _refused_page(*problem)
-    return _asset("index.html", "text/html; charset=utf-8", _PAGE_CSP)
-
-
-@router.get("/dashboard/{name}", include_in_schema=False)
-async def dashboard_asset(name: str, request: Request):
-    refused = _check(request, data=False)
-    if refused is not None:
-        return refused
-    if name not in _ASSETS:
-        return _refused(404, "not_found", "not found")
-    return _asset(name, _ASSETS[name])
+async def dashboard_pointer():
+    return _harden(PlainTextResponse(_pointer()))
 
 
 @router.get("/api/dashboard/status", include_in_schema=False)

@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Activity in the local page.** A new view between Chat and Connect apps lists every chat the character is in and, for the one you pick, what waits for your decision (Keep or Discard), what it learned (Undo), what it remembers, and what it recently said or let pass, with the reason. A dot on the sidebar marks a chat with something waiting. Decisions go into the same append-only ledger as `personagent learned`, with the reason `local page`.
+
+### Changed
+
+- **The agent service no longer serves a dashboard page.** Its startup banner and `personagent doctor` print no dashboard link, and there is no sign-in link or cookie any more; `GET /` on the service answers a short note pointing to the local page and to `personagent learned`. The JSON API under `/api/dashboard/` stays, for the local page and for scripts, and takes only the `X-Personagent-Dashboard-Token` header. The promotion checklist, evidence and history the page showed are in `personagent learned show`.
+- **The docs read more plainly and match 1.2.2,** with new screenshots of Connect apps and Activity.
+
+### Removed
+
+- The dashboard page's files (`persona_agent/static/index.html`, `app.js`, `app.css`) and `tools/dashboard_snapshot.py`, which only captured that page.
+
 ## [1.2.2] — 2026-10-17
 
 personagent says when a newer version is out, and the repository keeps only what a user opens at its root.
@@ -261,7 +274,7 @@ Protocol (docs/connectors.md), where the signing scheme, the segments and every 
 - **`personagent demo [quiet|teach|troll|all]`** plays three scenes on a scripted model with the real ledger and promotion code: which group lines it answers or skips and why, a correction that holds up, and a stranger's planted instruction that changes nothing. It is the same on every machine and costs nothing; `--online` plays it on your configured model. It runs a built-in character in a temporary folder and never reads your persona or touches your `runtime/`.
 - **A local dashboard at `http://127.0.0.1:<SERVER_PORT>/`**, served by `personagent run` with nothing loaded from the internet. It shows the service, its connectors and outbox, and preflight's findings, and draws each conversation as the chat: where the bot stayed quiet and why, corrected replies with what was learned from them, the full evidence chain, and proposals with each promotion rule ticked or crossed. Promote, Reject, Roll back and Replace write to the same ledger as `personagent learned`. English and Chinese, light and dark, and it works on a phone.
 
-  It opens only through its private link, which the startup banner and `personagent doctor` print. The token is kept in `<runtime>/dashboard.token`, and opening the link sets an HttpOnly, `SameSite=Strict` cookie. A request without the token gets 401, a wrong token 403, and a host name other than `localhost`, an IP address or `SERVER_HOST` 403, which blocks DNS rebinding. `CONNECTOR_TOKEN` does not open it, and `DASHBOARD_ENABLED=false` removes it. The [deployment guide](docs/deploy.md#the-dashboard) has the details.
+  It opens only through its private link, which the startup banner and `personagent doctor` print. The token is kept in `<runtime>/dashboard.token`, and opening the link sets an HttpOnly, `SameSite=Strict` cookie. A request without the token gets 401, a wrong token 403, and a host name other than `localhost`, an IP address or `SERVER_HOST` 403, which blocks DNS rebinding. `CONNECTOR_TOKEN` does not open it, and `DASHBOARD_ENABLED=false` removes it. The [deployment guide](docs/deploy.md#activity) has the details.
 - **`start.bat`**: double-click it to start personagent on Windows.
 - **A startup banner** with the version, the address, the home folder, the dashboard's link, and whether the agent is on, or off with the cause and the fix. The log also names the reply and gate models, and suggests a cheaper `LLM_JUDGE_MODEL` when they are the same.
 - **`personagent doctor --fix`** renames the settings 1.0 retired in `<home>/.env`, keeping values and comments and saving the old file as `.env.bak`. `personagent doctor` and `doctor --json` report retired settings (`retired_settings`) and exit 1 while any remain.

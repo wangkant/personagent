@@ -694,16 +694,10 @@ def _banner(host: str, port: int) -> str:
     else:
         state = (f"OFF: {_agent_off_reason()}, so nothing gets answered; "
                  f"{_agent_off_fix()}")
-    lines = [f"personagent {__version__}",
-             f"  listening:  http://{_url_host(host)}:{port}",
-             f"  home:       {ROOT}"]
-    if _dashboard_served():
-        link = dashboard.link(host, port)
-        lines.append(f"  dashboard:  {link}" if link else
-                     f"  dashboard:  unavailable (could not create "
-                     f"{dashboard.token_path()})")
-    lines.append(f"  agent:      {state}")
-    return "\n".join(lines)
+    return "\n".join([f"personagent {__version__}",
+                      f"  listening:  http://{_url_host(host)}:{port}",
+                      f"  home:       {ROOT}",
+                      f"  agent:      {state}"])
 
 
 # /health/details caches its probes for 60 s: each spends tokens and a

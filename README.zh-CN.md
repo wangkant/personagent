@@ -60,7 +60,7 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
       <b>上手快，你的群在哪它就去哪</b><br>
       在浏览器里设置和聊天，中英文都有，11 种模型服务可选。<br>
       QQ、微信、Telegram、Discord 由它自己连接，另外十几个平台也在同一个页面里接入。<br>
-      自带一个本地管理面板。
+      在「动态」里能看到它做了什么。
     </td>
   </tr>
 </table>
@@ -123,7 +123,7 @@ personagent 自带、而它们交给插件或文档里没写的：从别人对�
 
 ## 文档
 
-- [使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)：安装、设置、终端试聊、接入各平台、教它、管理面板、评测、排错，README 没写的都在这里
+- [使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)：安装、设置、终端试聊、接入各平台、教它、「动态」页、评测、排错，README 没写的都在这里
 - [中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)：装好、扫码接 QQ、排查，从零开始，每一步都写明会看到什么
 - [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）：长期运行要知道的事，包括连接器、多平台、对外暴露、费用和排查
 - [连接器协议](https://github.com/wangkant/personagent/blob/main/docs/connectors.md)（英文）：给别的平台自己写连接器

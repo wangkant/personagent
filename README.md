@@ -63,7 +63,7 @@ Every change is on record, and any of them can be rolled back.
 <td valign="top">
 <strong>It is easy to start, and lives where your group is.</strong><br>
 Browser setup and chat in English or Chinese, with 11 model services and optional advanced settings.<br>
-It joins QQ, WeChat, Telegram and Discord by itself and a dozen more apps from the same page; a local dashboard shows what it did.
+It joins QQ, WeChat, Telegram and Discord by itself and a dozen more apps from the same page; its Activity view shows what it did.
 </td>
 </tr>
 </table>
@@ -126,7 +126,7 @@ One run on one model is a sample, so expect some noise between runs. The reports
 
 ## Documentation
 
-- [User guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md) ([中文](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)): install, setup, the terminal chat, connectors, teaching it, the dashboard, troubleshooting.
+- [User guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md) ([中文](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)): install, setup, the terminal chat, connectors, teaching it, the Activity view, troubleshooting.
 - [Deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.md): running it for real: connectors, QQ, exposing the endpoints, costs, and what to check when the bot goes quiet.
 - [中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md): QQ from zero, step by step.
 - [Connector protocol](https://github.com/wangkant/personagent/blob/main/docs/connectors.md): one signed HTTP request per message, for writing your own connector.

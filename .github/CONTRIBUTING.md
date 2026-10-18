@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for looking. The interesting part of this project is the prompt and
-learning design, so a bug report that includes **the reply the bot actually
-produced** is worth far more than a feature request.
+Thanks for taking a look. Most of the work in this project is in the prompt
+and the learning design, so a bug report that quotes the reply the bot
+produced is worth more than a feature request.
 
 ## Getting set up
 
@@ -16,20 +16,20 @@ python -m persona_agent           # opens the local page
 python -m persona_agent chat
 ```
 
-`python -m persona_agent init --terminal` asks the setup questions in the terminal
-instead of opening the page. In a clone the home folder is the clone itself:
-`.env`, `persona.txt`, `runtime/` and `platforms/` sit next to
-`persona_agent/` and are gitignored. On Windows, `start.bat` does the same
-setup from a double-click.
+`python -m persona_agent init --terminal` asks the setup questions in the
+terminal instead of opening the page. In a clone, the home folder is the
+clone itself. `.env`, `persona.txt`, `runtime/` and `platforms/` sit next to
+`persona_agent/` and are gitignored. On Windows you can double-click
+`start.bat` instead. It creates `.venv`, installs the package and starts it.
 
 `personagent chat` is a simulated group chat. It runs the persona, the reply
 triggers, the speak-or-stay-quiet gate, example retrieval, generation, the
 character check, the output filters, memory commands and learning from
-reactions, in the order a live turn does. It skips the allowlists, the
-debounce and real delivery, and turns self-evaluation and vision off. It is
-the fastest way to reproduce a persona bug, and `/why` prints why it spoke or
-stayed quiet. `personagent demo` plays the same machinery with a scripted
-model and needs no key.
+reactions, in the same order as a live turn. It skips the allowlists, the
+debounce and real delivery, and turns off self-evaluation and vision. It is
+the fastest way to reproduce a persona bug. Type `/why` to see why it spoke
+or stayed quiet. `personagent demo` runs the same machinery against a
+scripted model and needs no key.
 
 ## Running the tests
 
@@ -42,16 +42,17 @@ ruff check . --select F401,F811,F821,F841
 python -m compileall -q persona_agent tools tests integrations
 ```
 
-The suite takes about a minute and needs no network or API key: the tests
-stub the model and the transport. Run these before opening a PR.
+The suite takes about a minute and needs no network or API key, because the
+tests stub the model and the transport. Run these before you open a PR.
 
-The ruff line catches dead and undefined names. It is not a style gate. CI
-runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows, and
-has a `package` job on Linux and Windows. That job builds the wheel and sdist, runs `twine check --strict`,
-installs each into a clean venv outside the checkout, and runs
-`tools/package_smoke.py` and `tools/welcome_smoke.py` against the installed
-command. CI compiles `.`; locally, name the directories so compileall skips
-`.venv`.
+The ruff line catches dead and undefined names. It is not a style gate.
+
+CI runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows.
+Its `package` job, on Linux and Windows, builds the wheel and the sdist,
+runs `twine check --strict`, installs each into a clean venv outside the
+checkout, and runs `tools/package_smoke.py` and `tools/welcome_smoke.py`
+against the installed command. CI compiles `.`. Locally, name the
+directories instead so compileall skips `.venv`.
 
 One file, or one test, for a fast loop:
 
@@ -62,47 +63,50 @@ python -m pytest tests/test_outbox.py -k long_poll
 
 ### The package smoke tests
 
-`tools/package_smoke.py` checks that an installed `personagent` command works
-with no checkout around it, offline: `--version`, `init --no-input`, `chat`
-against a stand-in model, `run` plus `GET /health`, and `doctor --json`, each
-in a throwaway home. `tools/welcome_smoke.py` opens the installed local page,
-saves a key, chats and exits, using only localhost. Run both after a change
-to packaging, the CLI, the local page or the files a wheel ships:
+`tools/package_smoke.py` checks, offline, that an installed `personagent`
+command works with no checkout around it. In a throwaway home it runs
+`--version`, `init --no-input`, `chat` against a stand-in model, `run` with
+`GET /health`, and `doctor --json`. `tools/welcome_smoke.py` opens the
+installed local page, saves a key, chats and exits, using only localhost.
+Run both after you change packaging, the CLI, the local page or the files a
+wheel ships. Pass the version in `pyproject.toml` to `--version`:
 
 ```bash
 python -m pip install build
 python -m build
 python -m venv /tmp/smoke-env
 /tmp/smoke-env/bin/python -m pip install dist/*.whl     # Windows: Scripts\python.exe
-python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.1.0
+python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.2.2
 python tools/welcome_smoke.py --personagent /tmp/smoke-env/bin/personagent
 ```
 
-`--skip init` (or another step) leaves a package smoke step out.
+`--skip init` leaves that step out of the package smoke test. The other
+steps (`version`, `chat`, `run`, `doctor`) can be skipped the same way, and
+the flag can be repeated.
 
 ### Writing a test
 
 - A test is a module-level `test_*` function in `tests/test_*.py`. pytest
-  finds it; nothing needs registering.
+  finds it, so there is nothing to register.
 - The pytest settings in `pyproject.toml` put the repo root and `tools/` on
   the import path, so tests import `persona_agent` and the CLI tools the way
   a deployment does.
-- `tests/conftest.py` provides the `tmp` fixture (a per-test scratch
-  directory), runs each `async def` test on its own event loop, and skips
+- `tests/conftest.py` provides the `tmp` fixture, a scratch directory per
+  test. It also runs each `async def` test on its own event loop, and skips
   the 5 s bare-call debounce unless a test is marked `bare_call_wait`.
   pytest is the only test dependency.
 - `tests/helpers.py` has `check(name, cond, detail)`, which asserts and
   names the property that failed. Use it or a plain `assert`.
 - `isolated_agent(tmp, **settings)` in `tests/helpers.py` builds a real
-  `Agent`; a suite's own `make_agent()` passes only what differs (persona
-  name, admins, a NapCat URL, stubs).
+  `Agent`. A suite's own `make_agent()` passes only what differs, such as
+  the persona name, admins, a NapCat URL or stubs.
 
 **Tests must never write the repo's real state files.** Everything mutable
 lives under `runtime/`, and a relative state-file setting such as
-`MEMORY_FILE=memory.json` resolves there. A test that forgets to
-redirect a path will overwrite a running deployment's learned data.
-`isolated_agent()` redirects every state file into `tmp`; `seeds=True` also
-swaps the shipped seed pools for empty ones.
+`MEMORY_FILE=memory.json` resolves there. A test that forgets to redirect a
+path will overwrite a running deployment's learned data. `isolated_agent()`
+redirects every state file into `tmp`. With `seeds=True` it also swaps the
+shipped seed pools for empty ones.
 
 The evidence log, the candidate ledger, both promoted views and the persona
 lineage all live next to `examples_file` (`Agent.learning_dir`). Redirecting
@@ -112,8 +116,8 @@ learned state in that directory, not under `ROOT`.
 
 ## The learning path: evidence, candidates, promotion
 
-These terms mean exactly this in code, tests and docs. Keep them distinct in
-a PR:
+These terms have exactly these meanings in code, tests and docs. Keep them
+distinct in a PR.
 
 - **Evidence**: an append-only record of something that happened in a
   conversation. A reaction is evidence. It carries no authority.
@@ -123,11 +127,11 @@ a PR:
 - **Rollback / supersession**: removing that authority later, without
   erasing history.
 
-The design enforces two rules:
+The design enforces two rules.
 
 1. **Nothing in the automatic path writes a retrieval pool.** It records
-   evidence, proposes a candidate, and asks `promotion.decide`. If you are
-   appending to `examples_file` or `feedback_file` from the agent, the change
+   evidence, proposes a candidate, and asks `promotion.decide`. If your
+   change appends to `examples_file` or `feedback_file` from the agent, it
    is in the wrong layer.
 2. **A single automatic signal must never permanently change behaviour.**
    Promotion needs at least two distinct compatible events, at least one of
@@ -137,24 +141,23 @@ The design enforces two rules:
    admin said so" is not a substitute for being the person the reply was
    aimed at.
 
-Both logs are append-only. To correct a mistake, append a lifecycle event;
-never edit a row. That way "why does it talk like this" and "why did it stop"
-both have answers.
+Both logs are append-only. To correct a mistake, append a lifecycle event.
+Never edit a row. That way "why does it talk like this" and "why did it
+stop" both have answers.
 
 ## Code layout
 
-`Agent` (`agent.py`) builds the runtime state and is composed from mixins,
-one per concern; it calls the pure modules below by name. Deciding whether to
-speak, building the prompt and retrieving what goes into it are separate
-modules, so each can be read, tested and replaced on its own:
+`Agent` (`agent.py`) builds the runtime state. It is composed from mixins,
+one per concern, and calls the pure modules below by name. Deciding whether
+to speak, building the prompt and retrieving what goes into it are separate
+modules, so each can be read, tested and replaced on its own.
 
-The entry points. Each root file is a shim over the package, kept so older
-commands keep working:
+The entry points:
 
 | Entry | What it is |
 |---|---|
 | `personagent` (`persona_agent/cli.py`) | The command: `start` (the default), `up`, `init`, `chat`, `demo`, `run`, `connect`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
-| `persona_agent/welcome.py`, `static/welcome/` | The local page `personagent start` opens on 127.0.0.1: Chat, Connect apps, Character & settings, with its JSON API. A second `start` reuses an open page |
+| `persona_agent/welcome.py`, `static/welcome/` | The local page `personagent start` opens on 127.0.0.1: Chat, Activity, Connect apps, Character & settings, with its JSON API. Activity reads the agent service's `/api/dashboard/` with the token in `<runtime>/dashboard.token`. A second `start` reuses an open page. The images at the top of `static/` are the page's and the README's illustrations |
 | `persona_agent/connections.py` | The catalog of platforms the page can connect, and which go direct or through the managed AstrBot |
 | `persona_agent/direct/` | QQ official bots, personal WeChat, Telegram and Discord, connected by personagent itself in one process (`python -m persona_agent.direct`), with credentials in `platforms/direct.json` |
 | `persona_agent/astrbot_install.py` | The managed AstrBot for every other platform: downloaded into the home on its own Python 3.12, run headless with no dashboard |
@@ -163,8 +166,9 @@ commands keep working:
 | `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `personagent run` starts it |
 | `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: bilingual terminal questions, the key test, the handshake with an AstrBot you already run |
 | `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo |
-| `persona_agent/dashboard.py`, `static/` | The dashboard at `/` of the agent service, its JSON API and the files it serves. `decision_log.py` keeps the recent speak decisions it shows |
+| `persona_agent/dashboard.py` | The agent service's Activity API under `/api/dashboard/`, its token, and the plain-text note at `/`. `decision_log.py` keeps the recent speak decisions it returns |
 | `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval` |
+| `persona_agent/updates.py` | The update notice: asks PyPI for a newer release at most once a day, sending only the version number. `UPDATE_CHECK_ENABLED=false` turns it off |
 | `start.bat`, `start.ps1` | Windows from a source ZIP or a clone: make `.venv`, install, then start |
 
 The rest of the package:
@@ -214,61 +218,66 @@ New behaviour goes in the module that owns the concern. If a change needs
 state from two mixins, it probably belongs in `agent.py`.
 
 A module stays out of the mixin chain when it needs no agent state.
-`textproc.py` is one: it is called by name (`TextProcessing._sanitize_reply(...)`),
-so a reply-safety gate can be tested without constructing an `Agent`.
-Reaching for `self` in such a module undoes the split.
+`textproc.py` is an example. It is called by name
+(`TextProcessing._sanitize_reply(...)`), so a reply-safety gate can be
+tested without constructing an `Agent`. Reaching for `self` in such a module
+undoes the split.
 
-To add a setting, add it to `AgentSettings` in `settings.py` and read it with
-the `config_env` helpers (settings of the HTTP layer, such as `SERVER_HOST`, are read
-in `server.py`). Then document it in `.env.example`: preflight reports any
-`.env` key that is not in `.env.example` as a misspelling, and
-`tests/test_http.py` fails if a setting the code reads is missing from
-`.env.example`.
+To add a setting, add it to `AgentSettings` in `settings.py` and read it
+with the `config_env` helpers. Settings of the HTTP layer, such as
+`SERVER_HOST`, are read in `server.py`. Then document the setting in
+`.env.example`. Preflight reports any `.env` key that is not in
+`.env.example` as a misspelling, and `tests/test_http.py` fails if a setting
+the code reads is missing from `.env.example`.
 
 ## Style
 
-- **Code, comments, logs and commit messages in English.** Chinese is for
+- Write code, comments, logs and commit messages in English. Chinese is for
   user-facing chat copy and prompt text only.
 - Comments explain a constraint the code cannot show, such as why a lock is
   released before a send or why a guard fails closed. Don't narrate the next
   line.
-- Prompt text is data, not code: a change to `prompts.py` changes the
-  persona's behaviour, so describe the failure you observed in the PR.
-- No AI-assistant tooling files in the repo (`CLAUDE.md`, `.cursor*`, agent
-  scratch directories). Keep it to project files.
+- A change to `prompts.py` changes the persona's behaviour, so treat prompt
+  text as behaviour and describe the failure you observed in the PR.
+- Keep AI-assistant tooling files out of the repo, such as `CLAUDE.md`,
+  `.cursor*` and agent scratch directories. The repo holds project files
+  only.
 
 ## Reporting a persona bug
 
 Use the "Persona report" issue form. It asks for three things:
 
-1. The last few context lines (redact names and IDs).
+1. The last few context lines, with names and IDs redacted.
 2. What the bot replied.
 3. What a real person would have said instead.
 
-That is the BAD/OK pair the learning loop uses, and it often becomes the fix
-directly: a row in `data/feedback.<lang>.jsonl`. Copy the shape of an existing
-row (`context`, `reply`, `better`, and `"rating": "better"`). The form also asks
-for the persona excerpt and the model, because both change what a reply looks
-like.
+Together they form the BAD/OK pair the learning loop uses, and they often
+become the fix directly as a row in `data/feedback.<lang>.jsonl`. Copy the
+shape of an existing row: `context`, `reply`, `better`, and
+`"rating": "better"`. The form also asks for the persona excerpt and the
+model, because both change what a reply looks like.
 
 ## Documentation
 
-The English page is the source of truth. A page with a `*.zh-CN.md` twin
-(`README`, `docs/start`, `docs/guide`, `docs/DISCLAIMER`, the AstrBot plugin
-README) is written in natural Chinese for Chinese readers, not translated line
-by line: when you change a fact in one, change it in the other.
-`docs/deploy.zh-CN.md` is not a twin: it is a separate Chinese step-by-step
-guide (install, QQ by scan, other platforms and troubleshooting), with
-NapCat and AstrBot as a closing third-party section. Images in a README use
-absolute `raw.githubusercontent.com` URLs so they render on PyPI.
+The English page is the source of truth. Some pages have a `*.zh-CN.md`
+twin: `README`, `docs/start`, `docs/guide`, `docs/DISCLAIMER` and the
+AstrBot plugin README. The Chinese twin is written in natural Chinese for
+Chinese readers and is not a line-by-line translation. When you change a
+fact in one, change it in the other.
+
+`docs/deploy.zh-CN.md` is not a twin. It is a separate step-by-step guide in
+Chinese that covers installing, connecting QQ by scan, other platforms and
+troubleshooting, and closes with a section on the third-party AstrBot and
+NapCat route. Images in a README use absolute `raw.githubusercontent.com`
+URLs so they render on PyPI.
 
 ## Releasing
 
-A release is a tag. Only the maintainer does this.
+A release is a tag. Only the maintainer cuts one.
 
 1. Put the version in `pyproject.toml`, `persona_agent/__init__.py`
-   (`__version__`) and the plugin's `metadata.yaml`. A test fails if the three
-   differ.
+   (`__version__`) and the plugin's `metadata.yaml`. A test fails if the
+   three differ.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
    (an em dash) and put a new, empty `## [Unreleased]` above it. In the link
    list at the end, add
@@ -283,34 +292,38 @@ A release is a tag. Only the maintainer does this.
    git push origin vX.Y.Z
    ```
 
-The `Release` workflow (`.github/workflows/release.yml`) then runs three jobs in
-order, so a release page never advertises a version PyPI lacks:
+The `Release` workflow (`.github/workflows/release.yml`) then runs three
+jobs in order, so a release page never advertises a version that PyPI does
+not have:
 
-1. **build** first refuses a tag whose commit is not on `main`, then runs the
-   test suite. Next, `tools/release_notes.py` fails the release when the tag
-   is not `v` plus the version in `pyproject.toml`, or when `CHANGELOG.md` has
-   no non-empty `## [X.Y.Z]` section. It then builds the sdist and the wheel,
-   runs `twine check --strict`, and smoke-tests the wheel with
+1. **build** refuses a tag whose commit is not on `main`, then runs the test
+   suite. Next, `tools/release_notes.py` fails the release if the tag is not
+   `v` plus the version in `pyproject.toml`, or if `CHANGELOG.md` has no
+   non-empty `## [X.Y.Z]` section. The job then builds the sdist and the
+   wheel, runs `twine check --strict`, and smoke-tests the wheel with
    `tools/package_smoke.py` before anything is published.
-2. **pypi** publishes that build to PyPI by trusted publishing (no token is
-   stored), through the GitHub environment named `pypi`.
+2. **pypi** publishes that build to PyPI by trusted publishing, through the
+   GitHub environment named `pypi`. No token is stored.
 3. **github-release** creates the GitHub Release for the tag, attaches the
-   sdist and the wheel, and uses the changelog section as its notes. It also
-   attaches `astrbot_plugin_personagent.zip`, the plugin folder packed by
-   `git archive`, for AstrBot's **Install from File**. The plugin has no
-   repository of its own.
+   sdist and the wheel, and uses the changelog section as the release notes.
+   It also attaches `astrbot_plugin_personagent.zip`, the plugin folder
+   packed by `git archive`, for AstrBot's Install from File. The plugin has
+   no repository of its own.
 
-Running the workflow by hand from a branch only builds the files and uploads
-them as artifacts; run it from a tag to release. PyPI must have a trusted
-publisher for this repository (owner `wangkant`, repository `personagent`,
-workflow `release.yml`, environment `pypi`); that is set up once, on pypi.org.
+A manual run of the workflow from a branch only builds the files and
+uploads them as workflow artifacts. Run it from a tag to release. PyPI needs
+a trusted publisher for this repository, set up once on pypi.org: owner
+`wangkant`, repository `personagent`, workflow `release.yml`, environment
+`pypi`.
 
 ## Privacy
 
 Never attach real group chat logs, QQ numbers, platform credentials or API
 keys to an issue. `.env`, `persona.txt`, `runtime/`, `platforms/`,
-`eval.jsonl`, `memory.json` and the sticker library are gitignored for this reason; check `git status` before committing.
-The evidence log quotes real reactions verbatim, so it lives under `runtime/`
-with the rest. It stores only the structured verdict and a one-sentence
-reason, **never a model's chain of thought**. Don't add a field that would
-change that.
+`eval.jsonl`, `memory.json` and the sticker library are gitignored for this
+reason. Check `git status` before you commit.
+
+The evidence log quotes real reactions verbatim, so it lives under
+`runtime/` with the rest. It stores only the structured verdict and a
+one-sentence reason, never a model's chain of thought. Don't add a field
+that would change that.

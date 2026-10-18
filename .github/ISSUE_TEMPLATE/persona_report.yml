@@ -66,6 +66,6 @@ body:
   - type: textarea
     id: why
     attributes:
-      label: What `/why` or the dashboard said (optional)
-      description: In `personagent chat`, `/why` explains the last reply. The dashboard shows why it spoke or stayed quiet.
+      label: What `/why` or the Activity view said (optional)
+      description: In `personagent chat`, `/why` explains the last reply. The local page's Activity view shows why it spoke or stayed quiet.
       render: shell

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 from fastapi.testclient import TestClient
+import httpx
 import pytest
 
 from persona_agent import connections as conn
@@ -13,6 +14,7 @@ from persona_agent import welcome
 
 
 TOKEN = "test-local-capability"
+REAL_ASYNC_CLIENT = httpx.AsyncClient
 HEADERS = {welcome.TOKEN_HEADER: TOKEN}
 
 
@@ -486,3 +488,118 @@ def test_features_keep_keys_out_of_state_and_never_forward_one(client, workspace
     cleared = client.post(url, headers=HEADERS, json={"search": {"clear": True}}).json()
     assert cleared["features"]["search"] == "free" and not cleared["features"]["vision"]["enabled"]
     assert workspace.config()["VISION_API_KEY"] == "chat-key"   # off keeps the key for next time
+
+
+def _activity_service(workspace, monkeypatch, handler):
+    """The character service's Activity API, answered by `handler`."""
+    monkeypatch.setattr(workspace.services, "running", lambda name: name == "agent")
+    monkeypatch.setattr(welcome.httpx, "AsyncClient",
+                        lambda **kw: REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kw))
+    runtime = workspace.home / "runtime"
+    runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / "dashboard.token").write_text("service-token\n", encoding="utf-8")
+
+
+CONVERSATION = {
+    "id": "telegram:-100", "platform": "telegram", "kind": "group",
+    "pending": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
+                 "created": 5.0, "actions": ["promote", "reject"], "checklist": {"rules": []},
+                 "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}]}],
+    "learned": [{"id": "def456", "type": "positive_example", "reply": "fair", "better": "",
+                 "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}]}],
+    "past": [{"id": "old", "type": "preference_pair"}],
+    "memories": [{"text": "match night at Sam's", "by": "Sam", "time": 3.0, "auto": False}],
+    "decisions": [{"ts": 2.0, "mode": "called", "spoke": True, "reason": "addressed", "excerpt": "sure",
+                   "answered": "Nova?", "sender": "Alex", "count": 1},
+                  {"ts": 1.0, "mode": "", "spoke": False, "reason": "below the trigger count",
+                   "excerpt": "lol", "answered": "", "sender": "Sam", "count": 3}],
+}
+
+
+def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_shows(client, workspace,
+                                                                                      monkeypatch):
+    seen = []
+    def handler(request):
+        seen.append(request)
+        if request.url.path == "/api/dashboard/conversations":
+            return httpx.Response(200, json={"conversations": [
+                {"id": "telegram:-100", "platform": "telegram", "kind": "group", "last_activity": 9.0,
+                 "memories": 1, "learned": 1, "pending": 1},
+                {"id": "private:browser:x", "platform": "browser", "kind": "dm", "last_activity": 8.0,
+                 "memories": 0, "learned": 0, "pending": 0}]})
+        return httpx.Response(200, json=CONVERSATION)
+    _activity_service(workspace, monkeypatch, handler)
+    listed = client.get("/api/activity", headers=HEADERS).json()
+    assert listed["running"] and not listed["off"]
+    assert [c["id"] for c in listed["chats"]] == ["telegram:-100", "private:browser:x"]
+    assert listed["chats"][0] == {"id": "telegram:-100", "platform": "telegram", "kind": "group",
+                                  "last": 9.0, "review": 1, "learned": 1, "notes": 1}
+    chat = client.get("/api/activity/chat", params={"id": "telegram:-100"}, headers=HEADERS).json()
+    assert seen[-1].url.params["id"] == "telegram:-100"
+    assert all(r.headers["x-personagent-dashboard-token"] == "service-token" for r in seen)
+    assert chat["review"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
+                               "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
+    assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
+    assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "when": 3.0}]
+    # Oldest first, like a chat; the service lists newest first.
+    assert [r["text"] for r in chat["recent"]] == ["lol", "sure"] and chat["recent"][0]["count"] == 3
+    assert "checklist" not in json.dumps(chat) and "past" not in chat and "history" not in json.dumps(chat)
+
+
+def test_activity_decisions_go_to_the_service_as_writes_and_come_back_as_the_chat(client, workspace,
+                                                                                monkeypatch):
+    writes = []
+    def handler(request):
+        if request.method == "POST":
+            writes.append(request)
+            if "/stale/" in request.url.path:
+                return httpx.Response(409, json={"error": "cannot", "code": "illegal_transition"})
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(200, json=CONVERSATION)
+    _activity_service(workspace, monkeypatch, handler)
+    url = "/api/activity/decide"
+    chat = client.post(url, headers=HEADERS, json={"id": "abc123", "action": "promote",
+                                                   "chat": "telegram:-100"}).json()
+    assert chat["id"] == "telegram:-100"
+    request = writes[-1]
+    assert request.url.path == "/api/dashboard/candidates/abc123/promote"
+    assert request.headers["x-personagent-dashboard"] == "1"
+    assert request.headers["content-type"] == "application/json"
+    assert json.loads(request.content) == {"reason": "local page"}
+    response = client.post(url, headers=HEADERS, json={"id": "stale", "action": "reject", "chat": "telegram:-100"})
+    assert response.status_code == 400 and response.json()["error"] == "activity_changed"
+    for bad in ({"id": "abc123", "action": "delete", "chat": "x"}, {"id": "../x", "action": "reject", "chat": "x"},
+                {"id": "abc123", "action": "reject", "chat": ""}):
+        response = client.post(url, headers=HEADERS, json=bad)
+        assert response.status_code == 400 and response.json()["error"] == "invalid_chat", bad
+    assert len(writes) == 2   # nothing invalid is ever written
+
+
+def test_activity_says_when_the_service_is_not_running_or_turned_off(client, workspace, monkeypatch):
+    monkeypatch.setattr(workspace.services, "running", lambda name: False)
+    assert client.get("/api/activity", headers=HEADERS).json() == {"running": False, "off": False, "chats": []}
+    _activity_service(workspace, monkeypatch, lambda request: httpx.Response(404, json={"detail": "Not Found"}))
+    assert client.get("/api/activity", headers=HEADERS).json() == {"running": True, "off": True, "chats": []}
+    _activity_service(workspace, monkeypatch, lambda request: httpx.Response(403, json={"code": "wrong_token"}))
+    response = client.get("/api/activity", headers=HEADERS)
+    assert response.status_code == 400 and response.json()["error"] == "activity_unavailable"
+    assert client.get("/api/activity").status_code == 403
+
+
+def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypatch):
+    def token_in(folder, text):
+        path = workspace.home / folder
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "dashboard.token").write_text(text + "\n", encoding="utf-8")
+    token_in("runtime", "default-token")
+    token_in("state-a", "shell-token")
+    token_in("state-b", "env-token")
+    monkeypatch.delenv("AGENT_RUNTIME_DIR", raising=False)
+    assert workspace._activity_token() == "default-token"
+    monkeypatch.setenv("AGENT_RUNTIME_DIR", "state-a")
+    assert workspace._activity_token() == "shell-token"
+    # The service's process takes .env over the shell, an empty value included.
+    sw.write_env(workspace.env, {"AGENT_RUNTIME_DIR": "state-b"})
+    assert workspace._activity_token() == "env-token"
+    sw.write_env(workspace.env, {"AGENT_RUNTIME_DIR": ""})
+    assert workspace._activity_token() == "default-token"

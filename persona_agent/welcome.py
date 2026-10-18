@@ -9,7 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import importlib.util
 import json
+import os
 from pathlib import Path
+import re
 import secrets
 import socket
 import subprocess
@@ -23,7 +25,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, home as homes
+from . import __version__, candidates, home as homes
 from . import connections as conn
 from . import direct
 from .direct import base as direct_base
@@ -49,6 +51,11 @@ DIRECT_WINDOW = 40
 # Refusals a direct platform names, which the page explains one by one.
 NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_content_intent_off",
                   "intents_not_allowed", "session_expired", "bot_offline", "bot_banned"}
+# The Activity view reads the character service's own API with the token it
+# keeps in its runtime folder; these are the decisions the view can make.
+ACTIVITY_ACTIONS = frozenset({"promote", "replace", "reject", "rollback"})
+ACTIVITY_RECENT = 40
+CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
 
 
 def _connector_type():
@@ -542,11 +549,106 @@ class Workspace:
             self._save_chat()
             return {"reply": reply}
 
+    def _activity_token(self) -> str:
+        # Where the service keeps it, read the way the service's own process
+        # gets it: .env over this process's environment, else <home>/runtime.
+        configured = dotenv_values(self.env).get("AGENT_RUNTIME_DIR")
+        if configured is None:
+            configured = os.environ.get("AGENT_RUNTIME_DIR", "")
+        runtime = Path(configured.strip() or "runtime").expanduser()
+        if not runtime.is_absolute():
+            runtime = self.home / runtime
+        try:
+            return (runtime / "dashboard.token").read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+    async def _activity_call(self, method: str, path: str, **kwargs) -> dict | None:
+        """The service's answer; None while it is not running, {"off": True}
+        when DASHBOARD_ENABLED is off."""
+        if not self.services.running("agent"):
+            return None
+        headers = {"X-Personagent-Dashboard-Token": self._activity_token()}
+        if method == "POST":
+            headers["X-Personagent-Dashboard"] = "1"
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
+                response = await client.request(method, self.services.agent_url + path,
+                                                headers=headers, **kwargs)
+            value = response.json()
+        except (httpx.HTTPError, ValueError):
+            raise ValueError("activity_unavailable") from None
+        if not isinstance(value, dict):
+            raise ValueError("activity_unavailable")
+        if response.status_code == 404 and value.get("detail") == "Not Found":
+            return {"off": True}
+        if response.status_code == 409:
+            raise ValueError("activity_changed")
+        if response.status_code != 200:
+            raise ValueError("activity_unavailable")
+        return value
+
+    async def activity(self) -> dict:
+        raw = await self._activity_call("GET", "/api/dashboard/conversations")
+        if raw is None or raw.get("off"):
+            return {"running": raw is not None, "off": bool(raw), "chats": []}
+        chats = [{"id": str(c.get("id", "")), "platform": str(c.get("platform", "")),
+                  "kind": str(c.get("kind", "")), "last": c.get("last_activity", 0),
+                  "review": int(c.get("pending", 0)), "learned": int(c.get("learned", 0)),
+                  "notes": int(c.get("memories", 0))}
+                 for c in raw.get("conversations", []) if isinstance(c, dict)]
+        return {"running": True, "off": False, "chats": chats}
+
+    async def activity_chat(self, chat: str) -> dict:
+        chat = str(chat or "")
+        if not chat or len(chat) > 512:
+            raise ValueError("invalid_chat")
+        raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
+        if raw is None or raw.get("off"):
+            raise ValueError("activity_unavailable")
+        return _activity_chat(raw)
+
+    async def activity_decide(self, payload: dict) -> dict:
+        cid, action = str(payload.get("id") or ""), str(payload.get("action") or "")
+        chat = str(payload.get("chat") or "")
+        if (action not in ACTIVITY_ACTIONS or not CANDIDATE_ID.fullmatch(cid)
+                or not chat or len(chat) > 512):
+            raise ValueError("invalid_chat")
+        result = await self._activity_call("POST", f"/api/dashboard/candidates/{cid}/{action}",
+                                           json={"reason": "local page"})
+        if result is None or result.get("off"):
+            raise ValueError("activity_unavailable")
+        return await self.activity_chat(chat)
+
     def close(self) -> None:
         with self._lock:
             self._closed = True
         self.services.shutdown()
         self.worker.shutdown(wait=False, cancel_futures=True)
+
+
+def _activity_chat(raw: dict) -> dict:
+    """One chat as the Activity view shows it: what waits for a decision,
+    what it learned, what it remembers and what it recently did. The
+    service's checklists, evidence and history stay with `personagent learned`."""
+    def item(cand: dict) -> dict:
+        speakers = [e.get("speaker") for e in cand.get("evidence") or [] if e.get("speaker")]
+        return {"id": cand.get("id", ""),
+                "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
+                "said": cand.get("reply", ""), "better": cand.get("better", ""),
+                "when": cand.get("created", 0), "from": list(dict.fromkeys(speakers))[:3],
+                "actions": [a for a in cand.get("actions") or [] if a in ACTIVITY_ACTIONS]}
+
+    return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
+            "review": [item(c) for c in raw.get("pending") or []],
+            "learned": [item(c) for c in raw.get("learned") or []],
+            "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "when": m.get("time", 0)}
+                      for m in raw.get("memories") or []],
+            "recent": [{"when": d.get("ts", 0), "spoke": bool(d.get("spoke")), "mode": d.get("mode", ""),
+                        "reason": d.get("reason", ""), "text": d.get("excerpt", ""),
+                        "answered": d.get("answered", ""), "sender": d.get("sender", ""),
+                        "count": int(d.get("count") or 1)}
+                       for d in (raw.get("decisions") or [])[:ACTIVITY_RECENT]][::-1]}
 
 
 def _expands(text: str) -> bool:
@@ -634,7 +736,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
                    "model_required", "invalid_character", "key_rejected", "model_unreachable",
                    "permission_required", "invalid_message", "invalid_platform",
-                   "field_required", "invalid_field", "invalid_persona", "invalid_feature"}
+                   "field_required", "invalid_field", "invalid_persona", "invalid_feature",
+                   "invalid_chat", "activity_unavailable", "activity_changed"}
         error = str(exc)
         return JSONResponse({"error": error if error in allowed else "generic"}, status_code=400)
 
@@ -738,6 +841,18 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.get("/api/chat/history")
     async def history():
         return workspace.history()
+
+    @app.get("/api/activity")
+    async def activity():
+        return await workspace.activity()
+
+    @app.get("/api/activity/chat")
+    async def activity_chat(id: str = ""):
+        return await workspace.activity_chat(id)
+
+    @app.post("/api/activity/decide")
+    async def activity_decide(request: Request):
+        return await workspace.activity_decide(await body(request))
 
     @app.post("/api/exit")
     async def exit_app(request: Request):

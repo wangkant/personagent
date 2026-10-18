@@ -5,6 +5,55 @@ const translations = {
     chat: "开始聊天",
     platforms: "连接平台",
     settings: "角色与设置",
+    activity: "动态",
+    activityLead: "它在哪些群和私聊里，最近说了什么，学到了什么。",
+    activityConnect: "去连接平台",
+    activityNotRunning: "角色还没有运行。在「开始聊天」里说一句话，或者连上一个平台，它就会启动。",
+    activityNone: "还没有聊天记录。连上一个平台，把它拉进群或私聊它，这里就会出现。",
+    activityOff: "动态已关闭（.env 里的 DASHBOARD_ENABLED=false）。",
+    activity_unavailable: "暂时读不到角色的动态，稍后会自动重试。",
+    activity_changed: "这条已经被处理过了，列表已刷新。",
+    invalid_chat: "这个聊天已经不在了。",
+    activityHere: "这个页面",
+    activityGroup: "群聊",
+    activityDm: "私聊",
+    activityReview: "等你确认",
+    activityReviewHint: "这些改动还在等更多反应才会自动生效，你也可以直接决定。",
+    activityLearned: "学到的",
+    activityNotes: "记住的事",
+    activityRecent: "最近",
+    activityRecentNone: "还没有记录。这里只保留最近的动态，角色重启后会清空。",
+    activityWording: "换个说法",
+    activityRepeat: "值得重复的回复",
+    activitySaid: "它说的",
+    activityBetter: "改成",
+    activityFrom: "来自 {who}",
+    activityKeep: "保留",
+    activityDiscard: "不要",
+    activityUndo: "撤销",
+    activityKept: "已保留，之后的回复会用上。",
+    activityDiscarded: "已放弃这条改动。",
+    activityUndone: "已撤销，它不会再这样说。",
+    activityQuiet: "没开口",
+    activityCount: "×{n}",
+    justNow: "刚刚",
+    minutesAgo: "{n} 分钟前",
+    hoursAgo: "{n} 小时前",
+    r_below: "没被叫到，消息数还没到插话门槛",
+    r_sleep: "深夜时段，为了作息自然跳过",
+    r_skip: "为了节奏自然随机跳过",
+    r_passed: "判断这里不需要它说话",
+    r_addressed: "被点名或 @",
+    r_sticky: "回应之前的点名",
+    r_followup: "接着自己刚才的话",
+    r_trigger: "消息数到了，考虑插话",
+    r_first: "第一次在这个聊天出现",
+    m_called: "被叫到",
+    m_owner: "管理员",
+    m_judge: "自己决定插话",
+    m_judge_quiet: "可以插话",
+    m_followup: "跟进",
+    m_proactive: "主动",
     local: "运行在你的电脑上",
     welcome: "欢迎来到 personagent",
     localReady: "本地应用已就绪",
@@ -183,6 +232,55 @@ const translations = {
     chat: "Chat",
     platforms: "Connect apps",
     settings: "Character & settings",
+    activity: "Activity",
+    activityLead: "Where it is, what it said lately, and what it learned.",
+    activityConnect: "Connect an app",
+    activityNotRunning: "The character isn't running yet. Say something in Chat, or connect an app, and it starts.",
+    activityNone: "No chats yet. Connect an app and add it to a group or message it, and they show up here.",
+    activityOff: "Activity is turned off (DASHBOARD_ENABLED=false in .env).",
+    activity_unavailable: "Couldn't read the character's activity just now. It will try again shortly.",
+    activity_changed: "That one was already handled. The list is up to date now.",
+    invalid_chat: "That chat is no longer there.",
+    activityHere: "This page",
+    activityGroup: "group",
+    activityDm: "DM",
+    activityReview: "Waiting for you",
+    activityReviewHint: "These changes are waiting for more reactions before they apply on their own. You can decide now.",
+    activityLearned: "Learned",
+    activityNotes: "Remembers",
+    activityRecent: "Recent",
+    activityRecentNone: "Nothing yet. Only recent activity is kept, and a restart clears it.",
+    activityWording: "Better wording",
+    activityRepeat: "Reply worth repeating",
+    activitySaid: "It said",
+    activityBetter: "Instead",
+    activityFrom: "from {who}",
+    activityKeep: "Keep",
+    activityDiscard: "Discard",
+    activityUndo: "Undo",
+    activityKept: "Kept. Its next replies will use it.",
+    activityDiscarded: "Discarded.",
+    activityUndone: "Undone. It won't say it this way any more.",
+    activityQuiet: "Stayed quiet",
+    activityCount: "×{n}",
+    justNow: "just now",
+    minutesAgo: "{n} min ago",
+    hoursAgo: "{n} h ago",
+    r_below: "not addressed, below the message count for joining in",
+    r_sleep: "night hours, skipped to keep a natural rhythm",
+    r_skip: "skipped at random to keep a natural rhythm",
+    r_passed: "judged it had nothing to add",
+    r_addressed: "called by name or @-mentioned",
+    r_sticky: "answering an earlier call",
+    r_followup: "following up on its own reply",
+    r_trigger: "enough messages to consider joining in",
+    r_first: "first time in this chat",
+    m_called: "called",
+    m_owner: "admin",
+    m_judge: "joined in on its own",
+    m_judge_quiet: "could join in",
+    m_followup: "follow-up",
+    m_proactive: "proactive",
     local: "Running on your computer",
     welcome: "Welcome to personagent",
     localReady: "Local app ready",
@@ -394,7 +492,7 @@ if (fragment.has("token")) {
 }
 const t = (key, fields = {}) =>
   Object.entries(fields).reduce(
-    (value, [name, text]) => value.replaceAll(`{${name}}`, text),
+    (value, [name, text]) => value.replaceAll(`{${name}}`, () => text),
     translations[lang][key] || translations[lang].generic,
   );
 function toast(text) {
@@ -452,6 +550,7 @@ function renderLanguage() {
   }
   updateNames();
   renderStatus();
+  renderActivity();
   if (!saving)
     $("save").textContent = t(state?.configured ? "saveAgain" : "saveStart");
 }
@@ -515,7 +614,7 @@ function showView(next) {
     toast(t("working"));
     return;
   }
-  if (next === "platforms" && !state.configured) {
+  if ((next === "platforms" || next === "activity") && !state.configured) {
     toast(t("firstConfigure"));
     next = "settings";
   }
@@ -526,13 +625,14 @@ function showView(next) {
   $("setup-view").hidden = !setup;
   $("chat-view").hidden = setup || next !== "chat";
   $("platforms-view").hidden = next !== "platforms";
+  $("activity-view").hidden = next !== "activity";
   $("page-label").textContent = t(
     setup
       ? state.configured
         ? "settings"
         : "welcome"
-      : next === "platforms"
-        ? "platforms"
+      : next === "platforms" || next === "activity"
+        ? next
         : "chat",
   );
   $("persona-card").hidden = !(setup && state.configured);
@@ -542,6 +642,10 @@ function showView(next) {
     if (!featuresDirty) fillFeatures();
   }
   if (next === "chat" && state.configured) $("message").focus();
+  if (next === "activity") {
+    renderActivity();
+    activityLoop();
+  }
 }
 // The persona as last loaded or saved; edits are compared with it.
 let personaShown = null,
@@ -626,6 +730,7 @@ const MARKS = {
   weixin_official_account: ["公", "#07c160", "wechat"],
   qq_official_webhook: ["Q", "#1ebafc", "qq"],
   aiocqhttp: ["N", "#1c1c1a", "onebot"],
+  qq: ["Q", "#1ebafc", "qq"],
   satori: ["Sa", "#7a5af8"],
 };
 function brand(node, kind) {
@@ -967,6 +1072,358 @@ async function poll() {
   }
   if (!ended) setTimeout(poll, state?.job.state === "working" ? 1000 : 4000);
 }
+// ---- Activity: where it is, what it said lately, what it learned
+let activity = null,
+  activityChat = null,
+  activitySelected = "",
+  activityError = "",
+  activityTimer = null,
+  activityBusy = false,
+  // Bumped by every load and decision, so an older answer never wins.
+  activitySeq = 0,
+  // What the view last drew; a poll that brings nothing new leaves the
+  // page, and the keyboard focus in it, alone.
+  activityShown = "";
+const ACTIVITY_MS = 8000;
+const ACTIVITY_IDLE_MS = 30000;
+// Why it spoke or stayed quiet, as the service records it.
+const REASONS = {
+  "below the trigger count": "r_below",
+  "sleep window": "r_sleep",
+  "spontaneous skip": "r_skip",
+  passed: "r_passed",
+  addressed: "r_addressed",
+  "sticky call": "r_sticky",
+  "followup window": "r_followup",
+  "trigger count": "r_trigger",
+  "first appearance": "r_first",
+};
+// Platforms a chat can come from that Connect apps does not list.
+const CHAT_PLATFORMS = { qq: "QQ", matrix: "Matrix", satori: "Satori" };
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function ago(epoch) {
+  const seconds = Date.now() / 1000 - Number(epoch || 0);
+  if (!epoch || seconds < 60) return t("justNow");
+  if (seconds < 3600)
+    return t("minutesAgo", { n: String(Math.floor(seconds / 60)) });
+  if (seconds < 86400)
+    return t("hoursAgo", { n: String(Math.floor(seconds / 3600)) });
+  return new Date(epoch * 1000).toLocaleDateString(
+    lang === "zh" ? "zh-CN" : "en",
+    { month: "short", day: "numeric" },
+  );
+}
+function chatTitle(chat) {
+  if (chat.platform === "browser") return t("activityHere");
+  const platform = spec(chat.platform)
+    ? pick(spec(chat.platform).name)
+    : CHAT_PLATFORMS[chat.platform] || chat.platform;
+  return `${platform} ${t(chat.kind === "dm" ? "activityDm" : "activityGroup")}`;
+}
+function chatTail(chat) {
+  if (chat.platform === "browser") return "";
+  const id = String(chat.id).split(":").pop();
+  return id.length > 8 ? `…${id.slice(-6)}` : id;
+}
+function chatBadge(chat) {
+  if (chat.platform !== "browser") return badge(chat.platform, "small");
+  const node = el("span", "badge small");
+  node.setAttribute("aria-hidden", "true");
+  node.append(document.querySelector(".brand-mark svg").cloneNode(true));
+  return node;
+}
+function reasonText(row) {
+  const key = REASONS[row.reason];
+  return key ? t(key) : row.reason;
+}
+function modeText(row) {
+  if (!row.mode) return "";
+  const key =
+    row.mode === "judge" && !row.spoke ? "m_judge_quiet" : `m_${row.mode}`;
+  return translations[lang][key] || row.mode;
+}
+function renderActivityDot() {
+  $("activity-dot").hidden = !(activity?.chats || []).some(
+    (chat) => chat.review > 0,
+  );
+}
+function renderActivity() {
+  renderActivityDot();
+  if (view !== "activity") return;
+  const shown = JSON.stringify([
+    lang,
+    activitySelected,
+    activityBusy,
+    activityError,
+    activity,
+    activityChat,
+    // "3 min ago" moves on even when nothing else does.
+    Math.floor(Date.now() / 60000),
+  ]);
+  if (shown === activityShown) return;
+  activityShown = shown;
+  const focused = document.activeElement?.dataset?.focus || "";
+  const chats = activity?.chats || [];
+  const empty = !activity
+    ? activityError
+    : !activity.running
+      ? "activityNotRunning"
+      : activity.off
+        ? "activityOff"
+        : chats.length
+          ? ""
+          : "activityNone";
+  $("activity-empty").hidden = !empty;
+  $("activity-empty-text").textContent = empty ? t(empty) : "";
+  $("activity-connect").hidden = !["activityNone", "activityNotRunning"].includes(empty);
+  $("activity-body").hidden = !activity || Boolean(empty);
+  if (!activity || empty) return;
+  $("activity-chats").replaceChildren(
+    ...chats.map((chat) => {
+      const row = el(
+        "button",
+        `activity-row${chat.id === activitySelected ? " active" : ""}`,
+      );
+      row.type = "button";
+      row.dataset.focus = `chat:${chat.id}`;
+      if (chat.id === activitySelected) row.setAttribute("aria-current", "true");
+      const text = el("span", "row-text");
+      text.append(
+        el("strong", "", chatTitle(chat)),
+        el(
+          "small",
+          "",
+          [chatTail(chat), ago(chat.last)].filter(Boolean).join(" · "),
+        ),
+      );
+      row.append(chatBadge(chat), text);
+      if (chat.review)
+        row.append(el("span", "count review", String(chat.review)));
+      row.addEventListener("click", () => selectChat(chat.id));
+      const item = el("li");
+      item.append(row);
+      return item;
+    }),
+  );
+  renderChat();
+  if (focused)
+    document.querySelector(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
+}
+function section(key, count) {
+  const node = el("section", "activity-section");
+  const title = el("h3", "", t(key));
+  if (count) title.append(el("span", "count", String(count)));
+  node.append(title);
+  return node;
+}
+function action(key, cls, focus, run) {
+  const button = el("button", cls, t(key));
+  button.type = "button";
+  button.dataset.focus = focus;
+  button.disabled = activityBusy;
+  button.addEventListener("click", run);
+  return button;
+}
+function change(item, waiting) {
+  const card = el("div", `change${waiting ? " waiting" : ""}`);
+  const top = el("div", "change-top");
+  const who = item.from.length
+    ? t("activityFrom", { who: item.from.join(lang === "zh" ? "、" : ", ") })
+    : "";
+  top.append(
+    el(
+      "span",
+      "change-kind",
+      t(item.kind === "wording" ? "activityWording" : "activityRepeat"),
+    ),
+    el("small", "", [who, ago(item.when)].filter(Boolean).join(" · ")),
+  );
+  card.append(top);
+  const body = el("div", "change-body");
+  if (item.kind === "wording") {
+    for (const [key, text, cls] of [
+      ["activitySaid", item.said, "was"],
+      ["activityBetter", item.better, "now"],
+    ]) {
+      const line = el("div", `change-line ${cls}`);
+      line.append(el("span", "label", t(key)), el("p", "", text));
+      body.append(line);
+    }
+  } else body.append(el("p", "change-reply", item.said));
+  card.append(body);
+  const buttons = el("div", "change-actions");
+  const keep = ["replace", "promote"].find((name) =>
+    item.actions.includes(name),
+  );
+  if (waiting) {
+    if (keep)
+      buttons.append(
+        action("activityKeep", "primary small", `${keep}:${item.id}`, () =>
+          decide(item, keep),
+        ),
+      );
+    if (item.actions.includes("reject"))
+      buttons.append(
+        action("activityDiscard", "quiet", `reject:${item.id}`, () =>
+          decide(item, "reject"),
+        ),
+      );
+  } else if (item.actions.includes("rollback"))
+    buttons.append(
+      action("activityUndo", "secondary", `rollback:${item.id}`, () =>
+        decide(item, "rollback"),
+      ),
+    );
+  if (buttons.childElementCount) card.append(buttons);
+  return card;
+}
+function recentLine(row) {
+  const item = el("li", row.spoke ? "spoke" : "passed");
+  const said = (text) => {
+    const line = el("p", "message");
+    if (row.sender) line.append(el("strong", "", `${row.sender} `));
+    line.append(text);
+    return line;
+  };
+  if (!row.spoke) item.append(said(row.text));
+  else {
+    if (row.answered) item.append(said(row.answered));
+    item.append(el("p", "reply", row.text));
+  }
+  const why = row.spoke
+    ? [modeText(row)]
+    : [t("activityQuiet"), reasonText(row)];
+  if (row.count > 1) why.push(t("activityCount", { n: String(row.count) }));
+  why.push(ago(row.when));
+  item.append(el("small", "why", why.filter(Boolean).join(" · ")));
+  return item;
+}
+function renderChat() {
+  const box = $("activity-chat");
+  const chat = activityChat?.id === activitySelected ? activityChat : null;
+  if (!chat) {
+    box.replaceChildren(
+      el("p", "activity-note", activityError ? t(activityError) : ""),
+    );
+    return;
+  }
+  const summary = activity.chats.find((c) => c.id === chat.id) || chat;
+  const head = el("div", "activity-head");
+  const name = el("div");
+  name.append(el("h2", "", chatTitle(summary)));
+  if (chat.platform !== "browser")
+    name.append(el("small", "", chat.id.replace(/^private:/, "")));
+  head.append(chatBadge(summary), name);
+  const parts = [head];
+  if (activityError)
+    parts.push(el("p", "activity-note error-note", t(activityError)));
+  if (chat.review.length) {
+    const part = section("activityReview", chat.review.length);
+    part.append(el("p", "section-hint", t("activityReviewHint")));
+    for (const item of chat.review) part.append(change(item, true));
+    parts.push(part);
+  }
+  if (chat.learned.length) {
+    const part = section("activityLearned", chat.learned.length);
+    for (const item of chat.learned) part.append(change(item, false));
+    parts.push(part);
+  }
+  if (chat.notes.length) {
+    const part = section("activityNotes");
+    const list = el("ul", "notes");
+    for (const note of chat.notes) {
+      const item = el("li");
+      item.append(el("span", "", note.text));
+      if (note.by && note.by !== "auto") item.append(el("small", "", note.by));
+      list.append(item);
+    }
+    part.append(list);
+    parts.push(part);
+  }
+  const recent = section("activityRecent");
+  if (chat.recent.length) {
+    const list = el("ul", "recent");
+    list.append(...chat.recent.map(recentLine));
+    recent.append(list);
+  } else recent.append(el("p", "activity-note", t("activityRecentNone")));
+  parts.push(recent);
+  box.replaceChildren(...parts);
+}
+async function loadActivity(withChat) {
+  const seq = ++activitySeq;
+  try {
+    const listed = await api("activity");
+    if (seq !== activitySeq) return;
+    activity = listed;
+    activityError = "";
+    const chats = activity.chats || [];
+    // Open on a chat with something to decide, else the latest one.
+    if (!chats.some((chat) => chat.id === activitySelected))
+      activitySelected = (chats.find((chat) => chat.review) || chats[0] || {}).id || "";
+    if (withChat && activitySelected) {
+      const chat = await api(
+        `activity/chat?id=${encodeURIComponent(activitySelected)}`,
+      );
+      if (seq !== activitySeq) return;
+      activityChat = chat;
+    }
+  } catch (error) {
+    if (seq !== activitySeq) return;
+    activityError = error.message;
+  }
+  renderActivity();
+}
+async function activityLoop() {
+  clearTimeout(activityTimer);
+  if (ended) return;
+  if (!document.hidden && state?.configured && !activityBusy)
+    await loadActivity(view === "activity");
+  clearTimeout(activityTimer);
+  activityTimer = setTimeout(
+    activityLoop,
+    view === "activity" ? ACTIVITY_MS : ACTIVITY_IDLE_MS,
+  );
+}
+function selectChat(id) {
+  if (id === activitySelected) return;
+  activitySelected = id;
+  activityChat = null;
+  renderActivity();
+  activityLoop();
+}
+async function decide(item, verb) {
+  if (activityBusy) return;
+  activityBusy = true;
+  const seq = ++activitySeq;
+  renderActivity();
+  try {
+    const chat = await api("activity/decide", {
+      id: item.id,
+      action: verb,
+      chat: activitySelected,
+    });
+    if (seq === activitySeq) activityChat = chat;
+    toast(
+      t(
+        verb === "reject"
+          ? "activityDiscarded"
+          : verb === "rollback"
+            ? "activityUndone"
+            : "activityKept",
+      ),
+    );
+  } catch (error) {
+    toast(t(error.message));
+  } finally {
+    activityBusy = false;
+    activityLoop();
+  }
+}
 function bubble(text, kind) {
   const node = document.createElement("div");
   node.className = `bubble ${kind}`;
@@ -1081,6 +1538,7 @@ $("features-save").addEventListener("click", async () => {
   }
 });
 $("gs-platform").addEventListener("click", () => showView("platforms"));
+$("activity-connect").addEventListener("click", () => showView("platforms"));
 $("gs-close").addEventListener("click", () => {
   try {
     localStorage.setItem(GS_KEY, "1");
@@ -1315,6 +1773,7 @@ $("exit").addEventListener("click", async () => {
         bubble(item.text, item.role === "user" ? "user" : "bot");
     }
     poll();
+    activityLoop();
   } catch (error) {
     toast(t(error.message));
   }

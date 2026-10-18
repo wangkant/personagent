@@ -1,4 +1,4 @@
-"""The operator dashboard: who may open it, what it shows, what it may change.
+"""The Activity API: who may call it, what it returns, what it may change.
 
 Run from the repo root:
 
@@ -6,11 +6,7 @@ Run from the repo root:
 """
 from __future__ import annotations
 
-import json
 import os
-import re
-import shutil
-import subprocess
 import time
 import warnings
 from datetime import datetime
@@ -35,7 +31,6 @@ with warnings.catch_warnings():
 LOCAL = "http://127.0.0.1:8080"
 API = ("/api/dashboard/status", "/api/dashboard/conversations",
        "/api/dashboard/conversation?id=telegram:c1")
-PAGES = ("/", "/dashboard/app.js", "/dashboard/app.css")
 WRITE = {"content-type": "application/json", "x-personagent-dashboard": "1"}
 SECRET_KEY = "sk-live-SECRET-0123456789abcdef"
 SECRET_TOKEN = "connector-SECRET-token-987654"
@@ -114,36 +109,27 @@ def live(tmp: Path):
 
 def client(peer: str = "127.0.0.1", base: str = LOCAL, signed_in: bool = True,
            **headers) -> TestClient:
-    """A browser that has opened the dashboard's link, unless `signed_in` is off."""
-    cookies = {dashboard.cookie_name(DASH_TOKEN): DASH_TOKEN} if signed_in else None
+    """A caller that sends the dashboard token, unless `signed_in` is off."""
+    if signed_in:
+        headers = {dashboard.TOKEN_HEADER: DASH_TOKEN, **headers}
     return TestClient(server.app, base_url=base, client=(peer, 50000),
-                      headers=headers or None, cookies=cookies)
+                      headers=headers or None)
 
 
 # ---------------------------------------------------------------- access ----
 
-def test_a_local_browser_gets_the_page_and_the_data(live) -> None:
+def test_the_token_header_gets_the_data(live) -> None:
     c = client()
-    page = c.get("/")
-    check("page: served", page.status_code == 200, page.text[:200])
-    check("page: html", page.headers["content-type"].startswith("text/html"))
-    csp = page.headers.get("content-security-policy", "")
-    check("page: strict CSP", "default-src 'self'" in csp and "script-src 'self'" in csp
-          and "frame-ancestors 'none'" in csp and "unsafe" not in csp, csp)
-    for name, value in (("x-content-type-options", "nosniff"),
-                        ("referrer-policy", "no-referrer")):
-        check(f"page: {name}", page.headers.get(name) == value, repr(page.headers.get(name)))
-    for path in PAGES[1:] + API:
+    for path in API:
         r = c.get(path)
-        check(f"local: {path} answered", r.status_code == 200, r.text[:200])
-        check(f"local: {path} hardened",
-              r.headers.get("x-content-type-options") == "nosniff"
-              and "frame-ancestors 'none'" in r.headers.get("content-security-policy", ""))
-    check("assets: only the shipped files",
-          c.get("/dashboard/..%2Fdashboard.py").status_code == 404
-          and c.get("/dashboard/index.html").status_code == 404)
-    check("assets: javascript type",
-          c.get("/dashboard/app.js").headers["content-type"].startswith("text/javascript"))
+        check(f"token: {path} answered", r.status_code == 200, r.text[:200])
+        check(f"token: {path} is JSON", r.headers["content-type"].startswith("application/json"))
+        for name, value in (("x-content-type-options", "nosniff"),
+                            ("referrer-policy", "no-referrer"),
+                            ("cache-control", "no-store")):
+            check(f"token: {path} {name}", r.headers.get(name) == value, repr(r.headers.get(name)))
+        check(f"token: {path} CSP", "frame-ancestors 'none'"
+              in r.headers.get("content-security-policy", ""))
 
 
 def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
@@ -152,17 +138,13 @@ def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
     # What a same-host proxy (nginx's default proxy_pass, an ssh -R or frp
     # tunnel) forwards: a loopback peer, a local Host, no forwarding header.
     looks_local = client(signed_in=False)
-    for path in PAGES + API:
+    for path in API:
         r = looks_local.get(path)
         check(f"no token: {path} refused", r.status_code == 401, repr((r.status_code, r.text[:120])))
     r = looks_local.post(write, json={}, headers=WRITE)
     check("no token: a write is refused", r.status_code == 401, r.text)
     check("no token: nothing reached the ledger",
           live.candidate_ledger.get(cid)["state"] == candidates.STATE_PROPOSED)
-    page = looks_local.get("/")
-    check("no token: the page says where the link is",
-          page.headers["content-type"].startswith("text/plain")
-          and "doctor" in page.text and "面板" in page.text, page.text)
 
     server.CONNECTOR_TOKEN = SECRET_TOKEN
     r = looks_local.get("/api/dashboard/status", headers={"x-personagent-token": SECRET_TOKEN})
@@ -173,61 +155,31 @@ def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
     check("the dashboard token in its header admits any client", ok.status_code == 200, ok.text)
     bad = remote.get("/api/dashboard/status", headers={dashboard.TOKEN_HEADER: "nope"})
     check("a wrong one is refused", bad.status_code == 403, bad.text)
-    wrong_cookie = TestClient(server.app, base_url=LOCAL, client=("127.0.0.1", 1),
-                              cookies={dashboard.cookie_name(DASH_TOKEN): "nope"})
-    check("a forged cookie is refused", wrong_cookie.get("/api/dashboard/status").status_code == 401)
-    r = client(**{"sec-fetch-site": "cross-site"}).get("/api/dashboard/status")
-    check("a cross-site fetch of the data is refused", r.status_code == 403, r.text)
+    cookie = TestClient(server.app, base_url=LOCAL, client=("127.0.0.1", 1),
+                        cookies={"personagent_dashboard": DASH_TOKEN})
+    check("a cookie opens nothing", cookie.get("/api/dashboard/status").status_code == 401)
+    for site in ("cross-site", "same-site"):
+        r = client(**{"sec-fetch-site": site}).get("/api/dashboard/status")
+        check(f"a {site} fetch of the data is refused", r.status_code == 403, r.text)
 
 
-def test_the_link_signs_the_browser_in_and_drops_the_token_from_the_address(live) -> None:
-    browser = client(signed_in=False)
-    browser.follow_redirects = False
-    r = browser.get("/", params={"token": DASH_TOKEN, "lang": "zh"})
-    check("link: redirected", r.status_code == 303 and r.headers["location"] == "./?lang=zh",
-          repr((r.status_code, r.headers.get("location"))))
-    cookie = r.headers.get("set-cookie", "")
-    check("link: the cookie is HttpOnly, SameSite=Strict, site-wide",
-          cookie.startswith(dashboard.cookie_name(DASH_TOKEN) + "=")
-          and "httponly" in cookie.lower() and "samesite=strict" in cookie.lower()
-          and "path=/" in cookie.lower(), cookie)
-    page = browser.get("/")
-    check("link: the page then opens on the cookie alone", page.status_code == 200, page.text[:200])
-    check("link: and so does its data", browser.get("/api/dashboard/status").status_code == 200)
-
-    other = client(signed_in=False)
-    other.follow_redirects = False
-    wrong = other.get("/", params={"token": "x" * 43})
-    check("a wrong link sets nothing", wrong.status_code == 403
-          and "set-cookie" not in wrong.headers, wrong.text)
-    started_elsewhere = other.get("/", params={"token": DASH_TOKEN},
-                                  headers={"sec-fetch-site": "cross-site"})
-    check("a link opened from another site still signs in, by a page that reloads",
-          started_elsewhere.status_code == 200 and "set-cookie" in started_elsewhere.headers
-          and 'http-equiv="refresh"' in started_elsewhere.text, started_elsewhere.text)
-
-
-def test_a_browser_must_name_a_host_no_rebinding_page_can(live) -> None:
-    rebound = client(base="http://evil.example:8080")
-    for path in PAGES + API:
-        r = rebound.get(path)
-        check(f"rebound name: {path} refused", r.status_code == 403, repr((r.status_code, r.text[:120])))
-    sign_in = client(base="http://evil.example:8080", signed_in=False)
-    sign_in.follow_redirects = False
-    r = sign_in.get("/", params={"token": DASH_TOKEN})
-    check("rebound name: the link signs nothing in", r.status_code == 403
-          and "set-cookie" not in r.headers, r.text)
-    for host in ("100.64.1.5:8080", "[::1]:8080", "localhost:8080"):
-        r = client(peer="100.64.1.5").get("/api/dashboard/status", headers={"host": host})
-        check(f"{host} is answered", r.status_code == 200, r.text)
-    saved = dict(server._LISTEN)
-    server._LISTEN["host"] = "mybox.lan"
-    try:
-        r = client(peer="192.168.1.9", base="http://mybox.lan:8080").get("/api/dashboard/status")
-    finally:
-        server._LISTEN.clear()
-        server._LISTEN.update(saved)
-    check("the name SERVER_HOST gives is answered", r.status_code == 200, r.text)
+def test_the_root_only_points_at_the_local_page(live) -> None:
+    c = client(signed_in=False)
+    c.follow_redirects = False
+    page = c.get("/")
+    check("root: answered without the token", page.status_code == 200, page.text)
+    check("root: plain text, in both languages",
+          page.headers["content-type"].startswith("text/plain")
+          and "Activity" in page.text and "learned`" in page.text
+          and "本地页面" in page.text, page.text)
+    check("root: hardened", page.headers.get("x-content-type-options") == "nosniff")
+    check("root: holds no token", DASH_TOKEN not in page.text)
+    link = c.get("/", params={"token": DASH_TOKEN})
+    check("root: an old link signs nothing in",
+          link.status_code == 200 and "set-cookie" not in link.headers, link.text)
+    for path in ("/dashboard/app.js", "/dashboard/app.css", "/dashboard/mark.svg"):
+        r = client().get(path)
+        check(f"{path} is gone", r.status_code == 404, repr((r.status_code, r.text[:120])))
 
 
 def test_the_token_file_is_made_once_and_kept(tmp, monkeypatch) -> None:
@@ -242,10 +194,6 @@ def test_the_token_file_is_made_once_and_kept(tmp, monkeypatch) -> None:
         check("made: owner-only", (path.stat().st_mode & 0o777) == 0o600, oct(path.stat().st_mode))
     monkeypatch.setattr(dashboard, "_token", "")
     check("kept: a restart reads the same one", dashboard.load_token(create=True) == made)
-    check("link: names it", dashboard.link("0.0.0.0", 8080)
-          == f"http://127.0.0.1:8080/?token={made}")
-    check("link: a specific address stays that address",
-          dashboard.link("100.64.1.5", 9000).startswith("http://100.64.1.5:9000/?token="))
     path.write_text("short\n", encoding="utf-8")
     monkeypatch.setattr(dashboard, "_token", "")
     fresh = dashboard.load_token(create=True)
@@ -264,7 +212,7 @@ def test_state_changes_need_the_header_and_the_same_origin(live) -> None:
         "a form post": c.post(url, content=b"reason=x", headers={
             "x-personagent-dashboard": "1",
             "content-type": "application/x-www-form-urlencoded"}),
-        "a browser not signed in": client(signed_in=False).post(url, json={}, headers=WRITE),
+        "a caller without the token": client(signed_in=False).post(url, json={}, headers=WRITE),
     }
     for name, r in refused.items():
         check(f"write: {name} refused", r.status_code in (401, 403, 415),
@@ -273,7 +221,7 @@ def test_state_changes_need_the_header_and_the_same_origin(live) -> None:
     check("write: nothing reached the ledger",
           live.candidate_ledger.get(cid)["state"] == candidates.STATE_PROPOSED)
     same = c.post(url, json={}, headers={**WRITE, "origin": LOCAL})
-    check("write: the page's own origin is accepted", same.status_code == 200, same.text)
+    check("write: the service's own origin is accepted", same.status_code == 200, same.text)
 
 
 # --------------------------------------------------------------- actions ----
@@ -372,7 +320,7 @@ def test_no_secret_reaches_any_response(live, monkeypatch) -> None:
         capabilities=("outbox",), platform="telegram", native=False,
         conversation_type="group", conversation_id="c1")
     c = client()
-    bodies = [c.get(path).text for path in API + PAGES]
+    bodies = [c.get(path).text for path in (*API, "/")]
     blob = "\n".join(bodies)
     for secret in (SECRET_KEY, SECRET_TOKEN, "tvly-SECRET-55555555"):
         check(f"secrets: {secret[:10]}... never sent", secret not in blob)
@@ -526,211 +474,6 @@ def test_a_fresh_install_has_empty_lists_not_errors(live, tmp) -> None:
           c.get("/api/dashboard/conversations").status_code == 200)
 
 
-def test_the_page_never_parses_server_text_as_html() -> None:
-    static = Path(dashboard.STATIC_DIR)
-    js = (static / "app.js").read_text(encoding="utf-8")
-    for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
-                 "new Function"):
-        check(f"page script: no {sink}", sink not in js)
-    html = (static / "index.html").read_text(encoding="utf-8")
-    check("page: no inline script", "<script>" not in html and "<script " in html
-          and 'src="dashboard/app.js"' in html)
-    check("page: no inline style", "style=" not in html and "<style" not in html)
-    check("page: nothing loaded from elsewhere", "http" not in html.replace(
-        'http-equiv', ''))
-
-
-def test_the_page_only_names_assets_that_ship_and_stays_small() -> None:
-    static = Path(dashboard.STATIC_DIR)
-    for name in dashboard._ASSETS:
-        check(f"asset {name} ships", (static / name).is_file())
-    text = (static / "index.html").read_text(encoding="utf-8") + \
-        (static / "app.js").read_text(encoding="utf-8")
-    named = set(re.findall(r"dashboard/([\w.-]+\.(?:js|css|svg|webp|png))", text))
-    check("every file the page names is served", named <= set(dashboard._ASSETS),
-          repr(named - set(dashboard._ASSETS)))
-    check("the favicon is the mark", 'rel="icon" href="dashboard/mark.svg"' in text)
-    total = sum(p.stat().st_size for p in static.rglob("*") if p.is_file())
-    check("static/ stays under 600 KB", total <= 600 * 1024, f"{total} bytes")
-
-
-def test_images_are_served_with_their_types(live) -> None:
-    c = client()
-    for name, kind in (("mark.svg", "image/svg+xml"), ("empty-chats.webp", "image/webp"),
-                       ("listening.webp", "image/webp"),
-                       ("learned-notebook.webp", "image/webp")):
-        r = c.get("/dashboard/" + name)
-        check(f"{name}: served", r.status_code == 200, r.text[:100])
-        check(f"{name}: type", r.headers["content-type"].startswith(kind),
-              r.headers["content-type"])
-        check(f"{name}: hardened", r.headers.get("x-content-type-options") == "nosniff")
-    check("images need the sign-in too",
-          client(signed_in=False).get("/dashboard/mark.svg").status_code in (401, 403))
-
-
-_CHAT_PROBE = r"""
-const fs = require("fs"), vm = require("vm");
-const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
-                        matchMedia: () => ({ matches: false }) },
-              document: { addEventListener() {}, hidden: false }, console };
-vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
-const cand = (id, state, reply, created) => ({ id, state, reply, created, type: "preference_pair",
-  better: "b", evidence: [], context: [], history: [], actions: [] });
-const long = "did you check the logs? roll back first, then diff the configs and the env";
-const d = {
-  decisions: [
-    { ts: 300, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
-    { ts: 200, spoke: true, excerpt: long.slice(0, 59) + "…", mode: "called", reason: "addressed", count: 1 },
-    { ts: 100, spoke: true, excerpt: "anytime", mode: "called", reason: "addressed", count: 1 },
-    { ts: 50, spoke: false, excerpt: "anytime", mode: "", reason: "passed", count: 1 },
-  ],
-  learned: [cand("L", "promoted", long, 210)],
-  pending: [cand("P", "proposed", "anytime", 301)],
-  past: [cand("X", "rejected", "said before the log began", 10)],
-};
-ctx.d = d;
-const out = vm.runInContext(`(() => {
-  const s = buildStream(d);
-  return { order: s.items.map((i) => i.row ? i.row.ts : "ledger"), bubbleOf: s.bubbleOf,
-           initials: [initial("小美"), initial("小林"), initial("alex")] };
-})()`, ctx);
-console.log(JSON.stringify(out));
-"""
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
-def test_learning_attaches_to_the_reply_it_changed() -> None:
-    script = Path(dashboard.STATIC_DIR) / "app.js"
-    run = subprocess.run(["node", "-e", _CHAT_PROBE, str(script)], capture_output=True,
-                         text=True, encoding="utf-8", timeout=60)
-    check("probe ran", run.returncode == 0, run.stderr)
-    out = json.loads(run.stdout)
-    order, at = out["order"], out["bubbleOf"]
-    check("oldest first, a ledger-only reply in its place", order == ["ledger", 50, 100, 200, 300],
-          repr(order))
-    check("a clipped log line still finds its proposal", at["L"] == "3", repr(at))
-    check("a repeated reply attaches to the one just before the proposal", at["P"] == "4", repr(at))
-    check("a reply older than the log gets its own bubble", at["X"] == "0", repr(at))
-    check("CJK initials tell 小美 from 小林", out["initials"] == ["美", "林", "A"], repr(out))
-
-
-_PAGE_PROBE = r"""
-const fs = require("fs"), vm = require("vm");
-const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
-                        matchMedia: () => ({ matches: false }) },
-              document: { addEventListener() {}, hidden: false }, console };
-vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
-ctx.render = () => {};
-const answer = (status, body) => async () => ({ ok: false, status, statusText: "",
-                                                json: async () => body });
-(async () => {
-  const out = {};
-  for (const [name, fetch] of [
-    ["unreachable", async () => { throw new TypeError("Failed to fetch"); }],
-    ["server error", answer(500, { error: "boom", code: "internal" })],
-    ["signed out", answer(401, { error: "no token", code: "dashboard_token" })],
-  ]) {
-    ctx.fetch = fetch;
-    await vm.runInContext("refresh()", ctx);
-    out[name] = vm.runInContext("({ down: view.down, hints: hintList() })", ctx);
-  }
-  out.counts = vm.runInContext(
-    '[t("notes_n", { n: 1 }), t("notes_n", { n: 2 }), t("convs_n", { n: 1 })]', ctx);
-  console.log(JSON.stringify(out));
-})();
-"""
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
-def test_the_page_tells_an_error_answer_from_an_unreachable_service() -> None:
-    script = Path(dashboard.STATIC_DIR) / "app.js"
-    run = subprocess.run(["node", "-e", _PAGE_PROBE, str(script)], capture_output=True,
-                         text=True, encoding="utf-8", timeout=60)
-    check("probe ran", run.returncode == 0, run.stderr)
-    out = json.loads(run.stdout)
-    down = out["unreachable"]
-    check("nothing answered: unreachable", down["down"] is True
-          and "run` still running" in down["hints"][0]["items"][0], repr(down))
-    error = out["server error"]
-    check("an error answer is not 'unreachable'", error["down"] is False
-          and "500" in error["hints"][0]["title"]
-          and error["hints"][0]["items"] == ["boom (internal)"], repr(error))
-    signed_out = out["signed out"]
-    check("signed out: says to open the link again", signed_out["down"] is False
-          and "doctor" in signed_out["hints"][0]["items"][0], repr(signed_out))
-    check("counts read as English", out["counts"] == ["1 note", "2 notes", "1 chat"],
-          repr(out["counts"]))
-
-
-_TEXT_PROBE = r"""
-const fs = require("fs"), vm = require("vm");
-const ctx = { window: { localStorage: null, location: { origin: "http://127.0.0.1:8080" },
-                        matchMedia: () => ({ matches: false }) },
-              document: { addEventListener() {}, hidden: false }, console };
-vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
-const out = vm.runInContext(`(() => {
-  view.status = { persona: { name: "Nova" } };
-  const row = { ts: 5, spoke: true, excerpt: "count me in", answered: "@Nova Nova, the final?",
-                sender: "Sam", mode: "called", reason: "addressed", count: 1 };
-  const ledger = { ledger: true, reply: "old reply", cands: [{ context: ["Sam: hi", "Nova: hey",
-                   "Priya: which film tonight?"] }] };
-  const mine = { ledger: true, reply: "x", cands: [{ context: ["Priya: hi", "Nova: hey"] }] };
-  const en = { asked: askedOf({ row, cands: [] }), ledger: askedOf(ledger), mine: askedOf(mine),
-               quiet: askedOf({ row: { spoke: false, excerpt: "lol", sender: "Sam" }, cands: [] }),
-               doubled: memberText("@Nova Nova, the final?"), plain: memberText("which match?"),
-               lead: lead("waiting_for"), list: joined(["a", "b"], true) + "|" + joined(["a", "b"]),
-               verdict: serverText("0/1 strong events (1 supporting)") };
-  view.lang = "zh";
-  const zh = { lead: lead("waiting_for"), list: joined(["甲", "乙"], true) + "|" + joined(["甲", "乙"]),
-               verdict: serverText("0/1 strong events (1 supporting)"),
-               ready: serverText("2 compatible events, 1 strong"),
-               history: serverText("the person accepted the retry instead"),
-               refusal: serverText("not in ACCESS_GROUPS, which lists telegram groups"),
-               model: serverText("Alex was venting, not asking for a fix"),
-               judge: t("m_judge"), quiet: t("m_judge_quiet") };
-  return { en, zh, judge: STRINGS.en.m_judge };
-})()`, ctx);
-console.log(JSON.stringify(out));
-"""
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
-def test_the_chat_shows_both_sides_and_reads_as_chinese() -> None:
-    script = Path(dashboard.STATIC_DIR) / "app.js"
-    run = subprocess.run(["node", "-e", _TEXT_PROBE, str(script)], capture_output=True,
-                         text=True, encoding="utf-8", timeout=60)
-    check("probe ran", run.returncode == 0, run.stderr)
-    out = json.loads(run.stdout)
-    en, zh = out["en"], out["zh"]
-    check("a reply shows the message it answered, by its sender",
-          en["asked"] == {"who": "Sam", "text": "@Nova Nova, the final?"}, repr(en["asked"]))
-    check("a reply older than the log answers its context's last line",
-          en["ledger"] == {"who": "Priya", "text": "which film tonight?"}, repr(en["ledger"]))
-    check("not when that line is its own", en["mine"] is None, repr(en["mine"]))
-    check("a silence has no reply to precede", en["quiet"] is None, repr(en["quiet"]))
-    check("a connector's mention in front of the name is left out",
-          en["doubled"] == "Nova, the final?" and en["plain"] == "which match?", repr(en))
-    check("English: a label, a space, ASCII separators",
-          en["lead"] == "Waiting for: " and en["list"] == "a; b|a, b"
-          and en["verdict"] == "0/1 strong events (1 supporting)", repr(en))
-    check("Chinese: no space after the full-width colon, full-width separators",
-          zh["lead"] == "还在等：" and zh["list"] == "甲；乙|甲，乙", repr(zh))
-    check("Chinese: the fixed server phrases are translated",
-          zh["verdict"] == "强证据 0/1（1 条支持）"
-          and zh["ready"] == "2 条一致的证据，其中 1 条是强证据"
-          and zh["history"] == "对方接受了它的重说"
-          and "ACCESS_GROUPS" in zh["refusal"] and "telegram" in zh["refusal"]
-          and "which lists" not in zh["refusal"], repr(zh))
-    check("Chinese: model-written text stays as it is",
-          zh["model"] == "Alex was venting, not asking for a fix", repr(zh["model"]))
-    check("plain words for joining in on its own",
-          out["judge"] == "joined in on its own" and zh["judge"] == "自己决定插话"
-          and zh["quiet"] == "可以插话", repr(out))
-
-
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     monkeypatch.setenv("DASHBOARD_ENABLED", "false")
     app = FastAPI()
@@ -738,7 +481,7 @@ def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     check("disabled: the app records it", app.state.dashboard is False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        check("disabled: the page is a 404",
+        check("disabled: / is a 404",
               TestClient(app, base_url=LOCAL, client=("127.0.0.1", 1)).get("/").status_code == 404)
     monkeypatch.setenv("DASHBOARD_ENABLED", "true")
     enabled = FastAPI()

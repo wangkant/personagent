@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1040" height="436" viewBox="0 0 1040 436" role="img" aria-labelledby="arch-title arch-desc">
   <title id="arch-title">personagent 架构</title>
-  <desc id="arch-desc">群聊消息经连接器（AstrBot、Satori 或 Matrix）进入。personagent 先判断要不要开口，不开口就什么都不发；开口则用人设、按会话的记忆和示例组装提示词，调用模型，校验后把回复发回。另一边，大家的反应经判定后写入只追加的证据日志；只有通过晋升的候选才会成为提示词可用的示例，你也可以批准、驳回或撤销。</desc>
+  <desc id="arch-desc">群聊消息经连接器进入：QQ、微信、Telegram、Discord 由 personagent 直接连接，其他平台经托管的 AstrBot，也可以经 Satori 或 Matrix。personagent 先判断要不要开口，不开口就什么都不发；开口则用人设、按会话的记忆和示例组装提示词，调用模型，校验后把回复发回。另一边，大家的反应经判定后写入只追加的证据日志；只有通过晋升的候选才会成为提示词可用的示例，你也可以批准、驳回或撤销。</desc>
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C4683F"/></marker>
     <marker id="al" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#557A59"/></marker>

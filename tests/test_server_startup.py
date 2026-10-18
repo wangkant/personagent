@@ -85,26 +85,23 @@ def test_the_banner_names_version_address_home_and_agent_state(monkeypatch) -> N
     assert f"personagent {server.__version__}" in banner
     assert "listening:  http://0.0.0.0:8080" in banner
     assert f"home:       {server.ROOT}" in banner
-    assert f"dashboard:  http://127.0.0.1:8080/?token={TOKEN}" in banner
     assert "on (model m-1, lang zh)" in banner
+    assert "dashboard" not in banner and TOKEN not in banner, banner
 
     monkeypatch.setattr(server, "agent", SimpleNamespace(enabled=False))
-    monkeypatch.setattr(server, "_dashboard_served", lambda: False)
     banner = server._banner("::1", 9000)
-    assert "http://[::1]:9000" in banner and "dashboard" not in banner
+    assert "http://[::1]:9000" in banner
     assert "OFF" in banner and "LLM_API_KEY" in banner and " init`" in banner
 
 
-def test_a_specific_address_gets_a_dashboard_link_that_opens(monkeypatch) -> None:
+def test_a_specific_address_answers_the_activity_api(monkeypatch) -> None:
     monkeypatch.setattr(server, "agent", None)
-    monkeypatch.setattr(server, "_dashboard_served", lambda: True)
     monkeypatch.setattr(dashboard, "_token", TOKEN)
-    banner = server._banner("100.64.1.5", 8080)
-    assert f"dashboard:  http://100.64.1.5:8080/?token={TOKEN}" in banner, banner
-    browser = TestClient(server.app, base_url="http://100.64.1.5:8080",
-                         client=("100.64.1.5", 50000))
-    assert browser.get(f"/?token={TOKEN}").status_code == 200
-    assert browser.get("/api/dashboard/status").status_code == 200
+    caller = TestClient(server.app, base_url="http://100.64.1.5:8080",
+                        client=("100.64.1.5", 50000))
+    assert caller.get("/api/dashboard/status",
+                      headers={dashboard.TOKEN_HEADER: TOKEN}).status_code == 200
+    assert caller.get("/api/dashboard/status").status_code == 401
 
 
 def test_a_turned_off_agent_is_told_how_to_turn_it_on(monkeypatch, caplog) -> None:
@@ -120,23 +117,19 @@ def test_a_turned_off_agent_is_told_how_to_turn_it_on(monkeypatch, caplog) -> No
     assert "AGENT_ENABLED=true" in said and "init`" not in said, said
 
 
-def test_doctor_prints_the_dashboard_link(monkeypatch, capsys, tmp_path) -> None:
+def test_doctor_says_when_the_activity_view_is_off(monkeypatch, capsys) -> None:
     from persona_agent import doctor
-    monkeypatch.setattr(dashboard, "_token", "")
-    monkeypatch.setattr(dashboard, "runtime_dir", lambda: tmp_path)
     monkeypatch.setattr(doctor, "check_config", lambda: [])
     monkeypatch.setattr(doctor, "run_checks", lambda: [])
-    monkeypatch.delenv("SERVER_HOST", raising=False)
-    monkeypatch.setenv("SERVER_PORT", "8123")
     monkeypatch.setenv("DASHBOARD_ENABLED", "true")
     doctor.main([])
-    token = (tmp_path / dashboard.TOKEN_FILE).read_text(encoding="utf-8").strip()
-    assert f"dashboard: http://127.0.0.1:8123/?token={token}" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "activity:" not in out and "?token=" not in out, out
     doctor.main(["--json"])
-    assert json.loads(capsys.readouterr().out)["dashboard"].endswith(f"?token={token}")
+    assert "dashboard" not in json.loads(capsys.readouterr().out)
     monkeypatch.setenv("DASHBOARD_ENABLED", "false")
     doctor.main([])
-    assert "dashboard:" not in capsys.readouterr().out
+    assert "Activity view" in capsys.readouterr().out
 
 
 # --- where it listens ------------------------------------------------------------
