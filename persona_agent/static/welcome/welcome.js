@@ -27,6 +27,7 @@ const translations = {
     activityRepeat: "值得重复的回复",
     activitySaid: "它说的",
     activityBetter: "改成",
+    activityLesson: "以后都这样",
     activityFrom: "来自 {who}",
     activityKeep: "保留",
     activityDiscard: "不要",
@@ -254,6 +255,7 @@ const translations = {
     activityRepeat: "Reply worth repeating",
     activitySaid: "It said",
     activityBetter: "Instead",
+    activityLesson: "From now on",
     activityFrom: "from {who}",
     activityKeep: "Keep",
     activityDiscard: "Discard",
@@ -1249,6 +1251,8 @@ function change(item, waiting) {
     for (const [key, text, cls] of [
       ["activitySaid", item.said, "was"],
       ["activityBetter", item.better, "now"],
+      // The fact behind the rewording, which every later reply in this chat sees.
+      ...(item.lesson ? [["activityLesson", item.lesson, "lesson"]] : []),
     ]) {
       const line = el("div", `change-line ${cls}`);
       line.append(el("span", "label", t(key)), el("p", "", text));

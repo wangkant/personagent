@@ -527,16 +527,36 @@ class Learning:
             history_line = ("" if is_admin else
                             self.teacher_stats.history_line(reactor_uid,
                                                             self.agent_lang))
+            recipient_uid = str(entry.get("target_uid") or "")
+            is_recipient = bool(recipient_uid) and recipient_uid == str(reactor_uid or "")
             prompt = reactions.build_adjudicator_prompt(
                 entry, reaction_text, reactor_name, is_admin,
-                self.persona_name, self.agent_lang, reactor_history=history_line)
-            raw = await self._call_llm(
-                "", [{"role": "user", "content": prompt}],
-                model=self.react_model, max_tokens=1000, enable_search=False,
-                json_object=True)
-            adj = reactions.parse_adjudication(raw)
+                self.persona_name, self.agent_lang, reactor_history=history_line,
+                reactor_is_recipient=is_recipient)
+            adj = None
+            # Once more on unusable output: a model now and then garbles a key
+            # ("reaction correction"), and a lost verdict loses the reaction.
+            for attempt in range(2):
+                raw = await self._call_llm(
+                    "", [{"role": "user", "content": prompt}],
+                    model=self.react_model, max_tokens=1000, enable_search=False,
+                    json_object=True)
+                adj = reactions.parse_adjudication(raw)
+                if adj:
+                    break
+                logger.warning("[Agent] reaction judge output unusable%s: %r",
+                               ", asking again" if not attempt else "",
+                               str(raw)[:120])
             if not adj:
                 return
+            # A lesson reaches every later prompt of this chat: only an
+            # accepted correction from the person the reply was for (or the
+            # admin) keeps one, and only past the core-memory filter.
+            adj["lesson"] = (
+                self._validate_memory_candidate(
+                    adj.get("lesson", ""), max_chars=reactions.LESSON_MAX_CHARS)
+                if adj["reaction"] == "correction" and adj["accept"]
+                and (is_recipient or is_admin) else "")
             now = datetime.now().isoformat(timespec="seconds")
             mode = entry.get("mode", "called")
             outcomes: list[str] = []
@@ -654,7 +674,8 @@ class Learning:
                     self.pending_reactions.note_rejection(
                         conv_id, entry, time.time(),
                         evidence_id=reaction_ev["event_id"],
-                        complainant_uid=str(reactor_uid or ""))
+                        complainant_uid=str(reactor_uid or ""),
+                        lesson=adj.get("lesson", ""))
                 if adj["reaction"] == "rejection" and conv_id:
                     if self.react_elicit_enabled and adj.get("ask"):
                         self._spawn(self._maybe_elicit(

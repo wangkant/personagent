@@ -327,6 +327,8 @@ A model call judges each reaction against the reply it answers. Alex's rejection
 
 > One message never teaches it anything. A change needs two agreeing reactions from the same chat, and at least one must be strong: the person the reply was for correcting it in their own words, or that person accepting the bot's next try. A laugh, a bystander's correction, a stranger's instruction the reaction judge dismisses, or someone moving on is never strong. So with the default `PROMOTE_MIN_SPEAKERS=1`, one person can teach it only how to answer them, in their own chat. `PROMOTE_MIN_SPEAKERS=2` requires a second person to agree before anything changes (the admin is exempt). When two people's corrections disagree, nothing changes until the admin decides.
 
+Some corrections teach a fact that holds beyond one reply: what the group calls a place or a person, who is hosting this year, how someone likes to be addressed. For these, the reaction judge also writes the fact down as one sentence, such as "This group calls the gym 'the cave'." Once the change is promoted, that sentence goes into every later prompt in this chat, whatever the message is about. The character then uses it in replies that look nothing like the one it was corrected on. Only the person the reply was for, or the admin, can leave such a sentence, and it passes the same filter as core memory, so it cannot carry instructions. A claim about someone else, such as a nickname for them, is held to the stricter rule for other people's corrections. The Activity view shows the sentence under **From now on**, and a rollback removes it along with the change.
+
 ### What one person can and cannot teach
 
 With the defaults:
@@ -334,6 +336,7 @@ With the defaults:
 | Alex... | Result |
 |---|---|
 | corrects a reply that was for Alex, then accepts the retry | Learned, in this chat |
+| tells it "we call the gym the cave", then accepts the retry | It says "the cave" in this chat from then on, whatever the topic |
 | corrects a reply, then moves on | Nothing changes |
 | laughs or says thanks | Nothing changes |
 | corrects a reply that was for Sam | Nothing changes: a bystander is never strong, even when the bot asks them what they meant |
@@ -414,7 +417,7 @@ The persona and learning suites need a judge model that differs from the model b
 
 `--rejudge REPORT` judges a kept report's replies again with the `BENCH_JUDGE_MODEL` you set now, without calling the model under test, and writes the result beside the original. The replies, the baselines and what the promotion policy did stay as they were. Judges disagree more than you might expect, so this is a cheap way to check a result.
 
-The latest published results are in the [README](../README.md#measured). The reports behind them, with every case, every reply and both judges' verdicts, are in [evals/2026-10-18](evals/2026-10-18). A few notes on reading them:
+The latest results, with the method, what they don't show and every report, are in [evals/2026-10-18](evals/2026-10-18/README.md). A few notes on reading the reports:
 
 - In `speak`, most misses are lines where its name means something else, such as a cinema or a puppy, or where someone tells someone else what it said. A name counts as a call, and the model seldom overrides that.
 - In `persona`, a split means the judge picked whichever reply came first (or second) both times. The published verdicts are Claude Opus 5.5's. It judged outside `personagent eval`, in batches, as each report's `rejudged` field records. Each pair's `earlier` field keeps the verdict of the first judge, Claude Haiku 5.5.

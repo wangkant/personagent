@@ -503,7 +503,7 @@ def _activity_service(workspace, monkeypatch, handler):
 CONVERSATION = {
     "id": "telegram:-100", "platform": "telegram", "kind": "group",
     "pending": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
-                 "created": 5.0, "actions": ["promote", "reject"], "checklist": {"rules": []},
+                 "lesson": "Priya hates rewatching Dune.", "created": 5.0, "actions": ["promote", "reject"], "checklist": {"rules": []},
                  "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}]}],
     "learned": [{"id": "def456", "type": "positive_example", "reply": "fair", "better": "",
                  "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}]}],
@@ -538,7 +538,7 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
     assert seen[-1].url.params["id"] == "telegram:-100"
     assert all(r.headers["x-personagent-dashboard-token"] == "service-token" for r in seen)
     assert chat["review"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
-                               "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
+                               "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
     assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "when": 3.0}]
     # Oldest first, like a chat; the service lists newest first.

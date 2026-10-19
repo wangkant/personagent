@@ -636,6 +636,7 @@ def _activity_chat(raw: dict) -> dict:
         return {"id": cand.get("id", ""),
                 "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
                 "said": cand.get("reply", ""), "better": cand.get("better", ""),
+                "lesson": cand.get("lesson", ""),
                 "when": cand.get("created", 0), "from": list(dict.fromkeys(speakers))[:3],
                 "actions": [a for a in cand.get("actions") or [] if a in ACTIVITY_ACTIONS]}
 

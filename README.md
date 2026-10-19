@@ -53,6 +53,7 @@ A burst of messages gets one reply, not one each.
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>It learns from corrections that hold up.</strong><br>
+What a correction teaches, like what the group calls the gym, carries into every later reply in that chat.<br>
 A change needs two agreeing reactions from the same chat, one of them strong.<br>
 A troll or a bystander cannot retrain it.<br>
 Every change is on record, and any of them can be rolled back.
@@ -103,59 +104,20 @@ Where they are ahead: desktop apps with every setting in a WebUI, big plugin eco
 
 ## Measured
 
-`personagent eval` drives the real agent through labelled chat moments and keeps every case, reply and verdict. The run below used personagent 1.2.2 on 2026-10-18, with the shipped example character (Nova in English, 小夏 in Chinese) on two models through OpenRouter. Every case ran three times, each in a fresh deployment. Brackets are 95% intervals that count each case once, so the repeats add no sample size.
-
-### When it speaks
-
-There are 60 group-chat moments per language: 20 where nobody names it, 20 right after it spoke, and 20 where its name appears. Half of each kind are labelled quiet. No judge is involved: each try is either right or wrong against its label.
-
-| Tries right | deepseek-v4.1-flash | gpt-6-luna |
-|---|---|---|
-| English | 83% [72–91] | 93% [84–97] |
-| Chinese | 80% [68–88] | 91% [80–96] |
-
-- It rarely ignores a message meant for it: at most 3 of 90 such tries, per model and language.
-- When nobody named it, or it had just spoken, it got 93–100% of tries right.
-- Most misses are its name used for something else, or said about it to someone else: a cinema, an earbud brand, a puppy, a quote. On those 10 moments per language, deepseek answered anyway in 25 of 30 English tries and 29 of 30 Chinese ones. gpt-6-luna answered in 12 and 16. personagent treats a name as a call, and the model seldom overrides that.
-
-### Playing the character
-
-personagent is compared with the same model given only the character text as its system prompt, which is what you get by pasting the character into a chat model. There are 40 moments per language, 22 in a group and 18 in DMs. Claude Opus 5.5 judged each pair blind twice, in separate sessions, with the replies swapped. A reply wins only when both picks agree, and a split counts as half. Saying nothing when called counts as a loss.
-
-| personagent's win rate | deepseek-v4.1-flash | gpt-6-luna |
-|---|---|---|
-| English | 63% [47–76] | 75% [59–86] |
-| Chinese | 58% [43–72] | 53% [38–67] |
-
-- In English it beats the plain prompt on both models. In Chinese the edge is within the noise.
-- The judge matters. A second judge, Claude Haiku 5.5 run through `personagent eval`, reached the same outcome on only 53–64% of the pairs. Its win rates were within 4 points of Opus's except on gpt-6-luna in English, where it gave 62%.
-- Moments vary from try to try: on deepseek in English, 11 of 40 moments won all three tries, 9 never won, and 20 went both ways.
-
-### Learning from corrections
-
-There are 20 scenarios per language, run through the real reaction path:
-
-- 7 teach a group convention the model can't guess, such as "we call the gym the cave" or "the BBQ is at Jules's this year".
-- 6 teach a style.
-- 7 must be held: a bystander's correction, a troll's, and one the person walks away from.
-
-A later, differently worded message in the same chat checks whether the character uses what it was taught. It runs once before the correction and once after, and Opus 5.5 judged the replies.
+`personagent eval` drives the real agent through labelled chat moments. The latest run, on 2026-10-18, put the shipped character on two models through OpenRouter, tried every case three times, and had Claude Opus 5.5 judge blind. English / Chinese:
 
 | | deepseek-v4.1-flash | gpt-6-luna |
 |---|---|---|
-| Held what it should hold | 42 of 42 tries | 42 of 42 tries |
-| Promoted what it should promote | 64 of 78 | 62 of 78 |
-| Used a promoted convention in the next message | 2 of 32 | 0 of 26 |
+| Right about when to speak (60 moments) | 83% / 80% | 93% / 91% |
+| Plays the character better than the same model given only its prompt (40 moments) | 63% / 58% | 75% / 53% |
+| Uses what a correction taught in a later, differently worded message | 76% / 56% | 71% / 67% |
 
-- The promotion rule did its job: no troll's, bystander's or walked-away correction got through. Of the 30 tries held that should have promoted, 21 failed because the reaction model did not accept the correction. The other 9 failed at the retry step: there was no retry, the retry wasn't linked to the correction, or the person's thanks didn't count as accepting it.
-- A promoted correction barely changes later replies. The rule promotes the character's own retry as an example of better wording, not the convention behind it. On deepseek, "fine, the cave at 7 then" was promoted. When the next message asked "leg day again tonight, same place at 6, you in?", the reply was "yeah I'm in, 6 at the usual spot".
-- The style scenarios can't show much: the models already followed those styles in 56 of 72 tries before any correction.
+- It rarely ignores a message meant for it. Most misses are its name used for something else, such as a cinema or a puppy.
+- In Chinese, its edge over the plain prompt is within the noise.
+- Before corrections kept their lesson, which was fixed after the first run that day, only 2 of 58 later messages used it.
+- No troll's, bystander's or walked-away correction got through, in 84 tries.
 
-### What this doesn't show
-
-These results cover one character on two models, on cases we wrote and labelled ourselves. A model judge is not a person, and these two judges often disagreed.
-
-The [reports](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) hold every case, every reply and both judges' verdicts. The [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#measure-it) explains each suite and how to run it yourself.
+The [full results](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) give the intervals, the misses by kind, the method, what the numbers don't show, and every report.
 
 ## Documentation
 

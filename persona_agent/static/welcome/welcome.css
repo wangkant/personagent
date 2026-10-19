@@ -1356,7 +1356,7 @@ label.check input {
 }
 .change-line {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
 }
@@ -1378,6 +1378,10 @@ label.check input {
 .change-line.now p,
 .change-reply {
   color: var(--ink);
+}
+.change-line.lesson p {
+  color: var(--ink);
+  font-weight: 600;
 }
 .change-actions {
   display: flex;

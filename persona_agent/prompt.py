@@ -259,6 +259,7 @@ class PromptBuilder:
         context_block = (
             f"{self._lorebook_for_prompt(all_history, focus_text=latest_text)}"
             f"{self._core_memory_for_prompt(group_id)}"
+            f"{self._lessons_for_prompt(group_id)}"
             f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
         system_content = static_block + semi_static_block + examples_block + context_block
@@ -478,6 +479,7 @@ class PromptBuilder:
         if pkey:
             memory_blocks = (
                 f"{self._core_memory_for_prompt(pkey)}"
+                f"{self._lessons_for_prompt(channels.learning_key(pkey))}"
                 f"{self._memories_for_prompt(pkey, focus_text=last_user)}"
             )
         dynamic_block = (

@@ -909,7 +909,8 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     row["candidates"] = []
     for cand in agent.candidate_ledger.all():
         item = {"type": cand.get("type"), "state": cand.get("state"),
-                "reply": cand.get("reply"), "better": cand.get("better")}
+                "reply": cand.get("reply"), "better": cand.get("better"),
+                "lesson": (cand.get("payload") or {}).get("lesson", "")}
         if cand.get("state") == "proposed":
             item["held_because"] = agent._decide_promotion(
                 cand["candidate_id"]).reason

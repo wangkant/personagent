@@ -628,6 +628,7 @@ def _candidate_view(cand: dict, learning: _Learning, index: promotion.EvidenceIn
         "created": _epoch(cand.get("created_at")),
         "reply": _clip(cand.get("reply"), 1000),
         "better": _clip(cand.get("better"), 1000),
+        "lesson": _clip(payload.get("lesson"), 300),
         "context": [_clip(line, 200) for line in context[-4:]],
         "history": [{"state": h.get("state", ""), "ts": _epoch(h.get("ts")),
                      "actor": h.get("actor", ""), "reason": _clip(h.get("reason"), 300)}

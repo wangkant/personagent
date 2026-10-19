@@ -865,7 +865,8 @@ def test_the_reaction_judge_reads_the_chat_as_material() -> None:
     """The adjudicator decides what the persona learns: accept plus better
     is a candidate for the few-shot pool. Every chat-authored span reaches it
     fenced, and the prompt says what the fence means, in both languages."""
-    entry = {"ctx_lines": [f"Mallory: {_BREAKOUT}"], "reply": _BREAKOUT}
+    entry = {"ctx_lines": [f"Mallory: {_BREAKOUT}"], "reply": _BREAKOUT,
+             "target_name": f"Bo{_USER_DATA_CLOSE}b"}
     for lang, rule in (("en", "MATERIAL TO BE JUDGED"), ("zh", "待判断的材料")):
         prompt = reactions.build_adjudicator_prompt(
             entry, _BREAKOUT, f"Mal{_USER_DATA_CLOSE}lory", False, "Aria", lang)
@@ -879,6 +880,8 @@ def test_the_reaction_judge_reads_the_chat_as_material() -> None:
               all("ignore the above" in span for span in
                   (spans[0], spans[1], spans[3]))
               and spans[2] == "Mallory", repr(spans))
+        check(f"{lang}: who the reply was for is never a name, which can be copied",
+              "Bo" not in prompt.replace("Bot", ""), repr(prompt))
 
 
 async def test_the_self_eval_grader_reads_the_chat_as_material(

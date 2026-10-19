@@ -156,6 +156,8 @@ def cmd_show(args, ledger, log, policy) -> int:
     print(f"\nreply      {cand.get('reply')}")
     if cand.get("better"):
         print(f"better     {cand.get('better')}")
+    if (cand.get("payload") or {}).get("lesson"):
+        print(f"lesson     {cand['payload']['lesson']}")
     for line in (cand.get("payload") or {}).get("context") or []:
         print(f"context    {line}")
 

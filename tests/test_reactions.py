@@ -88,7 +88,8 @@ def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
     p = reactions.PendingReplies(fix_window_sec=100)
     bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called",
                target_uid="42")
-    p.note_rejection("g1", bad, ts=100.0, evidence_id="ev1", complainant_uid="42")
+    p.note_rejection("g1", bad, ts=100.0, evidence_id="ev1", complainant_uid="42",
+                     lesson="This group calls the gym 'the cave'.")
     p.record("g1", **_entry_kwargs(reply="pizza", target_uid="7", ts=110.0))
     check("a reply to someone else leaves the complaint armed",
           (p.awaiting("g1") or {}).get("complainant_uid") == "42")
@@ -98,10 +99,16 @@ def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
           p.awaiting("g1", "42") is not None)
     p.record("g1", **_entry_kwargs(reply="check the logs first", ts=130.0))
     fixed = p.match("g1", sender_uid="42", at_bot=True, now=131.0)
-    check("the next reply to the complainant carries the fix and who it was for",
+    check("the next reply to the complainant carries the fix, who it was for "
+          "and the complaint's lesson",
           fixed["fixes"] == {"reply": "just restart it", "ctx_lines": ["a: down"],
                              "mode": "called", "evidence_id": "ev1",
-                             "target_uid": "42"}, repr(fixed))
+                             "target_uid": "42",
+                             "lesson": "This group calls the gym 'the cave'."},
+          repr(fixed))
+    pair = reactions.fix_pair(fixed["fixes"], fixed["reply"], "t")
+    check("the retry's pair keeps the lesson, since it is what promotes",
+          pair["lesson"] == "This group calls the gym 'the cave'.", repr(pair))
 
     with tempfile.TemporaryDirectory() as d:
         state = Path(d) / "pending.json"
@@ -619,3 +626,21 @@ def test_teacher_forgiveness_window(tmp: Path) -> None:
               reactions.TeacherStats(nan_path).hard_block("u3") in (True, False))
     finally:
         time.time = real
+
+
+def test_a_lesson_is_one_clean_sentence_or_nothing() -> None:
+    entry = {"reply": "see you at the gym", "ctx_lines": ["dana: 7am?"], "mode": "called"}
+    base = {"reaction": "correction", "accept": True, "reason": "r",
+            "better": "see you at the cave", "ask": "", "scenario": "s"}
+    check("no lesson field: an older verdict still parses",
+          reactions.parse_adjudication(json.dumps(base)) is not None)
+    check("a lesson that is not text is refused, like every other field",
+          reactions.parse_adjudication(json.dumps({**base, "lesson": ["x"]})) is None)
+    pair = reactions.to_feedback_pair(entry, base, "t")
+    check("no lesson: the pair has no lesson key", "lesson" not in pair, repr(pair))
+    long = "This group calls the gym\n 'the cave'. " + "x" * 400
+    pair = reactions.to_feedback_pair(entry, {**base, "lesson": long}, "t")
+    check("a lesson is one line, clipped to its cap",
+          pair["lesson"].startswith("This group calls the gym 'the cave'.")
+          and "\n" not in pair["lesson"]
+          and len(pair["lesson"]) == reactions.LESSON_MAX_CHARS, repr(pair))
