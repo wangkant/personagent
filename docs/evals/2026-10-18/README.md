@@ -2,7 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-`personagent eval` drives the real agent through labelled chat moments and keeps every case, reply and verdict. This run used personagent 1.2.2 plus the changes listed under Unreleased in the [changelog](../../../CHANGELOG.md), with the shipped example character (Nova in English, 小夏 in Chinese) on two models through OpenRouter: `deepseek/deepseek-v4.1-flash` and `openai/gpt-6-luna`. Every case ran three times, each in a fresh deployment.
+`personagent eval` drives the real agent through labelled chat moments and keeps every case, reply and verdict. This run measured the code released as personagent 1.3.0 (the reports, written before the version number moved, say 1.2.2), with the shipped example character (Nova in English, 小夏 in Chinese) on two models through OpenRouter: `deepseek/deepseek-v4.1-flash` and `openai/gpt-6-luna`. Every case ran three times, each in a fresh deployment.
 
 Brackets are 95% intervals. They count each case once, so the three tries add no sample size. How each suite works is in the [user guide](../../guide.md#measure-it).
 

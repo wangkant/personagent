@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "personagent"
-version = "1.2.2"
+version = "1.3.0"
 description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
 readme = "README.md"
 requires-python = ">=3.10"

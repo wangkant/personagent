@@ -6,12 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-18
+
+A correction now teaches what it meant, not just a better wording; the local page shows what the character did and learned; and the eval measures it against a real baseline, with repeats and intervals.
+
 ### Added
 
 - **Activity in the local page.** A new view between Chat and Connect apps lists every chat the character is in and, for the one you pick, what waits for your decision (Keep or Discard), what it learned (Undo), what it remembers, and what it recently said or let pass, with the reason. A dot on the sidebar marks a chat with something waiting. Decisions go into the same append-only ledger as `personagent learned`, with the reason `local page`.
+- **A correction now teaches its lesson, not just a better wording.** What gets promoted is the character's retry, and its retrieval framing ("learn the voice in [OK]") taught tone, so a later message on the same subject came out without the fact: in the eval, 2 of 58 replies after a promotion used what the group had taught, and with this change 52 of 77 do. When a correction teaches something that holds beyond one reply (what the group calls a place or a person, a fact about someone), the reaction judge now also writes it as one sentence. Only an accepted correction from the person the reply was for, or from the admin, keeps one, and it must pass the same filter as core memory, so it cannot carry markup, instructions or trigger rules. The sentence travels with the retry that promotes. Once promoted, it goes into every later prompt in that chat as a `<taught_here>` block of quoted data, whatever the turn is about, and a rollback takes it out. The Activity view shows it under **From now on**, and `personagent learned show` prints it.
 - **`personagent eval --repeat N`** runs every case N times, each in a fresh deployment. The 95% intervals count each case once, so repeats show how much a result moves between tries without inflating the sample, and every block reports how many cases went the same way on every try. Reports record the personagent version and which version of each dataset they measured.
 - **`personagent eval --rejudge REPORT`** judges a kept report's replies again with the judge you set now, without calling the model under test.
-- **A correction now teaches its lesson, not just a better wording.** What gets promoted is the character's retry, and its retrieval framing ("learn the voice in [OK]") taught tone, so a later message on the same subject came out without the fact: in the eval, 2 of 58 replies after a promotion used what the group had taught, and with this change 52 of 77 do. When a correction teaches something that holds beyond one reply (what the group calls a place or a person, a fact about someone), the reaction judge now also writes it as one sentence. Only an accepted correction from the person the reply was for, or from the admin, keeps one, and it must pass the same filter as core memory, so it cannot carry markup, instructions or trigger rules. The sentence travels with the retry that promotes. Once promoted, it goes into every later prompt in that chat as a `<taught_here>` block of quoted data, whatever the turn is about, and a rollback takes it out. The Activity view shows it under **From now on**, and `personagent learned show` prints it.
 
 ### Fixed
 
@@ -23,9 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The persona suite compares against a real baseline.** The other reply now comes from the same model given the character text as its whole system prompt, rather than from a plain assistant that any character beats. The judge sees each pair twice with the replies swapped. A reply wins when both picks agree, and a split counts half. The 1–5 rubric is gone: the last judge gave every reply full marks.
 - **The eval cases are larger and harder.** `speak` grows from 24 to 60 moments per language, with ten per language where the name means something else. `persona` grows from 18 to 40. `learning` grows from 10 to 20, adding seven group conventions the model cannot guess and three more cases that must be held.
 - **The README's Measured section is a short summary of the 2026-10-18 run**: two models, three tries per case, Claude Opus 5.5 as judge. The full results, with intervals, the misses by kind, the method and every report, are in `docs/evals/2026-10-18`, including the first learning run from before corrections kept their lesson.
-
 - **The agent service no longer serves a dashboard page.** Its startup banner and `personagent doctor` print no dashboard link, and there is no sign-in link or cookie any more; `GET /` on the service answers a short note pointing to the local page and to `personagent learned`. The JSON API under `/api/dashboard/` stays, for the local page and for scripts, and takes only the `X-Personagent-Dashboard-Token` header. The promotion checklist, evidence and history the page showed are in `personagent learned show`.
-- **The docs read more plainly and match 1.2.2,** with new screenshots of Connect apps and Activity.
+- **The docs read more plainly and match this release,** with new screenshots of Connect apps and Activity.
 
 ### Removed
 
@@ -410,7 +413,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/wangkant/personagent/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/wangkant/personagent/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/wangkant/personagent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/wangkant/personagent/compare/v1.1.0...v1.2.0

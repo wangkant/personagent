@@ -2,7 +2,7 @@
 
 [English](README.md) · **简体中文**
 
-`personagent eval` 用标注好的聊天场景驱动真实的 agent，每个用例、每条回复和判定都会存下来。这次用的是 personagent 1.2.2 加上[更新日志](../../../CHANGELOG.md)里 Unreleased 下列出的改动，角色是随包附带的示例角色（中文叫小夏，英文叫 Nova），模型经 OpenRouter 调用，测了两个：`deepseek/deepseek-v4.1-flash` 和 `openai/gpt-6-luna`。每个用例跑 3 遍，每遍都在全新的部署里。
+`personagent eval` 用标注好的聊天场景驱动真实的 agent，每个用例、每条回复和判定都会存下来。这次测的是作为 personagent 1.3.0 发布的代码（报告写于版本号更新之前，所以里面写的是 1.2.2），角色是随包附带的示例角色（中文叫小夏，英文叫 Nova），模型经 OpenRouter 调用，测了两个：`deepseek/deepseek-v4.1-flash` 和 `openai/gpt-6-luna`。每个用例跑 3 遍，每遍都在全新的部署里。
 
 方括号里是 95% 置信区间，每个用例只算一次，重复跑不会让样本显得更大。各项具体怎么测，见[使用手册](../../guide.zh-CN.md#效果评测)。
 
