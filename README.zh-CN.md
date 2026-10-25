@@ -34,6 +34,16 @@ personagent
 
 Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 3.10–3.14。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令行和连接器的用法在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)里。
 
+## 让编程助手帮你装
+
+能在你电脑上运行命令的 AI 编程助手，可以替你安装和设置 personagent。把这句话发给它：
+
+```text
+读 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md ，然后帮我把 personagent 装好并设置好
+```
+
+它会先问你角色的语言、名字和性格，用哪家模型服务，要接哪些聊天平台，然后安装 personagent、建好主目录、启动本地页面。模型 Key 由你自己在页面里填，不经过助手。它照着做的[说明](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)是英文的，你用中文和它交流就行。
+
 ## 为什么用它
 
 <table>

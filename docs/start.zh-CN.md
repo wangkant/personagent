@@ -13,6 +13,8 @@ personagent
 
 装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 无需单独安装即可运行。
 
+也可以让 AI 编程助手代劳：让它读 [setup-for-agents.md](setup-for-agents.md)，然后帮你把 personagent 装好并设置好。
+
 在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。它会在文件夹里建好自己的 Python 环境，再打开同一个本地页面。
 
 从 Git 仓库运行时，请为它单独建一个虚拟环境：先运行 `python -m venv .venv`，再运行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的解释器是 `.venv\Scripts\python.exe`，也可以直接双击 `start.bat`。

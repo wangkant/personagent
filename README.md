@@ -38,6 +38,16 @@ The browser opens on a local page with three views: **Chat**, **Connect apps** a
 
 On Windows you can also download the source ZIP and double-click `start.bat`. Python 3.10–3.14. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md); terminal commands and connectors are in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
+## Let your coding agent set it up
+
+A coding agent that can run commands on your computer can install and set up personagent for you. Give it this:
+
+```text
+Read https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md and set up personagent for me.
+```
+
+It asks for the character's language, name and personality, your model service and the chat apps you want, then installs personagent, creates the home folder and starts the local page. You paste your model key into that page yourself, so the key never passes through the agent. The [instructions it follows](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md) are plain Markdown you can read too.
+
 ## Why personagent
 
 <table>

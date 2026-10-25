@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Setup by a coding agent.** `docs/setup-for-agents.md` tells an AI coding agent how to install and set up personagent: what to ask the user, the install routes, `init --no-input`, starting the local page in the background and handing over its link, connecting apps, updating and undoing. The model key never passes through the agent: the user enters it in the page. The README has a prompt to paste, and a test checks that every command in the file parses.
+
 ## [1.3.0] — 2026-10-18
 
 A correction now teaches what it meant, not just a better wording; the local page shows what the character did and learned; and the eval measures it against a real baseline, with repeats and intervals.

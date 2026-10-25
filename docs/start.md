@@ -13,6 +13,8 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
+A coding agent can do the setup for you: ask it to read [setup-for-agents.md](setup-for-agents.md) and set up personagent.
+
 On Windows you can also download the source ZIP, unpack it and double-click `start.bat`. It creates its own Python environment in the folder and opens the same page.
 
 To run it from a clone, give it a venv of its own: `python -m venv .venv`, then `.venv/bin/python -m pip install -e .` and `.venv/bin/python -m persona_agent`. On Windows the interpreter is `.venv\Scripts\python.exe`, or you can double-click `start.bat`.
