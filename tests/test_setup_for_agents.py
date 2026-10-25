@@ -52,22 +52,13 @@ def _arguments(words: list[str]) -> list[str]:
     return list(takewhile(lambda w: not set(w) <= OPERATORS, words))
 
 
-def _argument_list(words: list[str]) -> list[str]:
-    """What PowerShell's `Start-Process ... -ArgumentList 'a', 'b'` passes."""
-    rest = words[words.index("-ArgumentList") + 1:] if "-ArgumentList" in words else []
-    args = []
-    for word in rest:
-        args.append(word.rstrip(","))
-        if not word.endswith(","):
-            break
-    return args
-
-
 def _invocation(snippet: str) -> list[str] | None:
     """The arguments `snippet` gives personagent, or None if it does not run it."""
     words = _words(snippet)
     for i, word in enumerate(words):
         before = words[i - 1] if i else ""
+        if word.startswith("/c "):  # the command line in `cmd /c '...'`
+            return _invocation(word[3:])
         name = re.split(r"[\\/]", word)[-1].lower()
         if word == "persona_agent" and before == "-m":
             return _arguments(words[i + 1:])
@@ -75,8 +66,6 @@ def _invocation(snippet: str) -> list[str] | None:
                 before == "uvx" and name.startswith("personagent@")):
             if before in PACKAGE_VERBS:
                 continue
-            if before == "Start-Process":
-                return _argument_list(words[i + 1:])
             return _arguments(words[i + 1:])
     return None
 
@@ -152,6 +141,15 @@ def test_the_guide_covers_the_whole_setup(monkeypatch) -> None:
     # The commands to run name the home (rule 9); a bare `personagent init` is a warning.
     inits = [a for a in COMMANDS if "init" in a and "--home" in a]
     assert inits and all("--no-input" in a for a in inits)
+    # Left out, --lang and --persona fall back to other defaults than step 1's.
+    assert all({"--lang", "--name", "--persona", "--provider"} <= set(a) for a in inits if "--key-env" not in a)
+
+
+def test_the_background_start_returns_through_a_pipe() -> None:
+    # A redirected or same-window Start-Process hands the page the caller's output pipe.
+    starts = [s for s in _snippets(DOC.read_text(encoding="utf-8")) if "Start-Process" in s]
+    assert any("cmd" in s for s in starts)
+    assert not any(re.search(r"-Redirect|-NoNewWindow", s) for s in starts)
 
 
 def test_the_tables_match_the_presets() -> None:
