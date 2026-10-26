@@ -147,7 +147,7 @@ Alles, was personagent speichert, bleibt auf deinem Rechner, in einem Home-Ordne
 
 ## Status
 
-1.3.0 ist auf PyPI, veröffentlicht am 2026-10-18. QQ ist die am meisten erprobte Plattform, in 1.0 über AstrBot und seit 1.1 direkt. Die Verbindungen zu WeChat, Telegram und Discord prüfen Zugangsdaten vor dem Speichern gegen die echten Dienste und sind ansonsten gegen Attrappen getestet; die Satori- und Matrix-Connectoren sind gegen Attrappen getestet. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus, dazu Jobs, die das Paket installieren und den Befehl sowie die lokale Seite steuern.
+1.3.1 ist auf PyPI, veröffentlicht am 2026-10-26. QQ ist die am meisten erprobte Plattform, in 1.0 über AstrBot und seit 1.1 direkt. Die Verbindungen zu WeChat, Telegram und Discord prüfen Zugangsdaten vor dem Speichern gegen die echten Dienste und sind ansonsten gegen Attrappen getestet; die Satori- und Matrix-Connectoren sind gegen Attrappen getestet. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus, dazu Jobs, die das Paket installieren und den Befehl sowie die lokale Seite steuern.
 
 ## Lizenz
 

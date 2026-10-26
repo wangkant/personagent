@@ -6,15 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-10-26
+
+The local page, the README and the memory commands in ten languages, and a character that answers in the language its chat uses.
+
 ### Added
 
 - **Setup by a coding agent.** `docs/setup-for-agents.md` tells an AI coding agent how to install and set up personagent: what to ask the user, the install routes, `init --no-input`, starting the local page in the background and handing over its link, connecting apps, updating and undoing. The model key never passes through the agent: the user enters it in the page. The README has a prompt to paste, and a test checks that every command in the file parses.
 - **The local page in eight more languages.** The menu at the top right now offers 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский besides English and 简体中文, and the browser remembers the choice; with none saved, the page follows the browser's language. Each is a translation file the page loads when chosen, and a string it lacks shows in English. The page's language and the character's are now separate: saving the settings writes `AGENT_LANG=zh` for either Chinese and `en` for English, and any other page language keeps the character's language as it was. The prompts and bundled data stay English and Chinese.
 - **The README in the same eight languages**, under `docs/readme/`, with a language bar at the top of every version. English stays the reference; the translations may lag behind it.
+- **Memory commands in the same ten languages.** `Nova, recuerda que...`, `ノヴァ、覚えて：...`, `Нова, запомни...` and the rest work like the English and Chinese ones, and so do forget, recall and "what have you learned". Japanese and Korean also take the verb last (`...って覚えといて`, `...다고 기억해 둬`). Each language reads its own questions, reminiscing and never-mind lines as chat. The reply, the learned summary and the line sent when a model call fails come in the language the message was written in, told by its script and, for Latin-script languages, by common words. Only the word for forgetting deletes a note: words for deleting, which chat uses for messages and lights, don't count. Each language is one module in `persona_agent/chatlangs/` with its own test cases.
+
+### Fixed
+
+- **Retrieval read nothing in Japanese, Korean or Russian.** With `AGENT_LANG=en` only ASCII words were search terms, so notes and examples in those chats ranked by age alone, and an accented word broke apart ("café" searched as "caf"). Words in every spaced script now count whole, and Han, katakana and Hangul runs give two-letter terms whatever the agent's language. English and Chinese text gives the same terms as before.
+- **`Nova, remember!` no longer keeps a note made of punctuation.** It asks what to remember, in every language.
+- **Chinese never-mind lines in Traditional characters** (`小夏 忘掉這個`) and "forgot to" lines (`小夏 忘了说，我明天不在`) are chat, not a forget that could delete notes. `帮我记一下：...` is now read as a note.
 
 ### Changed
 
-- **The character answers in the chat's language.** The group and one-on-one style guides now say to talk in the language the group, or the other person, is using, since the guides are English and a persona may be English or Chinese and neither should decide it. A Chinese or English chat reads as before. Names attached to particles (「ノヴァちゃん」, 「Nova야」) were already recognised as calls, and the reply checks already let Japanese, Korean, Cyrillic and accented Latin through. The memory commands and the few fixed replies stay English and Chinese.
+- **The character answers in the chat's language.** The group and one-on-one style guides now say to talk in the language the group, or the other person, is using, since the guides are English and a persona may be English or Chinese and neither should decide it. A Chinese or English chat reads as before. Names attached to particles (「ノヴァちゃん」, 「Nova야」) were already recognised as calls, and the reply checks already let Japanese, Korean, Cyrillic and accented Latin through.
 
 ## [1.3.0] — 2026-10-18
 
@@ -423,7 +434,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/wangkant/personagent/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/wangkant/personagent/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/wangkant/personagent/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/wangkant/personagent/compare/v1.2.0...v1.2.1

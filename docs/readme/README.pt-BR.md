@@ -147,7 +147,7 @@ Tudo o que o personagent guarda fica na sua máquina, numa única pasta principa
 
 ## Status
 
-A 1.3.0 está no PyPI, lançada em 2026-10-18. O QQ é a plataforma mais testada na prática, via AstrBot na 1.0 e diretamente desde a 1.1. As conexões com WeChat, Telegram e Discord verificam as credenciais nos serviços reais antes de salvar e, fora isso, são testadas com substitutos; os conectores Satori e Matrix são testados com substitutos. O CI roda os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12, além de jobs que instalam o pacote e exercitam o comando e a página local.
+A 1.3.1 está no PyPI, lançada em 2026-10-26. O QQ é a plataforma mais testada na prática, via AstrBot na 1.0 e diretamente desde a 1.1. As conexões com WeChat, Telegram e Discord verificam as credenciais nos serviços reais antes de salvar e, fora isso, são testadas com substitutos; os conectores Satori e Matrix são testados com substitutos. O CI roda os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12, além de jobs que instalam o pacote e exercitam o comando e a página local.
 
 ## Licença
 

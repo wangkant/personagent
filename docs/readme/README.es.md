@@ -147,7 +147,7 @@ Todo lo que personagent guarda se queda en tu máquina, en una sola carpeta prin
 
 ## Estado
 
-La versión 1.3.0 está en PyPI, publicada el 2026-10-18. QQ es la plataforma más probada, a través de AstrBot en la 1.0 y de forma directa desde la 1.1. Las conexiones de WeChat, Telegram y Discord comprueban las credenciales con los servicios reales antes de guardarlas y, por lo demás, se prueban con sustitutos; los conectores de Satori y Matrix se prueban con sustitutos. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12, además de trabajos que instalan el paquete y ejercitan el comando y la página local.
+La versión 1.3.1 está en PyPI, publicada el 2026-10-26. QQ es la plataforma más probada, a través de AstrBot en la 1.0 y de forma directa desde la 1.1. Las conexiones de WeChat, Telegram y Discord comprueban las credenciales con los servicios reales antes de guardarlas y, por lo demás, se prueban con sustitutos; los conectores de Satori y Matrix se prueban con sustitutos. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12, además de trabajos que instalan el paquete y ejercitan el comando y la página local.
 
 ## Licencia
 

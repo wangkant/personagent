@@ -514,7 +514,7 @@ personagent 保存的所有内容都在你自己的机器上，位于主目录�
 
 ## 项目状态和其他文档
 
-personagent 1.3.0 已发布到 PyPI。QQ 是运行和测试最充分的平台：1.0 经 AstrBot 接入，1.1 起由 personagent 直接连接。微信、Telegram 和 Discord 的连接会用真实服务核对凭据，其余部分在模拟环境中测试；Satori 和 Matrix 连接器也在模拟环境中测试。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 运行测试，另有几项任务会安装软件包，并实际运行命令和本地页面。
+personagent 1.3.1 已发布到 PyPI。QQ 是运行和测试最充分的平台：1.0 经 AstrBot 接入，1.1 起由 personagent 直接连接。微信、Telegram 和 Discord 的连接会用真实服务核对凭据，其余部分在模拟环境中测试；Satori 和 Matrix 连接器也在模拟环境中测试。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 运行测试，另有几项任务会安装软件包，并实际运行命令和本地页面。
 
 OneBot 直连入口（`/v1/onebot`）已废弃，在 1.x 期间保留。`tools/` 里的脚本供从源码运行时使用，说明见[工具脚本](tools.md)（英文）。
 
