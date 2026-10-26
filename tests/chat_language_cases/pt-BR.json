@@ -1,0 +1,45 @@
+{
+  "name": "Nova",
+  "commands": [
+    {"text": "Nova, anota aí que a Kay não come carne", "kind": "remember", "note": "a Kay não come carne"},
+    {"text": "Nova lembra: o encontro mudou pra sexta", "kind": "remember", "note": "o encontro mudou pra sexta"},
+    {"text": "@Nova guarda isso: eu odeio coentro", "kind": "remember", "note": "eu odeio coentro"},
+    {"text": "Nova, não esquece que amanhã tem prova de cálculo", "kind": "remember", "note": "amanhã tem prova de cálculo"},
+    {"text": "Nova lembre-se de que o aluguel vence dia 5", "kind": "remember", "note": "o aluguel vence dia 5"},
+    {"text": "Nova, esquece aquilo sobre o encontro", "kind": "forget", "deletes": "o encontro mudou pra sexta"},
+    {"text": "Nova, esquece o lance da carne", "kind": "forget", "deletes": "a Kay não come carne"},
+    {"text": "Nova esquece a do coentro", "kind": "forget", "deletes": "eu odeio coentro"},
+    {"text": "Nova lembra quando a gente foi pra praia", "kind": null},
+    {"text": "Nova, lembra da festa?", "kind": null},
+    {"text": "Nova lembra que a gente ficou acordado até as 4 kkk", "kind": null},
+    {"text": "Nova, lembra que eu te falei né", "kind": null},
+    {"text": "Nova, esquece isso", "kind": null},
+    {"text": "Nova esquece, deixa pra lá", "kind": null},
+    {"text": "Nova, apaga como? não entendi", "kind": null},
+    {"text": "Nova lembra de tudo mesmo, que memória boa", "kind": null},
+    {"text": "Eu não lembro da Nova falando isso", "kind": null},
+    {"text": "Nova, vamos almoçar hoje", "kind": null},
+    {"text": "Nova, grave mistake lol", "kind": null},
+    {"text": "Nova, guarded people are hard to read", "kind": null},
+    {"text": "Nova, note this down", "kind": null},
+    {"text": "Nova, o que você aprendeu na escola hoje", "kind": null},
+    {"text": "Nova, o que você lembra?", "kind": "recall"},
+    {"text": "Nova o que você aprendeu?", "kind": "learned"},
+    {"text": "Nova, apaga a luz", "kind": null}
+  ],
+  "first_person": [
+    {"text": "eu odeio coentro", "mine": true},
+    {"text": "minha gata se chama Mochi", "mine": true},
+    {"text": "o aniversário do meu irmão é sábado", "mine": true},
+    {"text": "a Kay odeia coentro", "mine": false},
+    {"text": "o Romeu mora em Recife", "mine": false}
+  ],
+  "detect": [
+    {"text": "e aí, tudo bem?", "code": "pt-BR"},
+    {"text": "kkkk não acredito", "code": "pt-BR"},
+    {"text": "vc vai hoje?", "code": "pt-BR"},
+    {"text": "tô com fome", "code": "pt-BR"},
+    {"text": "Nova, anota aí que a Kay não come carne", "code": "pt-BR"},
+    {"text": "valeu, até amanhã", "code": "pt-BR", "default": "en"}
+  ]
+}

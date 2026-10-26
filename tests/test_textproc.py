@@ -2635,6 +2635,33 @@ def test_a_single_character_trigger_still_scores_for_retrieval() -> None:
     check("multi-character runs are unchanged",
           _focus_tokens("今天天气", "zh") == {"今天", "天天", "天气"},
           repr(_focus_tokens("今天天气", "zh")))
+
+
+def test_retrieval_tokens_cover_the_other_chat_languages() -> None:
+    """An English agent in a Japanese, Korean, Russian or Spanish chat had
+    ASCII words only: nothing at all for the first three, and "caf" for
+    "café". Every script now yields tokens whatever AGENT_LANG says, and
+    English and Chinese text tokenize as before."""
+    check("English is unchanged",
+          _focus_tokens("The weekend hiking trip", "en") == {"weekend", "hiking", "trip"},
+          repr(_focus_tokens("The weekend hiking trip", "en")))
+    check("an accented word stays whole, without its ASCII pieces",
+          _focus_tokens("un café con Brötchen", "en") == {"café", "con", "brötchen"},
+          repr(_focus_tokens("un café con Brötchen", "en")))
+    check("Cyrillic words are tokens",
+          _focus_tokens("вчера шёл дождь", "en") == {"вчера", "шёл", "дождь"},
+          repr(_focus_tokens("вчера шёл дождь", "en")))
+    check("katakana and kanji runs give bigrams; hiragana is particles",
+          _focus_tokens("ラーメン食べたい", "en") == {"ラー", "ーメ", "メン"},
+          repr(_focus_tokens("ラーメン食べたい", "en")))
+    check("Hangul runs give bigrams",
+          _focus_tokens("김치를 좋아해", "en") == {"김치", "치를", "좋아", "아해"},
+          repr(_focus_tokens("김치를 좋아해", "en")))
+    check("Chinese in an English agent gets bigrams too",
+          _focus_tokens("周末爬山", "en") == {"周末", "末爬", "爬山"},
+          repr(_focus_tokens("周末爬山", "en")))
+
+
 def test_parser_unwraps_a_one_element_array() -> None:
     """A model that wrapped a CORRECT protocol object in a one-element array
     had its whole answer thrown away. The raw_decode layer would have

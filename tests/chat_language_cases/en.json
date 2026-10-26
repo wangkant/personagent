@@ -1,0 +1,28 @@
+{
+  "name": "Luna",
+  "commands": [
+    {"text": "Luna, remember that Kay is vegetarian", "kind": "remember", "note": "Kay is vegetarian"},
+    {"text": "Luna remember: the meetup moved to Friday", "kind": "remember", "note": "the meetup moved to Friday"},
+    {"text": "@Luna memorize I hate cilantro", "kind": "remember", "note": "I hate cilantro"},
+    {"text": "Luna remember when we went hiking", "kind": null},
+    {"text": "Luna, remember!", "kind": "remember", "note": null},
+    {"text": "Luna remember the party?", "kind": null},
+    {"text": "I don't remember Luna saying that", "kind": null},
+    {"text": "Luna forget vegetarian", "kind": "forget", "deletes": "Kay is vegetarian"},
+    {"text": "Luna, forget about the meetup", "kind": "forget", "deletes": "the meetup moved to Friday"},
+    {"text": "Luna forget it", "kind": null},
+    {"text": "Luna forget that", "kind": null},
+    {"text": "Luna what do you remember", "kind": "recall"},
+    {"text": "Luna what have you learned", "kind": "learned"}
+  ],
+  "first_person": [
+    {"text": "I hate cilantro", "mine": true},
+    {"text": "my cat is called Mochi", "mine": true},
+    {"text": "Kay hates cilantro", "mine": false}
+  ],
+  "detect": [
+    {"text": "hey what are you doing tonight", "code": "en"},
+    {"text": "lol that's so true", "code": "en"},
+    {"text": "is it raining there", "code": "en"}
+  ]
+}

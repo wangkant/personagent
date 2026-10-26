@@ -185,7 +185,7 @@ If you have not seen a film, say so instead of inventing an opinion.
 
 `AGENT_LANG` (`en` or `zh`) selects the language of the bundled examples, filters and checks. It does not translate your persona. [.env.example](../.env.example) describes every setting.
 
-The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in the language the chat uses. Its prompts and bundled data are English and Chinese, though, so how well it does in another language depends on the model, and the [memory commands](#memory-commands) and the few fixed replies are English and Chinese only.
+The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in the language the chat uses. Its prompts and bundled data are English and Chinese, though, so how well it does in another language depends on the model. The [memory commands](#memory-commands) and the few fixed replies, which don't go through the model, work in all ten languages.
 
 To override a shipped file, put a file with the same name in the home folder's `data/`. Files you do not override come from the copy shipped with personagent.
 
@@ -312,6 +312,22 @@ Who a note is about:
 Only the person a note is about, the person who saved it and the admin can read it. Only the person who saved a note, the person it is about and the admin can forget it.
 
 None of these commands call the model. Notes are for facts, so `Nova, remember: always reply in English` is turned down. Questions are not commands. `Nova, remember the party?`, `Nova, remember when we...` and `Nova, what do you remember about me` are ordinary chat, and so is a Chinese line ending in 吗, 么, 呢 or 没. `Nova, forget it` and `Nova, forget that` mean "never mind" and delete nothing.
+
+The same commands work in the other languages of the page's menu, and the reply comes in the language of the command. Japanese and Korean also take the verb last (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). A note is deleted with the word for forgetting; words like delete or erase, which chat uses for messages and lights, don't count, except Japanese `メモ消して`. One example of each:
+
+| Language | Remember | Forget | What do you remember | What have you learned |
+|---|---|---|---|---|
+| 简体中文 | `小夏 记住 阿杰不吃辣` | `小夏 忘掉 不吃辣` | `小夏 你都记得什么` | `小夏 学到了什么` |
+| 繁體中文 | `小夏 記住 阿傑不吃辣` | `小夏 忘掉 喜歡貓` | `小夏 你都記得什麼` | `小夏 你學到了什麼` |
+| 日本語 | `ノヴァ、覚えて：ケイはベジタリアン` | `ノヴァ、猫アレルギーのこと忘れて` | `ノヴァ、何覚えてる？` | `ノヴァ、何を学んだ？` |
+| 한국어 | `노바 기억해: 민수는 고양이를 좋아해` | `노바야 회의 얘기는 잊어 줘` | `노바 뭐 기억해?` | `노바 너 뭐 배웠어?` |
+| Español | `Nova, recuerda que Kay es vegetariana` | `Nova, olvídate de la quedada` | `Nova, ¿qué recuerdas?` | `Nova, ¿qué has aprendido?` |
+| Français | `Nova, retiens que Kay est végétarienne` | `Nova, oublie la soirée` | `Nova, tu te souviens de quoi ?` | `Nova, qu'est-ce que tu as appris ?` |
+| Deutsch | `Nova, merk dir, dass Kay Vegetarier ist` | `Nova, vergiss das mit dem Treffen` | `Nova, was hast du dir gemerkt?` | `Nova, was hast du gelernt?` |
+| Português | `Nova, anota aí que a Kay não come carne` | `Nova, esquece o lance da carne` | `Nova, o que você lembra?` | `Nova, o que você aprendeu?` |
+| Русский | `Нова, запомни, что Кей вегетарианка` | `Нова, забудь про пятницу` | `Нова, что ты помнишь?` | `Нова, чему ты научилась?` |
+
+Each language reads its own questions, reminiscing and never-mind lines as chat, as English and Chinese do. When a model call fails on a question, the short line the character sends is in the language the question was asked in.
 
 ### Corrections
 

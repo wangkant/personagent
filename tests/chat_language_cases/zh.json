@@ -1,0 +1,26 @@
+{
+  "name": "小夏",
+  "commands": [
+    {"text": "小夏 记住 阿杰喜欢猫", "kind": "remember", "note": "阿杰喜欢猫"},
+    {"text": "小夏，记一下：周六聚餐", "kind": "remember", "note": "周六聚餐"},
+    {"text": "小夏 记住了，周五开会", "kind": "remember", "note": "周五开会"},
+    {"text": "小夏 记住了吗", "kind": null},
+    {"text": "小夏 记忆力真好", "kind": null},
+    {"text": "小夏 忘了带伞怎么办", "kind": null},
+    {"text": "小夏 忘掉 喜欢猫", "kind": "forget", "deletes": "阿杰喜欢猫"},
+    {"text": "小夏 忘记 聚餐", "kind": "forget", "deletes": "周六聚餐"},
+    {"text": "小夏 忘掉这个", "kind": null},
+    {"text": "小夏 你都记得什么", "kind": "recall"},
+    {"text": "小夏 你学到了什么", "kind": "learned"}
+  ],
+  "first_person": [
+    {"text": "我不吃辣", "mine": true},
+    {"text": "阿杰不吃辣", "mine": false},
+    {"text": "我们周六聚餐", "mine": false}
+  ],
+  "detect": [
+    {"text": "在吗", "code": "zh"},
+    {"text": "这个周末去爬山吗", "code": "zh"},
+    {"text": "我们今天吃什么", "code": "zh"}
+  ]
+}

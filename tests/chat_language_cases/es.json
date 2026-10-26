@@ -1,0 +1,47 @@
+{
+  "name": "Nova",
+  "commands": [
+    {"text": "Nova, recuerda que Kay es vegetariana", "kind": "remember", "note": "Kay es vegetariana"},
+    {"text": "Nova apunta: la quedada se movió al viernes", "kind": "remember", "note": "la quedada se movió al viernes"},
+    {"text": "@Nova anota que odio el cilantro", "kind": "remember", "note": "odio el cilantro"},
+    {"text": "Nova, recuerda esto: Kay vive en Valencia", "kind": "remember", "note": "Kay vive en Valencia"},
+    {"text": "Nova acuérdate de que el bar cierra los lunes", "kind": "remember", "note": "el bar cierra los lunes"},
+    {"text": "Nova, no olvides que Ana trae la tarta", "kind": "remember", "note": "Ana trae la tarta"},
+    {"text": "Nova recuerda cuando fuimos a la playa", "kind": null},
+    {"text": "Nova acuérdate de cuando nos perdimos en el metro", "kind": null},
+    {"text": "Nova, ¿recuerdas la fiesta?", "kind": null},
+    {"text": "Nova recuerda la fiesta?", "kind": null},
+    {"text": "Nova recuerda la fiesta de ayer, verdad", "kind": null},
+    {"text": "Nova recuerda todo, es increíble", "kind": null},
+    {"text": "Nova, qué buena memoria tienes", "kind": null},
+    {"text": "no recuerdo que Nova dijera eso", "kind": null},
+    {"text": "Nova, ¿cómo estás hoy?", "kind": null},
+    {"text": "Nova olvida lo de vegetariana", "kind": "forget", "deletes": "Kay es vegetariana"},
+    {"text": "Nova, olvídate de la quedada", "kind": "forget", "deletes": "la quedada se movió al viernes"},
+    {"text": "Nova olvida que odio el cilantro", "kind": "forget", "deletes": "odio el cilantro"},
+    {"text": "Nova olvídalo", "kind": null},
+    {"text": "Nova olvida eso", "kind": null},
+    {"text": "Nova, olvídate del tema", "kind": null},
+    {"text": "Nova olvida, ¿qué pasa si mañana llueve", "kind": null},
+    {"text": "Nova, note this down", "kind": null},
+    {"text": "Nova, guard the door while I grab snacks", "kind": null},
+    {"text": "Nova, eliminate the boss first", "kind": null},
+    {"text": "Nova, ¿qué recuerdas?", "kind": "recall"},
+    {"text": "Nova qué has aprendido", "kind": "learned"},
+    {"text": "Nova, borra la pizarra", "kind": null}
+  ],
+  "first_person": [
+    {"text": "odio el cilantro", "mine": true},
+    {"text": "mi gato se llama Mochi", "mine": true},
+    {"text": "soy alérgico al marisco", "mine": true},
+    {"text": "Kay odia el cilantro", "mine": false},
+    {"text": "Kay vive en Madrid", "mine": false}
+  ],
+  "detect": [
+    {"text": "hola qué tal", "code": "es", "default": "en"},
+    {"text": "jajaja qué buena", "code": "es", "default": "en"},
+    {"text": "mañana no puedo", "code": "es", "default": "en"},
+    {"text": "pero eso es muy raro", "code": "es", "default": "en"},
+    {"text": "oye, ¿vienes al cine?", "code": "es", "default": "en"}
+  ]
+}

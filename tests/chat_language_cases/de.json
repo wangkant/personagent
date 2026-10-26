@@ -1,0 +1,42 @@
+{
+  "name": "Nova",
+  "commands": [
+    {"text": "Nova, merk dir, dass Kay Vegetarier ist", "kind": "remember", "note": "Kay Vegetarier ist"},
+    {"text": "Nova merk dir: das Treffen ist auf Freitag verschoben", "kind": "remember", "note": "das Treffen ist auf Freitag verschoben"},
+    {"text": "@Nova notier dir mal dass ich Koriander hasse", "kind": "remember", "note": "ich Koriander hasse"},
+    {"text": "Nova speicher: Lenas Geburtstag ist am 3. Mai", "kind": "remember", "note": "Lenas Geburtstag ist am 3. Mai"},
+    {"text": "Nova, schreib dir auf, dass wir Samstag grillen", "kind": "remember", "note": "wir Samstag grillen"},
+    {"text": "Nova, weißt du noch, als wir wandern waren", "kind": null},
+    {"text": "Nova erinnerst du dich an die Party", "kind": null},
+    {"text": "Nova merk dir das?", "kind": null},
+    {"text": "Nova merkst du dir das oder", "kind": null},
+    {"text": "Nova, du hast echt ein gutes Gedächtnis", "kind": null},
+    {"text": "Nova ist heute irgendwie still", "kind": null},
+    {"text": "Nova vergiss es", "kind": null},
+    {"text": "Nova, vergiss das", "kind": null},
+    {"text": "Nova vergiss nicht, dass Kay morgen kommt", "kind": null},
+    {"text": "Nova, vergiss, was ich gesagt hab", "kind": null},
+    {"text": "Nova, note this down for later", "kind": null},
+    {"text": "Nova, save me a seat and don't forget it", "kind": null},
+    {"text": "Nova, vergiss das mit dem Treffen", "kind": "forget", "deletes": "das Treffen ist auf Freitag verschoben"},
+    {"text": "Nova vergiss Koriander", "kind": "forget", "deletes": "ich hasse Koriander"},
+    {"text": "Nova vergiss alles über Lenas Geburtstag", "kind": "forget", "deletes": "Lenas Geburtstag ist am 3. Mai"},
+    {"text": "Nova, was hast du dir so gemerkt?", "kind": "recall"},
+    {"text": "Nova was hast du gelernt", "kind": "learned"},
+    {"text": "Nova, lösch die Nachricht", "kind": null}
+  ],
+  "first_person": [
+    {"text": "ich hasse Koriander", "mine": true},
+    {"text": "meine Katze heißt Mochi", "mine": true},
+    {"text": "gib mir Bescheid, wenn Kay kommt", "mine": true},
+    {"text": "Kay hasst Koriander", "mine": false},
+    {"text": "Michael mag Mirabellen", "mine": false}
+  ],
+  "detect": [
+    {"text": "hast du heute Zeit", "code": "de", "default": "en"},
+    {"text": "was machst du gerade", "code": "de", "default": "en"},
+    {"text": "ich bin so müde", "code": "de", "default": "en"},
+    {"text": "na, alles klar bei dir?", "code": "de", "default": "en"},
+    {"text": "danke dir", "code": "de", "default": "en"}
+  ]
+}

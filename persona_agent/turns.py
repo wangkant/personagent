@@ -11,6 +11,7 @@ from . import access
 from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
                        choose_group_mode, pacing_skip)
 from . import channels
+from . import chatlangs
 from . import decision_log
 from .connector import (ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
@@ -177,9 +178,12 @@ class Turns:
         if len(self._last_excuse_at) > _MAX_REFUSALS_LOGGED:
             self._last_excuse_at.pop(next(iter(self._last_excuse_at)))
 
-    def _model_failure_excuse(self) -> str:
-        return random.choice(MODEL_FAILURE_EXCUSES.get(
-            self.agent_lang, MODEL_FAILURE_EXCUSES["en"]))
+    def _model_failure_excuse(self, text: str = "") -> str:
+        """A line for when the model call failed, in the language `text`, the
+        message waiting for an answer, was written in."""
+        code = chatlangs.detect(text, self.agent_lang) if text else self.agent_lang
+        return random.choice(MODEL_FAILURE_EXCUSES.get(code)
+                             or MODEL_FAILURE_EXCUSES["en"])
 
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
@@ -422,7 +426,7 @@ class Turns:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 # Sent from a background task under the send lock, like a reply.
                 if mode in ("called", access.ADMIN_MODE) and self._excuse_begin(group_id):
-                    fallback = self._model_failure_excuse()
+                    fallback = self._model_failure_excuse(text)
 
                     # Outlives the connector response, hence _send_background.
                     async def _send_fallback() -> None:

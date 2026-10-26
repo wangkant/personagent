@@ -1,0 +1,43 @@
+{
+  "name": "노바",
+  "commands": [
+    {"text": "노바 기억해: 민수는 고양이를 좋아해", "kind": "remember", "note": "민수는 고양이를 좋아해"},
+    {"text": "노바야, 기억해 줘 이거: 회의는 금요일", "kind": "remember", "note": "회의는 금요일"},
+    {"text": "노바 민수 생일이 5월 3일이라고 기억해 줘", "kind": "remember", "note": "민수 생일이 5월 3일"},
+    {"text": "노바 지수는 매운 걸 못 먹는다고 기억해 둬", "kind": "remember", "note": "지수는 매운 걸 못 먹는다"},
+    {"text": "노바야 내 생일을 기억해 둬", "kind": "remember", "note": "내 생일"},
+    {"text": "노바 다음 모임 장소 강남역 메모해 줘", "kind": "remember", "note": "다음 모임 장소 강남역"},
+    {"text": "노바 기억해? 우리 처음 만난 날", "kind": null},
+    {"text": "노바 기억해 우리 같이 캠핑 갔던 거", "kind": null},
+    {"text": "노바 그때 기억해", "kind": null},
+    {"text": "노바 우리 캠핑 갔던 거 기억해?", "kind": null},
+    {"text": "노바 민수 생일 기억하니", "kind": null},
+    {"text": "노바 기억력 진짜 좋다", "kind": null},
+    {"text": "노바 오늘 날씨 좋다", "kind": null},
+    {"text": "노바 잊어 그냥", "kind": null},
+    {"text": "노바 그거 잊어버려", "kind": null},
+    {"text": "노바 우산 잊어버리면 어떡해", "kind": null},
+    {"text": "노바 remember when we went hiking", "kind": null},
+    {"text": "노바, can you memorize this memo?", "kind": null},
+    {"text": "노바 잊어: 고양이", "kind": "forget", "deletes": "민수는 고양이를 좋아해"},
+    {"text": "노바야 회의 얘기는 잊어 줘", "kind": "forget", "deletes": "회의는 금요일"},
+    {"text": "노바 민수 생일에 대한 거 잊어버려", "kind": "forget", "deletes": "민수 생일이 5월 3일이"},
+    {"text": "노바 뭐 기억해?", "kind": "recall"},
+    {"text": "노바 너 뭐 배웠어?", "kind": "learned"},
+    {"text": "노바 그 메시지 지워 줘", "kind": null}
+  ],
+  "first_person": [
+    {"text": "나 고수 싫어", "mine": true},
+    {"text": "내 고양이 이름은 모찌야", "mine": true},
+    {"text": "제가 다음 주에 이사 가요", "mine": true},
+    {"text": "민수는 고수 싫어해", "mine": false},
+    {"text": "내일 저녁에 나라 얘기 하자", "mine": false},
+    {"text": "저 사람 3일 전에 왔어", "mine": false}
+  ],
+  "detect": [
+    {"text": "뭐 해?", "code": "ko"},
+    {"text": "오늘 저녁 뭐 먹을까", "code": "ko"},
+    {"text": "ㅋㅋㅋ 진짜", "code": "ko"},
+    {"text": "노바 hi 반가워", "code": "ko", "default": "en"}
+  ]
+}

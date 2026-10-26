@@ -85,7 +85,7 @@ class DirectMessages:
                         delivered = False
                         try:
                             delivered = (await self._send_dm(
-                                user_id, self._model_failure_excuse())).success
+                                user_id, self._model_failure_excuse(text))).success
                         finally:
                             self._excuse_end(pkey, delivered)
                     return False

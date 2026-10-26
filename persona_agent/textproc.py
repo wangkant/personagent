@@ -260,23 +260,40 @@ _TOPIC_LEXICON = {
 }
 
 def _focus_tokens(text: str, lang: str = "en") -> set:
-    """Retrieval tokens: ASCII words of 3+ chars minus stopwords, plus CJK
-    bigrams for zh."""
+    """Retrieval tokens, matched as substrings: ASCII words of 3+ chars minus
+    stopwords; whole words of 3+ letters in other spaced scripts (é, ß,
+    Cyrillic); and bigrams of Han, katakana and Hangul runs, which need no
+    segmenter. A one-character Han run counts whole for zh."""
     focus_lc = text.lower()
-    ascii_tokens = {
-        t for t in re.findall(r"[a-z0-9]{3,}", focus_lc) if t not in _EN_STOPWORDS
+    # A word with a letter outside ASCII is kept whole ("café", "дождь"), and
+    # its ASCII pieces ("caf") are not tokens.
+    accented = {w for w in _SPACED_WORD_RE.findall(focus_lc) if not w.isascii()}
+    ascii_part = focus_lc
+    for word in accented:
+        ascii_part = ascii_part.replace(word, " ")
+    tokens = accented | {
+        t for t in re.findall(r"[a-z0-9]{3,}", ascii_part) if t not in _EN_STOPWORDS
     }
-    if lang == "zh":
-        # Per run, so bigrams never span punctuation; a one-character run is
-        # kept whole, or a lone 草 would match nothing.
-        cjk_ngrams: set[str] = set()
-        for run in re.findall(r"[一-鿿]+", focus_lc):
+    # Per run, so bigrams never span punctuation.
+    for pattern in _BIGRAM_RUNS:
+        for run in pattern.findall(focus_lc):
             if len(run) == 1:
-                cjk_ngrams.add(run)
+                # A lone 草 would otherwise match nothing.
+                if lang == "zh" and pattern is _HAN_RUN_RE:
+                    tokens.add(run)
             else:
-                cjk_ngrams.update(run[i:i + 2] for i in range(len(run) - 1))
-        return cjk_ngrams | ascii_tokens
-    return ascii_tokens
+                tokens.update(run[i:i + 2] for i in range(len(run) - 1))
+    return tokens
+
+
+_HAN_RUN_RE = re.compile(r"[一-鿿]+")
+_BIGRAM_RUNS = (_HAN_RUN_RE,
+                re.compile(r"[ァ-ヺー]+"),   # katakana
+                re.compile(r"[가-힣]+"))         # Hangul syllables
+# Letters of the spaced scripts: everything \w but digits, underscore and the
+# scripts tokenized above.
+_SPACED_WORD_RE = re.compile(
+    r"[^\W\d_぀-ヿ㐀-鿿가-힣ᄀ-ᇿ㄰-㆏]{3,}")
 
 def _detect_image_mime(data: bytes) -> str:
     """Return a supported image MIME type from its file signature."""

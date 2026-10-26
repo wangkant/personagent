@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import candidates as candidates_mod
 from . import channels
+from . import chatlangs
 from . import evidence as evidence_mod
 from . import promotion as promotion_mod
 from .paths import parse_jsonl, read_jsonl
@@ -21,6 +22,23 @@ logger = logging.getLogger("agent")
 # Refused outright by the reply's character policy, or rewritten by it.
 _UNSAFE = str.maketrans({c: " " for c in "[]<>{}|*`·→…"}
                         | {";": ",", "；": "，", "。": " ", "—": " "})
+
+
+# The English promotion chain; the other chat languages bring theirs.
+_LEARNED_EN = {
+    "someone_else": "someone in another chat",
+    "someone": "someone",
+    "retry": "{who} accepted the retry",
+    "self_review": "a self-review",
+    "self_eval": "a top self-score",
+    "corrected": "{who} corrected it",
+    "missed": "{who} said it missed",
+    "liked": "{who} liked it",
+    "by_admin": "promoted by the admin",
+    "passed": "passed with {events} events, {strong} strong",
+    "why": "why: {steps}",
+    "sep": ", ",
+}
 
 
 def _clip(text, limit: int = 30) -> str:
@@ -106,10 +124,13 @@ class DataViews:
                     for key, value in current_scope.items() if key != "persona_hash")
                 and evidence_mod.persona_identity(scope) == identity)
 
-    def _learned_summary(self, group_id: str) -> str:
+    def _learned_summary(self, group_id: str, lang: str = "") -> str:
         """What this room has taught the bot, chat-sized: counts, what waits,
-        the latest promotion and why. Reads state only."""
-        zh = self.agent_lang == "zh"
+        the latest promotion and why, in chat language `lang` (default: the
+        agent's). Reads state only."""
+        code = lang or self.agent_lang
+        # English builds its own lines, plurals and all; the rest fill templates.
+        text = {} if code == "en" else chatlangs.spec(code).learned_text
         current_scope = self._live_scope(group_id)
         identity = self.persona_identity
         self._reload_views_if_stale()
@@ -126,20 +147,22 @@ class DataViews:
 
         # Plain lines: the reply crosses the character policy like any other.
         n_ex, n_pr = len(examples), len(pairs)
-        if zh:
-            head = (f"记忆 {memories} 条，学到 {n_ex} 条回复和 {n_pr} 组纠正，"
-                    f"{voice} 条等第二个人佐证，{admin} 条等管理员处理")
+        if text:
+            head = text["head"].format(memories=memories, examples=n_ex, fixes=n_pr,
+                                       voice=voice, admin=admin)
         else:
             head = (f"{memories} memor{'y' if memories == 1 else 'ies'}, "
                     f"{n_ex} repl{'y' if n_ex == 1 else 'ies'} and {n_pr} fix{'' if n_pr == 1 else 'es'} learned, "
                     f"{voice} awaiting a second voice, {admin} awaiting the admin")
         if scores:
-            head += ("，最近自评 {:.1f}/5" if zh else ", recent self-score {:.1f}/5").format(
-                sum(scores) / len(scores))
+            score = f"{sum(scores) / len(scores):.1f}"
+            head += (text["score"].format(score=score) if text
+                     else f", recent self-score {score}/5")
 
         def pair_line(r: dict) -> str:
             was, better = _clip(r.get("reply")), _clip(r.get("better"))
-            return f"原来：{was}，改成：{better}" if zh else f"was: {was}, better: {better}"
+            return (text["pair"].format(was=was, better=better) if text
+                    else f"was: {was}, better: {better}")
 
         lines = []
         shown = ""
@@ -148,7 +171,7 @@ class DataViews:
             row = latest.get("payload") or {}
             lines.append(pair_line(row) if shown == "preference_pair"
                          else _clip(row.get("reply")))
-            chain = self._promotion_chain(latest, zh, current_scope["conv_id"])
+            chain = self._promotion_chain(latest, text, current_scope["conv_id"])
             if chain:
                 lines.append(chain)
         if shown != "preference_pair":
@@ -211,9 +234,11 @@ class DataViews:
         latest = max(active, key=promoted_at) if active else None
         return voice, admin, latest
 
-    def _promotion_chain(self, cand: dict, zh: bool, conv_id: str) -> str:
+    def _promotion_chain(self, cand: dict, text: dict, conv_id: str) -> str:
         """One line: who argued for `cand`, how, and why it passed (only people
-        in `conv_id` are named)."""
+        in `conv_id` are named). `text` is a chat language's learned-summary
+        templates; empty means English."""
+        say = text or _LEARNED_EN
         try:
             linked = self.evidence_log.many(cand.get("evidence") or [])
         except Exception:
@@ -224,34 +249,32 @@ class DataViews:
             e, cand, policy=self.promotion_policy)]
         for e in supporting:
             if str(e.get("conv_id") or "") != conv_id:
-                who = "另一个聊天里有人" if zh else "someone in another chat"
+                who = say["someone_else"]
             else:
-                who = _clip(e.get("speaker_name"), 16) or ("有人" if zh else "someone")
+                who = _clip(e.get("speaker_name"), 16) or say["someone"]
             kind, rtype = e.get("kind"), e.get("reaction_type")
             if kind == evidence_mod.KIND_RETRY_ACCEPTANCE:
-                step = f"{who} 接受了重答" if zh else f"{who} accepted the retry"
+                step = say["retry"].format(who=who)
             elif kind == evidence_mod.KIND_SELF_REVIEW:
-                step = "自我复盘" if zh else "a self-review"
+                step = say["self_review"]
             elif kind == evidence_mod.KIND_SELF_EVAL:
-                step = "自评满分" if zh else "a top self-score"
+                step = say["self_eval"]
             elif rtype == "correction":
-                step = f"{who} 纠正了" if zh else f"{who} corrected it"
+                step = say["corrected"].format(who=who)
             elif rtype == "rejection":
-                step = f"{who} 说没答对" if zh else f"{who} said it missed"
+                step = say["missed"].format(who=who)
             else:
-                step = f"{who} 觉得好" if zh else f"{who} liked it"
+                step = say["liked"].format(who=who)
             steps.append(step)
             if promotion_mod.anchors(e, cand):
                 strong += 1
         history = [h for h in cand.get("history") or ()
                    if h.get("state") == candidates_mod.STATE_PROMOTED]
         if history and history[-1].get("actor") != "auto":
-            steps.append("管理员通过" if zh else "promoted by the admin")
-        elif zh:
-            steps.append(f"{len(supporting)} 条证据其中 {strong} 条强，通过")
+            steps.append(say["by_admin"])
         else:
-            steps.append(f"passed with {len(supporting)} events, {strong} strong")
-        return ("原因：" + "，".join(steps)) if zh else ("why: " + ", ".join(steps))
+            steps.append(say["passed"].format(events=len(supporting), strong=strong))
+        return say["why"].format(steps=say["sep"].join(steps))
 
     def _reload_views_if_stale(self) -> None:
         """Hot-reload the promoted views, the only rows automatic learning can

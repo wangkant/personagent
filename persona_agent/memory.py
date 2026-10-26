@@ -9,77 +9,32 @@ from typing import Optional
 
 from . import access
 from . import channels
-from .addressing import mentions_name, name_regex
+from . import chatlangs
+from .addressing import _HAS_CJK, mentions_name, name_regex
 from .textproc import (
     _focus_tokens,
 )
 
 logger = logging.getLogger("agent")
 
-# Plain text: the reply crosses the character policy like any other.
-_COMMAND_REPLIES = {
-    "en": {
-        "remember_what": ("remember what? you didn't say anything", "spill it",
-                          "remember what lol"),
-        "not_instructions": ("I can remember facts, not instructions",),
-        "noted": ("noted", "got it, written down", "remembered", "mhm", "ok"),
-        "forget_what": ("forget what? be specific", "which one? say more"),
-        "nothing_to_forget": ("uh, never recorded that", "no recollection of that",
-                              "nothing matching to forget"),
-        "forgotten": ("forgotten", "dropped", "gone", "bye"),
-        "empty": ("head's empty", "nothing in there", "blank slate"),
-        "recall_head": ("Here's what I remember:",),
-        "about": ("about {name}: ",),
-        "from": ("from {name}: ",),
-    },
-    "zh": {
-        "remember_what": ("记什么？你啥也没说", "说呀，记啥", "要我记啥"),
-        "not_instructions": ("我只记事实，不记指令",),
-        "noted": ("记下了", "好，记住了", "嗯，记着呢", "收到"),
-        "forget_what": ("忘掉什么？说具体点", "哪条？再说清楚点"),
-        "nothing_to_forget": ("呃，没记过这个", "没这印象啊", "没有对得上的可以忘"),
-        "forgotten": ("忘掉了", "删了", "没了"),
-        "empty": ("脑子里空空的", "啥也没记", "一片空白"),
-        "recall_head": ("我记得这些：",),
-        "about": ("关于{name}：",),
-        "from": ("来自{name}：",),
-    },
-}
+# Plain text: the reply crosses the character policy like any other. One
+# table per chat language, kept with the rest of it in `chatlangs`.
+_COMMAND_REPLIES = {code: spec.replies for code, spec in chatlangs.SPECS.items()}
 
-# "remember when we...", "remember how...": reminiscing, not a note to keep.
-_NOT_A_NOTE = (r"(?!\s*(?:when|how|what|who|why|where|whether|if|me|"
-               r"the\s+time|that\s+time)\b)")
-# "forget it" / "forget about it" means never mind.
-_NOT_A_DELETE = r"(?!\s*(?:about\s+)?it\b)"
-
-# Chinese drops the question mark: "记住了吗", "记下来没", "忘记我说的话了吗".
-_QUESTION_END = re.compile(r"(?:[?？]|吗|么|呢|没有?)[\s?？!！。.~～]*$")
-# Asking words, judged on a forget only: "忘了带伞怎么办" asks, it does not delete.
-_ASKING = re.compile(r"怎么|怎样|咋|为什么|为啥|什么|啥|哪|多少|是不是|有没有|能不能")
-# A particle or aspect marker where the note should start: "记住了，..." / "记一下呗".
-_LEAD_PARTICLES = re.compile(
-    r"^(?:了|啊|呀|哦|喔|嘛|啦|哈|吧|呗)+(?=[\s，,。:：!！~～]|$)[\s，,。:：!！~～]*")
-# A forget naming no note means never mind, like "forget it".
-_DEICTIC = frozenset({
-    "that", "this", "it", "those", "these", "that one", "this one",
-    "这个", "那个", "这", "那", "这事", "那事", "这件事", "那件事", "这条", "那条",
-    "它", "刚才那个", "刚才的", "刚才说的"})
-# ...and one naming every note is too broad to act on.
-_EVERYTHING = frozenset({
-    "everything", "all", "all of it", "all of that", "all that", "every note",
-    "全部", "所有", "一切", "全部的", "所有的", "所有事", "全部记忆", "所有记忆"})
-_FIRST_PERSON = re.compile(
-    r"(?<![\w'])(?:i|i'm|i've|i'd|i'll|me|my|mine|myself)(?![\w'])|我(?!们)",
-    re.IGNORECASE)
+# Trimmed off a forget query, in every language.
+_QUERY_TRIM = " \t.!?,;:。！？，、~～…¡¿«»„“”"
 
 
-def _is_question(content: str) -> bool:
-    return bool(_QUESTION_END.search(content.strip()))
+def _is_question(content: str, spec: chatlangs.Spec) -> bool:
+    return bool(re.search(spec.question_end, content.strip(), re.IGNORECASE))
 
 
-def _forget_query(content: str) -> str:
-    query = re.sub(r"^(?:about|that)\s+", "", content.strip(), flags=re.IGNORECASE)
-    return query.strip(" \t.!?,;:。！？，、~～…")
+def _forget_query(content: str, spec: chatlangs.Spec) -> str:
+    query = content.strip()
+    if spec.query_lead:
+        query = re.sub(spec.query_lead, "", query, flags=re.IGNORECASE)
+    return query.strip(_QUERY_TRIM)
+
 
 # When a new auto-memory rewrites an older one (see `_restated_memory`): it may
 # drop almost none of the old note's tokens, must share a few, and only within
@@ -144,22 +99,50 @@ class Memory:
             logger.info("[Agent] core_memory updated (group=%s, %d chars)",
                         group_id, len(note))
 
-    def _parse_memory_command(self, text: str) -> Optional[tuple[str, str]]:
-        """(kind, what follows the keyword) when `text` is a memory command:
-        learned, remember, forget or recall. None for conversation."""
-        remember_pat, forget_pat, recall_pat, learned_pat = self._memory_cmd_patterns()
-        if learned_pat.search(text):
-            return "learned", ""
-        m = remember_pat.search(text)
-        # A question is reminiscing ("Luna remember the party?"), not a note.
-        if m and not _is_question(m.group(1)):
-            return "remember", m.group(1)
-        m = forget_pat.search(text)
-        if (m and not _is_question(m.group(1)) and not _ASKING.search(m.group(1))
-                and _forget_query(m.group(1)).lower() not in _DEICTIC):
-            return "forget", m.group(1)
-        if recall_pat.search(text):
-            return "recall", ""
+    def _parse_memory_command(self, text: str) -> Optional[tuple[str, str, str]]:
+        """(kind, what follows the keyword, chat language) when `text` is a
+        memory command: learned, remember, forget or recall. None for
+        conversation. Every language is tried; when two read it, the one the
+        message looks written in wins."""
+        table = self._memory_cmd_patterns()
+
+        def pick(found: list[tuple[str, str]]) -> Optional[tuple[str, str]]:
+            if len(found) < 2:
+                return found[0] if found else None
+            guess = chatlangs.detect(text, self.agent_lang)
+            return next((f for f in found if f[0] == guess), found[0])
+
+        hit = pick([(code, "") for code, _spec, pats in table
+                    if pats["learned"].search(text)])
+        if hit:
+            return "learned", "", hit[0]
+        found = []
+        for code, spec, pats in table:
+            for pat in pats["remember"]:
+                m = pat.search(text)
+                # A question is reminiscing ("Luna remember the party?").
+                if m and not _is_question(m.group(1), spec):
+                    found.append((code, m.group(1)))
+                    break
+        hit = pick(found)
+        if hit:
+            return "remember", hit[1], hit[0]
+        found = []
+        for code, spec, pats in table:
+            for pat in pats["forget"]:
+                m = pat.search(text)
+                if (m and not _is_question(m.group(1), spec)
+                        and not (spec.asking and re.search(spec.asking, m.group(1)))
+                        and _forget_query(m.group(1), spec).lower() not in spec.deictic):
+                    found.append((code, m.group(1)))
+                    break
+        hit = pick(found)
+        if hit:
+            return "forget", hit[1], hit[0]
+        hit = pick([(code, "") for code, _spec, pats in table
+                    if pats["recall"].search(text)])
+        if hit:
+            return "recall", "", hit[0]
         return None
 
     def _is_memory_command(self, text: str) -> bool:
@@ -175,17 +158,22 @@ class Memory:
         parsed = self._parse_memory_command(text)
         if parsed is None:
             return None
-        kind, arg = parsed
+        kind, arg, code = parsed
+        spec = chatlangs.spec(code)
         is_admin = access.is_admin(user_id, self._admins())
         caller = str(user_id or "")
-        say = self._memory_reply
+
+        def say(key: str) -> str:
+            return self._memory_reply(key, code)
         if kind == "learned":
-            return self._learned_summary(group_id)
+            return self._learned_summary(group_id, code)
 
         if kind == "remember":
-            content = re.sub(r"^that\s+", "", arg.strip(), flags=re.IGNORECASE)
-            content = _LEAD_PARTICLES.sub("", content)
-            if not content:
+            content = arg.strip()
+            if spec.note_lead:
+                content = re.sub(spec.note_lead, "", content, flags=re.IGNORECASE)
+            # "Luna, remember!" names nothing to keep.
+            if not content.strip(_QUERY_TRIM):
                 return say("remember_what")
             content = self._validate_memory_candidate(content)
             if not content:
@@ -196,7 +184,8 @@ class Memory:
                 item["saved_by"] = caller
                 if user_name:
                     item["saved_by_name"] = user_name
-                uid, name = self._note_subject(group_id, content, caller, user_name)
+                uid, name = self._note_subject(group_id, content, caller, user_name,
+                                               spec)
                 if uid:
                     item["user_id"] = uid
                     if name:
@@ -212,13 +201,14 @@ class Memory:
             return caller in (str(it.get("user_id") or ""), str(it.get("saved_by") or ""))
 
         if kind == "forget":
-            query = _forget_query(arg)
-            # Short queries over-delete: English needs 3+ characters and whole
-            # words ("tea" not "steak"), CJK a 2+ character substring.
-            by_word = query.isascii()
-            if len(query) < (3 if by_word else 2) or query.lower() in _EVERYTHING:
+            query = _forget_query(arg, spec)
+            # Short queries over-delete: a spaced script needs 3+ characters
+            # and whole words ("tea" not "steak"), CJK a 2+ character substring.
+            by_word = not _HAS_CJK.search(query)
+            if len(query) < (3 if by_word else 2) or query.lower() in spec.everything:
                 return say("forget_what")
-            word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(query)}(?![A-Za-z0-9_])",
+            edge = "A-Za-z0-9_" if query.isascii() else r"\w"
+            word = re.compile(rf"(?<![{edge}]){re.escape(query)}(?![{edge}])",
                               re.IGNORECASE)
             items = self.memories.get(group_id, [])
             before = len(items)
@@ -256,16 +246,18 @@ class Memory:
         return say("recall_head") + "\n" + "\n".join(lines)
 
     def _note_subject(self, group_id: str, text: str, saver: str,
-                      saver_name: str) -> tuple[str, str]:
+                      saver_name: str,
+                      spec: Optional[chatlangs.Spec] = None) -> tuple[str, str]:
         """Who a saved note is about: the saver when it says "I" or names them,
         else a member it names, else nobody."""
-        if _FIRST_PERSON.search(text) or (
+        first_person = (spec or chatlangs.spec(self.agent_lang)).first_person
+        if (first_person and re.search(first_person, text, re.IGNORECASE)) or (
                 saver_name and len(saver_name) >= 2 and saver_name in text):
             return saver, saver_name
         return self._memory_subject(group_id, text)
 
-    def _memory_reply(self, key: str) -> str:
-        table = _COMMAND_REPLIES.get(self.agent_lang, _COMMAND_REPLIES["en"])
+    def _memory_reply(self, key: str, code: str = "") -> str:
+        table = _COMMAND_REPLIES.get(code or self.agent_lang, _COMMAND_REPLIES["en"])
         return random.choice(table[key])
 
     def _names_me(self, text: str) -> bool:
@@ -273,35 +265,47 @@ class Memory:
         missed-mention catch-up and the memory commands."""
         return mentions_name(text, self.persona_name)
 
-    def _memory_cmd_patterns(self) -> tuple:
-        """remember / forget / recall / learned regexes, cached per persona_name."""
+    def _memory_cmd_patterns(self) -> list:
+        """[(code, spec, {kind: regex or [regexes]})] for every chat language,
+        cached per persona_name."""
         cached = getattr(self, "_mem_cmd_pats", None)
         if cached and cached[0] == self.persona_name:
             return cached[1]
         # Anchored at the start, so "I don't remember..." stays conversation.
         lead = r"^\s*(?:\[reply\]\s*)?"
-        if self.persona_name:
-            head = (lead + r"(?:@\S+\s*)*?@?" + name_regex(self.persona_name)
-                    + r"\s*[，,:：]?\s*")
-        else:
-            head = lead + r"(?:@\S*\s*)?[，,]?\s*"
-        # \b only after English keywords (Python counts CJK as word characters).
-        # Recall must be the whole message: "小夏 记忆力真好" is a compliment.
-        tail = r"\s*(?:呢|呀|啊|吗|嘛)?[\s?？!！.。~～]*$"
-        pats = (
-            re.compile(head + r"(?:(?:remember|memorize)\b" + _NOT_A_NOTE
-                       + r"|记(?:住|一下|下来|下))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
-            re.compile(head + r"(?:forget\b" + _NOT_A_DELETE
-                       + r"|忘(?:了|记|掉))\s*[：:，,]?\s*(.+)", re.IGNORECASE),
-            re.compile(head + r"(?:what do you remember|what'?s in your memory|memory\?|"
-                       r"(?:你\s*)?(?:都\s*)?(?:记得(?:什么|啥)|记忆|有什么记忆|脑子里有啥))"
-                       + tail, re.IGNORECASE),
-            re.compile(head + r"(?:what (?:have|did) you learn(?:ed)?|what'?ve you learned|"
-                       r"learned\?|(?:你)?(?:学到|学会|学了)(?:了)?(?:什么|啥))",
-                       re.IGNORECASE),
-        )
-        self._mem_cmd_pats = (self.persona_name, pats)
-        return pats
+        name = name_regex(self.persona_name) if self.persona_name else ""
+        sep = r"\s*[：:，,]?\s*"
+        table = []
+        for code, spec in chatlangs.SPECS.items():
+            if name:
+                vocative = f"(?:{spec.vocative})?" if spec.vocative else ""
+                head = (lead + r"(?:@\S+\s*)*?@?" + name + vocative
+                        + r"\s*[，,:：、]?\s*")
+            else:
+                head = lead + r"(?:@\S*\s*)?[，,]?\s*"
+            remember = [re.compile(head + f"(?:{spec.remember})" + spec.not_a_note
+                                   + sep + r"(.+)", re.IGNORECASE)]
+            forget = [re.compile(head + f"(?:{spec.forget})" + spec.not_a_delete
+                                 + sep + r"(.+)", re.IGNORECASE)]
+            # The verb-last forms: everything between the name and the keyword.
+            end = r"[\s!！.。~～]*$"
+            if spec.remember_last:
+                remember.append(re.compile(
+                    head + r"(.+?)\s*" + f"(?:{spec.remember_last})" + end, re.IGNORECASE))
+            if spec.forget_last:
+                forget.append(re.compile(
+                    head + r"(.+?)\s*" + f"(?:{spec.forget_last})" + end, re.IGNORECASE))
+            # Recall must be the whole message: "小夏 记忆力真好" is a compliment.
+            tail = r"\s*" + (f"(?:{spec.recall_tail})?" if spec.recall_tail else "")
+            table.append((code, spec, {
+                "remember": remember,
+                "forget": forget,
+                "recall": re.compile(head + f"(?:{spec.recall})" + tail
+                                     + r"[\s?？!！.。~～]*$", re.IGNORECASE),
+                "learned": re.compile(head + f"(?:{spec.learned})", re.IGNORECASE),
+            }))
+        self._mem_cmd_pats = (self.persona_name, table)
+        return table
 
     @staticmethod
     def _evict_memory(items: list[dict]) -> None:
@@ -376,7 +380,7 @@ class Memory:
         merge window, never across two named subjects, and in a `room` never
         an unattributed note into one that names somebody.
         """
-        # "zh" tokenizes both scripts; "en" would yield nothing for Chinese.
+        # "zh" also keeps a one-character Han run, whatever the agent speaks.
         fresh = _focus_tokens(text, "zh")
         if len(fresh) < _MEMORY_MERGE_MIN_SHARED:
             return None

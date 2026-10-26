@@ -1,0 +1,51 @@
+{
+  "name": "Nova",
+  "commands": [
+    {"text": "Nova, retiens que Kay est végétarienne", "kind": "remember", "note": "Kay est végétarienne"},
+    {"text": "Nova retiens : la soirée est déplacée à vendredi", "kind": "remember", "note": "la soirée est déplacée à vendredi"},
+    {"text": "@Nova mémorise je déteste la coriandre", "kind": "remember", "note": "je déteste la coriandre"},
+    {"text": "Nova souviens-toi bien qu'il pleut tout le temps à Brest", "kind": "remember", "note": "il pleut tout le temps à Brest"},
+    {"text": "Nova, n'oublie pas que Léa arrive lundi", "kind": "remember", "note": "Léa arrive lundi"},
+    {"text": "Nova gardez en tête que le code wifi a changé", "kind": "remember", "note": "le code wifi a changé"},
+    {"text": "Nova souviens-toi quand on est allés à la plage", "kind": null},
+    {"text": "Nova, rappelle-toi de la fois où on s'est perdus", "kind": null},
+    {"text": "Nova retiens la fête ?", "kind": null},
+    {"text": "Nova, tu te souviens de Kay ?", "kind": null},
+    {"text": "Nova retiens que Kay vient ce soir, non", "kind": null},
+    {"text": "Nova oublie ça", "kind": null},
+    {"text": "Nova, oublie pas de manger", "kind": null},
+    {"text": "Nova oublie, c'est pas grave", "kind": null},
+    {"text": "Nova oublie comment on fait", "kind": null},
+    {"text": "Nova t'as une super mémoire", "kind": null},
+    {"text": "Nova, ta mémoire est incroyable", "kind": null},
+    {"text": "Nova est trop drôle aujourd'hui", "kind": null},
+    {"text": "Je me souviens pas que Nova ait dit ça", "kind": null},
+    {"text": "Nova memorise this please", "kind": null},
+    {"text": "Nova, remember when retention was this bad?", "kind": null},
+    {"text": "Nova, note this down", "kind": null},
+    {"text": "Nova oublie végétarienne", "kind": "forget", "deletes": "Kay est végétarienne"},
+    {"text": "Nova, oublie à propos de la soirée", "kind": "forget", "deletes": "la soirée est déplacée à vendredi"},
+    {"text": "Nova oublie : code wifi", "kind": "forget", "deletes": "le code wifi a changé"},
+    {"text": "Nova, oublie tout ce que je t'ai dit sur Brest", "kind": "forget", "deletes": "il pleut tout le temps à Brest"},
+    {"text": "Nova tu te souviens de quoi ?", "kind": "recall"},
+    {"text": "Nova, qu'est-ce que t'as retenu", "kind": "recall"},
+    {"text": "Nova qu'est-ce que tu as appris ?", "kind": "learned"},
+    {"text": "Nova t'as appris quoi", "kind": "learned"},
+    {"text": "Nova, supprime ce message", "kind": null}
+  ],
+  "first_person": [
+    {"text": "je déteste la coriandre", "mine": true},
+    {"text": "mon chat s'appelle Mochi", "mine": true},
+    {"text": "j'habite à Lyon", "mine": true},
+    {"text": "Kay déteste la coriandre", "mine": false},
+    {"text": "Kay mange même le dimanche", "mine": false}
+  ],
+  "detect": [
+    {"text": "salut, ça va ?", "code": "fr"},
+    {"text": "je suis trop fatigué ce soir", "code": "fr"},
+    {"text": "c'est vraiment pas mal", "code": "fr"},
+    {"text": "t'es où là", "code": "fr"},
+    {"text": "ouais, merci", "code": "fr"},
+    {"text": "on se voit ce soir avec Kay ?", "code": "fr"}
+  ]
+}

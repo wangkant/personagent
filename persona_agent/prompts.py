@@ -7,6 +7,7 @@ import logging
 import re
 from dataclasses import dataclass, replace
 
+from . import chatlangs
 
 logger = logging.getLogger("agent")
 
@@ -20,16 +21,11 @@ DEFAULT_PERSONA = (
     "persona.txt and edit it to whoever you want the bot to be."
 )
 
-#: Said when a direct question's model call fails. Sent as is, so keep them
-#: plain text the validator accepts, in the persona's voice.
-MODEL_FAILURE_EXCUSES = {
-    "en": ("ugh, hanging here for a sec",
-           "hold on, connection's wonky",
-           "signal weird rn, gimme a min"),
-    "zh": ("等我一下，网有点卡",
-           "信号不太好，稍等",
-           "卡住了，等会儿再聊"),
-}
+#: Said when a direct question's model call fails, in the language the
+#: question was asked in. Sent as is, so each chat language in `chatlangs`
+#: keeps them plain text the validator accepts.
+MODEL_FAILURE_EXCUSES = {code: spec.failure_excuses
+                         for code, spec in chatlangs.SPECS.items()}
 
 # A line made only of a rule (———, ---, ===); persona templates put their
 # note to the reader after one.

@@ -1,0 +1,46 @@
+{
+  "name": "ノヴァ",
+  "commands": [
+    {"text": "ノヴァ、覚えて：ケイはベジタリアン", "kind": "remember", "note": "ケイはベジタリアン"},
+    {"text": "ノヴァちゃん、メモして、集まりは金曜に変更", "kind": "remember", "note": "集まりは金曜に変更"},
+    {"text": "ノヴァ、覚えといてね、私はパクチーが嫌い", "kind": "remember", "note": "私はパクチーが嫌い"},
+    {"text": "ノヴァ 覚えて、土曜は休みってこと", "kind": "remember", "note": "土曜は休み"},
+    {"text": "ノヴァ、ケイは猫アレルギーって覚えといて", "kind": "remember", "note": "ケイは猫アレルギー"},
+    {"text": "ノヴァさん、来週の会議は三時からってことを覚えておいてください", "kind": "remember", "note": "来週の会議は三時から"},
+    {"text": "ノヴァ、ユミの誕生日をメモしてね", "kind": "remember", "note": "ユミの誕生日"},
+    {"text": "ノヴァ、去年の夏祭り覚えてる？", "kind": null},
+    {"text": "ノヴァ、覚えてる？一緒にカラオケ行ったとき", "kind": null},
+    {"text": "ノヴァ、あの日のこと覚えてるかな", "kind": null},
+    {"text": "ノヴァ、覚えておいてくれる", "kind": null},
+    {"text": "ノヴァ、ちゃんと覚えてたね", "kind": null},
+    {"text": "ノヴァって記憶力すごいね", "kind": null},
+    {"text": "ノヴァ、今日は雨だね", "kind": null},
+    {"text": "ノヴァ、忘れて", "kind": null},
+    {"text": "ノヴァ、忘れていいよ", "kind": null},
+    {"text": "ノヴァ、それ忘れてね", "kind": null},
+    {"text": "ノヴァ、忘れて、何の話だっけ", "kind": null},
+    {"text": "ノヴァ, note this down for later", "kind": null},
+    {"text": "ノヴァ, I wrote a memo about remembering names", "kind": null},
+    {"text": "ノヴァ remember when we sang karaoke", "kind": null},
+    {"text": "ノヴァ、忘れて、ベジタリアンのこと", "kind": "forget", "deletes": "ケイはベジタリアン"},
+    {"text": "ノヴァ、猫アレルギーのこと忘れて", "kind": "forget", "deletes": "ケイは猫アレルギー"},
+    {"text": "ノヴァ、ユミの誕生日のメモ消して", "kind": "forget", "deletes": "ユミの誕生日"},
+    {"text": "ノヴァ、何覚えてる？", "kind": "recall"},
+    {"text": "ノヴァちゃん、何を覚えてるの", "kind": "recall"},
+    {"text": "ノヴァ、何を学んだ？", "kind": "learned"}
+  ],
+  "first_person": [
+    {"text": "私はパクチーが嫌い", "mine": true},
+    {"text": "うちの猫はモチって名前", "mine": true},
+    {"text": "僕、辛いのが苦手", "mine": true},
+    {"text": "ケイはパクチーが嫌い", "mine": false},
+    {"text": "私たちは土曜に集まる", "mine": false},
+    {"text": "ケイがお礼を言ってた", "mine": false}
+  ],
+  "detect": [
+    {"text": "今日なに食べる？", "code": "ja"},
+    {"text": "週末どこか行こうよ", "code": "ja"},
+    {"text": "それな、まじでわかる", "code": "ja"},
+    {"text": "ノヴァ、元気？", "code": "ja"}
+  ]
+}

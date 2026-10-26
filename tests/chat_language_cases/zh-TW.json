@@ -1,0 +1,39 @@
+{
+  "name": "小夏",
+  "commands": [
+    {"text": "小夏 記住 阿傑喜歡貓", "kind": "remember", "note": "阿傑喜歡貓"},
+    {"text": "小夏，記一下：週六聚餐", "kind": "remember", "note": "週六聚餐"},
+    {"text": "小夏 記住了，週五開會", "kind": "remember", "note": "週五開會"},
+    {"text": "小夏 記住喔：我們禮拜天去爬山", "kind": "remember", "note": "我們禮拜天去爬山"},
+    {"text": "小夏 記下來 一件事：阿傑不吃香菜", "kind": "remember", "note": "阿傑不吃香菜"},
+    {"text": "小夏 忘掉 喜歡貓", "kind": "forget", "deletes": "阿傑喜歡貓"},
+    {"text": "小夏 忘記 聚餐", "kind": "forget", "deletes": "週六聚餐"},
+    {"text": "小夏 忘了 關於香菜", "kind": "forget", "deletes": "阿傑不吃香菜"},
+    {"text": "小夏 記住了嗎", "kind": null},
+    {"text": "小夏 記下來沒", "kind": null},
+    {"text": "小夏 你還記得我們去墾丁那次嗎", "kind": null},
+    {"text": "小夏 記憶力真好", "kind": null},
+    {"text": "小夏 忘了帶傘是不是很慘", "kind": null},
+    {"text": "小夏 忘記這個", "kind": null},
+    {"text": "小夏 忘記吧", "kind": null},
+    {"text": "小夏 忘掉它", "kind": null},
+    {"text": "小夏 今天好熱喔", "kind": null},
+    {"text": "小夏, remember when we went to Kenting?", "kind": null},
+    {"text": "小夏 do you remember the night market", "kind": null},
+    {"text": "小夏, forget it", "kind": null},
+    {"text": "小夏 你都記得什麼", "kind": "recall"},
+    {"text": "小夏 你學到了什麼", "kind": "learned"}
+  ],
+  "first_person": [
+    {"text": "我不吃辣", "mine": true},
+    {"text": "阿傑不吃辣", "mine": false},
+    {"text": "我們週六聚餐", "mine": false},
+    {"text": "我的貓叫麻糬", "mine": true}
+  ],
+  "detect": [
+    {"text": "在嗎", "code": "zh-TW"},
+    {"text": "這個週末要去爬山嗎", "code": "zh-TW"},
+    {"text": "我們今天吃什麼", "code": "zh-TW"},
+    {"text": "謝謝你幫忙", "code": "zh-TW"}
+  ]
+}
