@@ -185,6 +185,8 @@ If you have not seen a film, say so instead of inventing an opinion.
 
 `AGENT_LANG` (`en` or `zh`) selects the language of the bundled examples, filters and checks. It does not translate your persona. [.env.example](../.env.example) describes every setting.
 
+The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in another language only as far as the model does on its own: the prompts and the bundled data are English and Chinese.
+
 To override a shipped file, put a file with the same name in the home folder's `data/`. Files you do not override come from the copy shipped with personagent.
 
 | File | Holds |

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Setup by a coding agent.** `docs/setup-for-agents.md` tells an AI coding agent how to install and set up personagent: what to ask the user, the install routes, `init --no-input`, starting the local page in the background and handing over its link, connecting apps, updating and undoing. The model key never passes through the agent: the user enters it in the page. The README has a prompt to paste, and a test checks that every command in the file parses.
+- **The local page in eight more languages.** The menu at the top right now offers 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский besides English and 简体中文, and the browser remembers the choice; with none saved, the page follows the browser's language. Each is a translation file the page loads when chosen, and a string it lacks shows in English. The page's language and the character's are now separate: saving the settings writes `AGENT_LANG=zh` for either Chinese and `en` for English, and any other page language keeps the character's language as it was. The prompts and bundled data stay English and Chinese, and replies in other languages are left to the model.
+- **The README in the same eight languages**, under `docs/readme/`, with a language bar at the top of every version. English stays the reference; the translations may lag behind it.
 
 ## [1.3.0] — 2026-10-18
 

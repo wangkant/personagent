@@ -37,6 +37,9 @@ from .settings import normalize_lang
 from .storage import FileLock, LockUnavailable, atomic_write_text
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
+# The page's languages besides English and Chinese, each a translation in
+# ASSETS/i18n/<code>.json. The character still speaks en or zh prompts.
+PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 TOKEN_HEADER = "x-personagent-setup-token"
 MAX_BODY = 16_384
 # Characters; the shipped personas are under 800, and 4000 CJK characters
@@ -751,6 +754,14 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         if name not in ("welcome.js", "welcome.css"):
             raise HTTPException(404)
         return FileResponse(ASSETS / name)
+
+    @app.get("/assets/i18n/{name}")
+    async def page_language(name: str):
+        path = ASSETS / "i18n" / name
+        if name.removesuffix(".json") not in PAGE_LANGUAGES or not name.endswith(".json") \
+                or not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="application/json")
 
     @app.get("/api/state")
     async def state():

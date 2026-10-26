@@ -9,7 +9,7 @@
   <a href="https://github.com/wangkant/personagent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a.svg" alt="License: MIT"></a>
 </p>
 
-<p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <strong>简体中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
 personagent 是放进群聊里的一个角色：选一个现成的性格或自己写一个，接上任意 OpenAI 兼容的模型就能用。QQ、微信、Telegram、Discord 由它自己连接；KOOK、飞书、钉钉、Slack、企业微信、Mattermost、Misskey 在同一个页面里接入。
 
@@ -30,7 +30,7 @@ personagent
 
 装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。
 
-浏览器会打开一个本地页面，分三栏：「开始聊天」「连接平台」「角色与设置」。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。模型服务有 10 种预设，也可以选其他 OpenAI 兼容服务；角色有名字和性格预设。「人设」框里就是 `persona.txt`，保存后会重启角色服务，学到的东西不会丢。「更多功能」里可以开联网搜索、看图和主动说话。再次运行 `personagent` 会沿用已经打开的页面。
+浏览器会打开一个本地页面，分三栏：「开始聊天」「连接平台」「角色与设置」。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。模型服务有 10 种预设，也可以选其他 OpenAI 兼容服务；角色有名字和性格预设。「人设」框里就是 `persona.txt`，保存后会重启角色服务，学到的东西不会丢。「更多功能」里可以开联网搜索、看图和主动说话。再次运行 `personagent` 会沿用已经打开的页面。右上角的菜单可以把页面切换成英文、中文或另外八种语言。角色内置的提示词只有中文和英文，用其他语言聊天时它怎么回，取决于模型。
 
 Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 3.10–3.14。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令行和连接器的用法在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)里。
 
@@ -69,7 +69,7 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
     <td width="220"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="拿着本子准备聊天的兔子" width="220"></td>
     <td>
       <b>上手快，你的群在哪它就去哪</b><br>
-      在浏览器里设置和聊天，中英文都有，11 种模型服务可选。<br>
+      在浏览器里设置和聊天，页面有中英文和另外八种语言，11 种模型服务可选。<br>
       QQ、微信、Telegram、Discord 由它自己连接，另外十几个平台也在同一个页面里接入。<br>
       在「动态」里能看到它做了什么。
     </td>

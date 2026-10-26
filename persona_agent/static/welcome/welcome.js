@@ -29,6 +29,7 @@ const translations = {
     activityBetter: "改成",
     activityLesson: "以后都这样",
     activityFrom: "来自 {who}",
+    listSep: "、",
     activityKeep: "保留",
     activityDiscard: "不要",
     activityUndo: "撤销",
@@ -257,6 +258,7 @@ const translations = {
     activityBetter: "Instead",
     activityLesson: "From now on",
     activityFrom: "from {who}",
+    listSep: ", ",
     activityKeep: "Keep",
     activityDiscard: "Discard",
     activityUndo: "Undo",
@@ -471,7 +473,68 @@ const translations = {
     closing: "Closing…",
   },
 };
-let lang = navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+// The page's languages and their BCP 47 tags. English and Chinese live above;
+// the others are translations in /assets/i18n/<code>.json, loaded when chosen,
+// and a string one lacks shows in English. The character's own language is
+// separate and only en or zh (see charLang).
+const LANGS = {
+  en: "en",
+  zh: "zh-CN",
+  "zh-TW": "zh-TW",
+  ja: "ja",
+  ko: "ko",
+  es: "es",
+  fr: "fr",
+  de: "de",
+  "pt-BR": "pt-BR",
+  ru: "ru",
+};
+const LANG_KEY = "personagent-page-language";
+// Platform, service and personality names from the catalog, keyed by English.
+const catalogText = {};
+function browserLang() {
+  for (const tag of navigator.languages || [navigator.language || ""]) {
+    const low = tag.toLowerCase();
+    if (low.startsWith("zh"))
+      return /^zh-(tw|hk|mo|hant)/.test(low) ? "zh-TW" : "zh";
+    if (low.startsWith("pt")) return "pt-BR";
+    const base = low.split("-")[0];
+    if (LANGS[base]) return base;
+  }
+  return "";
+}
+function storedLang() {
+  try {
+    const code = localStorage.getItem(LANG_KEY);
+    return code && LANGS[code] ? code : "";
+  } catch {
+    return "";
+  }
+}
+let lang = storedLang() || browserLang() || "en";
+// What saving the settings writes to AGENT_LANG: either Chinese means zh and
+// English en; any other page language keeps what the character speaks now.
+const charLang = () =>
+  lang === "zh" || lang === "zh-TW"
+    ? "zh"
+    : lang !== "en" && state?.lang === "zh"
+      ? "zh"
+      : "en";
+const defaultName = () => (charLang() === "zh" ? "小夏" : "Nova");
+async function loadLang(code) {
+  if (translations[code]) return;
+  try {
+    const response = await fetch(`/assets/i18n/${code}.json`, {
+      credentials: "omit",
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    translations[code] = data.strings || {};
+    catalogText[code] = data.catalog || {};
+  } catch {
+    // Without the file every string shows in English.
+  }
+}
 let state = null,
   catalog = null,
   selected = null,
@@ -495,7 +558,10 @@ if (fragment.has("token")) {
 const t = (key, fields = {}) =>
   Object.entries(fields).reduce(
     (value, [name, text]) => value.replaceAll(`{${name}}`, () => text),
-    translations[lang][key] || translations[lang].generic,
+    translations[lang]?.[key] ||
+      translations.en[key] ||
+      translations[lang]?.generic ||
+      translations.en.generic,
   );
 function toast(text) {
   $("toast").textContent = text;
@@ -525,13 +591,13 @@ function options(select, items, selected) {
   for (const item of items) {
     const option = document.createElement("option");
     option.value = item.id;
-    option.textContent = item.name[lang === "zh" ? 1 : 0];
+    option.textContent = pick(item.name);
     select.append(option);
   }
   select.value = selected;
 }
 function renderLanguage() {
-  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.documentElement.lang = LANGS[lang] || "en";
   $("language").value = lang;
   for (const node of document.querySelectorAll("[data-t]"))
     label(node, t(node.dataset.t));
@@ -542,10 +608,7 @@ function renderLanguage() {
     const character = $("character").value || state.character;
     const chars = [...catalog.characters];
     if (state.character === "custom")
-      chars.push({
-        id: "custom",
-        name: [translations.en.custom, translations.zh.custom],
-      });
+      chars.push({ id: "custom", name: [t("custom"), t("custom")] });
     options($("character"), chars, character);
     tiles();
     if (selected) buildFields(true);
@@ -558,9 +621,7 @@ function renderLanguage() {
 }
 function updateNames() {
   const name =
-    $("character-name").value.trim() ||
-    state?.name ||
-    (lang === "zh" ? "小夏" : "Nova");
+    $("character-name").value.trim() || state?.name || defaultName();
   $("preview-name").textContent = name;
   $("chat-name").textContent = state?.name || name;
   // Avatars show the first character of the name.
@@ -575,17 +636,14 @@ function updateNames() {
 function characterOptions() {
   const chars = [...catalog.characters];
   if (state.character === "custom")
-    chars.push({
-      id: "custom",
-      name: [translations.en.custom, translations.zh.custom],
-    });
+    chars.push({ id: "custom", name: [t("custom"), t("custom")] });
   options($("character"), chars, state.character);
   $("custom-note").hidden = state.character !== "custom";
 }
 function populate() {
   options($("provider"), catalog.providers, state.provider);
   characterOptions();
-  $("character-name").value = state.name || (lang === "zh" ? "小夏" : "Nova");
+  $("character-name").value = state.name || defaultName();
   $("api-key").value = "";
   $("api-key").type = "password";
   $("show-key").textContent = t("show");
@@ -671,7 +729,8 @@ async function loadPersona() {
     $("persona-error").hidden = false;
   }
 }
-const pick = (pair) => pair[lang === "zh" ? 1 : 0];
+const pick = (pair) =>
+  lang === "zh" ? pair[1] : catalogText[lang]?.[pair[0]] || pair[0];
 const spec = (kind) => catalog?.platforms.find((p) => p.id === kind);
 const platformName = (kind) => (spec(kind) ? pick(spec(kind).name) : kind);
 // Each platform's mark: its logo, otherwise a short monogram in its
@@ -1115,10 +1174,10 @@ function ago(epoch) {
     return t("minutesAgo", { n: String(Math.floor(seconds / 60)) });
   if (seconds < 86400)
     return t("hoursAgo", { n: String(Math.floor(seconds / 3600)) });
-  return new Date(epoch * 1000).toLocaleDateString(
-    lang === "zh" ? "zh-CN" : "en",
-    { month: "short", day: "numeric" },
-  );
+  return new Date(epoch * 1000).toLocaleDateString(LANGS[lang] || "en", {
+    month: "short",
+    day: "numeric",
+  });
 }
 function chatTitle(chat) {
   if (chat.platform === "browser") return t("activityHere");
@@ -1147,7 +1206,7 @@ function modeText(row) {
   if (!row.mode) return "";
   const key =
     row.mode === "judge" && !row.spoke ? "m_judge_quiet" : `m_${row.mode}`;
-  return translations[lang][key] || row.mode;
+  return translations[lang]?.[key] || translations.en[key] || row.mode;
 }
 function renderActivityDot() {
   $("activity-dot").hidden = !(activity?.chats || []).some(
@@ -1235,7 +1294,7 @@ function change(item, waiting) {
   const card = el("div", `change${waiting ? " waiting" : ""}`);
   const top = el("div", "change-top");
   const who = item.from.length
-    ? t("activityFrom", { who: item.from.join(lang === "zh" ? "、" : ", ") })
+    ? t("activityFrom", { who: item.from.join(t("listSep")) })
     : "";
   top.append(
     el(
@@ -1468,11 +1527,20 @@ async function send(text, repeat = false) {
 }
 for (const button of document.querySelectorAll(".nav"))
   button.addEventListener("click", () => showView(button.dataset.view));
-$("language").addEventListener("change", () => {
-  const oldDefault = lang === "zh" ? "小夏" : "Nova";
-  lang = $("language").value;
+$("language").addEventListener("change", async () => {
+  const oldDefault = defaultName();
+  const next = $("language").value;
+  await loadLang(next);
+  // A later choice made while this file loaded wins.
+  if ($("language").value !== next) return;
+  lang = next;
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    // Private windows may refuse; the choice then lasts until the page closes.
+  }
   if (!state.name && $("character-name").value === oldDefault)
-    $("character-name").value = lang === "zh" ? "小夏" : "Nova";
+    $("character-name").value = defaultName();
   renderLanguage();
   showView(view);
 });
@@ -1626,7 +1694,7 @@ $("settings-form").addEventListener("submit", async (event) => {
       model: $("model").value,
       name: $("character-name").value,
       character: $("character").value,
-      lang,
+      lang: charLang(),
     });
     // A chosen personality rewrote persona.txt: drop the box's old text.
     if ($("character").value !== "custom") {
@@ -1760,13 +1828,20 @@ $("exit").addEventListener("click", async () => {
   }
 });
 (async () => {
+  await loadLang(lang);
   if (!token) {
     toast(t("auth"));
     return;
   }
   try {
     [state, catalog] = await Promise.all([api("state"), api("catalog")]);
-    if (state.lang === "zh" || state.lang === "en") lang = state.lang;
+    // With no choice saved, the page follows the character into or out of
+    // Chinese, as it always has; any other browser language stays.
+    if (!storedLang()) {
+      if (state.lang === "zh" && lang === "en") lang = "zh";
+      else if (state.lang === "en" && (lang === "zh" || lang === "zh-TW"))
+        lang = "en";
+    }
     populate();
     renderLanguage();
     showView("chat");

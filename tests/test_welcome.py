@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from fastapi.testclient import TestClient
 import httpx
@@ -603,3 +604,69 @@ def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypa
     assert workspace._activity_token() == "env-token"
     sw.write_env(workspace.env, {"AGENT_RUNTIME_DIR": ""})
     assert workspace._activity_token() == "default-token"
+
+
+def _page_strings(code):
+    """One of the string tables welcome.js carries inline (en or zh)."""
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    start = js.index(f"\n  {code}: {{\n")
+    block = js[start:js.index("\n  },\n", start)]
+    found = re.findall(r'^ {4}(\w+):\s*("(?:[^"\\]|\\.)*"),?$', block, re.M)
+    assert len(found) == len(re.findall(r"^ {4}\w+:", block, re.M))
+    return {key: json.loads(value) for key, value in found}
+
+
+def _catalog_english(client):
+    english = set()
+
+    def walk(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            if len(value) == 2 and all(isinstance(item, str) for item in value):
+                english.add(value[0])
+            else:
+                for item in value:
+                    walk(item)
+    walk(client.get("/api/catalog", headers=HEADERS).json())
+    return english
+
+
+def _fields(text):
+    return set(re.findall(r"\{(\w+)\}", text))
+
+
+def test_page_languages_are_listed_once_everywhere():
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    menu = re.search(r'<select id="language".*?</select', html, re.S).group(0)
+    assert re.findall(r'<option value="([^"]+)"', menu) == ["en", "zh", *welcome.PAGE_LANGUAGES]
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    table = re.search(r"const LANGS = \{(.*?)\};", js, re.S).group(1)
+    assert re.findall(r'^\s+"?([\w-]+)"?:', table, re.M) == ["en", "zh", *welcome.PAGE_LANGUAGES]
+    assert _page_strings("en").keys() == _page_strings("zh").keys()
+
+
+@pytest.mark.parametrize("code", welcome.PAGE_LANGUAGES)
+def test_each_page_language_translates_known_strings_with_their_fields(client, code):
+    data = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))
+    english = _page_strings("en")
+    assert set(data) == {"language", "strings", "catalog"}
+    # A string a translation lacks shows in English, so a subset is enough;
+    # an unknown key or a lost {field} is a mistake.
+    assert set(data["strings"]) <= set(english)
+    for key, text in data["strings"].items():
+        assert isinstance(text, str) and text.strip(), key
+        assert _fields(text) == _fields(english[key]), key
+    catalog = _catalog_english(client)
+    assert set(data["catalog"]) <= catalog
+    for source, text in data["catalog"].items():
+        assert isinstance(text, str) and text.strip(), source
+
+
+def test_page_language_files_are_served_and_nothing_else(client):
+    for code in welcome.PAGE_LANGUAGES:
+        response = client.get(f"/assets/i18n/{code}.json")
+        assert response.status_code == 200 and response.json()["strings"]
+    for name in ("en.json", "zh.json", "xx.json", "ja", "ja.json.bak", "..%2Fwelcome.js", "..%2F..%2Fwelcome.py"):
+        assert client.get(f"/assets/i18n/{name}").status_code == 404, name
