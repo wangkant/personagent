@@ -314,3 +314,21 @@ async def test_the_dm_guide_tells_the_character_to_receive_affection(
               > served.index("receive it, do not deflect"), who)
         check(f"...and is the one place the {who}'s prompt says it",
               served.lower().count("answer honestly") == 1, who)
+
+
+def test_both_guides_let_the_chat_choose_the_reply_language() -> None:
+    """The guides are English and the bundled data English or Chinese, so a
+    chat in any other language is answered in it only because [LANGUAGE] says
+    so. Unconditional text, so it is checked over every knob combination."""
+    group = _section(STYLE_GUIDE, "[LANGUAGE]")
+    check("the group guide follows the group's language",
+          "language the group is chatting in" in group, group)
+    check("...ahead of the format rules",
+          STYLE_GUIDE.index("[LANGUAGE]") < STYLE_GUIDE.index("[FORMAT"))
+    for style in _every_style():
+        guide = dm_style_guide(style)
+        check("the 1:1 guide follows the other person's language",
+              "language they write to you in" in _section(guide, "[LANGUAGE]"), repr(style))
+        check("...after the register, which stays first",
+              guide.index(COMPANY_HEADER) < guide.index("[LANGUAGE]") < guide.index("[FORMAT"),
+              repr(style))
