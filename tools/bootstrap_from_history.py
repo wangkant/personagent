@@ -59,7 +59,7 @@ logger = logging.getLogger("bootstrap")
 
 
 def _atomic_write_json(path, obj) -> None:
-    """Atomic write: a truncated stickers.json would load as an empty library."""
+    """Atomic JSON write."""
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 # ============ NapCat history ============
@@ -227,14 +227,9 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
     """Download all sticker-shaped images and register in stickers.json with
     surrounding context. Skips dupes (md5)."""
     STICKERS_DIR.mkdir(parents=True, exist_ok=True)
-    if STICKERS_JSON.exists():
-        try:
-            entries = json.loads(STICKERS_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            entries = {}
-    else:
-        entries = {}
-    md5_index = {v.get("md5"): k for k, v in entries.items() if isinstance(v, dict) and v.get("md5")}
+    entries = (json.loads(STICKERS_JSON.read_text(encoding="utf-8"))
+               if STICKERS_JSON.exists() else {})
+    md5_index = {v.get("md5"): k for k, v in entries.items() if v.get("md5")}
 
     new_count = 0
     ctx_count = 0
@@ -285,11 +280,7 @@ async def seed_stickers(messages: list[dict], classified: list[dict]) -> dict:
             filename = f"auto/{md5}.{ext}"
             filepath = ROOT / "stickers" / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                filepath.write_bytes(img_bytes)
-            except Exception as e:
-                logger.warning("write failed: %s", e)
-                continue
+            filepath.write_bytes(img_bytes)
             entry = {
                 "md5": md5,
                 "src_user": c["user_id"],

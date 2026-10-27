@@ -1,8 +1,4 @@
-"""Recent speak decisions per conversation, in memory for the dashboard.
-
-Bounded per conversation and per process, never written to disk, and holding
-only short excerpts: no prompt text, no whole messages.
-"""
+"""Recent speak decisions per conversation, in memory for the dashboard."""
 from __future__ import annotations
 
 import threading
@@ -25,8 +21,8 @@ def _clip(text, limit: int) -> str:
 class DecisionLog:
     def __init__(self, per_conversation: int = MAX_PER_CONVERSATION,
                  conversations: int = MAX_CONVERSATIONS) -> None:
-        self.per_conversation = max(1, int(per_conversation))
-        self.max_conversations = max(1, int(conversations))
+        self.per_conversation = per_conversation
+        self.max_conversations = conversations
         self._rows: OrderedDict[str, deque] = OrderedDict()
         self._lock = threading.Lock()
 
@@ -34,8 +30,6 @@ class DecisionLog:
                excerpt: str = "", *, answered: str = "", sender: str = "",
                now: float | None = None) -> None:
         key = str(conv_id or "")
-        if not key:
-            return
         row = {"ts": time.time() if now is None else float(now),
                "mode": _clip(mode, 16), "spoke": bool(spoke),
                "reason": _clip(reason, _REASON_CHARS),
@@ -80,12 +74,7 @@ LOG = DecisionLog()
 
 def record(conv_id: str, mode: str, spoke: bool, reason: str,
            excerpt: str = "", *, answered: str = "", sender: str = "") -> None:
-    """Note a final speak or stay-quiet decision. Never raises into a turn.
-
-    `answered` is the message a reply answered; `sender` wrote that message,
-    or the one it let pass."""
-    try:
-        LOG.record(conv_id, mode, spoke, reason, excerpt,
-                   answered=answered, sender=sender)
-    except Exception:
-        pass
+    """Note a final speak or stay-quiet decision. `answered` is the message a
+    reply answered; `sender` wrote that message, or the one it let pass."""
+    LOG.record(conv_id, mode, spoke, reason, excerpt,
+               answered=answered, sender=sender)

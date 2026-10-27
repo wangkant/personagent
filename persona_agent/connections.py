@@ -290,14 +290,14 @@ def connected(data: Path) -> list[str]:
     except (OSError, ValueError):
         return []
     on = {p.get("type") for p in cfg.get("platform", [])
-          if isinstance(p, dict) and p.get("enable") and p.get("id") == p.get("type")}
+          if p.get("enable") and p.get("id") == p.get("type")}
     return [p.kind for p in PLATFORMS if p.kind in on]
 
 
 def save_entry(data: Path, item: dict) -> None:
     """Add or replace the entry with this id, keeping every other one."""
     path, cfg = _main_config(data)
-    platforms = [p for p in cfg.get("platform", []) if isinstance(p, dict)]
+    platforms = cfg.get("platform", [])
     for i, existing in enumerate(platforms):
         if existing.get("id") == item["id"]:
             platforms[i] = item
@@ -311,7 +311,7 @@ def save_entry(data: Path, item: dict) -> None:
 def remove_entry(data: Path, kind: str) -> None:
     path, cfg = _main_config(data)
     cfg["platform"] = [p for p in cfg.get("platform", [])
-                       if not (isinstance(p, dict) and p.get("id") == kind)]
+                       if p.get("id") != kind]
     _write(path, cfg)
 
 

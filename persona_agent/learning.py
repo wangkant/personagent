@@ -1,9 +1,7 @@
 """The learning loops: self-eval, reaction adjudication, evolution.
 
-All of it runs off the hot path and never raises into the reply pipeline.
 Every automatic signal is recorded (evidence.py), proposed (candidates.py)
-and only then promoted if the policy allows (promotion.py); nothing here
-writes a retrieval pool directly."""
+and promoted only if the policy allows (promotion.py)."""
 
 from __future__ import annotations
 
@@ -57,71 +55,50 @@ class Learning:
             return str(user_id or "")
         return ""
 
-    def _record_evidence(self, event: dict) -> bool:
-        """Append one evidence event, accepted or not. False when already recorded."""
-        try:
-            return self.evidence_log.append(event)
-        except Exception as e:
-            logger.warning("[Agent] evidence append failed: %s: %s",
-                           type(e).__name__, e)
-            return False
-
     def _corroborate_existing(self, event: dict, ts: str) -> list[str]:
         """Link a new event to every pending candidate it supports and re-run
         the policy, so a late second voice still counts. Returns promoted ids."""
         ledger = self.candidate_ledger
         promoted: list[str] = []
-        try:
-            events = self.evidence_log.all()
-            peers = ledger.all()
-            for cand in ledger.pending():
-                # An earlier promotion in this loop may have retired it.
-                if cand.get("state") != candidates.STATE_PROPOSED:
-                    continue
-                if not promotion.supports_candidate(event, cand,
-                                                   policy=self.promotion_policy):
-                    continue
-                cid = cand["candidate_id"]
-                if not ledger.link_evidence(cid, [event["event_id"]], ts=ts,
-                                            note="late corroboration"):
-                    continue
-                decision = self._decide_promotion(cid, events=events, peers=peers)
-                if decision.promote and ledger.promote(
-                        cid, ts=ts, actor="auto", reason=decision.reason,
-                        evidence=[event["event_id"]]):
-                    promoted.append(cid)
-                    logger.info("[Agent] candidate PROMOTED %s (corroborated): "
-                                "%s", cid, decision.reason)
-                    self._retire_answered_drafts(cid, ts)
-            if promoted:
-                self._rebuild_promoted_views()
-        except Exception as e:
-            logger.warning("[Agent] corroboration scan failed: %s: %s",
-                           type(e).__name__, e)
+        events = self.evidence_log.all()
+        peers = ledger.all()
+        for cand in ledger.pending():
+            # An earlier promotion in this loop may have retired it.
+            if cand.get("state") != candidates.STATE_PROPOSED:
+                continue
+            if not promotion.supports_candidate(event, cand,
+                                               policy=self.promotion_policy):
+                continue
+            cid = cand["candidate_id"]
+            if not ledger.link_evidence(cid, [event["event_id"]], ts=ts,
+                                        note="late corroboration"):
+                continue
+            decision = self._decide_promotion(cid, events=events, peers=peers)
+            if decision.promote and ledger.promote(
+                    cid, ts=ts, actor="auto", reason=decision.reason,
+                    evidence=[event["event_id"]]):
+                promoted.append(cid)
+                logger.info("[Agent] candidate PROMOTED %s (corroborated): "
+                            "%s", cid, decision.reason)
+                self._retire_answered_drafts(cid, ts)
+        if promoted:
+            self._rebuild_promoted_views()
         return promoted
 
     #: Shared with tools/auto_reviewer.py, which writes the same file.
     CANDIDATE_AUDIT_MAX_BYTES = evolution.CANDIDATE_AUDIT_MAX_BYTES
 
     def _append_audit_row(self, row: dict, label: str) -> None:
-        """Append one audit row, and log loudly when the byte cap refuses it:
-        `src_eval_ts` here is the review-dedup key, so a dropped row means the
-        eval is re-diagnosed every tick. Every audit write goes through here."""
-        try:
-            written = evolution.append_jsonl(
-                self.candidates_file, [row],
-                max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES,
-            )
-        except Exception as e:
-            logger.warning("[Agent] candidate audit append failed: %s: %s",
-                           type(e).__name__, e)
-            return
+        """Append one audit row. `src_eval_ts` in it is the review-dedup key."""
+        written = evolution.append_jsonl(
+            self.candidates_file, [row],
+            max_bytes=self.CANDIDATE_AUDIT_MAX_BYTES,
+        )
         if not written:
             logger.error(
-                "[Agent] candidates.jsonl has hit its %d-byte cap — the audit "
-                "row for %s was DROPPED, so the audit trail is no longer being "
-                "written and any eval it deduped is re-diagnosed on every "
-                "evolve tick. Archive or truncate the file.",
+                "[Agent] candidates.jsonl is at its %d-byte cap; audit row for "
+                "%s dropped, so its eval is re-diagnosed every evolve tick. "
+                "Archive or truncate the file.",
                 self.CANDIDATE_AUDIT_MAX_BYTES, label)
 
     def _audit_candidate(self, ev: dict, diag: dict, applied: str) -> None:
@@ -132,7 +109,7 @@ class Learning:
 
     def _record_and_corroborate(self, event: dict, ts: str) -> bool:
         """Record an event, then let it speak for whatever is already waiting."""
-        fresh = self._record_evidence(event)
+        fresh = self.evidence_log.append(event)
         if fresh:
             self._corroborate_existing(event, ts)
         return fresh
@@ -141,51 +118,46 @@ class Learning:
                            ts: str) -> str:
         """Propose (or refresh) a candidate, link every logged event that
         supports it, then run the policy. Returns ``promoted`` / ``proposed``
-        / ``held`` / ``blocked`` / ``error``."""
-        try:
-            ledger = self.candidate_ledger
-            scope = candidates.scope_from_event(event)
-            cand = candidates.make_candidate(
-                ctype=ctype, scope=scope, payload=payload,
-                evidence=[event["event_id"]], created_at=ts,
-                adjudication_version=event.get("adjudicator_prompt_version", ""))
-            cid = cand["candidate_id"]
-            before = ledger.get(cid)
-            already = bool(before) and event["event_id"] in (before.get("evidence") or [])
-            projected, created = ledger.propose(cand)
-            if already and not created:
-                return "held"  # nothing new to weigh
-            events = self.evidence_log.all()
-            support = [
-                e["event_id"] for e in events
-                if promotion.supports_candidate(e, projected,
-                                                policy=self.promotion_policy)
-            ]
-            ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
-            decision = self._decide_promotion(cid, events=events)
-            label = "proposed" if created else "held"
-            if decision.promote:
-                if ledger.promote(cid, ts=ts, actor="auto",
-                                  reason=decision.reason,
-                                  evidence=[event["event_id"]]):
-                    self._retire_answered_drafts(cid, ts)
-                    self._rebuild_promoted_views()
-                    logger.info("[Agent] candidate PROMOTED %s (%s): %s — %r",
-                                cid, ctype, decision.reason,
-                                str(payload.get("reply") or "")[:50])
-                    return "promoted"
-                return label
-            if decision.blocked_by:
-                logger.info("[Agent] candidate %s BLOCKED (%s): %s [%s]",
-                            cid, ctype, decision.reason, decision.blocked_by)
-                return "blocked"
-            logger.info("[Agent] candidate %s %s (%s): %s",
-                        cid, label, ctype, decision.reason)
+        / ``held`` / ``blocked``."""
+        ledger = self.candidate_ledger
+        scope = candidates.scope_from_event(event)
+        cand = candidates.make_candidate(
+            ctype=ctype, scope=scope, payload=payload,
+            evidence=[event["event_id"]], created_at=ts,
+            adjudication_version=event.get("adjudicator_prompt_version", ""))
+        cid = cand["candidate_id"]
+        before = ledger.get(cid)
+        already = bool(before) and event["event_id"] in (before.get("evidence") or [])
+        projected, created = ledger.propose(cand)
+        if already and not created:
+            return "held"  # nothing new to weigh
+        events = self.evidence_log.all()
+        support = [
+            e["event_id"] for e in events
+            if promotion.supports_candidate(e, projected,
+                                            policy=self.promotion_policy)
+        ]
+        ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
+        decision = self._decide_promotion(cid, events=events)
+        label = "proposed" if created else "held"
+        if decision.promote:
+            if ledger.promote(cid, ts=ts, actor="auto",
+                              reason=decision.reason,
+                              evidence=[event["event_id"]]):
+                self._retire_answered_drafts(cid, ts)
+                self._rebuild_promoted_views()
+                logger.info("[Agent] candidate PROMOTED %s (%s): %s — %r",
+                            cid, ctype, decision.reason,
+                            str(payload.get("reply") or "")[:50])
+                return "promoted"
             return label
-        except Exception as e:
-            logger.warning("[Agent] candidate proposal failed: %s: %s",
-                           type(e).__name__, e)
-            return "error"
+        if decision.blocked_by:
+            logger.info("[Agent] candidate %s BLOCKED (%s): %s [%s]",
+                        cid, ctype, decision.reason, decision.blocked_by)
+            return "blocked"
+        logger.info("[Agent] candidate %s %s (%s): %s",
+                    cid, label, ctype, decision.reason)
+        return label
 
     def _retire_answered_drafts(self, cid: str, ts: str) -> None:
         """Reject the proposed rewrites `cid` answered (the complaint's own
@@ -259,17 +231,13 @@ class Learning:
         promoted candidate teaching it, for a person to review."""
         reply = (reply or "").strip()
         disputed = 0
-        try:
-            for cand in self.candidate_ledger.active():
-                if self._teaches(cand, reply) and self.candidate_ledger.link_evidence(
-                        cand["candidate_id"], [event_id], ts=ts,
-                        note="disputed by someone the reply was not for"):
-                    disputed += 1
-                    logger.info("[Agent] candidate %s DISPUTED by a bystander, "
-                                "kept for review: %r", cand["candidate_id"], reply[:50])
-        except Exception as e:
-            logger.warning("[Agent] dispute record failed: %s: %s",
-                           type(e).__name__, e)
+        for cand in self.candidate_ledger.active():
+            if self._teaches(cand, reply) and self.candidate_ledger.link_evidence(
+                    cand["candidate_id"], [event_id], ts=ts,
+                    note="disputed by someone the reply was not for"):
+                disputed += 1
+                logger.info("[Agent] candidate %s DISPUTED by a bystander, "
+                            "kept for review: %r", cand["candidate_id"], reply[:50])
         return disputed
 
     def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
@@ -298,8 +266,8 @@ class Learning:
         intent: str = "",
         ctx_msgs: list[str] | None = None,
     ) -> None:
-        """Background 1-5 eval appended to eval.jsonl; never raises. Also
-        scores sent stickers, and a top score only proposes a candidate."""
+        """Background 1-5 eval appended to eval.jsonl. Also scores sent
+        stickers; a top score proposes a candidate."""
         try:
             # Snapshotted at reply time, without the bot's reply; "name: text" lines.
             if ctx_msgs is not None:
@@ -478,32 +446,20 @@ class Learning:
         if not reply:
             return
         ts = ts or datetime.now().isoformat(timespec="seconds")
-        try:
-            self._rollback_promoted_for(reply, ts, event_id=event_id,
-                                        reason=reason)
-        except Exception as e:
-            logger.warning("[Agent] candidate rollback failed: %s: %s",
-                           type(e).__name__, e)
-        try:
-            removed = promotion.retract_example(self.examples_file, reply)
-            if removed:
-                self._auto_examples_seen.discard(reply)
-                self._examples_mtime = 0.0  # force a full reload
-                logger.info("[Agent] retracted %d legacy banked example(s): %r",
-                            removed, reply[:50])
-        except Exception as e:
-            logger.warning("[Agent] retraction failed: %s: %s",
-                           type(e).__name__, e)
+        self._rollback_promoted_for(reply, ts, event_id=event_id, reason=reason)
+        removed = promotion.retract_example(self.examples_file, reply)
+        if removed:
+            self._auto_examples_seen.discard(reply)
+            self._examples_mtime = 0.0  # force a full reload
+            logger.info("[Agent] retracted %d legacy banked example(s): %r",
+                        removed, reply[:50])
 
     @staticmethod
     def _append_with_rotation(path: Path, row: dict,
                               max_bytes: int = 5_000_000) -> None:
-        """Locked, rotating append; a failed write is logged, never raised."""
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            append_jsonl_rotating(path, row, max_bytes=max_bytes)
-        except OSError as e:
-            logger.warning("[Agent] log write failed for %s: %s", path, e)
+        """Locked, rotating append."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        append_jsonl_rotating(path, row, max_bytes=max_bytes)
 
     async def _process_reaction(self, entry: dict, reaction_text: str,
                                 reactor_name: str, reactor_uid: str,
@@ -511,7 +467,7 @@ class Learning:
                                 is_dm: bool = False) -> None:
         """Adjudicate a directed reaction: record it as evidence (always), then
         propose candidates, arm the retry and the elicitation ask, and roll
-        back what a rejected reply taught. Audited; never raises."""
+        back what a rejected reply taught. Audited."""
         try:
             # Consistently dismissed teachers stop costing adjudicator calls.
             if not is_admin and self.teacher_stats.hard_block(reactor_uid):
@@ -594,7 +550,7 @@ class Learning:
             # candidates that block each other forever.
             reaction_is_new = self._record_and_corroborate(reaction_ev, now)
 
-            # Loaded lazily, once: parsing the feedback pools is costly.
+            # Loaded lazily, once.
             fb_keys: set | None = None
 
             def _fresh_pair(p: dict) -> bool:
@@ -710,7 +666,7 @@ class Learning:
                             parent_evidence_id: str = "") -> None:
         """After a delay, unless the retry was accepted or the cooldown runs,
         ask what they meant; their next message (even without an @) then
-        adjudicates against the original reply. Never raises."""
+        adjudicates against the original reply."""
         try:
             if not ask:
                 return
@@ -778,16 +734,11 @@ class Learning:
         """Has the person accepted the retry that answers this complaint."""
         if not complaint_id:
             return False
-        try:
-            return any(
-                e.get("kind") == evidence.KIND_RETRY_ACCEPTANCE
-                and e.get("parent_event_id") == complaint_id
-                and (e.get("adjudication") or {}).get("accept")
-                for e in self.evidence_log.all())
-        except Exception as e:
-            logger.warning("[Agent] evidence read failed: %s: %s",
-                           type(e).__name__, e)
-            return False
+        return any(
+            e.get("kind") == evidence.KIND_RETRY_ACCEPTANCE
+            and e.get("parent_event_id") == complaint_id
+            and (e.get("adjudication") or {}).get("accept")
+            for e in self.evidence_log.all())
 
     # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:
@@ -833,11 +784,10 @@ class Learning:
             )
             diag = evolution.parse_review(raw)
             if not diag:
-                # Audited anyway: the audit row is the dedup key, so skipping
-                # it would re-diagnose this eval every tick.
+                # Audited anyway: the audit row is the dedup key.
                 logger.warning(
                     "[Agent] evolve: reviewer output not JSON for %s, marking "
-                    "reviewed so it is not retried forever: %s",
+                    "reviewed: %s",
                     str(ev.get("ts", "?"))[:19], str(raw)[:120])
                 self._audit_candidate(ev, {}, "unparseable")
                 continue
@@ -856,7 +806,7 @@ class Learning:
                         "accept": True, "better": pair["better"],
                         "scenario": pair.get("scenario", ""),
                         "mode": pair.get("mode", ""),
-                        "score": ev.get("score") if isinstance(ev.get("score"), int) else None,
+                        "score": ev.get("score"),
                         # The diagnosis, not the reasoning that produced it.
                         "reason": str(diag.get("bad_diagnosis") or "")[:200],
                     },

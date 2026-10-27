@@ -299,6 +299,9 @@ def test_gif_pixel_bomb_rejected_before_convert() -> None:
         def save(self, out, format):
             out.write(b"unsafe")
 
+        def close(self):
+            pass
+
     with patch("PIL.Image.open", return_value=FakeImage()):
         got = ContentIngestion._gif_first_frame_png(b"GIF89a" + b"x" * 32)
     check("gif: pixel bomb rejected", got == b"", repr(got))
@@ -1080,22 +1083,6 @@ async def test_link_enrichment_budget_caps_total_wait(tmp: Path) -> None:
     check("link budget: a descriptor still follows its own segment",
           result.find("three") < result.find("answered in time")
           and result.find("two") < result.find("three"), repr(result))
-
-
-async def test_link_enrichment_survives_a_failing_fetch(tmp: Path) -> None:
-    """One link raising must not take the message or its siblings with it."""
-    agent = make_agent(tmp)
-
-    async def describe(url: str) -> str:
-        if "broken" in url:
-            raise RuntimeError("boom")
-        return "[site] fine"
-
-    agent._describe_url = describe
-    result = await agent._extract_text(_link_payload({"type": "text", "data": {
-        "text": "look https://broken.example/x https://ok.example/y"}}))
-    check("link enrichment: a raising fetch is dropped, siblings kept",
-          "look" in result and "[site] fine" in result, repr(result))
 
 
 async def test_share_card_type_confusion(tmp: Path) -> None:

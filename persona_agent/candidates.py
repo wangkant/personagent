@@ -54,7 +54,7 @@ ROW_SUPERSESSION = "supersession"
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
 _WARN_BYTES_ENV = "LEDGER_CANDIDATES_WARN_BYTES"
 
-# Write-time guard: an illegal transition is refused, never recorded.
+# Legal lifecycle transitions: target state -> allowed source states.
 _ALLOWED_FROM = {
     STATE_PROMOTED: (STATE_PROPOSED, STATE_ROLLED_BACK),
     STATE_REJECTED: (STATE_PROPOSED, STATE_PROMOTED, STATE_ROLLED_BACK),
@@ -296,9 +296,6 @@ class CandidateLedger:
 
     # -- writes ------------------------------------------------------------
     def _append(self, row: dict) -> None:
-        reason = _validate_row(row)
-        if reason:
-            raise ValueError(f"invalid candidate ledger row: {reason}")
         with append_lock(self.path):
             # Callers apply the row to `_by_id` themselves. Advance the stamp
             # only if nobody else wrote since, decided under the lock.

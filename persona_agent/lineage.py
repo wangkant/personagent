@@ -42,8 +42,7 @@ class PersonaLineage:
                 self._lineages[str(version)] = [str(h) for h in hashes if h]
 
     def _save(self) -> None:
-        # A file that did not parse still holds history we cannot reconstruct;
-        # writing our (empty) view over it would destroy it for good.
+        # An unparsed file still holds history that cannot be rebuilt.
         if self._unreadable:
             raise OSError(f"lineage did not parse, refusing to overwrite {self.path}")
         self.path.parent.mkdir(parents=True, exist_ok=True)

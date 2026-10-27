@@ -45,7 +45,7 @@ python -m compileall -q persona_agent tools tests integrations
 The suite takes about a minute and needs no network or API key, because the
 tests stub the model and the transport. Run these before you open a PR.
 
-The ruff line catches dead and undefined names. It is not a style gate.
+The ruff line catches dead and undefined names.
 
 CI runs the suite on Python 3.10 to 3.14 on Linux and on 3.12 on Windows.
 Its `package` job, on Linux and Windows, builds the wheel and the sdist,
@@ -103,15 +103,13 @@ the flag can be repeated.
 
 **Tests must never write the repo's real state files.** Everything mutable
 lives under `runtime/`, and a relative state-file setting such as
-`MEMORY_FILE=memory.json` resolves there. A test that forgets to redirect a
-path will overwrite a running deployment's learned data. `isolated_agent()`
+`MEMORY_FILE=memory.json` resolves there. `isolated_agent()`
 redirects every state file into `tmp`. With `seeds=True` it also swaps the
 shipped seed pools for empty ones.
 
 The evidence log, the candidate ledger, both promoted views and the persona
-lineage all live next to `examples_file` (`Agent.learning_dir`). Redirecting
-the example pool therefore moves the whole learning layer, so one forgotten
-line in a test cannot write evidence into a live deployment. Put any new
+lineage all live next to `examples_file` (`Agent.learning_dir`), so
+redirecting the example pool moves the whole learning layer. Put any new
 learned state in that directory, not under `ROOT`.
 
 ## The learning path: evidence, candidates, promotion
@@ -142,8 +140,7 @@ The design enforces two rules.
    aimed at.
 
 Both logs are append-only. To correct a mistake, append a lifecycle event.
-Never edit a row. That way "why does it talk like this" and "why did it
-stop" both have answers.
+Never edit a row.
 
 ## Code layout
 
@@ -220,8 +217,7 @@ state from two mixins, it probably belongs in `agent.py`.
 A module stays out of the mixin chain when it needs no agent state.
 `textproc.py` is an example. It is called by name
 (`TextProcessing._sanitize_reply(...)`), so a reply-safety gate can be
-tested without constructing an `Agent`. Reaching for `self` in such a module
-undoes the split.
+tested without constructing an `Agent`.
 
 To add a setting, add it to `AgentSettings` in `settings.py` and read it
 with the `config_env` helpers. Settings of the HTTP layer, such as
@@ -262,8 +258,8 @@ model, because both change what a reply looks like.
 The English page is the source of truth. Some pages have a `*.zh-CN.md`
 twin: `README`, `docs/start`, `docs/guide`, `docs/DISCLAIMER` and the
 AstrBot plugin README. The Chinese twin is written in natural Chinese for
-Chinese readers and is not a line-by-line translation. When you change a
-fact in one, change it in the other.
+Chinese readers rather than translated line by line. When you change a fact
+in one, change it in the other.
 
 `docs/deploy.zh-CN.md` is not a twin. It is a separate step-by-step guide in
 Chinese that covers installing, connecting QQ by scan, other platforms and
@@ -293,8 +289,7 @@ A release is a tag. Only the maintainer cuts one.
    ```
 
 The `Release` workflow (`.github/workflows/release.yml`) then runs three
-jobs in order, so a release page never advertises a version that PyPI does
-not have:
+jobs in order:
 
 1. **build** refuses a tag whose commit is not on `main`, then runs the test
    suite. Next, `tools/release_notes.py` fails the release if the tag is not

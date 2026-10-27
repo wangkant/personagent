@@ -17,7 +17,7 @@ personagent 是放进群聊里的一个角色：选一个现成的性格或自�
 
 ![本地页面的「连接平台」：能接入的平台一目了然](https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg)
 
-<sub>「连接平台」和设置、角色聊天在同一个本地页面里。截图来自一个临时环境，使用本机模拟模型。</sub>
+<sub>「连接平台」和设置、角色聊天在同一个本地页面里。</sub>
 
 ## 从这里开始
 
@@ -30,7 +30,7 @@ personagent
 
 装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。
 
-浏览器会打开一个本地页面，分三栏：「开始聊天」「连接平台」「角色与设置」。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。模型服务有 10 种预设，也可以选其他 OpenAI 兼容服务；角色有名字和性格预设。「人设」框里就是 `persona.txt`，保存后会重启角色服务，学到的东西不会丢。「更多功能」里可以开联网搜索、看图和主动说话。再次运行 `personagent` 会沿用已经打开的页面。右上角的菜单可以把页面切换成英文、中文或另外八种语言。角色会用聊天里的语言回复；不过内置的提示词和数据只有中文和英文，换成其他语言效果如何，取决于模型。
+浏览器会打开一个本地页面，分三栏：「开始聊天」「连接平台」「角色与设置」。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。模型服务有 10 种预设，也可以选其他 OpenAI 兼容服务；角色有名字和性格预设。「人设」框里就是 `persona.txt`，保存后会重启角色服务，学到的东西不会丢。「更多功能」里可以开联网搜索、看图和主动说话。再次运行 `personagent` 会沿用已经打开的页面。右上角的菜单可以把页面切换成英文、中文或另外八种语言。角色会用聊天里的语言回复；内置的提示词和数据是中文和英文。
 
 Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 3.10–3.14。详见[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令行和连接器的用法在[完整手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)里。
 
@@ -42,7 +42,7 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
 读 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md ，然后帮我把 personagent 装好并设置好
 ```
 
-它会先问你角色的语言、名字和性格，用哪家模型服务，要接哪些聊天平台，然后安装 personagent、建好主目录、启动本地页面。模型 Key 由你自己在页面里填，不经过助手。它照着做的[说明](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)是英文的，你用中文和它交流就行。
+它会先问你角色的语言、名字和性格，用哪家模型服务，要接哪些聊天平台，然后安装 personagent、建好主目录、启动本地页面。模型 Key 由你自己在页面里填，不经过助手。助手照着[这份说明](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)做（英文），你用中文和它交流就行。
 
 ## 为什么用它
 
@@ -51,7 +51,7 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
     <td width="220"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="托着腮听大家聊天" width="220"></td>
     <td>
       <b>知道什么时候该安静</b><br>
-      叫它才回。没人叫时，由一个模型判断真人这时会不会接话，不靠掷骰子。<br>
+      叫它才回。没人叫时，由一个模型判断真人这时会不会接话。<br>
       有人连着刷屏，它只回一条。
     </td>
   </tr>
@@ -98,14 +98,14 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
 
 ## 和同类项目对比
 
-常被拿来比较的几个项目，依据各自 2026 年 10 月的文档：
+常被拿来比较的几个项目（截至 2026 年 10 月）：
 
 - **AstrBot**（AGPL-3.0）：机器人框架，能接 18 个以上的平台，有 WebUI 和很大的插件市场。可以开“主动回复”按概率随机插话（默认 10%，默认关闭），学习交给插件。
 - **麦麦 MaiBot**（GPL-3.0）：QQ 上的角色机器人，经 NapCat 接入，有 WebUI 和一键启动器。由一个规划模型决定多久说一次话，会从群聊里学表达方式和黑话。
 - **ChatLuna 伪装群友**（AGPL-3.0）：Koishi 插件，按规则插话：固定间隔、群里的活跃度、冷场了多久。
 - **ElizaOS**（MIT）：TypeScript 写的 agent 框架，支持 Discord、Telegram、Slack 等，由模型决定回不回。
 
-personagent 自带、而它们交给插件或文档里没写的：从别人对它回复的反应里学（纠正、否定、接受了的重答）；一处改动要同一个聊天里两条一致的反应，其中一条是强证据；每处改动都有记录，可以撤回；行为有公开的评测（[见下文](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)）。
+personagent 自带的：从别人对它回复的反应里学（纠正、否定、接受了的重答）；一处改动要同一个聊天里两条一致的反应，其中一条是强证据；每处改动都有记录，可以撤回；行为有公开的评测（[见下文](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)）。
 
 它们更强的地方：桌面程序、所有设置都在 WebUI 里点，插件生态大，还有学黑话、表情包、图片记忆。已经在用 AstrBot 或 Koishi 也不用二选一：personagent 可以接在它们后面，只当那个角色。
 
@@ -120,11 +120,9 @@ personagent 自带、而它们交给插件或文档里没写的：从别人对�
 | 纠正教过的事，之后换个说法再问能用上 | 56% / 76% | 67% / 71% |
 
 - 该它回的话几乎不漏；错的大多是名字指的是别的东西，比如影城的名字、谁家的宠物。
-- 中文比直接贴人设的优势在误差范围之内。
-- 当天第一轮时，纠正还不会单独记下要点，之后换个说法再问，58 次里只用上 2 次；改完重跑才是上面的数字。
-- 捣乱、旁观、说完就走的纠正，84 次一次都没混进来。
+- 捣乱、旁观、说完就走的纠正，84 次都没有混进来。
 
-[完整结果](https://github.com/wangkant/personagent/blob/main/docs/evals/2026-10-18/README.zh-CN.md)里有置信区间、各类错误、测法、这些数字说明不了什么，以及全部报告。
+[完整结果](https://github.com/wangkant/personagent/blob/main/docs/evals/2026-10-18/README.zh-CN.md)里有置信区间、各类错误、测法和全部报告。
 
 ## 文档
 
@@ -140,11 +138,11 @@ personagent 自带、而它们交给插件或文档里没写的：从别人对�
 
 ## 隐私
 
-personagent 存的一切都在你自己机器上的一个主目录里：放 Key 的 `.env`、`persona.txt`、`runtime/`，以及放托管 AstrBot 和直连平台凭据的 `platforms/`。模型服务商会看到对话内容；personagent 每天会向 pypi.org 查一次有没有新版本（`UPDATE_CHECK_ENABLED=false` 可以关掉）；接入真实的群之前，请告诉群友这是机器人，并征得他们同意。哪些内容会发给谁，见[使用手册的隐私一节](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#隐私与知情同意)。
+personagent 存的一切都在你自己机器上的一个主目录里：放 Key 的 `.env`、`persona.txt`、`runtime/`，以及放托管 AstrBot 和直连平台凭据的 `platforms/`。模型服务商会看到它回复的对话；personagent 每天会向 pypi.org 查一次有没有新版本（`UPDATE_CHECK_ENABLED=false` 可以关掉）；接入真实的群之前，请告诉群友这是机器人，并征得他们同意。哪些内容会发给谁，见[使用手册的隐私一节](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#隐私与知情同意)。
 
 ## 项目状态
 
-1.3.1 已发布到 PyPI（2026-10-26）。QQ 是跑得最多的平台，1.0 经 AstrBot，1.1 起直接连接。微信、Telegram、Discord 的直连会在保存前向真实服务校验凭据，其余部分在模拟环境里测试；Satori 和 Matrix 连接器目前只在模拟环境里测过。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有任务安装软件包，跑命令和本地页面。
+1.3.1 已发布到 PyPI（2026-10-26）。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 跑测试，另有任务安装软件包，跑命令和本地页面。
 
 ## 许可证
 

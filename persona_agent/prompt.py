@@ -233,7 +233,7 @@ class PromptBuilder:
 
         admin_block = ""
         if self.admin_name and self._admins():
-            rel = self.admin_relationship or ""
+            rel = self.admin_relationship
             rel_clause = f"({rel}, " if rel else "("
             admin_block = (
                 f"\n\n[Special person]\n"
@@ -330,16 +330,10 @@ class PromptBuilder:
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
-        # All inside the try: a malformed file must not silence every turn.
-        try:
-            profile = json.loads(profile_file.read_text(encoding="utf-8"))
-            if not isinstance(profile, dict):
-                return ""
-            total = int(profile.get("total_msgs", 0) or 0)
-            with_sticker = int(profile.get("msgs_with_image", 0) or 0)
-            sticker_only = int(profile.get("sticker_only_msgs", 0) or 0)
-        except Exception:
-            return ""
+        profile = json.loads(profile_file.read_text(encoding="utf-8"))
+        total = profile.get("total_msgs", 0)
+        with_sticker = profile.get("msgs_with_image", 0)
+        sticker_only = profile.get("sticker_only_msgs", 0)
         if total < 20:
             return ""
         ratio = with_sticker / total
@@ -377,7 +371,7 @@ class PromptBuilder:
         return ", ".join([f"{nick}({uid})" for uid, nick in unique[:5]])
 
     def _core_memory_for_prompt(self, group_id: str) -> str:
-        note = (self.core_memory.get(group_id) or "").strip()
+        note = self.core_memory.get(group_id, "").strip()
         if not note:
             return ""
         return (

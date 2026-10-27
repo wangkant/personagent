@@ -52,7 +52,7 @@ logger = logging.getLogger("import")
 
 
 def _atomic_write_json(path, obj) -> None:
-    """Atomic write: a truncated stickers.json would load as an empty library."""
+    """Atomic JSON write."""
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
 
 
@@ -168,11 +168,9 @@ async def main():
         return 1
 
     STICKERS_DIR.mkdir(parents=True, exist_ok=True)
-    if STICKERS_JSON.exists():
-        entries = json.loads(STICKERS_JSON.read_text(encoding="utf-8"))
-    else:
-        entries = {}
-    md5_index = {v.get("md5"): k for k, v in entries.items() if isinstance(v, dict) and v.get("md5")}
+    entries = (json.loads(STICKERS_JSON.read_text(encoding="utf-8"))
+               if STICKERS_JSON.exists() else {})
+    md5_index = {v.get("md5"): k for k, v in entries.items() if v.get("md5")}
 
     files = sorted([p for p in src.iterdir() if p.is_file()])
     if args.limit:
@@ -192,11 +190,7 @@ async def main():
 
     async with httpx.AsyncClient() as client:
         for i, src_file in enumerate(files):
-            try:
-                img_bytes = src_file.read_bytes()
-            except Exception as e:
-                logger.debug("read failed: %s", e)
-                continue
+            img_bytes = src_file.read_bytes()
             if len(img_bytes) < 200 or len(img_bytes) > 5_000_000:
                 skipped_unsupported += 1
                 continue

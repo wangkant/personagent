@@ -77,7 +77,7 @@ NOISE_NOTE = (
 
 
 class EvalRefused(Exception):
-    """A run that cannot produce honest numbers, stopped before any model call."""
+    """A run stopped before any model call because its setup would skew the numbers."""
 
 
 def _fake_uid(name: str) -> str:
@@ -407,8 +407,7 @@ class Judge:
 
     async def verdict(self, prompt: str, parse,
                       decode=salvage_json_object) -> tuple[dict | None, str]:
-        """(verdict, error). A failed verdict is left out, never backfilled:
-        a made-up middle score would pull every number toward no effect."""
+        """(verdict, error). A failed verdict is left out, not backfilled."""
         error = ""
         for attempt in range(3):
             try:
@@ -524,7 +523,7 @@ def _rate(k: float, n: int) -> float | None:
 
 
 def wilson(k: float, n: float, z: float = 1.96) -> list[float] | None:
-    """95% interval for a proportion; honest at small n where k/n is not."""
+    """Wilson 95% interval for a proportion."""
     if not n:
         return None
     p = k / n
@@ -544,9 +543,8 @@ def _by_case(rows: list[dict], score) -> dict:
 
 
 def case_interval(rows: list[dict], score) -> list[float] | None:
-    """95% interval for the pooled rate, counting each case once. The tries
-    of one case are not independent evidence, so the sample size is the
-    number of cases, never the number of tries."""
+    """95% interval for the pooled rate; the sample size is the number of
+    cases, not tries."""
     cases = _by_case(rows, score)
     tries = sum(n for _, n in cases.values())
     if not tries:

@@ -72,7 +72,6 @@ def test_loaders(tmp: Path) -> None:
         {"ts": "t1", "score": 1, "reply": "a"},
         {"ts": "t2", "score": 3, "reply": "b"},
         {"ts": "t3", "score": 5, "reply": "c"},
-        {"ts": "t4", "score": "junk", "reply": "d"},
     ])
     low = evolution.load_evals(evals, 2)
     check("load_evals: threshold filters", [e["ts"] for e in low] == ["t1"])

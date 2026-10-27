@@ -287,10 +287,7 @@ class QQ(Platform):
     async def _release(self, mid: str, on_event) -> None:
         """Hand over a plain group message no @ copy has replaced."""
         await asyncio.sleep(AT_GRACE_S)
-        held = self.held.pop(mid, None)
-        if held is None:
-            return
-        _, event, target = held
+        _, event, target = self.held.pop(mid)
         self.passive[target] = [mid, time.monotonic(), 0]
         await on_event(event, target)
 

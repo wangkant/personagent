@@ -1,9 +1,5 @@
-"""One way to read a setting from the environment.
-
-A bad value falls back to the declared default and says so in the log; it
-never raises and never silently means the opposite of what was written.
-Dependency-free: most of the package imports it at module scope.
-"""
+"""Reading settings from the environment. A bad value logs a warning and
+falls back to the default."""
 from __future__ import annotations
 
 import logging
@@ -42,8 +38,7 @@ def env_int(
     maximum: int | None = None,
     env=None,
 ) -> int:
-    """One integer setting, never raising: unset, empty, invalid and
-    out-of-range all mean ``default``, the last two with a warning."""
+    """An integer setting; unset, empty, invalid or out-of-range means ``default``."""
     return _env_number(int, name, default, minimum, maximum, env)
 
 
@@ -55,7 +50,7 @@ def env_float(
     maximum: float | None = None,
     env=None,
 ) -> float:
-    """One float setting, never raising. See :func:`env_int`."""
+    """A float setting. See :func:`env_int`."""
     return _env_number(float, name, default, minimum, maximum, env)
 
 
@@ -76,8 +71,7 @@ def parse_tz_offset(raw) -> float | None:
 
 
 def env_bool(name: str, default: bool, *, env=None) -> bool:
-    """One boolean setting, never raising; an unrecognised value keeps
-    ``default`` and warns."""
+    """A boolean setting; an unrecognised value keeps ``default``."""
     source = os.environ if env is None else env
     raw = source.get(name)
     if raw is None or str(raw).strip() == "":

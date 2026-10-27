@@ -86,9 +86,7 @@ class Workspace:
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
         saved = sw._read_json(self._history_path)
         self._conversation = str(saved.get("conversation") or secrets.token_hex(12))[:64]
-        self._history = [item for item in saved.get("messages", [])
-                         if isinstance(item, dict) and item.get("role") in ("user", "assistant")
-                         and isinstance(item.get("text"), str)][-50:]
+        self._history = saved.get("messages", [])[-50:]
         self.job = {"state": "idle", "stage": "", "error": ""}
 
     @property
@@ -238,8 +236,6 @@ class Workspace:
         search = payload.get("search") or {}
         vision = payload.get("vision") or {}
         proactive = payload.get("proactive") or {}
-        if not all(isinstance(part, dict) for part in (search, vision, proactive)):
-            raise ValueError("invalid_feature")
         with self._lock:
             if self._future is not None and not self._future.done():
                 raise ValueError("busy")
@@ -268,7 +264,7 @@ class Workspace:
             else:
                 values["VISION_MODEL"] = ""
             platforms = proactive.get("platforms") or []
-            if not isinstance(platforms, list) or any(str(p) not in PLATFORM_KINDS for p in platforms):
+            if any(str(p) not in PLATFORM_KINDS for p in platforms):
                 raise ValueError("invalid_feature")
             # The page offers only connected apps: an entry it could not show
             # (qq for NapCat, an app connected later) is kept, or an empty
@@ -399,8 +395,6 @@ class Workspace:
 
     def _connect_plugin(self) -> None:
         data = AstrBotInstallation(self.home).root / "data"
-        if not (data / "cmd_config.json").is_file():
-            raise RuntimeError("platform_not_installed")
         values = {}
         # OneBot (NapCat) carries QQ numbers, which the agent reads bare.
         sw.connect_astrbot(self.env, values, data_dir=data, qq="aiocqhttp" in conn.connected(data),
@@ -424,8 +418,6 @@ class Workspace:
 
     def _disconnect(self, spec: conn.Platform) -> None:
         data = AstrBotInstallation(self.home).root / "data"
-        if not (data / "cmd_config.json").is_file():
-            return
         conn.remove_entry(data, spec.kind)
         self._connect_plugin()
         sw.write_astrbot_config(data, conn.scope(sw.read_astrbot_config(data), spec.kind, allow=False))
@@ -581,8 +573,6 @@ class Workspace:
             value = response.json()
         except (httpx.HTTPError, ValueError):
             raise ValueError("activity_unavailable") from None
-        if not isinstance(value, dict):
-            raise ValueError("activity_unavailable")
         if response.status_code == 404 and value.get("detail") == "Not Found":
             return {"off": True}
         if response.status_code == 409:
@@ -599,7 +589,7 @@ class Workspace:
                   "kind": str(c.get("kind", "")), "last": c.get("last_activity", 0),
                   "review": int(c.get("pending", 0)), "learned": int(c.get("learned", 0)),
                   "notes": int(c.get("memories", 0))}
-                 for c in raw.get("conversations", []) if isinstance(c, dict)]
+                 for c in raw.get("conversations", [])]
         return {"running": True, "off": False, "chats": chats}
 
     async def activity_chat(self, chat: str) -> dict:

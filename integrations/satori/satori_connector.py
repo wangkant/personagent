@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-import binascii
 import hashlib
 import hmac
 import ipaddress
@@ -598,17 +597,13 @@ class SatoriBridge:
 
     async def on_message(self, account: Any, event: Any) -> None:
         """satori-python's message-created callback."""
-        try:
-            neutral = await self.build_event(account, event)
-        except Exception:
-            logger.exception("could not map a Satori message")
-            return
+        neutral = await self.build_event(account, event)
         if neutral is None:
             return
         answer = await self._post(neutral)
         if not answer:
             return
-        replies = [r for r in answer.get("replies") or [] if isinstance(r, dict)]
+        replies = answer.get("replies") or []
         channel = getattr(event, "channel", None) or getattr(event.message, "channel", None)
         # The referrer lets passive-reply platforms (the official QQ bot API)
         # accept an answer; satori-python's own send() passes it the same way.
@@ -619,8 +614,7 @@ class SatoriBridge:
     async def _post(self, neutral: dict) -> Optional[dict]:
         for attempt in range(2):
             try:
-                answer = await self.connector.send_event(neutral)
-                return answer if isinstance(answer, dict) else None
+                return await self.connector.send_event(neutral)
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 if status == 429 and attempt == 0:
@@ -638,7 +632,7 @@ class SatoriBridge:
                     "finishes the turn, so that reply is lost; keep LLM_TIMEOUT_S x "
                     "(1 + LLM_MAX_RETRIES) under SATORI_TIMEOUT_S", self.config.timeout_s)
                 return None
-            except Exception as exc:
+            except httpx.HTTPError as exc:
                 logger.warning("agent request failed: %s", exc)
                 return None
         return None
@@ -657,19 +651,11 @@ class SatoriBridge:
             text = str(item.get("text") or "")
             return head + [lib.Text((" " if head else "") + text)] if text else []
         if kind == "image":
-            image = self._image_element(str(item.get("b64") or ""))
-            return head + [image] if image is not None else []
-        logger.warning("dropping a reply item of unknown type %r", kind)
+            return head + [self._image_element(item["b64"])]
         return []
 
     def _image_element(self, b64: str) -> Any:
-        if not b64:
-            return None
-        try:
-            data = base64.b64decode(b64, validate=True)
-        except (binascii.Error, ValueError):
-            logger.warning("dropping a reply image that is not valid base64")
-            return None
+        data = base64.b64decode(b64)
         try:
             return self.lib.Image.of(raw=data)
         except ValueError:  # satori-python could not tell the format
@@ -724,7 +710,7 @@ class SatoriBridge:
             logger.warning("no online Satori login %s/%s for delivery %s",
                            handle["platform"], handle["self_id"], delivery.get("delivery_id"))
             return "failed", 0
-        items = [i for i in delivery.get("items") or [] if isinstance(i, dict)]
+        items = delivery.get("items") or []
         done = await self.send_items(account, handle["channel_id"], items,
                                      self.platform_name(handle["platform"]), is_group)
         if done == len(items):
@@ -755,7 +741,7 @@ def _mention_target(mention_user_id: Any, platform_name: str) -> Optional[str]:
 def _agent_error(response: httpx.Response) -> str:
     try:
         payload = response.json()
-    except Exception:
+    except ValueError:
         return ""
     return str(payload.get("error") or "") if isinstance(payload, dict) else ""
 

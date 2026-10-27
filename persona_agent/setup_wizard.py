@@ -57,18 +57,12 @@ def detect_lang() -> str:
         if found:
             return found
     if os.name == "nt":
-        try:
-            import ctypes
+        import ctypes
 
-            # The low byte of a LANGID is the primary language; 0x04 is Chinese.
-            if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0xFF == 0x04:
-                return "zh"
-        except (AttributeError, OSError):
-            pass
-    try:
-        return _lang_of(locale.getlocale()[0] or "") or "en"
-    except ValueError:
-        return "en"
+        # The low byte of a LANGID is the primary language; 0x04 is Chinese.
+        if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0xFF == 0x04:
+            return "zh"
+    return _lang_of(locale.getlocale()[0] or "") or "en"
 
 
 def t(key: str, **values) -> str:
@@ -459,7 +453,7 @@ def _clean_ids(ids) -> list[str]:
 
 def ask_ids(label: str, current) -> list[str]:
     """A comma-separated id list; Enter keeps `current`, '-' empties it."""
-    current = _clean_ids(current) if isinstance(current, (list, tuple)) else []
+    current = _clean_ids(current or [])
     hint = t("ids_keep") if current else t("ids_none")
     raw = ask(f"{label}（{hint}）" if _lang == "zh" else f"{label} ({hint})",
               default=",".join(current))
@@ -527,21 +521,15 @@ def write_env(env_path: Path, values: dict) -> None:
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, SECRET_FILE_MODE)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(updated)
-    try:
-        # Keep a stricter mode the operator chose, never a wider one.
-        if env_path.exists():
-            os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
-    except OSError:
-        pass  # Windows ACLs do not map onto POSIX mode bits
+    # Keep a stricter mode the operator chose, never a wider one.
+    if env_path.exists():
+        os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
     os.replace(tmp, env_path)
 
 
 def secure_env_file(env_path: Path) -> None:
     """Narrow .env to its user (0600); a copy of the template starts at 0644."""
-    try:
-        os.chmod(env_path, SECRET_FILE_MODE)
-    except OSError:
-        pass  # Windows ACLs do not map onto POSIX mode bits
+    os.chmod(env_path, SECRET_FILE_MODE)
 
 
 def env_get(env_path: Path, key: str) -> str:
@@ -852,11 +840,7 @@ def astrbot_roots() -> list[Path]:
 
 
 def find_astrbot_data() -> Path | None:
-    try:
-        roots = astrbot_roots()
-    except (OSError, RuntimeError):
-        return None
-    for root in roots:
+    for root in astrbot_roots():
         try:
             found = resolve_astrbot_data(root)
         except OSError:
@@ -1078,11 +1062,9 @@ def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
     starts. An entry with the same id keeps its other settings and gets the new credentials."""
     path = astrbot_main_config_path(data_dir)
     cfg = json.loads(path.read_text(encoding="utf-8-sig"))
-    platforms = cfg.get("platform")
-    if not isinstance(platforms, list):
-        platforms = []
+    platforms = cfg["platform"]
     for i, existing in enumerate(platforms):
-        if isinstance(existing, dict) and existing.get("id") == entry["id"]:
+        if existing.get("id") == entry["id"]:
             # Keep the user's own adapter settings (proxy, base URL, ...): only the credentials change.
             fields = ["enable"] + [key for key, _ in PLATFORMS.get(entry.get("type"), ())]
             same_kind = existing.get("type") == entry.get("type")
@@ -1091,7 +1073,6 @@ def write_astrbot_platform(data_dir: Path, entry: dict) -> Path:
             break
     else:
         platforms.append(entry)
-    cfg["platform"] = platforms
     return _write_json(path, cfg)
 
 
@@ -1156,10 +1137,7 @@ class Launcher:
 
 
 def _resolved(path: Path) -> Path:
-    try:
-        return Path(path).expanduser().resolve()
-    except OSError:
-        return Path(path)
+    return Path(path).expanduser().resolve()
 
 
 def _quote(text: str) -> str:

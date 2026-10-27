@@ -507,8 +507,9 @@ def test_weixin_only_treats_a_long_poll_timeout_as_empty(tmp_path):
     assert run(bot.send("u@im.wechat", [{"type": "text", "text": "hi"}])) == 0
 
 
-def test_weixin_reads_the_quoted_message_id_from_the_quoted_item():
-    bot = weixin.Weixin({"weixin_oc_token": "bt"}, client=mock(lambda r: httpx.Response(500)))
+def test_weixin_reads_the_quoted_message_id_from_the_quoted_item(tmp_path):
+    bot = weixin.Weixin({"weixin_oc_token": "bt"}, state=tmp_path / "s.json",
+                        client=mock(lambda r: httpx.Response(500)))
     event = bot.event({"from_user_id": "u@im.wechat", "message_id": 2, "item_list": [
         {"type": 1, "text_item": {"text": "yes"},
          "ref_msg": {"message_item": {"msg_id": "77", "text_item": {"text": "earlier"}}}}]})

@@ -21,7 +21,7 @@ Start in a local browser chat: add one model key and say hello. When you want th
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps screen of the local page, with every platform it can join" width="960">
 </p>
 
-<p align="center"><em>Connect apps, in the same local page as setup and the character chat. Screenshot from a throwaway setup with a local test model.</em></p>
+<p align="center"><em>Connect apps, in the same local page as setup and the character chat.</em></p>
 
 ## Start here
 
@@ -34,7 +34,7 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
-The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open. The menu at the top right shows the page in English, Chinese or eight more languages. The character answers in the language the chat uses; its built-in prompts and data are English and Chinese, so how well it does in another language depends on the model.
+The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open. The menu at the top right shows the page in English, Chinese or eight more languages. The character answers in the language the chat uses; its built-in prompts and data are English and Chinese.
 
 On Windows you can also download the source ZIP and double-click `start.bat`. Python 3.10–3.14. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md); terminal commands and connectors are in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
@@ -46,7 +46,7 @@ A coding agent that can run commands on your computer can install and set up per
 Read https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md and set up personagent for me.
 ```
 
-It asks for the character's language, name and personality, your model service and the chat apps you want, then installs personagent, creates the home folder and starts the local page. You paste your model key into that page yourself, so the key never passes through the agent. The [instructions it follows](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md) are plain Markdown you can read too.
+It asks for the character's language, name and personality, your model service and the chat apps you want, then installs personagent, creates the home folder and starts the local page. You paste your model key into that page yourself, so the key never passes through the agent. The agent follows [these instructions](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md).
 
 ## Why personagent
 
@@ -55,8 +55,8 @@ It asks for the character's language, name and personality, your model service a
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>It knows when to stay quiet.</strong><br>
-It answers when called. Otherwise a model judges whether a person would chime in: no dice roll.<br>
-A burst of messages gets one reply, not one each.
+It answers when called. Otherwise a model judges whether a person would chime in.<br>
+A burst of messages gets one reply.
 </td>
 </tr>
 <tr>
@@ -101,14 +101,14 @@ Setup for each is in the [user guide](https://github.com/wangkant/personagent/bl
 
 ## How it compares
 
-The projects people usually weigh it against, going by each one's documentation in October 2026:
+Projects it is often compared with, as of October 2026:
 
 - **AstrBot** (AGPL-3.0) is a bot framework for 18+ platforms, with a WebUI and a large plugin market. It can reply unasked at random (10% of the time, off by default) and leaves learning to plugins.
 - **MaiBot** (GPL-3.0) is a character bot for QQ, through NapCat, with a WebUI and a one-click launcher. A planner model decides how often it talks, and it picks up expressions and slang from the chat.
 - **ChatLuna's character plugin** for Koishi (AGPL-3.0) joins in on rules: a fixed interval, how busy the chat is, or how long it has gone quiet.
 - **ElizaOS** (MIT) is an agent framework in TypeScript for Discord, Telegram, Slack and more, where a model decides whether to respond.
 
-What personagent has built in, where the others leave it to plugins or don't describe it: it learns from how people react to its replies (corrections, rejections, retries they accepted); a change needs two agreeing reactions from the same chat, one of them strong; every change is logged and can be rolled back; and how it behaves is measured in a published eval ([below](https://github.com/wangkant/personagent#measured)).
+What personagent has built in: it learns from how people react to its replies (corrections, rejections, retries they accepted); a change needs two agreeing reactions from the same chat, one of them strong; every change is logged and can be rolled back; and how it behaves is measured in a published eval ([below](https://github.com/wangkant/personagent#measured)).
 
 Where they are ahead: desktop apps with every setting in a WebUI, big plugin ecosystems, and slang, sticker packs and image memory. If you already run AstrBot or Koishi, you don't have to choose: personagent can run behind either one as the character.
 
@@ -123,11 +123,9 @@ Where they are ahead: desktop apps with every setting in a WebUI, big plugin eco
 | Uses what a correction taught in a later, differently worded message | 76% / 56% | 71% / 67% |
 
 - It rarely ignores a message meant for it. Most misses are its name used for something else, such as a cinema or a puppy.
-- In Chinese, its edge over the plain prompt is within the noise.
-- Before corrections kept their lesson, which was fixed after the first run that day, only 2 of 58 later messages used it.
-- No troll's, bystander's or walked-away correction got through, in 84 tries.
+- None of 84 corrections from trolls, bystanders or people who walked away got through.
 
-The [full results](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) give the intervals, the misses by kind, the method, what the numbers don't show, and every report.
+The [full results](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) give the intervals, the misses by kind, the method and every report.
 
 ## Documentation
 
@@ -141,11 +139,11 @@ The [full results](https://github.com/wangkant/personagent/tree/main/docs/evals/
 
 ## Privacy
 
-Everything personagent stores stays on your machine, in one home folder: `.env` with your keys, `persona.txt`, `runtime/`, and `platforms/` with the managed AstrBot and the direct connections' credentials. The model provider you choose does see the conversations it answers, and once a day personagent asks pypi.org whether a newer version is out (`UPDATE_CHECK_ENABLED=false` stops that). Before you connect it to real people, tell them it is a bot and get their consent; the [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent) lists exactly what goes where.
+Everything personagent stores stays on your machine, in one home folder: `.env` with your keys, `persona.txt`, `runtime/`, and `platforms/` with the managed AstrBot and the direct connections' credentials. The model provider you choose sees the conversations it answers, and once a day personagent asks pypi.org whether a newer version is out (`UPDATE_CHECK_ENABLED=false` stops that). Before you connect it to real people, tell them it is a bot and get their consent; the [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent) lists what goes where.
 
 ## Status
 
-1.3.1 is on PyPI, released 2026-10-26. QQ is the most exercised platform, through AstrBot in 1.0 and directly since 1.1. The WeChat, Telegram and Discord connections check credentials against the real services before saving and are otherwise tested against stand-ins; the Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus jobs that install the package and drive the command and the local page.
+1.3.1 is on PyPI, released 2026-10-26. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12, plus jobs that install the package and drive the command and the local page.
 
 ## License
 

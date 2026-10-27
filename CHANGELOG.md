@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Less defensive code.** Guards for states the code itself never produces are gone: type checks on its own files and values, catch-alls around its own calls, misuse warnings. A corrupt state file (`connector_handles.json`, `stickers.json`, the direct-app credentials and others) now stops with an error instead of reading as empty. Network and model failures, the auth and SSRF checks and the handling of what chat users send are unchanged. Comments and docs lost their hedging.
+
+### Fixed
+
+- **A reply could send the same sticker twice.** The once-per-reply check looked stickers up by file name, but they are keyed by path, so it never matched.
+
 ## [1.3.1] — 2026-10-26
 
 The local page, the README and the memory commands in ten languages, and a character that answers in the language its chat uses.

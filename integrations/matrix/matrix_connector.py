@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-import binascii
 import collections
 import hashlib
 import html
@@ -767,6 +766,7 @@ class MatrixConnector:
                 try:
                     event = await self.build_event(room, source)
                 except Exception:
+                    # A malformed event must not stall the room's later ones.
                     logger.exception("could not read event %s", source.get("event_id"))
                     event = None
             # Without a slot: the event before may still be waiting for one.
@@ -804,8 +804,6 @@ class MatrixConnector:
             except httpx.HTTPError as exc:
                 logger.warning("agent unreachable at %s: %s", self.settings.personagent_url, exc)
                 return
-            if not isinstance(answer, dict):
-                return
             if answer.get("owned") and self.settings.read_receipts_enabled:
                 await self._quietly(self.client.room_read_markers(
                     room_id, event["message_id"], event["message_id"]))
@@ -842,14 +840,8 @@ class MatrixConnector:
         return {"m.in_reply_to": {"event_id": quoted}} if quoted else None
 
     async def _image_content(self, target: _Target, item: Mapping,
-                             mention: Optional[tuple[str, str]]) -> Optional[dict]:
-        try:
-            data = base64.b64decode(str(item.get("b64") or ""), validate=True)
-        except (binascii.Error, ValueError):
-            data = b""
-        if not data:
-            logger.warning("dropping an image reply with no valid base64")
-            return None
+                             mention: Optional[tuple[str, str]]) -> dict:
+        data = base64.b64decode(item["b64"])
         mimetype, extension = image_type(data)
         filename = f"image.{extension}"
         encrypt = bool(getattr(target.room, "encrypted", False))
@@ -885,11 +877,8 @@ class MatrixConnector:
             remembered = text
         elif kind == "image":
             content = await self._image_content(target, item, mention)
-            if content is None:
-                return
             remembered = "(sent an image)"
         else:
-            logger.warning("dropping a reply of unknown type %r", kind)
             return
         relation = self._relation(target, item)
         if relation:
@@ -907,8 +896,6 @@ class MatrixConnector:
         """Send in order; returns how many went out before the first failure."""
         room_id = target.room.room_id
         for index, item in enumerate(items):
-            if not isinstance(item, Mapping):
-                continue
             if index:
                 await self._typing_start(room_id)
                 try:
@@ -945,7 +932,7 @@ class MatrixConnector:
             return "refused", 0
         if getattr(room, "encrypted", False) and not self.settings.e2ee_enabled:
             return "unsupported", 0
-        items = [i for i in (delivery.get("items") or []) if isinstance(i, Mapping)]
+        items = delivery.get("items") or []
         sent = await self.send_items(_Target(room, conversation_id or room_id, not dm),
                                      items)
         if sent >= len(items):
@@ -1029,12 +1016,9 @@ async def login(client: Any, settings: Settings) -> None:
         return
 
     saved = _session_file(settings)
-    try:
-        session = json.loads(saved.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        session = None
+    session = json.loads(saved.read_text(encoding="utf-8")) if saved.is_file() else {}
     # Keyed by what the operator typed: MATRIX_USER_ID may be a bare localpart.
-    if (isinstance(session, dict) and session.get("login") == settings.user_id
+    if (session.get("login") == settings.user_id
             and session.get("homeserver") == settings.homeserver):
         client.access_token = session["access_token"]
         who = await client.whoami()
@@ -1053,10 +1037,7 @@ async def login(client: Any, settings: Settings) -> None:
         "user_id": response.user_id, "device_id": response.device_id,
         "access_token": response.access_token,
     }), encoding="utf-8")
-    try:
-        saved.chmod(0o600)
-    except OSError:
-        pass
+    saved.chmod(0o600)
 
 
 async def run(settings: Settings, *, nio_module: Any = None,

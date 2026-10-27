@@ -348,7 +348,7 @@ class _Context:
 
 
 def _plugin_instance(module, config, context=None):
-    plugin = module.PersonagentConnector(context, config)
+    plugin = module.PersonagentConnector(context or _Context(), config)
     plugin._client = _RecordingClient()
     return plugin
 

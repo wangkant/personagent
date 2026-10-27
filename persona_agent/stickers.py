@@ -80,17 +80,7 @@ class StickerLibrary:
     def _load(self) -> dict:
         if not self.file.exists():
             return {}
-        try:
-            loaded = json.loads(self.file.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError("sticker registry root must be an object")
-            return {
-                key: value for key, value in loaded.items()
-                if isinstance(key, str) and isinstance(value, dict)
-            }
-        except Exception as e:
-            logger.warning("stickers.json load failed: %s", e)
-            return {}
+        return json.loads(self.file.read_text(encoding="utf-8"))
 
     def _save(self, force: bool = False) -> None:
         # Atomic, and throttled to once per SAVE_MIN_INTERVAL_SEC since hot
@@ -99,26 +89,20 @@ class StickerLibrary:
         now = time.monotonic()
         if not force and (now - self._last_save) < SAVE_MIN_INTERVAL_SEC:
             return
-        try:
-            atomic_write_text(
-                self.file,
-                json.dumps(self.entries, ensure_ascii=False, separators=(',', ':')),
-            )
-            self._last_save = now
-        except Exception as e:
-            logger.warning("stickers.json save failed: %s", e)
+        atomic_write_text(
+            self.file,
+            json.dumps(self.entries, ensure_ascii=False, separators=(',', ':')),
+        )
+        self._last_save = now
 
     def _log_unknown(self, md5: str, src_user: str, src_group: str, url: str) -> None:
-        try:
-            append_jsonl_rotating(self.unknown_log, {
-                "ts": time.time(),
-                "md5": md5,
-                "src_user": src_user,
-                "src_group": src_group,
-                "url": url,
-            }, max_bytes=2_000_000)
-        except Exception:
-            pass
+        append_jsonl_rotating(self.unknown_log, {
+            "ts": time.time(),
+            "md5": md5,
+            "src_user": src_user,
+            "src_group": src_group,
+            "url": url,
+        }, max_bytes=2_000_000)
 
     def lookup_by_md5(self, md5: str) -> Optional[dict]:
         if not md5:
@@ -157,7 +141,7 @@ class StickerLibrary:
 
         if existing_filename:
             self._append_context(existing_filename, src_user, context_before)
-            entry = self.entries.get(existing_filename, {})
+            entry = self.entries[existing_filename]
             entry["use_count"] = entry.get("use_count", 0) + 1
             self._save()
             return md5
@@ -168,11 +152,7 @@ class StickerLibrary:
         ext = self._guess_ext(image_bytes)
         filename = f"auto/{md5}.{ext}"
         filepath = self.dir / filename
-        try:
-            filepath.write_bytes(image_bytes)
-        except Exception as e:
-            logger.warning("[stickers] write failed: %s", e)
-            return None
+        filepath.write_bytes(image_bytes)
 
         entry = {
             "md5": md5,
@@ -201,9 +181,7 @@ class StickerLibrary:
         context_before: list[str],
         save: bool = True,
     ) -> None:
-        entry = self.entries.get(filename)
-        if not entry:
-            return
+        entry = self.entries[filename]
         ctxs = entry.setdefault("seen_contexts", [])
         ctxs.append({
             "ts": time.time(),
@@ -224,18 +202,11 @@ class StickerLibrary:
         return (not entry.get("auto_tagged")
                 and len(entry.get("seen_contexts", [])) >= MIN_CONTEXTS_TO_TAG)
 
-    def _remove_entry(self, filename: str, *, warn_on_unlink: bool = False) -> bool:
-        """Drop the record, its md5 index entry and the file. False if unknown."""
-        entry = self.entries.pop(filename, None)
-        if not entry:
-            return False
+    def _remove_entry(self, filename: str) -> None:
+        """Drop the record, its md5 index entry and the file."""
+        entry = self.entries.pop(filename)
         self._md5_index.pop(entry.get("md5", ""), None)
-        try:
-            (self.dir / filename).unlink(missing_ok=True)
-        except Exception as e:
-            if warn_on_unlink:
-                logger.warning("[stickers] purge unlink failed for %s: %s", filename, e)
-        return True
+        (self.dir / filename).unlink(missing_ok=True)
 
     def _evict_least_used(self) -> None:
         """Drop the bottom 10% by use_count (untagged ones first)."""
@@ -259,8 +230,7 @@ class StickerLibrary:
         filename = self._md5_index.get(md5)
         if not filename:
             return
-        entry = self.entries.get(filename)
-        if not entry or not self._needs_tagging(entry):
+        if not self._needs_tagging(self.entries[filename]):
             return
         if filename in self._tagging_inflight:
             return
@@ -439,7 +409,7 @@ class StickerLibrary:
         if not unfit:
             return 0
         for filename in unfit:
-            self._remove_entry(filename, warn_on_unlink=True)
+            self._remove_entry(filename)
         self._save(force=True)  # entries + files just deleted — keep the index in sync on disk
         logger.info("[stickers] purged %d unfit entries", len(unfit))
         return len(unfit)
@@ -453,7 +423,7 @@ class StickerLibrary:
         """Record a 1-5 eval score; enough low scores demote the entry
         (persona_fit=false), a real-conversation signal."""
         entry = self.entries.get(filename)
-        if not entry or not isinstance(score, int) or not (1 <= score <= 5):
+        if not entry or not (1 <= score <= 5):
             return
         scores = entry.setdefault("quality_scores", [])
         scores.append(score)
@@ -567,7 +537,7 @@ class StickerLibrary:
             if v.get("md5", "") in exclude:
                 continue
             score = 0.0
-            entry_tags_lc = [((t or "").lower()) for t in v.get("tags", []) if t]
+            entry_tags_lc = [t.lower() for t in v.get("tags", []) if t]
             meaning_lc = (v.get("meaning") or "").lower()
             if tag_lc in entry_tags_lc:
                 score += 3.0
@@ -588,8 +558,7 @@ class StickerLibrary:
                 age_days = max(0.0, (now - first_seen) / 86400.0)
                 score += max(0.0, 0.6 - age_days * 0.02)
             score += random.uniform(0, 0.1)
-            # A record with a missing file must not win; stat only an entry
-            # that beats the running best.
+            # Stat only an entry that beats the running best.
             last = self._last_used.get(filename, 0)
             if now - last < RECENT_USE_COOLDOWN_SEC:
                 if score > cd_score and (self.dir / filename).exists():
@@ -604,9 +573,8 @@ class StickerLibrary:
         if not best_filename or best_score < 1.0:
             return None
         self._last_used[best_filename] = now
-        entry = self.entries.get(best_filename)
-        if entry:
-            entry["use_count"] = entry.get("use_count", 0) + 1
+        entry = self.entries[best_filename]
+        entry["use_count"] = entry.get("use_count", 0) + 1
         return self.dir / best_filename
 
     async def bootstrap_tag_all(self) -> int:

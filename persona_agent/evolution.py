@@ -51,7 +51,7 @@ VALID_MODES = {"owner", "called", "followup", "judge"}
 # Stamped on evidence; bump when REVIEWER_PROMPTS changes meaning.
 REVIEWER_VERSION = "self-reviewer/2"
 
-# Feedback is a curated dataset, not a log — refuse to grow it unbounded.
+# Size cap for the curated feedback pools.
 FEEDBACK_MAX_BYTES = 5_000_000
 
 # candidates.jsonl never rotates. Shared here by its two writers (the agent and
@@ -101,11 +101,7 @@ def load_evals(path: Path, threshold: int) -> list[dict]:
     """Eval entries with score <= threshold, in file order."""
     out: list[dict] = []
     for r in read_jsonl((path,)):
-        try:
-            score = int(r.get("score", 5))
-        except (TypeError, ValueError):
-            continue
-        if score <= threshold:
+        if int(r.get("score", 5)) <= threshold:
             out.append(r)
     return out
 
@@ -136,26 +132,20 @@ def candidate_record(ev: dict, diag: dict, applied: str = "") -> dict:
 def pair_from_candidate(cand: dict, ts: str) -> dict | None:
     """A candidate's pair_draft as a preference pair (rating "better"), or
     None when a side is missing, the reply was not copied, or it is unchanged."""
-    pd = cand.get("pair_draft")
-    if not isinstance(pd, dict):
-        return None
+    pd = cand["pair_draft"]
     reply = str(pd.get("reply") or "").strip()
     better = str(pd.get("better") or "").strip()
-    source_reply = cand.get("src_reply")
-    if not isinstance(source_reply, str) or reply != source_reply.strip():
+    if reply != str(cand.get("src_reply") or "").strip():
         return None
     if not reply or not better or reply == better:
         return None
     mode = str(pd.get("mode") or "").strip()
     if mode not in VALID_MODES:
         mode = str(cand.get("src_mode") or "called")
-    context = pd.get("context")
-    if not isinstance(context, list):
-        context = [str(context)] if context else []
     return {
         "ts": ts,
         "scenario": str(pd.get("scenario") or cand.get("failure_mode") or "auto-reviewed"),
-        "context": [str(c) for c in context][:4],
+        "context": pd["context"][:4],
         "mode": mode,
         "reply": reply,
         "rating": "better",
@@ -185,18 +175,14 @@ def _encoded_len(rec: dict) -> int:
 
 def append_jsonl(path: Path, records: list[dict],
                  max_bytes: int = FEEDBACK_MAX_BYTES) -> int:
-    """Append records; returns how many were written. Refuses past max_bytes
-    so an unattended loop can't grow a curated dataset without bound."""
+    """Append records; returns how many were written. Stops at max_bytes."""
     if not records:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     # Locked: on Windows O_APPEND is not atomic, and two writers share these files.
     with append_lock(path):
-        try:
-            size = path.stat().st_size if path.exists() else 0
-        except OSError:
-            size = 0
+        size = path.stat().st_size if path.exists() else 0
         for rec in records:
             if size + _encoded_len(rec) > max_bytes:
                 break
@@ -217,12 +203,9 @@ def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
     if slack is None:
         slack = max(8, max_auto // 10)
     # Cheap pre-check: the auto count never exceeds the line count.
-    try:
-        with path.open("rb") as fh:
-            if fh.read().count(b"\n") <= max_auto + max(0, slack):
-                return None
-    except OSError:
-        return None
+    with path.open("rb") as fh:
+        if fh.read().count(b"\n") <= max_auto + max(0, slack):
+            return None
     # Under the appenders' lock, or a concurrent append would be lost.
     with append_lock(path):
         records = read_jsonl((path,))

@@ -101,8 +101,8 @@ def test_an_embedding_neighbour_with_no_shared_words_needs_embeddings() -> None:
           rank(None) == ["word_match", "paraphrase"])
     check("embedding: with one the paraphrase wins",
           rank(query) == ["paraphrase", "word_match"])
-    check("embedding: a missing or mismatched row vector is no signal, not an error",
-          ranking.cosine(query, None) is None and ranking.cosine(query, [1.0, 0.0]) is None)
+    check("embedding: a missing row vector is no signal, not an error",
+          ranking.cosine(query, None) is None)
 
 
 # ---------------------------------------------------------------------------

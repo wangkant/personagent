@@ -14,7 +14,7 @@ import logging
 import random
 import secrets
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import quote
 
 import httpx
@@ -106,7 +106,7 @@ async def login(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
 class Weixin(Platform):
     kind = "weixin_oc"
 
-    def __init__(self, values: dict, *, state: Optional[Path] = None,
+    def __init__(self, values: dict, *, state: Path,
                  client: httpx.AsyncClient | None = None):
         super().__init__(values)
         self.token = str(values.get("weixin_oc_token") or "")
@@ -119,17 +119,11 @@ class Weixin(Platform):
         self.contexts: dict[str, str] = {k: str(v) for k, v in (saved.get("contexts") or {}).items()}
 
     def _load(self) -> dict:
-        if self.state_path is None:
+        if not self.state_path.exists():
             return {}
-        try:
-            value = json.loads(self.state_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-        return value if isinstance(value, dict) else {}
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
 
     def _save(self) -> None:
-        if self.state_path is None:
-            return
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(self.state_path, json.dumps(
             {"cursor": self.cursor, "contexts": self.contexts}, ensure_ascii=False))
@@ -281,6 +275,6 @@ class Weixin(Platform):
     async def close(self) -> None:
         try:
             await self.call("msg/notifystop", {})
-        except Exception:
+        except (ConnectionError, Refused):
             pass
         await self.client.aclose()

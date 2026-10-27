@@ -1,10 +1,8 @@
 """Append-only record of what happened in a conversation.
 
-An event is testimony with no authority: only a promoted candidate
-(candidates.py, promotion.py) reaches retrieval. Only the adjudicator's
-structured verdict and short reason are stored, never raw model output, and
-the log lives in the runtime directory. Identity is the sha256 of the
-semantic payload, so a replayed event is one row.
+Only a promoted candidate (candidates.py, promotion.py) reaches retrieval.
+An event stores the adjudicator's structured verdict and short reason.
+Identity is the sha256 of the semantic payload, so a replayed event is one row.
 
 Pure logic: no clock reads, no LLM. Callers pass timestamps.
 """
@@ -61,8 +59,6 @@ def _text(value, limit: int = _MAX_TEXT) -> str:
 
 
 def _context(lines) -> list[str]:
-    if isinstance(lines, str):
-        lines = [lines]
     return [_text(line, _MAX_CTX_CHARS) for line in (lines or [])][-_MAX_CTX_LINES:]
 
 
@@ -209,7 +205,7 @@ def make_event(
         "schema": SCHEMA,
         "event_id": "",
         "ts": _text(ts, 32),
-        "kind": kind if kind in KINDS else KIND_REACTION,
+        "kind": kind,
         **normalize_scope({
             "lang": lang, "platform": platform, "conv_id": conv_id,
             "persona": persona, "persona_hash": persona_hash,
@@ -333,12 +329,7 @@ class EvidenceLog:
     # -- writes ------------------------------------------------------------
     def append(self, event: dict) -> bool:
         """Append one event. Returns False when it was already recorded."""
-        eid = event.get("event_id")
-        if not eid:
-            return False
-        reason = _validate_event(event)
-        if reason:
-            raise ValueError(f"invalid evidence event: {reason}")
+        eid = event["event_id"]
         with append_lock(self.path):
             # Another process may have appended: re-read only if the stamp moved.
             if self._events is None or file_stamp(self.path) != self._stamp:

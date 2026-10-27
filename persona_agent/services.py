@@ -197,24 +197,19 @@ def _signal_child(process, force: bool = False) -> None:
 
 
 def stop_leftovers(home: Path) -> list[str]:
-    """Stop what an earlier run of the app for `home` started and left running
-    because it ended without stopping it, and return their names. A child is
-    stopped only once the app that started it is gone and while its command
-    line is still the one recorded for this home, so a process that reused
-    its number is left alone. Call this before starting any child."""
+    """Stop what an earlier run of the app for `home` left running, and return
+    their names. A child is stopped only once its app is gone and while its
+    command line is still the recorded one. Call before starting any child."""
     home = home.resolve()
     stopped = []
     for path in sorted((home / "runtime" / "desktop").glob("children-*.json")):
         record = _read_json(path)
-        owner, command = record.get("owner"), record.get("command")
-        running = _command_line(owner) if isinstance(owner, int) and owner != os.getpid() else ""
+        owner, command = record["owner"], record["command"]
+        running = _command_line(owner) if owner != os.getpid() else ""
         if running and (running == command or not command):
             continue    # that app is still running and stops them itself
-        children = record.get("children")
-        for name, child in (children.items() if isinstance(children, dict) else ()):
-            pid, argv = (child.get("pid"), child.get("argv")) if isinstance(child, dict) else (None, None)
-            if not isinstance(pid, int) or not isinstance(argv, list):
-                continue
+        for name, child in record["children"].items():
+            pid, argv = child["pid"], child["argv"]
             line = _command_line(pid)
             if line and str(home) in line and all(str(arg) in line for arg in argv[1:]):
                 _end(pid, line)

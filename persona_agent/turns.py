@@ -41,11 +41,7 @@ class Turns:
                             proactive: bool = False) -> bool:
         # One OneBot-shaped payload (/v1/onebot, the catch-up sweep or
         # handle_event); `proactive` text is the caller's cue (see _handle_dm).
-        try:
-            return await self._handle_inner(payload, proactive=proactive)
-        except Exception:
-            logger.exception("[Agent] handle failed")
-            return False
+        return await self._handle_inner(payload, proactive=proactive)
 
     @asynccontextmanager
     async def _ordered_group_intake(self, group_id: str):
@@ -89,7 +85,7 @@ class Turns:
         sink_platform = str(payload.get("_platform", "") or "")
         sink = ConnectorSink(
             platform=sink_platform,
-            native=sink_platform in (self.connector_qq_platforms or ()),
+            native=sink_platform in self.connector_qq_platforms,
             bot_id=self._self_mention_id(),
             prefiltered=event_prefiltered(event),
         )
@@ -182,8 +178,7 @@ class Turns:
         """A line for when the model call failed, in the language `text`, the
         message waiting for an answer, was written in."""
         code = chatlangs.detect(text, self.agent_lang) if text else self.agent_lang
-        return random.choice(MODEL_FAILURE_EXCUSES.get(code)
-                             or MODEL_FAILURE_EXCUSES["en"])
+        return random.choice(MODEL_FAILURE_EXCUSES[code])
 
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
@@ -340,10 +335,7 @@ class Turns:
                 self.last_reply_at[group_id] = time.time()
                 self._append_buffer(group_id, self.persona_name, mem_reply)
             if self.on_reply:
-                try:
-                    await self.on_reply(group_id, mem_reply)
-                except Exception as e:
-                    logger.warning("[Agent] on_reply callback failed: %s", e)
+                await self.on_reply(group_id, mem_reply)
             logger.info("[Agent] memory command (group=%s): %s", group_id, mem_reply[:60])
             return True
 
@@ -448,8 +440,6 @@ class Turns:
                                 logger.warning(
                                     "[Agent] fallback delivery failed (group=%s)",
                                     group_id)
-                        except Exception:
-                            logger.exception("[Agent] fallback send failed")
                         finally:
                             self._excuse_end(group_id, delivered)
 
@@ -522,10 +512,7 @@ class Turns:
             )
 
         if self.on_reply and committed:
-            try:
-                await self.on_reply(group_id, committed)
-            except Exception as e:
-                logger.warning("[Agent] on_reply callback failed: %s", e)
+            await self.on_reply(group_id, committed)
 
         # Self-eval only for a complete reply.
         if self.eval_enabled and send_result.success:

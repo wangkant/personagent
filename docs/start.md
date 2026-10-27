@@ -23,7 +23,7 @@ To run it from a clone, give it a venv of its own: `python -m venv .venv`, then 
 
 Choose a model service, paste its API key and click **Verify & start chatting**. DeepSeek and the warm listener character are selected to begin with. **Advanced settings** holds the model name and API address, and **Choose a name or personality** holds the character's name and personality.
 
-The key stays on your computer. Chat messages go to the model service you choose, and verifying the key and chatting may incur that service's usual charges. Click **Show** if you need to check the key. It is never included in status responses or kept in browser storage.
+The key stays on your computer; click **Show** to check it. Chat messages go to the model service you choose, at that service's usual rates.
 
 Your character replies in the page. Your settings are saved, so the next launch goes straight to chat.
 

@@ -11,7 +11,7 @@ version (`personagent --version`), how you installed it, which connector you
 use, and the smallest set of steps that reproduces the problem. Do not
 include real API keys, tokens or chat logs.
 
-One person maintains this project, so expect a reply within about a week.
+Expect a reply within about a week.
 A confirmed problem is fixed in a patch release and credited in the
 advisory and the CHANGELOG, unless you prefer not to be named. Please allow
 reasonable time for the fix to ship before you publish details.

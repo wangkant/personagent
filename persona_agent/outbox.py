@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .connector import CONVERSATION_TYPES, MAX_CONNECTOR_ID_CHARS, opaque_value
+from .connector import MAX_CONNECTOR_ID_CHARS, opaque_value
 from .storage import atomic_write_text
 
 logger = logging.getLogger("agent.outbox")
@@ -80,33 +80,6 @@ def parse_pull(body) -> Optional[dict]:
             "max_deliveries": int(numbers[1]), "acks": acks}
 
 
-def _clean_record(raw) -> Optional[dict]:
-    """A stored handle as written by `HandleStore.record`, or None."""
-    if not isinstance(raw, dict):
-        return None
-    try:
-        record = {
-            "reply_handle": str(raw.get("reply_handle") or ""),
-            "connector_id": str(raw.get("connector_id") or ""),
-            "capabilities": sorted(c for c in raw.get("capabilities")
-                                   if isinstance(c, str))
-            if isinstance(raw.get("capabilities"), list) else [],
-            "platform": str(raw.get("platform") or ""),
-            "native": raw.get("native") is True,
-            "conversation_type": str(raw.get("conversation_type") or ""),
-            "conversation_id": str(raw.get("conversation_id") or ""),
-            "prefiltered": raw.get("prefiltered") is not False,
-            "updated_at": float(raw.get("updated_at") or 0.0),
-        }
-    except (TypeError, ValueError):
-        return None
-    if record["conversation_type"] not in CONVERSATION_TYPES:
-        return None
-    if raw.get("unsupported") is True:
-        record["unsupported"] = True
-    return record
-
-
 class HandleStore:
     """How to reach each connector conversation without an incoming message.
 
@@ -120,7 +93,7 @@ class HandleStore:
 
     def __init__(self, path, *, cap: int = MAX_HANDLES) -> None:
         self.path = Path(path)
-        self.cap = max(1, int(cap))
+        self.cap = cap
         self._entries: Optional[dict[str, dict]] = None
         self._dirty = False
         self._last_flush = 0.0
@@ -135,20 +108,8 @@ class HandleStore:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
-        except (OSError, ValueError) as e:
-            logger.warning("[Outbox] %s unreadable, starting empty: %s",
-                           self.path, e)
-            return {}
-        if not isinstance(raw, dict):
-            return {}
-        entries = {}
-        for key, value in raw.items():
-            record = _clean_record(value)
-            if isinstance(key, str) and key and record:
-                entries[key] = record
         # Oldest first: eviction pops from the front.
-        return dict(sorted(entries.items(),
-                           key=lambda kv: kv[1]["updated_at"]))
+        return dict(sorted(raw.items(), key=lambda kv: kv[1]["updated_at"]))
 
     def get(self, key: str) -> Optional[dict]:
         record = self._data().get(str(key))
@@ -202,16 +163,12 @@ class HandleStore:
         now = time.monotonic()
         if not force and now - self._last_flush < self.TOUCH_FLUSH_S:
             return
-        try:
-            # No fsync: the next inbound message rebuilds any lost entry.
-            atomic_write_text(
-                self.path,
-                json.dumps(self._data(), ensure_ascii=False, sort_keys=True,
-                           separators=(",", ":")) + "\n",
-                fsync=False)
-        except Exception as e:
-            logger.warning("[Outbox] handle store write failed: %s", e)
-            return
+        # No fsync: the next inbound message rebuilds any lost entry.
+        atomic_write_text(
+            self.path,
+            json.dumps(self._data(), ensure_ascii=False, sort_keys=True,
+                       separators=(",", ":")) + "\n",
+            fsync=False)
         self._dirty = False
         self._last_flush = now
 

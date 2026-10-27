@@ -20,8 +20,7 @@ usage: {prog} [--json | --fix]
 Checks the configuration and ledgers (free, local), then probes every external
 service the agent depends on and prints an OK/FAIL table. Exits non-zero if a
 service marked critical is down. Each service probe sends one tiny request
-with your credentials and spends a small amount of credit: safe to run while
-the agent is live, but not a no-op.
+with your credentials and spends a small amount of credit.
 
 When the last answer is a day old, it also asks pypi.org whether a newer
 personagent is out (UPDATE_CHECK_ENABLED=false skips that).

@@ -65,11 +65,7 @@ class WebSearch:
 
     async def _web_search_ddg(self, query: str, max_results: int = 4) -> str:
         """DuckDuckGo (ddgs) results as a compact block, or '' on any failure."""
-        try:
-            from ddgs import DDGS
-        except Exception:
-            logger.warning("[Agent] ddgs not installed; web search disabled")
-            return ""
+        from ddgs import DDGS
         try:
             def _run():
                 return DDGS().text(query, max_results=max_results) or []
@@ -83,12 +79,7 @@ class WebSearch:
                                   hint: str = "") -> list[dict]:
         """`messages` with any search results folded into the last turn, as a new
         list; a caller making two calls off one turn grounds once up front."""
-        if not messages:
-            return messages
-        try:
-            results = await self._decide_and_search(messages, hint=hint)
-        except Exception:
-            results = ""
+        results = await self._decide_and_search(messages, hint=hint)
         if not results:
             return messages
         last = messages[-1]

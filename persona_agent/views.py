@@ -50,24 +50,18 @@ def _clip(text, limit: int = 30) -> str:
 
 class DataViews:
     @staticmethod
-    def _load_json_dict(path: Path, label: str) -> dict:
-        """JSON object from disk; missing or malformed → {}."""
+    def _load_json_dict(path: Path) -> dict:
+        """JSON object from disk; missing → {}."""
         try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError("root must be an object")
-            return loaded
+            return json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {}
-        except Exception as e:
-            logger.warning("[Agent] %s load failed: %s", label, e)
             return {}
 
     @staticmethod
     def _save_json(path: Path, obj, label: str) -> None:
         try:
             atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))
-        except Exception as e:
+        except OSError as e:
             logger.warning("[Agent] %s save failed: %s", label, e)
 
     def _reload_examples_if_stale(self) -> None:
@@ -84,7 +78,7 @@ class DataViews:
                 if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
             self._examples_mtime = stamp
-        except Exception as e:
+        except OSError as e:
             logger.warning("[Agent] examples.jsonl reload failed: %s", e)
 
     def _reload_pairs_if_stale(self) -> None:
@@ -96,7 +90,7 @@ class DataViews:
             records = self._read_pool(self.feedback_seed_file, self.feedback_file)
             self._pairs_cache = [r for r in records if self._is_better_pair(r)]
             self._pairs_mtime = stamp
-        except Exception as e:
+        except OSError as e:
             logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
 
     def _live_scope(self, conv_id: str) -> dict:
@@ -115,8 +109,6 @@ class DataViews:
         """May a promoted row with ``scope`` reach a prompt in ``current_scope``?
         Persona is compared through its lineage, everything else exactly.
         Pass ``identity`` (self.persona_identity) when checking many rows."""
-        if not isinstance(scope, dict):
-            return False
         if identity is None:
             # Read first: reading it registers the lineage the lookup below uses.
             identity = self.persona_identity
@@ -197,12 +189,8 @@ class DataViews:
         """(waiting for a second voice, waiting for the admin, latest active
         candidate) for this conversation, in one pass over each ledger. Liked
         replies are not counted: only a person can promote them."""
-        try:
-            cands = self.candidate_ledger.all()
-            events = self.evidence_log.all()
-        except Exception as e:
-            logger.warning("[Agent] learned summary: ledger unreadable: %s", e)
-            return 0, 0, None
+        cands = self.candidate_ledger.all()
+        events = self.evidence_log.all()
         waiting = [c for c in cands
                    if c.get("state") == candidates_mod.STATE_PROPOSED
                    and evidence_mod.can_be_strong(str(c.get("type") or ""))
@@ -239,10 +227,7 @@ class DataViews:
         in `conv_id` are named). `text` is a chat language's learned-summary
         templates; empty means English."""
         say = text or _LEARNED_EN
-        try:
-            linked = self.evidence_log.many(cand.get("evidence") or [])
-        except Exception:
-            return ""
+        linked = self.evidence_log.many(cand.get("evidence") or [])
         steps: list[str] = []
         strong = 0
         supporting = [e for e in linked if promotion_mod.supports_candidate(
@@ -286,14 +271,11 @@ class DataViews:
             stamp = self._pool_stamp((path,))
             if stamp == getattr(self, attr + "_stamp"):
                 continue
-            try:
-                rows = read_jsonl((path,))
-                if pairs_only:
-                    rows = [r for r in rows if self._is_better_pair(r)]
-                setattr(self, attr + "_cache", self._tag_rows(rows))
-                setattr(self, attr + "_stamp", stamp)
-            except Exception as e:
-                logger.warning("[Agent] %s reload failed: %s", path.name, e)
+            rows = read_jsonl((path,))
+            if pairs_only:
+                rows = [r for r in rows if self._is_better_pair(r)]
+            setattr(self, attr + "_cache", self._tag_rows(rows))
+            setattr(self, attr + "_stamp", stamp)
 
     @staticmethod
     def _is_better_pair(r: dict) -> bool:

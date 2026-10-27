@@ -237,26 +237,23 @@ def _configure_logging() -> None:
     log_file = os.getenv("SERVER_LOG_FILE", "").strip()
     if not log_file:
         return
+    target = Path(log_file).expanduser().resolve()
+    if any(
+        isinstance(handler, RotatingFileHandler)
+        and Path(handler.baseFilename).resolve() == target
+        for handler in root.handlers
+    ):
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = RollingLogThatSurvivesAFailedRotation(
+        str(target), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
+    )
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
     try:
-        target = Path(log_file).expanduser().resolve()
-        if any(
-            isinstance(handler, RotatingFileHandler)
-            and Path(handler.baseFilename).resolve() == target
-            for handler in root.handlers
-        ):
-            return
-        target.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RollingLogThatSurvivesAFailedRotation(
-            str(target), maxBytes=5_000_000, backupCount=3, encoding="utf-8",
-        )
-        file_handler.setFormatter(formatter)
-        root.addHandler(file_handler)
-        try:
-            os.chmod(target, 0o600)
-        except OSError:
-            pass
-    except Exception:
-        logger.exception("file logging setup failed")
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
 
 
 agent: Optional[Agent] = None
@@ -270,7 +267,7 @@ class AdmissionLimiter:
     """Small non-blocking admission counter for expensive webhook work."""
 
     def __init__(self, limit: int) -> None:
-        self.limit = max(1, int(limit))
+        self.limit = limit
         self.inflight = 0
         self._lock = asyncio.Lock()
 
@@ -283,8 +280,7 @@ class AdmissionLimiter:
 
     async def release(self) -> None:
         async with self._lock:
-            if self.inflight:
-                self.inflight -= 1
+            self.inflight -= 1
 
 
 class ReplayGuard:
@@ -301,8 +297,8 @@ class ReplayGuard:
         max_entries: int = 16_384,
         state_file: str | Path | None = None,
     ) -> None:
-        self.ttl_seconds = max(1, int(ttl_seconds))
-        self.max_entries = max(1, int(max_entries))
+        self.ttl_seconds = ttl_seconds
+        self.max_entries = max_entries
         self.state_file = Path(state_file) if state_file is not None else None
         self._log_lines = 0
         # A torn last line (crash mid-append) must not swallow the next append.
@@ -606,8 +602,7 @@ def _spawn(coro) -> asyncio.Task:
 async def lifespan(app: FastAPI):
     global agent
     _configure_logging()
-    # Report config mistakes (a misspelled key is otherwise silent) before
-    # anything is wired up; never fatal.
+    # Report config mistakes before anything is wired up; never fatal.
     preflight.log_findings(preflight.check_config())
     _validate_exposure_config(_LISTEN["host"], QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
     runtime_lock = None
@@ -656,10 +651,7 @@ async def lifespan(app: FastAPI):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         if agent is not None:
-            try:
-                await agent.aclose()
-            except Exception:
-                logger.exception("shutdown cleanup failed")
+            await agent.aclose()
         if runtime_lock is not None:
             runtime_lock.release()
 
@@ -680,7 +672,7 @@ def _url_host(host: str) -> str:
 
 
 def _dashboard_served() -> bool:
-    return bool(getattr(app.state, "dashboard", False))
+    return app.state.dashboard
 
 
 def _command(sub: str) -> str:
@@ -830,8 +822,7 @@ async def _onebot_webhook_admitted(request: Request):
         payload = json.loads(body or b"{}")
     except Exception:
         payload = {}
-    # These mark payloads handle_event synthesizes. Security gates on the sink
-    # contextvar; stripping them is defense in depth.
+    # Internal markers handle_event sets; never taken from the wire.
     if isinstance(payload, dict):
         payload.pop("_connector", None)
         payload.pop("_platform", None)
@@ -848,8 +839,6 @@ async def _onebot_webhook_admitted(request: Request):
         async def _safe_handle():
             try:
                 await agent.handle_onebot(payload)
-            except Exception:
-                logger.exception("handle failed")
             finally:
                 await _onebot_admission.release()
         request.state.admission_handed_off = True
@@ -875,7 +864,7 @@ def _agent_off_fix() -> str:
 
 
 def _warn_agent_off_once() -> None:
-    """An event reached an agent that cannot answer: say why, once, loudly."""
+    """An event reached an agent that cannot answer: say why, once."""
     global _AGENT_OFF_WARNED
     if _AGENT_OFF_WARNED:
         return

@@ -1,9 +1,8 @@
 """Config preflight: say what is wrong before the bot pretends to work.
 
 A misspelled key is otherwise silent: the bot starts cleanly and never
-answers. `.env.example` is the authority on key names (a test keeps it in
-step with the code), so a key in `.env` it does not list is a typo or a
-removed setting.
+answers. `.env.example` is the authority on key names, so a key in `.env`
+it does not list is a typo or a removed setting.
 
 check_config only reports and never raises; migrate_env_file, behind
 `doctor --fix`, is the one writer.
@@ -221,9 +220,6 @@ class Finding:
     def __init__(self, level: str, key: str, detail: str) -> None:
         self.level, self.key, self.detail = level, key, detail
 
-    def __repr__(self) -> str:  # pragma: no cover - diagnostics only
-        return f"<{self.level} {self.key}: {self.detail}>"
-
     def line(self) -> str:
         # repr a key with an invisible character (a BOM, a stray space), or
         # it prints exactly like the real one.
@@ -232,22 +228,16 @@ class Finding:
 
 
 def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:
-    """Key -> value for one dotenv file, or None when it is absent.
-
-    None, not {}: a missing template read as empty would report every key as
-    a typo. Parsed by python-dotenv, which is how the agent loads it."""
-    try:
-        if not path.is_file():
-            return None
-        from dotenv import dotenv_values
-        values = {k: v for k, v in dotenv_values(path).items() if k}
-        # A BOM lands on the first key. Strip it from the template only: the
-        # agent's load_dotenv keeps it on `.env`, so that setting never arrives.
-        if strip_bom:
-            values = {k.lstrip("﻿"): v for k, v in values.items()}
-        return values
-    except Exception:  # a preflight must not be the thing that breaks
+    """Key -> value for one dotenv file, or None when it is absent."""
+    if not path.is_file():
         return None
+    from dotenv import dotenv_values
+    values = {k: v for k, v in dotenv_values(path).items() if k}
+    # A BOM lands on the first key. Strip it from the template only: the
+    # agent's load_dotenv keeps it on `.env`, so that setting never arrives.
+    if strip_bom:
+        values = {k.lstrip("﻿"): v for k, v in values.items()}
+    return values
 
 
 def check_config(root: Path | None = None, env: dict | None = None) -> list[Finding]:
@@ -490,8 +480,7 @@ def retired_settings(root: Path | None = None, environ: dict | None = None) -> l
 
 def retired_problem(fix_command: str, root: Path | None = None,
                     environ: dict | None = None) -> str | None:
-    """One sentence per retired setting, or None. Ignoring them would silently
-    drop allowlists, admins and tokens, so a start with any of them is refused."""
+    """One sentence per retired setting, or None; a start with any of them is refused."""
     found = retired_settings(root, environ)
     if not found:
         return None

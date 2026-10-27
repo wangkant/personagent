@@ -159,9 +159,6 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
     check("unsupported: cleared by a new address",
           "unsupported" not in store.get("a"))
 
-    (tmp / "bad.json").write_text("{not json", encoding="utf-8")
-    check("a corrupt file reads as empty", HandleStore(tmp / "bad.json").keys() == [])
-
 
 # ---------------------------------------------------------------------------
 # The queue

@@ -32,10 +32,7 @@ async def serve(home: Path) -> int:
             pass            # Windows: the parent terminates the process instead
     bridges = []
     for kind, values in stored.items():
-        try:
-            platform = platform_for(kind, values, home)
-        except ValueError:
-            continue
+        platform = platform_for(kind, values, home)
         agent = client_type(agent_url, env.get("CONNECTOR_TOKEN", ""),
                             connector_id=f"direct-{kind}", timeout_s=420)
         bridges.append(Bridge(platform, agent, status))

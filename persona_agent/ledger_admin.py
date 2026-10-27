@@ -42,10 +42,7 @@ PROMOTE_MAX_EXAMPLES = env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0)
 PROMOTE_MAX_FEEDBACK = env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0)
 
 for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError):
-        pass
+    _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _paths(lang: str) -> dict:

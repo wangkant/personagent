@@ -219,16 +219,11 @@ def check_ledger_sizes():
     )
     parts, healthy = [], True
     for label, stem, cls in watched:
-        try:
-            path = resolve_runtime_lang_file(stem, "jsonl", lang)
-            if not path.exists():
-                parts.append(f"{label} absent")
-                continue
-            meta = cls(path).health_metadata()
-        except Exception as e:  # a probe must not be the thing that fails
-            parts.append(f"{label}: unreadable ({type(e).__name__})")
-            healthy = False
+        path = resolve_runtime_lang_file(stem, "jsonl", lang)
+        if not path.exists():
+            parts.append(f"{label} absent")
             continue
+        meta = cls(path).health_metadata()
         size_mb = meta["size_bytes"] / 1_000_000
         limit_mb = meta["warning_bytes"] / 1_000_000
         note = f"{label} {size_mb:.1f}MB/{limit_mb:.0f}MB"

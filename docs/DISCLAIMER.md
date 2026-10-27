@@ -4,8 +4,8 @@
 
 personagent is free software under the [MIT License](../LICENSE). It puts an AI
 character in your chats, and you are the one who runs it. You are responsible
-for what it says, where it says it and which accounts it uses. This page lists
-the risks that are easy to miss. It is not legal advice.
+for what it says, where it says it and which accounts it uses. This page is
+not legal advice.
 
 ## Chat platforms and your accounts
 
@@ -35,8 +35,7 @@ connection logs in as.
 
 If you use one of these, use a dedicated account you can afford to lose, never
 your main one. Where you can, run it from a home network rather than a cloud
-server. Read the current terms of every network you connect. Terms change, and
-the account at stake is yours. Neither the author of personagent nor the
+server. Read the current terms of every network you connect. Neither the author of personagent nor the
 maintainers of any third-party project it works with (AstrBot, NapCat, Koishi,
 mautrix and others) accept liability for a lost or restricted account.
 
@@ -54,7 +53,7 @@ mautrix and others) accept liability for a lost or restricted account.
   to you.
 - Keep it out of groups where its replies could harm or mislead people, such
   as groups about medical, legal, financial or crisis topics, and groups with
-  children. A model is often wrong and sounds sure of itself.
+  children.
 - If someone asks it to leave, or asks what it knows about them, take that
   seriously. The admin can make it forget a note (`<name>, forget ...`), and
   everything it stores is in its home folder (see below).

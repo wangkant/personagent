@@ -258,17 +258,16 @@ class AgentSettings:
     promotion_policy: promotion.Policy = _env(promotion.Policy.from_env)
 
     def __post_init__(self) -> None:
-        self.base_url = str(self.base_url or "").rstrip("/")
-        self.llm_fallback_base_url = str(self.llm_fallback_base_url or "").rstrip("/")
-        self.qq_onebot_url = str(self.qq_onebot_url or "").rstrip("/")
-        self.vision_base_url = (
-            str(self.vision_base_url).rstrip("/") if self.vision_base_url else "")
+        self.base_url = self.base_url.rstrip("/")
+        self.llm_fallback_base_url = self.llm_fallback_base_url.rstrip("/")
+        self.qq_onebot_url = self.qq_onebot_url.rstrip("/")
+        self.vision_base_url = self.vision_base_url.rstrip("/")
         self.qq_bot_id = str(self.qq_bot_id)
-        self.vision_model = (self.vision_model or "").strip()
-        self.tavily_key = (self.tavily_key or "").strip()
-        self.embedding_model = (self.embedding_model or "").strip()
-        self.embedding_base_url = str(self.embedding_base_url or "").strip().rstrip("/")
-        self.embedding_api_key = (self.embedding_api_key or "").strip()
+        self.vision_model = self.vision_model.strip()
+        self.tavily_key = self.tavily_key.strip()
+        self.embedding_model = self.embedding_model.strip()
+        self.embedding_base_url = self.embedding_base_url.strip().rstrip("/")
+        self.embedding_api_key = self.embedding_api_key.strip()
         self.message_debounce_sec = max(0.0, self.message_debounce_sec)
         if not self.agent_lang:
             self.agent_lang = self.lang or env_str("AGENT_LANG", "")
@@ -371,8 +370,7 @@ class AgentSettings:
             lang=normalize_lang(_str("AGENT_LANG", "en", strip=True)),
             connector_qq_platforms=identity.native_platforms,
         )
-        # The operational knobs' field defaults read os.environ; an explicit
-        # mapping has to reach them too, or from_env(env=...) is half-honoured.
+        # The operational knobs' field defaults read os.environ; apply ``env`` to them too.
         if env is not None:
             defaults.update((f.name, f.metadata["env"](env))
                             for f in fields(cls) if "env" in f.metadata)

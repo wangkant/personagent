@@ -51,16 +51,11 @@ logger = logging.getLogger("agent")
 
 def _load_persona_card() -> Optional[dict]:
     """The optional persona card (PERSONA_CARD_FILE) with the `reply_style`
-    policy. Any failure means no card: the narrow default, failing closed."""
+    policy."""
     card_path = ROOT / os.getenv("PERSONA_CARD_FILE", "persona.card.json")
     if not card_path.is_file():
         return None
-    try:
-        data = json.loads(card_path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.warning("read persona card failed; using the default reply style")
-        return None
-    return data if isinstance(data, dict) else None
+    return json.loads(card_path.read_text(encoding="utf-8"))
 
 
 _persona_sources_logged: set[str] = set()
@@ -78,21 +73,14 @@ def _load_persona(lang: str = "en") -> str:
     persona.example.<lang>.txt, else DEFAULT_PERSONA."""
     persona_path = ROOT / os.getenv("PERSONA_FILE", "persona.txt")
     if persona_path.is_file():
-        try:
-            text = persona_path.read_text(encoding="utf-8").strip()
-            _note_persona_source(str(persona_path) if text
-                                 else f"{persona_path} is empty, using the built-in one")
-            return text or DEFAULT_PERSONA
-        except Exception:
-            logger.warning("read persona file failed, falling back to bundled example")
+        text = persona_path.read_text(encoding="utf-8").strip()
+        _note_persona_source(str(persona_path) if text
+                             else f"{persona_path} is empty, using the built-in one")
+        return text or DEFAULT_PERSONA
     example = resolve_seed_lang_file("persona.example", "txt", lang)
     if example.is_file():
-        try:
-            text = example.read_text(encoding="utf-8").strip()
-            _note_persona_source(f"{example} (no {persona_path.name} yet)")
-            return text or DEFAULT_PERSONA
-        except Exception:
-            pass
+        _note_persona_source(f"{example} (no {persona_path.name} yet)")
+        return example.read_text(encoding="utf-8").strip() or DEFAULT_PERSONA
     _note_persona_source("the built-in default")
     return DEFAULT_PERSONA
 
@@ -105,16 +93,6 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         the settings fields as keywords (``Agent(api_key=..., ...)``)."""
         if settings is None:
             settings = AgentSettings(**overrides)
-        else:
-            if not isinstance(settings, AgentSettings):
-                raise TypeError(
-                    "Agent() takes an AgentSettings, or its fields as "
-                    f"keywords, not {type(settings).__name__}")
-            if overrides:
-                raise TypeError(
-                    "Agent() takes a settings record or its fields as "
-                    "keywords, not both — use dataclasses.replace(settings, "
-                    "...) to vary one: " + ", ".join(sorted(overrides)))
         #: As configured; the attributes below are the live values.
         self.settings = settings
         self._apply_settings(settings)
@@ -184,7 +162,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # Both are evidence scope; lineage.py keeps edits of one document in it.
         self.persona_version = s.persona_version
         self.persona_hash = hashlib.sha256(
-            (self.persona or "").encode("utf-8")).hexdigest()[:12]
+            self.persona.encode("utf-8")).hexdigest()[:12]
 
         # Sets: edited in place by the tests and the admin paths.
         self.admin_ids: set = set(s.admin_ids)
@@ -247,9 +225,6 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._http_pool: dict = {}
         # Strong refs: asyncio only weak-refs running tasks.
         self._bg_tasks: set[asyncio.Task] = set()
-        # Lets _http report a use after aclose().
-        self._closed = False
-        self._warned_use_after_close = False
 
         # See _throttle_send; the gate lock never holds another lock.
         self._send_gate = asyncio.Lock()
@@ -322,21 +297,12 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.outbox = outbox_mod.Outbox(self.connector_handles)
 
     def _load_seen_msg_ids(self) -> None:
-        """Refill the de-dup ring from disk; a missing or broken file is fine."""
-        try:
-            if self._seen_msg_file.exists():
-                with self._seen_msg_file.open("r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                if isinstance(loaded, list):
-                    self._seen_msg_ids.extend(
-                        str(value) for value in loaded[-2000:]
-                        if isinstance(value, (str, int))
-                    )
-                    logger.info("[Agent] loaded %d seen message_ids from disk",
-                                len(self._seen_msg_ids))
-        except Exception as e:
-            logger.warning("[Agent] seen_msg_ids load failed: %s: %s",
-                           type(e).__name__, e)
+        """Refill the de-dup ring from disk."""
+        if self._seen_msg_file.exists():
+            loaded = json.loads(self._seen_msg_file.read_text(encoding="utf-8"))
+            self._seen_msg_ids.extend(loaded[-2000:])
+            logger.info("[Agent] loaded %d seen message_ids from disk",
+                        len(self._seen_msg_ids))
 
     def _init_learning_state(self) -> None:
         """Open memory, reactions, stickers, the retrieval pools and the ledger
@@ -367,7 +333,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if not stickers_json.is_absolute():
             stickers_json = resolve_runtime_state_file(stickers_json)
         # For the tagger's persona-fit check, kept short.
-        persona_brief = (self.persona or "").replace("\n", " ").strip()[:200]
+        persona_brief = self.persona.replace("\n", " ").strip()[:200]
         self.stickers = StickerLibrary(
             stickers_dir=stickers_path,
             stickers_file=stickers_json,
@@ -527,18 +493,15 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         now = time.monotonic()
         if not force and self._seen_dirty < 25 and (now - self._seen_last_flush) < 30.0:
             return
-        try:
-            atomic_write_text(
-                self._seen_msg_file,
-                json.dumps(
-                    list(self._seen_msg_ids), ensure_ascii=False,
-                    separators=(',', ':'),
-                ) + "\n",
-            )
-            self._seen_dirty = 0
-            self._seen_last_flush = now
-        except Exception as e:
-            logger.debug("[Agent] seen_msg_ids persist failed: %s", e)
+        atomic_write_text(
+            self._seen_msg_file,
+            json.dumps(
+                list(self._seen_msg_ids), ensure_ascii=False,
+                separators=(',', ':'),
+            ) + "\n",
+        )
+        self._seen_dirty = 0
+        self._seen_last_flush = now
 
     def flush_state(self) -> None:
         """Force out the throttled writes (de-dup ring, reactions, handles,
@@ -546,15 +509,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._persist_seen(force=True)
         self.pending_reactions.flush()
         self.connector_handles.flush(force=True)
-        try:
-            self.stickers._save(force=True)
-        except Exception as e:
-            logger.debug("[Agent] sticker flush on shutdown failed: %s", e)
+        self.stickers._save(force=True)
 
     async def aclose(self) -> None:
-        """Stop owned work, close transports, then persist final state. One-way:
-        a later turn would mint a pool nothing closes, so `_http` warns."""
-        self._closed = True
+        """Stop owned work, close transports, then persist final state."""
         # Waiting deliveries end as not sent, and open long-polls return.
         await self.outbox.aclose()
         tasks = [task for task in self._bg_tasks

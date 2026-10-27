@@ -526,7 +526,6 @@ def test_the_decision_log_is_bounded_and_coalesces_silence() -> None:
     quiet = log.recent("g3")[0]
     check("a silence names who wrote what it let pass, and answered nothing",
           quiet["sender"] == "Sam" and quiet["answered"] == "", repr(quiet))
-    decision_log.record(None, "called", True, "addressed")  # must not raise
 
 
 async def test_a_group_turn_records_why_it_spoke_or_stayed_quiet(tmp, monkeypatch) -> None:

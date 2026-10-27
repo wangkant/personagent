@@ -523,17 +523,12 @@ const charLang = () =>
 const defaultName = () => (charLang() === "zh" ? "小夏" : "Nova");
 async function loadLang(code) {
   if (translations[code]) return;
-  try {
-    const response = await fetch(`/assets/i18n/${code}.json`, {
-      credentials: "omit",
-    });
-    if (!response.ok) return;
-    const data = await response.json();
-    translations[code] = data.strings || {};
-    catalogText[code] = data.catalog || {};
-  } catch {
-    // Without the file every string shows in English.
-  }
+  const response = await fetch(`/assets/i18n/${code}.json`, {
+    credentials: "omit",
+  });
+  const data = await response.json();
+  translations[code] = data.strings;
+  catalogText[code] = data.catalog;
 }
 let state = null,
   catalog = null,
@@ -602,35 +597,33 @@ function renderLanguage() {
   for (const node of document.querySelectorAll("[data-t]"))
     label(node, t(node.dataset.t));
   $("message").placeholder = t("message");
-  if (catalog) {
-    const provider = $("provider").value || state.provider;
-    options($("provider"), catalog.providers, provider);
-    const character = $("character").value || state.character;
-    const chars = [...catalog.characters];
-    if (state.character === "custom")
-      chars.push({ id: "custom", name: [t("custom"), t("custom")] });
-    options($("character"), chars, character);
-    tiles();
-    if (selected) buildFields(true);
-  }
+  const provider = $("provider").value || state.provider;
+  options($("provider"), catalog.providers, provider);
+  const character = $("character").value || state.character;
+  const chars = [...catalog.characters];
+  if (state.character === "custom")
+    chars.push({ id: "custom", name: [t("custom"), t("custom")] });
+  options($("character"), chars, character);
+  tiles();
+  if (selected) buildFields(true);
   updateNames();
   renderStatus();
   renderActivity();
   if (!saving)
-    $("save").textContent = t(state?.configured ? "saveAgain" : "saveStart");
+    $("save").textContent = t(state.configured ? "saveAgain" : "saveStart");
 }
 function updateNames() {
   const name =
-    $("character-name").value.trim() || state?.name || defaultName();
+    $("character-name").value.trim() || state.name || defaultName();
   $("preview-name").textContent = name;
-  $("chat-name").textContent = state?.name || name;
+  $("chat-name").textContent = state.name || name;
   // Avatars show the first character of the name.
   $("preview-avatar").textContent = Array.from(name)[0];
   for (const id of ["chat-avatar", "empty-avatar"])
-    $(id).textContent = Array.from(state?.name || name)[0];
-  $("chat-greeting").textContent = t("greeting", { name: state?.name || name });
+    $(id).textContent = Array.from(state.name || name)[0];
+  $("chat-greeting").textContent = t("greeting", { name: state.name || name });
   $("platforms-title").textContent = t("platformsTitle", {
-    name: state?.name || name,
+    name: state.name || name,
   });
 }
 function characterOptions() {
@@ -653,7 +646,6 @@ function populate() {
 }
 function providerChanged(reset = true) {
   const provider = catalog.providers.find((p) => p.id === $("provider").value);
-  if (!provider) return;
   $("base-url").value = reset
     ? provider.baseUrl
     : state.baseUrl || provider.baseUrl;
@@ -731,7 +723,7 @@ async function loadPersona() {
 }
 const pick = (pair) =>
   lang === "zh" ? pair[1] : catalogText[lang]?.[pair[0]] || pair[0];
-const spec = (kind) => catalog?.platforms.find((p) => p.id === kind);
+const spec = (kind) => catalog.platforms.find((p) => p.id === kind);
 const platformName = (kind) => (spec(kind) ? pick(spec(kind).name) : kind);
 // Each platform's mark: its logo, otherwise a short monogram in its
 // colour. Logos are their owners' trademarks and only name the platform.
@@ -1047,7 +1039,6 @@ function renderUpdate() {
   $("update-close").setAttribute("aria-label", t("close"));
 }
 function renderStatus() {
-  if (!state) return;
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
   renderUpdate();
@@ -1063,7 +1054,6 @@ function renderStatus() {
         !(working && job.action !== "disconnect" && job.platform === kind),
     );
   $("platforms-dot").hidden = !connected.length;
-  if (!catalog) return;
   for (const tile of document.querySelectorAll(".tile")) {
     const on = connected.includes(tile.dataset.platform);
     tile.classList.toggle("on", on);
@@ -1112,11 +1102,7 @@ function renderStatus() {
   $("progress-hint").textContent = t(`${step}Hint`);
   if (!scan) return;
   $("scan-help").textContent = t(`scanHelp_${selected}`);
-  if (
-    typeof job.qrImage === "string" &&
-    job.qrImage.startsWith("data:image/png;base64,")
-  )
-    $("qr-image").src = job.qrImage;
+  $("qr-image").src = job.qrImage;
 }
 async function poll() {
   if (ended) return;

@@ -4,7 +4,7 @@
 unconditional text, which is why they are checked over the WHOLE knob space
 rather than over the default style: the failure is not a persona choosing
 badly (no knob offers "be a service"), it is a later edit moving a section
-inside a `_variant(...)` table, or a new variant in a table between them
+inside a variant table, or a new variant in a table between them
 dropping what follows. Both ship green against one style and fail here."""
 from __future__ import annotations
 

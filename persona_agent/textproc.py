@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
 
-from .config_env import TZ_OFFSET_RANGE, parse_tz_offset
+from .config_env import parse_tz_offset
 
 
 logger = logging.getLogger("agent")
@@ -438,7 +438,7 @@ def _as_protocol_object(content: str) -> str:
 def apply_k2_quirks(payload: dict, model: str, base_url: str) -> dict:
     """Turn hidden reasoning off for a short-answer call, or it eats the budget.
 
-    The endpoint decides first because a wrong switch is silently ignored:
+    The endpoint decides first because a wrong switch is ignored:
     OpenRouter needs `reasoning`, K2 models `thinking` off at temperature 0.6."""
     if "openrouter.ai" in (base_url or ""):
         # The exclude/max_tokens form is 400-rejected by some upstreams.
@@ -464,9 +464,6 @@ SLEEP_PASS_PROB = 0.70        # 70% PASS rate during sleep hours
 SUB_TRIGGER_PASS_PROB = 0.35  # spontaneous skip on judge-mode triggers
 
 
-_TZ_WARNED: set[str] = set()
-
-
 def _local_tz_offset() -> float:
     """This machine's current UTC offset in hours, daylight saving included."""
     offset = datetime.now().astimezone().utcoffset()
@@ -485,17 +482,8 @@ def default_tz_offset() -> float:
 def _env_tz_offset() -> float:
     """PERSONA_TZ_OFFSET_HOURS in hours, else `default_tz_offset()`. Read on
     every call so a reload or a test can change it."""
-    raw = os.environ.get("PERSONA_TZ_OFFSET_HOURS", "")
-    hours = parse_tz_offset(raw)
-    if hours is not None:
-        return hours
-    default = default_tz_offset()
-    if str(raw).strip() and raw not in _TZ_WARNED:
-        _TZ_WARNED.add(raw)
-        low, high = TZ_OFFSET_RANGE
-        logger.warning("invalid PERSONA_TZ_OFFSET_HOURS=%r (hours from %g to %g, "
-                       "e.g. 8 or -5); using %g", raw, low, high, default)
-    return default
+    hours = parse_tz_offset(os.environ.get("PERSONA_TZ_OFFSET_HOURS", ""))
+    return default_tz_offset() if hours is None else hours
 
 
 # ===========================================================================
@@ -766,7 +754,7 @@ _BAR_CONFUSABLES: Ranges = (
                      "one vertical bar; modern Korean writes precomposed "
                      "syllables (U+AC00+), so a BARE medial I is not prose"),
     (0x3163, 0x3163, "HANGUL LETTER I - the compatibility spelling of the "
-                     "same bar, and Hangul is deliberately OUTSIDE the "
+                     "same bar, and Hangul is OUTSIDE the "
                      "mixed-script rule, so 'assistantㅣuser' mixes nothing "
                      "it can object to"),
     (0xFFDC, 0xFFDC, "HALFWIDTH HANGUL LETTER I - the same bar again, hiding "
@@ -1170,7 +1158,7 @@ _OPTIONAL_CODEPOINTS = {name: _expand(ranges)
 # --- the arrows opt-in buys narration, not a frame -------------------------
 # A frame hugs a bare token ('←persona→'); narration has spaces ('s1 → s2').
 # `(?:\s?/\s?)?` must stay ONE optional token, or mixed-spacing prose matches
-# and empties whole replies. Misses are deliberate: a false positive drops a reply.
+# and empties whole replies. Precision over recall: a false positive drops a reply.
 _ARROW_BLOCK = _char_class(_OPTIONAL_CHARSETS["arrows"])
 _ARROW_FRAME_RE = re.compile(
     rf"(?<![^\s])[{_ARROW_BLOCK}](?:\s?/\s?)?"
@@ -1308,8 +1296,8 @@ class ReplyStyle:
     max_chars    - the cut, clamped to [_MIN_REPLY_CHARS, MAX_REPLY_CHARS]: a
                    persona may shorten its leash, never lengthen it.
 
-    The hard-reject set is deliberately not a field. `prompts.PersonaStyle` is
-    a separate style schema, read from persona.txt's `[style]` block."""
+    The hard-reject set is not a field. `prompts.PersonaStyle` is a separate
+    style schema, read from persona.txt's `[style]` block."""
 
     allow_emoji: bool = False
     charsets: frozenset = frozenset()
@@ -1321,8 +1309,6 @@ class ReplyStyle:
         capped = min(int(self.max_chars), MAX_REPLY_CHARS)
         floored = max(_MIN_REPLY_CHARS, capped)
         if floored != capped:
-            # Warned like an unknown charset: honoured silently, the persona
-            # would go mute with no trace.
             logger.warning("[Agent] reply_style: max_chars %r is below the "
                            "%d-character floor and would silence every reply; "
                            "using %d", self.max_chars, _MIN_REPLY_CHARS, floored)
@@ -1378,21 +1364,10 @@ class ReplyStyle:
 DEFAULT_REPLY_STYLE = ReplyStyle()
 
 
-#: Labels `_sanitize_reply_with_reason` returns for a REFUSAL. The DM retry
-#: reads a label as "do not retry", so an unlabelled guard would be retried at
-#: double cost; tests/test_textproc.py checks this set against the source.
-_REFUSAL_LABELS = frozenset({
-    "arrow_frame",          # arrow-framed injection token
-    "reasoning_leak",       # fluent chain-of-thought prose, nothing to cut
-    "vendor_self_id",       # first-person "I'm <vendor model>"
-    "validator",            # whitelist validator rejected words the model
-                            # wrote, not residue the strip passes left
-    "validator_truncated",  # ...and again after the length truncation
-})
 
 
 class TextProcessing:
-    """A namespace of pure text operations, kept off Agent's MRO on purpose."""
+    """A namespace of pure text operations, kept off Agent's MRO."""
 
     @staticmethod
     def _sanitize_reply(text: str, lang: str = "en",
@@ -1412,8 +1387,7 @@ class TextProcessing:
             style: Optional[ReplyStyle] = None) -> tuple[str, str]:
         """`_sanitize_reply`'s body, returning `(text, refusal)`.
 
-        `refusal` names the guard that dropped the reply (`_REFUSAL_LABELS`),
-        else `""`: an empty text without one is an accident worth a redraft."""
+        `refusal` names the guard that dropped the reply, else `""`: an empty text without one is an accident worth a redraft."""
         if not text:
             return text, ""
         style = style if style is not None else DEFAULT_REPLY_STYLE
@@ -1636,7 +1610,7 @@ class TextProcessing:
         """Remove protocol-label LINES, keeping the reply written around them.
 
         Only with two or more: the labels are ordinary nouns too ("判断：他在撒谎"),
-        and scrubbing a lone one would silently corrupt a real answer."""
+        and scrubbing a lone one would corrupt a real answer."""
         if not text:
             return text
         lines = text.splitlines()

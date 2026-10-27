@@ -23,7 +23,7 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 캐릭터를 �
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 앱 연결 화면. 참여할 수 있는 모든 플랫폼이 표시되어 있습니다" width="960">
 </p>
 
-<p align="center"><em>앱 연결 화면은 설정, 캐릭터 채팅과 같은 로컬 페이지에 있습니다. 로컬 테스트 모델을 쓴 임시 환경에서 찍은 스크린샷입니다.</em></p>
+<p align="center"><em>앱 연결 화면은 설정, 캐릭터 채팅과 같은 로컬 페이지에 있습니다.</em></p>
 
 ## 시작하기
 
@@ -36,7 +36,7 @@ personagent
 
 [uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다.
 
-브라우저에서 로컬 페이지가 열리며, **채팅**, **앱 연결**, **캐릭터 및 설정**의 세 화면이 있습니다. 모델 API 키를 붙여 넣고 **확인하고 채팅 시작**을 누르면, 작은 요청 하나로 키를 확인합니다. 모델 서비스 프리셋 10개와 그 밖의 OpenAI 호환 서비스를 쓸 수 있고, 캐릭터의 이름과 성격 프리셋도 있습니다. **페르소나** 상자에는 `persona.txt`의 내용이 들어 있으며, 저장하면 에이전트가 다시 시작되고 배운 것은 그대로 유지됩니다. **추가 기능**에서는 웹 검색, 이미지 이해, 먼저 말하기를 켤 수 있습니다. `personagent`를 다시 실행하면 이미 열려 있는 페이지를 그대로 씁니다. 오른쪽 위 메뉴에서 페이지를 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다. 캐릭터는 채팅에서 쓰는 언어로 답합니다. 다만 내장된 프롬프트와 데이터는 영어와 중국어뿐이라, 다른 언어에서 얼마나 자연스러운지는 모델에 달려 있습니다.
+브라우저에서 로컬 페이지가 열리며, **채팅**, **앱 연결**, **캐릭터 및 설정**의 세 화면이 있습니다. 모델 API 키를 붙여 넣고 **확인하고 채팅 시작**을 누르면, 작은 요청 하나로 키를 확인합니다. 모델 서비스 프리셋 10개와 그 밖의 OpenAI 호환 서비스를 쓸 수 있고, 캐릭터의 이름과 성격 프리셋도 있습니다. **페르소나** 상자에는 `persona.txt`의 내용이 들어 있으며, 저장하면 에이전트가 다시 시작되고 배운 것은 그대로 유지됩니다. **추가 기능**에서는 웹 검색, 이미지 이해, 먼저 말하기를 켤 수 있습니다. `personagent`를 다시 실행하면 이미 열려 있는 페이지를 그대로 씁니다. 오른쪽 위 메뉴에서 페이지를 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다. 캐릭터는 채팅에서 쓰는 언어로 답합니다. 내장된 프롬프트와 데이터는 영어와 중국어입니다.
 
 Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 됩니다. Python 3.10–3.14를 지원합니다. [간단한 시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.md)를 참고하세요. 터미널 명령과 커넥터는 [전체 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.md)에 있습니다.
 
@@ -48,7 +48,7 @@ Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 �
 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md 를 읽고 personagent를 설정해 줘.
 ```
 
-에이전트는 캐릭터의 언어, 이름, 성격과 모델 서비스, 사용하려는 채팅 앱을 물어본 뒤, personagent를 설치하고 홈 폴더를 만들고 로컬 페이지를 시작합니다. 모델 키는 직접 그 페이지에 붙여 넣으므로, 키가 에이전트를 거치지 않습니다. 에이전트가 따르는 [지침](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)은 평범한 Markdown이라 직접 읽어 볼 수도 있습니다.
+에이전트는 캐릭터의 언어, 이름, 성격과 모델 서비스, 사용하려는 채팅 앱을 물어본 뒤, personagent를 설치하고 홈 폴더를 만들고 로컬 페이지를 시작합니다. 모델 키는 직접 그 페이지에 붙여 넣으므로, 키가 에이전트를 거치지 않습니다. 에이전트는 [이 지침](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)을 따릅니다.
 
 ## 왜 personagent인가
 
@@ -57,8 +57,8 @@ https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agent
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>언제 조용히 있어야 할지 압니다.</strong><br>
-부르면 답합니다. 그 밖에는 사람이라면 끼어들었을지를 모델이 판단합니다. 주사위를 굴리지 않습니다.<br>
-메시지가 몰려와도 하나하나 답하지 않고 한 번만 답합니다.
+부르면 답합니다. 그 밖에는 사람이라면 끼어들었을지를 모델이 판단합니다.<br>
+메시지가 몰려와도 한 번만 답합니다.
 </td>
 </tr>
 <tr>
@@ -103,14 +103,14 @@ QQ, WeChat, Telegram, Discord에는 직접 참여하고, 그 밖의 여러 앱�
 
 ## 다른 프로젝트와 비교
 
-사람들이 흔히 함께 비교하는 프로젝트들입니다. 2026년 10월 기준 각 프로젝트의 문서를 바탕으로 했습니다.
+흔히 함께 비교하는 프로젝트들입니다(2026년 10월 기준).
 
 - **AstrBot**(AGPL-3.0)은 18개 이상의 플랫폼을 지원하는 봇 프레임워크로, WebUI와 큰 플러그인 마켓이 있습니다. 부르지 않아도 무작위로 답할 수 있으며(10% 확률, 기본값은 꺼짐), 학습은 플러그인에 맡깁니다.
 - **MaiBot**(GPL-3.0)은 NapCat을 통해 QQ에서 동작하는 캐릭터 봇으로, WebUI와 원클릭 런처가 있습니다. 플래너 모델이 얼마나 자주 말할지 정하고, 대화에서 표현과 은어를 익힙니다.
 - Koishi용 **ChatLuna의 캐릭터 플러그인**(AGPL-3.0)은 정해진 간격, 대화가 얼마나 활발한지, 얼마나 오래 조용했는지 같은 규칙에 따라 대화에 참여합니다.
 - **ElizaOS**(MIT)는 Discord, Telegram, Slack 등을 위한 TypeScript 에이전트 프레임워크로, 응답할지를 모델이 정합니다.
 
-다른 프로젝트들이 플러그인에 맡기거나 설명하지 않는 부분 중 personagent에 내장된 것은 다음과 같습니다. 사람들이 답장에 보인 반응(지적, 거절, 받아들여진 재시도)에서 배웁니다. 변경이 적용되려면 같은 대화에서 일치하는 반응이 두 번 필요하고, 그중 하나는 강한 반응이어야 합니다. 모든 변경은 기록되며 되돌릴 수 있습니다. 그리고 동작 방식을 공개된 평가로 측정합니다([아래](https://github.com/wangkant/personagent#measured)).
+personagent에 내장된 것은 다음과 같습니다. 사람들이 답장에 보인 반응(지적, 거절, 받아들여진 재시도)에서 배웁니다. 변경이 적용되려면 같은 대화에서 일치하는 반응이 두 번 필요하고, 그중 하나는 강한 반응이어야 합니다. 모든 변경은 기록되며 되돌릴 수 있습니다. 그리고 동작 방식을 공개된 평가로 측정합니다([아래](https://github.com/wangkant/personagent#measured)).
 
 다른 프로젝트가 앞선 부분은 모든 설정을 WebUI에서 다루는 데스크톱 앱, 큰 플러그인 생태계, 그리고 은어, 스티커 팩, 이미지 기억입니다. 이미 AstrBot이나 Koishi를 쓰고 있다면 둘 중 하나를 고를 필요가 없습니다. personagent를 그 뒤에서 캐릭터로 실행할 수 있습니다.
 
@@ -125,11 +125,9 @@ QQ, WeChat, Telegram, Discord에는 직접 참여하고, 그 밖의 여러 앱�
 | 지적에서 배운 내용을 나중에 다르게 표현된 메시지에서 활용 | 76% / 56% | 71% / 67% |
 
 - 자신을 향한 메시지를 무시하는 일은 드뭅니다. 틀린 경우는 대부분 이름이 영화관이나 강아지처럼 다른 것을 가리킬 때였습니다.
-- 중국어에서는 프롬프트만 준 경우에 대한 우위가 오차 범위 안에 있습니다.
-- 지적에서 배운 내용이 유지되도록 고치기 전(그날 첫 실행 뒤에 수정됨)에는 이후 메시지 58개 중 2개만 그 내용을 활용했습니다.
 - 장난꾼, 구경꾼, 자리를 뜬 사람의 지적은 84번의 시도에서 한 번도 통과하지 못했습니다.
 
-[전체 결과](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18)에는 신뢰 구간, 유형별 실패, 방법, 수치가 보여 주지 않는 것, 그리고 모든 보고서가 있습니다.
+[전체 결과](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18)에는 신뢰 구간, 유형별 실패, 방법, 그리고 모든 보고서가 있습니다.
 
 ## 문서
 
@@ -143,11 +141,11 @@ QQ, WeChat, Telegram, Discord에는 직접 참여하고, 그 밖의 여러 앱�
 
 ## 개인정보
 
-personagent가 저장하는 모든 것은 내 컴퓨터의 홈 폴더 하나에 남습니다. 키가 담긴 `.env`, `persona.txt`, `runtime/`, 그리고 관리되는 AstrBot과 직접 연결의 인증 정보가 담긴 `platforms/`입니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으세요. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent)에 정확히 나와 있습니다.
+personagent가 저장하는 모든 것은 내 컴퓨터의 홈 폴더 하나에 남습니다. 키가 담긴 `.env`, `persona.txt`, `runtime/`, 그리고 관리되는 AstrBot과 직접 연결의 인증 정보가 담긴 `platforms/`입니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으세요. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent)에 나와 있습니다.
 
 ## 상태
 
-1.3.1이 2026-10-26에 PyPI에 릴리스되었습니다. 가장 많이 검증된 플랫폼은 QQ로, 1.0에서는 AstrBot을 통해, 1.1부터는 직접 연결합니다. WeChat, Telegram, Discord 연결은 저장 전에 실제 서비스에 인증 정보를 확인하며, 그 외에는 대역 서비스로 테스트합니다. Satori와 Matrix 커넥터도 대역 서비스로 테스트합니다. CI는 Linux에서 Python 3.10–3.14, Windows에서 Python 3.12로 테스트를 실행하고, 패키지를 설치해 명령과 로컬 페이지를 직접 구동하는 작업도 함께 돌립니다.
+1.3.1이 2026-10-26에 PyPI에 릴리스되었습니다. CI는 Linux에서 Python 3.10–3.14, Windows에서 Python 3.12로 테스트를 실행하고, 패키지를 설치해 명령과 로컬 페이지를 직접 구동하는 작업도 함께 돌립니다.
 
 ## 라이선스
 

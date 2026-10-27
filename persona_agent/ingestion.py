@@ -534,7 +534,7 @@ class ContentIngestion:
             try:
                 with path.open("rb") as fh:
                     data = fh.read(VISION_MAX_IMAGE_BYTES + 1)
-            except Exception as e:
+            except OSError as e:
                 logger.debug("[Agent] file:// read failed (%s): %s", local, e)
                 return None
             if len(data) > VISION_MAX_IMAGE_BYTES or not _detect_image_mime(data):
@@ -543,15 +543,10 @@ class ContentIngestion:
         if len(url) > MAX_URL_LENGTH:
             logger.warning("[Agent] image URL exceeds length limit")
             return None
-        # SSRF guard: these bytes go to the vision provider and the sticker
-        # library, and every redirect hop is re-checked.
-        try:
-            return await self._safe_get_bytes(
-                url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
-                max_bytes=VISION_MAX_IMAGE_BYTES)
-        except Exception as e:
-            logger.debug("[Agent] http fetch failed (%s): %s", _url_for_log(url), e)
-            return None
+        # SSRF guard: every redirect hop is re-checked.
+        return await self._safe_get_bytes(
+            url, timeout=15, headers={"User-Agent": "Mozilla/5.0"},
+            max_bytes=VISION_MAX_IMAGE_BYTES)
 
     async def _steal_image_async(
         self,
@@ -560,23 +555,19 @@ class ContentIngestion:
         group_id: str,
     ) -> None:
         """Background download + steal + maybe-tag. Fire-and-forget."""
-        try:
-            img_bytes = await self._fetch_image_bytes(url)
-            if not img_bytes:
-                return
-            ctx_lines = self._sticker_context_lines(group_id)
-            md5 = await self.stickers.steal(
-                image_bytes=img_bytes,
-                url=url,
-                src_user=sender_uid,
-                src_group=group_id,
-                context_before=ctx_lines,
-            )
-            if md5:
-                await self.stickers.maybe_tag(md5)
-        except Exception as e:
-            logger.debug("[Agent] steal failed: %s: %s",
-                         type(e).__name__, str(e) or "(no message)")
+        img_bytes = await self._fetch_image_bytes(url)
+        if not img_bytes:
+            return
+        ctx_lines = self._sticker_context_lines(group_id)
+        md5 = await self.stickers.steal(
+            image_bytes=img_bytes,
+            url=url,
+            src_user=sender_uid,
+            src_group=group_id,
+            context_before=ctx_lines,
+        )
+        if md5:
+            await self.stickers.maybe_tag(md5)
 
     async def _record_sticker_context(self, md5: str, group_id: str, sender_uid: str) -> None:
         """Log another context sighting for a known sticker, without a download."""
@@ -698,14 +689,11 @@ class ContentIngestion:
                 logger.warning("[Agent] refusing internal-address b23 url: %s", url)
                 self.bili_info_cache[cache_key] = {}
                 return {}
-            try:
-                # _safe_get re-checks every redirect hop.
-                r = await self._safe_get(url, timeout=5,
-                                         headers={"User-Agent": "Mozilla/5.0"})
-                if r is not None:
-                    real_url = str(r.url)
-            except Exception as e:
-                logger.debug("[Agent] b23.tv resolve failed (%s): %s", url, e)
+            # _safe_get re-checks every redirect hop.
+            r = await self._safe_get(url, timeout=5,
+                                     headers={"User-Agent": "Mozilla/5.0"})
+            if r is not None:
+                real_url = str(r.url)
 
         m = re.search(r"BV[a-zA-Z0-9]{10}", real_url)
         if not m:
@@ -942,25 +930,18 @@ class ContentIngestion:
         if cache_key in self.url_info_cache:
             return self.url_info_cache[cache_key]
         if len(self.url_info_cache) >= 200:
-            try:
-                first = next(iter(self.url_info_cache))
-                self.url_info_cache.pop(first, None)
-            except StopIteration:
-                pass
+            self.url_info_cache.pop(next(iter(self.url_info_cache)))
 
         result = ""
-        try:
-            host = url.split('//', 1)[-1].split('/', 1)[0].lower()
-            if "bilibili.com" in host or "b23.tv" in host:
-                info = await self._fetch_bili_info(url)
-                if info:
-                    result = self._format_bili_line(info)
-            elif "youtube.com" in host or "youtu.be" in host:
-                result = await self._fetch_oembed_youtube(url)
-            else:
-                result = await self._fetch_og_meta(url)
-        except Exception as e:
-            logger.debug("[Agent] _describe_url failed (%s): %s: %s", url, type(e).__name__, e)
+        host = url.split('//', 1)[-1].split('/', 1)[0].lower()
+        if "bilibili.com" in host or "b23.tv" in host:
+            info = await self._fetch_bili_info(url)
+            if info:
+                result = self._format_bili_line(info)
+        elif "youtube.com" in host or "youtu.be" in host:
+            result = await self._fetch_oembed_youtube(url)
+        else:
+            result = await self._fetch_og_meta(url)
 
         if not result:
             result = "[link]"
@@ -987,14 +968,8 @@ class ContentIngestion:
                         "budget", len(stragglers), len(urls),
                         self.LINK_ENRICHMENT_BUDGET_SEC)
         out: list[str] = []
-        for url, task in zip(urls, tasks):
-            desc = ""
-            if task in done:
-                try:
-                    desc = task.result()
-                except Exception as e:
-                    logger.debug("[Agent] link enrichment failed (%s): %s: %s",
-                                 url, type(e).__name__, e)
+        for task in tasks:
+            desc = task.result() if task in done else ""
             out.append(desc if desc and desc != "[link]" else "")
         return out
 
@@ -1023,21 +998,16 @@ class ContentIngestion:
 
     async def _fetch_og_meta(self, url: str) -> str:
         """Open Graph / Twitter card scrape of a page, or "" on any failure."""
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            }
-            # _safe_get: redirects re-checked per hop (SSRF via 302 blocked)
-            r = await self._safe_get(url, timeout=5, headers=headers)
-            if r is None or r.status_code != 200:
-                return ""
-            # Only read the first 100KB so a huge page can't eat memory.
-            html = r.text[:100_000]
-        except Exception as e:
-            logger.debug("[Agent] OG fetch failed (%s): %s: %s", url, type(e).__name__, e)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        # _safe_get: redirects re-checked per hop (SSRF via 302 blocked)
+        r = await self._safe_get(url, timeout=5, headers=headers)
+        if r is None or r.status_code != 200:
             return ""
+        html = r.text[:100_000]
 
         t = self._OG_TITLE_PAT.search(html)
         d = self._OG_DESC_PAT.search(html)
@@ -1124,18 +1094,16 @@ class ContentIngestion:
                 try:
                     converted.save(out, format="PNG")
                 finally:
-                    close_converted = getattr(converted, "close", None)
-                    if callable(close_converted) and converted is not im:
-                        close_converted()
+                    if converted is not im:
+                        converted.close()
                 return out.getvalue()
         except Exception as e:
             logger.debug("[Agent] GIF→PNG failed: %s: %s", type(e).__name__, e)
             return b""
 
         finally:
-            close_image = getattr(im, "close", None)
-            if callable(close_image):
-                close_image()
+            if im is not None:
+                im.close()
 
     def _vision_configured(self) -> bool:
         """Model, key and base URL all set, so no image is uploaded by default."""
@@ -1186,8 +1154,8 @@ class ContentIngestion:
             for attempt in range(attempts):
                 try:
                     r = await send()
-                    if (getattr(r, "status_code", 200) in (400, 422)
-                            and adapt_rejected_payload(payload, str(getattr(r, "text", "") or ""))):
+                    if (r.status_code in (400, 422)
+                            and adapt_rejected_payload(payload, r.text)):
                         r = await send()
                 except Exception as e:
                     if not retry_errors:
@@ -1255,11 +1223,7 @@ class ContentIngestion:
             file_path = self.stickers.dir / fn
             if not file_path.exists():
                 continue
-            try:
-                img_bytes = file_path.read_bytes()
-            except Exception as e:
-                logger.debug("[Agent] aesthetic read failed %s: %s", fn, e)
-                continue
+            img_bytes = file_path.read_bytes()
             tacky = await self._judge_sticker_aesthetic(img_bytes)
             if tacky is not None:
                 v["_visual_aesthetic_version"] = self.VISUAL_AESTHETIC_VERSION
@@ -1306,9 +1270,8 @@ class ContentIngestion:
             if not data_url:
                 logger.info("[Agent] vision: skip GIF (first-frame extract failed), fallback to OCR")
                 return ""
-            # Every group image comes through here: retry throttling, 5xx,
-            # timeouts and the odd 400 some providers give a valid image, or
-            # the bot silently stops seeing images.
+            # Retry throttling, 5xx, timeouts and the odd 400 some providers
+            # give a valid image.
             r, last_exc = await self._vision_post(
                 self.VISION_PROMPT, data_url, max_tokens=120, temperature=0.3,
                 attempts=3, retryable=frozenset({400, 429, 500, 502, 503, 504}),

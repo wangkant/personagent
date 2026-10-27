@@ -8,7 +8,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import logging
 import math
 import os
 import sys
@@ -18,8 +17,6 @@ from pathlib import Path
 from typing import Optional
 
 from .storage import atomic_write_text
-
-logger = logging.getLogger("agent")
 
 #: Texts per request: some OpenAI-compatible providers refuse more than 10.
 BATCH_SIZE = 10
@@ -93,7 +90,6 @@ class EmbeddingCache:
         self._stored: dict[str, array] = {}
         self._queries: OrderedDict[str, array] = OrderedDict()
         self._lines = 0
-        self._write_warned = False
 
     def _load(self, model: str) -> None:
         if model == self._model:
@@ -112,8 +108,6 @@ class EmbeddingCache:
                         continue  # a torn append costs one vector
         except FileNotFoundError:
             pass
-        except OSError as e:
-            logger.warning("[Agent] embedding cache unreadable, starting empty: %s", e)
 
     def get(self, model: str, key: str) -> Optional[array]:
         self._load(model)
@@ -134,22 +128,16 @@ class EmbeddingCache:
             return
         self._stored.update(vectors)
         data = "".join(_line(model, k, v) for k, v in vectors.items()).encode("ascii")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND
+                     | getattr(os, "O_BINARY", 0), 0o600)
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND
-                         | getattr(os, "O_BINARY", 0), 0o600)
-            try:
-                view = memoryview(data)
-                while view:
-                    view = view[os.write(fd, view):]
-            finally:
-                os.close(fd)
-            self._lines += len(vectors)
-        except OSError as e:
-            if not self._write_warned:
-                self._write_warned = True
-                logger.warning("[Agent] embedding cache not saved, a restart "
-                               "will re-embed: %s", e)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+        finally:
+            os.close(fd)
+        self._lines += len(vectors)
 
     def prune(self, model: str, keep: set[str]) -> None:
         """Rewrite the file with only `keep` once most of it is dead weight:
@@ -158,10 +146,6 @@ class EmbeddingCache:
         if self._lines <= 2 * len(keep) + 100:
             return
         self._stored = {k: v for k, v in self._stored.items() if k in keep}
-        try:
-            atomic_write_text(self.path, "".join(
-                _line(model, k, v) for k, v in self._stored.items()), fsync=False)
-        except OSError as e:
-            logger.warning("[Agent] embedding cache prune failed: %s", e)
-        # Also on failure: the next try waits until the file has grown again.
+        atomic_write_text(self.path, "".join(
+            _line(model, k, v) for k, v in self._stored.items()), fsync=False)
         self._lines = len(self._stored)

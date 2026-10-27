@@ -48,12 +48,7 @@ _MEMORY_MERGE_WINDOW_S = 6 * 3600.0
 
 class Memory:
     def _load_memories(self) -> dict:
-        loaded = self._load_json_dict(self.memory_file, "memory")
-        return {
-            str(conv_id): [row for row in rows if isinstance(row, dict)]
-            for conv_id, rows in loaded.items()
-            if isinstance(conv_id, str) and isinstance(rows, list)
-        }
+        return self._load_json_dict(self.memory_file)
 
     def _save_memories(self) -> None:
         self._save_json(self.memory_file, self.memories, "memory")
@@ -66,12 +61,7 @@ class Memory:
         self._save_memories()
 
     def _load_core_memory(self) -> dict[str, str]:
-        loaded = self._load_json_dict(self.core_memory_file, "core_memory.json")
-        return {
-            key: value
-            for key, value in loaded.items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
+        return self._load_json_dict(self.core_memory_file)
 
     def _save_core_memory(self) -> None:
         self._save_json(self.core_memory_file, self.core_memory, "core_memory")
@@ -246,19 +236,17 @@ class Memory:
         return say("recall_head") + "\n" + "\n".join(lines)
 
     def _note_subject(self, group_id: str, text: str, saver: str,
-                      saver_name: str,
-                      spec: Optional[chatlangs.Spec] = None) -> tuple[str, str]:
+                      saver_name: str, spec: chatlangs.Spec) -> tuple[str, str]:
         """Who a saved note is about: the saver when it says "I" or names them,
         else a member it names, else nobody."""
-        first_person = (spec or chatlangs.spec(self.agent_lang)).first_person
+        first_person = spec.first_person
         if (first_person and re.search(first_person, text, re.IGNORECASE)) or (
                 saver_name and len(saver_name) >= 2 and saver_name in text):
             return saver, saver_name
         return self._memory_subject(group_id, text)
 
-    def _memory_reply(self, key: str, code: str = "") -> str:
-        table = _COMMAND_REPLIES.get(code or self.agent_lang, _COMMAND_REPLIES["en"])
-        return random.choice(table[key])
+    def _memory_reply(self, key: str, code: str) -> str:
+        return random.choice(_COMMAND_REPLIES[code][key])
 
     def _names_me(self, text: str) -> bool:
         """Is this persona named in `text`: one rule for name calls, the

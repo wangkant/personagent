@@ -2,7 +2,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
-
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   personagent" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
@@ -14,7 +13,6 @@ $venvRelative = if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
     '.venv/bin/python'
 }
 $venvPy = Join-Path $PSScriptRoot $venvRelative
-$basePy = $null
 if ([Console]::IsInputRedirected -and -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.env')) -and -not $env:LLM_API_KEY) {
     Write-Host "error: setup is needed. Double-click start.bat to open the setup page." -ForegroundColor Red
     exit 1
@@ -31,15 +29,8 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
         Write-Error "Incomplete .venv. Move it aside, then start this again."
         exit 1
     }
-    $basePy = $py.Source
-}
-
-if (-not (Test-Path -LiteralPath $venvPy)) {
-    & $basePy -m venv (Join-Path $PSScriptRoot '.venv')
+    & $py.Source -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    if (-not (Test-Path -LiteralPath $venvPy)) {
-        throw "Virtual environment creation did not produce $venvRelative"
-    }
 }
 $pySource = $venvPy
 
@@ -47,7 +38,6 @@ $pySource = $venvPy
 # dependency installs it; a version bump alone needs no network.
 $project = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'pyproject.toml') -Raw
 $deps = [regex]::Match($project, '(?ms)^dependencies = \[.*?^\]').Value
-if (-not $deps) { $deps = $project }
 $sha = [System.Security.Cryptography.SHA256]::Create()
 $wanted = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($deps))) -replace '-', ''
 $stamp = Join-Path $PSScriptRoot '.venv/.personagent-installed'

@@ -252,8 +252,7 @@ HONEST_DISCLOSURE = (
 # The 1:1 style layer
 #
 # The group constants describe a room, so the 1:1 path has its own renderers,
-# copying channel-neutral lines verbatim so a diff shows only deliberate
-# changes. A persona picks a variant per knob and the ENGINE writes the
+# copying channel-neutral lines verbatim. A persona picks a variant per knob and the ENGINE writes the
 # sentence: no persona string reaches a rule line, and unknown keys or values
 # are ignored. Every variant re-emits the two SAFETY EXCEPTION clauses, which
 # are never overridable.
@@ -295,7 +294,7 @@ STYLE_KNOBS: dict[str, tuple[str, ...]] = {
 # The declaration block. Square brackets, not a tag, so it can't be confused
 # with the `<persona>` framing. A line continues the block only if its key is a
 # knob and its value is short and spelled in `_VALUE_ALPHABET`; anything weaker
-# would silently delete persona prose. `length: lng` still consumes, as a typo.
+# would delete persona prose. `length: lng` still consumes, as a typo.
 _STYLE_HEADER_RE = re.compile(r"^[ \t]*\[style\][ \t]*\r?\n",
                               re.IGNORECASE | re.MULTILINE)
 _STYLE_CLOSE_RE = re.compile(r"^[ \t]*\[/style\][ \t]*(?:\r?\n|\Z)",
@@ -323,19 +322,8 @@ _MAX_DECLARED_VALUE_LEN = 2 * _LONGEST_KNOB_VALUE
 
 def _value_alphabet_pattern(knobs: dict[str, tuple[str, ...]]) -> str:
     """Character-class body for the alphabet the options are spelled in, by
-    class (any ASCII letter admits them all), so a new option widens it.
-
-    Raises on whitespace in an option, which would make prose sentences parse
-    as declarations; `raise`, not `assert`, so `python -O` keeps it."""
+    class (any ASCII letter admits them all), so a new option widens it."""
     chars = {ch for values in knobs.values() for v in values for ch in v}
-    blank = sorted(ch for ch in chars if ch.isspace())
-    if blank:
-        raise ValueError(
-            "style knob options may not contain whitespace "
-            f"({', '.join(repr(ch) for ch in blank)}): it would enter the "
-            "derived value alphabet and make ordinary prose sentences parse "
-            "as declarations. Spell multi-word options with '_', the way "
-            "'ask_back' is spelled.")
     parts = []
     if any(ch.isascii() and ch.isalpha() for ch in chars):
         parts.append("a-zA-Z")
@@ -400,11 +388,10 @@ def _consume_style_block(
     return pos, declared, False
 
 
-def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
+def parse_persona_style(text: str) -> tuple[PersonaStyle, str]:
     """Split a persona document into (style, prose), removing every `[style]`
-    block (last one wins per knob). Never fails: anything malformed falls
-    back to the shipped default. The group path doesn't call this."""
-    text = str(persona_text or "")
+    block (last one wins per knob). Malformed lines keep the shipped default.
+    The group path doesn't call this."""
     declared: dict[str, str] = {}
     kept: list[str] = []
     cursor = 0
@@ -412,7 +399,7 @@ def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
     orphan_pending = False
     for header in _STYLE_HEADER_RE.finditer(text):
         if header.start() < cursor:
-            # A header inside a consumed block; guards against double-counting.
+            # A header inside a consumed block.
             continue
         segment = text[cursor:header.start()]
         kept.append(_drop_orphan_close(segment) if orphan_pending else segment)
@@ -429,8 +416,7 @@ def parse_persona_style(persona_text: object) -> tuple[PersonaStyle, str]:
 
 
 # --- the six overridable rules ---------------------------------------------
-# Each dict must cover every value in `STYLE_KNOBS`; `_variant` falls back to
-# the default, so a missing entry degrades to the shipped rule.
+# Each dict covers every value in `STYLE_KNOBS`.
 
 # The length bands. The character figure is the CHINESE count and the word
 # figure the ENGLISH one (a hanzi carries ~0.6 English words), so both are the
@@ -541,13 +527,6 @@ _TROLL_MOVES = {
 }
 
 
-def _variant(table: dict, key: str, knob: str) -> str:
-    """One rule variant, falling back to the knob's shipped default."""
-    if key in table:
-        return table[key]
-    return table[STYLE_KNOBS[knob][0]]
-
-
 def dm_style_guide(style: PersonaStyle) -> str:
     """`STYLE_GUIDE` for a one-on-one chat, with the six knobs applied. No
     persona string goes in here: it opens the shared prompt-cache prefix."""
@@ -578,21 +557,21 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "- Square brackets [] are reserved for the [STICKER:tag] marker ONLY — never for anything else. The internal [CORE_UPDATE]...[/CORE_UPDATE] suffix is the sole exception; use it only at the end of the reply field for a stable memory update\n"
         "\n"
         "[LENGTH HAS RHYTHM]\n"
-        + _variant(_LENGTH_RULES, style.length, "length") +
+        + _LENGTH_RULES[style.length] +
         "\n"
         "[EMOTIONAL SCENES — respond to the feeling, don't analyze]\n"
-        + _variant(_VENT_RULES, style.vent, "vent") + _VENT_SAFETY_TAIL
-        + _variant(_RECS_RULES, style.recs, "recs")
-        + _variant(_GOOD_NEWS_RULES, style.good_news, "good_news") +
+        + _VENT_RULES[style.vent] + _VENT_SAFETY_TAIL
+        + _RECS_RULES[style.recs]
+        + _GOOD_NEWS_RULES[style.good_news] +
         "\n"
         "[VOICE — playful, not cloying]\n"
-        + _variant(_PARTICLE_RULES, style.particles, "particles") +
+        + _PARTICLE_RULES[style.particles] +
         "- Light teasing only, **skip the joke if it doesn't quite fit**. Tease but leave them an exit; no direct insults, no piling on, no poking the same sore spot repeatedly\n"
         "  Bad: 'your code's literally brain-dead' / 'wow the honesty is unmatched, didn't back up first?'  Good: 'stress-testing prod again?'\n"
         # Two floors under every character, which no persona text can switch off.
         "- **Never win at their expense.** A tease that lands as a verdict on the person — 「你这人挺执着啊」, 「就这」, 「早跟你说过了」 — is an attack wearing a joke. No mocking what they feel or what they just told you, no scoring points, no correcting them for sport, no last word. If a line would sting to receive, it does not go out\n"
         "- **Say the thing.** Whatever register this character has, they must be able to tell what you meant on ONE read. A reply that arrives as a riddle, an oracle or a fragment they have to decode is not atmosphere — it is the conversation stalling, and they are the one left holding it. Short is short AND clear; withholding is a thing a character DOES in a moment, never the way they talk\n"
-        + _variant(_FATIGUE_RULES, style.fatigue, "fatigue") +
+        + _FATIGUE_RULES[style.fatigue] +
         "- Riffing on a bingo / gacha / meme → engage with the bit, don't review it ('hits philosophical levels' type of phrasing → out)\n"
         "\n"
         # Without this the model deflects "I like you" with a tease and a step
@@ -660,13 +639,13 @@ def dm_intent_rules(style: PersonaStyle) -> str:
         "**The `intent` JSON field picks the sub-style. Each intent calls for a different voice:**\n"
         "- `joke` — meme / absurd / nonsense / wordplay → just play along with the bit. **No analyzing tone** ('that's funny' / 'this meme is great' / 'I can't even' all out). Don't explain, don't ask follow-ups\n"
         "- `vent` — complaining / feeling low / asking for comfort → "
-        + _variant(vent_body, style.vent, "vent") +
+        + vent_body[style.vent] +
         " **SAFETY EXCEPTION, overriding every word of this line**: if the message involves suicide, self-harm, or wanting to die, DO ask if they're ok, DO stay with them, and DO point them to a crisis helpline or emergency services — never PASS, never a sticker, never silence\n"
         "- `share` — sending a video / image / link → comment on the **actual content** (what's in the image / what the video is about). Never say 'thanks for sharing' / 'nice share'\n"
         "- `question` — genuine question / asking for info or recommendation → answer directly, as this person and from what they'd know. No 'great question' preamble, no detour, no encyclopedia entry — and when they wouldn't have it or wouldn't bother, saying so in their own words IS the direct answer\n"
         "- `troll` — teasing / fake-praise / pretending-to-be-weak / starting trouble → **pick one of three**, and **don't use (a) two times in a row within the same burst**:\n"
         "      a) Light reversal tease (subtle, leaves them an out; this register gets overused — be careful)\n"
-        + _variant(_TROLL_MOVES, style.fatigue, "fatigue") +
+        + _TROLL_MOVES[style.fatigue] +
         "      **Check previous 2 replies: if both went (a), THIS reply must be (b) or (c)**\n"
         "- `chat` — default casual chat → fall back to the style baseline above\n"
         "</intent_rules>"
@@ -738,7 +717,7 @@ def dm_output_protocol(style: PersonaStyle) -> str:
         'intent (string, pick one of 6): \"joke\" / \"vent\" / \"share\" / \"question\" / \"troll\" / \"chat\". When unsure, pick \"chat\".\n'
         "\n"
         "reply (string, what they will actually see — **never empty, and never the literal \"PASS\"**):\n"
-        f"  - {_variant(_LENGTH_PROTOCOL, style.length, 'length')} (see the style block's length rhythm)\n"
+        f"  - {_LENGTH_PROTOCOL[style.length]} (see the style block's length rhythm)\n"
         "  - Nothing to add? Then it is a SHORT reply, not no reply — \"mhm\" / \"yeah\" / \"night\" all count. There is no way to say nothing here.\n"
         "  - **No nested JSON / XML tags / extra brackets** inside the string value. The only markers allowed inside reply are [STICKER:tag] and the internal [CORE_UPDATE]...[/CORE_UPDATE] suffix. Use that suffix only for a stable memory update; it is stripped before delivery.\n"
         "\n"

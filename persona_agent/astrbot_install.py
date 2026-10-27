@@ -66,14 +66,11 @@ def install_astrbot(home: Path) -> Path:
         subprocess.run([str(installation.executable), "init", "--yes"],
                        check=True, cwd=installation.root, env=env)
     if not (data / "cmd_config.json").is_file():
-        # `astrbot init` creates directories; the config is normally created
-        # at first start. Use AstrBot's defaults rather than an empty JSON file.
+        # `astrbot init` only creates directories; write AstrBot's default config.
         subprocess.run([str(installation.python), "-c",
                         "from astrbot.core.config.astrbot_config import AstrBotConfig; "
                         "AstrBotConfig(config_path='data/cmd_config.json')"],
                        check=True, cwd=installation.root, env=env)
-    if not (data / "cmd_config.json").is_file():
-        raise OSError(f"AstrBot did not create {data / 'cmd_config.json'}")
     hide_dashboard(data)
     return data
 
@@ -85,9 +82,7 @@ def hide_dashboard(data: Path) -> dict:
 
     path = data / "cmd_config.json"
     cfg = json.loads(path.read_text(encoding="utf-8-sig"))  # AstrBot writes a BOM
-    dashboard = cfg.get("dashboard")
-    if not isinstance(dashboard, dict):
-        dashboard = cfg["dashboard"] = {}
+    dashboard = cfg.setdefault("dashboard", {})
     if dashboard.get("enable") is not False or dashboard.get("host") != "127.0.0.1":
         dashboard.update({"enable": False, "host": "127.0.0.1"})
         atomic_write_text(path, json.dumps(cfg, ensure_ascii=False, indent=4) + "\n")

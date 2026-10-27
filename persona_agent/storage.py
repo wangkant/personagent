@@ -49,9 +49,7 @@ def _set_private_permissions(path: Path) -> None:
     try:
         os.chmod(path, PRIVATE_FILE_MODE)
     except OSError:
-        # Windows ACLs do not map cleanly to POSIX mode bits.  Creation still
-        # uses 0600 where supported; deployment ACL policy remains authoritative.
-        pass
+        pass  # Windows ACLs do not map to POSIX mode bits
 
 
 def _sync_directory(directory: Path) -> None:
@@ -209,9 +207,6 @@ def append_jsonl_unlocked(path: str | Path, row: dict) -> int:
 def append_jsonl(path: str | Path, row: dict, *,
                  lock_timeout: float | None = DEFAULT_LOCK_TIMEOUT_SEC) -> int:
     """Serialize and durably append one JSONL row under a process lock."""
-    path = Path(path)
-    # Serialize before taking the lock so a bad object cannot hold up writers.
-    json.dumps(row, ensure_ascii=False)
     with append_lock(path, timeout=lock_timeout):
         return append_jsonl_unlocked(path, row)
 
@@ -220,7 +215,6 @@ def append_jsonl_rotating(path: str | Path, row: dict, *, max_bytes: int,
                           lock_timeout: float | None = DEFAULT_LOCK_TIMEOUT_SEC) -> int:
     """Locked append that first moves ``path`` aside to ``<path>.old`` past ``max_bytes``."""
     path = Path(path)
-    json.dumps(row, ensure_ascii=False)
     with append_lock(path, timeout=lock_timeout):
         try:
             if path.exists() and path.stat().st_size > max_bytes:
@@ -291,7 +285,7 @@ def read_validated_jsonl(
     path = Path(path)
     try:
         lines = path.read_bytes().splitlines()
-    except (FileNotFoundError, OSError):
+    except OSError:
         return ValidatedJsonl([], [])
     rows: list[dict] = []
     quarantined: list[QuarantinedRow] = []
@@ -305,7 +299,7 @@ def read_validated_jsonl(
             continue
         try:
             row = json.loads(text)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError:
             quarantined.append(QuarantinedRow(line_number, "invalid json"))
             continue
         if not isinstance(row, dict):

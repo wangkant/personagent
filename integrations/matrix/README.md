@@ -35,15 +35,13 @@ Inbound, for each message in an allowed room:
   (`> <@alex:example.org> ...`), so the agent never reads someone else's
   words as the sender's.
 - Images and stickers up to 4 MB are downloaded, decrypted in encrypted
-  rooms, and sent to the agent as bytes. Since spec 1.11, Matrix media needs
-  an access token, so the agent could not fetch a URL itself. Voice
-  messages, videos and files are described in words.
+  rooms, and sent to the agent as bytes. Voice messages, videos and files are described in words.
 - A room's messages reach the agent in the order they were sent. A message
   sent after an image waits until the image has been downloaded. The agent
   can still work on several turns at once.
 - The timestamp is the homeserver's `origin_server_ts`.
 - The connector skips the bot's own messages, `m.notice` messages (the type
-  bots send, so two bots never answer each other), edits, reactions,
+  bots send), edits, reactions,
   messages from `MATRIX_IGNORE_USERS`, the backlog the first sync returns at
   startup, and anything older than `MATRIX_MAX_EVENT_AGE_S`, such as history
   a bridge backfills into a new room.
@@ -207,7 +205,7 @@ To set one up:
    `ACCESS_GROUPS` lists as `matrix:!room:server`. List room ids here to
    choose rooms in the connector instead.
 
-### Caveats of puppeting
+### Puppeting
 
 - The bridge is an unofficial client of the network, logged in as a normal
   user account (a linked device or a web session). It does not use a bot
@@ -223,8 +221,7 @@ To set one up:
 
 ### Terms of each network
 
-Read the terms of every network before you connect it. Terms change, and the
-account at stake is yours.
+Read the terms of every network before you connect it.
 
 - [WhatsApp](https://www.whatsapp.com/legal/terms-of-service) lists
   auto-messaging among impermissible communications, forbids non-personal

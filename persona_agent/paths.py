@@ -11,14 +11,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-import logging
 import os
 from collections.abc import Iterable
 from pathlib import Path
 
 from .home import find_home, resource
-
-logger = logging.getLogger("agent")
 
 ROOT = find_home()
 
@@ -57,31 +54,10 @@ def runtime_dir() -> Path:
 
 
 def resolve_runtime_state_file(value: str | Path) -> Path:
-    """Resolve mutable relative state and copy a legacy root file once.
-
-    Keeping migration here makes service startup and maintenance tools agree:
-    whichever runs first preserves the pre-runtime/ file.
-
-    An ABSOLUTE value is taken as given and is deliberately not fenced to the
-    runtime dir, unlike AGENT_RUNTIME_DIR itself: it is the escape hatch for
-    pointing one file at another disk. It is still worth saying out loud when
-    one lands outside, because the failure it produces otherwise — a stale
-    MEMORY_FILE from an old deploy quietly writing somewhere nothing
-    else reads — looks like amnesia, not like a path problem.
-    """
+    """Resolve a relative state path under the runtime dir, copying a legacy
+    root-level file once. An absolute path is used as given."""
     path = Path(value)
     if path.is_absolute():
-        try:
-            base = runtime_dir()
-        except ValueError:
-            base = None          # AGENT_RUNTIME_DIR is itself misconfigured
-        if base is not None:
-            try:
-                path.resolve().relative_to(base)
-            except (ValueError, OSError):
-                logger.warning(
-                    "[Agent] %s is outside the runtime dir (%s); state written "
-                    "there is invisible to everything that scans it", path, base)
         return path
     base = runtime_dir().resolve()
     target = (base / path).resolve()
@@ -95,8 +71,6 @@ def resolve_runtime_state_file(value: str | Path) -> Path:
     if not target.exists() and legacy.is_file():
         from .storage import atomic_write_text
 
-        # Fail closed: continuing with an empty target could let the caller
-        # overwrite the new location and permanently shadow valid legacy data.
         atomic_write_text(target, legacy.read_text(encoding="utf-8"))
     return target
 

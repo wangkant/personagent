@@ -69,19 +69,14 @@ _PLATFORM_WAIT_S = 30
 # The plugin store key for the reply handles the plugin minted.
 _HANDLES_KEY = "reply_handles"
 
-# Retry policy for _post_to_agent. Only statuses where resending the exact
-# same bytes is safe get a retry: 500 is the agent failing after accepting
-# the envelope, and 429 is the agent's admission gate, which runs before
-# envelope verification (see connector_events in persona_agent/server.py), so a
-# 429 never burns a nonce and is always safe to resend. 400/403/413 mean the
-# envelope or body itself is the problem -- resending unchanged bytes would
-# just fail the same way again.
+# Statuses where resending the same signed bytes can succeed: 500 is the agent
+# failing after accepting the envelope, 429 its admission gate, which runs
+# before the nonce is checked.
 _RETRYABLE_STATUSES = frozenset({429, 500})
 _RETRY_BACKOFFS_S = (0.3, 0.8)
-# The agent rejects a signed envelope once its timestamp is older than this
-# (ReplayGuard in persona_agent/server.py). A retry reuses the original signed
-# timestamp rather than re-signing, so each retry must START well inside this
-# window (the age is checked on arrival).
+# The agent rejects a signed envelope older than this (ReplayGuard in
+# persona_agent/server.py); a retry resends the first signature, so it must
+# start inside the window.
 _REPLAY_WINDOW_S = 300
 _RETRY_WINDOW_SAFETY_MARGIN_S = 20
 
@@ -278,10 +273,7 @@ class _Handles:
 
     def load(self, rows) -> None:
         """Take what the plugin store kept; handles minted meanwhile win."""
-        kept = collections.OrderedDict()
-        for row in rows if isinstance(rows, list) else []:
-            if isinstance(row, list) and len(row) == 4 and all(isinstance(v, str) for v in row):
-                kept[row[0]] = tuple(row[1:])
+        kept = collections.OrderedDict((row[0], tuple(row[1:])) for row in rows or [])
         for handle, entry in self._bound.items():
             kept.pop(handle, None)
             kept[handle] = entry
@@ -338,29 +330,17 @@ class PersonagentConnector(Star):
         plugin store: the agent queues outbox deliveries by it."""
         if self._connector_id:
             return self._connector_id
-        stored = None
-        with contextlib.suppress(Exception):
-            stored = await self.get_kv_data("connector_id", None)
+        stored = await self.get_kv_data("connector_id", None)
         if not stored:
             stored = "astrbot-" + secrets.token_hex(6)
-            try:
-                await self.put_kv_data("connector_id", stored)
-            except Exception as e:
-                logger.warning(
-                    "personagent: could not store connector_id; the "
-                    f"agent will see a new connector after a restart: {e}")
+            await self.put_kv_data("connector_id", stored)
         self._connector_id = str(stored)
         return self._connector_id
 
     async def _load_handles(self) -> None:
         if self._handles.loaded:
             return
-        rows = None
-        try:
-            rows = await self.get_kv_data(_HANDLES_KEY, None)
-        except Exception as e:
-            logger.warning(f"personagent: could not read the stored reply handles: {e}")
-        self._handles.load(rows)
+        self._handles.load(await self.get_kv_data(_HANDLES_KEY, None))
 
     async def _mint_handle(self, handle: str, platform: str, conversation_type: str,
                            conversation_id: str) -> None:
@@ -369,12 +349,7 @@ class PersonagentConnector(Star):
         await self._load_handles()
         if not self._handles.mint(handle, platform, conversation_type, conversation_id):
             return
-        try:
-            await self.put_kv_data(_HANDLES_KEY, self._handles.rows())
-        except Exception as e:
-            logger.warning(
-                "personagent: could not store a reply handle; after a "
-                f"reload the outbox waits for that conversation to write again: {e}")
+        await self.put_kv_data(_HANDLES_KEY, self._handles.rows())
 
     def _outbox_running(self) -> bool:
         task = self._outbox_task
@@ -384,10 +359,8 @@ class PersonagentConnector(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def forward_to_agent(self, event: AstrMessageEvent):
-        # EventMessageType.ALL also matches OTHER_MESSAGE (system/channel
-        # events). Those report is_private_chat() False with an empty group
-        # id, so the group/DM split below would misclassify them as
-        # DMs and run the agent's DM persona on them — skip them outright.
+        # ALL also matches OTHER_MESSAGE (system/channel events), which would
+        # read as DMs below.
         msg_type = getattr(event.message_obj, "type", None)
         if msg_type not in (MessageType.GROUP_MESSAGE, MessageType.FRIEND_MESSAGE):
             return
@@ -423,11 +396,8 @@ class PersonagentConnector(Star):
             # "Sticker: X", "[voice消息]": the adapter's words, not the person's.
             text = ""
         if platform == "telegram":
-            # The Telegram adapter encodes "reply to the bot" as a wake-prefix
-            # hack prepended to the text ("/@<bot> ", restored to "/ " by its
-            # own command handling). AstrBot's wake stage cleans message_str
-            # but not the component chain — strip the artifact from both so
-            # the agent never sees it as user text.
+            # The adapter marks a reply to the bot with a "/@<bot> " prefix;
+            # AstrBot cleans message_str but not the chain.
             text = self._strip_tg_wake_artifact(text, bot_id)
             stripped = False
             for seg in segments:
@@ -436,12 +406,9 @@ class PersonagentConnector(Star):
                     seg["text"] = self._strip_tg_wake_artifact(before, bot_id)
                     stripped = seg["text"] != before
                     break
-            # That artifact, next to a quote, is the only sign a Telegram
-            # reply-to-bot carries in the component chain: the Reply's
-            # sender_id is numeric while bot_id is the username, and no At
-            # is emitted. AstrBot's is_at_or_wake_command is NOT used for
-            # this — it is also set by any "/" wake-prefix text and by every
-            # @all. The raw update below covers photos and voice too.
+            # With a quote, that prefix is the chain's only sign of a reply
+            # to the bot (Reply.sender_id is numeric, bot_id the username).
+            # _addressed reads the raw update for photos and voice.
             if is_group and stripped and any(
                     seg.get("type") == "reply" for seg in segments):
                 addressed = True
@@ -494,9 +461,7 @@ class PersonagentConnector(Star):
 
         rules = rules_for(platform)
         temps: list = []
-        # AstrBot's own typing indicator, where the adapter has one (Telegram
-        # today): the round-trip covers the agent's thinking and its typing
-        # simulation, which is exactly when a person expects to see "typing".
+        # AstrBot's typing indicator, where the adapter has one.
         await self._typing(event, True)
         try:
             _replied, owned, replies = await self._post_to_agent(neutral_event)
@@ -506,8 +471,7 @@ class PersonagentConnector(Star):
             first = True
             for chain, _done in chains:
                 if not first:
-                    # Small pause between consecutive replies so multi-bubble
-                    # answers read naturally instead of arriving as a burst.
+                    # A pause between bubbles, so they do not arrive as a burst.
                     await self._typing(event, True)
                     await asyncio.sleep(random.uniform(0.8, 1.8))
                 first = False
@@ -517,11 +481,8 @@ class PersonagentConnector(Star):
             await self._typing(event, False)
 
         if owned and self.config.get("block_default", True):
-            # Gate on ownership, not on whether a reply came back. The agent
-            # stays quiet on purpose far more often than it speaks — PASS, a
-            # debounce merge, the rhythm gate — and reading that as "not mine"
-            # hands the conversation to AstrBot's built-in model, which then
-            # answers as someone else in a room this persona chose to sit out.
+            # On ownership, not on a reply: a PASS or a debounce merge in an
+            # owned conversation must not fall through to AstrBot's own model.
             event.stop_event()
 
     def _listed(self, key: str) -> list:
@@ -582,25 +543,16 @@ class PersonagentConnector(Star):
         msg_type = getattr(obj, "type", None)
         session = str(getattr(obj, "session_id", "") or "")
         if msg_type == MessageType.GROUP_MESSAGE and session:
-            try:
-                platform_id = str(event.get_platform_id())
-            except Exception:
-                platform_id = umo.partition(":")[0]
+            platform_id = str(event.get_platform_id())
             if platform_id:
                 return f"{platform_id}:{msg_type.value}:{session}"
         return umo
 
     def _platform_inst_now(self, platform_id: str):
-        try:
-            return self.context.get_platform_inst(platform_id)
-        except Exception:
-            return None
+        return self.context.get_platform_inst(platform_id)
 
     def _event_inst(self, event):
-        try:
-            return self._platform_inst_now(str(event.get_platform_id()))
-        except Exception:
-            return None
+        return self._platform_inst_now(str(event.get_platform_id()))
 
     def _remember_people(self, platform: str, event, raw) -> None:
         """Keep the usernames the outbound side needs to mention someone."""
@@ -675,10 +627,7 @@ class PersonagentConnector(Star):
     def _quote_chars(self) -> int:
         if not self.config.get("forward_quoted_text", True):
             return 0
-        try:
-            return max(0, int(self.config.get("quote_max_chars", DEFAULT_QUOTE_MAX_CHARS)))
-        except (TypeError, ValueError):
-            return DEFAULT_QUOTE_MAX_CHARS
+        return int(self.config.get("quote_max_chars", DEFAULT_QUOTE_MAX_CHARS))
 
     def _reply_segment(self, message_id=None, text=None, sender_id=None,
                        sender_name=None) -> dict:
@@ -741,11 +690,7 @@ class PersonagentConnector(Star):
             elif isinstance(comp, Comp.At):
                 target = str(comp.qq)
                 name = str(getattr(comp, "name", "") or "")
-                # Mentions arrive as typed (e.g. Telegram usernames are
-                # case-insensitive), so compare case-insensitively, and emit
-                # the canonical bot_id on a match: the agent normalizes
-                # self-mentions with an exact compare against the event's
-                # bot_id.
+                # Mentions arrive as typed; the agent matches bot_id exactly.
                 if bot_id and target.lower() == bot_id.lower():
                     addressed = True
                     target = bot_id
@@ -773,11 +718,7 @@ class PersonagentConnector(Star):
                 fid = str(getattr(comp, "id", "") or "")
                 segments.append({"type": "emoji", "name": face_text.lstrip("/") or fid, "id": fid})
             elif isinstance(comp, Comp.Reply):
-                # Quoting one of the bot's own messages addresses the bot,
-                # even on platforms that emit no At component for it. (On
-                # Telegram sender_id is numeric while bot_id is the bot
-                # username, so this match never fires there — forward_to_agent
-                # reads the adapter's reply-to-bot text artifact instead.)
+                # Quoting the bot addresses it (Telegram: see forward_to_agent).
                 sender = str(getattr(comp, "sender_id", "") or "")
                 name = getattr(comp, "sender_nickname", "")
                 text = (getattr(comp, "message_str", "") or getattr(comp, "text", "")
@@ -901,10 +842,7 @@ class PersonagentConnector(Star):
                         logger.debug(f"personagent: could not read an image: {e}")
         if not b64:
             return {"type": "text", "text": _IMAGE_NOTE}
-        try:
-            cap = int(self.config.get("max_inline_image_bytes", DEFAULT_MAX_INLINE_IMAGE_BYTES))
-        except (TypeError, ValueError):
-            cap = DEFAULT_MAX_INLINE_IMAGE_BYTES
+        cap = int(self.config.get("max_inline_image_bytes", DEFAULT_MAX_INLINE_IMAGE_BYTES))
         if len(b64) * 3 // 4 > cap or len(b64) > budget[0]:
             return {"type": "text", "text": _IMAGE_NOTE}
         budget[0] -= len(b64)
@@ -998,10 +936,8 @@ class PersonagentConnector(Star):
 
     @staticmethod
     def _strip_tg_wake_artifact(text: str, bot_id: str) -> str:
-        """Remove the Telegram adapter's reply-to-bot wake hack from the
-        start of a text. The adapter prepends "/@<bot username> " (its own
-        command restoration turns that into "/ ") purely to trip AstrBot's
-        wake stage; neither form is something the user typed."""
+        """Strip the Telegram adapter's reply-to-bot prefix ("/@<bot> " or
+        "/ ") from a text."""
         if not text:
             return text
         if bot_id:
@@ -1040,20 +976,11 @@ class PersonagentConnector(Star):
 
     @staticmethod
     def _log_http_failure(exc, status: int) -> None:
-        """Report one failed agent call at a level that matches its cause.
-
-        403 in particular must carry the agent's own words: the agent
-        answers 403 for a peer that is not on the allowlist, for an envelope
-        that failed HMAC or replayed, and for an event whose sent_at is
-        outside the freshness window. Reporting all three as "bad token" sends the
-        operator to rotate a key when the real fault is a drifting clock.
-        """
-        detail = ""
+        """Log a failed agent call with the agent's own error text: a 403
+        can be the allowlist, the signature or a drifting clock."""
         try:
-            payload = exc.response.json()
-            if isinstance(payload, dict):
-                detail = str(payload.get("error") or "")
-        except Exception:
+            detail = str(exc.response.json().get("error") or "")
+        except ValueError:
             detail = ""
         if status == 403:
             logger.error(
@@ -1067,13 +994,11 @@ class PersonagentConnector(Star):
                 "oversized inline image")
         elif status == 429:
             logger.info(
-                "personagent: agent at capacity (429); this turn was "
-                "dropped. Expected backpressure, not a fault.")
+                "personagent: agent at capacity (429); this turn was dropped")
         elif status == 400:
             logger.warning(
                 "personagent: agent rejected the event schema (400)"
-                f"{': ' + detail if detail else ''} -- this is a bug in this "
-                "plugin, not a configuration problem")
+                f"{': ' + detail if detail else ''}")
         else:
             logger.warning(
                 f"personagent: agent request failed ({status})"
@@ -1081,9 +1006,7 @@ class PersonagentConnector(Star):
 
     @staticmethod
     def _retry_wait(response, status: int, attempt: int) -> float:
-        """Seconds to wait before resending. A 429 comes from the agent's
-        admission gate, which says how long it expects to stay full; retrying
-        sooner just spends every attempt against the same full gate."""
+        """Seconds to wait before resending; a 429 says how long."""
         if status == 429:
             try:
                 wait = float(response.headers.get("Retry-After"))
@@ -1102,14 +1025,8 @@ class PersonagentConnector(Star):
 
     async def _post_to_agent(
             self, neutral_event: dict) -> tuple[bool, bool, list]:
-        """POST one event; return (replied, owned, reply items).
-
-        `owned` is the agent's answer to "is this conversation mine", which is
-        NOT the same as whether it replied: a PASS, a debounce merge and a
-        rhythm-gate skip are all deliberate silence in a conversation it owns.
-        Falling back to `handled` keeps an older agent — one that does not send
-        the field — behaving exactly as it does today.
-        """
+        """POST one event; return (replied, owned, reply items). An agent
+        older than the `owned` field answers with `handled` alone."""
         base = self._base_url()
         timeout = self._timeout()
         token = str(self.config.get("connector_token") or "")
@@ -1122,16 +1039,9 @@ class PersonagentConnector(Star):
         body = sdk.canonical_body(neutral_event)
         headers = sdk.signed_headers(body, token)
         signed_ts = int(headers["X-Personagent-Timestamp"]) if token else None
-        # The signed timestamp above is minted ONCE and every retry resends it
-        # unchanged -- that is deliberate (the agent un-burns a nonce when its
-        # own write fails, precisely so a correct client can resend the same
-        # bytes). The agent checks the envelope's age when a request ARRIVES,
-        # before the turn runs, so only the START of each attempt has to fall
-        # inside the replay window; how long the turn then takes does not
-        # matter. Every attempt therefore gets the full timeout_s, and a retry
-        # is sent only while it would still start inside the window.
+        # Retries resend the same signed bytes; the agent checks their age on
+        # arrival, so a retry goes out only while it starts inside the window.
         attempts = len(_RETRY_BACKOFFS_S) + 1
-        data = None
         if self._client is None:
             self._client = httpx.AsyncClient()
         for attempt in range(attempts):
@@ -1158,34 +1068,19 @@ class PersonagentConnector(Star):
                 self._log_http_failure(e, status)
                 return False, False, []
             except (httpx.ReadTimeout, httpx.WriteTimeout):
-                # NOT httpx.TimeoutException: that also covers ConnectTimeout
-                # and PoolTimeout, which happen before the request reaches the
-                # agent, where the warning below would simply be false.
+                # Read/write only: the request reached the agent, which still
+                # finishes the turn.
                 logger.error(
                     "personagent: timed out waiting for the agent "
-                    f"(timeout_s={timeout:.0f}). The agent does not check "
-                    "whether the caller is still connected, so it is finishing "
-                    "this turn and committing the reply, the debounce state "
-                    "and the learning evidence for a message nobody will see "
-                    "-- and AstrBot's own model is about to answer the same "
-                    "turn in a different voice. If this recurs, raise "
-                    "timeout_s or lower the agent's LLM_TIMEOUT_S / "
-                    "LLM_MAX_RETRIES: keep LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) "
-                    "under timeout_s."
+                    f"(timeout_s={timeout:.0f}); that reply is lost. Keep "
+                    "LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) under timeout_s."
                 )
                 return False, False, []
-            except Exception as e:
+            except httpx.HTTPError as e:
                 logger.warning(f"personagent: agent request failed: {e}")
                 return False, False, []
-        if data is None:
-            return False, False, []
-        replies = data.get("replies") if isinstance(data, dict) else None
-        if not isinstance(replies, list):
-            return False, False, []
         handled = bool(data.get("handled"))
-        return handled, bool(data.get("owned", handled)), [
-            r for r in replies if isinstance(r, dict)
-        ]
+        return handled, bool(data.get("owned", handled)), data.get("replies") or []
 
     # ---------- outbox: messages nobody asked for ----------
 
@@ -1196,10 +1091,7 @@ class PersonagentConnector(Star):
         if not allowed:
             logger.warning(f"personagent: outbox off: {reason}")
             return
-        try:
-            wait_s = min(30, max(1, int(self.config.get("outbox_wait_s") or 25)))
-        except (TypeError, ValueError):
-            wait_s = 25
+        wait_s = min(30, max(1, int(self.config.get("outbox_wait_s") or 25)))
         connector = sdk.Connector(url, token, connector_id=await self._ensure_connector_id(),
                                   timeout_s=self._timeout())
         try:
@@ -1222,7 +1114,7 @@ class PersonagentConnector(Star):
     async def _deliver(self, delivery: dict) -> tuple[str, int]:
         """Send one outbox delivery; return (ack status, items sent)."""
         handle = str(delivery.get("reply_handle") or "")
-        items = [i for i in (delivery.get("items") or []) if isinstance(i, dict)]
+        items = delivery.get("items") or []
         try:
             # AstrBot's own parse, the one context.send_message applies.
             session = MessageSession.from_str(handle)
@@ -1251,10 +1143,7 @@ class PersonagentConnector(Star):
             logger.warning(
                 f"personagent: outbox: no running platform {platform_id!r}")
             return "failed", 0
-        try:
-            platform = str(inst.meta().name)
-        except Exception:
-            platform = str(delivery.get("platform") or "")
+        platform = str(inst.meta().name)
         wanted = str(delivery.get("platform") or "")
         # QQ's ids may be spelled under "qq" (docs/connectors.md, Addressing).
         if platform != bound[0] or (wanted and wanted != platform
@@ -1307,12 +1196,10 @@ class PersonagentConnector(Star):
     def _forward_threshold(self, umo=None) -> int:
         """Above this many characters AstrBot turns a QQ reply into a
         merged-forward card, which no person would send."""
-        try:
-            conf = self.context.get_config(umo) if umo else self.context.get_config()
-            value = int(conf["platform_settings"]["forward_threshold"])
-        except Exception:
-            value = DEFAULT_FORWARD_THRESHOLD
-        return max(value, 50)
+        conf = self.context.get_config(umo) if umo else self.context.get_config()
+        value = (conf.get("platform_settings") or {}).get("forward_threshold",
+                                                          DEFAULT_FORWARD_THRESHOLD)
+        return max(int(value), 50)
 
     def _render(self, items: list, platform: str, is_group: bool,
                 conversation_id: str, temps: list, umo=None) -> list:
@@ -1369,15 +1256,11 @@ class PersonagentConnector(Star):
                     out.append([Comp.Plain(body)])
             return out
         if rtype == "image":
-            b64 = item.get("b64") or ""
-            if not b64:
-                return []
             chain = list(prefix)
             if at and rules.mention in ("at", "at_spaced"):
                 chain.append(Comp.At(qq=at, name=at))
-            chain.append(self._outbound_image(b64, platform, temps))
+            chain.append(self._outbound_image(item["b64"], platform, temps))
             return [chain]
-        logger.warning(f"personagent: dropping unknown reply type {rtype!r}")
         return []
 
     @staticmethod
@@ -1428,28 +1311,19 @@ class PersonagentConnector(Star):
     @staticmethod
     def _outbound_image(b64: str, platform: str, temps: list):
         if platform == "kook":
-            # The KOOK client uploads base64 only when it starts with "/"
-            # (JPEG) and posts the error text, data and all, otherwise; a
-            # file path uploads any format.
-            try:
-                data = base64.b64decode(b64)
-                fd, path = tempfile.mkstemp(prefix="persona_", suffix=image_suffix(data))
-                with os.fdopen(fd, "wb") as f:
-                    f.write(data)
-                temps.append(path)
-                return Comp.Image.fromFileSystem(path)
-            except Exception as e:
-                logger.warning(f"personagent: could not stage an image for KOOK: {e}")
+            # The KOOK client uploads base64 only for JPEG; a file path
+            # uploads any format.
+            data = base64.b64decode(b64)
+            fd, path = tempfile.mkstemp(prefix="persona_", suffix=image_suffix(data))
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            temps.append(path)
+            return Comp.Image.fromFileSystem(path)
         return Comp.Image.fromBase64(b64)
 
     @staticmethod
     def _resolve_at(mention_user_id, platform: str):
-        """Recover the raw platform id from a platform-prefixed mention target.
-
-        The agent spells user ids "<platform>:<raw id>". A bare value without a
-        platform prefix is the agent's QQ-side bot id (or a hallucinated
-        marker) and is never addressable here, so it is dropped.
-        """
+        """The raw id in a "<platform>:<raw id>" mention target, or None."""
         if not mention_user_id:
             return None
         target = str(mention_user_id)
@@ -1457,21 +1331,12 @@ class PersonagentConnector(Star):
         if target.startswith(prefix):
             raw = target[len(prefix):]
             return raw or None
-        if ":" in target:
-            logger.warning(
-                f"personagent: mention target {target!r} is not on "
-                f"platform {platform!r}, sending without at"
-            )
         return None
 
     @staticmethod
     def _resolve_reply_id(reply_to, platform: str, conversation_id: str):
-        """Recover the raw platform message id from a conversation-namespaced
-        reply_to_message_id ("<platform>:<conversation>:<raw mid>", emitted
-        by agent builds that point at people via quote-reply instead of
-        mentions). An id from another platform or another conversation can't
-        be quoted here, so it is dropped and the reply goes out without a
-        quote."""
+        """The raw message id in a "<platform>:<conversation>:<raw mid>"
+        reply_to_message_id of this conversation, or None."""
         if not reply_to:
             return None
         target = str(reply_to)

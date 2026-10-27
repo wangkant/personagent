@@ -1179,7 +1179,7 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     trigger = max(1, args.trigger)
 
     live = AgentSettings.from_env(lang=lang)
-    if not (live.api_key or "").strip():
+    if not live.api_key.strip():
         # Before anything is built: a home without a key gets no trial folder.
         print(text_for(lang)["no_key"].format(init=hint("init", lang),
                                               demo=hint("demo", lang)))

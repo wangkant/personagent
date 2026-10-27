@@ -108,18 +108,14 @@ raw platform ids. The agent adds the prefix.
 The connector sets `addressed`. It is true when the message mentions the
 bot, replies to one of the bot's messages, or is addressed to the bot under
 the platform's own rules. The agent also notices its name in the text on its
-own. Behind a connector, `addressed` is how the agent learns that a message
-responds to something it said. It reads a quote of its own message, or an @
-of the bot, as a reaction it may learn from. A connector that leaves
-`addressed` false for a reply to the bot takes that signal away. A quote of
-another member's message is never a reaction to the bot, even when the same
-message also addresses the bot.
+own. It reads a quote of its own message, or an @ of the bot, as a reaction it
+may learn from, so set `addressed` on replies to the bot. A quote of another
+member's message is never a reaction to the bot.
 
 An event whose `sender_id` equals its `bot_id` is the bot's own message
 echoed back. The agent drops it unread and answers
 `{"handled": false, "owned": true, "replies": []}`, so the connector's own
-bot logic stays quiet as well. A connector should avoid sending such events
-in the first place.
+bot logic stays quiet as well. Skip such events in the connector.
 
 Segments come in order:
 
@@ -172,9 +168,8 @@ The response looks like this:
 Some messages do not answer a request. Examples are a scheduled opener, the
 follow-up question after a rejection, and the excuse when the model is down
 in a group. The agent queues these per conversation, and a connector that
-declared `outbox` pulls them. Because the connector pulls, the agent never
-needs to reach it, and a connector behind NAT or a firewall works the same
-way. Conversations stored under bare QQ ids (see Addressing) also use the
+declared `outbox` pulls them, so a connector behind NAT or a firewall works
+the same way. Conversations stored under bare QQ ids (see Addressing) also use the
 outbox while their connector is pulling. Otherwise they go through NapCat's
 HTTP API, when `QQ_ONEBOT_URL` is set.
 
@@ -237,8 +232,7 @@ Report each delivery in `acks` on the next pull:
 Rules:
 
 - **At most once.** The agent hands out a delivery once and never again,
-  whatever happens to the ack, because retrying an ambiguous send would
-  duplicate a chat message. Keep the last few hundred `delivery_id`s and
+  whatever happens to the ack. Keep the last few hundred `delivery_id`s and
   never send one twice.
 - **In order.** Send one conversation's deliveries in the order you received
   them. Different conversations may go out in parallel.
@@ -283,17 +277,15 @@ counts against the same DM cooldown as the agent's own openers
 (`PROACTIVE_DM_COOLDOWN_S`), and it does not count as activity from the
 person.
 
-Always set the flag. Without it, the agent stores the cue as the person's
-words. The cue then stays in the DM history for the next 40 messages, can be
-quoted back to the person, and can be saved as a memory about them. A group
-event with the flag is claimed (`owned: true`, so the connector keeps its
+Always set the flag; without it, the agent stores the cue as the person's
+words. A group event with the flag is claimed (`owned: true`, so the connector keeps its
 own bot quiet) and dropped unread.
 
 ## Capabilities and what degrades
 
 | Missing | Effect |
 |---|---|
-| `outbox` | No scheduled openers, no follow-up question, and no excuse for a failed model call in a group. QQ ids still get them through NapCat when `QQ_ONEBOT_URL` is set and reachable. A DM's excuse does not need the outbox, because it is sent while the request is still open and comes back in that response's `replies`. |
+| `outbox` | No scheduled openers, no follow-up question, and no excuse for a failed model call in a group. QQ ids still get them through NapCat when `QQ_ONEBOT_URL` is set and reachable. A DM's excuse comes back in the response's `replies` and does not need the outbox. |
 | `quote_text` | The agent understands a quoted message only if it saw that message itself. |
 | `reply_handle` | Same as a missing `outbox`. |
 | `addressed` wrong | The persona treats messages addressed to it as background chatter. |

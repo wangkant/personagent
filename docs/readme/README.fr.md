@@ -23,7 +23,7 @@ Commencez par une discussion locale dans le navigateur : ajoutez une clé de mod
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="L'écran Connecter des applis de la page locale, avec toutes les plateformes que le personnage peut rejoindre" width="960">
 </p>
 
-<p align="center"><em>Connecter des applis, dans la même page locale que la configuration et la discussion avec le personnage. Capture d'écran d'une installation jetable avec un modèle de test local.</em></p>
+<p align="center"><em>Connecter des applis, dans la même page locale que la configuration et la discussion avec le personnage.</em></p>
 
 ## Pour commencer
 
@@ -36,7 +36,7 @@ personagent
 
 Avec [uv](https://docs.astral.sh/uv/), `uvx personagent` le lance sans étape d'installation séparée.
 
-Le navigateur s'ouvre sur une page locale avec trois vues : **Discussion**, **Connecter des applis** et **Personnage et réglages**. Collez la clé API de votre modèle et cliquez sur **Vérifier et discuter** ; une petite requête la vérifie. Il y a 10 services de modèle préréglés, plus tout autre service compatible OpenAI, ainsi que des noms et des personnalités prédéfinis pour le personnage. Le champ **Fiche du personnage** contient `persona.txt` ; l'enregistrer redémarre l'agent et conserve ce qu'il a appris. **Autres fonctions** active la recherche web, la compréhension des images et la prise de parole en premier. Relancer `personagent` réutilise une page déjà ouverte. Le menu en haut à droite affiche la page en anglais, en chinois ou dans huit autres langues. Le personnage répond dans la langue de la discussion ; ses prompts intégrés et ses données sont en anglais et en chinois, donc son aisance dans une autre langue dépend du modèle.
+Le navigateur s'ouvre sur une page locale avec trois vues : **Discussion**, **Connecter des applis** et **Personnage et réglages**. Collez la clé API de votre modèle et cliquez sur **Vérifier et discuter** ; une petite requête la vérifie. Il y a 10 services de modèle préréglés, plus tout autre service compatible OpenAI, ainsi que des noms et des personnalités prédéfinis pour le personnage. Le champ **Fiche du personnage** contient `persona.txt` ; l'enregistrer redémarre l'agent et conserve ce qu'il a appris. **Autres fonctions** active la recherche web, la compréhension des images et la prise de parole en premier. Relancer `personagent` réutilise une page déjà ouverte. Le menu en haut à droite affiche la page en anglais, en chinois ou dans huit autres langues. Le personnage répond dans la langue de la discussion ; ses prompts intégrés et ses données sont en anglais et en chinois.
 
 Sous Windows, vous pouvez aussi télécharger le ZIP des sources et double-cliquer sur `start.bat`. Python 3.10–3.14. Consultez le [petit guide de démarrage](https://github.com/wangkant/personagent/blob/main/docs/start.md) ; les commandes du terminal et les connecteurs sont dans le [guide complet](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
@@ -48,7 +48,7 @@ Un agent de code capable d'exécuter des commandes sur votre ordinateur peut ins
 Lis https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md et installe personagent pour moi.
 ```
 
-Il vous demande la langue, le nom et la personnalité du personnage, votre service de modèle et les applis de discussion voulues, puis installe personagent, crée le dossier personnel et lance la page locale. Vous collez vous-même votre clé de modèle dans cette page : la clé ne passe donc jamais par l'agent. Les [instructions qu'il suit](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md) sont du Markdown simple, que vous pouvez lire aussi.
+Il vous demande la langue, le nom et la personnalité du personnage, votre service de modèle et les applis de discussion voulues, puis installe personagent, crée le dossier personnel et lance la page locale. Vous collez vous-même votre clé de modèle dans cette page : la clé ne passe donc jamais par l'agent. L'agent suit [ces instructions](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md).
 
 ## Pourquoi personagent
 
@@ -57,8 +57,8 @@ Il vous demande la langue, le nom et la personnalité du personnage, votre servi
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>Il sait quand se taire.</strong><br>
-Il répond quand on l'appelle. Sinon, un modèle juge si une personne interviendrait : pas de coup de dés.<br>
-Une rafale de messages reçoit une seule réponse, pas une par message.
+Il répond quand on l'appelle. Sinon, un modèle juge si une personne interviendrait.<br>
+Une rafale de messages reçoit une seule réponse.
 </td>
 </tr>
 <tr>
@@ -103,14 +103,14 @@ La configuration de chacun est décrite dans le [guide d'utilisation](https://gi
 
 ## Comparaison
 
-Les projets auxquels on le compare le plus souvent, d'après la documentation de chacun en octobre 2026 :
+Les projets auxquels on le compare le plus souvent, en octobre 2026 :
 
 - **AstrBot** (AGPL-3.0) est un framework de bots pour plus de 18 plateformes, avec une WebUI et un vaste catalogue de plugins. Il peut répondre sans être sollicité, au hasard (10 % du temps, désactivé par défaut), et laisse l'apprentissage aux plugins.
 - **MaiBot** (GPL-3.0) est un bot à personnage pour QQ, via NapCat, avec une WebUI et un lanceur en un clic. Un modèle planificateur décide de la fréquence à laquelle il parle, et il reprend les expressions et l'argot de la discussion.
 - **Le plugin de personnage de ChatLuna** pour Koishi (AGPL-3.0) intervient selon des règles : un intervalle fixe, l'activité de la discussion ou la durée depuis laquelle elle est silencieuse.
 - **ElizaOS** (MIT) est un framework d'agents en TypeScript pour Discord, Telegram, Slack et d'autres, où un modèle décide s'il faut répondre.
 
-Ce que personagent intègre d'office, là où les autres s'en remettent aux plugins ou n'en parlent pas : il apprend de la façon dont les gens réagissent à ses réponses (corrections, refus, nouvelles tentatives qu'ils ont acceptées) ; un changement demande deux réactions concordantes venues de la même discussion, dont une forte ; chaque changement est journalisé et peut être annulé ; et son comportement est mesuré dans une évaluation publiée ([ci-dessous](https://github.com/wangkant/personagent#measured)).
+Ce que personagent intègre d'office : il apprend de la façon dont les gens réagissent à ses réponses (corrections, refus, nouvelles tentatives qu'ils ont acceptées) ; un changement demande deux réactions concordantes venues de la même discussion, dont une forte ; chaque changement est journalisé et peut être annulé ; et son comportement est mesuré dans une évaluation publiée ([ci-dessous](https://github.com/wangkant/personagent#measured)).
 
 Là où ils ont de l'avance : des applis de bureau avec tous les réglages dans une WebUI, de grands écosystèmes de plugins, ainsi que l'argot, les packs de stickers et la mémoire des images. Si vous utilisez déjà AstrBot ou Koishi, inutile de choisir : personagent peut fonctionner derrière l'un ou l'autre comme personnage.
 
@@ -125,11 +125,9 @@ Là où ils ont de l'avance : des applis de bureau avec tous les réglages dans 
 | Utilise ce qu'une correction lui a appris dans un message ultérieur, formulé autrement | 76 % / 56 % | 71 % / 67 % |
 
 - Il ignore rarement un message qui lui est destiné. La plupart des ratés viennent de son nom employé pour autre chose, comme un cinéma ou un chiot.
-- En chinois, son avantage sur le prompt seul reste dans la marge de bruit.
-- Avant que les corrections ne conservent leur leçon, ce qui a été corrigé après la première exécution ce jour-là, seuls 2 messages ultérieurs sur 58 l'utilisaient.
-- Aucune correction venant d'un troll, d'un spectateur ou de quelqu'un parti en cours de route n'est passée, sur 84 tentatives.
+- Aucune des 84 corrections venant d'un troll, d'un spectateur ou de quelqu'un parti en cours de route n'est passée.
 
-Les [résultats complets](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) donnent les intervalles, les ratés par type, la méthode, ce que les chiffres ne montrent pas, et chaque rapport.
+Les [résultats complets](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18) donnent les intervalles, les ratés par type, la méthode et chaque rapport.
 
 ## Documentation
 
@@ -143,11 +141,11 @@ Les [résultats complets](https://github.com/wangkant/personagent/tree/main/docs
 
 ## Confidentialité
 
-Tout ce que personagent stocke reste sur votre machine, dans un seul dossier personnel : `.env` avec vos clés, `persona.txt`, `runtime/`, et `platforms/` avec l'AstrBot géré et les identifiants des connexions directes. Le fournisseur de modèle que vous choisissez voit bien les conversations auxquelles il répond, et une fois par jour personagent demande à pypi.org si une version plus récente est sortie (`UPDATE_CHECK_ENABLED=false` désactive cette vérification). Avant de le mettre en contact avec de vraies personnes, prévenez-les que c'est un bot et obtenez leur consentement ; le [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent) détaille précisément ce qui va où.
+Tout ce que personagent stocke reste sur votre machine, dans un seul dossier personnel : `.env` avec vos clés, `persona.txt`, `runtime/`, et `platforms/` avec l'AstrBot géré et les identifiants des connexions directes. Le fournisseur de modèle que vous choisissez voit les conversations auxquelles il répond, et une fois par jour personagent demande à pypi.org si une version plus récente est sortie (`UPDATE_CHECK_ENABLED=false` désactive cette vérification). Avant de le mettre en contact avec de vraies personnes, prévenez-les que c'est un bot et obtenez leur consentement ; le [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent) détaille ce qui va où.
 
 ## État du projet
 
-La version 1.3.1 est sur PyPI, publiée le 2026-10-26. QQ est la plateforme la plus éprouvée, via AstrBot en 1.0 et directement depuis la 1.1. Les connexions WeChat, Telegram et Discord vérifient les identifiants auprès des vrais services avant l'enregistrement et sont, pour le reste, testées contre des simulacres ; les connecteurs Satori et Matrix sont testés contre des simulacres. La CI exécute les tests sous Linux avec Python 3.10–3.14 et sous Windows avec Python 3.12, plus des jobs qui installent le paquet et pilotent la commande et la page locale.
+La version 1.3.1 est sur PyPI, publiée le 2026-10-26. La CI exécute les tests sous Linux avec Python 3.10–3.14 et sous Windows avec Python 3.12, plus des jobs qui installent le paquet et pilotent la commande et la page locale.
 
 ## Licence
 

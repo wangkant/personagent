@@ -797,8 +797,7 @@ def test_corroboration_means_people_not_events() -> None:
     admin = [ev("admin1"),
              ev("admin1", evidence.KIND_RETRY_ACCEPTANCE, "positive")]
 
-    # Default (1) keeps solo clarification working: the honest path and the
-    # attack path are structurally identical, so this is a deployment choice.
+    # Default (1) keeps solo clarification working.
     check("speakers: default lets one person clarify",
           decide(solo).promote is True, decide(solo).reason)
     # Opting in to 2 is what refuses a lone stranger.
@@ -908,20 +907,19 @@ def test_a_hand_edited_strength_cannot_buy_a_promotion() -> None:
         payload={"reply": "bad line", "better": "fixed", "mode": "called",
                  "rating": "better"})
 
-    honest = [bystander("alice"), bystander("bob")]
+    plain = [bystander("alice"), bystander("bob")]
     check("strength: a bystander's correction is not strong",
-          all(e["strength"] == evidence.NEGATIVE_ONLY for e in honest),
-          str([e["strength"] for e in honest]))
-    clean = promotion.decide(cand, linked_events=honest, related_events=[],
+          all(e["strength"] == evidence.NEGATIVE_ONLY for e in plain),
+          str([e["strength"] for e in plain]))
+    clean = promotion.decide(cand, linked_events=plain, related_events=[],
                              peers=[], now=now)
     check("strength: two bystanders alone do not promote",
           clean.promote is False, clean.reason)
 
-    tampered = [dict(honest[0], strength=evidence.STRONG), honest[1]]
-    # The point of the whole test: the integrity hash does NOT cover this edit,
-    # so nothing upstream of promotion is going to catch it.
+    tampered = [dict(plain[0], strength=evidence.STRONG), plain[1]]
+    # The event id does not cover `strength`.
     check("strength: editing it leaves event_id intact",
-          tampered[0]["event_id"] == honest[0]["event_id"])
+          tampered[0]["event_id"] == plain[0]["event_id"])
     forged = promotion.decide(cand, linked_events=tampered, related_events=[],
                               peers=[], now=now)
     check("strength: a hand-edited `strong` still does not promote",
@@ -1411,11 +1409,8 @@ def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
           derived == set(evidence.STRONG_CAPABLE_TYPES),
           f"derived={sorted(derived)} table={sorted(evidence.STRONG_CAPABLE_TYPES)}")
 
-    # The exclusion that keeps the derivation honest. A retry acceptance IS
-    # strong, and its `reply` is the text the user REJECTED — so admitting it
-    # as support for a positive example would let "the user accepted the fix"
-    # promote the rejected line as something to imitate. Only the
-    # reply-equality check in supports_candidate stood between those two.
+    # A retry acceptance is strong, but its `reply` is the text the user
+    # rejected, so it must not support a positive example.
     retry = evidence.make_event(
         kind=evidence.KIND_RETRY_ACCEPTANCE, ts=stamp(NOW), speaker_id="a",
         recipient_id="a", reply="the rejected line", reaction_type="positive",

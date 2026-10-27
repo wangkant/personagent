@@ -2,7 +2,7 @@
 from . import Spec
 
 # "I" or "我": the saver talking about themself. English and Chinese share it,
-# as they always have, so a note in either is attributed in either.
+# so a note in either is attributed in either.
 FIRST_PERSON = (r"(?<![\w'])(?:i|i'm|i've|i'd|i'll|me|my|mine|myself)(?![\w'])"
                 r"|我(?!们)")
 

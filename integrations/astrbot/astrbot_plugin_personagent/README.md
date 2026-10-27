@@ -42,8 +42,6 @@ two cases.
 The persona, memory, debounce and typing simulation all run in the agent.
 This plugin is a connector as defined in the agent's
 [`docs/connectors.md`](https://github.com/wangkant/personagent/blob/main/docs/connectors.md).
-It translates between AstrBot and the agent and has no say in what the
-persona says.
 
 ## Install into your own AstrBot
 
@@ -188,10 +186,9 @@ front of the agent, even on a single host.
 ### Timeouts
 
 Each request lasts as long as the agent's turn, which is a short debounce
-plus every model call and retry. A slow round-trip is therefore normal. If
-`timeout_s` runs out, the agent still finishes the turn and keeps its reply
-and what it learned. Nobody sees that reply, though, and AstrBot's own model
-answers the same message in a different voice.
+plus every model call and retry. If `timeout_s` runs out, the agent still
+finishes the turn and keeps what it learned, but the reply is lost and
+AstrBot's own model answers the message instead.
 
 Keep the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` below `timeout_s`.
 With the agent's defaults (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`), a turn
@@ -205,11 +202,8 @@ The plugin retries a 429 or 500 from the agent up to twice, honouring
 ### `block_default` and ownership
 
 The plugin stops AstrBot's pipeline whenever the agent reports that the
-conversation is its own (`owned: true`), whether or not it replied. The agent
-often stays quiet on purpose. It may pass, merge several messages into one
-answer, or hold back to keep a natural rhythm. If AstrBot's built-in model
-took those turns, someone else would speak in a conversation the persona
-chose to sit out.
+conversation is its own (`owned: true`), whether or not it replied, so
+AstrBot's built-in model stays out of turns the persona sits out.
 
 Transport errors, invalid responses and conversations the agent turns away
 continue to AstrBot's normal pipeline. If the agent's response has no
@@ -242,11 +236,8 @@ it also asks for `QQ_BOT_ID`. A short section in Chinese covers this route:
 [docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#第三方路线astrbot--napcat).
 
 Do not skip `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Without it the agent files QQ
-chats under `aiocqhttp:`-prefixed ids. Its QQ-side actions then target groups
-and people that do not exist, anything learned under the plain QQ ids no
-longer matches, and the ledgers cannot be re-keyed afterwards. With the
-setting, a QQ message relayed by AstrBot lands on the same ids NapCat would
-have produced.
+chats under `aiocqhttp:`-prefixed ids, anything learned under the plain QQ
+ids no longer matches, and the ledgers cannot be re-keyed afterwards.
 
 Because QQ ids stay plain, the agent's own QQ settings still apply to them.
 The QQ entries of `ACCESS_GROUPS` gate groups (no entries means every QQ
@@ -260,7 +251,7 @@ before plugin handlers.
 
 - `platform_settings.rate_limit` defaults to 30 messages per 60 s. Messages
   over the limit are delayed, not dropped. Raise or disable the limit.
-- `content_safety.internal_keywords` is on by default and silently drops
+- `content_safety.internal_keywords` is on by default and drops
   messages that match its keyword list, including ones the persona would have
   answered. Review the list.
 
@@ -268,9 +259,7 @@ before plugin handlers.
 
 The agent speaks one neutral format, and the plugin translates at the edges
 using each platform's own mechanisms. The table below was checked against the
-adapters in AstrBot 4.25.5. Adapter internals change between versions, so
-the plugin reads every raw field defensively and falls back to what AstrBot
-provides when a field is missing.
+adapters in AstrBot 4.25.5.
 
 On every platform:
 
@@ -330,7 +319,7 @@ The outbox is on by default (`outbox_enabled`).
   messages, because the plugin does not declare the outbox for their
   conversations.
 - An agent without the outbox answers 404. The plugin asks again every ten
-  minutes and otherwise behaves exactly as before.
+  minutes.
 
 The agent knows this AstrBot by `connector_id`, which the plugin generates
 once and keeps. Two AstrBot hosts talking to one agent need different ids.
@@ -385,7 +374,7 @@ The plugin's lines in AstrBot's log start with `personagent:`.
 | `dropping event without a valid time the platform sent it` | The adapter gave no timestamp. AstrBot handles that message itself. |
 | `agent request failed: ...` or `agent request failed (<status>)` | Usually the agent is not running or `personagent_url` is wrong. A 404 means a wrong path: `personagent_url` is the base URL, without `/v1/events`. A 500 means the agent failed, so check its log. |
 | `outbox off: ...` | The outbox follows the same `personagent_url` rule as events. See the first row. |
-| `outbox: agent has no outbox (turned off, or an older version); retrying in 10 minutes` | Expected when the agent's `CONNECTOR_OUTBOX_ENABLED` is off. Nothing else changes. |
+| `outbox: agent has no outbox (turned off, or an older version); retrying in 10 minutes` | The agent's `CONNECTOR_OUTBOX_ENABLED` is off. |
 | `outbox: outbox pull refused (403)` or `outbox pull failed: ...` | Same causes as for events: the token, the clocks, or the agent not running. The plugin backs off up to a minute between tries. |
 | `outbox: no running platform '<id>'` | A delivery for an adapter that is disabled or was renamed in AstrBot. The plugin reports it to the agent as failed. |
 | `could not store connector_id` | AstrBot's plugin store failed. Set `connector_id` yourself, or the agent sees a new AstrBot after every restart. |
@@ -396,9 +385,8 @@ value in the agent's `.env`.
 
 On QQ, Telegram, Discord, KOOK, QQ official and Misskey, the message's time
 is the platform's own, not the time AstrBot received it. When AstrBot has been
-down longer than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, the agent therefore
-refuses the backlog AstrBot delivers as stale, which is the intended
-behaviour.
+down longer than the agent's `CONNECTOR_MAX_EVENT_AGE_S`, the agent refuses
+the backlog AstrBot delivers as stale.
 
 ## Known limitation: Telegram mentions
 
@@ -410,4 +398,4 @@ Until then, the mention reaches the agent under the username.
 
 Replies mention someone by username, or with a `tg://user` link when they
 have none. The plugin does not mention someone it has not seen since AstrBot
-started at all, rather than writing the inert text `@123456`.
+started.

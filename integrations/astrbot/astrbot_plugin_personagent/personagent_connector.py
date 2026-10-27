@@ -86,8 +86,6 @@ class Connector:
                  timeout_s: float = 420.0, client: Optional[httpx.AsyncClient] = None):
         if not endpoint_allowed(base_url, token):
             raise ValueError("base_url must be loopback, or HTTPS with a token")
-        if not connector_id:
-            raise ValueError("connector_id is required")
         self.events_url = endpoint_url(base_url, EVENTS_PATH)
         self.outbox_url = endpoint_url(base_url, OUTBOX_PATH)
         self.token = token

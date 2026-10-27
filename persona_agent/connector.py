@@ -29,10 +29,6 @@ CONNECTOR_BOT_ID = "persona-self"
 #: without being a CONNECTOR_QQ_PLATFORMS one. Stored in ids, so keep it.
 FALLBACK_PLATFORM = "gateway"
 
-#: Inbound segment types this version understands. Anything else is dropped
-#: (see synthesize_onebot_payload) — listed here so the drop can say so.
-_KNOWN_SEGMENT_TYPES = frozenset({"text", "mention", "image", "emoji", "reply"})
-
 
 def _ns_mid(platform: str, native: bool, conversation_id, mid) -> str:
     """Namespace a MESSAGE id.
@@ -74,22 +70,16 @@ def message_to_reply_item(
         message, *, platform: str = "", native: bool = False,
         bot_id: str = "") -> dict:
     """One NapCat-shaped message (str or v11 segments) as one neutral reply
-    item; the send paths emit only text, [at?, text] or [at?, image], so the
-    fold is lossless.
-
-    `platform`/`native` restore the prefix of an outbound mention: native ids
-    are stored bare, but the connector resolves "<platform>:<raw>". `bot_id`
-    is never prefixed, or the connector would @ the bot itself."""
+    item. `platform`/`native` restore the prefix of an outbound mention;
+    `bot_id` is never prefixed."""
     if isinstance(message, str):
         return {"type": "text", "text": message}
     at_user_id = ""
     texts: list[str] = []
     image_b64 = ""
-    for seg in message or []:
-        if not isinstance(seg, dict):
-            continue
-        t = seg.get("type")
-        d = seg.get("data") if isinstance(seg.get("data"), dict) else {}
+    for seg in message:
+        t = seg["type"]
+        d = seg["data"]
         if t == "at":
             at_user_id = str(d.get("qq", ""))
         elif t == "text":
@@ -111,24 +101,21 @@ def message_to_reply_item(
 
 
 class ConnectorSink:
-    """Ordered collector for the replies produced while handling one connector
-    event. Closed once handle_event returns its HTTP response; a late add
-    (e.g. from a background task that inherited the context) is dropped with
-    a warning instead of being silently lost in a dead response."""
+    """The replies produced while handling one connector event. Closed once
+    handle_event returns; a late add is dropped with a warning."""
 
     def __init__(self, platform: str = "", native: bool = False,
                  bot_id: str = "", prefiltered: bool = True) -> None:
         # For re-prefixing outbound mentions (message_to_reply_item).
-        self.platform = str(platform or "")
-        self.native = bool(native)
-        self.bot_id = str(bot_id or "")
+        self.platform = platform
+        self.native = native
+        self.bot_id = bot_id
         # Whether the connector filtered this turn itself.
-        self.prefiltered = bool(prefiltered)
+        self.prefiltered = prefiltered
         self.items: list[dict] = []
         self.closed = False
-        # Set once the turn clears admission: the conversation is ours whether
-        # or not we spoke, so a deliberate silence is not handed to the
-        # connector's own model.
+        # Set once the turn clears admission, so a silence is not handed to
+        # the connector's own model.
         self.owned = False
 
     def add(self, message) -> bool:
@@ -190,10 +177,7 @@ def event_connector(event: dict) -> dict:
 
 
 def event_prefiltered(event: dict) -> bool:
-    """The event's `prefiltered` flag; anything but an explicit no is yes.
-
-    A connector that filters need not send it, so absence reads as true.
-    A spelled-out "false" counts as false: the flag only ever tightens."""
+    """The event's `prefiltered` flag; anything but an explicit no is yes."""
     value = event.get("prefiltered", True)
     if isinstance(value, str):
         return value.strip().lower() not in ("false", "0", "no", "off")
@@ -228,16 +212,8 @@ def synthesize_onebot_payload(
     has_self_mention = False
     for seg in event.get("segments") or []:
         if not isinstance(seg, dict):
-            logger.debug("[Connector] %s: dropping non-dict segment %s",
-                         platform, type(seg).__name__)
             continue
         t = seg.get("type")
-        if t not in _KNOWN_SEGMENT_TYPES:
-            # DEBUG: a newer connector may send types this version predates,
-            # but a typo looks the same, so not silent either.
-            logger.debug("[Connector] %s: dropping unknown segment type %r",
-                         platform, t)
-            continue
         if t == "text":
             message.append({"type": "text", "data": {"text": str(seg.get("text", ""))}})
         elif t == "mention":

@@ -97,16 +97,9 @@ class Spec:
     letters: str = ""
 
 
-def _load() -> dict[str, Spec]:
-    specs = {}
-    for code in CODES:
-        module = importlib.import_module(f".{code.replace('-', '_')}", __name__)
-        if module.SPEC is not None:
-            specs[code] = module.SPEC
-    return specs
-
-
-SPECS: dict[str, Spec] = _load()
+SPECS: dict[str, Spec] = {
+    code: importlib.import_module(f".{code.replace('-', '_')}", __name__).SPEC
+    for code in CODES}
 
 
 def spec(code: str) -> Spec:
@@ -129,7 +122,6 @@ _LATIN_CODES = ("en", "es", "fr", "de", "pt-BR")
 def detect(text: str, default: str = "en") -> str:
     """The chat language `text` is most likely in, or `default` when nothing
     says. Script first; Latin-script languages by common words and letters."""
-    text = str(text or "")
     if _KANA.search(text):
         return "ja"
     hangul, han = len(_HANGUL.findall(text)), len(_HAN.findall(text))
@@ -138,10 +130,10 @@ def detect(text: str, default: str = "en") -> str:
     if han:
         traditional = sum(ch in _TRADITIONAL for ch in text)
         simplified = sum(ch in _SIMPLIFIED for ch in text)
-        if "zh-TW" in SPECS and traditional > simplified:
+        if traditional > simplified:
             return "zh-TW"
         return "zh"
-    if _CYRILLIC.search(text) and "ru" in SPECS:
+    if _CYRILLIC.search(text):
         return "ru"
     lower = text.lower()
     words = _LATIN_WORD.findall(lower)
@@ -149,8 +141,6 @@ def detect(text: str, default: str = "en") -> str:
         return default
     scores = {}
     for code in _LATIN_CODES:
-        if code not in SPECS:
-            continue
         s = SPECS[code]
         scores[code] = (sum(word in s.stopwords for word in words)
                         + 2 * sum(lower.count(ch) for ch in s.letters))

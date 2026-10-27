@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 from collections import deque
 from pathlib import Path
@@ -28,57 +27,6 @@ MAX_ARMED_PER_CONV = 8
 # A lesson is one sentence; anything longer is not one.
 LESSON_MAX_CHARS = 200
 
-
-def _is_time(value) -> bool:
-    return (isinstance(value, (int, float)) and not isinstance(value, bool)
-            and math.isfinite(value))
-
-
-def _str_list(value) -> list[str] | None:
-    if not isinstance(value, list) or not all(
-            isinstance(v, (str, int)) and not isinstance(v, bool) for v in value):
-        return None
-    return [str(v) for v in value]
-
-
-def _loaded_pending(row) -> dict | None:
-    """A persisted pending row in the shape `match` reads, or None. A state
-    file is hand-editable, so a row that would raise on the hot path is
-    dropped here instead of wedging its conversation."""
-    if not isinstance(row, dict):
-        return None
-    mids = _str_list(row.get("mids", []))
-    ctx = _str_list(row.get("ctx_lines", []))
-    seq = row.get("seq") or 0
-    reply = row.get("reply")
-    if (not isinstance(reply, str) or not reply.strip() or not _is_time(row.get("ts"))
-            or mids is None or ctx is None
-            or not isinstance(seq, int) or isinstance(seq, bool)):
-        return None
-    out = {**row, "mids": mids, "ctx_lines": ctx, "seq": seq,
-           "mode": str(row.get("mode") or "called")}
-    for key in ("intent", "target_uid", "target_name", "elicited_uid",
-                "parent_evidence_id"):
-        out[key] = str(row.get(key) or "")
-    if not isinstance(out.get("fixes", {}), dict):
-        out.pop("fixes")
-    return out
-
-
-def _loaded_awaiting(row) -> dict | None:
-    """A persisted armed complaint, or None (see `_loaded_pending`)."""
-    if not isinstance(row, dict):
-        return None
-    ctx = _str_list(row.get("ctx_lines", []))
-    reply = row.get("reply")
-    if (not isinstance(reply, str) or not reply.strip() or ctx is None
-            or not _is_time(row.get("rejected_ts"))
-            or not str(row.get("complainant_uid") or "")):
-        return None
-    out = {**row, "ctx_lines": ctx, "mode": str(row.get("mode") or "called")}
-    for key in ("complainant_uid", "target_uid", "evidence_id", "lesson"):
-        out[key] = str(row.get(key) or "")
-    return out
 
 # Stamped on every event; bump whenever ADJUDICATOR_PROMPTS changes meaning.
 ADJUDICATOR_VERSION = "reaction-adjudicator/3"
@@ -200,42 +148,29 @@ class PendingReplies:
     def _load(self) -> None:
         if self.state_file is None:
             return
-        try:
-            raw = json.loads(self.state_file.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict) or raw.get("version") != 1:
-                return
-            pending = raw.get("pending") or {}
-            awaiting = raw.get("awaiting_fix") or {}
-            order = raw.get("order") or []
-            if (not isinstance(pending, dict)
-                    or not isinstance(awaiting, dict)
-                    or not isinstance(order, list)):
-                return
-            for conv_id in order:
-                key = str(conv_id)
-                rows = pending.get(key) or []
-                if isinstance(rows, list):
-                    valid = [r for r in map(_loaded_pending, rows) if r is not None]
-                    for row in valid:
-                        if row["seq"] > self._seq:
-                            self._seq = row["seq"]
-                    if valid:
-                        self._by_conv[key] = deque(
-                            valid[-self.max_per_conv:],
-                            maxlen=self.max_per_conv)
-                fix = awaiting.get(key)
-                if isinstance(fix, dict):
-                    # A single row is the one-slot shape of earlier state files.
-                    armed = [fix] if "reply" in fix else list(fix.values())
-                    slots = {bad["complainant_uid"]: bad for bad in
-                             map(_loaded_awaiting, armed) if bad is not None}
-                    if slots:
-                        self._awaiting_fix[key] = slots
-                if key in self._by_conv or key in self._awaiting_fix:
-                    self._touch(key)
-        except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError,
-                ValueError):
+        if not self.state_file.exists():
             return
+        raw = json.loads(self.state_file.read_text(encoding="utf-8"))
+        pending = raw["pending"]
+        awaiting = raw["awaiting_fix"]
+        for key in raw["order"]:
+            rows = pending.get(key, [])
+            for row in rows:
+                self._seq = max(self._seq, row.get("seq", 0))
+            if rows:
+                self._by_conv[key] = deque(rows[-self.max_per_conv:],
+                                           maxlen=self.max_per_conv)
+            fix = awaiting.get(key)
+            if fix:
+                # A single row is the one-slot shape of earlier state files,
+                # which may not name its complainant.
+                armed = [fix] if "reply" in fix else list(fix.values())
+                slots = {bad["complainant_uid"]: bad for bad in armed
+                         if bad.get("complainant_uid")}
+                if slots:
+                    self._awaiting_fix[key] = slots
+            if key in self._by_conv or key in self._awaiting_fix:
+                self._touch(key)
 
     def _save(self) -> None:
         if self.state_file is None:
@@ -254,16 +189,12 @@ class PendingReplies:
                 if key in self._awaiting_fix
             },
         }
-        try:
-            # No fsync: this runs on the event loop for every message, and a
-            # crash loses at most a learning turn; the replace stays atomic.
-            atomic_write_text(
-                self.state_file,
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                fsync=False,
-            )
-        except OSError:
-            return
+        # No fsync: this runs on the event loop for every message.
+        atomic_write_text(
+            self.state_file,
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            fsync=False,
+        )
 
     def drop_conversation(self, conv_id: str, *, persist: bool = True) -> None:
         self._by_conv.pop(conv_id, None)
@@ -354,9 +285,9 @@ class PendingReplies:
         """Arm `complainant_uid`'s complaint: the next reply to them is the
         candidate fix. Adjudication runs beside the turn, so a reply already
         queued after ``match_seq`` is linked now instead."""
-        complainant = str(complainant_uid or "")
+        complainant = complainant_uid
         if not complainant:
-            return  # no one whose next reply could be the retry
+            return
         bad = {**entry, "rejected_ts": ts, "evidence_id": str(evidence_id or ""),
                "complainant_uid": complainant, "lesson": str(lesson or "")}
         slots = self._awaiting_fix.get(conv_id) or {}
@@ -422,20 +353,7 @@ class PendingReplies:
               quote_by_bot: bool | None = None) -> dict | None:
         """Attribute a message to a pending reply, or None: in a group only a
         quote or an @ (or an elicited answer), in a DM the next message. Pops
-        the entry, stamping ``matched_by``. Never raises."""
-        try:
-            return self._match(conv_id, sender_uid=sender_uid,
-                               quote_mid=quote_mid, at_bot=at_bot, is_dm=is_dm,
-                               now=now, quote_by_bot=quote_by_bot)
-        except Exception as e:
-            logger.warning("[Agent] pending reactions for %s unreadable, "
-                           "dropped: %s: %s", conv_id, type(e).__name__, e)
-            self.drop_conversation(conv_id)
-            return None
-
-    def _match(self, conv_id: str, *, sender_uid: str, quote_mid: str,
-               at_bot: bool, is_dm: bool, now: float,
-               quote_by_bot: bool | None) -> dict | None:
+        the entry, stamping ``matched_by``."""
         self._expire(conv_id, now)
         q = self._by_conv.get(conv_id)
         if not q:
@@ -605,20 +523,14 @@ class TeacherStats:
 
     def __init__(self, path):
         self.path = path
-        self._d: dict[str, dict] = {}
-        try:
-            if path.exists():
-                loaded = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    self._d = loaded
-        except (OSError, json.JSONDecodeError):
-            self._d = {}
+        self._d: dict[str, dict] = (
+            json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
         # Persist a `ts` on old records: a blocked teacher never calls update(),
         # and an in-memory stamp would restart the clock on every boot.
         stamped = False
         now = time.time()
         for rec in self._d.values():
-            if isinstance(rec, dict) and not isinstance(rec.get("ts"), (int, float)):
+            if "ts" not in rec:
                 rec["ts"] = now
                 stamped = True
         if stamped:
@@ -636,19 +548,13 @@ class TeacherStats:
     @staticmethod
     def _is_forgiven(rec: dict) -> bool:
         """Has this record been quiet long enough to start over."""
-        try:
-            age = time.time() - float(rec.get("ts") or 0.0)
-        except (TypeError, ValueError):
-            return False
-        # A NaN `ts` compares False: never forgiven, never raises.
-        return age > TEACHER_FORGIVENESS_DAYS * 86400.0
+        return time.time() - rec.get("ts", 0.0) > TEACHER_FORGIVENESS_DAYS * 86400.0
 
     def _counts(self, uid: str) -> tuple[int, int]:
-        rec = self._d.get(str(uid)) or {}
+        rec = self._d.get(str(uid), {})
         if self._is_forgiven(rec):
             return 0, 0
-        return (int(rec.get("accepted", 0) or 0),
-                int(rec.get("dismissed", 0) or 0))
+        return rec.get("accepted", 0), rec.get("dismissed", 0)
 
     def hard_block(self, uid: str) -> bool:
         """Persistently bad teachers stop costing adjudicator calls, until the
@@ -668,10 +574,5 @@ class TeacherStats:
                 f"{dis} dismissed.")
 
     def _save(self) -> None:
-        try:
-            atomic_write_text(
-                self.path,
-                json.dumps(self._d, ensure_ascii=False, indent=1),
-            )
-        except OSError:
-            pass
+        atomic_write_text(self.path,
+                          json.dumps(self._d, ensure_ascii=False, indent=1))

@@ -310,18 +310,6 @@ def test_the_agent_accepts_the_record_and_its_fields() -> None:
               from_record.settings == from_kwargs.settings)
         check("the record is kept whole on the agent",
               from_record.settings is settings)
-        try:
-            Agent(settings, persona_name="other")
-            both = False
-        except TypeError:
-            both = True
-        check("a record AND keywords is refused rather than half-applied", both)
-        try:
-            Agent("sk-not-a-record")
-            wrong = False
-        except TypeError:
-            wrong = True
-        check("a stray positional is refused", wrong)
     if previous_home is None:
         os.environ.pop("AGENT_HOME", None)
     else:

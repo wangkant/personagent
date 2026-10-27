@@ -1,7 +1,6 @@
 """The promotion policy: when may evidence grant a candidate authority.
 
-A single automatic signal must never permanently change behaviour, so
-promotion needs ``MIN_EVENTS`` compatible events (same persona, language and
+Promotion needs ``MIN_EVENTS`` compatible events (same persona, language and
 conversation), ``MIN_STRONG`` of them strong, and no compatible evidence
 pointing the other way; contradictions are left for a human. Weak evidence
 never promotes at any quantity. Also ``retract_example``, how a human
@@ -408,19 +407,12 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
 
 def retract_example(path: Path, reply: str) -> int:
     """Remove every banked example whose reply is `reply`; returns how many.
-
-    Atomic, other rows byte-identical, under the appenders' lock so a
-    concurrent append is not erased. A failed replace raises rather than
-    silently leaving the rejected reply retrievable.
-    """
+    Atomic, under the appenders' lock; other rows are kept byte-identical."""
     reply = (reply or "").strip()
     if not reply or not Path(path).exists():
         return 0
     with append_lock(path):
-        try:
-            lines = Path(path).read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return 0
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
         kept, dropped = [], 0
         for ln in lines:
             if not ln.strip():
@@ -430,7 +422,7 @@ def retract_example(path: Path, reply: str) -> int:
             except json.JSONDecodeError:
                 kept.append(ln)
                 continue
-            if isinstance(rec, dict) and str(rec.get("reply") or "").strip() == reply:
+            if str(rec.get("reply") or "").strip() == reply:
                 dropped += 1
                 continue
             kept.append(ln)

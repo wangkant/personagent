@@ -275,22 +275,15 @@ class Transport:
         for kind, value in TextProcessing._delivery_units(segments, cap):
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
-                if not file_path or not file_path.exists():
+                if not file_path:
                     logger.info("[Agent] sticker tag %r → no match, skipping%s",
                                 value, label)
                     continue
-                picked_md5 = str(
-                    (self.stickers.entries.get(file_path.name) or {}).get("md5", ""))
-                if picked_md5:
-                    used_md5s.add(picked_md5)
+                rel = file_path.relative_to(self.stickers.dir).as_posix()
+                used_md5s.add(self.stickers.entries[rel].get("md5", ""))
                 if not collected:
                     await asyncio.sleep(random.uniform(0.6, 1.4))
-                try:
-                    img_b64 = base64.b64encode(file_path.read_bytes()).decode()
-                except Exception as e:
-                    # Skipped, not failed: `failed` means the network stopped.
-                    logger.warning("[Agent] sticker read failed (%s): %s", file_path, e)
-                    continue
+                img_b64 = base64.b64encode(file_path.read_bytes()).decode()
                 sendable = True
                 message = at_head + [
                     {"type": "image", "data": {"file": f"base64://{img_b64}"}}]
@@ -301,11 +294,7 @@ class Transport:
                                    "dropping remaining segments (%s)", target_key)
                     break
                 sent_any = True
-                try:
-                    sent_stickers.append(
-                        str(file_path.relative_to(self.stickers.dir)).replace("\\", "/"))
-                except ValueError:
-                    pass
+                sent_stickers.append(rel)
                 continue
             sendable = True
             if not collected:

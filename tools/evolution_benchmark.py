@@ -4,13 +4,12 @@ Drives the real Agent over synthetic train / held-out scenarios for N rounds
 in two arms (evolve-on, evolve-off control), each in an isolated state dir,
 then has the blind held-out replies scored and plots mean score per round.
 
-The judge must not be the model under test: `--judge export` writes a blind
-inbox for a human or another model, `--judge openai` / `--judge anthropic`
-send it to a named judge model. No score ever feeds the learning loop.
+`--judge export` writes a blind inbox for a human or another model,
+`--judge openai` / `--judge anthropic` send it to a named judge model, which
+should not be the model under test. Scores never feed the learning loop.
 
 The evolve-on arm stubs the human gate: after each tick it promotes what was
-proposed (actor="benchmark" in the ledger). A curve therefore measures the
-material the loop drafts, not how much a deployment learns on its own.
+proposed (actor="benchmark" in the ledger).
 """
 from __future__ import annotations
 
@@ -102,7 +101,6 @@ async def drive_scenario(agent, scenario: dict, persona_name: str, group_id: str
 def build_isolated_agent(state_dir: Path, persona_name: str, lang: str, eval_enabled: bool):
     """An Agent with every writable state path under state_dir. Credentials come
     from the environment, defaulting to a fake key (tests stub `_call_llm`)."""
-    import os
     from persona_agent.agent import Agent
     from persona_agent.config_env import vision_endpoint_from_env
     # Absolute: the ctor re-anchors relative state paths under runtime/, which
@@ -216,15 +214,13 @@ _STATE_MARKER = ".benchmark-state"
 
 
 def _reset_state_dir(state_dir: Path) -> None:
-    """Empty a benchmark arm's state directory, only if a run created it:
-    `--outdir` is free-form, so the marker file guards against deleting
-    a directory that merely shares the name."""
+    """Empty a benchmark arm's state directory, only if a run created it
+    (it carries the marker file)."""
     if state_dir.exists():
         if not (state_dir / _STATE_MARKER).is_file():
             raise SystemExit(
-                f"refusing to delete {state_dir}: no {_STATE_MARKER} marker, "
-                f"so a benchmark run did not create it. Move or remove it by "
-                f"hand if that is really what you want.")
+                f"refusing to delete {state_dir}: no {_STATE_MARKER} marker; "
+                f"move or remove it by hand.")
         shutil.rmtree(state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / _STATE_MARKER).write_text(
@@ -313,8 +309,7 @@ def aggregate(key_map: dict, scores: dict) -> dict:
 
 
 def _measurement_warnings(all_scores: list[int]) -> list[str]:
-    """Flag runs whose scores cannot support a conclusion (no or near-zero
-    variance still yields a tidy curve)."""
+    """Flag runs with no or near-zero score variance."""
     warnings: list[str] = []
     if not all_scores:
         return ["no scores at all"]
@@ -322,9 +317,8 @@ def _measurement_warnings(all_scores: list[int]) -> list[str]:
     if len(distinct) == 1:
         warnings.append(
             f"the judge gave {distinct[0]} to all {len(all_scores)} items: zero "
-            "variance, so this run cannot show a difference between arms of any "
-            "size. Treat the curve as void. Usually the scenarios do not "
-            "actually elicit the failure mode, or the rubric is too coarse.")
+            "variance, so the arms cannot be compared. The scenarios may not "
+            "elicit the failure mode, or the rubric is too coarse.")
     elif len(distinct) == 2 and min(all_scores) >= 4:
         warnings.append(
             f"scores span only {distinct}: near-ceiling, so the comparison has "
@@ -427,7 +421,7 @@ async def judge_anthropic(inbox: list[dict], model: str) -> dict:
             raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
             scores[it["item_id"]] = _parse_judge_json(raw)
         except Exception as e:
-            # Dropped, not backfilled: a made-up 3 pulls both arms together.
+            # Dropped, not backfilled.
             print(f"  judge error {it['item_id']}: {e}")
             failures += 1
     if failures:
@@ -479,7 +473,7 @@ def _parse_judge_json(raw: str) -> dict:
 
 async def judge_openai_compatible(inbox: list[dict], model: str) -> dict:
     """Judge every reply with an OpenAI-compatible chat endpoint. A failed
-    item is left out, never backfilled, and aggregate refuses a partial set."""
+    item is left out; aggregate refuses a partial set."""
     base = (os.getenv("BENCH_JUDGE_BASE_URL")
             or os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)).rstrip("/")
     key = os.getenv("BENCH_JUDGE_API_KEY") or os.getenv("LLM_API_KEY", "")
@@ -535,18 +529,14 @@ async def cmd_run(args) -> int:
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
     gen_model = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
-    # Refused before the arms spend anything; meta.json records the judge.
+    # Checked before the arms spend anything; meta.json records the judge.
     if args.judge in ("anthropic", "openai") and not args.judge_model:
         sys.exit(f"--judge {args.judge} needs a model id: pass --judge-model, "
-                 f"or set BENCH_JUDGE_MODEL in .env. There is no default, "
-                 f"because a judge that shares a vendor with the model under "
-                 f"test is the one failure this benchmark treats as "
-                 f"disqualifying.")
+                 f"or set BENCH_JUDGE_MODEL in .env.")
     if args.judge in ("anthropic", "openai") and args.judge_model:
         if args.judge_model.strip().lower() == gen_model.strip().lower():
-            print(f"WARNING: judge model == model under test ({gen_model}). "
-                  f"These scores measure self-preference, not quality. "
-                  f"Set --judge-model to a different vendor's model.",
+            print(f"WARNING: judge model == model under test ({gen_model}); "
+                  f"set --judge-model to a different vendor's model.",
                   file=sys.stderr)
     (out / "meta.json").write_text(json.dumps({
         "rounds": args.rounds, "lang": args.lang, "style": args.style,
@@ -602,7 +592,7 @@ def _ingest(out: Path) -> int:
     warnings.extend(_arm_warnings(out / "arms.json"))
     warnings.extend(_style_warnings(out / "meta.json", warnings))
     if warnings:
-        print("\n  THIS RUN IS NOT EVIDENCE:")
+        print("\n  warnings:")
         for w in warnings:
             print(f"    - {w}")
         return 2
@@ -611,26 +601,19 @@ def _ingest(out: Path) -> int:
 
 def _style_warnings(meta_path: Path, existing: list[str]) -> list[str]:
     """Name the likely cause when a flagged run used --style full, where both
-    arms sit at ceiling by design; only meta.json tells that apart."""
+    arms sit at ceiling."""
     if not existing:
         return []
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
     if meta.get("style") == "full":
-        return ["this run used --style full (the default): the ablation was "
-                "never on, so a ceiling here is expected, not a finding. "
-                "Re-run with --style weak before concluding anything."]
+        return ["this run used --style full (the default), so both arms sit "
+                "at ceiling; re-run with --style weak."]
     return []
 
 
 def _pass_counts(arms_path: Path) -> dict:
     """Per (arm, round): (silent, total) holdout replies, from arms.json."""
-    try:
-        arms = json.loads(arms_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    arms = json.loads(arms_path.read_text(encoding="utf-8"))
     out: dict = {}
     for arm in arms:
         for rd in arm.get("rounds", []):
@@ -654,19 +637,14 @@ def _pass_warnings(counts: dict) -> list[str]:
                 detail = ", ".join(f"{a}={rates[a]:.0%}" for a in sorted(rates))
                 warnings.append(
                     f"round {rnd}: the arms' silence rates differ by "
-                    f"{spread:.0%} ({detail}). Each arm's mean is computed "
-                    "over a different scenario subset; the comparison is not "
-                    "like-for-like this round.")
+                    f"{spread:.0%} ({detail}); the means cover different "
+                    "scenario subsets, so the comparison is not like-for-like.")
     return warnings
 
 
 def _arm_warnings(arms_path: Path) -> list[str]:
-    """Flag an evolve-on arm that produced no feedback pair, which makes it
-    the control under another name."""
-    try:
-        arms = json.loads(arms_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
+    """Flag an evolve-on arm that produced no feedback pair."""
+    arms = json.loads(arms_path.read_text(encoding="utf-8"))
     out: list[str] = []
     for arm in arms:
         if arm.get("arm") != "evolve-on":
@@ -675,9 +653,7 @@ def _arm_warnings(arms_path: Path) -> list[str]:
         if pairs and not any(pairs):
             out.append(
                 f"the evolve-on arm accumulated no feedback pairs ({pairs}): it "
-                "had nothing to learn from, so it is not distinguishable from "
-                "the control by construction. The scenarios did not trigger a "
-                "low enough self-eval to produce a pair.")
+                "had nothing to learn from, so it matches the control.")
     return out
 
 

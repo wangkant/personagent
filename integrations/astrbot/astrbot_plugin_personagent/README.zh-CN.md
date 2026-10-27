@@ -20,7 +20,7 @@ QQ、微信、Telegram、Discord 不需要这个插件，personagent 会直接�
 - 拉取 personagent 的 outbox，发送它主动说的话，例如定时开场、追问，以及模型不可用时在群里的致歉。
 - personagent 接管某个会话后，阻止 AstrBot 自带的模型继续回答（`block_default`），避免两个声音同时回复。
 
-人设、记忆、防抖和「打字」节奏都由 personagent 处理。插件只负责格式转换，不决定角色说什么。
+人设、记忆、防抖和「打字」节奏都由 personagent 处理。插件只负责格式转换。
 
 ## 装进你自己的 AstrBot
 
@@ -34,7 +34,7 @@ personagent connect astrbot
 
 如果不想逐项回答，可以直接指定文件夹：`personagent connect astrbot <data 文件夹>`，要经 NapCat 接 QQ 时再加 `--qq`。这种方式首次连接时白名单为空，需要在 AstrBot 网页的插件设置里填写 `groups`（群）和 `dm_users`（允许私聊的人）。这条命令可以重复运行，已有的白名单会保留。
 
-也可以从 personagent 的[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页通过「从文件安装」上传。之后把 `connector_token` 设为 personagent 的 `.env` 中的 `CONNECTOR_TOKEN`，并填好白名单。AstrBot 与 personagent 不在同一台电脑上时，`personagent_url` 必须是 HTTPS 地址（见下文「AstrBot 在 Docker 里」）。升级时用同样的方式上传新版 zip：AstrBot 4.29 及以后的版本会直接替换旧版；更早的版本需要先卸载旧插件，卸载时不要勾选「同时删除插件配置文件」。
+也可以从 personagent 的[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在 AstrBot 插件页通过「从文件安装」上传。之后把 `connector_token` 设为 personagent 的 `.env` 中的 `CONNECTOR_TOKEN`，并填好白名单。AstrBot 与 personagent 不在同一台电脑上时，`personagent_url` 必须是 HTTPS 地址（见下文「AstrBot 在 Docker 里」）。升级时用同样的方式上传新版 zip。AstrBot 4.29 及以后的版本会直接替换旧版；更早的版本需要先卸载旧插件，卸载时不要勾选「同时删除插件配置文件」。
 
 手动安装：把本文件夹复制到 `<AstrBot data>/plugins/astrbot_plugin_personagent/`，重启 AstrBot，然后在网页里填写设置。
 
@@ -71,7 +71,7 @@ NapCat 的 HTTP 服务是可选的。开启后把它的地址填入 `QQ_ONEBOT_U
 
 这条路线的简要步骤见 [docs/deploy.zh-CN.md 的「第三方路线：AstrBot + NapCat」](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#第三方路线astrbot--napcat)。
 
-让 AstrBot 接入消息较多的 QQ 群之前，请检查 AstrBot 自身的两项设置，它们在插件之前生效：`platform_settings.rate_limit` 默认每 60 秒 30 条，超出的消息会被延迟处理，可以调高或关闭；`content_safety.internal_keywords` 默认开启，会静默丢弃命中关键词的消息，包括角色本该回答的消息。
+让 AstrBot 接入消息较多的 QQ 群之前，请检查 AstrBot 自身的两项设置，它们在插件之前生效：`platform_settings.rate_limit` 默认每 60 秒 30 条，超出的消息会被延迟处理，可以调高或关闭；`content_safety.internal_keywords` 默认开启，会丢弃命中关键词的消息，包括角色本该回答的消息。
 
 ## AstrBot 在 Docker 里
 
@@ -102,7 +102,7 @@ personagent 的默认值为 `LLM_TIMEOUT_S=120`、`LLM_MAX_RETRIES=2`，最坏�
 | `agent rejected the body as too large (413)` | 通常是图片过大。调大 personagent 的 `SERVER_MAX_BODY_BYTES`。 |
 | `timed out waiting for the agent` | 见上文「超时」。 |
 | `agent request failed ...` | 通常是 personagent 没有运行，或 `personagent_url` 填错了。它是基础地址，不要带 `/v1/events`。 |
-| `outbox: agent has no outbox ...` | personagent 关闭了 `CONNECTOR_OUTBOX_ENABLED`。不影响其他功能。 |
+| `outbox: agent has no outbox ...` | personagent 关闭了 `CONNECTOR_OUTBOX_ENABLED`。 |
 
 如果 AstrBot 自带的模型突然以另一种口吻回复，说明插件没有连上 personagent，或 personagent 没有接管这个会话。请先对照上表排查，再运行 `personagent doctor`。如果 personagent 是由本地页面启动的，打开页面上的「动态」，看消息有没有到达、它为什么没开口；用 `personagent run` 启动的，看它的终端输出。更多排查步骤见 [docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#机器人不说话)。
 

@@ -1,4 +1,4 @@
-"""Where a deployment lives, decided before any setting is read. Stdlib only."""
+"""Where a deployment lives, decided before any setting is read."""
 from __future__ import annotations
 
 import os
@@ -51,11 +51,9 @@ FROM_ENV_FILE: set[str] = set()
 
 def load_env() -> Path:
     """Load <home>/.env without overriding the shell, and return the home."""
+    from dotenv import dotenv_values
+
     home = find_home()
-    try:
-        from dotenv import dotenv_values
-    except ImportError:
-        return home
     for key, value in dotenv_values(home / ".env").items():
         if value is not None and key not in os.environ:
             os.environ[key] = value

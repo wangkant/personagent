@@ -70,14 +70,14 @@ def _read(home: Path) -> dict:
         data = json.loads(_cache(home).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return data if isinstance(data, dict) else {}
+    return data
 
 
 def stale(home: Path) -> bool:
     """The last answer is a day old, or an hour old after a failed attempt."""
     last = _read(home)
     checked, wait = last.get("checked"), RETRY_AFTER_S if last.get("failed") else CHECK_EVERY_S
-    return not (isinstance(checked, (int, float)) and 0 <= time.time() - checked < wait)
+    return checked is None or not 0 <= time.time() - checked < wait
 
 
 def check(home: Path, timeout: float = TIMEOUT_S) -> str:
@@ -122,11 +122,7 @@ def refresh_soon(home: Path) -> None:
             with _lock:
                 _running.discard(key)
 
-    try:
-        threading.Thread(target=run, name="personagent-update-check", daemon=True).start()
-    except RuntimeError:  # the interpreter is shutting down
-        with _lock:
-            _running.discard(key)
+    threading.Thread(target=run, name="personagent-update-check", daemon=True).start()
 
 
 def how_to_update() -> tuple[str, bool]:

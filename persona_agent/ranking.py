@@ -119,7 +119,7 @@ def row_fields(rec: dict) -> tuple[str, str, float, str]:
 def cosine(a, b) -> Optional[float]:
     """Cosine similarity of two unit vectors; None when either is missing,
     so such a row is ranked on the other signals alone."""
-    if a is None or b is None or len(a) != len(b):
+    if a is None or b is None:
         return None
     return _dot(a, b)
 

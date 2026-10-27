@@ -58,26 +58,20 @@ def status_path(home: Path) -> Path:
 
 
 def _read(path: Path) -> dict:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    if not path.exists():
         return {}
-    return value if isinstance(value, dict) else {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _write_private(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    os.chmod(path, 0o600)
 
 
 def load_credentials(home: Path) -> dict[str, dict]:
     """kind -> the values saved for it."""
-    stored = _read(credentials_path(home))
-    return {k: v for k, v in stored.items() if isinstance(v, dict)}
+    return _read(credentials_path(home))
 
 
 def save_credentials(home: Path, kind: str, values: dict) -> None:
@@ -93,7 +87,7 @@ def remove_credentials(home: Path, kind: str) -> None:
 
 
 def read_status(home: Path) -> dict[str, dict]:
-    return {k: v for k, v in _read(status_path(home)).items() if isinstance(v, dict)}
+    return _read(status_path(home))
 
 
 class Status:
@@ -109,10 +103,7 @@ class Status:
         if current.get("state") == state and current.get("detail") == detail:
             return
         self.states[kind] = {"state": state, "detail": detail, "since": int(time.time())}
-        try:
-            _write_private(self.path, self.states)
-        except OSError:
-            logger.warning("could not write %s", self.path)
+        _write_private(self.path, self.states)
 
 
 # ---------------------------------------------------------------- text
@@ -183,7 +174,7 @@ class Platform:
 
 async def backoff_sleep(attempt: int) -> None:
     first, last = RETRY_S
-    # The exponent is capped: a long outage would otherwise overflow the float.
+    # Capped so a long outage cannot overflow the float.
     await asyncio.sleep(min(first * (2 ** min(attempt, 16)), last))
 
 
@@ -214,7 +205,7 @@ class Bridge:
                 logger.warning("%s: the agent did not take a message: %s",
                                self.platform.kind, type(exc).__name__)
                 return
-            items = [item for item in answer.get("replies") or [] if isinstance(item, dict)]
+            items = answer.get("replies") or []
             if not items:
                 return
             try:
@@ -231,7 +222,7 @@ class Bridge:
             target = self.platform.target(delivery)
         except Unsupported:
             return "unsupported", 0
-        items = [item for item in delivery.get("items") or [] if isinstance(item, dict)]
+        items = delivery.get("items") or []
         sent = await self.platform.send(target, items)
         return ("sent" if sent == len(items) else "partial" if sent else "failed"), sent
 

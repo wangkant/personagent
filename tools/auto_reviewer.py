@@ -74,12 +74,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s",
                     datefmt="%H:%M:%S")
 logger = logging.getLogger("auto-reviewer")
 
-# Windows consoles may default to a legacy codepage; never crash on output.
+# Windows consoles may default to a legacy codepage.
 for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError):
-        pass
+    _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _feedback_files() -> tuple[Path, Path]:
@@ -125,9 +122,6 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
     )
     if not pending:
         return []
-    if not API_KEY:
-        logger.error("LLM_API_KEY not configured; cannot call reviewer")
-        return []
 
     written: list[dict] = []
     for ev in pending:
@@ -149,15 +143,13 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
             print(line)
         else:
             # Locked append per record: the running agent writes this file too.
-            # A row refused at the cap would be re-reviewed (and re-billed)
-            # every run, since src_eval_ts is the only dedup key.
             if not evolution.append_jsonl(
                     CANDIDATES_FILE, [record],
                     max_bytes=evolution.CANDIDATE_AUDIT_MAX_BYTES):
                 logger.error(
-                    "candidates.jsonl has hit its %d-byte cap — the audit "
-                    "row for %s was DROPPED and this eval will be "
-                    "re-reviewed on every run. Archive or truncate it.",
+                    "candidates.jsonl is at its %d-byte cap; audit row for %s "
+                    "dropped, so it is re-reviewed every run. Archive or "
+                    "truncate it.",
                     evolution.CANDIDATE_AUDIT_MAX_BYTES,
                     str(ev.get("ts", "?"))[:19])
                 continue
@@ -174,8 +166,6 @@ async def review_pending(threshold: int, limit: int, *, no_write: bool,
 def apply_candidates(auto_yes: bool) -> None:
     """Stage 2: pending candidates -> feedback pairs, always human-gated."""
     if auto_yes:
-        # Model output is not operator authority: unattended review goes
-        # through evidence -> candidate -> promotion, never straight to a pool.
         logger.error(
             "--yes direct apply is disabled; use EVOLVE_AUTO_ENABLED for gated "
             "unattended review, or --apply for explicit per-pair approval")
@@ -237,8 +227,7 @@ def apply_candidates(auto_yes: bool) -> None:
                     trimmed[0], trimmed[1], PROMOTE_MAX_FEEDBACK)
     n = evolution.append_jsonl(feedback, approved)
     if n < len(approved):
-        # The unwritten tail stays pending: marked approved, it would be in no
-        # pool and never offered again.
+        # The unwritten tail stays pending.
         for ts in approved_ts[n:]:
             verdicts.pop(ts, None)
         logger.warning("feedback file at size cap: %d of %d pairs written; "
@@ -272,8 +261,6 @@ async def main() -> int:
                    help="deprecated unsafe mode; refused without writing feedback")
     args = p.parse_args()
 
-    # Checked here: an empty review result cannot tell "nothing pending" from
-    # "no key", and a cron job would then never review anything.
     if not args.dry_run and not API_KEY:
         logger.error("LLM_API_KEY not configured; cannot call reviewer")
         return 1

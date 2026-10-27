@@ -63,7 +63,7 @@ Running `personagent` again reuses the page that is already open. `--no-browser`
 
 When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation, whether it came from pip, uvx, uv tool, pipx or a Git clone. For an unpacked source ZIP, the notice links to the release page instead. The terminal prints the same command. Closing the notice hides it for that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` report a new version too. The page and `up` ask pypi.org at most once a day, in the background. `doctor` asks right away when the last answer is more than a day old. Set `UPDATE_CHECK_ENABLED=false` to turn the check off.
 
-The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. On Windows this uses a job object, elsewhere a process group. If an earlier run crashed and left processes behind, the next start stops them first.
+The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. If an earlier run crashed and left processes behind, the next start stops them first.
 
 ## See it first: the demo
 
@@ -185,7 +185,7 @@ If you have not seen a film, say so instead of inventing an opinion.
 
 `AGENT_LANG` (`en` or `zh`) selects the language of the bundled examples, filters and checks. It does not translate your persona. [.env.example](../.env.example) describes every setting.
 
-The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in the language the chat uses. Its prompts and bundled data are English and Chinese, though, so how well it does in another language depends on the model. The [memory commands](#memory-commands) and the few fixed replies, which don't go through the model, work in all ten languages.
+The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in the language the chat uses. Its prompts and bundled data are English and Chinese. The [memory commands](#memory-commands) and the few fixed replies, which don't go through the model, work in all ten languages.
 
 To override a shipped file, put a file with the same name in the home folder's `data/`. Files you do not override come from the copy shipped with personagent.
 
@@ -433,9 +433,9 @@ personagent eval --suite all --lang zh --repeat 5
 
 The persona and learning suites need a judge model that differs from the model being measured. Set `BENCH_JUDGE_MODEL`, plus `BENCH_JUDGE_BASE_URL` and `BENCH_JUDGE_API_KEY` if another endpoint serves it. Without a separate judge, these suites refuse to run. `--allow-same-judge` runs them anyway and marks the report. The learning suite never promotes anything itself, and its expectations follow your promotion settings. Under a policy stricter than the defaults, every scenario is expected to be held. Every run calls your models and works on a throwaway copy of the state. `--keep` keeps the copy and prints where it is.
 
-`--rejudge REPORT` judges a kept report's replies again with the `BENCH_JUDGE_MODEL` you set now, without calling the model under test, and writes the result beside the original. The replies, the baselines and what the promotion policy did stay as they were. Judges disagree more than you might expect, so this is a cheap way to check a result.
+`--rejudge REPORT` judges a kept report's replies again with the `BENCH_JUDGE_MODEL` you set now, without calling the model under test, and writes the result beside the original. The replies, the baselines and what the promotion policy did stay as they were.
 
-The latest results, with the method, what they don't show and every report, are in [evals/2026-10-18](evals/2026-10-18/README.md). A few notes on reading the reports:
+The latest results, with the method and every report, are in [evals/2026-10-18](evals/2026-10-18/README.md). A few notes on reading the reports:
 
 - In `speak`, most misses are lines where its name means something else, such as a cinema or a puppy, or where someone tells someone else what it said. A name counts as a call, and the model seldom overrides that.
 - In `persona`, a split means the judge picked whichever reply came first (or second) both times. The published verdicts are Claude Opus 5.5's. It judged outside `personagent eval`, in batches, as each report's `rejudged` field records. Each pair's `earlier` field keeps the verdict of the first judge, Claude Haiku 5.5.
@@ -459,7 +459,7 @@ The [Activity](#activity) view is part of the local page, which listens on 127.0
 
 At most once a day, the local page, `personagent up` and `personagent doctor` ask pypi.org for the newest version number. The request carries personagent's own version and nothing else. `UPDATE_CHECK_ENABLED=false` stops it.
 
-The model provider does see conversations:
+The model provider sees conversations:
 
 - Chat context goes to your `LLM_BASE_URL`.
 - If you configure a fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), it is also called on ordinary turns for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and it receives chat context as well.
@@ -495,7 +495,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Status and other docs
 
-personagent 1.3.1 is on PyPI. QQ is the most exercised platform, through AstrBot in 1.0 and directly since 1.1. The WeChat, Telegram and Discord connections check credentials against the real services and are otherwise tested against stand-ins. The Satori and Matrix connectors are tested against stand-ins. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page.
+personagent 1.3.1 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page.
 
 The direct OneBot route (`/v1/onebot`) is deprecated but kept through 1.x. The scripts in `tools/` are meant to be run from a clone, and [tools.md](tools.md) describes them.
 

@@ -114,12 +114,6 @@ class ModelCalls:
         key = tuple(sorted((k, _norm(v)) for k, v in kwargs.items()))
         client = self._http_pool.get(key)
         if client is None or client.is_closed:
-            if self._closed and not self._warned_use_after_close:
-                self._warned_use_after_close = True
-                logger.warning(
-                    "[Agent] HTTP pool rebuilt after aclose() — this Agent is "
-                    "closed and the new connections will never be closed. A "
-                    "closed Agent should be discarded, not reused.")
             client = httpx.AsyncClient(**kwargs)
             self._http_pool[key] = client
         return _PooledHTTP(client)
@@ -326,7 +320,6 @@ class ModelCalls:
         if not (self.base_url and self.api_key):
             logger.warning("[Agent] missing base_url/api_key; cannot call LLM")
             return ""
-        sys_text = system or ""
 
         async def _do_call(mtok: int, mdl: str, force_disable_thinking: bool = False,
                            force_plain_text: bool = False):
@@ -349,7 +342,7 @@ class ModelCalls:
             messages = await self._ground_with_search(messages, hint=search_hint)
 
         # OpenAI endpoint uses a single system message; provider auto prefix-caches.
-        _oai_messages = ([{"role": "system", "content": sys_text}] if sys_text else []) + list(messages)
+        _oai_messages = ([{"role": "system", "content": system}] if system else []) + list(messages)
 
         # Recovery: transient errors back off and retry; throttling arms a
         # cooldown and switches to the fallback at once; anything else but
@@ -425,7 +418,7 @@ class ModelCalls:
 
         def _budget_starved(t: str, fin: str) -> bool:
             # Truncation: no visible text, or a half-emitted JSON object the
-            # fail-closed parser would silently drop.
+            # parser would drop.
             if fin != "length":
                 return False
             if not t:

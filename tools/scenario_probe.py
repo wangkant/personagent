@@ -13,8 +13,7 @@ Usage:
         --judge-model <a model other than LLM_MODEL> --outdir benchmark_runs/probe
 
 Writes probe_results.jsonl (one row per scenario: reply + both scores) and a
-per-family summary to stdout. Selection is left to the operator: the numbers
-are the evidence, not the verdict.
+per-family summary to stdout.
 """
 from __future__ import annotations
 
@@ -48,15 +47,14 @@ async def probe_one(scn: dict, persona_name: str, lang: str, state_root: Path) -
     latest = ctx_lines[-1] if ctx_lines else ""
     await agent._evaluate_reply("g1", scn["mode"], latest, reply,
                                 ctx_msgs=ctx_lines)
-    try:
+    # No eval.jsonl when the eval call failed.
+    eval_file = state_dir / "eval.jsonl"
+    if eval_file.exists():
         rows = [json.loads(l) for l in
-                (state_dir / "eval.jsonl").read_text(encoding="utf-8").splitlines()
-                if l.strip()]
+                eval_file.read_text(encoding="utf-8").splitlines() if l.strip()]
         if rows:
-            row["self_eval"] = int(rows[-1].get("score", 0)) or None
+            row["self_eval"] = rows[-1]["score"] or None
             row["self_eval_reason"] = str(rows[-1].get("reason", ""))[:160]
-    except (OSError, json.JSONDecodeError, ValueError):
-        pass
     return row
 
 
@@ -73,7 +71,7 @@ async def main_async(args) -> int:
 
     rows: list[dict] = []
     with tempfile.TemporaryDirectory() as td:
-        for scn in scns:  # sequential on purpose: stay inside the rate window
+        for scn in scns:  # sequential: stay inside the rate window
             row = await probe_one(scn, persona_name, args.lang, Path(td))
             rows.append(row)
             print(f"  {row['id']} [{row['family']}] self_eval="
@@ -99,7 +97,6 @@ async def main_async(args) -> int:
     fams: dict[str, list[dict]] = {}
     for r in rows:
         fams.setdefault(r["family"], []).append(r)
-    # Without a judge the tell column is unmeasured, not zero.
     judged = any(r.get("judge") is not None for r in rows)
     print(f"\n{'family':<14} {'n':>2} {'self<=2':>7} {'judge<=3':>8}  verdict")
     for fam, frs in sorted(fams.items()):
@@ -114,8 +111,8 @@ async def main_async(args) -> int:
                    "no-trigger" if tell else "inert")
         print(f"{fam:<14} {len(frs):>2} {trig:>7} {tell:>8}  {verdict}")
     if not judged:
-        print("\nNo judge ran (--judge-model empty), so the judge column is "
-              "unmeasured, not zero. Pass --judge-model for the tell verdicts.")
+        print("\nNo judge ran (--judge-model empty); pass --judge-model for "
+              "the tell verdicts.")
     print(f"\nWrote {out}")
     return 0
 

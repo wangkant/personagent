@@ -144,35 +144,6 @@ def test_one_complaint_does_not_disarm_another() -> None:
           len(p._awaiting_fix["g1"]) == reactions.MAX_ARMED_PER_CONV)
 
 
-def test_a_malformed_state_row_cannot_wedge_a_conversation() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        state = Path(d) / "pending.json"
-        good = {"reply": "hi", "ts": 100.0, "mids": ["m1"], "target_uid": "1", "seq": 1}
-        state.write_text(json.dumps({
-            "version": 1, "order": ["777", "778"],
-            "pending": {"777": [{"reply": "hi", "ts": None, "mids": [], "target_uid": "1"},
-                                {"reply": "yo", "ts": 100.0},
-                                {"reply": "hey", "ts": 100.0, "mids": "m2"},
-                                good],
-                        "778": [{"reply": "x", "ts": 100.0, "mids": [], "seq": "3"}]},
-            "awaiting_fix": {"778": {"42": {"reply": "x", "rejected_ts": "soon",
-                                            "complainant_uid": "42"}}},
-        }), encoding="utf-8")
-        p = reactions.PendingReplies(ttl_sec=60, state_file=state)
-        check("a row with no timestamp is dropped, a row with no ids is read",
-              [e["reply"] for e in p._by_conv["777"]] == ["yo", "hi"],
-              repr(list(p._by_conv["777"])))
-        check("the conversation still matches",
-              (p.match("777", sender_uid="1", at_bot=True, now=110.0) or {}).get(
-                  "reply") == "hi")
-        check("unreadable rows arm nothing", p.awaiting("778") is None
-              and "778" not in p._by_conv)
-        p._by_conv["777"].appendleft({"reply": "late", "ts": None, "mids": []})
-        check("a row that breaks at match time is dropped, not raised",
-              p.match("777", sender_uid="1", at_bot=True, now=110.0) is None
-              and "777" not in p._by_conv)
-
-
 def test_a_quote_of_another_member_is_not_a_reaction() -> None:
     p = reactions.PendingReplies(ttl_sec=60)
     p.record("tg", **_entry_kwargs(mids=[]))

@@ -9,11 +9,7 @@ import time
 from .access import ADMIN_MODE
 from . import channels
 from .decision import PASS, SEND
-from .textproc import (
-    TextProcessing,
-    _REFUSAL_LABELS,
-    _truncate_framed,
-)
+from .textproc import TextProcessing, _truncate_framed
 
 logger = logging.getLogger("agent")
 
@@ -186,15 +182,10 @@ class DirectMessages:
         return reply, mem
 
     def _draft_should_be_retried(self, reply: str) -> bool:
-        """Would this draft render to nothing by accident? A guard's refusal is
-        a decision, not an accident, and is not retried."""
+        """Would this draft render to nothing? A guard's refusal is not retried."""
         text, refusal = TextProcessing._sanitize_reply_with_reason(
-            reply or "", self.agent_lang, self.reply_style)
+            reply, self.agent_lang, self.reply_style)
         if refusal:
-            if refusal not in _REFUSAL_LABELS:
-                logger.warning(
-                    "[Agent] unknown sanitizer refusal label %r, not retried; "
-                    "add it to textproc._REFUSAL_LABELS", refusal)
             return False
         text = text.strip().strip('"').strip("「」")
         return not re.sub(r'\[AT:[^\]\s]+\]', '', text).strip()

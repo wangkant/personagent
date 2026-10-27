@@ -52,8 +52,7 @@ agent, the process that holds the directly connected platforms, and the
 managed AstrBot when one is installed. Running `personagent` again reuses an
 open page. `personagent up` starts the same processes without a browser.
 
-Either way, those processes end with it, however it ends. Windows uses a job
-object and other systems a process group. Anything an earlier crashed run
+Either way, those processes end with it, however it ends. Anything an earlier crashed run
 left behind is stopped at the next start. Each process writes its log to
 `<home>/runtime/desktop/` (`agent.log`, `direct.log`, `astrbot.log`).
 
@@ -120,9 +119,8 @@ local page, review and overrule learning with `personagent learned`.
 1. **A writable home.** Startup takes a lock at
    `<home>/.personagent.instance.lock`, outside `runtime/`. A read-only home
    fails to start.
-2. **One process per home.** The lock stops two copies from corrupting each
-   other's ledgers. A second `personagent run` exits with one sentence saying
-   so.
+2. **One process per home.** A second `personagent run` on the same home
+   exits with one sentence saying so.
 3. **A free port.** A taken or forbidden port also exits with one sentence.
    Pick another with `--port` or `SERVER_PORT`.
 
@@ -162,7 +160,7 @@ lists an entry for that platform (see
 arrive as `<platform>:<id>`, for example `qq_official:<openid>`,
 `weixin_oc:<id>`, `telegram:<id>` and `discord:<id>`. The official QQ bot
 sees openids, not QQ numbers. Connecting a platform directly removes an
-AstrBot connection for the same platform, so one bot is never served twice.
+AstrBot connection for the same platform.
 
 ## Through an AstrBot you already run
 
@@ -291,8 +289,7 @@ for @-mentions missed while offline needs the server, together with
 `QQ_BOT_ID`. The sweep runs at startup and then every 30 minutes. It covers
 the QQ groups in `ACCESS_GROUPS` plus any group with traffic since the last
 restart, and replays @-mentions under an hour old. With the URL blank,
-`personagent doctor` shows the OneBot bridge as "not configured", not as a
-failure.
+`personagent doctor` shows the OneBot bridge as "not configured".
 
 **Lost on every connector path** (direct, AstrBot or another connector), with
 no setting to bring it back:
@@ -455,13 +452,11 @@ and why it stayed quiet. On a server, read the service log, and use
    to each model endpoint and shows the status, which also catches a wrong
    `LLM_BASE_URL` or `LLM_MODEL`. While the model is down, the persona sends a
    short in-character excuse when it is called, at most once per conversation
-   every five minutes. The five minutes count from an excuse that was
-   delivered, so when sending one fails, the next failure tries again.
-7. **A misspelled setting.** Nothing fails, so the mistake is easy to miss.
-   The startup log and `personagent doctor` list every key that
+   every five minutes.
+7. **A misspelled setting.** The startup log and `personagent doctor` list every key that
    `.env.example` does not know, and any value that starts with `#`.
 8. **A BOM on `.env`.** The first setting's name carries the BOM and never
-   reaches the process, although the file looks fine in every editor. Startup
+   reaches the process. Startup
    and `personagent doctor` report it. Re-save the file as UTF-8 without a
    BOM.
 9. **`QQ_BOT_ID` unset or wrong with NapCat.** Through AstrBot, @-mentions
@@ -515,8 +510,7 @@ carry over, because `CONNECTOR_QQ_PLATFORMS` keeps the ids.
 If you still run the legacy route:
 
 - Set up both directions as
-  [NapCat's documentation](https://napneko.github.io/) describes, since the
-  format changes between versions. You need an **HTTP server** at
+  [NapCat's documentation](https://napneko.github.io/) describes. You need an **HTTP server** at
   `QQ_ONEBOT_URL` for sending, and an **HTTP client** posting to
   `http://127.0.0.1:8080/v1/onebot` (`SERVER_HOST`, `SERVER_PORT`).
   `QQ_ONEBOT_URL` is blank by default, so write it in `.env`. Without it the
@@ -534,5 +528,3 @@ If you still run the legacy route:
 
 Check sending with `curl http://127.0.0.1:3000/get_login_info`. Check
 receiving by watching personagent's log while you message the bot in a group.
-A failure in either direction looks the same from outside: the bot runs and
-stays silent.

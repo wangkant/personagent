@@ -135,10 +135,8 @@ def load_token(*, create: bool = False) -> str:
         try:
             _write_token(path, secrets.token_urlsafe(32))
             text = path.read_text(encoding="utf-8").strip()
-        except (OSError, UnicodeDecodeError, ValueError) as exc:
+        except OSError as exc:
             logger.warning("[dashboard] cannot create its token file: %s", exc)
-            return ""
-        if not _usable(text):
             return ""
     _token = text
     return text
@@ -148,10 +146,7 @@ def load_token(*, create: bool = False) -> str:
 def _cli() -> str:
     """How this install spells `personagent`, for the commands it names."""
     from .setup_wizard import Launcher
-    try:
-        return Launcher(python=sys.executable, home=ROOT).shown("")[-1].strip()
-    except Exception:
-        return "personagent"
+    return Launcher(python=sys.executable, home=ROOT).shown("")[-1].strip()
 
 
 def _same_origin(origin: str, request: Request) -> bool:
@@ -313,7 +308,7 @@ def _shown_path(path) -> str:
     """A path under the user's home directory, written from ``~``."""
     try:
         return str(Path("~") / Path(path).resolve().relative_to(Path.home().resolve()))
-    except (ValueError, OSError, RuntimeError):
+    except ValueError:
         return str(path)
 
 
@@ -380,7 +375,7 @@ def _connectors(agent) -> list[dict]:
                                   float(record.get("updated_at") or 0.0))
         entry["conversations"] += 1
     # A connector that pulls the outbox but has not forwarded a message yet.
-    for cid in getattr(agent.outbox, "_last_pull", {}):
+    for cid in agent.outbox._last_pull:
         seen.setdefault(cid, {"id": cid, "platforms": set(),
                               "capabilities": set(), "last_event": 0.0,
                               "conversations": 0})
@@ -406,12 +401,11 @@ def _activity(agent) -> dict:
     if agent is None:
         return out
     refused = []
-    for key in list(getattr(agent, "_refusals_logged", {}))[-10:]:
+    for key in list(agent._refusals_logged)[-10:]:
         conv, _, reason = str(key).partition("\x00")
         refused.append({"conversation": conv, "reason": reason})
     dm_spoke = any(turn.get("role") == "assistant"
-                   for turns in agent.dm_history.values() for turn in turns
-                   if isinstance(turn, dict))
+                   for turns in agent.dm_history.values() for turn in turns)
     out.update({
         "received": bool(any(agent.last_activity_at.values())
                          or any(agent.last_dm_activity_at.values())
@@ -430,11 +424,8 @@ def status_payload(agent) -> dict:
         state = "off"
     else:
         state = "ready" if agent.enabled else "no_key"
-    try:
-        findings = [{"level": f.level, "key": f.key, "detail": _redact_urls(f.detail)}
-                    for f in preflight.check_config()]
-    except Exception:
-        findings = []
+    findings = [{"level": f.level, "key": f.key, "detail": _redact_urls(f.detail)}
+                for f in preflight.check_config()]
     now = time.time()
     return {
         "version": __version__,
@@ -619,8 +610,6 @@ def _candidate_view(cand: dict, learning: _Learning, index: promotion.EvidenceIn
         actions = ["replace" if a == "promote" else a for a in actions]
     payload = cand.get("payload") or {}
     context = payload.get("context") or []
-    if isinstance(context, str):
-        context = [context]
     view = {
         "id": cand.get("candidate_id", ""),
         "type": cand.get("type", ""),

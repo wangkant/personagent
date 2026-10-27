@@ -133,7 +133,7 @@ of a message.
 
 personagent stores ids as `<platform>:<id>`, where the platform is the
 Satori login's platform (`telegram`, `discord`, `onebot` and so on). The log
-line from step 4 shows it. Two cases need care:
+line from step 4 shows it. Two cases are special:
 
 - **QQ through OneBot** (Koishi's `adapter-onebot`, with NapCat or LLOneBot
   behind it) uses QQ numbers as ids. To keep what the agent learned on an
@@ -144,8 +144,7 @@ line from step 4 shows it. Two cases need care:
   platform whose ids really are QQ numbers.
 - **The official QQ bot API** (Koishi's `adapter-qq`) calls its platform
   `qq`, but its ids are openids, not QQ numbers. The connector renames the
-  platform to `qqbot` so its ids are never mistaken for QQ numbers.
-  `SATORI_PLATFORM_NAMES` overrides the rename. personagent can also connect
+  platform to `qqbot`. `SATORI_PLATFORM_NAMES` overrides the rename. personagent can also connect
   official QQ bots itself, without Koishi.
 
 ## What works
