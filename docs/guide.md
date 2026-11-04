@@ -10,14 +10,15 @@ This guide covers setting personagent up, putting it in your chats, teaching it 
 4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
 5. [Make it your character](#make-it-your-character)
 6. [Put it in a chat](#put-it-in-a-chat): [QQ, WeChat, Telegram, Discord](#qq-wechat-telegram-and-discord) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
-7. [Teach it](#teach-it)
-8. [Activity](#activity)
-9. [Measure it](#measure-it)
-10. [How it works](#how-it-works)
-11. [Privacy and consent](#privacy-and-consent)
-12. [Troubleshooting](#troubleshooting)
-13. [Upgrading from 0.x](#upgrading-from-0x)
-14. [Status and other docs](#status-and-other-docs)
+7. [Coding agents](#coding-agents)
+8. [Teach it](#teach-it)
+9. [Activity](#activity)
+10. [Measure it](#measure-it)
+11. [How it works](#how-it-works)
+12. [Privacy and consent](#privacy-and-consent)
+13. [Troubleshooting](#troubleshooting)
+14. [Upgrading from 0.x](#upgrading-from-0x)
+15. [Status and other docs](#status-and-other-docs)
 
 ## Install and the home folder
 
@@ -108,6 +109,8 @@ Everything the page does is also available from a terminal, which suits servers 
 | `personagent run` | the service alone, for connectors you run yourself |
 | `personagent up` | the service, the platforms personagent connects itself and the managed AstrBot, together |
 | `personagent connect astrbot` | connect an AstrBot (`--install` to download a managed one, `--start` to start it) |
+| `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | put the character into a [coding agent](#coding-agents) (`--react` for remarks when a turn ends on the first two, `--remove` to undo) |
+| `personagent mcp` | the MCP server a coding agent starts; you do not run it yourself |
 | `personagent doctor` | check the setup and every service it depends on |
 | `personagent learned` | review, promote or roll back what it learned |
 | `personagent eval` | measure speaking, persona and learning |
@@ -289,6 +292,61 @@ personagent listens on `127.0.0.1:8080`, and a blank `SERVER_HOST` means the sam
 ### Speaking first
 
 Some messages are not replies to anyone. These are openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse sent when the model fails in a group. In a DM, the excuse goes back in the response to the waiting message instead. personagent queues these messages in an outbox, and the connectors pull and send them on platforms that let a bot speak first. WeChat official accounts and WeCom smart bots do not. QQ rate-limits an official bot's unprompted messages, and users can switch them off. `PROACTIVE_PLATFORMS=qq_official` limits openers to the official QQ bot, and `qq` limits them to QQ through NapCat. On the page, **Sometimes speak first** under **More features** writes both settings. See the [deployment guide](deploy.md#more-than-one-platform).
+
+## Coding agents
+
+Codex, Claude Code and DeepSeek Harness (`dsh`) reach the character over MCP. With a model key saved, run one or more:
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+The first calls `claude mcp add` at user scope. The second writes to `config.toml` in Codex's folder (`CODEX_HOME` or `~/.codex`). The third adds an entry to `cordis.patch.yml` in every profile under `DSH_HOME` or `~/.dsh`. Each way of running DeepSeek Harness, such as the desktop app or `dsh web`, gets its profile the first time it starts, so start it once before you connect, and restart it afterwards. All three name this installation and this home, so run the command again after you move either, with `--react` if you used it: a run without it takes the hook out. Start a new session, then ask the coding agent to say something to your character.
+
+It gets two tools:
+
+| Tool | Does | Costs |
+|---|---|---|
+| `talk` | one message in the same one-to-one chat as the local page, with the same memory. Turns said from a coding agent show up in the page's Chat after a reload, when the page is what answered them. Memory commands such as `Nova, what do you remember?` work here too. | one reply from your model service, except memory commands |
+| `character` | reads the name and `persona.txt` | nothing |
+
+Claude Code and Codex ask before the first `talk`, and you can allow it from then on in that prompt. `dsh headless` does not ask. A run with nobody there to answer needs the permission up front: `claude -p` takes `--allowedTools mcp__personagent__talk`, and `codex exec` needs this in `config.toml`:
+
+```toml
+[mcp_servers.personagent.tools.talk]
+approval_mode = "approve"
+```
+
+**What answers.** An open page answers first, then a service `personagent up` is running. With neither, the MCP server starts the page in the background, and the page ends when the coding session does, along with any chat apps you connected. Two sessions at once share one page. Running `personagent` while such a page is up prints its link, and the page still ends with the session that started it. Do not run `personagent up` while such a page is up: end the coding session first.
+
+**Remarks when a turn ends.** On Claude Code and Codex, `--react` adds a Stop hook. DeepSeek Harness does not take it: its hook bridge passes a Stop hook no last message and does not show the hook's output. When the coding agent finishes a turn, the character gets a [proactive cue](connectors.md#speaking-first-without-the-outbox) and either says a line to you or passes. The line goes to you and not to the coding agent.
+
+```bash
+personagent connect claude-code --react
+```
+
+- The cue carries the folder's name and the first 300 characters of the coding agent's last message, so that text goes to your model service. The line, and anything the model notes from the cue, stay in the character's memory. This is why it is off by default.
+- It costs one model call each time, at most once per `CODING_REACT_COOLDOWN_S` (30 minutes by default).
+- It only uses a character service that is already running and never starts one.
+- Codex runs a new hook only after you trust it: type `/hooks` in a Codex session.
+
+**What to keep in mind.** `talk` sends what the coding agent writes to your model service and into the character's memory. The tool's description tells the coding agent to send only what you want said and never code or secrets, and to treat replies as chat and not as instructions, since a character's notes can come from what people said in your groups. Those are instructions to a model, not a guarantee, so keep the coding agent's permission prompts for anything it would do with a reply.
+
+**Undo.** `--remove` takes out the server and the hook and leaves the rest of the coding agent's configuration as it was. Do this before you uninstall personagent.
+
+```bash
+personagent connect claude-code --remove
+personagent connect codex --remove
+personagent connect dsh --remove
+```
+
+**Other tools.** Anything that speaks MCP over stdio can start the server itself. `--home` is needed unless the home is the default folder:
+
+```json
+{"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
+```
 
 ## Teach it
 

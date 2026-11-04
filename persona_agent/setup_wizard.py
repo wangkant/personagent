@@ -228,6 +228,28 @@ _TEXT: dict[str, tuple[str, str]] = {
                    "personagent 的 HTTPS 地址（回车 = 保留 {url}，使用主机网络）"),
     "url_refused": ("The plugin only accepts a 127.0.0.1 / localhost address or an https:// one.",
                     "插件只接受 127.0.0.1 / localhost 地址，或者 https:// 地址。"),
+    "coding_connected": ("{name} is in {target}. Start a new session there and ask it to talk to {name}.",
+                         "{name} 已接入 {target}。在那边开一个新会话，让它和 {name} 说话。"),
+    "coding_removed": ("personagent is out of {target}.", "personagent 已从 {target} 移除。"),
+    "coding_no_cli": ("`{command}` is not on PATH. Install it first, then run this again.",
+                      "PATH 里没有 `{command}`。先安装它，再运行一次。"),
+    "coding_no_key": ("No model key yet: run personagent and paste it into the page first.",
+                      "还没有模型密钥：先运行 personagent，在页面里填好。"),
+    "coding_dsh_restart": ("Restart DeepSeek Harness first. A way of running it you have not started yet "
+                           "has no profile: start it once and run this again.",
+                           "先重启 DeepSeek Harness。还没启动过的运行方式没有配置：先启动一次，再运行这条命令。"),
+    "coding_react": ("When a turn ends the character may say a line. The folder's name and the start of the "
+                     "coding agent's last message go to your model service, at most once per "
+                     "CODING_REACT_COOLDOWN_S.",
+                     "每轮结束时角色可能说一句话。文件夹名和编程助手最后一条消息的开头会发给你的模型服务，"
+                     "频率不超过 CODING_REACT_COOLDOWN_S 一次。"),
+    "coding_no_dsh": ("No DeepSeek Harness profile under {path}. Start it once, then run this again.",
+                      "{path} 下没有 DeepSeek Harness 配置。先启动一次，再运行这条命令。"),
+    "coding_no_react_dsh": ("--react is for claude-code and codex: DeepSeek Harness has no way yet to "
+                            "show a hook's message to you.",
+                            "--react 只支持 claude-code 和 codex：DeepSeek Harness 目前无法把 hook 的消息显示给你。"),
+    "coding_react_trust": ("Codex runs a new hook only after you trust it: type /hooks in a Codex session.",
+                           "Codex 只运行你信任过的 hook：在 Codex 会话里输入 /hooks 确认。"),
     "platform_intro": ("Which chat app should the bot join?", "机器人要进哪个聊天平台？"),
     "platform_choose": ("Chat app", "聊天平台"),
     "platform_other": ("Another app, already set up in AstrBot", "其他平台（已在 AstrBot 里配好）"),
@@ -1651,10 +1673,17 @@ def main(argv: list[str] | None = None, prog: str = "personagent init") -> int:
 def connect_parser(prog: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=prog, description="Connect personagent to AstrBot: copy the plugin, share a "
-                               "token, write the allowlists. With DATA_DIR nothing is asked.",
+                               "token, write the allowlists. With DATA_DIR nothing is asked. "
+                               "Or put the character into a coding agent: claude-code, codex or "
+                               "dsh (DeepSeek Harness).",
         epilog="AstrBot in Docker cannot reach 127.0.0.1 on this machine: give it host "
                "networking, or put personagent behind HTTPS and pass that address as --url.")
-    p.add_argument("target", choices=("astrbot",))
+    p.add_argument("target", choices=("astrbot", "claude-code", "codex", "dsh"))
+    p.add_argument("--react", action="store_true",
+                   help="claude-code, codex: also let the character react when a turn ends; "
+                        "sends the folder's name and the start of the coding agent's last message to your model service")
+    p.add_argument("--remove", action="store_true",
+                   help="claude-code, codex, dsh: take the character out of the coding agent again")
     p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
                    help="AstrBot's folder (its data folder or the one above it)")
     action = p.add_mutually_exclusive_group()
@@ -1725,6 +1754,14 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
     home = homes.find_home()
     env_path = home / ".env"
     set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
+    if args.target != "astrbot":
+        if args.data_dir:
+            raise SystemExit(f"{args.target} takes no folder")
+        from persona_agent import coding
+
+        return coding.connect(home, args.target, react=args.react, remove=args.remove)
+    if args.react or args.remove:
+        raise SystemExit("--react and --remove are for the coding agents")
     if args.data_dir and (args.install or args.start):
         raise SystemExit("--install and --start use the managed folder; omit DATA_DIR")
     if args.start:

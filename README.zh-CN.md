@@ -44,6 +44,20 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
 
 它会先问你角色的语言、名字和性格，用哪家模型服务，要接哪些聊天平台，然后安装 personagent、建好主目录、启动本地页面。模型 Key 由你自己在页面里填，不经过助手。助手照着[这份说明](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)做（英文），你用中文和它交流就行。
 
+## 接进你的编程助手
+
+写代码时，Codex、Claude Code 和 DeepSeek Harness（`dsh`）可以直接和你的角色说话。先配好模型密钥，然后运行：
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+在那边开一个新会话（DeepSeek Harness 要先重启），让它对角色说句话。这和本地页面是同一个一对一聊天，记忆也相同，每次回复都会调用一次你的模型服务。Claude Code 和 Codex 第一次用这个工具时会征求你的同意。如果本地页面和 `personagent up` 都没在运行，页面会在后台启动，随这个会话一起结束，你连接的聊天平台也一样。
+
+在 Claude Code 或 Codex 上加 `--react`，角色可能在一轮结束时说一句话。这会把文件夹名和编程助手最后一条消息的开头发给你的模型服务，最多每 30 分钟一次。`--remove` 会撤掉全部设置。其他支持 MCP 的工具可以自己启动 `personagent mcp`。详情见[用户指南](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#编程助手)。
+
 ## 为什么用它
 
 <table>

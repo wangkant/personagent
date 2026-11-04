@@ -15,6 +15,10 @@ This repository ships four connectors:
 | Satori | Every Satori implementation (Koishi and others, third-party): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, email and more. | `integrations/satori/` |
 | Matrix | Matrix rooms, and through third-party mautrix bridges WhatsApp, Signal, Messenger, Instagram, Google Messages and more. | `integrations/matrix/` |
 
+Coding agents are not chat platforms, so they get their own route: an MCP
+server, `personagent mcp`, covered in the
+[user guide](guide.md#coding-agents).
+
 All four speak the protocol described on this page. To write a new one you
 need this page and an HTTP client. The Python helper in
 `integrations/sdk/personagent_connector.py` signs requests and runs the

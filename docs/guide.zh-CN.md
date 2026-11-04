@@ -12,6 +12,7 @@
 - [终端命令](#终端命令)：[设置](#在终端里设置) · [聊天](#在终端里聊) · [只启动服务](#只启动服务)
 - [改成你自己的角色](#改成你自己的角色)
 - [接进聊天平台](#接进聊天平台)：[QQ、微信、Telegram、Discord](#qq微信telegram-和-discord) · [其他平台](#其他平台经托管的-astrbot) · [你自己运行的桥接](#你自己运行的桥接) · [主动发言](#主动发言)
+- [编程助手](#编程助手)
 - [教它](#教它)
 - [动态](#动态)
 - [效果评测](#效果评测)
@@ -112,6 +113,8 @@ PyPI 上有新版本时，「开始聊天」页会显示一条提示，并给出
 | `personagent run` | 只启动服务，供你自己运行的连接器使用 |
 | `personagent up` | 一起启动服务、personagent 直接连接的平台和托管的 AstrBot |
 | `personagent connect astrbot` | 连接 AstrBot（`--install` 下载一份托管的，`--start` 启动它） |
+| `personagent connect claude-code`、`personagent connect codex`、`personagent connect dsh` | 把角色接进[编程助手](#编程助手)（前两者可用 `--react` 让它在一轮结束时说话，`--remove` 撤销） |
+| `personagent mcp` | 编程助手启动的 MCP 服务，不需要你自己运行 |
 | `personagent doctor` | 检查配置和它依赖的每个服务 |
 | `personagent learned` | 查看、采纳或撤回它学到的内容 |
 | `personagent eval` | 评测开口时机、人设和学习效果 |
@@ -317,6 +320,61 @@ personagent 默认监听 `127.0.0.1:8080`，`SERVER_HOST` 留空时也是如此�
 ### 主动发言
 
 有些消息并不是对某人的回复：主动开场（`PROACTIVE_ENABLED`，默认关闭）、被否定后的追问，以及群聊中模型出错时发出的托词（私聊中，托词会直接随对应消息的响应返回）。personagent 把这些消息放进 outbox，由连接器拉取后发出，前提是平台允许机器人主动发言。微信公众号和企业微信智能机器人不允许；QQ 会限制官方机器人主动发消息的频率，用户也可以关闭这类消息。`PROACTIVE_PLATFORMS=qq_official` 把主动开场限定在 QQ 官方机器人上，`qq` 则限定在经 NapCat 接入的 QQ 上。页面「更多功能」里的「偶尔主动说话」会写入这两项设置。详见[部署指南](deploy.md#more-than-one-platform)（英文）。
+
+## 编程助手
+
+Codex、Claude Code 和 DeepSeek Harness（`dsh`）通过 MCP 连接角色。保存好模型密钥后，运行其中一条或几条：
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+第一条调用 `claude mcp add`，范围是用户级。第二条写入 Codex 文件夹（`CODEX_HOME` 或 `~/.codex`）里的 `config.toml`。第三条在 `DSH_HOME` 或 `~/.dsh` 下每个配置的 `cordis.patch.yml` 里加一项。DeepSeek Harness 的每种运行方式（比如桌面应用、`dsh web`）第一次启动时才有自己的配置，所以连接前要先启动一次，写入后要重启它。三者都记录当前的安装和主目录，移动其中任何一个之后要重新运行；用过 `--react` 的话要带上它，不带会把 hook 移除。开一个新会话，再让编程助手对角色说句话。
+
+它会多出两个工具：
+
+| 工具 | 作用 | 费用 |
+|---|---|---|
+| `talk` | 在和本地页面相同的一对一聊天里发一条消息，记忆也相同。由页面应答时，这些对话在刷新页面后也会出现在「开始聊天」里。`小夏，你记得什么` 这类记忆命令同样可用。 | 一次模型服务回复（记忆命令除外） |
+| `character` | 读取名字和 `persona.txt` | 无 |
+
+第一次调用 `talk` 前，Claude Code 和 Codex 会询问你，你可以在那个提示里选择以后都允许。`dsh headless` 不会询问。无人值守的运行需要提前授权：`claude -p` 加上 `--allowedTools mcp__personagent__talk`，`codex exec` 则要在 `config.toml` 里写：
+
+```toml
+[mcp_servers.personagent.tools.talk]
+approval_mode = "approve"
+```
+
+**由谁应答。** 优先是已打开的页面，其次是 `personagent up` 运行的服务。两者都没有时，MCP 服务会在后台启动页面，页面和你连接的聊天平台都随编程会话一起结束。同时开两个会话会共用一个页面。这种页面运行期间执行 `personagent` 会打印它的链接，但页面仍然随启动它的那个会话结束。这种页面运行期间不要运行 `personagent up`，先结束编程会话。
+
+**一轮结束时说话。** 在 Claude Code 和 Codex 上，`--react` 会添加一个 Stop hook。DeepSeek Harness 不支持：它的 hook 桥不把最后一条消息传给 Stop hook，也不显示 hook 的输出。编程助手结束一轮时，角色会收到一条[主动发言提示](connectors.md#speaking-first-without-the-outbox)（英文），然后对你说一句话，或者不说。这句话只给你看，不会进入编程助手的上下文。
+
+```bash
+personagent connect claude-code --react
+```
+
+- 提示里带有文件夹名和编程助手最后一条消息的前 300 个字符，这些文字会发给你的模型服务。角色说的话和模型从提示里记下的内容会留在角色的记忆里。所以默认关闭。
+- 每次调用一次模型，频率不超过 `CODING_REACT_COOLDOWN_S`（默认 30 分钟）一次。
+- 它只使用已在运行的角色服务，不会自己启动。
+- Codex 只运行你信任过的 hook：在 Codex 会话里输入 `/hooks` 确认。
+
+**需要注意。** `talk` 会把编程助手写的内容发给你的模型服务，并写进角色的记忆。工具说明要求编程助手只发你想说的话，不发代码和密钥，并把回复当作聊天而不是指令，因为角色的笔记可能来自群里其他人说的话。这些只是给模型的要求，不是保证，所以编程助手要根据回复做任何操作时，请保留它的权限确认。
+
+**撤销。** `--remove` 会移除服务和 hook，编程助手的其他配置不变。卸载 personagent 之前先做这一步。
+
+```bash
+personagent connect claude-code --remove
+personagent connect codex --remove
+personagent connect dsh --remove
+```
+
+**其他工具。** 支持 stdio MCP 的工具都可以自己启动这个服务。主目录不是默认位置时需要 `--home`：
+
+```json
+{"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
+```
 
 ## 教它
 

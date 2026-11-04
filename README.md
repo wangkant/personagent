@@ -48,6 +48,20 @@ Read https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-
 
 It asks for the character's language, name and personality, your model service and the chat apps you want, then installs personagent, creates the home folder and starts the local page. You paste your model key into that page yourself, so the key never passes through the agent. The agent follows [these instructions](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md).
 
+## Bring it into your coding agent
+
+Codex, Claude Code and DeepSeek Harness (`dsh`) can talk to your character while you work. Set up your model key first, then:
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+Start a new session there (restart DeepSeek Harness first) and ask it to say something to your character. It is the same one-to-one chat and memory as the local page, and each reply costs one call to your model service. Claude Code and Codex ask your permission the first time they use the tool. If neither the page nor `personagent up` is running, the page starts in the background for that session and ends with it, along with any chat apps you connected.
+
+With Claude Code or Codex, add `--react` and the character may say a line when a turn ends. That sends the folder's name and the start of the coding agent's last message to your model service, at most once every 30 minutes. `--remove` takes everything out again. Any other tool that speaks MCP can start `personagent mcp` itself. The [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents) has the details.
+
 ## Why personagent
 
 <table>

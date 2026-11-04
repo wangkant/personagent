@@ -50,6 +50,20 @@ https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agent
 
 エージェントは、キャラクターの言語・名前・性格、使うモデルサービス、つなぎたいチャットアプリを尋ねたうえで、personagent をインストールし、ホームフォルダーを作成してローカルページを起動します。モデルのキーはそのページにあなた自身が貼り付けるので、キーがエージェントを経由することはありません。エージェントは[この手順書](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)に従います。
 
+## コーディングエージェントに連れていく
+
+作業中に Codex、Claude Code、DeepSeek Harness（`dsh`）からキャラクターと話せます。先にモデルのキーを設定してから、次を実行します。
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+そちらで新しいセッションを開き（DeepSeek Harness は先に再起動してください）、キャラクターに何か言うよう頼んでください。ローカルページと同じ一対一のチャットと記憶を使い、返信のたびにモデルサービスを 1 回呼び出します。Claude Code と Codex は、このツールを初めて使うときに許可を求めます。ローカルページも `personagent up` も動いていなければ、ページがバックグラウンドで起動し、接続済みのチャットアプリとともにそのセッションと一緒に終了します。
+
+Claude Code と Codex では、`--react` を付けるとターンの終わりにキャラクターが一言話すことがあります。このときフォルダ名とコーディングエージェントの最後のメッセージの冒頭がモデルサービスに送られます。頻度は最大で 30 分に 1 回です。`--remove` ですべて元に戻せます。MCP に対応した他のツールは、`personagent mcp` を自分で起動できます。詳しくは[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents)（英語）をご覧ください。
+
 ## personagent を選ぶ理由
 
 <table>

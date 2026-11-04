@@ -50,6 +50,20 @@ https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agent
 
 에이전트는 캐릭터의 언어, 이름, 성격과 모델 서비스, 사용하려는 채팅 앱을 물어본 뒤, personagent를 설치하고 홈 폴더를 만들고 로컬 페이지를 시작합니다. 모델 키는 직접 그 페이지에 붙여 넣으므로, 키가 에이전트를 거치지 않습니다. 에이전트는 [이 지침](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)을 따릅니다.
 
+## 코딩 에이전트로 데려가기
+
+작업하는 동안 Codex, Claude Code, DeepSeek Harness(`dsh`)에서 캐릭터와 이야기할 수 있습니다. 먼저 모델 키를 설정한 뒤 다음을 실행하세요.
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+그쪽에서 새 세션을 열고(DeepSeek Harness는 먼저 다시 시작하세요) 캐릭터에게 말을 전해 달라고 하세요. 로컬 페이지와 같은 일대일 대화와 기억을 쓰며, 답장마다 모델 서비스를 한 번 호출합니다. Claude Code와 Codex는 이 도구를 처음 쓸 때 허락을 구합니다. 로컬 페이지와 `personagent up`이 모두 실행 중이 아니면 페이지가 백그라운드에서 시작되고, 연결한 채팅 앱과 함께 그 세션이 끝날 때 종료됩니다.
+
+Claude Code와 Codex에서는 `--react`를 붙이면 턴이 끝날 때 캐릭터가 한마디 할 수 있습니다. 이때 폴더 이름과 코딩 에이전트의 마지막 메시지 앞부분이 모델 서비스로 전송되며, 최대 30분에 한 번입니다. `--remove`는 모든 설정을 되돌립니다. MCP를 지원하는 다른 도구는 `personagent mcp`를 직접 실행할 수 있습니다. 자세한 내용은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents)(영어)를 참고하세요.
+
 ## 왜 personagent인가
 
 <table>

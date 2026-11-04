@@ -69,6 +69,25 @@ def _connector_type():
     return module.Connector
 
 
+async def send_chat_event(url: str, token: str, conversation: str, text: str, *,
+                          connector_id: str = "local-welcome", timeout_s: float = 120,
+                          **fields) -> str:
+    """One message in the owner's one-to-one chat; the text of what comes back."""
+    async with httpx.AsyncClient(trust_env=False) as client:
+        connector = _connector_type()(url, token, connector_id=connector_id,
+                                      timeout_s=timeout_s, client=client)
+        response = await connector.send_event({
+            "kind": "event", "platform": "browser", "conversation_type": "dm",
+            "conversation_id": conversation, "sender_id": conversation,
+            "sender_name": "you", "message_id": secrets.token_hex(12),
+            "sent_at": int(time.time()),
+            "text": text, "segments": [{"type": "text", "text": text}], "prefiltered": True,
+            **fields,
+        })
+    return "\n".join(str(item.get("text", "")) for item in response.get("replies", [])
+                     if item.get("type") == "text")
+
+
 class Workspace:
     def __init__(self, home: Path):
         self.home = home.resolve()
@@ -527,22 +546,8 @@ class Workspace:
             raise ValueError("invalid_message")
         async with self._chat_lock:
             await asyncio.to_thread(self.services.start_agent)
-            values = self.config()
-            async with httpx.AsyncClient(trust_env=False) as client:
-                connector = _connector_type()(self.services.agent_url, values.get("CONNECTOR_TOKEN", ""),
-                                              connector_id="local-welcome", timeout_s=120, client=client)
-                try:
-                    response = await connector.send_event({
-                        "kind": "event", "platform": "browser", "conversation_type": "dm",
-                        "conversation_id": self._conversation, "sender_id": self._conversation,
-                        "sender_name": "you", "message_id": secrets.token_hex(12),
-                        "sent_at": int(time.time()),
-                        "text": text, "segments": [{"type": "text", "text": text}], "prefiltered": True,
-                    })
-                finally:
-                    await connector.aclose()
-            reply = "\n".join(str(item.get("text", "")) for item in response.get("replies", [])
-                              if item.get("type") == "text")
+            reply = await send_chat_event(self.services.agent_url, self.config().get("CONNECTOR_TOKEN", ""),
+                                          self._conversation, text)
             self._history.extend([{"role": "user", "text": text}, {"role": "assistant", "text": reply}])
             self._history = self._history[-50:]
             self._save_chat()

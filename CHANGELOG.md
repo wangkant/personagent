@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The character in your coding agent.** `personagent connect claude-code`, `personagent connect codex` and `personagent connect dsh` (DeepSeek Harness) register a new MCP server, `personagent mcp`, with a `talk` tool in the same one-to-one chat and memory as the local page and a free `character` tool. It uses the open page or a running `personagent up`, and otherwise starts the page for that session. On Claude Code and Codex, `--react` adds a Stop hook that lets the character say a line when a turn ends (`CODING_REACT_COOLDOWN_S`, 30 minutes by default); `--remove` undoes it all.
 - **Notes stay current.** After 8 new notes of its own in a chat (`MEMORY_TIDY_EVERY`, 0 turns it off), one call to the gate model merges repeats and drops what a newer note replaced or what time has ended. Only the notes it wrote itself change; notes people saved stay as they are and count as evidence.
 - **A group's notes about someone follow them into their DM**, for replies, recall and forgetting. Nothing goes the other way: a DM stays in that DM.
 - **Share memory between groups**, a switch under **More features** (`MEMORY_SHARE_ROOMS`, off by default). What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.

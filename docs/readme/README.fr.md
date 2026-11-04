@@ -50,6 +50,20 @@ Lis https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-a
 
 Il vous demande la langue, le nom et la personnalité du personnage, votre service de modèle et les applis de discussion voulues, puis installe personagent, crée le dossier personnel et lance la page locale. Vous collez vous-même votre clé de modèle dans cette page : la clé ne passe donc jamais par l'agent. L'agent suit [ces instructions](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md).
 
+## Emmenez-le dans votre agent de code
+
+Codex, Claude Code et DeepSeek Harness (`dsh`) peuvent parler à votre personnage pendant que vous travaillez. Configurez d'abord votre clé de modèle, puis lancez :
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+Ouvrez-y une nouvelle session (redémarrez d'abord DeepSeek Harness) et demandez-lui de dire quelque chose à votre personnage. C'est la même conversation privée et la même mémoire que la page locale, et chaque réponse coûte un appel à votre service de modèles. Claude Code et Codex vous demandent votre accord la première fois qu'ils utilisent l'outil. Si ni la page ni `personagent up` ne tournent, la page démarre en arrière-plan pour cette session et s'arrête avec elle, ainsi que les applications de discussion connectées.
+
+Sur Claude Code et Codex, avec `--react`, le personnage peut dire un mot à la fin d'un tour. Le nom du dossier et le début du dernier message de l'agent partent alors vers votre service de modèles, au plus une fois toutes les 30 minutes. `--remove` retire le tout. Tout autre outil compatible MCP peut lancer `personagent mcp` lui-même. Les détails sont dans le [guide d'utilisation](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents) (en anglais).
+
 ## Pourquoi personagent
 
 <table>

@@ -316,6 +316,8 @@ From the command line, personagent connects only AstrBot:
 
 The [deployment guide](deploy.md) covers AstrBot, NapCat, Satori, Matrix and public addresses in full.
 
+**Coding agents.** Only if the user asks for the character inside Claude Code, Codex or DeepSeek Harness, and only with a personagent newer than 1.3.1: run `personagent --home "<home>" connect claude-code`, `personagent --home "<home>" connect codex` or `personagent --home "<home>" connect dsh`. It changes that coding agent's configuration and asks nothing. The user then starts a new session there, after restarting DeepSeek Harness if that is the one. On Claude Code or Codex, add `--react` only if the user wants remarks at the end of a turn, after telling them that the folder's name and the start of the coding agent's last message then go to their model service. `--remove` undoes it. [The guide](guide.md#coding-agents) has the details.
+
 ## 8. Daily use
 
 - **With a browser:** `personagent --home "<home>" start` opens the page and resumes the connected apps. The user keeps its window open; **Quit**, Ctrl+C or closing the window stops everything.
@@ -352,8 +354,9 @@ The home folder carries over: settings, character, what it learned and connected
 
 ## Undoing it
 
-1. Stop it: **Quit** in the page, Ctrl+C, or the commands at the end of step 6. Delete the step 6 log files if you made them.
-2. Uninstall the package: `uv tool uninstall personagent`, `pipx uninstall personagent`, or delete the virtual environment's folder. For pip into the user's Python, `python -m pip uninstall personagent`. uvx installed nothing.
-3. The home folder holds the key, the character, what it learned, the chat apps' credentials and the managed AstrBot. Delete it only after the user confirms, because that cannot be undone. Offer to keep a copy of `persona.txt` first.
-4. Remind the user to revoke the API key on the service's key page if they no longer need it, and to remove the bot from their chat apps on those platforms.
-5. If you installed uv, pipx or Python for this, say so. Remove them only if the user asks.
+1. If the character was connected to a coding agent, take it out first: `personagent --home "<home>" connect codex --remove`, or the same with `claude-code` or `dsh`. Otherwise that agent keeps trying to start a program that is gone.
+2. Stop it: **Quit** in the page, Ctrl+C, or the commands at the end of step 6. Delete the step 6 log files if you made them.
+3. Uninstall the package: `uv tool uninstall personagent`, `pipx uninstall personagent`, or delete the virtual environment's folder. For pip into the user's Python, `python -m pip uninstall personagent`. uvx installed nothing.
+4. The home folder holds the key, the character, what it learned, the chat apps' credentials and the managed AstrBot. Delete it only after the user confirms, because that cannot be undone. Offer to keep a copy of `persona.txt` first.
+5. Remind the user to revoke the API key on the service's key page if they no longer need it, and to remove the bot from their chat apps on those platforms.
+6. If you installed uv, pipx or Python for this, say so. Remove them only if the user asks.

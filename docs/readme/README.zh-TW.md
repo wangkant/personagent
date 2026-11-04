@@ -46,6 +46,20 @@ Windows 也可以下載原始碼 ZIP，解壓縮後雙擊 `start.bat`。需要 P
 
 它會先問你角色的語言、名字和個性、要用哪家模型服務、要接哪些聊天平台，然後安裝 personagent、建立主目錄、啟動本機頁面。模型金鑰由你自己在頁面裡填，不經過助手。助手照著[這份說明](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)做（英文），你用中文和它溝通就行。
 
+## 接進你的程式助手
+
+寫程式時，Codex、Claude Code 和 DeepSeek Harness（`dsh`）可以直接和你的角色說話。先設定好模型金鑰，然後執行：
+
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+在那邊開一個新工作階段（DeepSeek Harness 要先重新啟動），請它對角色說句話。這和本機頁面是同一個一對一聊天，記憶也相同，每次回覆都會呼叫一次你的模型服務。Claude Code 和 Codex 第一次使用這個工具時會徵求你的同意。如果本機頁面和 `personagent up` 都沒有在執行，頁面會在背景啟動，隨這個工作階段一起結束，你連接的聊天平台也一樣。
+
+在 Claude Code 或 Codex 上加 `--react`，角色可能在一輪結束時說一句話。這會把資料夾名稱和程式助手最後一則訊息的開頭傳給你的模型服務，最多每 30 分鐘一次。`--remove` 會移除全部設定。其他支援 MCP 的工具可以自行啟動 `personagent mcp`。詳情見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#编程助手)（簡體中文）。
+
 ## 為什麼用它
 
 <table>
