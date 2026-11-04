@@ -180,6 +180,8 @@ class Memory:
         is_admin = access.is_admin(user_id, self._admins())
         caller = str(user_id or "")
         reader = channels.dm_user(group_id)
+        # Whose notes in other rooms this chat can also list and forget.
+        elsewhere = reader or (caller if self.memory_share_rooms else "")
 
         def say(key: str) -> str:
             return self._memory_reply(key, code)
@@ -239,8 +241,7 @@ class Memory:
             changed = len(kept) != len(items)
             if changed:
                 self.memories[group_id] = kept
-            # What a DM's prompt reads from the rooms, it can also forget.
-            for room, it in self._room_notes_about(reader):
+            for room, it in self._room_notes_about(elsewhere, group_id):
                 if hit(it["text"]):
                     self.memories[room].remove(it)
                     changed = True
@@ -263,7 +264,7 @@ class Memory:
             items = [it for it in items if not it.get("user_id") or (
                 caller and caller in (str(it.get("user_id")),
                                       str(it.get("saved_by") or "")))]
-        items = items + [it for _, it in self._room_notes_about(reader)]
+        items = items + [it for _, it in self._room_notes_about(elsewhere, group_id)]
         if not items:
             return say("empty")
         # No brackets or list markers: the character policy refuses them.
@@ -278,14 +279,27 @@ class Memory:
             lines.append(f"{tag}{it['text']}")
         return say("recall_head") + "\n" + "\n".join(lines)
 
-    def _room_notes_about(self, uid: str) -> list[tuple[str, dict]]:
-        """(room, note) for each note a room keeps about `uid`. Their own DM
-        reads these; a room never reads another room's notes, or a DM's."""
+    def _room_notes_about(self, uid: str, besides: str = "") -> list[tuple[str, dict]]:
+        """(room, note) for each note a room other than `besides` keeps about
+        `uid`. A DM's notes never leave it."""
         if not uid:
             return []
         return [(key, it) for key, items in self.memories.items()
-                if not channels.is_dm(key)
+                if key != besides and not channels.is_dm(key)
                 for it in items if str(it.get("user_id") or "") == uid]
+
+    def _notes_from_rooms(self, conv: str) -> list[tuple[str, dict]]:
+        """What other rooms' notes reach `conv`: about a DM's reader always;
+        in a room, about whoever talks there once MEMORY_SHARE_ROOMS is on."""
+        reader = channels.dm_user(conv)
+        if reader:
+            uids = {reader}
+        elif self.memory_share_rooms:
+            uids = {str(m["user_id"]) for m in self.buffers.get(conv, [])
+                    if m.get("user_id")}
+        else:
+            return []
+        return [note for uid in uids for note in self._room_notes_about(uid, conv)]
 
     def _forget_in_core(self, group_id: str, hit: Callable[[str], bool],
                         mine: Callable[[str], bool]) -> bool:

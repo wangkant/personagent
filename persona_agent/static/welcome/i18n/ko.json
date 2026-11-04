@@ -103,6 +103,8 @@
     "proactiveTitle": "가끔 먼저 말하기",
     "proactiveHint": "그룹이나 DM이 한동안 조용하면, 드물게 먼저 화제를 꺼낼 수 있어요.",
     "proactivePlatforms": "이 앱에서만(아무것도 선택하지 않으면 전체):",
+    "shareRoomsTitle": "그룹 간에 기억 공유",
+    "shareRoomsHint": "한 그룹에서 어떤 사람에 대해 기록한 내용이 그 사람이 말하는 다른 그룹에도 이어집니다. 1:1 대화 내용과 그룹 전체에 대한 메모는 공유되지 않습니다.",
     "featuresSaved": "저장했어요. 캐릭터가 새 설정으로 다시 시작했어요.",
     "invalid_feature": "입력한 내용에 문제가 있어요. 키와 앱을 확인해 주세요.",
     "gsTitle": "시작하기",

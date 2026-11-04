@@ -311,7 +311,9 @@ Who a note is about:
 
 Only the person a note is about, the person who saved it and the admin can read it. Only the person who saved a note, the person it is about and the admin can forget it.
 
-These commands also work in a DM, with the name in front as in a group. A group's notes about you follow you there: they reach its replies to you, `what do you remember` lists them, and `forget` deletes them. Nothing goes the other way. What you tell it in a DM stays in that DM, and one group never reads another's notes.
+These commands also work in a DM, with the name in front as in a group. A group's notes about you follow you there: they reach its replies to you, `what do you remember` lists them, and `forget` deletes them. Nothing goes the other way. What you tell it in a DM stays in that DM.
+
+One group doesn't read another's notes unless you turn on **Share memory between groups** under **More features** (`MEMORY_SHARE_ROOMS`, off by default). Then what one group noted about someone also comes up in the other groups they talk in, and in those groups `what do you remember` lists it, in front of everyone there, and `forget` deletes it. DMs and notes about a whole group stay where they are, and an account on one app is not linked to the same person's account on another.
 
 `forget` also cuts the matching sentences from the chat's core note, the short summary that is in every prompt. In a group, that takes the admin or a sentence that names you.
 

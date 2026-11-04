@@ -115,6 +115,8 @@ class AgentSettings:
     memory_max_per_conversation: int = 50
     #: New auto notes in a chat before a model pass tidies them; 0 turns it off.
     memory_tidy_every: int = 8
+    #: A room's notes about someone also reach other rooms they talk in.
+    memory_share_rooms: bool = False
     message_debounce_sec: float = 2.5
     #: Persona document; ``None`` means the agent loads ``PERSONA_FILE``, so
     #: file reads stay out of this record.
@@ -346,6 +348,7 @@ class AgentSettings:
                 "MEMORY_MAX_PER_CONVERSATION", 50, minimum=1, maximum=10_000, env=env),
             memory_tidy_every=env_int(
                 "MEMORY_TIDY_EVERY", 8, minimum=0, maximum=10_000, env=env),
+            memory_share_rooms=env_bool("MEMORY_SHARE_ROOMS", False, env=env),
             admin_ids=identity.written["ADMIN_IDS"],
             admin_name=_str("ADMIN_NAME"),
             admin_relationship=_str("ADMIN_RELATIONSHIP"),

@@ -103,6 +103,8 @@
     "proactiveTitle": "Às vezes falar primeiro",
     "proactiveHint": "Depois que um grupo ou conversa privada fica em silêncio por um tempo, ele pode puxar um assunto, raramente.",
     "proactivePlatforms": "Só nestes apps (nenhum marcado significa todos):",
+    "shareRoomsTitle": "Compartilhar a memória entre grupos",
+    "shareRoomsHint": "O que um grupo anotou sobre alguém também aparece em outros grupos onde essa pessoa fala. Conversas privadas e notas sobre um grupo inteiro ficam onde estão.",
     "featuresSaved": "Salvo. O personagem reiniciou com isso.",
     "invalid_feature": "Algo aqui não está certo; confira as chaves e os apps.",
     "gsTitle": "Primeiros passos",

@@ -139,13 +139,16 @@ class Workspace:
         vision_key, vision_base = values.get("VISION_API_KEY", ""), values.get("VISION_BASE_URL", "")
         same = bool(vision_base) and (vision_base.rstrip("/") == values.get("LLM_BASE_URL", "").rstrip("/")
                                       and vision_key == values.get("LLM_API_KEY", ""))
+        def on(name: str) -> bool:
+            return values.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
         return {"search": "tavily" if values.get("TAVILY_API_KEY") else "free",
                 "vision": {"enabled": bool(values.get("VISION_MODEL")), "model": values.get("VISION_MODEL", ""),
                            "sameAsChat": same, "baseUrl": "" if same else vision_base,
                            "keyHint": sw.mask_secret(vision_key) if vision_key and not same else ""},
-                "proactive": {"enabled": values.get("PROACTIVE_ENABLED", "").strip().lower()
-                              in ("1", "true", "yes", "on"),
-                              "platforms": sw.split_ids(values.get("PROACTIVE_PLATFORMS", ""))}}
+                "proactive": {"enabled": on("PROACTIVE_ENABLED"),
+                              "platforms": sw.split_ids(values.get("PROACTIVE_PLATFORMS", ""))},
+                "shareRooms": on("MEMORY_SHARE_ROOMS")}
 
     def save(self, payload: dict) -> dict:
         with self._lock:
@@ -273,6 +276,7 @@ class Workspace:
             kept = [p for p in sw.split_ids(old.get("PROACTIVE_PLATFORMS", "")) if p not in offered]
             values["PROACTIVE_ENABLED"] = "true" if proactive.get("enabled") else "false"
             values["PROACTIVE_PLATFORMS"] = ",".join(dict.fromkeys(kept + [str(p) for p in platforms]))
+            values["MEMORY_SHARE_ROOMS"] = "true" if payload.get("shareRooms") else "false"
             sw.write_env(self.env, values)
             self._restart_agent()
             return self.summary()

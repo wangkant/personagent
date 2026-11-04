@@ -103,6 +103,8 @@
     "proactiveTitle": "Manchmal zuerst sprechen",
     "proactiveHint": "Wenn eine Gruppe oder Direktnachricht eine Weile still war, beginnt er vielleicht ein Thema, selten.",
     "proactivePlatforms": "Nur in diesen Apps (nichts angehakt heißt alle):",
+    "shareRoomsTitle": "Gedächtnis zwischen Gruppen teilen",
+    "shareRoomsHint": "Was eine Gruppe über jemanden notiert hat, kommt auch in anderen Gruppen vor, in denen diese Person schreibt. Direktnachrichten und Notizen über eine ganze Gruppe bleiben, wo sie sind.",
     "featuresSaved": "Gespeichert. Der Charakter wurde damit neu gestartet.",
     "invalid_feature": "Hier stimmt etwas nicht; prüfe die Schlüssel und Apps.",
     "gsTitle": "Erste Schritte",

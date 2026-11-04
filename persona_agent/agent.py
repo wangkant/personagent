@@ -174,6 +174,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.memory_file = resolve_runtime_state_file(s.memory_file)
         self.memory_max_per_conversation = s.memory_max_per_conversation
         self.memory_tidy_every = s.memory_tidy_every
+        self.memory_share_rooms = s.memory_share_rooms
 
         self.eval_enabled = s.eval_enabled
         self.eval_model = s.eval_model

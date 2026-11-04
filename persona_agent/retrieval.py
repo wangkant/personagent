@@ -282,8 +282,10 @@ class Retrieval:
     def _memories_for_prompt(self, group_id: str, focus_text: str = "") -> str:
         items = self.memories.get(group_id, [])
         reader = channels.dm_user(group_id)
-        if reader:
-            items = items + [it for _, it in self._room_notes_about(reader)]
+        # The same fact noted in two rooms takes one of a person's few lines.
+        known = {it["text"] for it in items}
+        shared = {it["text"]: it for _, it in self._notes_from_rooms(group_id)}
+        items = items + [it for text, it in shared.items() if text not in known]
         if not items:
             return ""
 

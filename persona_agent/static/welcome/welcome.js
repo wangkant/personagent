@@ -104,6 +104,8 @@ const translations = {
     proactiveTitle: "偶尔主动说话",
     proactiveHint: "群聊或私聊安静一阵后，它可能会主动开个话题，次数很少。",
     proactivePlatforms: "只在这些平台上（都不勾就是全部）：",
+    shareRoomsTitle: "让群之间的记忆互通",
+    shareRoomsHint: "在一个群里记下的关于某人的事，也会带到 TA 发言的其他群。私聊内容和不针对具体某人的笔记不会带过去。",
     featuresSaved: "已保存，角色已按新的设置重新启动。",
     invalid_feature: "这里有一项填得不对，检查一下密钥和平台。",
     gsTitle: "开始使用",
@@ -342,6 +344,8 @@ const translations = {
     proactiveTitle: "Sometimes speak first",
     proactiveHint: "After a group or DM has been quiet for a while, it may start a topic, rarely.",
     proactivePlatforms: "Only on these apps (none checked means all):",
+    shareRoomsTitle: "Share memory between groups",
+    shareRoomsHint: "What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.",
     featuresSaved: "Saved. The character restarted with it.",
     invalid_feature: "Something here is not right; check the keys and apps.",
     gsTitle: "Getting started",
@@ -983,6 +987,7 @@ function fillFeatures() {
   $("vision-key").value = "";
   $("vision-key").placeholder = features.vision.keyHint ? t("keySaved") : "";
   $("proactive-on").checked = features.proactive.enabled;
+  $("share-rooms").checked = features.shareRooms;
   $("proactive-platforms").replaceChildren(
     ...state.platforms.map((kind) => {
       const box = Object.assign(document.createElement("input"), {
@@ -1632,6 +1637,7 @@ $("features-save").addEventListener("click", async () => {
           (box) => box.value,
         ),
       },
+      shareRooms: $("share-rooms").checked,
     });
     delete $("tavily-clear").dataset.clear;
     renderStatus();

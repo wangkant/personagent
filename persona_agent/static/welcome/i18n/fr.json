@@ -103,6 +103,8 @@
     "proactiveTitle": "Parler parfois en premier",
     "proactiveHint": "Quand un groupe ou un MP est calme depuis un moment, il peut lancer un sujet, rarement.",
     "proactivePlatforms": "Seulement sur ces applis (aucune cochée = toutes) :",
+    "shareRoomsTitle": "Partager la mémoire entre les groupes",
+    "shareRoomsHint": "Ce qu'un groupe a noté sur quelqu'un ressort aussi dans les autres groupes où cette personne parle. Les discussions privées et les notes sur tout un groupe restent où elles sont.",
     "featuresSaved": "Enregistré. Le personnage a redémarré avec ces réglages.",
     "invalid_feature": "Quelque chose ne va pas ici ; vérifiez les clés et les applis.",
     "gsTitle": "Pour commencer",

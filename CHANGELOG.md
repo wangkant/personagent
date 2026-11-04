@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Notes stay current.** After 8 new notes of its own in a chat (`MEMORY_TIDY_EVERY`, 0 turns it off), one call to the gate model merges repeats and drops what a newer note replaced or what time has ended. Only the notes it wrote itself change; notes people saved stay as they are and count as evidence.
-- **A group's notes about someone follow them into their DM**, for replies, recall and forgetting. Nothing goes the other way: a DM stays in that DM, and one group never reads another's notes.
+- **A group's notes about someone follow them into their DM**, for replies, recall and forgetting. Nothing goes the other way: a DM stays in that DM.
+- **Share memory between groups**, a switch under **More features** (`MEMORY_SHARE_ROOMS`, off by default). What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.
 - **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
 
 ### Changed

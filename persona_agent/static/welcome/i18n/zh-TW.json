@@ -103,6 +103,8 @@
     "proactiveTitle": "偶爾主動說話",
     "proactiveHint": "群組或私訊安靜一陣子後，它可能會主動開個話題，次數很少。",
     "proactivePlatforms": "只在這些平台上（都不勾選就是全部）：",
+    "shareRoomsTitle": "讓群之間的記憶互通",
+    "shareRoomsHint": "在一個群裡記下的關於某人的事，也會帶到對方發言的其他群。私聊內容和不針對特定某人的筆記不會帶過去。",
     "featuresSaved": "已儲存，角色已依新設定重新啟動。",
     "invalid_feature": "這裡有一項填得不對，請檢查金鑰和平台。",
     "gsTitle": "開始使用",

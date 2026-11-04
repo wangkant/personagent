@@ -671,7 +671,7 @@ def conversation_payload(agent, conv_id: str) -> dict:
     if agent is not None:
         kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
         # What its prompt also reads, so the page shows all it knows here.
-        kept += agent._room_notes_about(channels.dm_user(conv_id))
+        kept += agent._notes_from_rooms(conv_id)
         for where, item in kept:
             by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
             memories.append({"text": _clip(item.get("text"), 500),
