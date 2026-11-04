@@ -66,6 +66,12 @@ def dm_routing_key(user_id: str) -> str:
     return f"{DM_ROUTING_PREFIX}{user_id}"
 
 
+def dm_user(routing_key: str) -> str:
+    """Who a one-to-one key is with; "" for a room."""
+    key = str(routing_key or "")
+    return key[len(DM_ROUTING_PREFIX):] if is_dm(key) else ""
+
+
 def dm_learning_key(user_id: str) -> str:
     """The learning scope for a one-to-one conversation with `user_id`."""
     return f"{DM_LEARNING_PREFIX}{user_id}"

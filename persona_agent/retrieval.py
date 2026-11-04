@@ -10,7 +10,7 @@ import time
 from collections import defaultdict
 from itertools import chain
 
-from . import embeddings, ranking
+from . import channels, embeddings, ranking
 from .endpoints import embedding_endpoint
 from .textproc import (
     _clean_prompt_source,
@@ -281,6 +281,9 @@ class Retrieval:
 
     def _memories_for_prompt(self, group_id: str, focus_text: str = "") -> str:
         items = self.memories.get(group_id, [])
+        reader = channels.dm_user(group_id)
+        if reader:
+            items = items + [it for _, it in self._room_notes_about(reader)]
         if not items:
             return ""
 
@@ -290,6 +293,9 @@ class Retrieval:
             if m.get("user_id")
         }
         present_uids |= self._admins()
+        # A one-on-one chat keeps no buffer; its reader is always present.
+        if reader:
+            present_uids.add(reader)
 
         now = time.time()
         focus_tokens = _focus_tokens(focus_text, self.agent_lang)
@@ -323,28 +329,27 @@ class Retrieval:
             per_user[name].sort(key=_score, reverse=True)
             per_user[name] = per_user[name][:5]
 
+        def _line(text: str, it: dict) -> str:
+            age = ranking.age_phrase(now - it.get("time", now))
+            return f"- {json.dumps(text, ensure_ascii=False)} ({age})"
+
         parts: list[str] = []
         if group_level:
             parts.append(
                 "Things noted about the group:\n"
-                + "\n".join(
-                    f"- {json.dumps(it['text'], ensure_ascii=False)}"
-                    for it in group_level
-                )
+                + "\n".join(_line(it["text"], it) for it in group_level)
             )
         for name, lst in per_user.items():
             if self.agent_lang == "zh":
                 # "我喜欢猫" -> "Alice 喜欢猫" (not 我们). A function, since a
                 # nickname is no regex template.
-                texts = [re.sub(r"我(?!们)", lambda _m: name, it["text"])
+                lines = [_line(re.sub(r"我(?!们)", lambda _m: name, it["text"]), it)
                          for it in lst]
             else:
-                texts = [it["text"] for it in lst]
+                lines = [_line(it["text"], it) for it in lst]
             parts.append(
                 f"About {_fence_user_data(_clean_prompt_source(name))}:\n"
-                + "\n".join(
-                    f"- {json.dumps(t, ensure_ascii=False)}" for t in texts
-                )
+                + "\n".join(lines)
             )
         if not parts:
             return ""
@@ -357,7 +362,8 @@ class Retrieval:
             "**For reference only — use ONLY when truly relevant to the current topic.**\n"
             "Don't shoehorn memories in. If a memory isn't relevant to the current exchange, "
             "act as if you don't know it.\n"
-            "Memories are not what's happening NOW — don't narrate past facts as current events.\n\n"
+            "Memories are not what's happening NOW — don't narrate past facts as current events.\n"
+            "The bracket after each one says when it was written: a plan or a state may be over by now.\n\n"
             + "\n\n".join(parts) +
             "\n</memories>\n"
         )

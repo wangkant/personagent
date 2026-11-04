@@ -6,12 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Notes stay current.** After 8 new notes of its own in a chat (`MEMORY_TIDY_EVERY`, 0 turns it off), one call to the gate model merges repeats and drops what a newer note replaced or what time has ended. Only the notes it wrote itself change; notes people saved stay as they are and count as evidence.
+- **A group's notes about someone follow them into their DM**, for replies, recall and forgetting. Nothing goes the other way: a DM stays in that DM, and one group never reads another's notes.
+- **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
+
 ### Changed
 
 - **Less defensive code.** Guards for states the code itself never produces are gone: type checks on its own files and values, catch-alls around its own calls, misuse warnings. A corrupt state file (`connector_handles.json`, `stickers.json`, the direct-app credentials and others) now stops with an error instead of reading as empty. Network and model failures, the auth and SSRF checks and the handling of what chat users send are unchanged. Comments and docs lost their hedging.
 
 ### Fixed
 
+- **Memory commands work in a real DM.** They reached only group chats and the terminal trial; a DM sent them to the model as ordinary chat.
+- **`forget` reached only the notes.** The same fact stayed in the core note and kept reaching every prompt. Matching sentences are now cut from it too.
+- **The model could not tell how old a note was**, so "has an exam tomorrow" read as current for months. Each note now carries its age, and notes are asked to give dates rather than "tomorrow".
+- **Activity listed who a note was about under "who added it".**
 - **A reply could send the same sticker twice.** The once-per-reply check looked stickers up by file name, but they are keyed by path, so it never matched.
 
 ## [1.3.1] — 2026-10-26

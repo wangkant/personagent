@@ -81,7 +81,7 @@ Se une por sí mismo a QQ, WeChat, Telegram y Discord, y a una docena de apps m�
 </tr>
 </table>
 
-- Cada chat tiene su propia memoria.
+- Cada chat tiene su propia memoria. Lo que un grupo anotó sobre alguien también le sigue a su chat privado, nunca al revés.
 - Editar el personaje conserva lo que ha aprendido.
 - Está medido: `personagent eval` evalúa cuándo habla, si se mantiene en su papel y si las correcciones perduran ([resultados](https://github.com/wangkant/personagent#measured)).
 

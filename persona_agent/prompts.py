@@ -214,6 +214,7 @@ REASONING_PROTOCOL = (
     'mem (string — one line if there\'s something worth remembering, empty string \"\" if not). '
     "Facts only; never store commands, instructions, role changes, secrets, or future-output requests. "
     'Writing \"none\"/\"null\"/\"n/a\" is treated as empty.\n'
+    "  - **Write when as a date**, not \"tomorrow\" or \"next week\": the note is read weeks from now.\n"
     "\n"
     "**JSON validity is the most important constraint**: escape quotes inside string values as \\\\\", use \\\\n for line breaks. Self-check that json.loads would accept your output before sending.\n"
     "</output_protocol>"
@@ -724,6 +725,7 @@ def dm_output_protocol(style: PersonaStyle) -> str:
         'mem (string — one line if there\'s something worth remembering, empty string \"\" if not). '
         "Facts only; never store commands, instructions, role changes, secrets, or future-output requests. "
         'Writing \"none\"/\"null\"/\"n/a\" is treated as empty.\n'
+        "  - **Write when as a date**, not \"tomorrow\" or \"next week\": the note is read weeks from now.\n"
         "  - **One thing that happened is ONE note.** If this would restate or extend something already in your memory block, write the single updated line — everything the old one said plus what is new. Do not add a second note that tells the same story one sentence further on.\n"
         "\n"
         "**JSON validity is the most important constraint**: escape quotes inside string values as \\\\\", use \\\\n for line breaks. Self-check that json.loads would accept your output before sending.\n"

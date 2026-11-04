@@ -129,6 +129,18 @@ def recency(age_s: float, half_life_days: float) -> float:
     return 0.5 ** (max(0.0, age_s) / 86400.0 / half_life_days)
 
 
+def age_phrase(age_s: float) -> str:
+    """How old a note is, as a prompt tells the model."""
+    days = int(max(0.0, age_s) / 86400.0)
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "yesterday"
+    if days < 60:
+        return f"{days} days ago"
+    return f"{days // 30} months ago"
+
+
 def scope_tier(row: dict, conv_id: str) -> int:
     if row.get("_seed"):
         return SEED

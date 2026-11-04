@@ -78,7 +78,7 @@ Windows 也可以下載原始碼 ZIP，解壓縮後雙擊 `start.bat`。需要 P
   </tr>
 </table>
 
-- 每個聊天的記憶各自獨立，互不相通。
+- 每個聊天的記憶各自獨立。群裡記下的關於某人的事，也會跟到對方和角色的私聊裡，反過來不會。
 - 修改人設不會丟掉它學到的東西。
 - 效果是實際量測過的，數字見[效果評測](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)。
 

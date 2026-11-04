@@ -421,7 +421,7 @@ def build_agent(lang: str, root: Path, *, offline: bool
         stickers_dir=str(root / "stickers"), stickers_file="stickers.json",
         vision_model="", tavily_key="", react_learn_enabled=True,
         react_elicit_enabled=False, proactive_enabled=False,
-        evolve_auto_enabled=False,
+        evolve_auto_enabled=False, memory_tidy_every=0,
     )
     model: ScriptedModel | None = None
     if offline:

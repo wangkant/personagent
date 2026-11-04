@@ -1018,6 +1018,7 @@ def build_agent(lang: str, trigger: int) -> tuple[Agent, Path]:
             # follow-up ask would go to a platform two minutes later.
             eval_enabled=False, vision_model="", react_elicit_enabled=False,
             proactive_enabled=False, evolve_auto_enabled=False,
+            memory_tidy_every=0,
         )
         agent = Agent(settings)
     finally:

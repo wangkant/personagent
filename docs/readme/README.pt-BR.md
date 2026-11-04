@@ -81,7 +81,7 @@ Entra sozinho no QQ, WeChat, Telegram e Discord e em mais uma dúzia de apps pel
 </tr>
 </table>
 
-- Cada conversa tem sua própria memória.
+- Cada conversa tem sua própria memória. O que um grupo anotou sobre alguém também acompanha essa pessoa na conversa privada, nunca o contrário.
 - Editar o personagem mantém o que ele aprendeu.
 - Ele é medido: `personagent eval` avalia quando ele fala, se continua no personagem e se as correções pegam ([resultados](https://github.com/wangkant/personagent#measured)).
 

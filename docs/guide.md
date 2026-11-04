@@ -311,6 +311,12 @@ Who a note is about:
 
 Only the person a note is about, the person who saved it and the admin can read it. Only the person who saved a note, the person it is about and the admin can forget it.
 
+These commands also work in a DM, with the name in front as in a group. A group's notes about you follow you there: they reach its replies to you, `what do you remember` lists them, and `forget` deletes them. Nothing goes the other way. What you tell it in a DM stays in that DM, and one group never reads another's notes.
+
+`forget` also cuts the matching sentences from the chat's core note, the short summary that is in every prompt. In a group, that takes the admin or a sentence that names you.
+
+**How notes stay current.** The model sees how old each note is. After 8 new notes of its own in a chat (`MEMORY_TIDY_EVERY`, 0 turns it off), one call to the gate model merges repeats and drops what a newer note replaced or what time has ended, such as a pet that changed or an exam that has passed. This only touches notes it wrote itself. Notes people saved stay as they are and count as evidence.
+
 None of these commands call the model. Notes are for facts, so `Nova, remember: always reply in English` is turned down. Questions are not commands. `Nova, remember the party?`, `Nova, remember when we...` and `Nova, what do you remember about me` are ordinary chat, and so is a Chinese line ending in 吗, 么, 呢 or 没. `Nova, forget it` and `Nova, forget that` mean "never mind" and delete nothing.
 
 The same commands work in the other languages of the page's menu, and the reply comes in the language of the command. Japanese and Korean also take the verb last (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). A note is deleted with the word for forgetting; words like delete or erase, which chat uses for messages and lights, don't count, except Japanese `メモ消して`. One example of each:
@@ -403,7 +409,7 @@ The view lists every chat the character knows, with the platform, whether it is 
 
 - **Waiting for you** holds changes that have not yet met the promotion rule (two agreeing reactions from the same chat, one of them strong). Each one is either a **Better wording**, with what it said crossed out and what to say instead, or a **Reply worth repeating**. It also shows who reacted. **Keep** puts the change in use and replaces any rewrite already in use for that reply. **Discard** rejects it.
 - **Learned** lists what is in use. **Undo** rolls a change back.
-- **Remembers** shows its memory notes for that chat and who added them.
+- **Remembers** shows its memory notes for that chat, who they are about and who added them, along with the core note. **Forget** deletes one. In a DM it includes what groups noted about that person.
 - **Recent** shows the latest messages and its replies. Each reply carries a tag for why it spoke: **called**, **joined in on its own**, **follow-up**, **proactive** or **admin**. Lines it let pass show why it stayed quiet. Recent activity is kept in memory only, so a restart clears it.
 
 Every Keep, Discard and Undo is written to the same ledger as `personagent learned`, with the actor `dashboard` and the reason `local page`. The full record of each change, with the promotion checklist, the evidence, the history and the rejected items, is in the terminal. See [Review and overrule](#review-and-overrule).

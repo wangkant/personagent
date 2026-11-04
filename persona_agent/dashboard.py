@@ -31,7 +31,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (__version__, access, candidates, channels, decision_log,
-               evidence, home, lineage, preflight, promotion)
+               embeddings, evidence, home, lineage, preflight, promotion)
 from .config_env import env_bool, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
 from .storage import atomic_write_text
@@ -669,11 +669,16 @@ def conversation_payload(agent, conv_id: str) -> dict:
             groups[group].append(_candidate_view(cand, learning, index, now))
     memories, core, counter, trigger = [], "", 0, 0
     if agent is not None:
-        for item in reversed(agent.memories.get(conv_id, [])):
-            by = item.get("user_name") or ("auto" if item.get("auto") else "")
+        kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
+        # What its prompt also reads, so the page shows all it knows here.
+        kept += agent._room_notes_about(channels.dm_user(conv_id))
+        for where, item in kept:
+            by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
             memories.append({"text": _clip(item.get("text"), 500),
                              "time": _epoch(item.get("time")), "by": by,
-                             "auto": bool(item.get("auto"))})
+                             "about": item.get("user_name") or "",
+                             "auto": bool(item.get("auto")), "conv": where,
+                             "id": embeddings.text_key(item["text"])})
         core = _clip(agent.core_memory.get(conv_id, ""), 600)
         counter = int(agent.counters.get(conv_id, 0))
         trigger = int(agent.chat_trigger_count)
@@ -817,3 +822,31 @@ async def dashboard_action(cid: str, action: str, request: Request):
     agent = srv.agent
     status, payload = apply_action(agent, cid, action, str(reason or ""))
     return _json(payload, agent, status)
+
+
+@router.post("/api/dashboard/memory/forget", include_in_schema=False)
+async def dashboard_forget(request: Request):
+    """Forget one note of a chat, by its id, or with no id its core note."""
+    refused = _check(request, write=True)
+    if refused is not None:
+        return refused
+    srv = _server()
+    try:
+        body = await srv._read_body_limited(request, _MAX_BODY)
+    except srv.RequestBodyTooLarge:
+        return _refused(413, "body_too_large", "request body too large")
+    try:
+        parsed = json.loads(body or b"{}")
+    except ValueError:
+        return _refused(400, "invalid_json", "body is not JSON")
+    if not isinstance(parsed, dict):
+        return _refused(400, "invalid_json", "body is not an object")
+    conv, note = str(parsed.get("conv") or ""), str(parsed.get("note") or "")
+    if not conv or len(conv) > 512:
+        return _refused(400, "invalid_id", "give a conversation id")
+    agent = srv.agent
+    async with agent.locks[conv]:
+        done = agent._forget_note(conv, note) if note else agent._forget_core(conv)
+    if not done:
+        return _refused(409, "already_forgotten", "that note is already gone")
+    return _json({"ok": True}, agent)

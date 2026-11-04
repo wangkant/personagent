@@ -9,7 +9,12 @@ import time
 from .access import ADMIN_MODE
 from . import channels
 from .decision import PASS, SEND
-from .textproc import TextProcessing, _truncate_framed
+from .textproc import (
+    TextProcessing,
+    _clean_prompt_source,
+    _strip_web_desc,
+    _truncate_framed,
+)
 
 logger = logging.getLogger("agent")
 
@@ -38,6 +43,27 @@ class DirectMessages:
                 text = await self._extract_text(payload)
                 if not text:
                     return False
+
+                # Answered at once, like a room's: no model call, no history,
+                # and it must not consume the pending reply.
+                if not proactive:
+                    sender = payload.get("sender") or {}
+                    nickname = (_clean_prompt_source(
+                        sender.get("card") or sender.get("nickname")) or "?")[:8]
+                    async with self.locks[pkey]:
+                        mem_reply = self._handle_memory_command(
+                            pkey, _strip_web_desc(text), user_id, nickname)
+                    if mem_reply is not None:
+                        self.last_dm_activity_at[user_id] = time.time()
+                        send_result = await self._send_dm(user_id, mem_reply)
+                        if not send_result.success:
+                            logger.warning(
+                                "[Agent] memory command delivery failed (user=%s)",
+                                user_id)
+                            return send_result.partial
+                        logger.info("[Agent] memory command (user=%s): %s",
+                                    user_id, mem_reply[:60])
+                        return True
 
                 # A proactive cue is not a reaction from the reader.
                 if self.react_learn_enabled and not proactive:

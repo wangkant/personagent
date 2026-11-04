@@ -541,7 +541,8 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
     assert chat["review"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
                                "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
-    assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "when": 3.0}]
+    assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "about": "", "when": 3.0,
+                              "id": "", "conv": ""}]
     # Oldest first, like a chat; the service lists newest first.
     assert [r["text"] for r in chat["recent"]] == ["lol", "sure"] and chat["recent"][0]["count"] == 3
     assert "checklist" not in json.dumps(chat) and "past" not in chat and "history" not in json.dumps(chat)

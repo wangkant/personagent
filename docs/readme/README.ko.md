@@ -81,7 +81,7 @@ QQ, WeChat, Telegram, Discord에는 직접 참여하고, 그 밖의 여러 앱�
 </tr>
 </table>
 
-- 대화마다 기억이 따로 있습니다.
+- 대화마다 기억이 따로 있습니다. 그룹에서 어떤 사람에 대해 기록한 내용은 그 사람과의 1:1 대화로도 이어지지만, 반대로는 이어지지 않습니다.
 - 캐릭터를 수정해도 배운 것은 유지됩니다.
 - 측정됩니다. `personagent eval`은 말할 때를 잘 고르는지, 캐릭터를 유지하는지, 지적이 남는지를 채점합니다([결과](https://github.com/wangkant/personagent#measured)).
 

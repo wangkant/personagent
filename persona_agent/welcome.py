@@ -613,6 +613,17 @@ class Workspace:
             raise ValueError("activity_unavailable")
         return await self.activity_chat(chat)
 
+    async def activity_forget(self, payload: dict) -> dict:
+        chat, conv = str(payload.get("chat") or ""), str(payload.get("conv") or "")
+        if not chat or len(chat) > 512 or len(conv) > 512:
+            raise ValueError("invalid_chat")
+        result = await self._activity_call(
+            "POST", "/api/dashboard/memory/forget",
+            json={"conv": conv or chat, "note": str(payload.get("note") or "")})
+        if result is None or result.get("off"):
+            raise ValueError("activity_unavailable")
+        return await self.activity_chat(chat)
+
     def close(self) -> None:
         with self._lock:
             self._closed = True
@@ -636,8 +647,10 @@ def _activity_chat(raw: dict) -> dict:
     return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
             "review": [item(c) for c in raw.get("pending") or []],
             "learned": [item(c) for c in raw.get("learned") or []],
-            "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "when": m.get("time", 0)}
+            "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "about": m.get("about", ""),
+                       "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", "")}
                       for m in raw.get("memories") or []],
+            "core": raw.get("core_note", ""),
             "recent": [{"when": d.get("ts", 0), "spoke": bool(d.get("spoke")), "mode": d.get("mode", ""),
                         "reason": d.get("reason", ""), "text": d.get("excerpt", ""),
                         "answered": d.get("answered", ""), "sender": d.get("sender", ""),
@@ -855,6 +868,10 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/activity/decide")
     async def activity_decide(request: Request):
         return await workspace.activity_decide(await body(request))
+
+    @app.post("/api/activity/forget")
+    async def activity_forget(request: Request):
+        return await workspace.activity_forget(await body(request))
 
     @app.post("/api/exit")
     async def exit_app(request: Request):

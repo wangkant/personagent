@@ -113,6 +113,8 @@ class AgentSettings:
     chat_followup_window_s: int = 120
     memory_file: str = "memory.json"
     memory_max_per_conversation: int = 50
+    #: New auto notes in a chat before a model pass tidies them; 0 turns it off.
+    memory_tidy_every: int = 8
     message_debounce_sec: float = 2.5
     #: Persona document; ``None`` means the agent loads ``PERSONA_FILE``, so
     #: file reads stay out of this record.
@@ -342,6 +344,8 @@ class AgentSettings:
             memory_file=_str("MEMORY_FILE", "memory.json"),
             memory_max_per_conversation=env_int(
                 "MEMORY_MAX_PER_CONVERSATION", 50, minimum=1, maximum=10_000, env=env),
+            memory_tidy_every=env_int(
+                "MEMORY_TIDY_EVERY", 8, minimum=0, maximum=10_000, env=env),
             admin_ids=identity.written["ADMIN_IDS"],
             admin_name=_str("ADMIN_NAME"),
             admin_relationship=_str("ADMIN_RELATIONSHIP"),

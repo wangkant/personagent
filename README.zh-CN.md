@@ -76,7 +76,7 @@ Windows 也可以下载源码 ZIP，解压后双击 `start.bat`。需要 Python 
   </tr>
 </table>
 
-- 每个聊天的记忆各管各的，互不相通。
+- 每个聊天的记忆各管各的。群里记下的关于某人的事，也会跟到 TA 和角色的私聊里，反过来不会。
 - 改人设不会丢掉它学到的东西。
 - 效果是量过的，数字见[效果评测](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)。
 

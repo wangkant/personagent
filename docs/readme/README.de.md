@@ -81,7 +81,7 @@ Er tritt QQ, WeChat, Telegram und Discord selbst bei und einem Dutzend weiterer 
 </tr>
 </table>
 
-- Jeder Chat hat sein eigenes Gedächtnis.
+- Jeder Chat hat sein eigenes Gedächtnis. Was eine Gruppe über jemanden notiert hat, folgt dieser Person auch in ihren Direktchat, aber nie umgekehrt.
 - Wenn du den Charakter bearbeitest, bleibt erhalten, was er gelernt hat.
 - Er wird gemessen: `personagent eval` bewertet, wann er spricht, ob er in seiner Rolle bleibt und ob Korrekturen haften bleiben ([Ergebnisse](https://github.com/wangkant/personagent#measured)).
 

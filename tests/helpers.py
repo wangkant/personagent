@@ -25,6 +25,7 @@ def isolated_agent(tmp: Path, *, seeds: bool = False, **settings) -> Agent:
         "api_key": "test-key", "qq_bot_id": "10001", "persona_name": "TestBot",
         "persona": "test persona", "lang": "en", "message_debounce_sec": 0,
         "memory_file": str(tmp / "memory.json"), "eval_enabled": False,
+        "memory_tidy_every": 0,
         "eval_file": str(tmp / "eval.jsonl"), "stickers_dir": str(tmp / "stickers"),
         "stickers_file": str(tmp / "stickers.json"), **settings})
     # The ctor already read the default files; drop what it loaded.

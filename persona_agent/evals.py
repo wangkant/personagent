@@ -277,6 +277,7 @@ def agent_settings(home: Path, *, lang: str, persona: str, persona_name: str,
         # self-initiated turns to the fallback model partway through.
         llm_rate_threshold=10**9,
         proactive_enabled=False, evolve_auto_enabled=False,
+        memory_tidy_every=0,
         react_learn_enabled=True,
         # The follow-up ask waits two minutes and then sends to nobody here.
         react_elicit_enabled=False,

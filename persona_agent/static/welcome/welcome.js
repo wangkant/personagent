@@ -29,6 +29,11 @@ const translations = {
     activityBetter: "改成",
     activityLesson: "以后都这样",
     activityFrom: "来自 {who}",
+    activityAbout: "关于 {who}",
+    activityRoomNote: "群里记下的",
+    activityCore: "一直记着",
+    activityForget: "忘掉",
+    activityForgotten: "已忘掉。",
     listSep: "、",
     activityKeep: "保留",
     activityDiscard: "不要",
@@ -258,6 +263,11 @@ const translations = {
     activityBetter: "Instead",
     activityLesson: "From now on",
     activityFrom: "from {who}",
+    activityAbout: "about {who}",
+    activityRoomNote: "from a group",
+    activityCore: "Always in mind",
+    activityForget: "Forget",
+    activityForgotten: "Forgotten.",
     listSep: ", ",
     activityKeep: "Keep",
     activityDiscard: "Discard",
@@ -1382,13 +1392,32 @@ function renderChat() {
     for (const item of chat.learned) part.append(change(item, false));
     parts.push(part);
   }
-  if (chat.notes.length) {
+  if (chat.core || chat.notes.length) {
     const part = section("activityNotes");
     const list = el("ul", "notes");
+    if (chat.core) {
+      const item = el("li");
+      item.append(
+        el("span", "", chat.core),
+        el("small", "", t("activityCore")),
+        action("activityForget", "quiet", "forget:core", () => forget("", "")),
+      );
+      list.append(item);
+    }
     for (const note of chat.notes) {
       const item = el("li");
       item.append(el("span", "", note.text));
-      if (note.by && note.by !== "auto") item.append(el("small", "", note.by));
+      const tags = [
+        note.about && t("activityAbout", { who: note.about }),
+        note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
+        note.conv !== chat.id && t("activityRoomNote"),
+      ].filter(Boolean);
+      if (tags.length) item.append(el("small", "", tags.join(" · ")));
+      item.append(
+        action("activityForget", "quiet", `forget:${note.id}`, () =>
+          forget(note.conv, note.id),
+        ),
+      );
       list.append(item);
     }
     part.append(list);
@@ -1466,6 +1495,26 @@ async function decide(item, verb) {
             : "activityKept",
       ),
     );
+  } catch (error) {
+    toast(t(error.message));
+  } finally {
+    activityBusy = false;
+    activityLoop();
+  }
+}
+async function forget(conv, note) {
+  if (activityBusy) return;
+  activityBusy = true;
+  const seq = ++activitySeq;
+  renderActivity();
+  try {
+    const chat = await api("activity/forget", {
+      chat: activitySelected,
+      conv,
+      note,
+    });
+    if (seq === activitySeq) activityChat = chat;
+    toast(t("activityForgotten"));
   } catch (error) {
     toast(t(error.message));
   } finally {

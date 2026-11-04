@@ -81,7 +81,7 @@ Il rejoint lui-même QQ, WeChat, Telegram et Discord, et une douzaine d'autres a
 </tr>
 </table>
 
-- Chaque discussion a sa propre mémoire.
+- Chaque discussion a sa propre mémoire. Ce qu'un groupe a noté sur quelqu'un le suit aussi dans sa discussion privée, jamais l'inverse.
 - Modifier le personnage conserve ce qu'il a appris.
 - Il est mesuré : `personagent eval` évalue quand il parle, s'il reste dans son rôle et si les corrections tiennent ([résultats](https://github.com/wangkant/personagent#measured)).
 

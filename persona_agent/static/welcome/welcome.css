@@ -1415,6 +1415,13 @@ label.check input {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.notes li button {
+  flex: none;
+  margin-left: auto;
+}
+.notes small + button {
+  margin-left: 0;
+}
 .notes small {
   margin-left: auto;
   font-size: 12px;
@@ -1571,6 +1578,12 @@ label.check input {
 @media (max-width: 480px) {
   .top-actions {
     gap: 0;
+  }
+  .notes li {
+    flex-wrap: wrap;
+  }
+  .notes li span {
+    flex-basis: 100%;
   }
   .page {
     padding: 24px 16px;

@@ -173,6 +173,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
         self.memory_file = resolve_runtime_state_file(s.memory_file)
         self.memory_max_per_conversation = s.memory_max_per_conversation
+        self.memory_tidy_every = s.memory_tidy_every
 
         self.eval_enabled = s.eval_enabled
         self.eval_model = s.eval_model
@@ -308,6 +309,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         """Open memory, reactions, stickers, the retrieval pools and the ledger
         views; after _apply_settings, since all of it hangs off the settings."""
         self.memories: dict[str, list[dict]] = self._load_memories()
+        # Conversations with a tidy pass under way (memory.py).
+        self._tidying: set[str] = set()
         # One short note per conversation, always in the prompt.
         self.core_memory_file = resolve_runtime_state_file("core_memory.json")
         self.core_memory: dict[str, str] = self._load_core_memory()

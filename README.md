@@ -79,7 +79,7 @@ It joins QQ, WeChat, Telegram and Discord by itself and a dozen more apps from t
 </tr>
 </table>
 
-- Each chat has its own memory.
+- Each chat has its own memory. What a group noted about someone also follows them into their DM with it, and never the other way.
 - Editing the character keeps what it learned.
 - It is measured: `personagent eval` scores when it speaks, whether it stays in character, and whether corrections stick ([results](https://github.com/wangkant/personagent#measured)).
 
