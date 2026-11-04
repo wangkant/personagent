@@ -94,8 +94,8 @@ def test_the_system_language_picks_the_default(monkeypatch) -> None:
 def test_the_providers_are_complete() -> None:
     keys = [p.key for p in sw.PROVIDERS]
     check("providers: the eleven choices, Other last",
-          keys == ["deepseek", "siliconflow", "bailian", "zhipu", "moonshot", "ark",
-                   "openrouter", "openai", "gemini", "ollama", "other"], repr(keys))
+          keys == ["openrouter", "deepseek", "siliconflow", "bailian", "zhipu", "moonshot", "ark",
+                   "openai", "gemini", "ollama", "other"], repr(keys))
     for p in sw.PROVIDERS[:-1]:
         check(f"{p.key}: https or a local address",
               p.base_url.startswith("https://") or p.key == "ollama", p.base_url)
@@ -199,9 +199,9 @@ def test_the_env_template_reads_top_down() -> None:
     check("template: no NapCat address unless you run one", values["QQ_ONEBOT_URL"] == "")
     check("template: the time zone defaults to this machine",
           values["PERSONA_TZ_OFFSET_HOURS"] == "")
-    check("template: the default endpoint is the code's",
+    check("template: the default endpoint is the first preset's",
           (values["LLM_BASE_URL"], values["LLM_MODEL"])
-          == (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL))
+          == (sw.PROVIDERS[0].base_url, sw.PROVIDERS[0].model))
     check("template: present tense, no release history",
           not re.search(r"\b(since|in|until) 0\.\d|before it existed|as they were|used to\b",
                         text))
@@ -289,18 +289,18 @@ def test_a_first_run_in_english(monkeypatch, tmp_path, capsys) -> None:
     out = capsys.readouterr().out
     get = lambda key: sw.env_get(tmp_path / ".env", key)  # noqa: E731
     check("first run: the preset's endpoint and model",
-          (get("LLM_BASE_URL"), get("LLM_MODEL")) == ("https://api.deepseek.com", "deepseek-flash"))
+          (get("LLM_BASE_URL"), get("LLM_MODEL")) == ("https://openrouter.ai/api/v1", "openrouter/free"))
     check("first run: key, name and language", (get("LLM_API_KEY"), get("PERSONA_NAME"),
                                                  get("AGENT_LANG")) == ("sk-test-1234567890", "Mira", "en"))
     persona = (tmp_path / "persona.txt").read_text(encoding="utf-8")
     check("first run: the chosen character, named", persona.startswith("Your name is Mira.")
           and "gamer" in persona, persona)
-    check("first run: the key was tested", ("probe", "https://api.deepseek.com",
-                                            "sk-test-1234567890", "deepseek-flash") in calls)
+    check("first run: the key was tested", ("probe", "https://openrouter.ai/api/v1",
+                                            "sk-test-1234567890", "openrouter/free") in calls)
     check("first run: the key is never printed", "sk-test-1234567890" not in out
           and not any("sk-test-1234567890" in p for p in script.prompts))
     check("first run: titled for a first run", "First-time setup" in out)
-    check("first run: where the key comes from", "platform.deepseek.com/api_keys" in out)
+    check("first run: where the key comes from", "openrouter.ai/keys" in out)
     check("first run: the chat is handed over",
           any(c[0] == "chat" and c[1][-1] == "chat" for c in calls), repr(calls))
     check("first run: nine questions including key visibility", len(script.prompts) == 9,
@@ -310,7 +310,7 @@ def test_a_first_run_in_english(monkeypatch, tmp_path, capsys) -> None:
 
 
 def test_a_first_run_in_chinese_asks_in_chinese(monkeypatch, tmp_path, capsys) -> None:
-    script = Script([("Choose / 选择", "2"), ("选择服务", "4"), ("API key", "sk-zh-1234567890"),
+    script = Script([("Choose / 选择", "2"), ("选择服务", "5"), ("API key", "sk-zh-1234567890"),
                      ("[Y/n]", "n"), ("[y/N]", "n")])
     _wire(monkeypatch, script)
     sw.run_wizard(tmp_path, _launcher(tmp_path))
@@ -342,7 +342,7 @@ def test_a_failed_probe_offers_another_try(monkeypatch, tmp_path, capsys) -> Non
     sw.run_wizard(tmp_path, _launcher(tmp_path))
     out = capsys.readouterr().out
     check("retry: the failure is explained with the URL called",
-          "HTTP 401" in out and sw.completions_url("https://api.deepseek.com") in out, out)
+          "HTTP 401" in out and sw.completions_url("https://openrouter.ai/api/v1") in out, out)
     check("retry: the Base URL is offered on the second pass",
           sum("Base URL" in p for p in script.prompts) == 1, "\n".join(script.prompts))
     check("retry: tried twice", len(keys) == 2, repr(keys))

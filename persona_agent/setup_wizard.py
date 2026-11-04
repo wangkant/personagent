@@ -19,6 +19,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from persona_agent.config_env import DEFAULT_LLM_BASE_URL
 from persona_agent import home as homes
 from persona_agent.prompts import render_persona_template
 
@@ -138,6 +139,8 @@ _TEXT: dict[str, tuple[str, str]] = {
                 "通常是模型名写错了，或者账户还没开通这个模型。"),
     "fix_429": ("Too many requests or no quota right now. Wait a minute, or check your plan.",
                 "请求太频繁或额度不足。稍等一分钟，或检查你的套餐。"),
+    "fix_429_free": ("OpenRouter's free models stop at 50 requests a day, until midnight UTC.",
+                     "OpenRouter 的免费模型每天限 50 次请求，到 UTC 零点恢复。"),
     "fix_5xx": ("The service had an internal error. Try again in a few minutes.",
                 "服务商内部出错，过几分钟再试。"),
     "fix_net": ("Could not reach {host}: {detail}\n"
@@ -361,6 +364,12 @@ class Provider:
 
 # Base URLs as each vendor documents them for OpenAI-compatible chat.
 PROVIDERS: tuple[Provider, ...] = (
+    Provider("openrouter", ("OpenRouter", "OpenRouter"), "https://openrouter.ai/api/v1",
+             "openrouter/free", "https://openrouter.ai/keys",
+             ("openrouter/free picks one of OpenRouter's free models for each request. The key costs "
+              "nothing and the limit is 50 requests a day. Some free providers keep what they receive.",
+              "openrouter/free 每次请求会选一个 OpenRouter 的免费模型。密钥不花钱，每天限 50 次请求。"
+              "部分免费服务商会保留收到的内容。")),
     Provider("deepseek", ("DeepSeek", "DeepSeek 深度求索"), "https://api.deepseek.com",
              "deepseek-flash", "https://platform.deepseek.com/api_keys"),
     Provider("siliconflow", ("SiliconFlow", "硅基流动 SiliconFlow"), "https://api.siliconflow.cn/v1",
@@ -379,8 +388,6 @@ PROVIDERS: tuple[Provider, ...] = (
              "https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-lite-260915",
              "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
              ("Enable the model in the Ark console first.", "先在方舟控制台的开通管理里开通这个模型。")),
-    Provider("openrouter", ("OpenRouter", "OpenRouter"), "https://openrouter.ai/api/v1",
-             "deepseek/deepseek-v4.1-flash", "https://openrouter.ai/keys"),
     Provider("openai", ("OpenAI", "OpenAI"), "https://api.openai.com/v1", "gpt-6-luna",
              "https://platform.openai.com/api-keys"),
     Provider("gemini", ("Google Gemini", "Google Gemini"),
@@ -796,7 +803,7 @@ def explain_probe(probe: Probe, provider: Provider | None) -> str:
     if status == 404:
         return t("fix_404", example=example)
     if status == 429:
-        return t("fix_429")
+        return t("fix_429") + ("\n" + t("fix_429_free") if provider and provider.key == "openrouter" else "")
     if status >= 500:
         return t("fix_5xx")
     if status == 0:
@@ -1213,6 +1220,8 @@ def step_model(current: dict, retry: bool = False) -> dict:
     known = provider_for_base(current["LLM_BASE_URL"]) if current["LLM_BASE_URL"] else None
     if current["LLM_BASE_URL"] and known is None:
         known = provider_named("other")
+    if current["LLM_API_KEY"] and not current["LLM_BASE_URL"]:
+        known = provider_for_base(DEFAULT_LLM_BASE_URL)
     default = PROVIDERS.index(known) + 1 if known else 1
     provider = PROVIDERS[ask_number(t("provider_choose"), len(PROVIDERS), default) - 1]
     same = known is not None and known.key == provider.key
@@ -1541,6 +1550,10 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     if args.base_url and not has_scheme(args.base_url):
         raise SystemExit("--base-url needs https:// or http:// in front, such as https://api.deepseek.com")
     existed = (home / ".env").exists()
+    # A key does not say whose it is, and a key alone used to mean DeepSeek.
+    if (os.environ.get(args.key_env or "LLM_API_KEY", "").strip()
+            and not (existed or args.provider or args.base_url)):
+        raise SystemExit("Which service is this key for? Add --provider, such as --provider openrouter")
     env_path = copy_env_template(home)
     lang = (args.lang or os.environ.get("AGENT_LANG", "").strip().lower()
             or (env_get(env_path, "AGENT_LANG") if existed else "") or detect_lang())
@@ -1557,7 +1570,8 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
             values["LLM_API_KEY"] = "ollama"
     if args.base_url:
         values["LLM_BASE_URL"] = args.base_url
-    old_url = env_get(env_path, "LLM_BASE_URL").rstrip("/")
+    old_url = (env_get(env_path, "LLM_BASE_URL")
+               or (DEFAULT_LLM_BASE_URL if env_get(env_path, "LLM_API_KEY") else "")).rstrip("/")
     new_url = str(values.get("LLM_BASE_URL", old_url)).rstrip("/")
     if (existed and old_url and new_url != old_url and not args.key_env
             and env_get(env_path, "LLM_API_KEY") and "LLM_API_KEY" not in values):

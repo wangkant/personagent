@@ -192,6 +192,9 @@ def _template_values() -> dict[str, str]:
 #: the raw input `agent_lang` is resolved from, and the policy belongs to
 #: promotion.py.
 _NOT_DEFAULTS = {"lang", "promotion_policy"}
+#: The template starts a new setup on the first preset, while an unset endpoint
+#: keeps meaning DeepSeek, for a .env holding only that key.
+_NEW_SETUP_ONLY = {"LLM_BASE_URL", "LLM_MODEL"}
 
 
 def test_one_source_of_defaults(monkeypatch) -> None:
@@ -204,7 +207,8 @@ def test_one_source_of_defaults(monkeypatch) -> None:
         monkeypatch.delenv(name, raising=False)
     plain = AgentSettings(api_key="k")
     env_defaults = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
-    documented = AgentSettings.from_env(env={**template, "LLM_API_KEY": "k"})
+    documented = AgentSettings.from_env(env={**{k: v for k, v in template.items() if k not in _NEW_SETUP_ONLY},
+                                             "LLM_API_KEY": "k"})
     for f in dataclasses.fields(AgentSettings):
         if f.name in _NOT_DEFAULTS:
             continue

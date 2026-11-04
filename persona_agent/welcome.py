@@ -141,7 +141,9 @@ class Workspace:
             updates.refresh_soon(self.home)
             return {"version": __version__, "update": updates.notice(self.home),
                     "configured": bool(values.get("LLM_API_KEY")),
-                    "provider": known.key if known else ("other" if values.get("LLM_BASE_URL") else "deepseek"),
+                    "provider": known.key if known else ("other" if values.get("LLM_BASE_URL")
+                                                          else "deepseek" if values.get("LLM_API_KEY")
+                                                          else sw.PROVIDERS[0].key),
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
                     "name": values.get("PERSONA_NAME", ""), "lang": values.get("AGENT_LANG", ""),
@@ -174,10 +176,10 @@ class Workspace:
             if self._future is not None and not self._future.done():
                 raise ValueError("busy")
             old = self.config()
-            provider = sw.provider_named(str(payload.get("provider") or "deepseek"))
+            previous = sw.provider_for_base(old.get("LLM_BASE_URL", ""))
+            provider = sw.provider_named(str(payload.get("provider") or (previous or sw.PROVIDERS[0]).key))
             if provider is None:
                 raise ValueError("invalid_provider")
-            previous = sw.provider_for_base(old.get("LLM_BASE_URL", ""))
             same = ((previous is not None and previous.key == provider.key)
                     or (previous is None and provider.key == "other" and bool(old.get("LLM_BASE_URL"))))
             base = str(payload.get("baseUrl") or provider.base_url).strip()
@@ -216,7 +218,8 @@ class Workspace:
                 raise ValueError("model_unreachable") from None
             if not probe.ok:
                 # Never return an upstream response body: it may echo a key.
-                raise ValueError("key_rejected" if probe.status in (401, 403) else "model_unreachable")
+                raise ValueError("key_rejected" if probe.status in (401, 403)
+                                 else "model_limited" if probe.status == 429 else "model_unreachable")
             sw.copy_env_template(self.home)
             values = {"LLM_BASE_URL": base, "LLM_MODEL": model, "LLM_API_KEY": key,
                       "PERSONA_NAME": name, "AGENT_LANG": lang,
@@ -750,7 +753,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.exception_handler(ValueError)
     async def bad_value(request, exc):
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
-                   "model_required", "invalid_character", "key_rejected", "model_unreachable",
+                   "model_required", "invalid_character", "key_rejected", "model_limited", "model_unreachable",
                    "permission_required", "invalid_message", "invalid_platform",
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
                    "invalid_chat", "activity_unavailable", "activity_changed"}

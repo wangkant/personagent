@@ -37,7 +37,7 @@ Ask these in one message, with the defaults shown, and accept "use the defaults"
 | Which language should the character speak? English or Chinese | the language the user writes to you in | `--lang en` or `--lang zh` |
 | The character's name. It answers when its name comes up in a chat | `Nova` (English), `小夏` (Chinese) | `--name` |
 | Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona`, or your own `persona.txt` (step 4) |
-| Which model service do they have, or want, an API key for? | DeepSeek | `--provider` (table below) |
+| Which model service do they have, or want, an API key for? | OpenRouter's free models | `--provider` (table below) |
 | Where should the home folder live? | `~/personagent` (on Windows `C:\Users\<name>\personagent`) | `<home>` |
 | Which chat apps should it join, if any? None are needed to start | none | step 7 |
 | How to install, only if it matters (they prefer pip, or neither uv nor pipx is present) | uv, else pipx, else a virtual environment | step 3 |
@@ -56,13 +56,13 @@ Model services:
 
 | `--provider` | Service | Default model | Where the user gets a key |
 |---|---|---|---|
+| `openrouter` | OpenRouter | `openrouter/free`, free to use, 50 requests a day; some free providers keep what they receive, so say so | https://openrouter.ai/keys |
 | `deepseek` | DeepSeek | `deepseek-flash` | https://platform.deepseek.com/api_keys |
 | `siliconflow` | SiliconFlow | `deepseek-ai/DeepSeek-V3.2` | https://cloud.siliconflow.cn/account/ak |
 | `bailian` | Alibaba Bailian / Qwen | `qwen-plus` | https://bailian.console.aliyun.com/ (outside mainland China, add `--base-url https://dashscope-intl.aliyuncs.com/compatible-mode/v1`) |
 | `zhipu` | Zhipu GLM | `glm-4.7-flash`, free to use | https://bigmodel.cn/usercenter/proj-mgmt/apikeys |
 | `moonshot` | Moonshot / Kimi | `kimi-k2.6` | https://platform.kimi.com/console/api-keys |
 | `ark` | Volcengine Ark / Doubao | `doubao-seed-2-1-lite-260915` | https://console.volcengine.com/ark/region:ark+cn-beijing/apikey (enable the model in the Ark console first) |
-| `openrouter` | OpenRouter | `deepseek/deepseek-v4.1-flash` | https://openrouter.ai/keys |
 | `openai` | OpenAI | `gpt-6-luna` | https://platform.openai.com/api-keys |
 | `gemini` | Google Gemini | `gemini-3.8-flash` | https://aistudio.google.com/apikey |
 | `ollama` | Ollama on this computer | `qwen3` | no key; Ollama must be running with the model pulled |
@@ -154,7 +154,7 @@ It prints `personagent 1.3.0` or later. From here on, `personagent` means the co
 Run `init --no-input` with the user's answers. Pass `--lang`, `--name`, `--persona` and `--provider` every time, with the step 1 defaults for anything the user left to you: left out, `--lang` falls back to the system language rather than the user's, and `--persona` to the plain `template` character rather than warm listener. The same line works in PowerShell and bash:
 
 ```bash
-personagent --home "<home>" init --no-input --lang en --name Nova --persona warm-listener --provider deepseek
+personagent --home "<home>" init --no-input --lang en --name Nova --persona warm-listener --provider openrouter
 ```
 
 A Chinese character on Zhipu's free model:
@@ -172,7 +172,7 @@ personagent --home "<home>" init --no-input --lang en --name Nova --persona warm
 What `init --no-input` does:
 
 - It asks nothing, sends nothing over the network and does not test a key.
-- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, `Nova` or `小夏` for `--name`, `template` for `--persona` and DeepSeek for `--provider`. On a home that is already set up, it keeps the saved value.
+- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, `Nova` or `小夏` for `--name`, `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value.
 - Without a key it still succeeds, with exit code 0. The key comes in step 6.
 - It ends with a "Next" list written for a person at a terminal. Skip it and follow this file: "run this setup again" there means the interactive setup that rule 8 rules out, and the `chat` command it shows calls the model, which costs money.
 - It creates `<home>` if needed and writes `<home>/.env` from the shipped template, readable only by the user on macOS and Linux, and `<home>/persona.txt`.

@@ -71,7 +71,8 @@ personagent's version number, at most once a day; `UPDATE_CHECK_ENABLED=false`
 turns it off.
 
 Read each provider's data-retention policy before you use it. Some providers
-keep prompts, and some train on them unless you opt out. A local model (Ollama,
+keep prompts, and some train on them unless you opt out. The default, OpenRouter's
+free models, can reach such providers. A local model (Ollama,
 llama.cpp) keeps the prompts on your machine. The people in the chat did not
 agree to any provider's terms, so tell them where their messages go.
 

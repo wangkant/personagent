@@ -60,7 +60,7 @@ def test_one_key_is_enough_and_state_does_not_leak_it(client, workspace):
     assert response.json()["configured"]
     assert key not in response.text
     values = workspace.config()
-    assert values["LLM_BASE_URL"] == "https://api.deepseek.com"
+    assert values["LLM_BASE_URL"] == "https://openrouter.ai/api/v1"
     assert values["PERSONA_NAME"] == "小夏"
     assert values["CONNECTOR_TOKEN"]
     assert (workspace.home / "persona.txt").is_file()

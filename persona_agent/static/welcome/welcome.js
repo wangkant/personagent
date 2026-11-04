@@ -71,6 +71,7 @@ const translations = {
     modelTitle: "连接一个模型",
     modelHint: "角色通过你选择的模型服务与你聊天。",
     provider: "模型服务",
+    freeNote: "OpenRouter 的免费模型：密钥不花钱，每天限 50 次请求。每次用的模型可能不同，部分免费服务商会保留收到的内容。",
     getKey: "去获取密钥 ↗",
     show: "显示",
     hide: "隐藏",
@@ -202,6 +203,8 @@ const translations = {
     auth: "请通过启动窗口里显示的本地链接打开此页面。",
     key_required: "请填入 API Key。",
     key_rejected: "密钥未通过验证，请检查是否复制完整、是否属于所选服务。",
+    model_limited:
+      "服务商说请求太多或额度用完了。OpenRouter 的免费模型每天限 50 次，到 UTC 零点恢复。请稍后再试，或换一个服务。",
     model_unreachable:
       "暂时连不上这个模型，请检查网络、模型名称和服务地址后重试。",
     model_required: "请在更多设置中填写模型名称。",
@@ -308,6 +311,8 @@ const translations = {
     modelTitle: "Connect a model",
     modelHint: "Your character talks through the model service you choose.",
     provider: "Model service",
+    freeNote:
+      "OpenRouter's free models: the key costs nothing and the limit is 50 requests a day. The model can change from one request to the next, and some free providers keep what they receive.",
     getKey: "Get an API key ↗",
     show: "Show",
     hide: "Hide",
@@ -448,6 +453,8 @@ const translations = {
     key_required: "Enter your API key.",
     key_rejected:
       "The key was not accepted. Check that it is complete and belongs to this service.",
+    model_limited:
+      "The service says too many requests or no quota left. OpenRouter's free models stop at 50 requests a day, until midnight UTC. Try again later or pick another service.",
     model_unreachable:
       "Couldn't reach this model. Check the network, model name and API address, then retry.",
     model_required: "Enter a model name under advanced settings.",
@@ -658,6 +665,9 @@ function populate() {
   providerChanged(false);
   updateNames();
 }
+function freeNoteChanged() {
+  $("free-note").hidden = $("model").value.trim() !== "openrouter/free";
+}
 function providerChanged(reset = true) {
   const provider = catalog.providers.find((p) => p.id === $("provider").value);
   $("base-url").value = reset
@@ -666,6 +676,7 @@ function providerChanged(reset = true) {
   $("model").value = reset ? provider.model : state.model || provider.model;
   $("key-link").href = provider.keyUrl || "#";
   $("key-link").hidden = !provider.keyUrl;
+  freeNoteChanged();
   $("api-key").required = provider.id !== "ollama" && !state.configured;
   if (reset && provider.id !== state.provider) {
     $("api-key").value = "";
@@ -1585,6 +1596,7 @@ $("language").addEventListener("change", async () => {
   showView(view);
 });
 $("provider").addEventListener("change", () => providerChanged());
+$("model").addEventListener("input", freeNoteChanged);
 $("character-name").addEventListener("input", updateNames);
 $("show-key").addEventListener("click", async () => {
   try {

@@ -21,7 +21,7 @@ To run it from a clone, give it a venv of its own: `python -m venv .venv`, then 
 
 ## Add a key and chat
 
-Choose a model service, paste its API key and click **Verify & start chatting**. DeepSeek and the warm listener character are selected to begin with. **Advanced settings** holds the model name and API address, and **Choose a name or personality** holds the character's name and personality.
+Choose a model service, paste its API key and click **Verify & start chatting**. OpenRouter's free models and the warm listener character are selected to begin with. The key is free and the limit is 50 requests a day. **Advanced settings** holds the model name and API address, and **Choose a name or personality** holds the character's name and personality.
 
 The key stays on your computer; click **Show** to check it. Chat messages go to the model service you choose, at that service's usual rates.
 

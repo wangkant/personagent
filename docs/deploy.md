@@ -12,13 +12,16 @@ and what to check when the bot goes quiet.
 
 The local page (`personagent`, or `personagent init --terminal` for the
 terminal wizard) checks the key with one small request, then writes `.env` in
-the home folder. Chatting needs one setting:
+the home folder. Chatting needs a key, and `.env.example` starts you on
+OpenRouter's free models:
 
 ```
 LLM_API_KEY=...
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=openrouter/free
 ```
 
-`LLM_BASE_URL` and `LLM_MODEL` default to `https://api.deepseek.com` and
+A `.env` that sets only the key means `https://api.deepseek.com` and
 `deepseek-flash`. You can point them at any OpenAI-compatible endpoint,
 hosted or local (Ollama, llama.cpp). Paste the API address the way the
 provider documents it, either a root or a version base such as `.../v1` or

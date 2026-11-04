@@ -56,7 +56,7 @@ This guide writes commands as `personagent ...`. If you did not install it, put 
 - **Chat** is a one-to-one chat with the character in the browser. The same agent that serves your chat platforms answers it.
 - **Activity** shows the chats the character is in, what it said lately, what it learned and what waits for your decision. See [Activity](#activity).
 - **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat).
-- **Character & settings** is where you pick a model service (DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenRouter, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose.
+- **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose.
 
 Until you connect an app, the Chat view shows a short **Getting started** bar.
 
@@ -121,12 +121,12 @@ Every command takes `--help`.
 
 `personagent init --terminal` asks the same questions as the page, in English or Chinese, and explains each term in one line:
 
-- **The AI service.** The presets match the page. The default is DeepSeek's `deepseek-flash`. For Ollama, name a model you have already pulled. Ollama needs no key.
+- **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
 - **The key.** Input is hidden by default. You can choose to show it, which also reveals the saved key when you reconfigure. The wizard tests the key with one small request. If the request fails, it shows the address it called, the HTTP status and a likely fix.
 - **The character.** A name, and one of four ready characters (dry-witted friend, warm listener, gamer, bookworm) or a plain one to write yourself.
 - **AstrBot.** Optional, and you can skip it the first time. See [Bridges you run yourself](#bridges-you-run-yourself).
 
-To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`. `--provider other` also needs `--base-url`. `personagent init --help` lists every flag. If `personagent init` runs without a terminal and without any of these flags, it skips the questions, says so, and exits with code 2.
+To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`. On a new home, a key from `--key-env` or the shell's `LLM_API_KEY` needs `--provider` or `--base-url` to say whose it is. `--provider other` also needs `--base-url`. `personagent init --help` lists every flag. If `personagent init` runs without a terminal and without any of these flags, it skips the questions, says so, and exits with code 2.
 
 ### Chat in the terminal
 

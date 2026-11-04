@@ -393,8 +393,10 @@ class ModelCalls:
                             continue
                     if kind == "fatal_auth":
                         self._report_fatal(e, cur_model)
-                    logger.warning("[Agent] LLM call failed (model=%s, %s): %s",
-                                   cur_model, kind, e)
+                    # A 429's body says which limit it was; httpx's message does not.
+                    logger.warning("[Agent] LLM call failed (model=%s, %s): %s %s",
+                                   cur_model, kind, e,
+                                   _response_text(e)[:300] if kind == "rate_limit" else "")
                     raise
 
         def _pick(d: dict) -> tuple[str, str]:
