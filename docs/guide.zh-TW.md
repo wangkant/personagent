@@ -268,10 +268,10 @@ QQ 連好後，在手機 QQ 的「聯絡人 → 機器人」裡找到它，可�
 |---|---|
 | 你已經在執行的 [AstrBot](https://docs.astrbot.app) | 它已接好的平臺 |
 | 經 AstrBot 接 [NapCat](https://github.com/NapNeko/NapCatQQ)（OneBot v11） | 用個人 QQ 號接入 QQ |
-| [Koishi](https://koishi.chat) 或其他 Satori 服務端，經 [Satori 聯結器](../integrations/satori/README.md)（英文） | 該服務端已登入的平臺 |
-| [Matrix](../integrations/matrix/README.md)（英文），經 mautrix 橋接 | Matrix 房間，以及 WhatsApp、Signal、Messenger、Instagram 和 Google Messages |
+| [Koishi](https://koishi.chat) 或其他 Satori 服務端，經 [Satori 聯結器](../integrations/satori/README.zh-TW.md) | 該服務端已登入的平臺 |
+| [Matrix](../integrations/matrix/README.zh-TW.md)，經 mautrix 橋接 | Matrix 房間，以及 WhatsApp、Signal、Messenger、Instagram 和 Google Messages |
 
-其他平臺可以按[聯結器協議](connectors.md)（英文）接入，每條訊息對應一個簽名的 HTTP 請求。一個 personagent 可以同時連線多個聯結器。長期執行的注意事項見[部署指南](deploy.md)（英文）。
+其他平臺可以按[聯結器協議](connectors.zh-TW.md)接入，每條訊息對應一個簽名的 HTTP 請求。一個 personagent 可以同時連線多個聯結器。長期執行的注意事項見[部署指南](deploy.zh-TW.md#部署參考)。
 
 **你已經在執行的 AstrBot。** AstrBot 透過一個小外掛 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.zh-TW.md) 把訊息轉給 personagent。外掛隨 personagent 一起安裝，託管的 AstrBot 會自動裝上。`personagent connect astrbot` 會找到你的 AstrBot（也可以把它的資料夾作為引數傳入），安裝外掛，在兩邊寫入同一個 `CONNECTOR_TOKEN`，然後詢問要放行哪些群。在群裡傳送 `/sid` 可以檢視群 ID。
 
@@ -315,11 +315,11 @@ OneBot 直連入口（`/v1/onebot`）已廢棄，在 1.x 期間保留。它透�
 
 同一個 compose 檔案裡的 NapCat 容器也需要開啟 host 網路。
 
-personagent 預設監聽 `127.0.0.1:8080`，`SERVER_HOST` 留空時也是如此。要監聽網路地址（`--host 0.0.0.0` 或 `SERVER_HOST`），必須設定 `CONNECTOR_TOKEN`。即使所有元件都在同一臺機器上，也請在新增反向代理或隧道之前設定好它，因為隧道會讓外部請求看起來像是本機發出的。其餘要求見[暴露服務地址](deploy.md#exposing-the-endpoints)（英文）。
+personagent 預設監聽 `127.0.0.1:8080`，`SERVER_HOST` 留空時也是如此。要監聽網路地址（`--host 0.0.0.0` 或 `SERVER_HOST`），必須設定 `CONNECTOR_TOKEN`。即使所有元件都在同一臺機器上，也請在新增反向代理或隧道之前設定好它，因為隧道會讓外部請求看起來像是本機發出的。其餘要求見[暴露服務地址](deploy.zh-TW.md#對外暴露介面)。
 
 ### 主動發言
 
-有些訊息並不是對某人的回覆：主動開場（`PROACTIVE_ENABLED`，預設關閉）、被否定後的追問，以及群聊中模型出錯時發出的託詞（私聊中，託詞會直接隨對應訊息的響應返回）。personagent 把這些訊息放進 outbox，由聯結器拉取後發出，前提是平臺允許機器人主動發言。微信公眾號和企業微信智慧機器人不允許；QQ 會限制官方機器人主動發訊息的頻率，使用者也可以關閉這類訊息。`PROACTIVE_PLATFORMS=qq_official` 把主動開場限定在 QQ 官方機器人上，`qq` 則限定在經 NapCat 接入的 QQ 上。頁面「更多功能」裡的「偶爾主動說話」會寫入這兩項設定。詳見[部署指南](deploy.md#more-than-one-platform)（英文）。
+有些訊息並不是對某人的回覆：主動開場（`PROACTIVE_ENABLED`，預設關閉）、被否定後的追問，以及群聊中模型出錯時發出的託詞（私聊中，託詞會直接隨對應訊息的響應返回）。personagent 把這些訊息放進 outbox，由聯結器拉取後發出，前提是平臺允許機器人主動發言。微信公眾號和企業微信智慧機器人不允許；QQ 會限制官方機器人主動發訊息的頻率，使用者也可以關閉這類訊息。`PROACTIVE_PLATFORMS=qq_official` 把主動開場限定在 QQ 官方機器人上，`qq` 則限定在經 NapCat 接入的 QQ 上。頁面「更多功能」裡的「偶爾主動說話」會寫入這兩項設定。詳見[部署指南](deploy.zh-TW.md#同時接多個平臺)。
 
 ## 程式設計助手
 
@@ -349,7 +349,7 @@ approval_mode = "approve"
 
 **由誰應答。** 優先是已開啟的頁面，其次是 `personagent up` 執行的服務。兩者都沒有時，MCP 服務會在後臺啟動頁面，頁面和你連線的聊天平臺都隨程式設計會話一起結束。同時開兩個會話會共用一個頁面。這種頁面執行期間執行 `personagent` 會列印它的連結，但頁面仍然隨啟動它的那個會話結束。這種頁面執行期間不要執行 `personagent up`，先結束程式設計會話。
 
-**一輪結束時說話。** 在 Claude Code 和 Codex 上，`--react` 會新增一個 Stop hook。DeepSeek Harness 不支援：它的 hook 橋不把最後一條訊息傳給 Stop hook，也不顯示 hook 的輸出。程式設計助手結束一輪時，角色會收到一條[主動發言提示](connectors.md#speaking-first-without-the-outbox)（英文），然後對你說一句話，或者不說。這句話只給你看，不會進入程式設計助手的上下文。
+**一輪結束時說話。** 在 Claude Code 和 Codex 上，`--react` 會新增一個 Stop hook。DeepSeek Harness 不支援：它的 hook 橋不把最後一條訊息傳給 Stop hook，也不顯示 hook 的輸出。程式設計助手結束一輪時，角色會收到一條[主動發言提示](connectors.zh-TW.md#不用-outbox-先開口)，然後對你說一句話，或者不說。這句話只給你看，不會進入程式設計助手的上下文。
 
 ```bash
 personagent connect claude-code --react
@@ -493,7 +493,7 @@ personagent learned rebuild                   # 從證據日誌重新生成檢�
 
 角色執行之前，這裡是空的。在頁面上聊一句或者連上一個平臺，角色就會啟動，頁面上也會這樣提示。設定 `DASHBOARD_ENABLED=false` 會關閉「動態」背後的資料，頁面會說明已關閉，`personagent doctor` 也會輸出 `activity: off`。
 
-本地頁面只有本機能訪問。伺服器上沒有本地頁面，請用 `personagent learned` 檢視和推翻學到的內容。指令碼可以透過服務的 API 讀取同樣的資料，見[部署指南的 Activity 一節](deploy.md#activity)（英文）。
+本地頁面只有本機能訪問。伺服器上沒有本地頁面，請用 `personagent learned` 檢視和推翻學到的內容。指令碼可以透過服務的 API 讀取同樣的資料，見[部署參考的動態介面一節](deploy.zh-TW.md#動態介面)。
 
 ![一個群聊的「動態」：兩條等你確認的改動，一條換個說法、一條值得重複的回覆，各帶「保留」和「不要」；一條學到的內容，帶「撤銷」；一條記住的事；以及最近的訊息，標明它為什麼開口或沒開口](activity.zh-CN.png)
 
@@ -566,7 +566,7 @@ personagent 儲存的所有內容都在你自己的機器上，位於主目錄�
 2. 沒有收到任何訊息。在執行本地頁面的電腦上開啟[「動態」](#動態)，看看有沒有這個聊天；在伺服器上，點名叫它一次，再看服務日誌：每次回覆、每個被拒絕的聊天都有一行記錄。如果沒有收到訊息，說明聯結器沒有轉發，或者沒有連上 personagent。QQ 官方機器人在群裡能收到哪些訊息，要在 QQ 裡檢視。使用你自己執行的 AstrBot 時，外掛只轉發 `groups` 和 `dm_users` 中列出的群和使用者（走 NapCat 時，外掛的 `excluded_platforms` 裡不能有 `aiocqhttp`）；另外請檢查外掛的 `personagent_url`，以及兩邊的 `CONNECTOR_TOKEN` 是否一致。
 3. 沒有叫到它。用名字叫它（`PERSONA_NAME`，按完整詞匹配）。在群裡它不會每條都回：累計 `CHAT_TRIGGER_COUNT` 條訊息（預設 30）後才考慮插話，而且只在判斷模型認為真人會接話時才開口。
 
-完整的排查清單見[中文部署教程](deploy.zh-TW.md#機器人不說話)和[部署指南](deploy.md#when-the-bot-goes-quiet)（英文）。
+完整的排查清單見[部署教程](deploy.zh-TW.md#完整排查清單)。
 
 **怎麼確認服務線上？** `curl http://127.0.0.1:8080/health` 不會呼叫模型。`/health/details` 還會探測各項服務；配置了令牌後，需要帶上 `X-Personagent-Token` 請求頭。
 
@@ -582,8 +582,8 @@ personagent 儲存的所有內容都在你自己的機器上，位於主目錄�
 
 personagent 1.3.1 已釋出到 PyPI。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 執行測試，另有幾項任務會安裝軟體包，並實際執行命令和本地頁面。
 
-OneBot 直連入口（`/v1/onebot`）已廢棄，在 1.x 期間保留。`tools/` 裡的指令碼供從原始碼執行時使用，說明見[工具指令碼](tools.md)（英文）。
+OneBot 直連入口（`/v1/onebot`）已廢棄，在 1.x 期間保留。`tools/` 裡的指令碼供從原始碼執行時使用，說明見[工具指令碼](tools.zh-TW.md)。
 
-- [簡明入門](start.zh-TW.md) · [部署指南](deploy.md)（英文） · [中文部署教程：QQ 掃碼直連和排查](deploy.zh-TW.md)
-- 聯結器：[AstrBot 外掛](../integrations/astrbot/astrbot_plugin_personagent/README.zh-TW.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [協議](connectors.md)（後三個為英文）
+- [簡明入門](start.zh-TW.md) · [部署教程和參考](deploy.zh-TW.md)
+- 聯結器：[AstrBot 外掛](../integrations/astrbot/astrbot_plugin_personagent/README.zh-TW.md) · [Satori](../integrations/satori/README.zh-TW.md) · [Matrix](../integrations/matrix/README.zh-TW.md) · [協議](connectors.zh-TW.md)
 - [全部設定](../.env.example) · [更新日誌](../CHANGELOG.md) · [貢獻指南](../.github/CONTRIBUTING.md) · [安全策略](../.github/SECURITY.md)（英文）

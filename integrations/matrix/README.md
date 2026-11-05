@@ -1,5 +1,7 @@
 # Matrix connector
 
+English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
+
 This connector puts [personagent](https://github.com/wangkant/personagent)
 in Matrix rooms, and through [mautrix bridges](https://docs.mau.fi/bridges/)
 on WhatsApp, Signal, Messenger, Instagram, Google Messages and other

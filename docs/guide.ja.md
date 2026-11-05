@@ -249,12 +249,12 @@ LINE は提供していません。AstrBot が LINE のコールバックをダ�
 |---|---|
 | すでに動かしている [AstrBot](https://docs.astrbot.app) | そのプラットフォーム |
 | [NapCat](https://github.com/NapNeko/NapCatQQ)（OneBot v11）、AstrBot 経由 | 個人の QQ アカウントでの QQ |
-| [Koishi](https://koishi.chat) またはほかの Satori サーバー、[Satori コネクター](../integrations/satori/README.md)経由 | そのサーバーがログインしている先 |
-| [Matrix](../integrations/matrix/README.md)、mautrix ブリッジ経由 | Matrix のルーム、WhatsApp、Signal、Messenger、Instagram、Google Messages |
+| [Koishi](https://koishi.chat) またはほかの Satori サーバー、[Satori コネクター](../integrations/satori/README.ja.md)経由 | そのサーバーがログインしている先 |
+| [Matrix](../integrations/matrix/README.ja.md)、mautrix ブリッジ経由 | Matrix のルーム、WhatsApp、Signal、Messenger、Instagram、Google Messages |
 
 それ以外のものは、メッセージごとに署名付き HTTP リクエストを 1 回受け取る[コネクタープロトコル](connectors.ja.md)でつなげます。複数のコネクターが 1 つの personagent に同時につながれます。本番運用については[デプロイガイド](deploy.ja.md)を参照してください。
 
-**すでに動かしている AstrBot。** AstrBot は小さなプラグイン [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md) を通じて personagent にメッセージを渡します。プラグインは personagent に同梱されており、管理下の AstrBot には自動で入ります。`personagent connect astrbot` は AstrBot を見つけるか、フォルダーを引数で受け取ります。プラグインをインストールし、共通の `CONNECTOR_TOKEN` を両側に書き込み、どのグループを許可するか尋ねます。グループで `/sid` を送ると ID がわかります。
+**すでに動かしている AstrBot。** AstrBot は小さなプラグイン [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.ja.md) を通じて personagent にメッセージを渡します。プラグインは personagent に同梱されており、管理下の AstrBot には自動で入ります。`personagent connect astrbot` は AstrBot を見つけるか、フォルダーを引数で受け取ります。プラグインをインストールし、共通の `CONNECTOR_TOKEN` を両側に書き込み、どのグループを許可するか尋ねます。グループで `/sid` を送ると ID がわかります。
 
 別のマシンの AstrBot の場合：
 
@@ -501,7 +501,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 `--rejudge REPORT` は残したレポートの返信を、今設定している `BENCH_JUDGE_MODEL` で、テスト対象のモデルを呼ばずに再判定し、結果を元のレポートの横に書きます。返信、ベースライン、昇格ポリシーの動作はそのままです。
 
-方法とすべてのレポートを含む最新の結果は [evals/2026-10-18](evals/2026-10-18/README.md) にあります。レポートを読むときの注意をいくつか挙げます。
+方法とすべてのレポートを含む最新の結果は [evals/2026-10-18](evals/2026-10-18/README.ja.md) にあります。レポートを読むときの注意をいくつか挙げます。
 
 - `speak` では、見逃しの多くは名前が映画館や子犬のような別のものを指す行か、誰かがそれの発言を別の人に伝える行です。名前は呼びかけと数えられ、モデルがそれを覆すことはめったにありません。
 - `persona` では、分割は判定役が 2 回とも先（または後）に来た返信を選んだことを意味します。公開している判定は Claude Opus 5.5 のものです。`personagent eval` の外でバッチで判定し、各レポートの `rejudged` フィールドに記録されています。各組の `earlier` フィールドには最初の判定役 Claude Haiku 5.5 の判定が残っています。
@@ -566,5 +566,5 @@ personagent 1.3.1 は PyPI にあります。CI は Linux の Python 3.10–3.14
 直接の OneBot 経路（`/v1/onebot`）は非推奨ですが 1.x の間は残ります。`tools/` のスクリプトはクローンから実行するもので、[tools.md](tools.ja.md) で説明しています。
 
 - [はじめに](start.ja.md) · [デプロイガイド](deploy.ja.md) · [中国語の手順ガイド（QQ のスキャン接続とトラブルシューティング）](deploy.zh-CN.md)
-- コネクター：[AstrBot プラグイン](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [プロトコル](connectors.ja.md)
+- コネクター：[AstrBot プラグイン](../integrations/astrbot/astrbot_plugin_personagent/README.ja.md) · [Satori](../integrations/satori/README.ja.md) · [Matrix](../integrations/matrix/README.ja.md) · [プロトコル](connectors.ja.md)
 - [すべての設定](../.env.example) · [変更履歴](../CHANGELOG.md) · [貢献](../.github/CONTRIBUTING.md) · [セキュリティポリシー](../.github/SECURITY.md)

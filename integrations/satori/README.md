@@ -1,5 +1,7 @@
 # Satori connector
 
+English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
+
 This connector links [personagent](https://github.com/wangkant/personagent)
 to a [Satori](https://satori.chat) server. Satori is a cross-platform chat
 protocol. A server such as [Koishi](https://koishi.chat) (with its

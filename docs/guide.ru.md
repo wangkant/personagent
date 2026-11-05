@@ -249,12 +249,12 @@ LINE не предлагается, потому что AstrBot получает
 |---|---|
 | [AstrBot](https://docs.astrbot.app), который у вас уже работает | его платформам |
 | [NapCat](https://github.com/NapNeko/NapCatQQ) (OneBot v11), через AstrBot | QQ с личным аккаунтом QQ |
-| [Koishi](https://koishi.chat) или другой сервер Satori, через [коннектор Satori](../integrations/satori/README.md) | тому, что подключено к этому серверу |
-| [Matrix](../integrations/matrix/README.md), через мосты mautrix | комнатам Matrix, а также WhatsApp, Signal, Messenger, Instagram и Google Messages |
+| [Koishi](https://koishi.chat) или другой сервер Satori, через [коннектор Satori](../integrations/satori/README.ru.md) | тому, что подключено к этому серверу |
+| [Matrix](../integrations/matrix/README.ru.md), через мосты mautrix | комнатам Matrix, а также WhatsApp, Signal, Messenger, Instagram и Google Messages |
 
 Всё остальное можно подключить через [протокол коннекторов](connectors.ru.md), принимающий один подписанный HTTP-запрос на сообщение. Несколько коннекторов могут одновременно обслуживать один personagent. [Руководство по развёртыванию](deploy.ru.md) описывает работу в продакшене.
 
-**AstrBot, который у вас уже работает.** AstrBot пересылает сообщения в personagent через небольшой плагин, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md). Плагин поставляется с personagent, и управляемый AstrBot получает его автоматически. `personagent connect astrbot` находит ваш AstrBot или принимает его папку как аргумент. Он устанавливает плагин, записывает общий `CONNECTOR_TOKEN` на обе стороны и спрашивает, какие группы разрешить. Отправьте `/sid` в группе, чтобы увидеть её идентификатор.
+**AstrBot, который у вас уже работает.** AstrBot пересылает сообщения в personagent через небольшой плагин, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.ru.md). Плагин поставляется с personagent, и управляемый AstrBot получает его автоматически. `personagent connect astrbot` находит ваш AstrBot или принимает его папку как аргумент. Он устанавливает плагин, записывает общий `CONNECTOR_TOKEN` на обе стороны и спрашивает, какие группы разрешить. Отправьте `/sid` в группе, чтобы увидеть её идентификатор.
 
 Для AstrBot на другой машине:
 
@@ -501,7 +501,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 `--rejudge REPORT` заново оценивает ответы сохранённого отчёта с заданным сейчас `BENCH_JUDGE_MODEL`, не вызывая тестируемую модель, и пишет результат рядом с оригиналом. Ответы, эталоны и то, что сделала политика продвижения, остаются как есть.
 
-Последние результаты, с методом и всеми отчётами, находятся в [evals/2026-10-18](evals/2026-10-18/README.md). Несколько замечаний для чтения отчётов:
+Последние результаты, с методом и всеми отчётами, находятся в [evals/2026-10-18](evals/2026-10-18/README.ru.md). Несколько замечаний для чтения отчётов:
 
 - В `speak` большинство промахов — строки, где его имя значит что-то другое, например кинотеатр или щенка, или где кто-то пересказывает другому, что он сказал. Имя считается вызовом, и модель редко с этим спорит.
 - В `persona` ничья значит, что судья оба раза выбрал ответ, шедший первым (или вторым). Опубликованные вердикты принадлежат Claude Opus 5.5. Он судил вне `personagent eval`, пакетами, как записано в поле `rejudged` каждого отчёта. Поле `earlier` каждой пары хранит вердикт первого судьи, Claude Haiku 5.5.
@@ -566,5 +566,5 @@ personagent 1.3.1 есть на PyPI. CI запускает тесты на Linu
 Прямой путь OneBot (`/v1/onebot`) устарел, но остаётся на протяжении всей 1.x. Скрипты в `tools/` рассчитаны на запуск из клона, и [tools.md](tools.ru.md) их описывает.
 
 - [Быстрый старт](start.ru.md) · [Руководство по развёртыванию](deploy.ru.md) · [Пошаговое руководство на китайском (QQ через сканирование и устранение неполадок)](deploy.zh-CN.md)
-- Коннекторы: [плагин AstrBot](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [протокол](connectors.ru.md)
+- Коннекторы: [плагин AstrBot](../integrations/astrbot/astrbot_plugin_personagent/README.ru.md) · [Satori](../integrations/satori/README.ru.md) · [Matrix](../integrations/matrix/README.ru.md) · [протокол](connectors.ru.md)
 - [Все настройки](../.env.example) · [Журнал изменений](../CHANGELOG.md) · [Участие в разработке](../.github/CONTRIBUTING.md) · [Политика безопасности](../.github/SECURITY.md)

@@ -11,7 +11,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <strong>繁體中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-*本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新；文中連結的指南為英文或簡體中文。*
+*本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
 personagent 是放進群組聊天裡的一個角色：選一個現成的個性或自己寫一個，接上任何相容 OpenAI 的模型就能用。QQ、微信、Telegram、Discord 由它自己連接；KOOK、飛書、釘釘、Slack、企業微信、Mattermost、Misskey 在同一個頁面裡接入。
 
@@ -34,7 +34,7 @@ personagent
 
 瀏覽器會開啟一個本機頁面，分成三個分頁：「開始聊天」「連接平台」「角色與設定」。填入模型 API 金鑰，按下「驗證並開始聊天 →」，它會送出一次小請求來驗證金鑰。預設選中的是 OpenRouter 的免費模型：金鑰不用付費，每天限 50 次請求，每次用的模型可能不同。模型服務有 10 種預設，也可以選其他相容 OpenAI 的服務；角色有名字和個性的預設。「人設」框裡的內容就是 `persona.txt`，儲存後會重新啟動角色服務，學到的東西不會遺失。「更多功能」裡可以開啟網路搜尋、看圖和主動說話。再次執行 `personagent` 會沿用已經開啟的頁面。右上角的選單可以把頁面切換成英文、中文或另外八種語言。角色會用聊天裡的語言回覆；內建的提示詞和資料是中文和英文。
 
-Windows 也可以下載原始碼 ZIP，解壓縮後雙擊 `start.bat`。需要 Python 3.10–3.14。詳見[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)；命令列和連接器的用法在[完整手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)裡。
+Windows 也可以下載原始碼 ZIP，解壓縮後雙擊 `start.bat`。需要 Python 3.10–3.14。詳見[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)；命令列和連接器的用法在[完整手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md)裡。
 
 ## 讓程式助手幫你安裝
 
@@ -58,7 +58,7 @@ personagent connect dsh
 
 在那邊開一個新工作階段（DeepSeek Harness 要先重新啟動），請它對角色說句話。這和本機頁面是同一個一對一聊天，記憶也相同，每次回覆都會呼叫一次你的模型服務。Claude Code 和 Codex 第一次使用這個工具時會徵求你的同意。如果本機頁面和 `personagent up` 都沒有在執行，頁面會在背景啟動，隨這個工作階段一起結束，你連接的聊天平台也一樣。
 
-在 Claude Code 或 Codex 上加 `--react`，角色可能在一輪結束時說一句話。這會把資料夾名稱和程式助手最後一則訊息的開頭傳給你的模型服務，最多每 30 分鐘一次。`--remove` 會移除全部設定。其他支援 MCP 的工具可以自行啟動 `personagent mcp`。詳情見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#编程助手)（簡體中文）。
+在 Claude Code 或 Codex 上加 `--react`，角色可能在一輪結束時說一句話。這會把資料夾名稱和程式助手最後一則訊息的開頭傳給你的模型服務，最多每 30 分鐘一次。`--remove` 會移除全部設定。其他支援 MCP 的工具可以自行啟動 `personagent mcp`。詳情見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#程式設計助手)。
 
 ## 為什麼用它
 
@@ -94,7 +94,7 @@ personagent connect dsh
 
 - 每個聊天的記憶各自獨立。群裡記下的關於某人的事，也會跟到對方和角色的私聊裡，反過來不會。
 - 修改人設不會丟掉它學到的東西。
-- 效果是實際量測過的，數字見[效果評測](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)。
+- 效果是實際量測過的，數字見[效果評測](#效果評測)。
 
 ## 接進你的群組
 
@@ -108,9 +108,9 @@ personagent connect dsh
 
 填寫的內容會先經過驗證，通過才儲存；連好的平台之後每次啟動 personagent 都會自動連上。QQ、微信、Telegram、Discord 由 personagent 直接連接，其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入，不必另外開啟什麼。在伺服器上不開瀏覽器的話，`personagent up` 會啟動角色和所有連好的平台。
 
-**已經在用 AstrBot、Koishi 或 Matrix？** 如果 AstrBot 就在這台電腦上，執行 `personagent connect astrbot` 就會裝好外掛、設好通關密語。如果 AstrBot 在別台機器上，從[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下載 `astrbot_plugin_personagent.zip`，在它外掛頁面的 **Install from File** 上傳，再依照下面的手冊填好通關密語和 personagent 的 HTTPS 位址。[Koishi](https://koishi.chat) 透過 [Satori 連接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md)（英文）接入，[Matrix](https://matrix.org)（可透過 mautrix 橋接 WhatsApp、Signal）透過 [Matrix 連接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md)（英文）接入。
+**已經在用 AstrBot、Koishi 或 Matrix？** 如果 AstrBot 就在這台電腦上，執行 `personagent connect astrbot` 就會裝好外掛、設好通關密語。如果 AstrBot 在別台機器上，從[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下載 `astrbot_plugin_personagent.zip`，在它外掛頁面的 **Install from File** 上傳，再依照下面的手冊填好通關密語和 personagent 的 HTTPS 位址。[Koishi](https://koishi.chat) 透過 [Satori 連接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)接入，[Matrix](https://matrix.org)（可透過 mautrix 橋接 WhatsApp、Signal）透過 [Matrix 連接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)接入。
 
-具體做法見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)（簡體中文）和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）；[中文部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)（簡體中文）從零開始講解 QQ，每一步都寫明會看到什麼。
+具體做法見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接進聊天平臺)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)，它從零開始講解 QQ，每一步都寫明會看到什麼。
 
 ## 與同類專案比較
 
@@ -121,7 +121,7 @@ personagent connect dsh
 - **ChatLuna 偽裝群友**（AGPL-3.0）：Koishi 外掛，依規則插話：固定間隔、群組的活躍程度、冷場了多久。
 - **ElizaOS**（MIT）：以 TypeScript 撰寫的 agent 框架，支援 Discord、Telegram、Slack 等，由模型決定要不要回覆。
 
-personagent 內建的：從別人對它回覆的反應中學習（糾正、否定、被接受的重答）；一項變更需要同一個聊天裡兩則一致的反應，其中一則是強證據；每項變更都有紀錄，可以撤回；行為有公開的評測（[見下文](https://github.com/wangkant/personagent/blob/main/README.zh-CN.md#效果评测)）。
+personagent 內建的：從別人對它回覆的反應中學習（糾正、否定、被接受的重答）；一項變更需要同一個聊天裡兩則一致的反應，其中一則是強證據；每項變更都有紀錄，可以撤回；行為有公開的評測（[見下文](#效果評測)）。
 
 它們比較強的地方：桌面程式、所有設定都能在 WebUI 裡點選、外掛生態豐富，還有學行話、貼圖、圖片記憶。已經在用 AstrBot 或 Koishi 也不必二選一：personagent 可以接在它們後面，只擔任那個角色。
 
@@ -138,23 +138,23 @@ personagent 內建的：從別人對它回覆的反應中學習（糾正、否�
 - 該它回的話幾乎不會漏；出錯的大多是名字其實指別的東西，例如影城的名字、別人家的寵物。
 - 搗亂、旁觀、說完就走的糾正，84 次都沒有混進來。
 
-[完整結果](https://github.com/wangkant/personagent/blob/main/docs/evals/2026-10-18/README.zh-CN.md)（簡體中文）裡有信賴區間、各類錯誤、測試方法和全部報告。
+[完整結果](https://github.com/wangkant/personagent/blob/main/docs/evals/2026-10-18/README.zh-TW.md)裡有信賴區間、各類錯誤、測試方法和全部報告。
 
 ## 文件
 
-- [使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)（簡體中文）：安裝、設定、終端機試聊、接入各平台、教它、「動態」頁、評測、疑難排解，README 沒寫的都在這裡
-- [中文部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)（簡體中文）：安裝、掃描接上 QQ、排查問題，從零開始，每一步都寫明會看到什麼
-- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）：長期執行要知道的事，包括連接器、多平台、對外公開、費用和排查
-- [連接器協定](https://github.com/wangkant/personagent/blob/main/docs/connectors.md)（英文）：為其他平台自行撰寫連接器
-- [工具腳本](https://github.com/wangkant/personagent/blob/main/docs/tools.md)（英文）：`tools/` 裡給原始碼版使用的腳本
+- [使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md)：安裝、設定、終端機試聊、接入各平台、教它、「動態」頁、評測、疑難排解，README 沒寫的都在這裡
+- [部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)：安裝、掃描接上 QQ、排查問題，從零開始，每一步都寫明會看到什麼
+- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md#部署參考)：長期執行要知道的事，包括連接器、多平台、對外公開、費用和排查
+- [連接器協定](https://github.com/wangkant/personagent/blob/main/docs/connectors.zh-TW.md)：為其他平台自行撰寫連接器
+- [工具腳本](https://github.com/wangkant/personagent/blob/main/docs/tools.zh-TW.md)：`tools/` 裡給原始碼版使用的腳本
 - [更新日誌](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（英文），含[從 0.4 升級](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04)的完整清單
 - [貢獻指南](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md)（英文）
 - [安全性政策](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md)（英文）：如何私下回報漏洞
-- [免責聲明](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.zh-CN.md)（簡體中文）
+- [免責聲明](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.zh-TW.md)
 
 ## 隱私
 
-personagent 儲存的一切都在你自己機器上的一個主目錄裡：存放金鑰的 `.env`、`persona.txt`、`runtime/`，以及存放代管 AstrBot 和直連平台憑證的 `platforms/`。模型服務商會看到它回覆的對話；personagent 每天會向 pypi.org 查詢一次有沒有新版本（設定 `UPDATE_CHECK_ENABLED=false` 可以關閉）；接入真實的群組之前，請告訴群組成員這是機器人，並徵得他們同意。哪些內容會傳送給誰，見[使用手冊的隱私一節](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#隐私与知情同意)（簡體中文）。
+personagent 儲存的一切都在你自己機器上的一個主目錄裡：存放金鑰的 `.env`、`persona.txt`、`runtime/`，以及存放代管 AstrBot 和直連平台憑證的 `platforms/`。模型服務商會看到它回覆的對話；personagent 每天會向 pypi.org 查詢一次有沒有新版本（設定 `UPDATE_CHECK_ENABLED=false` 可以關閉）；接入真實的群組之前，請告訴群組成員這是機器人，並徵得他們同意。哪些內容會傳送給誰，見[使用手冊的隱私一節](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#隱私與知情同意)。
 
 ## 專案狀態
 

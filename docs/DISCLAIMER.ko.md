@@ -11,7 +11,7 @@ personagent가 채팅 플랫폼에 닿는 방법은 두 가지예요. QQ 공식 
 - **공식 봇 API**는 봇을 위해 만들어졌어요. QQ 공식 봇 API, 개인 WeChat용 Tencent iLink 봇 API, Telegram, Discord, Slack, KOOK, Feishu/Lark, DingTalk, WeCom 같은 플랫폼이 여기에 속해요. 그래도 각 플랫폼의 개발자 약관과 속도 제한은 지켜야 해요.
 - **비공식 클라이언트**는 일반 사용자 계정으로 로그인해 소프트웨어로 조작해요. 플랫폼은 이를 허용하지 않으며 약관으로 금지할 수도 있어요. 계정이 제한, 동결되거나 영구 정지될 수 있어요. 다음이 여기에 속해요.
   - **NapCat, LLOneBot, Lagrange 등 OneBot 구현을 통한 QQ**. 고급 OneBot v11 옵션이에요. QQ 공식 봇에는 이 중 아무것도 필요 없어요. Tencent는 이를 허용하지 않으며, 클라우드나 해외 IP 주소에서는 위험이 가장 커요.
-  - **mautrix 브리지를 통한 WhatsApp, Signal, Messenger, Instagram, Google Messages 등**. Matrix 커넥터가 이 방식으로 닿아요. 브리지는 각 네트워크의 비공식 클라이언트이고, 일부 네트워크는 약관에서 자동 메시지를 다뤄요. [Matrix 커넥터 안내](../integrations/matrix/README.md#terms-of-each-network)를 보세요.
+  - **mautrix 브리지를 통한 WhatsApp, Signal, Messenger, Instagram, Google Messages 등**. Matrix 커넥터가 이 방식으로 닿아요. 브리지는 각 네트워크의 비공식 클라이언트이고, 일부 네트워크는 약관에서 자동 메시지를 다뤄요. [Matrix 커넥터 안내](../integrations/matrix/README.ko.md#각-네트워크의-약관)를 보세요.
   - 그 밖에 사람으로 로그인하는 모든 것.
 
 이 중 하나를 쓴다면 잃어도 괜찮은 전용 계정을 쓰고, 주 계정은 절대 쓰지 마세요. 가능하면 클라우드 서버 대신 가정용 네트워크에서 실행하세요. 연결하는 모든 네트워크의 최신 약관을 읽으세요. 계정 손실이나 제한에 대해 personagent 작성자도, 함께 쓰는 서드파티 프로젝트(AstrBot, NapCat, Koishi, mautrix 등)의 관리자도 책임지지 않아요.

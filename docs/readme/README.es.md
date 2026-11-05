@@ -13,7 +13,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <strong>Español</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-*Esta es una traducción del README en inglés, que es la versión de referencia y puede estar más actualizada. Las guías a las que enlaza están en inglés.*
+*Esta es una traducción del README en inglés, que es la versión de referencia y puede estar más actualizada.*
 
 personagent es un personaje para tus chats de grupo: elige uno o escribe el tuyo, y hazlo funcionar con cualquier modelo compatible con OpenAI. Se conecta por sí mismo a QQ, WeChat, Telegram y Discord, y desde la misma página a KOOK, Feishu, DingTalk, Slack, WeCom, Mattermost y Misskey.
 
@@ -38,7 +38,7 @@ Con [uv](https://docs.astral.sh/uv/), `uvx personagent` lo ejecuta sin un paso d
 
 El navegador abre una página local con tres vistas: **Chat**, **Conectar apps** y **Personaje y ajustes**. Pega la clave de API de tu modelo y haz clic en **Verificar y empezar a chatear**; una pequeña solicitud la comprueba. El servicio preseleccionado son los modelos gratuitos de OpenRouter: la clave no cuesta nada, el límite es de 50 solicitudes al día y el modelo puede cambiar de una solicitud a otra. Hay 10 servicios de modelos preconfigurados, además de cualquier otro compatible con OpenAI, y nombres y personalidades predefinidos para el personaje. El cuadro **Perfil del personaje** contiene `persona.txt`; al guardarlo, el agente se reinicia y conserva lo que ha aprendido. **Más funciones** activa la búsqueda web, la comprensión de imágenes y la opción de hablar primero. Si vuelves a ejecutar `personagent`, reutiliza la página que ya esté abierta. El menú de arriba a la derecha muestra la página en inglés, en chino o en otros ocho idiomas. El personaje responde en el idioma del chat; sus instrucciones internas y sus datos están en inglés y en chino.
 
-En Windows también puedes descargar el ZIP del código fuente y hacer doble clic en `start.bat`. Python 3.10–3.14. Consulta la [guía rápida de inicio](https://github.com/wangkant/personagent/blob/main/docs/start.md); los comandos de terminal y los conectores están en la [guía completa](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
+En Windows también puedes descargar el ZIP del código fuente y hacer doble clic en `start.bat`. Python 3.10–3.14. Consulta la [guía rápida de inicio](https://github.com/wangkant/personagent/blob/main/docs/start.es.md); los comandos de terminal y los conectores están en la [guía completa](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md).
 
 ## Deja que tu agente de programación lo configure
 
@@ -62,7 +62,7 @@ personagent connect dsh
 
 Abre allí una sesión nueva (reinicia antes DeepSeek Harness) y pídele que le diga algo a tu personaje. Es el mismo chat privado y la misma memoria que la página local, y cada respuesta cuesta una llamada a tu servicio de modelos. Claude Code y Codex te piden permiso la primera vez que usan la herramienta. Si ni la página ni `personagent up` están en marcha, la página arranca en segundo plano para esa sesión y termina con ella, junto con las apps de chat que hayas conectado.
 
-En Claude Code y Codex, con `--react`, el personaje puede decir algo al terminar un turno. Eso envía a tu servicio de modelos el nombre de la carpeta y el inicio del último mensaje del agente, como máximo una vez cada 30 minutos. `--remove` lo deshace todo. Cualquier otra herramienta compatible con MCP puede iniciar `personagent mcp` por su cuenta. Los detalles están en la [guía de uso](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents) (en inglés).
+En Claude Code y Codex, con `--react`, el personaje puede decir algo al terminar un turno. Eso envía a tu servicio de modelos el nombre de la carpeta y el inicio del último mensaje del agente, como máximo una vez cada 30 minutos. `--remove` lo deshace todo. Cualquier otra herramienta compatible con MCP puede iniciar `personagent mcp` por su cuenta. Los detalles están en la [guía de uso](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#agentes-de-código) (en inglés).
 
 ## Por qué personagent
 
@@ -111,9 +111,9 @@ Abre **Conectar apps** en la página local. Ahí las apps se agrupan así:
 
 Las credenciales se comprueban antes de guardarse, y las apps conectadas vuelven a iniciarse cada vez que arranca personagent. personagent conecta por sí mismo QQ, WeChat, Telegram y Discord; el resto pasa por un [AstrBot](https://github.com/AstrBotDevs/AstrBot) que descarga y ejecuta en segundo plano, sin nada más que abrir. En un servidor, `personagent up` inicia el personaje y todas las apps conectadas sin navegador.
 
-**¿Ya usas AstrBot, Koishi o Matrix?** Para un AstrBot en esta computadora, `personagent connect astrbot` instala el plugin y el token compartido. Para uno en otra máquina, sube `astrbot_plugin_personagent.zip` de la [última versión](https://github.com/wangkant/personagent/releases/latest) mediante **Install from File** en su página de plugins, y luego configura su token y la dirección HTTPS de personagent como se describe en las guías de abajo. [Koishi](https://koishi.chat) se une mediante el [conector de Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md), y [Matrix](https://matrix.org), con WhatsApp y Signal detrás de puentes de mautrix, mediante el [conector de Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
+**¿Ya usas AstrBot, Koishi o Matrix?** Para un AstrBot en esta computadora, `personagent connect astrbot` instala el plugin y el token compartido. Para uno en otra máquina, sube `astrbot_plugin_personagent.zip` de la [última versión](https://github.com/wangkant/personagent/releases/latest) mediante **Install from File** en su página de plugins, y luego configura su token y la dirección HTTPS de personagent como se describe en las guías de abajo. [Koishi](https://koishi.chat) se une mediante el [conector de Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.es.md), y [Matrix](https://matrix.org), con WhatsApp y Signal detrás de puentes de mautrix, mediante el [conector de Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.es.md).
 
-La configuración de cada una está en la [guía de usuario](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat) y en la [guía de despliegue](https://github.com/wangkant/personagent/blob/main/docs/deploy.md); la [guía paso a paso en chino](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md) cubre QQ desde cero.
+La configuración de cada una está en la [guía de usuario](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#ponlo-en-un-chat) y en la [guía de despliegue](https://github.com/wangkant/personagent/blob/main/docs/deploy.es.md).
 
 ## Cómo se compara
 
@@ -145,17 +145,16 @@ Los [resultados completos](https://github.com/wangkant/personagent/tree/main/doc
 
 ## Documentación
 
-- [Guía de usuario](https://github.com/wangkant/personagent/blob/main/docs/guide.md) ([中文](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)): instalación, configuración, el chat en la terminal, conectores, cómo enseñarle, la vista Actividad y solución de problemas.
-- [Guía de despliegue](https://github.com/wangkant/personagent/blob/main/docs/deploy.md): ponerlo en marcha de verdad: conectores, QQ, exponer los endpoints, costos y qué revisar cuando el bot se queda callado.
-- [Tutorial de despliegue en chino](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md): QQ desde cero, paso a paso.
-- [Protocolo de conectores](https://github.com/wangkant/personagent/blob/main/docs/connectors.md): una solicitud HTTP firmada por mensaje, para escribir tu propio conector.
-- [Herramientas](https://github.com/wangkant/personagent/blob/main/docs/tools.md): los scripts de `tools/`, para ejecutarlos desde un clon.
+- [Guía de usuario](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md): instalación, configuración, el chat en la terminal, conectores, cómo enseñarle, la vista Actividad y solución de problemas.
+- [Guía de despliegue](https://github.com/wangkant/personagent/blob/main/docs/deploy.es.md): ponerlo en marcha de verdad: conectores, QQ, exponer los endpoints, costos y qué revisar cuando el bot se queda callado.
+- [Protocolo de conectores](https://github.com/wangkant/personagent/blob/main/docs/connectors.es.md): una solicitud HTTP firmada por mensaje, para escribir tu propio conector.
+- [Herramientas](https://github.com/wangkant/personagent/blob/main/docs/tools.es.md): los scripts de `tools/`, para ejecutarlos desde un clon.
 - [Registro de cambios](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md), incluida la [actualización desde 0.4](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04).
-- [Cómo contribuir](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [Política de seguridad](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [Aviso legal](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.md)
+- [Cómo contribuir](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [Política de seguridad](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [Aviso legal](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.es.md)
 
 ## Privacidad
 
-Todo lo que personagent guarda se queda en tu máquina, en una sola carpeta principal: `.env` con tus claves, `persona.txt`, `runtime/` y `platforms/` con el AstrBot gestionado y las credenciales de las conexiones directas. El proveedor de modelos que elijas ve las conversaciones a las que responde, y una vez al día personagent consulta a pypi.org si hay una versión más nueva (`UPDATE_CHECK_ENABLED=false` lo desactiva). Antes de conectarlo con personas reales, diles que es un bot y obtén su consentimiento; la [guía](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent) detalla qué va a dónde.
+Todo lo que personagent guarda se queda en tu máquina, en una sola carpeta principal: `.env` con tus claves, `persona.txt`, `runtime/` y `platforms/` con el AstrBot gestionado y las credenciales de las conexiones directas. El proveedor de modelos que elijas ve las conversaciones a las que responde, y una vez al día personagent consulta a pypi.org si hay una versión más nueva (`UPDATE_CHECK_ENABLED=false` lo desactiva). Antes de conectarlo con personas reales, diles que es un bot y obtén su consentimiento; la [guía](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#privacidad-y-consentimiento) detalla qué va a dónde.
 
 ## Estado
 

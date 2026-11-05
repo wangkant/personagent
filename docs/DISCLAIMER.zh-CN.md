@@ -11,7 +11,7 @@ personagent 接入聊天平台有两种方式。QQ 官方机器人、个人微�
 - **官方机器人接口**本来就是为机器人设计的，包括 QQ 官方机器人接口、腾讯为个人微信提供的 iLink 机器人接口，以及 Telegram、Discord、Slack、KOOK、飞书、钉钉、企业微信等平台的接口。使用时仍须遵守各平台的开发者条款和频率限制。
 - **非官方客户端**以普通用户账号登录，再由软件代为操作。平台不认可这种做法，条款中可能明令禁止，账号可能因此被限制、冻结乃至永久封禁。这类方式包括：
   - **通过 NapCat、LLOneBot、Lagrange 或其他 OneBot 实现接入 QQ**，即高级选项中的 OneBot v11。使用 QQ 官方机器人则完全不需要它们。腾讯不认可这些实现，从云服务器或境外 IP 登录时风险最高。
-  - **通过 mautrix 桥接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 连接器的接入方式。桥接程序是这些网络的非官方客户端，其中一些网络的条款对自动发送消息有专门规定。详见 [Matrix 连接器的说明](../integrations/matrix/README.md#terms-of-each-network)（英文）。
+  - **通过 mautrix 桥接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 连接器的接入方式。桥接程序是这些网络的非官方客户端，其中一些网络的条款对自动发送消息有专门规定。详见 [Matrix 连接器的说明](../integrations/matrix/README.zh-CN.md#各网络的条款)。
   - 其他任何以真人账号登录的方式。
 
 如果使用其中任何一种，请准备一个**专用的、丢失也无妨的小号**，不要用主号；条件允许时，在家庭网络中运行，不要部署在云服务器上。接入每个网络之前，请阅读它现行的条款。personagent 的作者，以及与它配合使用的第三方项目（AstrBot、NapCat、Koishi、mautrix 等）的维护者，均不对账号丢失或受限承担责任。

@@ -1,9 +1,10 @@
 # astrbot_plugin_personagent
 
+English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
+
 This [AstrBot](https://github.com/AstrBotDevs/AstrBot) plugin connects AstrBot
 to [personagent](https://github.com/wangkant/personagent). It forwards each
 allowed message to the agent and sends the agent's replies back to the chat.
-A Chinese version of this page is [README.zh-CN.md](README.zh-CN.md).
 
 ## Do you need it?
 
@@ -232,8 +233,8 @@ and sets `CONNECTOR_QQ_PLATFORMS` for you.
 
 `personagent connect astrbot <data dir> --qq` removes `aiocqhttp` from
 `excluded_platforms` and sets `CONNECTOR_QQ_PLATFORMS`. Run without a folder,
-it also asks for `QQ_BOT_ID`. A short section in Chinese covers this route:
-[docs/deploy.zh-CN.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#第三方路线astrbot--napcat).
+it also asks for `QQ_BOT_ID`. The deployment guide covers this route too:
+[docs/deploy.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.md#qq-through-napcat-onebot).
 
 Do not skip `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Without it the agent files QQ
 chats under `aiocqhttp:`-prefixed ids, anything learned under the plain QQ
@@ -378,6 +379,12 @@ The plugin's lines in AstrBot's log start with `personagent:`.
 | `outbox: outbox pull refused (403)` or `outbox pull failed: ...` | Same causes as for events: the token, the clocks, or the agent not running. The plugin backs off up to a minute between tries. |
 | `outbox: no running platform '<id>'` | A delivery for an adapter that is disabled or was renamed in AstrBot. The plugin reports it to the agent as failed. |
 | `could not store connector_id` | AstrBot's plugin store failed. Set `connector_id` yourself, or the agent sees a new AstrBot after every restart. |
+
+If AstrBot's own model suddenly answers in another voice, the plugin did not
+reach the agent, or the agent did not claim the conversation. Check the table
+above, then run `personagent doctor`. If the local page started the agent,
+open **Activity** there to see whether the message arrived and why the persona
+stayed silent. If you started it with `personagent run`, read its terminal.
 
 If the agent's own log says the connector sends `X-Personagent-Token` but
 `CONNECTOR_TOKEN` is blank, the agent is ignoring the token. Set the same

@@ -106,9 +106,9 @@ personagent connect dsh
 
 填的内容先校验，通过才保存；连好的平台以后每次启动 personagent 都会自动连上。QQ、微信、Telegram、Discord 由 personagent 直接连接，其余平台经它在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入，不用另外打开什么。在服务器上不开浏览器的话，`personagent up` 会启动角色和所有连好的平台。
 
-**已经在用 AstrBot、Koishi 或 Matrix？** 这台电脑上的 AstrBot，运行 `personagent connect astrbot` 就会装好插件、配好口令。AstrBot 在别的机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在它插件页的「从文件安装」上传，再按下面的手册填好口令和 personagent 的 HTTPS 地址。[Koishi](https://koishi.chat) 经 [Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md)（英文）接入，[Matrix](https://matrix.org)（可经 mautrix 桥接 WhatsApp、Signal）经 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md)（英文）接入。
+**已经在用 AstrBot、Koishi 或 Matrix？** 这台电脑上的 AstrBot，运行 `personagent connect astrbot` 就会装好插件、配好口令。AstrBot 在别的机器上的话，从[最新 Release](https://github.com/wangkant/personagent/releases/latest) 下载 `astrbot_plugin_personagent.zip`，在它插件页的「从文件安装」上传，再按下面的手册填好口令和 personagent 的 HTTPS 地址。[Koishi](https://koishi.chat) 经 [Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-CN.md)接入，[Matrix](https://matrix.org)（可经 mautrix 桥接 WhatsApp、Signal）经 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-CN.md)接入。
 
-具体做法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）；[中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)从零讲 QQ，每一步都写明会看到什么。
+具体做法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)和[部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)，它从零讲 QQ，每一步都写明会看到什么。
 
 ## 和同类项目对比
 
@@ -142,9 +142,9 @@ personagent 自带的：从别人对它回复的反应里学（纠正、否定�
 
 - [使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)：安装、设置、终端试聊、接入各平台、教它、「动态」页、评测、排错，README 没写的都在这里
 - [中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)：装好、扫码接 QQ、排查，从零开始，每一步都写明会看到什么
-- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)（英文）：长期运行要知道的事，包括连接器、多平台、对外暴露、费用和排查
-- [连接器协议](https://github.com/wangkant/personagent/blob/main/docs/connectors.md)（英文）：给别的平台自己写连接器
-- [工具脚本](https://github.com/wangkant/personagent/blob/main/docs/tools.md)（英文）：`tools/` 里给源码版用的脚本
+- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md#部署参考)：长期运行要知道的事，包括连接器、多平台、对外暴露、费用和排查
+- [连接器协议](https://github.com/wangkant/personagent/blob/main/docs/connectors.zh-CN.md)：给别的平台自己写连接器
+- [工具脚本](https://github.com/wangkant/personagent/blob/main/docs/tools.zh-CN.md)：`tools/` 里给源码版用的脚本
 - [更新日志](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（英文），含[从 0.4 升级](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04)的完整清单
 - [贡献指南](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md)（英文）
 - [安全策略](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md)（英文）：怎么私下报告漏洞

@@ -84,7 +84,7 @@ API はエージェントサービスの `/api/dashboard/` の下にあります
 
 ## すでに動かしている AstrBot を通す
 
-AstrBot、NapCat（OneBot）、Koishi（[Satori コネクター](../integrations/satori/README.md)経由）、Matrix（[Matrix コネクター](../integrations/matrix/README.md)と mautrix ブリッジ経由）は、personagent と連携するサードパーティのブリッジです。QQ、WeChat、Telegram、Discord にはどれも必要ありません。
+AstrBot、NapCat（OneBot）、Koishi（[Satori コネクター](../integrations/satori/README.ja.md)経由）、Matrix（[Matrix コネクター](../integrations/matrix/README.ja.md)と mautrix ブリッジ経由）は、personagent と連携するサードパーティのブリッジです。QQ、WeChat、Telegram、Discord にはどれも必要ありません。
 
 AstrBot は `integrations/astrbot/astrbot_plugin_personagent/` のプラグインを通じて personagent にメッセージを渡します。プラグインは各メッセージを `POST /v1/events` に送り、レスポンスの返信を中継します。personagent のアウトボックスも取得するので（`outbox_enabled`、既定でオン）、プラットフォームがボットに許す場所ではペルソナが先に話せます。表はプラグインの README にあります。管理下の AstrBot にはプラグインが自動で入ります。自分の AstrBot の場合は、一度起動してデータフォルダー（`cmd_config.json`、`plugins/`、`config/` があるフォルダー）を作らせてから、次を実行します。
 
@@ -108,7 +108,7 @@ personagent を更新したら、`connect astrbot` を再実行するか、新�
 
 初回の実行では許可リストは空のままです。再実行すると、ほかの除外プラットフォームとともに保たれます。
 
-プラグインの既定は拒否です。AstrBot の WebUI で `groups` と、DM 用に `dm_users` を埋めるか、`connect` の質問に答えてください。DM は `dm_users` が空でなくなると転送されます。[プラグインの README](../integrations/astrbot/astrbot_plugin_personagent/README.md)にすべてのキーがあります。管理下の AstrBot は、つないだ各プラットフォームを `<platform>:*` で開きます。プラグインをインストールしたら、AstrBot を再起動するか WebUI でプラグインを再読み込みしてください。personagent 側では：
+プラグインの既定は拒否です。AstrBot の WebUI で `groups` と、DM 用に `dm_users` を埋めるか、`connect` の質問に答えてください。DM は `dm_users` が空でなくなると転送されます。[プラグインの README](../integrations/astrbot/astrbot_plugin_personagent/README.ja.md)にすべてのキーがあります。管理下の AstrBot は、つないだ各プラットフォームを `<platform>:*` で開きます。プラグインをインストールしたら、AstrBot を再起動するか WebUI でプラグインを再読み込みしてください。personagent 側では：
 
 - `CONNECTOR_TOKEN` は各リクエストを認証します。リクエストは `X-Personagent-Token` ヘッダーと、トークンを鍵とした `timestamp.nonce.body` の HMAC-SHA256 を運び、リプレイ防止が再利用された nonce を拒否します。傍受したリクエストを再送したり改ざんしたりはできません。トークンは署名鍵でもあるので、ログに残さず、漏れたら交換してください。1 台のホストでは任意、ホストをまたぐ場合は必須です。
 - `ADMIN_IDS` は管理者のアカウントを `<platform>:<id>`（`telegram:12345`、`discord:4242`）で一覧にします。ID だけ、または `qq:<id>` は QQ 番号です。`ADMIN_NAME` は管理者の名前を設定します。一覧のアカウントはすべて 1 人の人物のもので、グループと DM でより親しいペルソナを受け取り、ボットがグループについて覚えていることを管理でき、1 人で教えることができます。AstrBot 経由では、プラットフォームは AstrBot が表示するアダプター名で、チャットで `/sid` を使うと ID が表示されます。

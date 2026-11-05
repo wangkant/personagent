@@ -249,12 +249,12 @@ Les projets ci-dessous sont des logiciels tiers avec lesquels personagent foncti
 |---|---|
 | Un [AstrBot](https://docs.astrbot.app) que vous exécutez déjà | ses plateformes |
 | [NapCat](https://github.com/NapNeko/NapCatQQ) (OneBot v11), via AstrBot | QQ avec un compte QQ personnel |
-| [Koishi](https://koishi.chat) ou un autre serveur Satori, via le [connecteur Satori](../integrations/satori/README.md) | ce à quoi ce serveur est connecté |
-| [Matrix](../integrations/matrix/README.md), via les ponts mautrix | les salons Matrix, et WhatsApp, Signal, Messenger, Instagram et Google Messages |
+| [Koishi](https://koishi.chat) ou un autre serveur Satori, via le [connecteur Satori](../integrations/satori/README.fr.md) | ce à quoi ce serveur est connecté |
+| [Matrix](../integrations/matrix/README.fr.md), via les ponts mautrix | les salons Matrix, et WhatsApp, Signal, Messenger, Instagram et Google Messages |
 
 Tout le reste peut se connecter via le [protocole des connecteurs](connectors.fr.md), qui prend une requête HTTP signée par message. Plusieurs connecteurs peuvent servir un même personagent à la fois. Le [guide de déploiement](deploy.fr.md) couvre l'exécution en production.
 
-**Un AstrBot que vous exécutez déjà.** AstrBot transmet les messages à personagent via un petit plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md). Le plugin est livré avec personagent, et l'AstrBot géré le reçoit automatiquement. `personagent connect astrbot` trouve votre AstrBot, ou prend son dossier en argument. Il installe le plugin, écrit un `CONNECTOR_TOKEN` commun des deux côtés et demande quels groupes autoriser. Envoyez `/sid` dans un groupe pour voir son identifiant.
+**Un AstrBot que vous exécutez déjà.** AstrBot transmet les messages à personagent via un petit plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.fr.md). Le plugin est livré avec personagent, et l'AstrBot géré le reçoit automatiquement. `personagent connect astrbot` trouve votre AstrBot, ou prend son dossier en argument. Il installe le plugin, écrit un `CONNECTOR_TOKEN` commun des deux côtés et demande quels groupes autoriser. Envoyez `/sid` dans un groupe pour voir son identifiant.
 
 Pour un AstrBot sur une autre machine :
 
@@ -501,7 +501,7 @@ Les suites de persona et d'apprentissage nécessitent un modèle juge différent
 
 `--rejudge REPORT` rejuge les réponses d'un rapport conservé avec le `BENCH_JUDGE_MODEL` défini maintenant, sans appeler le modèle testé, et écrit le résultat à côté de l'original. Les réponses, les références et ce qu'a fait la politique de promotion restent tels quels.
 
-Les derniers résultats, avec la méthode et tous les rapports, se trouvent dans [evals/2026-10-18](evals/2026-10-18/README.md). Quelques notes pour lire les rapports :
+Les derniers résultats, avec la méthode et tous les rapports, se trouvent dans [evals/2026-10-18](evals/2026-10-18/README.fr.md). Quelques notes pour lire les rapports :
 
 - Dans `speak`, la plupart des ratés sont des lignes où son nom désigne autre chose, comme un cinéma ou un chiot, ou où quelqu'un raconte à quelqu'un d'autre ce qu'il a dit. Un nom compte comme un appel, et le modèle passe rarement outre.
 - Dans `persona`, un partage signifie que le juge a choisi la réponse venue en premier (ou en second) les deux fois. Les verdicts publiés sont ceux de Claude Opus 5.5. Il a jugé hors de `personagent eval`, par lots, comme l'enregistre le champ `rejudged` de chaque rapport. Le champ `earlier` de chaque paire garde le verdict du premier juge, Claude Haiku 5.5.
@@ -566,5 +566,5 @@ personagent 1.3.1 est sur PyPI. La CI exécute les tests sous Linux avec Python 
 La voie directe OneBot (`/v1/onebot`) est obsolète mais reste pendant toute la 1.x. Les scripts de `tools/` sont faits pour être exécutés depuis un clone, et [tools.md](tools.fr.md) les décrit.
 
 - [Premiers pas](start.fr.md) · [Guide de déploiement](deploy.fr.md) · [Guide pas à pas en chinois (QQ par scan et dépannage)](deploy.zh-CN.md)
-- Connecteurs : [plugin AstrBot](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [protocole](connectors.fr.md)
+- Connecteurs : [plugin AstrBot](../integrations/astrbot/astrbot_plugin_personagent/README.fr.md) · [Satori](../integrations/satori/README.fr.md) · [Matrix](../integrations/matrix/README.fr.md) · [protocole](connectors.fr.md)
 - [Tous les réglages](../.env.example) · [Journal des modifications](../CHANGELOG.md) · [Contribuer](../.github/CONTRIBUTING.md) · [Politique de sécurité](../.github/SECURITY.md)

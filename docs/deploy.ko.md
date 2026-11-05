@@ -84,7 +84,7 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있어요.
 
 ## 이미 실행 중인 AstrBot을 통해
 
-AstrBot, NapCat(OneBot), Koishi([Satori 커넥터](../integrations/satori/README.md) 경유), Matrix([Matrix 커넥터](../integrations/matrix/README.md)와 mautrix 브리지 경유)는 personagent와 함께 동작하는 서드파티 브리지예요. QQ, WeChat, Telegram, Discord에는 어느 것도 필요 없어요.
+AstrBot, NapCat(OneBot), Koishi([Satori 커넥터](../integrations/satori/README.ko.md) 경유), Matrix([Matrix 커넥터](../integrations/matrix/README.ko.md)와 mautrix 브리지 경유)는 personagent와 함께 동작하는 서드파티 브리지예요. QQ, WeChat, Telegram, Discord에는 어느 것도 필요 없어요.
 
 AstrBot은 `integrations/astrbot/astrbot_plugin_personagent/`의 플러그인을 통해 personagent에 메시지를 넘겨요. 플러그인은 각 메시지를 `POST /v1/events`로 보내고 응답의 답장을 전달해요. personagent의 아웃박스도 가져오므로(`outbox_enabled`, 기본값 켜짐), 플랫폼이 봇에 허용하는 곳에서는 페르소나가 먼저 말할 수 있어요. 표는 플러그인 README에 있어요. 관리형 AstrBot에는 플러그인이 자동으로 들어가요. 직접 운영하는 AstrBot은 한 번 시작해서 데이터 폴더(`cmd_config.json`, `plugins/`, `config/`가 있는 폴더)를 만들게 한 다음 실행하세요.
 
@@ -108,7 +108,7 @@ personagent를 업그레이드한 뒤에는 `connect astrbot`을 다시 실행�
 
 첫 실행에서는 허용 목록이 비어 있어요. 다시 실행하면 다른 제외 플랫폼과 함께 유지돼요.
 
-플러그인의 기본값은 거부예요. AstrBot WebUI에서 `groups`와, DM을 위해 `dm_users`를 채우거나 `connect`의 질문에 답하세요. DM은 `dm_users`가 비어 있지 않으면 전달돼요. [플러그인 README](../integrations/astrbot/astrbot_plugin_personagent/README.md)에 모든 키가 있어요. 관리형 AstrBot은 연결한 각 플랫폼을 `<platform>:*`로 열어요. 플러그인을 설치한 뒤에는 AstrBot을 재시작하거나 WebUI에서 플러그인을 다시 불러오세요. personagent 쪽에서는:
+플러그인의 기본값은 거부예요. AstrBot WebUI에서 `groups`와, DM을 위해 `dm_users`를 채우거나 `connect`의 질문에 답하세요. DM은 `dm_users`가 비어 있지 않으면 전달돼요. [플러그인 README](../integrations/astrbot/astrbot_plugin_personagent/README.ko.md)에 모든 키가 있어요. 관리형 AstrBot은 연결한 각 플랫폼을 `<platform>:*`로 열어요. 플러그인을 설치한 뒤에는 AstrBot을 재시작하거나 WebUI에서 플러그인을 다시 불러오세요. personagent 쪽에서는:
 
 - `CONNECTOR_TOKEN`은 각 요청을 인증해요. 요청에는 `X-Personagent-Token` 헤더와, 토큰을 키로 `timestamp.nonce.body`에 계산한 HMAC-SHA256이 담기고, 재전송 방지가 재사용된 nonce를 거부해요. 가로챈 요청은 재전송하거나 변조할 수 없어요. 토큰은 서명 키이기도 하므로 로그에 남기지 말고, 유출되면 교체하세요. 한 호스트에서는 선택이고, 호스트 간에는 필수예요.
 - `ADMIN_IDS`는 관리자의 계정을 `<platform>:<id>`(`telegram:12345`, `discord:4242`)로 나열해요. ID만 있거나 `qq:<id>`면 QQ 번호예요. `ADMIN_NAME`은 관리자의 이름을 설정해요. 나열된 계정은 모두 한 사람의 것이고, 그 사람은 그룹과 DM에서 더 친밀한 페르소나를 받으며, 봇이 그룹에 대해 기억하는 내용을 관리할 수 있고, 혼자서 가르칠 수 있어요. AstrBot을 통할 때 플랫폼은 AstrBot이 보여 주는 어댑터 이름이고, 채팅에서 `/sid`를 쓰면 ID가 표시돼요.

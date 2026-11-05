@@ -249,12 +249,12 @@ LINE은 제공하지 않아요. AstrBot이 LINE 콜백을 대시보드를 통해
 |---|---|
 | 이미 실행 중인 [AstrBot](https://docs.astrbot.app) | 그 플랫폼들 |
 | [NapCat](https://github.com/NapNeko/NapCatQQ)(OneBot v11), AstrBot 경유 | 개인 QQ 계정의 QQ |
-| [Koishi](https://koishi.chat) 또는 다른 Satori 서버, [Satori 커넥터](../integrations/satori/README.md) 경유 | 그 서버가 로그인한 곳 |
-| [Matrix](../integrations/matrix/README.md), mautrix 브리지 경유 | Matrix 방, WhatsApp, Signal, Messenger, Instagram, Google Messages |
+| [Koishi](https://koishi.chat) 또는 다른 Satori 서버, [Satori 커넥터](../integrations/satori/README.ko.md) 경유 | 그 서버가 로그인한 곳 |
+| [Matrix](../integrations/matrix/README.ko.md), mautrix 브리지 경유 | Matrix 방, WhatsApp, Signal, Messenger, Instagram, Google Messages |
 
 그 밖의 것은 메시지마다 서명된 HTTP 요청 하나를 받는 [커넥터 프로토콜](connectors.ko.md)로 연결할 수 있어요. 여러 커넥터가 하나의 personagent를 동시에 쓸 수 있어요. 실제 운영은 [배포 가이드](deploy.ko.md)에서 다뤄요.
 
-**이미 실행 중인 AstrBot.** AstrBot은 작은 플러그인 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md)를 통해 personagent에 메시지를 넘겨요. 플러그인은 personagent에 포함되어 있고 관리형 AstrBot에는 자동으로 들어가요. `personagent connect astrbot`은 AstrBot을 찾거나 폴더를 인수로 받아요. 플러그인을 설치하고, 공유 `CONNECTOR_TOKEN`을 양쪽에 쓰고, 어떤 그룹을 허용할지 물어봐요. 그룹에서 `/sid`를 보내면 ID를 볼 수 있어요.
+**이미 실행 중인 AstrBot.** AstrBot은 작은 플러그인 [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.ko.md)를 통해 personagent에 메시지를 넘겨요. 플러그인은 personagent에 포함되어 있고 관리형 AstrBot에는 자동으로 들어가요. `personagent connect astrbot`은 AstrBot을 찾거나 폴더를 인수로 받아요. 플러그인을 설치하고, 공유 `CONNECTOR_TOKEN`을 양쪽에 쓰고, 어떤 그룹을 허용할지 물어봐요. 그룹에서 `/sid`를 보내면 ID를 볼 수 있어요.
 
 다른 컴퓨터의 AstrBot이라면:
 
@@ -501,7 +501,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 `--rejudge REPORT`는 보관한 보고서의 답장을 지금 설정한 `BENCH_JUDGE_MODEL`로, 테스트 대상 모델을 호출하지 않고 다시 판정하며, 결과를 원본 옆에 써요. 답장, 기준선, 승격 정책이 한 일은 그대로예요.
 
-방법과 모든 보고서를 포함한 최신 결과는 [evals/2026-10-18](evals/2026-10-18/README.md)에 있어요. 보고서를 읽을 때 참고할 점이에요.
+방법과 모든 보고서를 포함한 최신 결과는 [evals/2026-10-18](evals/2026-10-18/README.ko.md)에 있어요. 보고서를 읽을 때 참고할 점이에요.
 
 - `speak`에서 놓친 경우의 대부분은 이름이 영화관이나 강아지처럼 다른 것을 뜻하는 줄이거나, 누군가 그것이 한 말을 다른 사람에게 전하는 줄이에요. 이름은 호출로 계산되고 모델이 그것을 뒤집는 일은 드물어요.
 - `persona`에서 분할은 판정자가 두 번 다 먼저(또는 나중에) 온 답장을 골랐다는 뜻이에요. 공개된 판정은 Claude Opus 5.5의 것이에요. `personagent eval` 밖에서 묶음으로 판정했고, 각 보고서의 `rejudged` 필드가 이를 기록해요. 각 쌍의 `earlier` 필드에는 첫 판정자 Claude Haiku 5.5의 판정이 남아 있어요.
@@ -566,5 +566,5 @@ personagent 1.3.1은 PyPI에 있어요. CI는 Linux의 Python 3.10–3.14와 Win
 직접 OneBot 경로(`/v1/onebot`)는 폐지 예정이지만 1.x 동안 유지돼요. `tools/`의 스크립트는 클론에서 실행하는 용도이며 [tools.md](tools.ko.md)에서 설명해요.
 
 - [시작하기](start.ko.md) · [배포 가이드](deploy.ko.md) · [중국어 단계별 가이드(QQ 스캔 연결과 문제 해결)](deploy.zh-CN.md)
-- 커넥터: [AstrBot 플러그인](../integrations/astrbot/astrbot_plugin_personagent/README.md) · [Satori](../integrations/satori/README.md) · [Matrix](../integrations/matrix/README.md) · [프로토콜](connectors.ko.md)
+- 커넥터: [AstrBot 플러그인](../integrations/astrbot/astrbot_plugin_personagent/README.ko.md) · [Satori](../integrations/satori/README.ko.md) · [Matrix](../integrations/matrix/README.ko.md) · [프로토콜](connectors.ko.md)
 - [모든 설정](../.env.example) · [변경 기록](../CHANGELOG.md) · [기여](../.github/CONTRIBUTING.md) · [보안 정책](../.github/SECURITY.md)

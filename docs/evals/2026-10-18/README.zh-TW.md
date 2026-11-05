@@ -1,6 +1,6 @@
 # 評測結果，2026-10-18
 
-[English](README.md) · [简体中文](README.zh-CN.md) · **繁體中文**
+[English](README.md) · [简体中文](README.zh-CN.md) · 繁體中文 · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 `personagent eval` 用標註好的聊天場景驅動真實的 agent，每個用例、每條回覆和判定都會存下來。這次測的是作為 personagent 1.3.0 釋出的程式碼（報告寫於版本號更新之前，所以裡面寫的是 1.2.2），角色是隨包附帶的示例角色（中文叫小夏，英文叫 Nova），模型經 OpenRouter 呼叫，測了兩個：`deepseek/deepseek-v4.1-flash` 和 `openai/gpt-6-luna`。每個用例跑 3 遍，每遍都在全新的部署裡。
 

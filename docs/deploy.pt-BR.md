@@ -84,7 +84,7 @@ Nos dois caminhos, uma plataforma conectada responde a todo grupo e mensagem dir
 
 ## Por um AstrBot que você já executa
 
-AstrBot, NapCat (OneBot), Koishi (pelo [conector Satori](../integrations/satori/README.md)) e Matrix (pelo [conector Matrix](../integrations/matrix/README.md) e pontes mautrix) são pontes de terceiros com as quais o personagent funciona. Nenhuma é necessária para QQ, WeChat, Telegram ou Discord.
+AstrBot, NapCat (OneBot), Koishi (pelo [conector Satori](../integrations/satori/README.pt-BR.md)) e Matrix (pelo [conector Matrix](../integrations/matrix/README.pt-BR.md) e pontes mautrix) são pontes de terceiros com as quais o personagent funciona. Nenhuma é necessária para QQ, WeChat, Telegram ou Discord.
 
 O AstrBot entrega mensagens ao personagent por um plugin em `integrations/astrbot/astrbot_plugin_personagent/`. O plugin envia cada mensagem para `POST /v1/events` e repassa as respostas recebidas. Ele também busca a caixa de saída do personagent (`outbox_enabled`, ligado por padrão), então a persona pode falar primeiro onde a plataforma permitir isso a um bot. O README do plugin tem a tabela. O AstrBot gerenciado recebe o plugin automaticamente. Para o seu próprio AstrBot, inicie-o uma vez para que ele crie a pasta de dados (a que contém `cmd_config.json`, `plugins/` e `config/`) e depois execute:
 
@@ -108,7 +108,7 @@ Opções de `connect astrbot`:
 
 A primeira execução deixa as listas de permissão vazias. Uma nova execução as mantém, junto com outras plataformas excluídas.
 
-O plugin nega por padrão. Preencha `groups`, e `dm_users` para mensagens diretas, na WebUI do AstrBot, ou responda às perguntas de `connect`. Mensagens diretas são encaminhadas quando `dm_users` não está vazio. O [README do plugin](../integrations/astrbot/astrbot_plugin_personagent/README.md) lista todas as chaves. O AstrBot gerenciado abre cada plataforma que você conecta com `<platform>:*`. Depois de instalar o plugin, reinicie o AstrBot ou recarregue os plugins na WebUI. No lado do personagent:
+O plugin nega por padrão. Preencha `groups`, e `dm_users` para mensagens diretas, na WebUI do AstrBot, ou responda às perguntas de `connect`. Mensagens diretas são encaminhadas quando `dm_users` não está vazio. O [README do plugin](../integrations/astrbot/astrbot_plugin_personagent/README.pt-BR.md) lista todas as chaves. O AstrBot gerenciado abre cada plataforma que você conecta com `<platform>:*`. Depois de instalar o plugin, reinicie o AstrBot ou recarregue os plugins na WebUI. No lado do personagent:
 
 - `CONNECTOR_TOKEN` autentica cada requisição. A requisição leva o cabeçalho `X-Personagent-Token` mais um HMAC-SHA256, com o token como chave, sobre `timestamp.nonce.body`, e uma proteção contra repetição rejeita nonces reutilizados. Uma requisição capturada não pode ser repetida nem alterada. O token também é a chave de assinatura, então mantenha-o fora dos logs e troque-o se vazar. É opcional em um host e obrigatório entre hosts.
 - `ADMIN_IDS` lista as contas do administrador como `<platform>:<id>` (`telegram:12345`, `discord:4242`). Um ID puro ou `qq:<id>` é um número de QQ. `ADMIN_NAME` define o nome do administrador. Todas as contas listadas pertencem a uma pessoa, que recebe a persona mais próxima em grupos e mensagens diretas, pode gerenciar o que o bot lembra sobre um grupo e pode ensiná-lo sozinha. Pelo AstrBot, a plataforma é o nome de adaptador que o AstrBot mostra, e `/sid` em uma conversa mostra um ID.

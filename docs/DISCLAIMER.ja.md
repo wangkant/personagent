@@ -11,7 +11,7 @@ personagent がチャットプラットフォームにつながる方法は 2 �
 - **公式ボット API** はボットのために作られています。QQ 公式ボット API、個人の WeChat 向けの Tencent iLink ボット API、Telegram、Discord、Slack、KOOK、Feishu/Lark、DingTalk、WeCom などのプラットフォームが該当します。それでも、各プラットフォームの開発者規約とレート制限には従う必要があります。
 - **非公式クライアント** は普通のユーザーアカウントとしてログインし、ソフトウェアで操作します。プラットフォームはこれを認めておらず、規約で禁じている場合もあります。アカウントの制限、凍結、永久停止につながることがあります。次のものが該当します。
   - **NapCat、LLOneBot、Lagrange などの OneBot 実装を使う QQ**。これは上級者向けの OneBot v11 オプションです。QQ 公式ボットにはどれも必要ありません。Tencent はこれらを認めておらず、クラウドや海外の IP アドレスからはリスクが最も高くなります。
-  - **mautrix ブリッジ経由の WhatsApp、Signal、Messenger、Instagram、Google Messages など**。Matrix コネクターはこの方法でこれらにつながります。ブリッジは各ネットワークの非公式クライアントであり、自動メッセージについて規約で定めているネットワークもあります。[Matrix コネクターの注記](../integrations/matrix/README.md#terms-of-each-network)を参照してください。
+  - **mautrix ブリッジ経由の WhatsApp、Signal、Messenger、Instagram、Google Messages など**。Matrix コネクターはこの方法でこれらにつながります。ブリッジは各ネットワークの非公式クライアントであり、自動メッセージについて規約で定めているネットワークもあります。[Matrix コネクターの注記](../integrations/matrix/README.ja.md#各ネットワークの規約)を参照してください。
   - そのほか、人としてログインするものすべて。
 
 これらのいずれかを使うなら、失っても構わない専用アカウントを使い、メインのアカウントは絶対に使わないでください。可能であれば、クラウドサーバーではなく家庭のネットワークから動かしてください。つなぐすべてのネットワークの最新の規約を読んでください。アカウントの喪失や制限について、personagent の作者も、連携するサードパーティプロジェクト（AstrBot、NapCat、Koishi、mautrix など）のメンテナーも責任を負いません。

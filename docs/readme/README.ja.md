@@ -13,7 +13,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <strong>日本語</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-*これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。リンク先のガイドは英語です。*
+*これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
 personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。QQ、WeChat、Telegram、Discord には自力で接続し、KOOK、Feishu、DingTalk、Slack、WeCom、Mattermost、Misskey にも同じページから接続できます。
 
@@ -38,7 +38,7 @@ personagent
 
 ブラウザーでローカルページが開き、**チャット**、**アプリ連携**、**キャラクターと設定** の 3 つのビューが表示されます。モデルの API キーを貼り付けて **確認してチャット開始 →** をクリックすると、小さなリクエストを 1 回送ってキーを確認します。最初に選ばれているのは OpenRouter の無料モデルです。キーは無料で、1 日 50 リクエストまで、リクエストごとにモデルが変わることがあります。モデルサービスのプリセットは 10 種類あり、そのほかの OpenAI 互換サービスも使えます。キャラクターの名前と性格にもプリセットがあります。**ペルソナ** 欄の内容は `persona.txt` に保存され、保存するとエージェントが再起動し、学んだことはそのまま残ります。**その他の機能** では、ウェブ検索、画像の理解、自分から話しかける機能をオンにできます。`personagent` をもう一度実行すると、すでに開いているページを再利用します。右上のメニューで、ページを英語、中国語、またはほか 8 つの言語で表示できます。キャラクターはチャットで使われている言語で返事をします。組み込みのプロンプトとデータは英語と中国語です。
 
-Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。対応する Python は 3.10–3.14 です。[簡単なスタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.md)を参照してください。ターミナルでのコマンドとコネクターについては[詳しいガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md)にあります。
+Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。対応する Python は 3.10–3.14 です。[簡単なスタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)を参照してください。ターミナルでのコマンドとコネクターについては[詳しいガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md)にあります。
 
 ## コーディングエージェントにセットアップを任せる
 
@@ -62,7 +62,7 @@ personagent connect dsh
 
 そちらで新しいセッションを開き（DeepSeek Harness は先に再起動してください）、キャラクターに何か言うよう頼んでください。ローカルページと同じ一対一のチャットと記憶を使い、返信のたびにモデルサービスを 1 回呼び出します。Claude Code と Codex は、このツールを初めて使うときに許可を求めます。ローカルページも `personagent up` も動いていなければ、ページがバックグラウンドで起動し、接続済みのチャットアプリとともにそのセッションと一緒に終了します。
 
-Claude Code と Codex では、`--react` を付けるとターンの終わりにキャラクターが一言話すことがあります。このときフォルダ名とコーディングエージェントの最後のメッセージの冒頭がモデルサービスに送られます。頻度は最大で 30 分に 1 回です。`--remove` ですべて元に戻せます。MCP に対応した他のツールは、`personagent mcp` を自分で起動できます。詳しくは[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents)（英語）をご覧ください。
+Claude Code と Codex では、`--react` を付けるとターンの終わりにキャラクターが一言話すことがあります。このときフォルダ名とコーディングエージェントの最後のメッセージの冒頭がモデルサービスに送られます。頻度は最大で 30 分に 1 回です。`--remove` ですべて元に戻せます。MCP に対応した他のツールは、`personagent mcp` を自分で起動できます。詳しくは[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)（英語）をご覧ください。
 
 ## personagent を選ぶ理由
 
@@ -111,9 +111,9 @@ QQ、WeChat、Telegram、Discord には自力で参加し、さらに十数個�
 
 認証情報は保存前に確認され、連携済みのアプリは personagent を起動するたびに再び起動します。QQ、WeChat、Telegram、Discord には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ほかに何かを開く必要はありません。サーバーでは、`personagent up` でキャラクターと連携済みのすべてのアプリをブラウザーなしで起動できます。
 
-**すでに AstrBot、Koishi、Matrix を運用していますか？** このコンピューター上の AstrBot なら、`personagent connect astrbot` でプラグインと共有トークンをインストールできます。別のマシン上の AstrBot なら、[最新リリース](https://github.com/wangkant/personagent/releases/latest)の `astrbot_plugin_personagent.zip` をそのプラグインページの **Install from File** からアップロードし、以下のガイドに従ってトークンと personagent の HTTPS アドレスを設定してください。[Koishi](https://koishi.chat) は [Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md)で参加でき、[Matrix](https://matrix.org)（mautrix ブリッジ経由の WhatsApp と Signal を含む）は [Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md)で参加できます。
+**すでに AstrBot、Koishi、Matrix を運用していますか？** このコンピューター上の AstrBot なら、`personagent connect astrbot` でプラグインと共有トークンをインストールできます。別のマシン上の AstrBot なら、[最新リリース](https://github.com/wangkant/personagent/releases/latest)の `astrbot_plugin_personagent.zip` をそのプラグインページの **Install from File** からアップロードし、以下のガイドに従ってトークンと personagent の HTTPS アドレスを設定してください。[Koishi](https://koishi.chat) は [Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)で参加でき、[Matrix](https://matrix.org)（mautrix ブリッジ経由の WhatsApp と Signal を含む）は [Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)で参加できます。
 
-それぞれの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat)と[デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)にあります。[中国語のステップバイステップガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)では、QQ をゼロから設定する手順を説明しています。
+それぞれの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)と[デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md)にあります。
 
 ## 他のプロジェクトとの比較
 
@@ -145,17 +145,16 @@ personagent に組み込まれているもの：返信への人々の反応（�
 
 ## ドキュメント
 
-- [ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md)（[中文](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md)）：インストール、設定、ターミナルでのチャット、コネクター、教え方、アクティビティビュー、トラブルシューティング。
-- [デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.md)：本番運用について。コネクター、QQ、エンドポイントの公開、コスト、ボットが黙ってしまったときの確認事項。
-- [中文部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)：QQ をゼロから設定するステップバイステップの中国語ガイド。
-- [コネクタープロトコル](https://github.com/wangkant/personagent/blob/main/docs/connectors.md)：1 メッセージにつき署名付き HTTP リクエスト 1 回。独自のコネクターを書くためのものです。
-- [ツール](https://github.com/wangkant/personagent/blob/main/docs/tools.md)：`tools/` 内のスクリプト。クローンから実行するためのものです。
+- [ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md)：インストール、設定、ターミナルでのチャット、コネクター、教え方、アクティビティビュー、トラブルシューティング。
+- [デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md)：本番運用について。コネクター、QQ、エンドポイントの公開、コスト、ボットが黙ってしまったときの確認事項。
+- [コネクタープロトコル](https://github.com/wangkant/personagent/blob/main/docs/connectors.ja.md)：1 メッセージにつき署名付き HTTP リクエスト 1 回。独自のコネクターを書くためのものです。
+- [ツール](https://github.com/wangkant/personagent/blob/main/docs/tools.ja.md)：`tools/` 内のスクリプト。クローンから実行するためのものです。
 - [変更履歴](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（[0.4 からのアップグレード](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04)を含む）。
-- [コントリビューション](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [セキュリティポリシー](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [免責事項](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.md)
+- [コントリビューション](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [セキュリティポリシー](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [免責事項](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.ja.md)
 
 ## プライバシー
 
-personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。キーを含む `.env`、`persona.txt`、`runtime/`、そして管理対象の AstrBot と直接接続の認証情報を含む `platforms/` です。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人々とつなぐ前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.md#privacy-and-consent)に記載しています。
+personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。キーを含む `.env`、`persona.txt`、`runtime/`、そして管理対象の AstrBot と直接接続の認証情報を含む `platforms/` です。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人々とつなぐ前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
 
 ## ステータス
 

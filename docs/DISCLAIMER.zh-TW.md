@@ -11,7 +11,7 @@ personagent 接入聊天平臺有兩種方式。QQ 官方機器人、個人微�
 - **官方機器人介面**本來就是為機器人設計的，包括 QQ 官方機器人介面、騰訊為個人微信提供的 iLink 機器人介面，以及 Telegram、Discord、Slack、KOOK、飛書、釘釘、企業微信等平臺的介面。使用時仍須遵守各平臺的開發者條款和頻率限制。
 - **非官方客戶端**以普通使用者賬號登入，再由軟體代為操作。平臺不認可這種做法，條款中可能明令禁止，賬號可能因此被限制、凍結乃至永久封禁。這類方式包括：
   - **透過 NapCat、LLOneBot、Lagrange 或其他 OneBot 實現接入 QQ**，即高階選項中的 OneBot v11。使用 QQ 官方機器人則完全不需要它們。騰訊不認可這些實現，從雲伺服器或境外 IP 登入時風險最高。
-  - **透過 mautrix 橋接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 聯結器的接入方式。橋接程式是這些網路的非官方客戶端，其中一些網路的條款對自動傳送訊息有專門規定。詳見 [Matrix 聯結器的說明](../integrations/matrix/README.md#terms-of-each-network)（英文）。
+  - **透過 mautrix 橋接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 聯結器的接入方式。橋接程式是這些網路的非官方客戶端，其中一些網路的條款對自動傳送訊息有專門規定。詳見 [Matrix 聯結器的說明](../integrations/matrix/README.zh-TW.md#各網路的條款)。
   - 其他任何以真人賬號登入的方式。
 
 如果使用其中任何一種，請準備一個**專用的、丟失也無妨的小號**，不要用主號；條件允許時，在家庭網路中執行，不要部署在雲伺服器上。接入每個網路之前，請閱讀它現行的條款。personagent 的作者，以及與它配合使用的第三方專案（AstrBot、NapCat、Koishi、mautrix 等）的維護者，均不對賬號丟失或受限承擔責任。
