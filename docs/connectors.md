@@ -1,5 +1,7 @@
 # Connector protocol
 
+English · [简体中文](connectors.zh-CN.md) · [繁體中文](connectors.zh-TW.md) · [日本語](connectors.ja.md) · [한국어](connectors.ko.md) · [Español](connectors.es.md) · [Français](connectors.fr.md) · [Deutsch](connectors.de.md) · [Português (Brasil)](connectors.pt-BR.md) · [Русский](connectors.ru.md)
+
 The agent never talks to a chat platform itself. A connector does that work.
 It logs in to one platform, or to a framework that covers many, turns each
 incoming message into a neutral event, posts the event to personagent and
