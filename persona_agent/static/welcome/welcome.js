@@ -496,8 +496,8 @@ const translations = {
 };
 // The page's languages and their BCP 47 tags. English and Chinese live above;
 // the others are translations in /assets/i18n/<code>.json, loaded when chosen,
-// and a string one lacks shows in English. The character's own language is
-// separate and only en or zh (see charLang).
+// and a string one lacks shows in English. Saving the settings makes the page's
+// language AGENT_LANG.
 const LANGS = {
   en: "en",
   zh: "zh-CN",
@@ -533,15 +533,14 @@ function storedLang() {
   }
 }
 let lang = storedLang() || browserLang() || "en";
-// What saving the settings writes to AGENT_LANG: either Chinese means zh and
-// English en; any other page language keeps what the character speaks now.
-const charLang = () =>
-  lang === "zh" || lang === "zh-TW"
-    ? "zh"
-    : lang !== "en" && state?.lang === "zh"
-      ? "zh"
-      : "en";
-const defaultName = () => (charLang() === "zh" ? "小夏" : "Nova");
+const DEFAULT_NAMES = {
+  zh: "小夏",
+  "zh-TW": "小夏",
+  ja: "ノヴァ",
+  ko: "노바",
+  ru: "Нова",
+};
+const defaultName = () => DEFAULT_NAMES[lang] || "Nova";
 async function loadLang(code) {
   if (translations[code]) return;
   const response = await fetch(`/assets/i18n/${code}.json`, {
@@ -1747,7 +1746,7 @@ $("settings-form").addEventListener("submit", async (event) => {
       model: $("model").value,
       name: $("character-name").value,
       character: $("character").value,
-      lang: charLang(),
+      lang,
     });
     // A chosen personality rewrote persona.txt: drop the box's old text.
     if ($("character").value !== "custom") {
@@ -1888,13 +1887,8 @@ $("exit").addEventListener("click", async () => {
   }
   try {
     [state, catalog] = await Promise.all([api("state"), api("catalog")]);
-    // With no choice saved, the page follows the character into or out of
-    // Chinese, as it always has; any other browser language stays.
-    if (!storedLang()) {
-      if (state.lang === "zh" && lang === "en") lang = "zh";
-      else if (state.lang === "en" && (lang === "zh" || lang === "zh-TW"))
-        lang = "en";
-    }
+    // With no choice saved, the page speaks the language the character was set up in.
+    if (!storedLang() && state.lang) lang = state.lang;
     populate();
     renderLanguage();
     showView("chat");

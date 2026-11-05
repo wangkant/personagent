@@ -482,13 +482,13 @@ def test_hint_spells_the_command_for_this_install(monkeypatch) -> None:
 
 def test_language_and_key_handling_agree_between_chat_and_demo(
         tmp: Path, monkeypatch, capsys) -> None:
-    langs = ("fr", "zh", "ZH-CN", " zh_TW", "", None)
-    assert [chat.normalize_lang(v) for v in langs] == ["en", "zh", "zh", "zh", "en", "en"]
+    langs = ("xx", "zh", "ZH-CN", " zh_TW", "", None)
+    assert [chat.normalize_lang(v) for v in langs] == ["en", "zh", "zh", "zh-TW", "en", "en"]
     monkeypatch.setenv("LLM_API_KEY", "   ")
     with demo.throwaway_home(str(tmp)):
-        assert chat.run(["--lang", "fr"]) == 1
+        assert chat.run(["--lang", "xx"]) == 1
         assert "No model key yet" in capsys.readouterr().out
-        assert demo.main(["--online", "--lang", "fr"]) == 1
+        assert demo.main(["--online", "--lang", "xx"]) == 1
         assert "--online needs a model key" in capsys.readouterr().out
 
 

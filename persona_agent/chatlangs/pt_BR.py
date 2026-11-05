@@ -3,6 +3,11 @@ from . import Spec
 
 SPEC = Spec(
     code="pt-BR",
+    instruction=(r'''^(?:a partir de agora|de agora em diante|sempre|nunca|você deve|você tem que)\b.{0,50}\b(?:respost\w*|respond\w*|diga\w*|fale\w*|escrev\w*|termin\w*)\b'''
+                 r'''|^(?:responda|termine|diga|fale|escreva)\s+(?:sempre|só|somente|apenas)\b'''
+                 r'''|\b(?:ignore|esqueça)\b.{0,40}\b(?:instruç\w+|regras?|prompt)\b'''
+                 r'''|^(?:finja|aja como|faça o papel)\b'''
+                 r'''|\bvocê é\b.{0,40}\b(?:humano|humana|ia|bot|assistente|modelo)\b'''),
     # "anota aí", "lembra que", "lembre-se de que", "não esquece que". No
     # "grave" (English) and no "memoriza"/"memorize" (Spanish, English).
     remember=(r"(?:n[ãa]o\s+esque[cç][ae]|lembr[ae](?:-se)?|anot[ae](?:\s+a[ií])?"

@@ -682,7 +682,7 @@ def _command(sub: str) -> str:
 
 def _banner(host: str, port: int) -> str:
     if agent is not None and agent.enabled:
-        state = f"on (model {agent.model}, lang {agent.agent_lang})"
+        state = f"on (model {agent.model}, lang {agent.chat_lang})"
     else:
         state = (f"OFF: {_agent_off_reason()}, so nothing gets answered; "
                  f"{_agent_off_fix()}")

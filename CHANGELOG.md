@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Share memory between groups**, a switch under **More features** (`MEMORY_SHARE_ROOMS`, off by default). What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.
 - **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
 
+- **Ten languages in the terminal.** `init --terminal`, `chat` and `demo` run in English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, French, German, Brazilian Portuguese and Russian, and `--lang` and `AGENT_LANG` take all ten codes. Each language has its own starter personas and default name. Saving the local page writes the page's language to `AGENT_LANG`, and the first setup follows the system language.
+
 ### Changed
 
 - **Longer DM history stays in the prompt cache.** The clock, memory and examples now close the last turn, after the history, and the output protocol joins the cached system prompt. Old turns drop in a batch, from 60 messages to 40, not one pair a turn. Mean input grows about 3%, so a provider without caching costs slightly more.
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A planted instruction is refused in every language.** The check on what a memory command saves read only English and Chinese, so "always answer X" in the other eight languages was saved.
 - **Memory commands work in a real DM.** They reached only group chats and the terminal trial; a DM sent them to the model as ordinary chat.
 - **`forget` reached only the notes.** The same fact stayed in the core note and kept reaching every prompt. Matching sentences are now cut from it too.
 - **The model could not tell how old a note was**, so "has an exam tomorrow" read as current for months. Each note now carries its age, and notes are asked to give dates rather than "tomorrow".

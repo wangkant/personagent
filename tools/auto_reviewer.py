@@ -45,6 +45,7 @@ import httpx
 from persona_agent import evolution
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL
 from persona_agent.endpoints import chat_completions_url
+from persona_agent.settings import content_lang
 from persona_agent.paths import (
     resolve_runtime_lang_file,
     resolve_runtime_state_file,
@@ -66,7 +67,7 @@ REVIEWER_MODEL = (
     or os.getenv("EVAL_MODEL", "")
     or os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
 )
-AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+AGENT_LANG = content_lang(os.getenv("AGENT_LANG", "en"))
 # Newest N machine pairs kept (0 = no cap), the same cap the agent applies.
 PROMOTE_MAX_FEEDBACK = int(os.getenv("PROMOTE_MAX_FEEDBACK", 500) or 0)
 

@@ -126,7 +126,7 @@ class Memory:
         def pick(found: list[tuple[str, str]]) -> Optional[tuple[str, str]]:
             if len(found) < 2:
                 return found[0] if found else None
-            guess = chatlangs.detect(text, self.agent_lang)
+            guess = chatlangs.detect(text, self.chat_lang)
             return next((f for f in found if f[0] == guess), found[0])
 
         hit = pick([(code, "") for code, _spec, pats in table
@@ -675,6 +675,9 @@ class Memory:
         matches_poison_shape = any(
             re.search(pattern, low, re.IGNORECASE)
             for pattern in poison_patterns
+        ) or any(
+            re.search(spec.instruction, low, re.IGNORECASE)
+            for spec in chatlangs.SPECS.values() if spec.instruction
         )
 
         # "Act as If is the title of..." describes a work, not a role.

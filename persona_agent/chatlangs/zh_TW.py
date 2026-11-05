@@ -4,6 +4,9 @@ from .en import FIRST_PERSON
 
 SPEC = Spec(
     code="zh-TW",
+    instruction=(r'''(?:忽略|無視|覆蓋|忘掉).{0,30}(?:指令|提示|規則|之前的一切)'''
+                 r'''|^(?:以後|今後|請)?\s*(?:一直|只|永遠|必須|總是).{0,18}(?:回覆|回答|輸出|說)'''
+                 r'''|^(?:從現在開始|以後|今後|永遠)?\s*(?:請)?\s*(?:扮演|假裝|充當|作為)|你.{0,4}(?:要|必須|應該|總是|永遠|會).{0,18}(?:假裝|扮演|回覆|回答|只用|輸出|說)|你.{0,4}(?:是|不是).{0,12}(?:人類|真人|AI|人工智慧|機器人|模型)'''),
     remember=r"(?:幫我|帮我)?記(?:住|一下|下來|下)",
     # 忘了 and 忘掉 are also Simplified: both specs read them and detection
     # picks, so what keeps a forget conversation below covers both scripts.

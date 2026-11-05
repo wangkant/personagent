@@ -25,7 +25,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, candidates, home as homes
+from . import __version__, candidates, home as homes, langs
 from . import connections as conn
 from . import direct
 from .direct import base as direct_base
@@ -33,7 +33,6 @@ from . import setup_wizard as sw
 from . import updates
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
-from .settings import normalize_lang
 from .storage import FileLock, LockUnavailable, atomic_write_text
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
@@ -146,7 +145,7 @@ class Workspace:
                                                           else sw.PROVIDERS[0].key),
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
-                    "name": values.get("PERSONA_NAME", ""), "lang": values.get("AGENT_LANG", ""),
+                    "name": values.get("PERSONA_NAME", ""), "lang": langs.normalize(values.get("AGENT_LANG")),
                     "character": origin[0] if origin else ("custom" if card.is_file() else "warm-listener"),
                     "platformInstalled": installation.python.is_file(),
                     "platforms": platforms, "platformStatus": status,
@@ -199,7 +198,7 @@ class Workspace:
             model = str(payload.get("model") or provider.model).strip()
             if not model or len(model) > 256:
                 raise ValueError("model_required")
-            lang = "zh" if payload.get("lang") == "zh" else "en"
+            lang = langs.normalize(payload.get("lang")) or "en"
             name = str(payload.get("name") or sw.DEFAULT_NAMES[lang]).strip()
             character = str(payload.get("character") or "warm-listener")
             if (not name or len(name) > 64 or _expands(name)
@@ -249,7 +248,7 @@ class Workspace:
             if path.is_file():
                 return {"text": path.read_text(encoding="utf-8").strip()}
             values = self.config()
-            lang = "zh" if normalize_lang(values.get("AGENT_LANG")) == "zh" else "en"
+            lang = langs.normalize(values.get("AGENT_LANG")) or "en"
             text = sw.persona_text(sw.TEMPLATE, name=values.get("PERSONA_NAME") or sw.DEFAULT_NAMES[lang],
                                    lang=lang, admin_name=values.get("ADMIN_NAME", ""),
                                    admin_relationship=values.get("ADMIN_RELATIONSHIP", ""))

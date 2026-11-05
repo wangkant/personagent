@@ -440,8 +440,8 @@ and why it stayed quiet. On a server, read the service log, and use
    an @. Otherwise it waits for enough conversation (`CHAT_TRIGGER_COUNT`, 30
    messages by default) and may still pass. From 02:00 to 07:00 in its time
    zone, it mostly stays out of chats it was not called into. The time zone
-   is `PERSONA_TZ_OFFSET_HOURS`. Left blank, it is UTC+8 when `AGENT_LANG=zh`
-   and this machine's offset otherwise. Activity shows the reason for each
+   is `PERSONA_TZ_OFFSET_HOURS`. Left blank, it is UTC+8 when `AGENT_LANG` is
+   `zh` or `zh-TW` and this machine's offset otherwise. Activity shows the reason for each
    recent turn. To watch the same decision offline, run
    `personagent chat --trigger 4`.
 5. **personagent's allowlists.** `ACCESS_GROUPS` and `ACCESS_DM_USERS` apply
@@ -478,8 +478,8 @@ and why it stayed quiet. On a server, read the service log, and use
     persona hash the lineage does not list, run
     `personagent learned lineage adopt <hash>`, then
     `personagent learned rebuild`. The hash is in the candidate's scope in
-    `personagent learned show <id>`. Changing `AGENT_LANG` also switches to
-    that language's learned files in `runtime/`.
+    `personagent learned show <id>`. Moving `AGENT_LANG` between Chinese and any
+    other language also switches to the other learned files in `runtime/`.
 
 Errors from `/v1/events` are listed below. The AstrBot plugin logs the
 message, and `code` is the stable field a client can branch on.

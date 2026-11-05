@@ -31,13 +31,14 @@ load_dotenv(ROOT / ".env", override=False)
 
 import httpx
 from persona_agent.paths import resolve_runtime_state_file
+from persona_agent.settings import content_lang
 from persona_agent.storage import atomic_write_text
 from persona_agent.textproc import strip_json_fences
 from persona_agent.config_env import vision_endpoint_from_env
 
 VISION_API_KEY, VISION_BASE_URL = vision_endpoint_from_env()
 VISION_MODEL = os.getenv("VISION_MODEL", "")
-AGENT_LANG = os.getenv("AGENT_LANG", "en").strip().lower()
+AGENT_LANG = content_lang(os.getenv("AGENT_LANG", "en"))
 
 # Sentinels the vision model emits when it can't read the image; treated as
 # "no tag" regardless of agent language.

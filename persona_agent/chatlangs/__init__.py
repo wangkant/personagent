@@ -2,9 +2,9 @@
 reads without the model: memory commands, their replies, the learned
 summary and the line sent when a model call fails.
 
-AGENT_LANG stays en or zh: it picks the prompts and the bundled data. A spec
-here only decides how a memory command in its language is read and which
-language a fixed line answers in. Each language is one module of this
+The prompts and the bundled data are English or Chinese whatever AGENT_LANG
+says. A spec here only decides how a memory command in its language is read and
+which language a fixed line answers in. Each language is one module of this
 package; `detect` guesses which one a message is written in.
 """
 from __future__ import annotations
@@ -58,6 +58,9 @@ class Spec:
     #: Allowed between the name and the command: a vocative particle
     #: ("노바야", "ノヴァちゃん").
     vocative: str = ""
+    #: A note that is a standing order to the bot, or an attempt to cancel its
+    #: rules, in this language. English and Chinese are in memory.py.
+    instruction: str = ""
     #: The same two commands with the keyword at the END, for languages that
     #: put the verb last: the note or query is everything before it.
     remember_last: str = ""

@@ -68,7 +68,7 @@ The page starts the agent and the connected platforms in the background, so keep
 
 ## See it first: the demo
 
-`personagent demo` plays three scenes on a scripted model, so it needs no key. The scenes show which group messages it skips and why, how it learns from a correction, and how a stranger fails to plant an instruction. To play only one scene, name it (`quiet`, `teach` or `troll`). Add `--lang zh` for the Chinese version.
+`personagent demo` plays three scenes on a scripted model, so it needs no key. The scenes show which group messages it skips and why, how it learns from a correction, and how a stranger fails to plant an instruction. To play only one scene, name it (`quiet`, `teach` or `troll`). Add `--lang` and a language code for another language, such as `--lang ja`.
 
 Below is a trimmed run of `personagent demo teach`. The model's lines are scripted, but the ledger and the promotion rule are the real code:
 
@@ -119,7 +119,7 @@ Every command takes `--help`.
 
 ### Set up in the terminal
 
-`personagent init --terminal` asks the same questions as the page, in English or Chinese, and explains each term in one line:
+`personagent init --terminal` asks the same questions as the page, in the language you pick first, and explains each term in one line:
 
 - **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
 - **The key.** Input is hidden by default. You can choose to show it, which also reveals the saved key when you reconfigure. The wizard tests the key with one small request. If the request fails, it shows the address it called, the HTTP status and a likely fix.
@@ -157,7 +157,7 @@ Alex> Nova, the deploy failed again
 | `--name Alex` | sets your name |
 | `--admin` | makes every line the admin's |
 | `--dm` | makes it a one-to-one chat |
-| `--lang zh`, `--lang en` | overrides `AGENT_LANG` |
+| `--lang <code>` | overrides `AGENT_LANG`, such as `--lang ja` |
 | `--trigger N` | messages before it considers joining in (default 4) |
 
 The trial runs the real speak-or-stay-quiet decision, output checks, memory commands and learning. It considers joining in after 4 messages, where the live bot waits for 30. What it learns stays in `runtime/trial/` in the home folder, separate from the live bot. `personagent learned` does not show it, and `/reset` clears it. The trial skips the allowlists and real delivery. It also turns off self-evaluation, vision, the follow-up question and messages the character would start on its own. When a model call fails, it prints one line that says what to check:
@@ -186,9 +186,9 @@ When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
 ```
 
-`AGENT_LANG` (`en` or `zh`) selects the language of the bundled examples, filters and checks. It does not translate your persona. [.env.example](../.env.example) describes every setting.
+`AGENT_LANG` is one of `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` and `ru`. It sets the starter persona, the terminal setup, trial and demo, the memory commands and the fixed replies. The bundled examples, filters and checks are Chinese for `zh` and `zh-TW` and English for the others. It does not translate your persona. [.env.example](../.env.example) describes every setting.
 
-The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, either Chinese sets `AGENT_LANG=zh` and English sets `en`; any other language keeps the character's language as it was (`en` for a new setup). The character answers in the language the chat uses. Its prompts and bundled data are English and Chinese. The [memory commands](#memory-commands) and the few fixed replies, which don't go through the model, work in all ten languages.
+The language menu at the top right of the local page offers English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. It changes the page, and the browser remembers it. When you save the settings, the page's language becomes `AGENT_LANG`. The character answers in the language the chat uses. Its prompts are English and Chinese. The [memory commands](#memory-commands) and the few fixed replies, which don't go through the model, work in all ten languages.
 
 To override a shipped file, put a file with the same name in the home folder's `data/`. Files you do not override come from the copy shipped with personagent.
 

@@ -7,7 +7,7 @@ import logging
 import re
 from dataclasses import dataclass, replace
 
-from . import chatlangs
+from . import chatlangs, langs
 
 logger = logging.getLogger("agent")
 
@@ -32,7 +32,9 @@ MODEL_FAILURE_EXCUSES = {code: spec.failure_excuses
 _TEMPLATE_RULE_RE = re.compile(r"^[ \t]*[—\-_=~*]{3,}[ \t]*$", re.MULTILINE)
 # The sentence that names the persona in the shipped templates, which reads
 # wrong with no name in it.
-_NAME_SENTENCE_RE = re.compile(r"Your name is \{bot_name\}\.[ \t]*|你叫\{bot_name\}[，,。]?")
+_NAME_SENTENCE_RE = re.compile(
+    r"(?:Your name is|Te llamas|Tu t'appelles|Du heißt|Seu nome é|Тебя зовут) \{bot_name\}\.[ \t]*"
+    r"|你叫\{bot_name\}[，,。]?|あなたの名前は\{bot_name\}です。|당신의 이름은 \{bot_name\}입니다\.[ \t]*")
 
 
 def _without_reader_note(text: str) -> str:
@@ -72,7 +74,7 @@ def render_persona_template(text: str, *, bot_name: str, admin_name: str = "",
         text = _NAME_SENTENCE_RE.sub("", text)
     text = (text.replace("{admin_name}", admin)
             .replace("{admin_relationship}", relationship)
-            .replace("{bot_name}", name or ("这个角色" if lang == "zh" else "the persona")))
+            .replace("{bot_name}", name or langs.say("the persona", "这个角色", lang)))
     return text.strip()
 
 
@@ -113,7 +115,7 @@ STYLE_GUIDE = (
     "<style>\n"
     "You're chatting in an IM group. Write like a real person, not a chatbot.\n"
     "\n"
-    "[LANGUAGE] Talk in the language the group is chatting in, the way a member would. These instructions are in English and your persona may be in English or Chinese; neither decides the language you talk in. If the chat is in Japanese, Spanish or anything else, reply in it with your persona's voice. Where people mix languages, a word or two from another one is fine\n"
+    "[LANGUAGE] Talk in the language the group is chatting in, the way a member would. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If the chat is in Japanese, Spanish or anything else, reply in it with your persona's voice. Where people mix languages, a word or two from another one is fine\n"
     "\n"
     "[FORMAT — not a document]\n"
     "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
@@ -550,7 +552,7 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "- **You are somebody, not a general-purpose engine.** What you can and will do is decided by who this character is, not by what a model could produce. A request only a machine takes on demand — reciting long numbers or lists, writing code or documents, translating, doing sums, digging up facts to order — gets handled the way THIS person would: they might know a bit and say it in their own words, ask what it's for, not have it and say so, or plainly not feel like it. What never happens is the character turning into the tool and typing out the deliverable\n"
         "- **You know what this person would know, and no more.** If the character genuinely is the kind of person who does that work — a tutor, a coder, a translator — do it as they would: in their voice, with their opinions, at the length they would actually bother to type into a chat. A person who wouldn't have a hundred digits of pi in their head doesn't produce them\n"
         "\n"
-        "[LANGUAGE] Reply in the language they write to you in. These instructions are in English and your persona may be in English or Chinese; neither decides the language you talk in. If they write in Japanese, Spanish or anything else, answer in it with your persona's voice, and switch when they do\n"
+        "[LANGUAGE] Reply in the language they write to you in. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If they write in Japanese, Spanish or anything else, answer in it with your persona's voice, and switch when they do\n"
         "\n"
         "[FORMAT — not a document]\n"
         "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"

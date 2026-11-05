@@ -78,7 +78,7 @@ TOKEN = "t" * 43
 
 def test_the_banner_names_version_address_home_and_agent_state(monkeypatch) -> None:
     monkeypatch.setattr(server, "agent", SimpleNamespace(
-        enabled=True, model="m-1", agent_lang="zh"))
+        enabled=True, model="m-1", chat_lang="zh"))
     monkeypatch.setattr(server, "_dashboard_served", lambda: True)
     monkeypatch.setattr(dashboard, "_token", TOKEN)
     banner = server._banner("0.0.0.0", 8080)

@@ -702,7 +702,7 @@ def test_preflight_names_a_language_or_time_zone_it_cannot_use() -> None:
 
     for lang in ("en", "zh", "zh-CN", "zh_cn", "en-US", "cn"):
         check(f"AGENT_LANG={lang} is read", not levels(AGENT_LANG=lang))
-    check("AGENT_LANG=fr is named", ("WARN", "AGENT_LANG") in levels(AGENT_LANG="fr"))
+    check("AGENT_LANG=xx is named", ("WARN", "AGENT_LANG") in levels(AGENT_LANG="xx"))
     found = preflight.check_config(env={"LLM_API_KEY": "sk-x",
                                         "REACT_MODEL": "# blank = LLM_JUDGE_MODEL"})
     check("a comment read as a value is named, without echoing it",

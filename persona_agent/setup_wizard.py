@@ -21,10 +21,11 @@ from pathlib import Path
 
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL
 from persona_agent import home as homes
+from persona_agent import langs
 from persona_agent.prompts import render_persona_template
 
-LANGS = ("en", "zh")
-DEFAULT_NAMES = {"en": "Nova", "zh": "小夏"}
+LANGS = langs.CODES
+DEFAULT_NAMES = langs.DEFAULT_NAMES
 
 # Readable by its user only, as `persona_agent.storage.PRIVATE_FILE_MODE`;
 # that module needs dependencies this one must run without.
@@ -40,19 +41,29 @@ _lang = "en"
 
 def set_lang(lang: str) -> None:
     global _lang
-    _lang = lang if lang in LANGS else "en"
+    _lang = langs.normalize(lang) or "en"
+
+
+_TRADITIONAL_WORDS = ("traditional", "taiwan", "hong kong", "macao", "macau")
+# The primary language in the low byte of a Windows LANGID, and the LANGIDs of
+# traditional Chinese.
+_WINDOWS_LANGS = {0x04: "zh", 0x11: "ja", 0x12: "ko", 0x0A: "es", 0x0C: "fr",
+                  0x07: "de", 0x16: "pt-BR", 0x19: "ru"}
+_WINDOWS_TRADITIONAL = (0x0404, 0x0C04, 0x1404)
 
 
 def _lang_of(tag: str) -> str:
-    """'zh' or 'en' for a locale name such as zh_CN.UTF-8 or 'Chinese (Simplified)_China'."""
+    """A language code for a locale name such as zh_CN.UTF-8 or 'Chinese (Simplified)_China'."""
     tag = (tag or "").strip().lower().split(".")[0]
     if not tag or tag in ("c", "posix"):
         return ""
-    return "zh" if tag.startswith("zh") or "chinese" in tag else "en"
+    if "chinese" in tag:
+        return "zh-TW" if any(word in tag for word in _TRADITIONAL_WORDS) else "zh"
+    return langs.normalize(tag) or "en"
 
 
 def detect_lang() -> str:
-    """The system's language: zh for a Chinese locale, else en."""
+    """The system's language, en when personagent does not have it."""
     for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
         found = _lang_of(os.environ.get(var, "").split(":")[0])
         if found:
@@ -60,16 +71,17 @@ def detect_lang() -> str:
     if os.name == "nt":
         import ctypes
 
-        # The low byte of a LANGID is the primary language; 0x04 is Chinese.
-        if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0xFF == 0x04:
-            return "zh"
+        langid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+        if langid in _WINDOWS_TRADITIONAL:
+            return "zh-TW"
+        if langid & 0xFF in _WINDOWS_LANGS:
+            return _WINDOWS_LANGS[langid & 0xFF]
     return _lang_of(locale.getlocale()[0] or "") or "en"
 
 
 def t(key: str, **values) -> str:
     """The text for `key` in the current language."""
-    en, zh = _TEXT[key]
-    text = zh if _lang == "zh" else en
+    text = langs.say(*_TEXT[key], _lang)
     return text.format(**values) if values else text
 
 
@@ -351,11 +363,11 @@ class Provider:
 
     @property
     def label(self) -> str:
-        return self.name[1] if _lang == "zh" else self.name[0]
+        return langs.say(*self.name, _lang)
 
     @property
     def hint(self) -> str:
-        return self.note[1] if _lang == "zh" else self.note[0]
+        return langs.say(*self.note, _lang)
 
     @property
     def needs_key(self) -> bool:
@@ -449,11 +461,15 @@ def ask(prompt: str, default: str = "", required: bool = False,
         print(f"    {t('required')}")
 
 
+# How "yes" starts in each language: y, 是, 好, はい, 네, 예, sí, sim, oui, ja, да.
+_YES_INITIALS = frozenset("y是好は네예sojд")
+
+
 def ask_yn(prompt: str, default_yes: bool = True) -> bool:
     answer = input(f"  {prompt} [{t('yes_no') if default_yes else t('no_yes')}]: ").strip().lower()
     if not answer:
         return default_yes
-    return answer[0] in ("y", "是", "好")
+    return answer[0] in _YES_INITIALS
 
 
 def ask_number(prompt: str, count: int, default: int | None = None) -> int:
@@ -484,7 +500,7 @@ def ask_ids(label: str, current) -> list[str]:
     """A comma-separated id list; Enter keeps `current`, '-' empties it."""
     current = _clean_ids(current or [])
     hint = t("ids_keep") if current else t("ids_none")
-    raw = ask(f"{label}（{hint}）" if _lang == "zh" else f"{label} ({hint})",
+    raw = ask(f"{label}（{hint}）" if langs.content(_lang) == "zh" else f"{label} ({hint})",
               default=",".join(current))
     return [] if raw.strip() == "-" else split_ids(raw)
 
@@ -615,7 +631,7 @@ class Character:
 
     @property
     def label(self) -> str:
-        return self.title[1] if _lang == "zh" else self.title[0]
+        return langs.say(*self.title, _lang)
 
 
 TEMPLATE = "template"
@@ -633,7 +649,11 @@ CHARACTERS: tuple[Character, ...] = (
 )
 PERSONA_KEYS = tuple(c.key for c in CHARACTERS)
 
-NAME_LINE = {"en": "Your name is {name}.", "zh": "你叫{name}。"}
+NAME_LINE = {"en": "Your name is {name}.", "zh": "你叫{name}。", "zh-TW": "你叫{name}。",
+             "ja": "あなたの名前は{name}です。", "ko": "당신의 이름은 {name}입니다.",
+             "es": "Te llamas {name}.", "fr": "Tu t'appelles {name}.",
+             "de": "Du heißt {name}.", "pt-BR": "Seu nome é {name}.",
+             "ru": "Тебя зовут {name}."}
 
 # Earlier releases' templates, copied verbatim: still counted as unmodified.
 _LEGACY_PERSONA_SHA256 = frozenset({
@@ -1048,7 +1068,13 @@ PLATFORMS = {
              ("app_secret", ("Lark / Feishu app secret", "飞书 / Lark App Secret"))),
 }
 PLATFORM_LABELS = {"telegram": "Telegram", "discord": "Discord", "slack": "Slack",
-                   "kook": "KOOK", "lark": "Lark / Feishu", "qq_official": "QQ 官方机器人"}
+                   "kook": "KOOK", "lark": "Lark / Feishu"}
+
+
+def platform_label(kind: str) -> str:
+    if kind == "qq_official":
+        return langs.say("QQ official bot", "QQ 官方机器人", _lang)
+    return PLATFORM_LABELS[kind]
 _PLATFORM_DEFAULTS = {
     "qq_official": {"enable_group_c2c": True, "enable_guild_direct_message": True,
                     "use_markdown": True},
@@ -1197,9 +1223,9 @@ def _header(text: str) -> None:
 def ask_language(default: str) -> str:
     print()
     print("  Language / 语言")
-    print("    1. English")
-    print("    2. 中文")
-    choice = ask_number("Choose / 选择", 2, default=LANGS.index(default) + 1)
+    for i, code in enumerate(LANGS, 1):
+        print(f"   {i:>2}. {langs.NAMES[code]}")
+    choice = ask_number("Choose / 选择", len(LANGS), default=LANGS.index(default) + 1)
     return LANGS[choice - 1]
 
 
@@ -1309,7 +1335,7 @@ def _platform_label(kind: str) -> str:
         return t("qq_via")
     if kind == "other":
         return t("platform_other")
-    return PLATFORM_LABELS[kind]
+    return platform_label(kind)
 
 
 def _entries_on(ids: list[str], platform: str) -> list[str]:
@@ -1409,7 +1435,7 @@ def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
         if kind in PLATFORMS:
             _say(t("token_skip"))
             for key, prompts in PLATFORMS[kind]:
-                prompt = prompts[1] if _lang == "zh" else prompts[0]
+                prompt = langs.say(*prompts, _lang)
                 creds[key] = ask(prompt, secret="token" in key or "secret" in key)
             if not all(creds.values()):
                 creds = {}
@@ -1422,7 +1448,7 @@ def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
                 admin = ask(t("admin_any"))
         else:
             mine = _entries_on(admins_all, kind)
-            admin = ask(t("admin_other", platform=PLATFORM_LABELS[kind]),
+            admin = ask(t("admin_other", platform=platform_label(kind)),
                         default=_raw_id(mine[0]) if mine else "")
             if admin and not admin.startswith(kind + ":"):
                 admin = f"{kind}:{admin}"
@@ -1451,7 +1477,7 @@ def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
         _say(t("plugin_config", path=cfg_path))
         if creds and kind in PLATFORMS:
             write_astrbot_platform(data_dir, astrbot_platform_entry(kind, creds))
-            _say(t("platform_written", kind=PLATFORM_LABELS[kind]))
+            _say(t("platform_written", kind=platform_label(kind)))
     except OSError as exc:
         _say(t("write_failed", path=data_dir, error=exc))
         return None
@@ -1497,15 +1523,15 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
     env_path = copy_env_template(home)
     rerun = bool(env_get(env_path, "LLM_API_KEY"))
     current = _current(env_path) if rerun else {k: "" for k in _current(env_path)}
-    current_lang = current["AGENT_LANG"].lower() if rerun else ""
-    lang = ask_language(current_lang if current_lang in LANGS else (lang_default or detect_lang()))
+    current_lang = langs.normalize(current["AGENT_LANG"]) if rerun else ""
+    lang = ask_language(current_lang or lang_default or detect_lang())
     set_lang(lang)
     _header(t("title_again") if rerun else t("title_first"))
     _say(t("folder", path=home))
     _say(t("enter_hint"))
     warn_if_agent_home_diverges(env_path, home)
-    if current_lang in LANGS and lang != current_lang:
-        _say(t("lang_switched", lang="中文" if lang == "zh" else "English"))
+    if current_lang and langs.content(lang) != langs.content(current_lang):
+        _say(t("lang_switched", lang=langs.NAMES[langs.content(lang)]))
 
     _header(t("step", n=1, what=t("step_model")))
     retry = False
@@ -1555,9 +1581,9 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
             and not (existed or args.provider or args.base_url)):
         raise SystemExit("Which service is this key for? Add --provider, such as --provider openrouter")
     env_path = copy_env_template(home)
-    lang = (args.lang or os.environ.get("AGENT_LANG", "").strip().lower()
-            or (env_get(env_path, "AGENT_LANG") if existed else "") or detect_lang())
-    lang = lang if lang in LANGS else "en"
+    lang = langs.normalize(args.lang or os.environ.get("AGENT_LANG", "").strip()
+                           or (env_get(env_path, "AGENT_LANG") if existed else "")
+                           or detect_lang()) or "en"
     set_lang(lang)
     values: dict = {"AGENT_LANG": lang}
     keyless = False
@@ -1628,8 +1654,8 @@ def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
     p.add_argument("--model", help="the model id (default: the preset's)")
     p.add_argument("--key-env", metavar="VAR",
                    help="read the API key from this environment variable")
-    p.add_argument("--name", help="the bot's name (default: Nova, or a Chinese name with --lang zh)")
-    p.add_argument("--lang", choices=LANGS, help="en or zh (default: the system language)")
+    p.add_argument("--name", help="the bot's name (default: one in the chosen language)")
+    p.add_argument("--lang", choices=LANGS, help="the language (default: the system's)")
     p.add_argument("--persona", choices=PERSONA_KEYS,
                    help="a ready character for persona.txt (written only while it is unedited)")
     return p
@@ -1744,7 +1770,7 @@ def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
             except ValueError as exc:
                 raise SystemExit(f"platform not written: {exc}") from None
             write_astrbot_platform(found, entry)
-            print(t("platform_written", kind=PLATFORM_LABELS[platform]))
+            print(t("platform_written", kind=platform_label(platform)))
     except OSError as exc:
         raise SystemExit(t("write_failed", path=found, error=exc)) from None
     print(t("plugin_installed", path=found / "plugins" / PLUGIN_NAME))

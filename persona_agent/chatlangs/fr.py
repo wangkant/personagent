@@ -6,6 +6,11 @@ _A = "['’]"
 
 SPEC = Spec(
     code="fr",
+    instruction=(r'''^(?:à partir de maintenant|désormais|dorénavant|toujours|jamais|tu dois|il faut)\b.{0,50}\b(?:répon\w*|dis|dire|parle\w*|écri\w*|termine\w*|finis\w*)\b'''
+                 r'''|^(?:réponds|termine|finis|dis|parle|écris)\s+(?:toujours|seulement|uniquement|désormais)\b'''
+                 r'''|\b(?:ignore|oublie)\b.{0,40}\b(?:instructions?|règles?|prompt)\b'''
+                 r'''|^(?:fais semblant|agis comme|joue le rôle)\b'''
+                 r'''|\btu es\b.{0,40}\b(?:humain|humaine|ia|bot|assistant|modèle)\b'''),
     # Imperatives, tu or vous. "note" is English, "rappelle" alone is "call
     # back", so only the reflexive "rappelle-toi"; "n'oublie pas" only with
     # "que", else it is a reminder to act ("n'oublie pas de manger").
@@ -34,8 +39,8 @@ SPEC = Spec(
              rf"\s+appris|(?:tu\s+as|t{_A}\s*as|vous\s+avez)\s+appris\s+quoi|appris\s*\?"),
     # The question mark, a tag ("..., non", "hein") or an opening "est-ce que".
     question_end=(r"[?？][\s?？!！.~～]*$|(?:,\s*(?:non|nan|ou\s+pas|ou\s+quoi)|[\s,]hein)[\s!.~]*$"
-                  rf"|^est-ce\s+qu"),
-    asking=(rf"(?<![\w-])(?:comment|pourquoi|quoi|combien|où|est-ce|lequel|laquelle)"
+                  r"|^est-ce\s+qu"),
+    asking=(r"(?<![\w-])(?:comment|pourquoi|quoi|combien|où|est-ce|lequel|laquelle)"
             r"(?![\w-])"),
     # "retiens bien que...", "retiens ça : ...", "qu'il..." keeps "il...".
     note_lead=(r"^(?:bien\s+|quand\s+même\s+)?(?:(?:ça|ca|cela|ceci)(?:\s*[:,]\s*|\s*$))?"

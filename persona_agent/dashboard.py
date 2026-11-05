@@ -31,9 +31,10 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (__version__, access, candidates, channels, decision_log,
-               embeddings, evidence, home, lineage, preflight, promotion)
+               embeddings, evidence, home, langs, lineage, preflight, promotion)
 from .config_env import env_bool, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
+from .settings import content_lang
 from .storage import atomic_write_text
 
 logger = logging.getLogger("bot")
@@ -250,8 +251,7 @@ def _epoch(ts) -> float:
 def _lang(agent) -> str:
     if agent is not None:
         return str(agent.agent_lang or "en")
-    raw = os.getenv("AGENT_LANG", "en").strip().lower()
-    return "zh" if raw.startswith(("zh", "cn")) else "en"
+    return content_lang(os.getenv("AGENT_LANG", "en"))
 
 
 def _routing_key(learning_key: str) -> str:
@@ -327,7 +327,7 @@ def _persona(agent, learning: _Learning) -> dict:
     if agent is None:
         return {"name": os.getenv("PERSONA_NAME", "").strip(), "file": "",
                 "source": "", "version": "", "hash": "", "revisions": 0}
-    path, source = _persona_file(learning.lang)
+    path, source = _persona_file(agent.chat_lang)
     version = agent.persona_version or ""
     hashes = learning.lineage.hashes(version)
     current = agent.persona_hash
@@ -760,12 +760,16 @@ def apply_action(agent, cid: str, action: str, reason: str = "") -> tuple[int, d
 # ----------------------------------------------------------------- routes ---
 
 def _pointer() -> str:
-    return (
-        "personagent is running. Its Activity view is in the local page: run "
-        f"`{_cli()}` on this computer to open it. On a server, "
-        f"`{_cli()} learned` reviews what it learned.\n\n"
-        "personagent 正在运行。「动态」在本地页面里：在这台电脑上运行 "
-        f"`{_cli()}` 打开。在服务器上，用 `{_cli()} learned` 查看它学到了什么。\n")
+    en = ("personagent is running. Its Activity view is in the local page: run "
+          "`{cli}` on this computer to open it. On a server, `{cli} learned` "
+          "reviews what it learned.\n")
+    zh = ("personagent 正在运行。「动态」在本地页面里：在这台电脑上运行 `{cli}` 打开。"
+          "在服务器上，用 `{cli} learned` 查看它学到了什么。\n")
+    configured = langs.normalize(os.getenv("AGENT_LANG", ""))
+    shown = [en, zh]
+    if configured not in ("", "en", "zh"):
+        shown.append(langs.say(en, zh, configured))
+    return "\n".join(text.format(cli=_cli()) for text in shown)
 
 
 @router.get("/", include_in_schema=False)

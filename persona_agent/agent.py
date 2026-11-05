@@ -16,6 +16,7 @@ from typing import Optional
 from . import candidates as candidate_ledger_mod
 from . import embeddings as embeddings_mod
 from . import evidence as evidence_mod
+from . import langs
 from . import lineage as lineage_mod
 from . import outbox as outbox_mod
 from . import reactions
@@ -113,8 +114,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.api_key = s.api_key
         self.base_url = s.base_url
         self.model = s.model
-        # Process-wide: the validator, data files and lexicons all read it.
-        self.agent_lang = s.agent_lang
+        # The validator, data files, ledgers and lexicons read `agent_lang`, en or
+        # zh; what the agent says itself reads `chat_lang`, the configured language.
+        self.agent_lang = langs.content(s.agent_lang)
+        self.chat_lang = s.agent_lang
         self.llm_fallback_model = s.llm_fallback_model
         self.llm_fallback_base_url = s.llm_fallback_base_url
         self.llm_fallback_api_key = s.llm_fallback_api_key
@@ -144,10 +147,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             raw_persona = s.persona
         else:
             # A copied template still carries placeholders and a note to the reader.
-            loaded = _load_persona(self.agent_lang)
+            loaded = _load_persona(self.chat_lang)
             raw_persona = render_persona_template(
                 loaded, bot_name=s.persona_name, admin_name=s.admin_name,
-                admin_relationship=s.admin_relationship, lang=self.agent_lang)
+                admin_relationship=s.admin_relationship, lang=self.chat_lang)
             if not raw_persona:
                 raw_persona = DEFAULT_PERSONA
                 _note_persona_source("the persona file holds only a template's "

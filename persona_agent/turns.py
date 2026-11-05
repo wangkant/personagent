@@ -177,7 +177,7 @@ class Turns:
     def _model_failure_excuse(self, text: str = "") -> str:
         """A line for when the model call failed, in the language `text`, the
         message waiting for an answer, was written in."""
-        code = chatlangs.detect(text, self.agent_lang) if text else self.agent_lang
+        code = chatlangs.detect(text, self.chat_lang) if text else self.chat_lang
         return random.choice(MODEL_FAILURE_EXCUSES[code])
 
     async def _handle_inner(self, payload: dict, *,

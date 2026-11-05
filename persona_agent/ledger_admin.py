@@ -34,9 +34,9 @@ home.load_env()
 from persona_agent import access, candidates, evidence, lineage, promotion  # noqa: E402
 from persona_agent.config_env import env_int  # noqa: E402
 from persona_agent.paths import resolve_runtime_lang_file  # noqa: E402
-from persona_agent.settings import normalize_lang  # noqa: E402
+from persona_agent.settings import content_lang  # noqa: E402
 
-AGENT_LANG = normalize_lang(os.getenv("AGENT_LANG", "en"))
+AGENT_LANG = content_lang(os.getenv("AGENT_LANG", "en"))
 # The caps the agent applies when it rebuilds a view.
 PROMOTE_MAX_EXAMPLES = env_int("PROMOTE_MAX_EXAMPLES", 500, minimum=0)
 PROMOTE_MAX_FEEDBACK = env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0)

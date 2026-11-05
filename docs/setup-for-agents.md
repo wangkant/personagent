@@ -34,8 +34,8 @@ Ask these in one message, with the defaults shown, and accept "use the defaults"
 
 | Question | Default | Becomes |
 |---|---|---|
-| Which language should the character speak? English or Chinese | the language the user writes to you in | `--lang en` or `--lang zh` |
-| The character's name. It answers when its name comes up in a chat | `Nova` (English), `小夏` (Chinese) | `--name` |
+| Which language should the character speak? English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) or Русский | the language the user writes to you in | `--lang` with `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` or `ru`. `personagent init --help` lists the codes the installed version takes |
+| The character's name. It answers when its name comes up in a chat | `小夏` (both Chinese), `ノヴァ` (Japanese), `노바` (Korean), `Нова` (Russian), `Nova` (the others) | `--name` |
 | Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona`, or your own `persona.txt` (step 4) |
 | Which model service do they have, or want, an API key for? | OpenRouter's free models | `--provider` (table below) |
 | Where should the home folder live? | `~/personagent` (on Windows `C:\Users\<name>\personagent`) | `<home>` |
@@ -172,7 +172,7 @@ personagent --home "<home>" init --no-input --lang en --name Nova --persona warm
 What `init --no-input` does:
 
 - It asks nothing, sends nothing over the network and does not test a key.
-- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, `Nova` or `小夏` for `--name`, `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value.
+- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, that language's default name for `--name`, `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value.
 - Without a key it still succeeds, with exit code 0. The key comes in step 6.
 - It ends with a "Next" list written for a person at a terminal. Skip it and follow this file: "run this setup again" there means the interactive setup that rule 8 rules out, and the `chat` command it shows calls the model, which costs money.
 - It creates `<home>` if needed and writes `<home>/.env` from the shipped template, readable only by the user on macOS and Linux, and `<home>/persona.txt`.

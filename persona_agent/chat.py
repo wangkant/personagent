@@ -31,7 +31,7 @@ from pathlib import Path
 
 import httpx
 
-from persona_agent import access, candidates, channels, evidence, home, paths, promotion
+from persona_agent import access, candidates, channels, evidence, home, langs, paths, promotion
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
@@ -154,8 +154,10 @@ _TEXT = {
         "why_ledger": "  the ledger:",
         "kind_pair": "fix",
         "kind_example": "example",
-        "states": {},
-        "reactions": {},
+        "states": {"proposed": "proposed", "promoted": "promoted", "rejected": "rejected",
+                   "rolled_back": "rolled back", "superseded": "superseded"},
+        "reactions": {"correction": "correction", "rejection": "rejection",
+                      "positive": "positive", "neutral": "neutral"},
         "strengths": {"strong": "strong", "negative_only": "negative only",
                       "weak": "weak"},
     },
@@ -257,8 +259,9 @@ _TEXT = {
 }
 
 
+@functools.lru_cache(maxsize=None)
 def text_for(lang: str) -> dict:
-    return _TEXT.get(lang, _TEXT["en"])
+    return langs.table(_TEXT["en"], _TEXT["zh"], lang)
 
 
 def clip(text, width: int = 40) -> str:
@@ -267,12 +270,12 @@ def clip(text, width: int = 40) -> str:
 
 
 def normalize_lang(value: str | None) -> str:
-    """The two languages there are: zh and zh-CN are Chinese, anything else English."""
-    return "zh" if str(value or "").strip().lower().startswith("zh") else "en"
+    """The language code for a spelling of one; English for anything else."""
+    return langs.normalize(value) or "en"
 
 
 def plural(lang: str, n: int, one: str, many: str) -> str:
-    return one if lang != "zh" and n == 1 else many
+    return langs.say(one if n == 1 else many, "", lang)
 
 
 @functools.lru_cache(maxsize=None)
@@ -281,7 +284,7 @@ def hint(sub: str, lang: str = "en") -> str:
     Cached so the demo can ask before it swaps in its throwaway home."""
     from persona_agent.setup_wizard import Launcher
     lines = Launcher(python=sys.executable, home=paths.ROOT).shown(sub)
-    return ("，然后" if lang == "zh" else ", then ").join(f"`{line}`" for line in lines)
+    return langs.say(", then ", "，然后", lang).join(f"`{line}`" for line in lines)
 
 
 @dataclass(frozen=True)
@@ -1051,7 +1054,7 @@ class ChatSession:
     def banner(self) -> None:
         t, agent = self.t, self.trial.agent
         head = t["banner_dm" if self.trial.dm else "banner"]
-        print(head.format(name=self.name, model=agent.model, lang=agent.agent_lang))
+        print(head.format(name=self.name, model=agent.model, lang=self.lang))
         print(t["you_are_dm" if self.trial.dm else "you_are"].format(
             you=self.you[0], name=self.name))
         if self.name_ignored:
@@ -1166,7 +1169,7 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     p = argparse.ArgumentParser(
         prog=prog, description="Talk to the character in a simulated group chat.")
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
-                   help="agent language: en (default) or zh")
+                   help="language code: " + ", ".join(langs.CODES) + " (default: en)")
     p.add_argument("--admin", action="store_true",
                    help="speak as the configured admin (closer relationship)")
     p.add_argument("--name", default="you", help="your display name in the chat")
@@ -1191,7 +1194,7 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     trial = Trial(agent, dm=args.dm, state_dir=state,
                   factory=lambda: build_agent(lang, trigger)[0])
     session = ChatSession(
-        trial, lang=agent.agent_lang, you=args.name, admin=args.admin,
+        trial, lang=lang, you=args.name, admin=args.admin,
         live_trigger=live.chat_trigger_count, resumed=resumed,
         name_unset=not os.getenv("PERSONA_NAME", "").strip(),
         name_ignored=args.admin and args.name != "you")

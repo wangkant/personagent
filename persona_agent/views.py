@@ -120,7 +120,7 @@ class DataViews:
         """What this room has taught the bot, chat-sized: counts, what waits,
         the latest promotion and why, in chat language `lang` (default: the
         agent's). Reads state only."""
-        code = lang or self.agent_lang
+        code = lang or self.chat_lang
         # English builds its own lines, plurals and all; the rest fill templates.
         text = {} if code == "en" else chatlangs.spec(code).learned_text
         current_scope = self._live_scope(group_id)

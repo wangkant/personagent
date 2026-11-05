@@ -8,6 +8,11 @@ _FILL = r"(?:\s+(?:denn|so|eigentlich|alles|bisher|schon))*"
 
 SPEC = Spec(
     code="de",
+    instruction=(r'''^(?:ab jetzt|von nun an|immer|nie|niemals|du musst|du sollst)\b.{0,50}\b(?:antwort\w*|sag\w*|sprich\w*|schreib\w*|beende\w*)\b'''
+                 r'''|^(?:antworte|beende|sag|sprich|schreib\w*)\b.{0,15}\b(?:immer|nur|ab jetzt|stets)\b'''
+                 r'''|\b(?:ignorier\w*|vergiss)\b.{0,40}\b(?:anweisung\w*|regeln?|prompt)\b'''
+                 r'''|^(?:tu so, als|verhalte dich wie|spiel die rolle)\b'''
+                 r'''|\bdu bist\b.{0,40}\b(?:mensch|ki|bot|assistent|modell)\b'''),
     # The du imperative: "merk dir", "merk's dir", "notier", "speicher",
     # "schreib dir auf", each with an optional "bitte" or "mal".
     remember=(r"(?:bitte\s+)?(?:merk(?:e|'?s)?(?:\s+mal)?\s+dir"

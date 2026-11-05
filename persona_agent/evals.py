@@ -51,7 +51,7 @@ from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
 from persona_agent.endpoints import chat_completions_url
 from persona_agent.home import load_env
 from persona_agent.promotion import Policy
-from persona_agent.settings import AgentSettings
+from persona_agent.settings import AgentSettings, content_lang
 from persona_agent.textproc import salvage_json_object
 from persona_agent.transport import SendResult
 
@@ -1086,7 +1086,7 @@ async def run(args, env=None) -> dict:
     """Run the requested suites and write the report; returns it."""
     if args.rejudge:
         return await run_rejudge(args, env)
-    lang =(args.lang or env_str("AGENT_LANG", strip=True, env=env) or "en").lower()
+    lang = content_lang(args.lang or env_str("AGENT_LANG", strip=True, env=env))
     suites = list(SUITES) if args.suite == "all" else [args.suite]
     cases = {s: take(load_cases(s, lang), args.limit, _STRATA[s]) for s in suites}
     name = env_str("PERSONA_NAME", strip=True, env=env) or DEFAULT_NAMES.get(lang, "Nova")

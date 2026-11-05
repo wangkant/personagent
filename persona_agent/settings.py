@@ -20,14 +20,11 @@ import logging
 from dataclasses import dataclass, field, fields
 from typing import Awaitable, Callable, Optional
 
-from . import access, channels, promotion
+from . import access, channels, langs, promotion
 from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, env_bool,
                          env_float, env_int, env_str, vision_endpoint_from_env)
 
 logger = logging.getLogger("agent")
-
-#: Spellings of the two supported languages that mean one of them.
-_LANG_ALIASES = {"cn": "zh", "chinese": "zh", "中文": "zh", "english": "en"}
 
 #: The shortest EVOLVE_INTERVAL_HOURS the loop runs at; 0 runs it back to back.
 MIN_EVOLVE_INTERVAL_HOURS = 0.1
@@ -42,20 +39,24 @@ def _env(read):
 
 
 def normalize_lang(value: object) -> str:
-    """AGENT_LANG as the agent uses it: "zh" for zh-CN, zh_cn, cn, chinese;
-    "en" for en-US and blank. Anything else is kept (lowercased) with a
-    warning, since it names data files and ledgers that may already exist."""
+    """AGENT_LANG as one of the language codes: "zh" for zh-CN and cn, "zh-TW"
+    for zh_hk, "en" for en-US and blank. Anything else is kept (lowercased) with
+    a warning, since it names data files and ledgers that may already exist."""
     raw = str(value or "").strip().lower().replace("_", "-")
     if not raw:
         return "en"
-    lang = _LANG_ALIASES.get(raw) or raw.split("-", 1)[0]
-    if lang in ("zh", "en"):
+    lang = langs.normalize(raw)
+    if lang:
         return lang
     if raw not in _warned_langs:
         _warned_langs.add(raw)
-        logger.warning("AGENT_LANG=%r is neither en nor zh; the prompts and "
-                       "the shipped data are English and Chinese only", value)
+        logger.warning("AGENT_LANG=%r is not one of %s", value, ", ".join(langs.CODES))
     return raw
+
+
+def content_lang(value: object) -> str:
+    """The language of the prompts, bundled data and ledgers AGENT_LANG reads."""
+    return langs.content(normalize_lang(value))
 
 
 @dataclass
@@ -102,9 +103,9 @@ class AgentSettings:
     qq_onebot_url: str = ""
     admin_name: str = ""
     admin_relationship: str = ""
-    #: 'en' or 'zh'; blank means whatever ``AGENT_LANG`` says.
+    #: A language code; blank means whatever ``AGENT_LANG`` says.
     lang: str = ""
-    #: The resolved language everything language-dependent reads.
+    #: The resolved language code.
     agent_lang: str = ""
 
     # ---- conversation -----------------------------------------------------

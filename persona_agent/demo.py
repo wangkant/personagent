@@ -22,10 +22,10 @@ import shutil
 import tempfile
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from persona_agent import candidates, evidence, home, paths, reactions
+from persona_agent import candidates, evidence, home, langs, paths, reactions
 from persona_agent.agent import Agent
 from persona_agent.chat import (
     TRIAL_TRIGGER,
@@ -52,7 +52,7 @@ from persona_agent.settings import AgentSettings
 
 SCENES = ("quiet", "teach", "troll")
 
-NAME = {"en": "Nova", "zh": "小夏"}
+NAME = langs.DEFAULT_NAMES
 
 PERSONA = {
     "en": ("Your name is Nova. You chat with friends about films and cooking.\n"
@@ -72,6 +72,14 @@ PEOPLE = {
            "mallory": "Mallory"},
     "zh": {"alex": "小林", "sam": "阿杰", "priya": "小美", "jordan": "小周",
            "mallory": "阿强"},
+    "zh-TW": {"alex": "小林", "sam": "阿傑", "priya": "小美", "jordan": "小周",
+              "mallory": "阿強"},
+    "ja": {"alex": "アレックス", "sam": "サム", "priya": "プリヤ", "jordan": "ジョーダン",
+           "mallory": "マロリー"},
+    "ko": {"alex": "알렉스", "sam": "샘", "priya": "프리야", "jordan": "조던",
+           "mallory": "맬러리"},
+    "ru": {"alex": "Алекс", "sam": "Сэм", "priya": "Прия", "jordan": "Джордан",
+           "mallory": "Мэллори"},
 }
 UIDS = {"alex": "1001", "sam": "1002", "priya": "1003", "jordan": "1004",
         "mallory": "1005"}
@@ -351,6 +359,24 @@ _TEXT = {
 }
 
 
+def _in(table: dict, lang: str):
+    return langs.table(table["en"], table["zh"], lang)
+
+
+def _beat_in(en: Beat, zh: Beat, lang: str) -> Beat:
+    """A beat in `lang`. Who speaks and the judge's reaction kind are data."""
+    verdict = en.verdict and {**langs.table(en.verdict, zh.verdict, lang),
+                              "reaction": en.verdict["reaction"]}
+    return replace(en, text=langs.say(en.text, zh.text, lang),
+                   reply=langs.table(en.reply, zh.reply, lang), verdict=verdict)
+
+
+def scripts_in(lang: str) -> dict[str, list[Beat]]:
+    return {scene: [_beat_in(a, b, lang)
+                    for a, b in zip(SCRIPTS["en"][scene], SCRIPTS["zh"][scene])]
+            for scene in SCENES}
+
+
 class ScriptedModel:
     """Stands in for the LLM. The speak gate, the reply and the reaction judge
     each answer from their own queue, loaded per message; an empty queue gives
@@ -414,7 +440,8 @@ def build_agent(lang: str, root: Path, *, offline: bool
     """The demo persona, with every file under `root`. Call inside
     throwaway_home(), which makes `root` the runtime's home."""
     settings = dict(
-        lang=lang, persona=PERSONA[lang], persona_name=NAME[lang],
+        lang=lang, persona=langs.say(PERSONA["en"], PERSONA["zh"], lang),
+        persona_name=NAME[lang],
         qq_bot_id="10001", admin_ids=(), admin_name="",
         chat_trigger_count=TRIAL_TRIGGER, message_debounce_sec=0,
         memory_file="memory.json", eval_enabled=False, eval_file="eval.jsonl",
@@ -459,9 +486,10 @@ class Demo:
         self.trial.pacing = model is None
         self.model = model
         self.lang = lang
-        self.t = _TEXT[lang]
+        self.t = _in(_TEXT, lang)
+        self.scripts = scripts_in(lang)
         self.name = NAME[lang]
-        self.people = PEOPLE[lang]
+        self.people = PEOPLE.get(lang, PEOPLE["en"])
         self.out = out
 
     @property
@@ -490,7 +518,7 @@ class Demo:
         self.out(self.t[key].format(name=self.name))
         self.out(self.t[f"{key}_intro"].format(name=self.name, **fmt))
         self.out("")
-        return SCRIPTS[self.lang][key]
+        return self.scripts[key]
 
     def _note(self, text: str) -> None:
         for line in text.splitlines():
@@ -540,8 +568,8 @@ class Demo:
         alone = (self.t["alone"] if self.agent.promotion_policy.min_speakers <= 1
                  else "")
         script = self._scene("teach", alex=self.people["alex"], alone=alone)
-        who, text, advice, sympathy = _PROBE[self.lang]
-        retry = _RETRY[self.lang]
+        who, text, advice, sympathy = _in(_PROBE, self.lang)
+        retry = _in(_RETRY, self.lang)
         probe = Beat(who, text,
                      reply=lambda system: sympathy if retry in system else advice)
         self.out("  " + self.t["probe_before"].format(who=self.people[who], text=text))
@@ -690,8 +718,8 @@ class Demo:
             else:
                 # The ledger keeps its reasons in English.
                 reason_text = str(((cand.get("history") or [{}])[-1]).get("reason") or "")
-                if self.lang != "en":
-                    reason_text = _ZH_LEDGER_REASONS.get(reason_text, "")
+                reason_text = langs.say(reason_text, _ZH_LEDGER_REASONS.get(reason_text, ""),
+                                        self.lang)
                 if reason_text:
                     status += t["colon"] + reason_text
             self.out("    " + t["other"].format(better=clip(cand.get("better"), 44)))
@@ -749,7 +777,7 @@ async def run(scenes, *, lang: str, offline: bool,
                         await getattr(demo, scene)()
                 except ModelFailed as stop:
                     out("")
-                    out("  " + _TEXT[lang]["stopped"].format(
+                    out("  " + _in(_TEXT, lang)["stopped"].format(
                         why=failure_text(lang, stop.failure)))
                     return 1
                 demo.outro()
@@ -776,11 +804,11 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                       help="the scripted model, with no key and no network "
                            "(the default)")
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
-                   help="en (default) or zh")
+                   help="language code: " + ", ".join(langs.CODES) + " (default: en)")
     args = p.parse_args(argv)
     lang = normalize_lang(args.lang)
     if args.online and not os.getenv("LLM_API_KEY", "").strip():
-        print(_TEXT[lang]["needs_key"].format(init=hint("init", lang)))
+        print(_in(_TEXT, lang)["needs_key"].format(init=hint("init", lang)))
         return 1
     scenes = SCENES if args.scene == "all" else (args.scene,)
     try:

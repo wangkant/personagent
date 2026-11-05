@@ -472,9 +472,9 @@ def _local_tz_offset() -> float:
 
 def default_tz_offset() -> float:
     """Offset for a blank PERSONA_TZ_OFFSET_HOURS: UTC+8 for zh, else local."""
-    from .settings import normalize_lang
+    from .settings import content_lang
 
-    if normalize_lang(os.environ.get("AGENT_LANG", "")) == "zh":
+    if content_lang(os.environ.get("AGENT_LANG", "")) == "zh":
         return 8.0
     return _local_tz_offset()
 

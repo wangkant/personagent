@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import access, channels, endpoints
+from . import access, channels, endpoints, langs
 from .config_env import (DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, TZ_OFFSET_RANGE,
                          parse_tz_offset)
 from .home import FROM_ENV_FILE, resource
@@ -202,16 +202,6 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     return findings
 
 
-def _lang_family(value: str) -> str:
-    """en or zh for a language the agent reads (zh-CN, en_US, ...), else ''."""
-    tag = value.strip().lower().replace("_", "-")
-    if tag in ("zh", "cn", "chinese") or tag.startswith("zh-"):
-        return "zh"
-    if tag == "en" or tag.startswith("en-"):
-        return "en"
-    return ""
-
-
 class Finding:
     """One problem, at one level, about one key."""
 
@@ -388,11 +378,11 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                 f" Give the complete /chat/completions endpoint instead{gemini}"))
 
     lang = str(configured.get("AGENT_LANG") or "").strip()
-    if lang and not _lang_family(lang):
+    if lang and not langs.normalize(lang):
         findings.append(Finding(
             "WARN", "AGENT_LANG",
-            f"is {lang!r}, but the examples, filters and checks exist only in"
-            " English and Chinese. Set AGENT_LANG=en or AGENT_LANG=zh"))
+            f"is {lang!r}, which is not a language personagent has."
+            f" Set it to one of {', '.join(langs.CODES)}"))
 
     tz = str(configured.get("PERSONA_TZ_OFFSET_HOURS") or "").strip()
     if tz and parse_tz_offset(tz) is None:

@@ -210,9 +210,9 @@ def check_ledger_sizes():
     from .candidates import CandidateLedger
     from .evidence import EvidenceLog
     from .paths import resolve_runtime_lang_file
-    from .settings import normalize_lang
+    from .settings import content_lang
 
-    lang = normalize_lang(os.getenv("AGENT_LANG", ""))
+    lang = content_lang(os.getenv("AGENT_LANG", ""))
     watched = (
         ("evidence", "evidence", EvidenceLog),
         ("candidate_ledger", "candidate_ledger", CandidateLedger),
