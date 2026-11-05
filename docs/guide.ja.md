@@ -186,7 +186,7 @@ When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
 ```
 
-`AGENT_LANG` は `en`、`zh`、`zh-TW`、`ja`、`ko`、`es`、`fr`、`de`、`pt-BR`、`ru` のいずれかです。スターターのペルソナ、ターミナルのセットアップ、試用版とデモ、記憶コマンド、固定の返信を決めます。同梱の例、フィルター、チェックは `zh` と `zh-TW` では中国語、それ以外では英語です。あなたのペルソナは翻訳しません。[.env.example](../.env.example) がすべての設定を説明しています。
+`AGENT_LANG` は `en`、`zh`、`zh-TW`、`ja`、`ko`、`es`、`fr`、`de`、`pt-BR`、`ru` のいずれかです。スターターのペルソナ、ターミナルのセットアップ、試用版とデモ、`--help` と `doctor`、記憶コマンド、固定の返信を決めます。同梱の例、フィルター、チェックは `zh` と `zh-TW` では中国語、それ以外では英語です。あなたのペルソナは翻訳しません。[.env.example](../.env.example) がすべての設定を説明しています。
 
 ローカルページ右上の言語メニューには English、简体中文、繁體中文、日本語、한국어、Español、Français、Deutsch、Português (Brasil)、Русский があります。ページの言語が変わり、ブラウザーが覚えます。設定を保存すると、ページの言語が `AGENT_LANG` になります。キャラクターはチャットで使われている言語で答えます。プロンプトは英語と中国語です。モデルを通らない[記憶コマンド](#記憶コマンド)といくつかの固定の返信は、10 言語すべてで動きます。
 

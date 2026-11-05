@@ -45,7 +45,6 @@ from persona_agent.chat import (
     reason,
     state_label,
     strength_label,
-    utf8_console,
 )
 from persona_agent.decision import GATED_MODES
 from persona_agent.settings import AgentSettings
@@ -789,22 +788,22 @@ async def run(scenes, *, lang: str, offline: bool,
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    utf8_console()
+    langs.utf8_console()
     home.load_env()
     p = argparse.ArgumentParser(
         prog=prog,
-        description="Watch it stay quiet, learn from a correction and refuse a troll.")
+        description=langs.term("Watch it stay quiet, learn from a correction and refuse a troll."))
     p.add_argument("scene", nargs="?", default="all", choices=("all",) + SCENES,
-                   help="which scene to play (default: all three)")
+                   help=langs.term("which scene to play (default: all three)"))
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--online", action="store_true",
-                      help="ask your configured model instead of the scripted one "
-                           "(costs tokens; results vary)")
+                      help=langs.term("ask your configured model instead of the scripted one "
+                           "(costs tokens; results vary)"))
     mode.add_argument("--offline", action="store_true",
-                      help="the scripted model, with no key and no network "
-                           "(the default)")
+                      help=langs.term("the scripted model, with no key and no network "
+                           "(the default)"))
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
-                   help="language code: " + ", ".join(langs.CODES) + " (default: en)")
+                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
     args = p.parse_args(argv)
     lang = normalize_lang(args.lang)
     if args.online and not os.getenv("LLM_API_KEY", "").strip():

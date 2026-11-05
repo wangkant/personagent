@@ -186,7 +186,7 @@ When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
 ```
 
-`AGENT_LANG`은 `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR`, `ru` 중 하나예요. 시작 페르소나, 터미널 설정, 체험과 데모, 기억 명령, 고정 답장을 정해요. 함께 제공되는 예시, 필터, 점검은 `zh`와 `zh-TW`에서는 중국어, 나머지에서는 영어예요. 내 페르소나를 번역하지는 않아요. [.env.example](../.env.example)이 모든 설정을 설명해요.
+`AGENT_LANG`은 `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR`, `ru` 중 하나예요. 시작 페르소나, 터미널 설정, 체험과 데모, `--help`와 `doctor`, 기억 명령, 고정 답장을 정해요. 함께 제공되는 예시, 필터, 점검은 `zh`와 `zh-TW`에서는 중국어, 나머지에서는 영어예요. 내 페르소나를 번역하지는 않아요. [.env.example](../.env.example)이 모든 설정을 설명해요.
 
 로컬 페이지 오른쪽 위의 언어 메뉴에는 English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil), Русский가 있어요. 페이지 언어를 바꾸고 브라우저가 기억해요. 설정을 저장하면 페이지 언어가 `AGENT_LANG`이 돼요. 캐릭터는 채팅에서 쓰는 언어로 답해요. 프롬프트는 영어와 중국어예요. 모델을 거치지 않는 [기억 명령](#기억-명령)과 몇 가지 고정 답장은 10개 언어 모두에서 동작해요.
 

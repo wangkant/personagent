@@ -611,12 +611,15 @@ function options(select, items, selected) {
   }
   select.value = selected;
 }
-function renderLanguage() {
+function renderText() {
   document.documentElement.lang = LANGS[lang] || "en";
   $("language").value = lang;
   for (const node of document.querySelectorAll("[data-t]"))
     label(node, t(node.dataset.t));
   $("message").placeholder = t("message");
+}
+function renderLanguage() {
+  renderText();
   const provider = $("provider").value || state.provider;
   options($("provider"), catalog.providers, provider);
   const character = $("character").value || state.character;
@@ -1882,13 +1885,17 @@ $("exit").addEventListener("click", async () => {
 (async () => {
   await loadLang(lang);
   if (!token) {
+    renderText();
     toast(t("auth"));
     return;
   }
   try {
     [state, catalog] = await Promise.all([api("state"), api("catalog")]);
     // With no choice saved, the page speaks the language the character was set up in.
-    if (!storedLang() && state.lang) lang = state.lang;
+    if (!storedLang() && state.lang) {
+      lang = state.lang;
+      await loadLang(lang);
+    }
     populate();
     renderLanguage();
     showView("chat");

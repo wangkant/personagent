@@ -1154,30 +1154,21 @@ class ChatSession:
         print()
 
 
-def utf8_console() -> None:
-    """Chinese output must not crash a console on a legacy code page."""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, OSError, ValueError):
-            pass
-
-
 async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    utf8_console()
+    langs.utf8_console()
     home.load_env()
     p = argparse.ArgumentParser(
-        prog=prog, description="Talk to the character in a simulated group chat.")
+        prog=prog, description=langs.term("Talk to the character in a simulated group chat."))
     p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
-                   help="language code: " + ", ".join(langs.CODES) + " (default: en)")
+                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
     p.add_argument("--admin", action="store_true",
-                   help="speak as the configured admin (closer relationship)")
-    p.add_argument("--name", default="you", help="your display name in the chat")
+                   help=langs.term("speak as the configured admin (closer relationship)"))
+    p.add_argument("--name", default="you", help=langs.term("your display name in the chat"))
     p.add_argument("--dm", action="store_true",
-                   help="a one-to-one chat instead of a group")
+                   help=langs.term("a one-to-one chat instead of a group"))
     p.add_argument("--trigger", type=int, default=TRIAL_TRIGGER,
-                   help=f"messages before it considers joining in (default "
-                        f"{TRIAL_TRIGGER}; the live bot uses CHAT_TRIGGER_COUNT)")
+                   help=langs.term(f"messages before it considers joining in (default "
+                        f"{TRIAL_TRIGGER}; the live bot uses CHAT_TRIGGER_COUNT)"))
     args = p.parse_args(argv)
     lang = normalize_lang(args.lang)
     trigger = max(1, args.trigger)

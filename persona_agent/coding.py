@@ -32,6 +32,7 @@ import time
 from dotenv import dotenv_values
 import httpx
 
+from persona_agent import langs
 from persona_agent import __version__
 from persona_agent import home as homes
 from persona_agent import setup_wizard as sw
@@ -268,8 +269,8 @@ class Server:
 
 def mcp_main(argv: list[str] | None = None, prog: str = "personagent mcp") -> int:
     argparse.ArgumentParser(
-        prog=prog, description="Serve the character to Codex, Claude Code and other MCP "
-                               "clients, over stdin and stdout.").parse_args(argv)
+        prog=prog, description=langs.term("Serve the character to Codex, Claude Code and other MCP "
+                               "clients, over stdin and stdout.")).parse_args(argv)
     out = sys.stdout.buffer
     sys.stdout = sys.stderr    # stdout carries the protocol and nothing else
     server = Server(homes.find_home(), out)
@@ -297,8 +298,8 @@ def _cue(data: dict) -> str:
 
 def hook_main(argv: list[str] | None = None, prog: str = "personagent hook") -> int:
     argparse.ArgumentParser(
-        prog=prog, description="A coding agent's Stop hook: reads the event on stdin and "
-                               "lets the character react.").parse_args(argv)
+        prog=prog, description=langs.term("A coding agent's Stop hook: reads the event on stdin and "
+                               "lets the character react.")).parse_args(argv)
     data = json.loads(sys.stdin.buffer.read() or b"{}")
     home = homes.find_home()
     stamp = _desktop(home) / "coding-react.json"

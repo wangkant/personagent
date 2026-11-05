@@ -186,7 +186,7 @@ When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
 ```
 
-`AGENT_LANG` es uno de `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` y `ru`. Define la persona inicial, la configuración en terminal, la prueba y la demo, los comandos de memoria y las respuestas fijas. Los ejemplos, filtros y comprobaciones incluidos están en chino para `zh` y `zh-TW` y en inglés para los demás. No traduce tu persona. [.env.example](../.env.example) describe todos los ajustes.
+`AGENT_LANG` es uno de `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` y `ru`. Define la persona inicial, la configuración en terminal, la prueba y la demo, `--help` y `doctor`, los comandos de memoria y las respuestas fijas. Los ejemplos, filtros y comprobaciones incluidos están en chino para `zh` y `zh-TW` y en inglés para los demás. No traduce tu persona. [.env.example](../.env.example) describe todos los ajustes.
 
 El menú de idioma de arriba a la derecha de la página local ofrece English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) y Русский. Cambia la página, y el navegador lo recuerda. Al guardar los ajustes, el idioma de la página pasa a ser `AGENT_LANG`. El personaje responde en el idioma que usa el chat. Sus prompts están en inglés y chino. Los [comandos de memoria](#comandos-de-memoria) y las pocas respuestas fijas, que no pasan por el modelo, funcionan en los diez idiomas.
 

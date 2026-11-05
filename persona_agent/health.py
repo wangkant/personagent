@@ -227,12 +227,12 @@ def check_ledger_sizes():
         size_mb = meta["size_bytes"] / 1_000_000
         limit_mb = meta["warning_bytes"] / 1_000_000
         note = f"{label} {size_mb:.1f}MB/{limit_mb:.0f}MB"
-        if meta["size_warning"]:
-            healthy = False
-            note += " OVER"
         if meta["quarantined_rows"]:
             healthy = False
             note += f" {meta['quarantined_rows']} UNPARSEABLE row(s)"
+        if meta["size_warning"]:
+            healthy = False
+            note += " OVER"
         parts.append(note)
     return healthy, "; ".join(parts) or "no ledgers yet"
 

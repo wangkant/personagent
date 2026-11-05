@@ -10,6 +10,7 @@ import importlib
 import os
 import sys
 
+from persona_agent import langs
 from persona_agent import __version__
 
 # name -> (module, function, one-line help). The function takes (argv, prog).
@@ -42,9 +43,9 @@ COMMANDS = {
 
 
 def _run_server(argv: list[str], prog: str) -> int:
-    p = argparse.ArgumentParser(prog=prog, description=COMMANDS["run"][2])
-    p.add_argument("--host", default=None, help="default SERVER_HOST or 127.0.0.1")
-    p.add_argument("--port", type=int, default=None, help="default SERVER_PORT or 8080")
+    p = argparse.ArgumentParser(prog=prog, description=langs.term(COMMANDS["run"][2]))
+    p.add_argument("--host", default=None, help=langs.term("default SERVER_HOST or 127.0.0.1"))
+    p.add_argument("--port", type=int, default=None, help=langs.term("default SERVER_PORT or 8080"))
     args = p.parse_args(argv)
     from persona_agent import server
 
@@ -55,14 +56,14 @@ def _run_server(argv: list[str], prog: str) -> int:
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="personagent",
-        description="A character for your group chats that knows when to stay "
-                    "quiet, and learns from being corrected.",
-        epilog="Run `personagent` to open local setup and chat, or "
-               "`personagent start --no-browser` to print the local link.")
+        description=langs.term("A character for your group chats that knows when to stay "
+                    "quiet, and learns from being corrected."),
+        epilog=langs.term("Run `personagent` to open local setup and chat, or "
+               "`personagent start --no-browser` to print the local link."))
     p.add_argument("--version", action="version", version=f"personagent {__version__}")
     p.add_argument("--home", metavar="DIR",
-                   help="the folder holding .env, persona.txt and runtime/ "
-                        "(default: AGENT_HOME, this checkout, or ~/personagent)")
+                   help=langs.term("the folder holding .env, persona.txt and runtime/ "
+                        "(default: AGENT_HOME, this checkout, or ~/personagent)"))
     p.add_argument("command", nargs="?", choices=list(COMMANDS), metavar="command",
                    help=", ".join(COMMANDS))
     p.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
@@ -71,8 +72,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def _usage() -> str:
     width = max(map(len, COMMANDS))
-    lines = [f"  {name:<{width}}  {spec[2]}" for name, spec in COMMANDS.items()]
-    return "commands:\n" + "\n".join(lines)
+    lines = [f"  {name:<{width}}  {langs.term(spec[2])}" for name, spec in COMMANDS.items()]
+    return langs.term("commands:") + "\n" + "\n".join(lines)
 
 
 def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
@@ -85,7 +86,7 @@ def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
             break
         if word == "--home":
             if i + 1 >= len(args):
-                raise SystemExit("personagent: --home needs a folder")
+                raise SystemExit(langs.term("personagent: --home needs a folder"))
             home, i = args[i + 1], i + 2
         elif word.startswith("--home="):
             home, i = word[len("--home="):], i + 1
@@ -96,6 +97,9 @@ def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    langs.utf8_console()
+    # argparse asks gettext for its own words: usage, options, its errors.
+    argparse._ = langs.term
     p = _parser()
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
     if not args.command and sys.stdin is not None and sys.stdin.isatty():
@@ -115,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         result = func(rest, f"personagent {args.command}")
     except SystemExit as stop:
         if {"-h", "--help"} & set(rest) and not stop.code:
-            print("\nAlso accepted: --home DIR, the folder holding .env, persona.txt and runtime/.")
+            print(langs.term("\nAlso accepted: --home DIR, the folder holding .env, persona.txt and runtime/."))
         raise
     return int(result or 0)
 

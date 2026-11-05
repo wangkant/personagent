@@ -10,6 +10,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from persona_agent import langs
 from . import platform_for
 from .base import Bridge, Status, load_credentials, sdk
 
@@ -18,7 +19,7 @@ async def serve(home: Path) -> int:
     env = {k: str(v or "") for k, v in dotenv_values(home / ".env").items()}
     stored = load_credentials(home)
     if not stored:
-        print("No direct platforms are connected.", flush=True)
+        print(langs.term("No direct platforms are connected."), flush=True)
         return 0
     client_type = sdk().Connector
     agent_url = f"http://127.0.0.1:{env.get('SERVER_PORT') or 8080}"
@@ -36,14 +37,14 @@ async def serve(home: Path) -> int:
         agent = client_type(agent_url, env.get("CONNECTOR_TOKEN", ""),
                             connector_id=f"direct-{kind}", timeout_s=420)
         bridges.append(Bridge(platform, agent, status))
-    print(f"direct: running {', '.join(b.platform.kind for b in bridges)}", flush=True)
+    print(langs.term(f"direct: running {', '.join(b.platform.kind for b in bridges)}"), flush=True)
     await asyncio.gather(*(bridge.run(stop) for bridge in bridges))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m persona_agent.direct",
-                                     description="Connect the stored platforms directly")
+                                     description=langs.term("Connect the stored platforms directly"))
     parser.add_argument("--home", required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, stream=sys.stdout,

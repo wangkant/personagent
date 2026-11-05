@@ -210,11 +210,11 @@ class Finding:
     def __init__(self, level: str, key: str, detail: str) -> None:
         self.level, self.key, self.detail = level, key, detail
 
-    def line(self) -> str:
+    def line(self, say=str) -> str:
         # repr a key with an invisible character (a BOM, a stray space), or
         # it prints exactly like the real one.
         shown = self.key if self.key.isprintable() else repr(self.key)
-        return f"[{self.level:>5}] {shown}: {self.detail}"
+        return f"[{self.level:>5}] {shown}: {say(self.detail)}"
 
 
 def _parse(path: Path, *, strip_bom: bool = False) -> dict | None:

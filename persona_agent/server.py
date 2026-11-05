@@ -18,6 +18,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+from persona_agent import langs
 from persona_agent import home
 
 home.load_env()
@@ -1065,7 +1066,7 @@ def main(host: str | None = None, port: int | None = None) -> None:
     port = port or SERVER_PORT
     problem = startup_problem(host, port)
     if problem:
-        print(f"personagent: {problem}", file=sys.stderr)
+        print(f"personagent: {langs.term(problem)}", file=sys.stderr)
         raise SystemExit(2)
     from persona_agent import server as served  # not __main__ under -m
     served._LISTEN.update(host=host, port=port)

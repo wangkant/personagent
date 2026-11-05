@@ -22,7 +22,7 @@ class WebSearch:
         t = (text or "").strip()
         if len(t) < 3:
             return False
-        return bool(_SEARCH_HINT_RE.search(t))
+        return bool(_SEARCH_HINT_RE.search(t.lower()))
 
     async def _web_search(self, query: str, max_results: int = 4) -> str:
         """Tavily if a key is set, else keyless DuckDuckGo."""

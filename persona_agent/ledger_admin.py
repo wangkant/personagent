@@ -27,6 +27,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import langs
 from persona_agent import home
 
 home.load_env()
@@ -266,44 +267,44 @@ def cmd_rebuild(args, ledger, log, policy, paths) -> int:
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    p = argparse.ArgumentParser(prog=prog, description=__doc__.splitlines()[0])
+    p = argparse.ArgumentParser(prog=prog, description=langs.term(__doc__.splitlines()[0]))
     # How this install spells the command, for the hints it prints.
     p.set_defaults(prog=p.prog)
     p.add_argument("--lang", default=AGENT_LANG,
-                   help="language pool to operate on (default AGENT_LANG)")
+                   help=langs.term("language pool to operate on (default AGENT_LANG)"))
     p.add_argument("--actor", default="admin",
-                   help="recorded as the actor on lifecycle events")
+                   help=langs.term("recorded as the actor on lifecycle events"))
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    lst = sub.add_parser("list", help="list candidates (default: pending)")
+    lst = sub.add_parser("list", help=langs.term("list candidates (default: pending)"))
     lst.add_argument("--state", default=candidates.STATE_PROPOSED,
                      choices=("",) + candidates.STATES)
     lst.add_argument("--type", default="", choices=("",) + candidates.TYPES)
     lst.add_argument("--limit", type=int, default=20)
 
-    show = sub.add_parser("show", help="one candidate with its evidence")
+    show = sub.add_parser("show", help=langs.term("one candidate with its evidence"))
     show.add_argument("candidate_id")
 
     for name, helptext in (("promote", "grant authority to affect replies"),
                            ("reject", "refuse a proposal"),
                            ("rollback", "revoke a promoted candidate")):
-        sp = sub.add_parser(name, help=helptext)
+        sp = sub.add_parser(name, help=langs.term(helptext))
         sp.add_argument("candidate_id")
         sp.add_argument("--reason", default="")
 
-    sup = sub.add_parser("supersede", help="replace one candidate with another")
+    sup = sub.add_parser("supersede", help=langs.term("replace one candidate with another"))
     sup.add_argument("old_id")
     sup.add_argument("new_id")
     sup.add_argument("--reason", default="")
 
-    sub.add_parser("rebuild", help="re-derive the retrieval views from the log")
+    sub.add_parser("rebuild", help=langs.term("re-derive the retrieval views from the log"))
 
-    lin = sub.add_parser("lineage", help="persona revisions that share one learning scope")
+    lin = sub.add_parser("lineage", help=langs.term("persona revisions that share one learning scope"))
     lin.add_argument("action", nargs="?", default="show", choices=("show", "adopt"))
     lin.add_argument("persona_hash", nargs="?", default="",
-                     help="with adopt: a pre-lineage hash to fold into the current character")
+                     help=langs.term("with adopt: a pre-lineage hash to fold into the current character"))
     lin.add_argument("--version", default=os.getenv("PERSONA_VERSION", "").strip(),
-                     help="PERSONA_VERSION the hash belongs to (default: current)")
+                     help=langs.term("PERSONA_VERSION the hash belongs to (default: current)"))
 
     args = p.parse_args(argv)
     paths = _paths(args.lang.strip().lower())

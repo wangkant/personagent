@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Share memory between groups**, a switch under **More features** (`MEMORY_SHARE_ROOMS`, off by default). What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.
 - **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
 
-- **Ten languages in the terminal.** `init --terminal`, `chat` and `demo` run in English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, French, German, Brazilian Portuguese and Russian, and `--lang` and `AGENT_LANG` take all ten codes. Each language has its own starter personas and default name. Saving the local page writes the page's language to `AGENT_LANG`, and the first setup follows the system language.
+- **Ten languages in the terminal.** `init --terminal`, `chat`, `demo`, every `--help` and `doctor` run in English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, French, German, Brazilian Portuguese and Russian, and `--lang` and `AGENT_LANG` take all ten codes. Each language has its own starter personas and default name. Saving the local page writes the page's language to `AGENT_LANG`, and the first setup follows the system language.
 
 ### Changed
 

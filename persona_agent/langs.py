@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import functools
 import json
+import os
+import re
+import sys
 from pathlib import Path
 
 from .chatlangs import CODES
@@ -30,6 +33,9 @@ _LOWER = {code.lower(): code for code in CODES}
 _TRADITIONAL = {"tw", "hk", "mo", "hant"}
 
 _LOCALES = Path(__file__).resolve().parent / "locales"
+#: `--help`, `doctor` and the refusals of a start, keyed by the English sentence;
+#: `{0}` stands for what the sentence is built around.
+_TERMINAL = _LOCALES / "terminal"
 
 
 def normalize(value: object) -> str:
@@ -79,3 +85,54 @@ def table(en, zh, lang: str):
     if isinstance(en, (list, tuple)):
         return type(en)(table(a, b, lang) for a, b in zip(en, zh))
     return en
+
+
+@functools.lru_cache(maxsize=None)
+def _terminal_catalog(lang: str) -> tuple[dict, tuple]:
+    """A language's terminal sentences, and those with slots as patterns, the
+    longest first so a short shape cannot swallow a long one."""
+    path = _TERMINAL / f"{lang}.json"
+    sentences = json.loads(path.read_text(encoding="utf-8"))
+    shapes = []
+    for english, there in sentences.items():
+        if re.search(r"\{\d\}", english):
+            pattern = re.sub(r"\\\{(\d)\\\}", r"(?P<s\1>.+?)", re.escape(english))
+            shapes.append((len(english), re.compile(pattern, re.DOTALL), there))
+    shapes.sort(key=lambda shape: -shape[0])
+    return sentences, tuple((pattern, there) for _, pattern, there in shapes)
+
+
+def utf8_console() -> None:
+    """Every language's output must not crash a pipe on a legacy code page."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
+def terminal_lang() -> str:
+    """AGENT_LANG from the environment or the home's `.env`, else the system's."""
+    from . import home
+    from .setup_wizard import detect_lang, env_get
+
+    return (normalize(os.environ.get("AGENT_LANG"))
+            or normalize(env_get(home.find_home() / ".env", "AGENT_LANG"))
+            or detect_lang())
+
+
+def term(text: str) -> str:
+    """One terminal sentence in the language of this install, slots kept."""
+    lang = terminal_lang()
+    if lang == "en":
+        return text
+    sentences, shapes = _terminal_catalog(lang)
+    if text in sentences:
+        return sentences[text]
+    for pattern, there in shapes:
+        match = pattern.fullmatch(text)
+        if match:
+            return re.sub(r"\{(\d)\}", lambda slot: term(match[f"s{slot[1]}"]), there)
+    if "\n" in text:
+        return "\n".join(term(line) for line in text.split("\n"))
+    return text

@@ -226,7 +226,18 @@ _SEARCH_HINT_RE = re.compile(
     r"\bmeme\b|\bslang\b|\bterm\b|\blook ?up\b|\bsearch\b|\bgoogle\b|"
     r"http|www\.|\.com|\.org|\.net|\.io|\.cn|"
     # Chinese fact-seeking hints
-    r"是什么|为什么|多少|哪里|哪个|谁是|新闻|最新|查一下|搜一下|价格|怎么做|怎么用",
+    r"是什么|为什么|多少|哪里|哪个|谁是|新闻|最新|查一下|搜一下|价格|怎么做|怎么用"
+    # The other eight languages.
+    r"|何|なに|なぜ|どこ|いつ|だれ|誰|いくら|ニュース|最新|検索|調べ|値段|価格|どうやって|"
+    r"뭐|무엇|왜|어디|언제|누구|얼마|뉴스|최신|검색|찾아|가격|어떻게|"
+    r"(?<![A-Za-z\u00c0-\u024f\u0400-\u04ff])(?:"
+    r"qué|por qué|cuándo|dónde|quién|cuánto|cómo|noticias|precio|busca|buscar|"
+    r"quoi|pourquoi|quand|où|qui est|combien|comment faire|comment ça|actualités|prix|"
+    r"cherche|chercher|was ist|was sind|was kostet|warum|wann|wo|wer|wie|welche[rsmn]?|"
+    r"nachrichten|neueste[rsmn]?|preis|suche|suchen|o que|por que|quando|onde|quem|quanto|"
+    r"como|notícias|preço|busque|pesquisa|pesquise|что|почему|когда|где|кто|сколько|как|"
+    r"какой|новости|последн[а-яё]*|цена|найди|поищи|загугли"
+    r")(?![A-Za-z\u00c0-\u024f\u0400-\u04ff])",
     re.IGNORECASE | re.ASCII,
 )
 

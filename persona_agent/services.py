@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
+from . import langs
 from . import home as homes
 from .astrbot_install import AstrBotInstallation, hide_dashboard
 from .setup_wizard import _read_json, env_get, write_env
@@ -430,17 +431,17 @@ class Services:
 
 
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
-    argparse.ArgumentParser(prog=prog, description="Start personagent and its connected platforms together").parse_args(argv)
+    argparse.ArgumentParser(prog=prog, description=langs.term("Start personagent and its connected platforms together")).parse_args(argv)
     home = homes.find_home()
     if not env_get(home / ".env", "LLM_API_KEY"):
-        print("Open personagent start to finish setup first.")
+        print(langs.term("Open personagent start to finish setup first."))
         return 2
     from . import updates
     from .setup_wizard import connect_astrbot
     updates.refresh_soon(home)
     stopped = stop_leftovers(home)
     if stopped:
-        print(f"Stopped what an earlier personagent left running: {', '.join(stopped)}.")
+        print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
     services = Services(home)
     try:
         if not env_get(home / ".env", "CONNECTOR_TOKEN"):
@@ -458,7 +459,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
             started.append("astrbot")
         services.start_direct()
         names = started + (["direct"] if services.running("direct") else [])
-        print(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop.")
+        print(langs.term(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop."))
         notice = updates.line(updates.notice(home), sub="up")
         if notice:
             print(notice)
@@ -468,11 +469,11 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         while all(services.running(name) for name in started):
             if direct_running and not services.running("direct"):
                 direct_running = False
-                print("The directly connected platforms stopped; see runtime/desktop/direct.log.",
+                print(langs.term("The directly connected platforms stopped; see runtime/desktop/direct.log."),
                       file=sys.stderr)
             time.sleep(0.5)
         stopped = next(name for name in started if not services.running(name))
-        print(f"{stopped} stopped; see runtime/desktop/{stopped}.log.", file=sys.stderr)
+        print(langs.term(f"{stopped} stopped; see runtime/desktop/{stopped}.log."), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 0

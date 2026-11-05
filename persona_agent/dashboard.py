@@ -424,7 +424,7 @@ def status_payload(agent) -> dict:
         state = "off"
     else:
         state = "ready" if agent.enabled else "no_key"
-    findings = [{"level": f.level, "key": f.key, "detail": _redact_urls(f.detail)}
+    findings = [{"level": f.level, "key": f.key, "detail": langs.term(_redact_urls(f.detail))}
                 for f in preflight.check_config()]
     now = time.time()
     return {

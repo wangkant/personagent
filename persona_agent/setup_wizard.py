@@ -1572,14 +1572,14 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     """Write the templates and flags; returns the bot's name. An unedited
     shipped persona.txt follows the flags; an edited one is never touched."""
     if args.provider == "other" and not args.base_url:
-        raise SystemExit("--provider other needs --base-url")
+        raise SystemExit(langs.term("--provider other needs --base-url"))
     if args.base_url and not has_scheme(args.base_url):
-        raise SystemExit("--base-url needs https:// or http:// in front, such as https://api.deepseek.com")
+        raise SystemExit(langs.term("--base-url needs https:// or http:// in front, such as https://api.deepseek.com"))
     existed = (home / ".env").exists()
     # A key does not say whose it is, and a key alone used to mean DeepSeek.
     if (os.environ.get(args.key_env or "LLM_API_KEY", "").strip()
             and not (existed or args.provider or args.base_url)):
-        raise SystemExit("Which service is this key for? Add --provider, such as --provider openrouter")
+        raise SystemExit(langs.term("Which service is this key for? Add --provider, such as --provider openrouter"))
     env_path = copy_env_template(home)
     lang = langs.normalize(args.lang or os.environ.get("AGENT_LANG", "").strip()
                            or (env_get(env_path, "AGENT_LANG") if existed else "")
@@ -1610,7 +1610,7 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     if args.key_env:
         key = os.environ.get(args.key_env, "").strip()
         if not key:
-            raise SystemExit(f"--key-env {args.key_env}: that environment variable is empty")
+            raise SystemExit(langs.term(f"--key-env {args.key_env}: that environment variable is empty"))
         values["LLM_API_KEY"] = key
     name = args.name or env_get(env_path, "PERSONA_NAME") or DEFAULT_NAMES[lang]
     values["PERSONA_NAME"] = name
@@ -1644,20 +1644,20 @@ def setup_without_questions(home: Path, args: argparse.Namespace, launcher: Laun
 def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=prog, add_help=add_help,
-        description="Set up personagent: the AI service, the character, and "
-                    "optionally AstrBot. Asks questions in a terminal.")
+        description=langs.term("Set up personagent: the AI service, the character, and "
+                    "optionally AstrBot. Asks questions in a terminal."))
     p.add_argument("--no-input", action="store_true",
-                   help="ask nothing; use the flags below and keep everything else")
-    p.add_argument("--terminal", action="store_true", help="use the terminal setup wizard instead of the welcome page")
-    p.add_argument("--provider", choices=PROVIDER_KEYS, help="an AI service preset")
-    p.add_argument("--base-url", help="the service's API address (needed with --provider other)")
-    p.add_argument("--model", help="the model id (default: the preset's)")
+                   help=langs.term("ask nothing; use the flags below and keep everything else"))
+    p.add_argument("--terminal", action="store_true", help=langs.term("use the terminal setup wizard instead of the welcome page"))
+    p.add_argument("--provider", choices=PROVIDER_KEYS, help=langs.term("an AI service preset"))
+    p.add_argument("--base-url", help=langs.term("the service's API address (needed with --provider other)"))
+    p.add_argument("--model", help=langs.term("the model id (default: the preset's)"))
     p.add_argument("--key-env", metavar="VAR",
-                   help="read the API key from this environment variable")
-    p.add_argument("--name", help="the bot's name (default: one in the chosen language)")
-    p.add_argument("--lang", choices=LANGS, help="the language (default: the system's)")
+                   help=langs.term("read the API key from this environment variable"))
+    p.add_argument("--name", help=langs.term("the bot's name (default: one in the chosen language)"))
+    p.add_argument("--lang", choices=LANGS, help=langs.term("the language (default: the system's)"))
     p.add_argument("--persona", choices=PERSONA_KEYS,
-                   help="a ready character for persona.txt (written only while it is unedited)")
+                   help=langs.term("a ready character for persona.txt (written only while it is unedited)"))
     return p
 
 
@@ -1712,39 +1712,39 @@ def main(argv: list[str] | None = None, prog: str = "personagent init") -> int:
 
 def connect_parser(prog: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog=prog, description="Connect personagent to AstrBot: copy the plugin, share a "
+        prog=prog, description=langs.term("Connect personagent to AstrBot: copy the plugin, share a "
                                "token, write the allowlists. With DATA_DIR nothing is asked. "
                                "Or put the character into a coding agent: claude-code, codex or "
-                               "dsh (DeepSeek Harness).",
-        epilog="AstrBot in Docker cannot reach 127.0.0.1 on this machine: give it host "
-               "networking, or put personagent behind HTTPS and pass that address as --url.")
+                               "dsh (DeepSeek Harness)."),
+        epilog=langs.term("AstrBot in Docker cannot reach 127.0.0.1 on this machine: give it host "
+               "networking, or put personagent behind HTTPS and pass that address as --url."))
     p.add_argument("target", choices=("astrbot", "claude-code", "codex", "dsh"))
     p.add_argument("--react", action="store_true",
-                   help="claude-code, codex: also let the character react when a turn ends; "
-                        "sends the folder's name and the start of the coding agent's last message to your model service")
+                   help=langs.term("claude-code, codex: also let the character react when a turn ends; "
+                        "sends the folder's name and the start of the coding agent's last message to your model service"))
     p.add_argument("--remove", action="store_true",
-                   help="claude-code, codex, dsh: take the character out of the coding agent again")
+                   help=langs.term("claude-code, codex, dsh: take the character out of the coding agent again"))
     p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
-                   help="AstrBot's folder (its data folder or the one above it)")
+                   help=langs.term("AstrBot's folder (its data folder or the one above it)"))
     action = p.add_mutually_exclusive_group()
     action.add_argument("--install", action="store_true",
-                        help="download and initialise AstrBot under this agent home, then connect it")
+                        help=langs.term("download and initialise AstrBot under this agent home, then connect it"))
     action.add_argument("--start", action="store_true",
-                        help="start the AstrBot installed under this agent home")
+                        help=langs.term("start the AstrBot installed under this agent home"))
     qq = p.add_mutually_exclusive_group()
     qq.add_argument("--qq", dest="qq", action="store_const", const=True,
-                    help="route QQ through AstrBot too")
+                    help=langs.term("route QQ through AstrBot too"))
     qq.add_argument("--no-qq", dest="qq", action="store_const", const=False,
-                    help="stop routing QQ through AstrBot (without either, it is left as it is)")
+                    help=langs.term("stop routing QQ through AstrBot (without either, it is left as it is)"))
     p.add_argument("--platform", choices=tuple(PLATFORMS),
-                   help="also switch on this adapter in AstrBot's own config")
-    p.add_argument("--token", default="", help="the adapter's bot token")
-    p.add_argument("--app-token", default="", help="Slack's app-level token")
-    p.add_argument("--app-id", default="", help="Lark / Feishu app id")
-    p.add_argument("--app-secret", default="", help="Lark / Feishu app secret")
+                   help=langs.term("also switch on this adapter in AstrBot's own config"))
+    p.add_argument("--token", default="", help=langs.term("the adapter's bot token"))
+    p.add_argument("--app-token", default="", help=langs.term("Slack's app-level token"))
+    p.add_argument("--app-id", default="", help=langs.term("Lark / Feishu app id"))
+    p.add_argument("--app-secret", default="", help=langs.term("Lark / Feishu app secret"))
     p.add_argument("--url", default="",
-                   help="the address the plugin posts to, such as an https:// one "
-                        "(default http://127.0.0.1:<SERVER_PORT>)")
+                   help=langs.term("the address the plugin posts to, such as an https:// one "
+                        "(default http://127.0.0.1:<SERVER_PORT>)"))
     return p
 
 
@@ -1768,7 +1768,7 @@ def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
             try:
                 entry = astrbot_platform_entry(platform, creds or {})
             except ValueError as exc:
-                raise SystemExit(f"platform not written: {exc}") from None
+                raise SystemExit(langs.term(f"platform not written: {exc}")) from None
             write_astrbot_platform(found, entry)
             print(t("platform_written", kind=platform_label(platform)))
     except OSError as exc:
@@ -1796,18 +1796,18 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
     set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
     if args.target != "astrbot":
         if args.data_dir:
-            raise SystemExit(f"{args.target} takes no folder")
+            raise SystemExit(langs.term(f"{args.target} takes no folder"))
         from persona_agent import coding
 
         return coding.connect(home, args.target, react=args.react, remove=args.remove)
     if args.react or args.remove:
-        raise SystemExit("--react and --remove are for the coding agents")
+        raise SystemExit(langs.term("--react and --remove are for the coding agents"))
     if args.data_dir and (args.install or args.start):
-        raise SystemExit("--install and --start use the managed folder; omit DATA_DIR")
+        raise SystemExit(langs.term("--install and --start use the managed folder; omit DATA_DIR"))
     if args.start:
         if args.qq is not None or args.platform or args.url or any(
                 (args.token, args.app_token, args.app_id, args.app_secret)):
-            raise SystemExit("--start cannot be combined with connection settings")
+            raise SystemExit(langs.term("--start cannot be combined with connection settings"))
         from persona_agent.astrbot_install import start_astrbot
 
         try:
@@ -1822,7 +1822,7 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
             try:
                 astrbot_platform_entry(args.platform, creds)
             except ValueError as exc:
-                raise SystemExit(f"platform not written: {exc}") from None
+                raise SystemExit(langs.term(f"platform not written: {exc}")) from None
         if args.url and not personagent_url_accepted(args.url, "token"):
             raise SystemExit(t("url_refused"))
         try:
@@ -1836,9 +1836,9 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
                                          platform=args.platform or "", creds=creds,
                                          url=args.url)
     if args.qq is not None or args.platform or args.url:
-        raise SystemExit("--qq, --no-qq, --platform and --url need DATA_DIR")
+        raise SystemExit(langs.term("--qq, --no-qq, --platform and --url need DATA_DIR"))
     if not (sys.stdin is not None and sys.stdin.isatty()):
-        raise SystemExit(f"{prog}: give AstrBot's folder (DATA_DIR), or run this in a terminal")
+        raise SystemExit(langs.term(f"{prog}: give AstrBot's folder (DATA_DIR), or run this in a terminal"))
     try:
         env_path = copy_env_template(home)
         answers: dict = {}
@@ -1856,10 +1856,10 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
 
 def start_main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     """A small front door; each action runs in a fresh process to reload settings."""
-    argparse.ArgumentParser(prog=prog, description="Open the personagent start menu").parse_args(argv)
+    argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
     _prepare_output()
     if sys.stdin is None or not sys.stdin.isatty():
-        print("Open this menu in a terminal: personagent start")
+        print(langs.term("Open this menu in a terminal: personagent start"))
         return 2
     home = homes.find_home()
     launcher = Launcher(python=sys.executable, home=home)

@@ -4,7 +4,9 @@ The probes are shared with /health/details (health.py); the flags are in USAGE.
 """
 import json
 import sys
+import unicodedata
 
+from persona_agent import langs
 from persona_agent import home
 
 home.load_env()
@@ -42,17 +44,23 @@ def _fix() -> int:
     changes = preflight.migrate_env_file(env_file)
     for old, new, action in changes:
         if action == "renamed":
-            print(f"renamed {old} -> {new}")
+            print(langs.term(f"renamed {old} -> {new}"))
         else:
-            print(f"left {old} out: {new} is already set (the old line is now a comment)")
+            print(langs.term(f"left {old} out: {new} is already set (the old line is now a comment)"))
     if changes:
-        print(f"Saved the previous file as {env_file.name}.bak next to it.")
+        print(langs.term(f"Saved the previous file as {env_file.name}.bak next to it."))
     for old, new, where in preflight.retired_settings():
         if where != ".env":
-            print(f"{old} is set in the environment, not .env: rename it to {new} where you set it.")
+            print(langs.term(f"{old} is set in the environment, not .env: rename it to {new} where you set it."))
     if not changes:
-        print(f"Nothing to rename in {env_file}.")
+        print(langs.term(f"Nothing to rename in {env_file}."))
     return 0
+
+
+def _pad(text: str, width: int) -> str:
+    """`text` filled to `width` terminal columns; CJK takes two."""
+    used = sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+    return text + " " * (width - used)
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
@@ -61,7 +69,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     if argv == ["--fix"]:
         return _fix()
     if argv and argv != ["--json"]:
-        print(USAGE.format(prog=prog))
+        print(langs.term(USAGE).format(prog=prog))
         return 0 if {"-h", "--help"} & set(argv) else 2
     retired = preflight.retired_settings()
     if argv == ["--json"]:
@@ -80,45 +88,45 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     print("=" * 64)
-    print("  personagent — config + API health check")
+    print(langs.term("  personagent — config + API health check"))
     print("=" * 64)
     # Config first: a probe that fails because a key is misspelled reads like
     # the service being down, and the two have very different fixes.
     findings = check_config()
     if findings:
         for finding in findings:
-            print(f"  {finding.line()}")
+            print(f"  {finding.line(langs.term)}")
         print("-" * 64)
     else:
-        print("[  OK ] configuration                    no unknown or missing keys")
+        print(langs.term("[  OK ] configuration                    no unknown or missing keys"))
         print("-" * 64)
     if any(f.key == "LLM_API_KEY" and f.level == "ERROR" for f in findings):
-        print("  No model key yet: `personagent init` sets up the model and key.")
+        print(langs.term("  No model key yet: `personagent init` sets up the model and key."))
         print("-" * 64)
     if retired:
-        print(f"  The service will not start while these settings are in use; "
-              f"run `{fix_command()}` to rename them.")
+        print(langs.term(f"  The service will not start while these settings are in use; "
+              f"run `{fix_command()}` to rename them."))
         print("-" * 64)
     results = run_checks()
     for r in results:
         mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")
-        tag = " [critical]" if r["critical"] else ""
-        print(f"[{mark}] {r['name']:<28}{tag:<11} {r['ms']:5.0f}ms  {r['detail']}")
+        tag = langs.term(" [critical]") if r["critical"] else ""
+        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r['detail'])}")
     print("=" * 64)
     services_ok = all_critical_ok(results)
     if not services_ok:
-        print("RESULT: a CRITICAL service is DOWN.")
+        print(langs.term("RESULT: a CRITICAL service is DOWN."))
     elif retired:
-        print("RESULT: services OK, but retired settings must be renamed.")
+        print(langs.term("RESULT: services OK, but retired settings must be renamed."))
     else:
-        print("RESULT: all critical services OK.")
+        print(langs.term("RESULT: all critical services OK."))
     off = activity_off()
     if off:
-        print(off)
+        print(langs.term(off))
     from persona_agent.updates import line
     notice = line(update_notice())
     if notice:
-        print(notice)
+        print(langs.term(notice))
     return 0 if services_ok and not retired else 1
 
 

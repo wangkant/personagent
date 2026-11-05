@@ -45,6 +45,7 @@ from pathlib import Path
 
 import httpx
 
+from . import langs
 from persona_agent import __version__, channels, paths
 from persona_agent.agent import Agent
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
@@ -1172,26 +1173,26 @@ async def run(args, env=None) -> dict:
 
 def parse_args(argv=None, prog: str | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog=prog, description="Measure speaking, persona and learning on "
-                               "labelled cases, through the real agent.")
+        prog=prog, description=langs.term("Measure speaking, persona and learning on "
+                               "labelled cases, through the real agent."))
     p.add_argument("--suite", choices=(*SUITES, "all"), default="all")
-    p.add_argument("--lang", default="", help="en or zh (default: AGENT_LANG, else en)")
+    p.add_argument("--lang", default="", help=langs.term("en or zh (default: AGENT_LANG, else en)"))
     p.add_argument("--limit", type=int, default=0,
-                   help="cases per suite, spread across modes and labels (0: all)")
+                   help=langs.term("cases per suite, spread across modes and labels (0: all)"))
     p.add_argument("--out", default="",
-                   help="report path (default: <home>/benchmark_runs/"
-                        "behavior-eval-<lang>-<time>.json)")
+                   help=langs.term("report path (default: <home>/benchmark_runs/"
+                        "behavior-eval-<lang>-<time>.json)"))
     p.add_argument("--persona", default="",
-                   help="persona file (default: the shipped persona.example.<lang>.txt)")
+                   help=langs.term("persona file (default: the shipped persona.example.<lang>.txt)"))
     p.add_argument("--keep", action="store_true",
-                   help="keep the throwaway deployment root and print where it is")
+                   help=langs.term("keep the throwaway deployment root and print where it is"))
     p.add_argument("--repeat", type=int, default=1,
-                   help="tries per case, each in a fresh deployment (default 1)")
+                   help=langs.term("tries per case, each in a fresh deployment (default 1)"))
     p.add_argument("--allow-same-judge", action="store_true",
-                   help="let BENCH_JUDGE_MODEL be a model under test (marks the report)")
+                   help=langs.term("let BENCH_JUDGE_MODEL be a model under test (marks the report)"))
     p.add_argument("--rejudge", default="", metavar="REPORT",
-                   help="judge a kept report's replies again with BENCH_JUDGE_MODEL, "
-                        "without calling the model under test")
+                   help=langs.term("judge a kept report's replies again with BENCH_JUDGE_MODEL, "
+                        "without calling the model under test"))
     return p.parse_args(argv)
 
 

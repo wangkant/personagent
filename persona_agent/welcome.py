@@ -898,10 +898,10 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
 
 def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     import uvicorn
-    parser = argparse.ArgumentParser(prog=prog, description="Open local setup and chat in your browser")
-    parser.add_argument("--no-browser", action="store_true", help="print the local link without opening a browser")
-    parser.add_argument("--terminal", action="store_true", help="use the terminal menu instead")
-    parser.add_argument("--port", type=int, default=0, help="local page port (default: choose automatically)")
+    parser = argparse.ArgumentParser(prog=prog, description=langs.term("Open local setup and chat in your browser"))
+    parser.add_argument("--no-browser", action="store_true", help=langs.term("print the local link without opening a browser"))
+    parser.add_argument("--terminal", action="store_true", help=langs.term("use the terminal menu instead"))
+    parser.add_argument("--port", type=int, default=0, help=langs.term("local page port (default: choose automatically)"))
     args = parser.parse_args(argv)
     if args.terminal:
         return sw.start_main([])
@@ -913,7 +913,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     except LockUnavailable:
         url = sw._read_json(info).get("url", "")
         if not url:
-            print("personagent is starting. Try again in a moment.")
+            print(langs.term("personagent is starting. Try again in a moment."))
             return 1
         print(url, flush=True)
         if not args.no_browser:
@@ -924,13 +924,13 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     try:
         stopped = stop_leftovers(home)
         if stopped:
-            print(f"Stopped what an earlier personagent left running: {', '.join(stopped)}.")
+            print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
         sock.bind(("127.0.0.1", args.port))
         sock.listen(128)
         port = sock.getsockname()[1]
         url = f"http://127.0.0.1:{port}/#token={token}"
         atomic_write_text(info, json.dumps({"url": url}))
-        print(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop.", flush=True)
+        print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
         notice = updates.line(updates.notice(home))
         if notice:
             print(notice, flush=True)
