@@ -1,6 +1,6 @@
 # 免责声明
 
-[English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md)
+[English](DISCLAIMER.md) · 简体中文 · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
 personagent 是以 [MIT 许可证](../LICENSE)发布的自由软件。它让一个 AI 角色出现在你的聊天里，而运行它的人是你。它说什么、在哪里说、使用哪些账号，都由你负责。本页不构成法律意见。
 

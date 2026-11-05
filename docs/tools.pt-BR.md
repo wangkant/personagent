@@ -1,0 +1,25 @@
+# Os scripts de `tools/`
+
+[English](tools.md) · [简体中文](tools.zh-CN.md) · [繁體中文](tools.zh-TW.md) · [日本語](tools.ja.md) · [한국어](tools.ko.md) · [Español](tools.es.md) · [Français](tools.fr.md) · [Deutsch](tools.de.md) · Português (Brasil) · [Русский](tools.ru.md)
+
+Os scripts de `tools/` são para quem executa o personagent a partir de um clone. Eles não são instalados com o pacote e leem `.env` e `runtime/` do clone. Execute-os com o interpretador do clone, a partir da raiz do repositório:
+
+```bash
+.venv/bin/python tools/<script>.py --help     # Windows: .venv\Scripts\python.exe
+```
+
+As tarefas do dia a dia são subcomandos do `personagent` em vez de scripts: `personagent doctor`, `personagent learned` e `personagent eval`. Para testar uma mudança de prompt, use `personagent chat`. Para medi-la, use `personagent eval`.
+
+| Script | O que faz | Precisa de | Chama um modelo | Status |
+|---|---|---|---|---|
+| `import_stickers_folder.py` | Importa uma pasta de imagens para a biblioteca de figurinhas e marca cada uma, para que uma biblioteca nova não comece vazia. `--dry-run` mostra as contagens e `--no-tag` só copia os arquivos | Uma pasta de imagens, mais `VISION_MODEL`, `VISION_API_KEY` e `VISION_BASE_URL` para marcar | Sim, uma chamada de visão por imagem, a menos que você passe `--dry-run` ou `--no-tag` | Com suporte |
+| `bootstrap_from_history.py` | Dá a uma implantação nova um início único a partir do histórico de um grupo do QQ. Cria o perfil de figurinhas e tamanho de mensagens do administrador e salva na biblioteca as figurinhas que vê | O servidor HTTP do NapCat, um cliente de QQ de terceiros, em `QQ_ONEBOT_URL` (obrigatório), e grupos do QQ em `ACCESS_GROUPS` ou `--group` | Não. O modelo de visão do bot em execução marca depois as figurinhas salvas | Experimental, só QQ e NapCat |
+| `auto_reviewer.py` | Lê as notas baixas de autoavaliação de `runtime/eval.jsonl` e faz um modelo transformar cada uma em um par de antes e depois. Com `--apply`, pergunta a você, par a par, se deve adicioná-lo ao conjunto compartilhado de feedback | `EVAL_ENABLED=true` por um tempo, para que existam notas | Sim, uma chamada por entrada revisada (`--limit`, padrão 20). `--dry-run` não chama nada | Experimental. `--apply` grava em um conjunto usado por todas as conversas. Para aprovar uma correção em uma só conversa, use `personagent learned` |
+| `evolution_benchmark.py` | Executa o agente real nos cenários de `data/benchmark/` por várias rodadas, uma vez com o ciclo de autoaperfeiçoamento ligado e outra desligado, e compara os dois. `run` faz as execuções e `ingest` lê de volta as notas do juiz | `LLM_API_KEY` e um juiz que não seja o modelo testado (`--judge export`, `openai` ou `anthropic`, com `BENCH_JUDGE_MODEL`) | Sim, muitas: cada cenário, rodada e variante | Experimental |
+| `scenario_probe.py` | Testa cenários candidatos do benchmark no modelo real e informa quais expõem a falha de que o benchmark precisa | `LLM_API_KEY`, um arquivo de cenários candidatos no formato de `data/benchmark/scenarios.train.en.jsonl` e `--judge-model` para a passada do juiz | Sim, uma resposta, uma autoavaliação e uma chamada ao juiz por cenário | Experimental, para construir o benchmark |
+| `sticker_holdout_eval.py` | Mede a estabilidade e a precisão do filtro de aprovação de figurinhas com figurinhas que você rotulou à mão | `runtime/holdout.jsonl` (formato em `tools/holdout.example.jsonl`) e as três configurações `VISION_*` | Sim, imagens × `--runs` (padrão 5) chamadas de visão, cerca de 150 para 30 imagens | Experimental |
+| `package_smoke.py` | Verifica de ponta a ponta um comando `personagent` instalado: versão, `init --no-input`, `chat`, `run` com `/health` e `doctor --json` | Um `personagent` instalado (`--personagent PATH`) e nada mais | Não, um servidor substituto responde | Com suporte. A CI executa no Linux e no Windows |
+| `welcome_smoke.py` | Verifica de ponta a ponta a página local instalada: `start --no-browser`, salvar uma chave, uma conversa com o personagem real, uma segunda abertura que reaproveita a página e uma saída limpa | Um `personagent` instalado (`--personagent PATH`) e nada mais | Não, o mesmo servidor substituto responde | Com suporte. A CI executa no Linux e no Windows |
+| `release_notes.py` | Confere uma tag de versão com `pyproject.toml` e imprime a seção do CHANGELOG dessa versão | A tag, como `v1.1.0` | Não | Com suporte. O fluxo de publicação executa |
+
+Os scripts experimentais são auxiliares de pesquisa e manutenção e podem mudar ou ser removidos sem período de descontinuação. Os scripts que chamam um modelo gastam crédito da conta no seu `.env`; leia `--help` primeiro e teste `--dry-run` onde existir.

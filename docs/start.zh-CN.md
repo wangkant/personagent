@@ -1,6 +1,6 @@
 # 开始使用 personagent
 
-[English](start.md) · [完整手册](guide.zh-CN.md)
+[English](start.md) · 简体中文 · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [完整手册](guide.zh-CN.md)
 
 ## 打开应用
 

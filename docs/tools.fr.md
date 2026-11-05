@@ -1,0 +1,25 @@
+# Les scripts de `tools/`
+
+[English](tools.md) · [简体中文](tools.zh-CN.md) · [繁體中文](tools.zh-TW.md) · [日本語](tools.ja.md) · [한국어](tools.ko.md) · [Español](tools.es.md) · Français · [Deutsch](tools.de.md) · [Português (Brasil)](tools.pt-BR.md) · [Русский](tools.ru.md)
+
+Les scripts de `tools/` sont destinés à ceux qui lancent personagent depuis un clone. Ils ne sont pas installés avec le paquet et lisent `.env` et `runtime/` depuis le clone. Lancez-les avec l'interpréteur du clone, depuis la racine du dépôt :
+
+```bash
+.venv/bin/python tools/<script>.py --help     # Windows: .venv\Scripts\python.exe
+```
+
+Les tâches courantes sont des sous-commandes de `personagent` plutôt que des scripts : `personagent doctor`, `personagent learned` et `personagent eval`. Pour essayer une modification de prompt, utilisez `personagent chat`. Pour la mesurer, utilisez `personagent eval`.
+
+| Script | Ce qu'il fait | Besoins | Appelle un modèle | Statut |
+|---|---|---|---|---|
+| `import_stickers_folder.py` | Importe un dossier d'images dans la bibliothèque de stickers et étiquette chacune, pour qu'une nouvelle bibliothèque ne démarre pas vide. `--dry-run` affiche les décomptes et `--no-tag` copie seulement les fichiers | Un dossier d'images, plus `VISION_MODEL`, `VISION_API_KEY` et `VISION_BASE_URL` pour l'étiquetage | Oui, un appel de vision par image, sauf avec `--dry-run` ou `--no-tag` | Pris en charge |
+| `bootstrap_from_history.py` | Donne à un nouveau déploiement un démarrage unique à partir de l'historique d'un groupe QQ. Il construit le profil de stickers et de longueur de messages de l'administrateur et enregistre dans la bibliothèque les stickers qu'il voit | Le serveur HTTP de NapCat, un client QQ tiers, à `QQ_ONEBOT_URL` (obligatoire), et des groupes QQ dans `ACCESS_GROUPS` ou `--group` | Non. Le modèle de vision du bot en marche étiquette plus tard les stickers enregistrés | Expérimental, QQ et NapCat uniquement |
+| `auto_reviewer.py` | Lit les faibles notes d'auto-évaluation de `runtime/eval.jsonl` et demande à un modèle de transformer chacune en paire avant/après. Avec `--apply`, il vous demande ensuite, paire par paire, s'il faut l'ajouter au fonds de retours partagé | `EVAL_ENABLED=true` pendant un moment, pour que des notes existent | Oui, un appel par entrée examinée (`--limit`, 20 par défaut). `--dry-run` n'appelle rien | Expérimental. `--apply` écrit dans un fonds utilisé par toutes les discussions. Pour approuver une correction pour une seule discussion, utilisez `personagent learned` |
+| `evolution_benchmark.py` | Fait tourner le véritable agent sur les scénarios de `data/benchmark/` pendant plusieurs tours, une fois avec la boucle d'auto-amélioration activée et une fois désactivée, et compare les deux. `run` effectue les exécutions et `ingest` relit les notes du juge | `LLM_API_KEY` et un juge qui n'est pas le modèle testé (`--judge export`, `openai` ou `anthropic`, avec `BENCH_JUDGE_MODEL`) | Oui, beaucoup : chaque scénario, tour et variante | Expérimental |
+| `scenario_probe.py` | Essaie des scénarios candidats du banc d'essai sur le véritable modèle et indique lesquels révèlent l'échec dont le banc d'essai a besoin | `LLM_API_KEY`, un fichier de scénarios candidats au format de `data/benchmark/scenarios.train.en.jsonl` et `--judge-model` pour la passe du juge | Oui, une réponse, une auto-évaluation et un appel au juge par scénario | Expérimental, pour construire le banc d'essai |
+| `sticker_holdout_eval.py` | Mesure la stabilité et la précision du filtre d'approbation des stickers sur des stickers que vous avez étiquetés à la main | `runtime/holdout.jsonl` (format dans `tools/holdout.example.jsonl`) et les trois réglages `VISION_*` | Oui, images × `--runs` (5 par défaut) appels de vision, environ 150 pour 30 images | Expérimental |
+| `package_smoke.py` | Vérifie de bout en bout une commande `personagent` installée : version, `init --no-input`, `chat`, `run` avec `/health`, et `doctor --json` | Un `personagent` installé (`--personagent PATH`) et rien d'autre | Non, un serveur de substitution répond | Pris en charge. La CI le lance sous Linux et Windows |
+| `welcome_smoke.py` | Vérifie de bout en bout la page locale installée : `start --no-browser`, enregistrer une clé, une discussion avec le véritable personnage, un second lancement qui réutilise la page et une sortie propre | Un `personagent` installé (`--personagent PATH`) et rien d'autre | Non, le même serveur de substitution répond | Pris en charge. La CI le lance sous Linux et Windows |
+| `release_notes.py` | Vérifie une étiquette de version par rapport à `pyproject.toml` et affiche la section du CHANGELOG de cette version | L'étiquette, comme `v1.1.0` | Non | Pris en charge. Le flux de publication le lance |
+
+Les scripts expérimentaux sont des aides à la recherche et à la maintenance et peuvent changer ou disparaître sans période de dépréciation. Les scripts qui appellent un modèle dépensent le crédit du compte de votre `.env` ; lisez d'abord `--help` et essayez `--dry-run` quand il existe.

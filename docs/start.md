@@ -1,6 +1,6 @@
 # Start using personagent
 
-[中文](start.zh-CN.md) · [Full guide](guide.md)
+English · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [Full guide](guide.md)
 
 ## Open it
 

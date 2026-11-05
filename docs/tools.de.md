@@ -1,0 +1,25 @@
+# Die Skripte in `tools/`
+
+[English](tools.md) · [简体中文](tools.zh-CN.md) · [繁體中文](tools.zh-TW.md) · [日本語](tools.ja.md) · [한국어](tools.ko.md) · [Español](tools.es.md) · [Français](tools.fr.md) · Deutsch · [Português (Brasil)](tools.pt-BR.md) · [Русский](tools.ru.md)
+
+Die Skripte in `tools/` sind für alle, die personagent aus einem Klon starten. Sie werden nicht mit dem Paket installiert und lesen `.env` und `runtime/` aus dem Klon. Führe sie mit dem Interpreter des Klons im Wurzelverzeichnis des Repositorys aus:
+
+```bash
+.venv/bin/python tools/<script>.py --help     # Windows: .venv\Scripts\python.exe
+```
+
+Alltägliche Aufgaben sind Unterbefehle von `personagent` statt Skripte: `personagent doctor`, `personagent learned` und `personagent eval`. Um eine Prompt-Änderung auszuprobieren, nutze `personagent chat`. Um sie zu messen, nutze `personagent eval`.
+
+| Skript | Was es macht | Braucht | Ruft ein Modell auf | Status |
+|---|---|---|---|---|
+| `import_stickers_folder.py` | Importiert einen Bilderordner in die Sticker-Bibliothek und versieht jedes Bild mit Tags, damit eine neue Bibliothek nicht leer startet. `--dry-run` zeigt die Anzahl, `--no-tag` kopiert nur die Dateien | Einen Bilderordner, dazu `VISION_MODEL`, `VISION_API_KEY` und `VISION_BASE_URL` für die Tags | Ja, ein Vision-Aufruf pro Bild, außer mit `--dry-run` oder `--no-tag` | Unterstützt |
+| `bootstrap_from_history.py` | Gibt einer neuen Bereitstellung einen einmaligen Start aus dem Verlauf einer QQ-Gruppe. Es erstellt das Sticker- und Nachrichtenlängen-Profil des Admins und speichert die gesehenen Sticker in der Bibliothek | Den HTTP-Server von NapCat, einem QQ-Client eines Drittanbieters, unter `QQ_ONEBOT_URL` (erforderlich), und QQ-Gruppen in `ACCESS_GROUPS` oder `--group` | Nein. Das Vision-Modell des laufenden Bots versieht die gespeicherten Sticker später mit Tags | Experimentell, nur QQ und NapCat |
+| `auto_reviewer.py` | Liest niedrige Selbstbewertungen aus `runtime/eval.jsonl` und lässt ein Modell aus jeder ein Vorher-Nachher-Paar machen. Mit `--apply` fragt es dich dann Paar für Paar, ob es in den gemeinsamen Feedback-Pool soll | `EVAL_ENABLED=true` für eine Weile, damit es Bewertungen gibt | Ja, ein Aufruf pro geprüftem Eintrag (`--limit`, Standard 20). `--dry-run` ruft nichts auf | Experimentell. `--apply` schreibt in einen Pool, den jeder Chat nutzt. Um eine Korrektur nur für einen Chat freizugeben, nutze `personagent learned` |
+| `evolution_benchmark.py` | Lässt den echten Agenten mehrere Runden über die Szenarien in `data/benchmark/` laufen, einmal mit eingeschalteter Selbstverbesserungsschleife und einmal ohne, und vergleicht beides. `run` führt die Läufe aus, `ingest` liest die Richter-Bewertungen zurück | `LLM_API_KEY` und einen Richter, der nicht das getestete Modell ist (`--judge export`, `openai` oder `anthropic`, mit `BENCH_JUDGE_MODEL`) | Ja, sehr viele: jedes Szenario, jede Runde, jede Variante | Experimentell |
+| `scenario_probe.py` | Probiert Kandidaten für Benchmark-Szenarien mit dem echten Modell aus und meldet, welche den Fehler aufdecken, den der Benchmark braucht | `LLM_API_KEY`, eine Datei mit Kandidaten im Format von `data/benchmark/scenarios.train.en.jsonl` und `--judge-model` für den Richter-Durchgang | Ja, eine Antwort, eine Selbstbewertung und ein Richter-Aufruf pro Szenario | Experimentell, zum Aufbau des Benchmarks |
+| `sticker_holdout_eval.py` | Misst, wie stabil und genau die Sticker-Freigabe bei von Hand beschrifteten Stickern ist | `runtime/holdout.jsonl` (Format in `tools/holdout.example.jsonl`) und die drei `VISION_*`-Einstellungen | Ja, Bilder × `--runs` (Standard 5) Vision-Aufrufe, etwa 150 bei 30 Bildern | Experimentell |
+| `package_smoke.py` | Prüft einen installierten `personagent`-Befehl von Anfang bis Ende: Version, `init --no-input`, `chat`, `run` mit `/health` und `doctor --json` | Ein installiertes `personagent` (`--personagent PATH`) und sonst nichts | Nein, ein Ersatzserver antwortet | Unterstützt. Die CI führt es unter Linux und Windows aus |
+| `welcome_smoke.py` | Prüft die installierte lokale Seite von Anfang bis Ende: `start --no-browser`, einen Schlüssel speichern, ein Chat mit dem echten Charakter, ein zweiter Start, der die Seite wiederverwendet, und ein sauberes Beenden | Ein installiertes `personagent` (`--personagent PATH`) und sonst nichts | Nein, derselbe Ersatzserver antwortet | Unterstützt. Die CI führt es unter Linux und Windows aus |
+| `release_notes.py` | Prüft ein Release-Tag gegen `pyproject.toml` und gibt den CHANGELOG-Abschnitt dieser Version aus | Das Tag, zum Beispiel `v1.1.0` | Nein | Unterstützt. Der Release-Workflow führt es aus |
+
+Experimentelle Skripte sind Hilfsmittel für Forschung und Wartung und können sich ohne Übergangsfrist ändern oder wegfallen. Skripte, die ein Modell aufrufen, verbrauchen Guthaben des Kontos in deiner `.env`; lies zuerst `--help` und probiere `--dry-run`, wo es das gibt.

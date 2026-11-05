@@ -1,5 +1,7 @@
 # The `tools/` scripts
 
+English · [简体中文](tools.zh-CN.md) · [繁體中文](tools.zh-TW.md) · [日本語](tools.ja.md) · [한국어](tools.ko.md) · [Español](tools.es.md) · [Français](tools.fr.md) · [Deutsch](tools.de.md) · [Português (Brasil)](tools.pt-BR.md) · [Русский](tools.ru.md)
+
 The scripts in `tools/` are for people who run personagent from a clone. They
 are not installed with the package, and they read `.env` and `runtime/` from
 the clone. Run them with the clone's interpreter, from the repository root:

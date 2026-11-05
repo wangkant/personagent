@@ -1,6 +1,6 @@
 # Disclaimer
 
-[English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md)
+English · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
 personagent is free software under the [MIT License](../LICENSE). It puts an AI
 character in your chats, and you are the one who runs it. You are responsible
