@@ -1,6 +1,6 @@
 # Deploying personagent
 
-[中文：部署、QQ 扫码直连和排查](deploy.zh-CN.md)
+English · [简体中文](deploy.zh-CN.md) · [繁體中文](deploy.zh-TW.md) · [日本語](deploy.ja.md) · [한국어](deploy.ko.md) · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
 The [quick start](start.md) and the [user guide](guide.md) take you to a
 first chat. They cover installing, the

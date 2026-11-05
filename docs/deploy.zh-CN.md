@@ -1,6 +1,6 @@
 # 部署 personagent：QQ 扫码直连，以及排查
 
-[English](deploy.md) · **简体中文**
+[English](deploy.md) · 简体中文 · [繁體中文](deploy.zh-TW.md) · [日本語](deploy.ja.md) · [한국어](deploy.ko.md) · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
 本文按顺序介绍如何把角色接入 QQ 群：安装、填写 key、用手机 QQ 扫码。QQ 官方机器人由 personagent 直接连接，不需要 AstrBot，也不需要 NapCat 和 QQ 小号。微信、Telegram、Discord 同样由它直接连接。如果想用个人 QQ 小号，请看后面的[第三方路线：AstrBot + NapCat](#第三方路线astrbot--napcat)。
 
