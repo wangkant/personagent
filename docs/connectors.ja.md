@@ -13,7 +13,7 @@
 | Satori | すべての Satori 実装（Koishi などサードパーティ）：QQ、Telegram、Discord、KOOK、Lark、DingTalk、LINE、WhatsApp、Matrix、Zulip、メールなど。 | `integrations/satori/` |
 | Matrix | Matrix のルーム。さらにサードパーティの mautrix ブリッジ経由で WhatsApp、Signal、Messenger、Instagram、Google Messages など。 | `integrations/matrix/` |
 
-コーディングエージェントはチャットプラットフォームではないので、専用の経路があります。MCP サーバー `personagent mcp` で、[ユーザーガイド](guide.md#coding-agents)で説明しています。
+コーディングエージェントはチャットプラットフォームではないので、専用の経路があります。MCP サーバー `personagent mcp` で、[ユーザーガイド](guide.ja.md#コーディングエージェント)で説明しています。
 
 4 つとも、このページで説明するプロトコルを話します。新しいコネクターを書くのに必要なのは、このページと HTTP クライアントです。`integrations/sdk/personagent_connector.py` の Python ヘルパーは、リクエストの署名とアウトボックスのループを代わりに行います。ベース URL、トークン、コネクターの `connector_id` を受け取り、`httpx` が必要です。
 

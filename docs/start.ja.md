@@ -1,6 +1,6 @@
 # personagent を使い始める
 
-[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · 日本語 · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [ガイド全文](guide.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · 日本語 · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [ガイド全文](guide.ja.md)
 
 ## 開く
 
@@ -53,4 +53,4 @@ personagent をもう一度開きます。設定は残っていて、つない�
 
 PyPI に新しいバージョンが出ると、**チャット** ビューにリリースノートへのリンクと、このコピーのインストール方法に合った更新コマンドが表示されます。ソースの ZIP から展開したコピーには、代わりにリリースページから新しいソースをダウンロードするリンクが出ます。personagent が pypi.org に問い合わせるのは多くても 1 日 1 回で、リクエストに含まれるのはバージョン番号だけです。確認をオフにするには、`.env` に `UPDATE_CHECK_ENABLED=false` と設定します。
 
-コマンドラインがよければ、`personagent start --terminal`、`personagent init --terminal`、`personagent up`、または `chat`、`demo`（キー不要）、`run`、`connect` の各コマンドを使ってください。既存の `.env`、編集したペルソナ、学習した記憶は保たれます。ほかのプラットフォームについては[ガイド全文](guide.md)を参照してください。
+コマンドラインがよければ、`personagent start --terminal`、`personagent init --terminal`、`personagent up`、または `chat`、`demo`（キー不要）、`run`、`connect` の各コマンドを使ってください。既存の `.env`、編集したペルソナ、学習した記憶は保たれます。ほかのプラットフォームについては[ガイド全文](guide.ja.md)を参照してください。

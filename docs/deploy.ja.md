@@ -2,7 +2,7 @@
 
 [English](deploy.md) · [简体中文](deploy.zh-CN.md) · [繁體中文](deploy.zh-TW.md) · 日本語 · [한국어](deploy.ko.md) · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
-[クイックスタート](start.ja.md)と[ユーザーガイド](guide.md)で最初のチャットまで進めます。インストール、[ホームフォルダー](guide.md#install-and-the-home-folder)、ローカルページでの設定、プラットフォームの接続を扱っています。このガイドでは、本番運用に必要なことと、ボットが黙ったときに確認することを説明します。
+[クイックスタート](start.ja.md)と[ユーザーガイド](guide.ja.md)で最初のチャットまで進めます。インストール、[ホームフォルダー](guide.ja.md#インストールとホームフォルダー)、ローカルページでの設定、プラットフォームの接続を扱っています。このガイドでは、本番運用に必要なことと、ボットが黙ったときに確認することを説明します。
 
 ## 動く最短の設定
 
@@ -35,13 +35,13 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 ローカルページと `personagent up` は、新しい personagent が出ていないかを多くても 1 日 1 回 pypi.org に尋ねます。出ていれば、チャットビューとターミナルにこのコピーを更新するコマンドが表示されます。リクエストに含まれるのはバージョン番号だけで、`UPDATE_CHECK_ENABLED=false` で確認をオフにできます。
 
-`personagent run` はエージェントだけを起動します。[サービスを実行する](guide.md#run-the-service)で説明しています。自分のコネクター（自分で動かす AstrBot、Satori、Matrix）が話しかける場合に使います。`personagent doctor` は設定を確認し、すべての上流サービスを調べます。
+`personagent run` はエージェントだけを起動します。[サービスを実行する](guide.ja.md#サービスを実行する)で説明しています。自分のコネクター（自分で動かす AstrBot、Satori、Matrix）が話しかける場合に使います。`personagent doctor` は設定を確認し、すべての上流サービスを調べます。
 
 **1.0 で名前が変わった設定。** 1.0 で廃止された設定名が残っていると、起動は終了コード 2 で拒否され、それぞれを `OLD -> NEW` と一覧にします。`personagent doctor --fix` は `<home>/.env` の中で名前を変えます。値とコメントは保ち、古いファイルを `.env.bak` に保存し、新しい名前がすでに設定されている古い行はコメントアウトします。`.env` ではなく環境に設定された廃止名は、設定した場所で変更してください。`personagent doctor` は残っている間は 1 で終了し、`--json` は `retired_settings` の下に一覧にします。`HOST`、`PORT`、`LOG_FILE` は `.env` に書かれている場合だけ数えます。
 
 ### アクティビティ
 
-[アクティビティ](guide.md#activity)はローカルページのビューの 1 つです。追加のインストールは不要で、インターネットから何も読み込まず、キーやトークンを表示しません。ローカルページが起動したエージェントサービスの JSON API を読みます。`personagent run` だけの場合は、サービスのログを読み、代わりに `personagent learned` を使ってください。`DASHBOARD_ENABLED=false` は API をオフにします。するとビューにその旨が表示され、`personagent doctor` は `activity: off (...)` と出力します。
+[アクティビティ](guide.ja.md#アクティビティ)はローカルページのビューの 1 つです。追加のインストールは不要で、インターネットから何も読み込まず、キーやトークンを表示しません。ローカルページが起動したエージェントサービスの JSON API を読みます。`personagent run` だけの場合は、サービスのログを読み、代わりに `personagent learned` を使ってください。`DASHBOARD_ENABLED=false` は API をオフにします。するとビューにその旨が表示され、`personagent doctor` は `activity: off (...)` と出力します。
 
 API はエージェントサービスの `/api/dashboard/` の下にあります。
 
@@ -114,7 +114,7 @@ personagent を更新したら、`connect astrbot` を再実行するか、新�
 - `ADMIN_IDS` は管理者のアカウントを `<platform>:<id>`（`telegram:12345`、`discord:4242`）で一覧にします。ID だけ、または `qq:<id>` は QQ 番号です。`ADMIN_NAME` は管理者の名前を設定します。一覧のアカウントはすべて 1 人の人物のもので、グループと DM でより親しいペルソナを受け取り、ボットがグループについて覚えていることを管理でき、1 人で教えることができます。AstrBot 経由では、プラットフォームは AstrBot が表示するアダプター名で、チャットで `/sid` を使うと ID が表示されます。
 - `ACCESS_GROUPS` と `ACCESS_DM_USERS` は、同じ `<platform>:<id>` の形で personagent 自身にプラットフォームを制限させます。プラットフォームごとに別々に制限されます。項目のないプラットフォームはコネクターに任され、項目が 1 つでもあればそのプラットフォームは項目だけに制限されます。personagent が拒否したターンは引き受けられずに戻るので、AstrBot 自身のモデルが答えることがあります。
 
-Docker や別のホストの AstrBot については[ユーザーガイド](guide.md#bridges-you-run-yourself)を参照してください。
+Docker や別のホストの AstrBot については[ユーザーガイド](guide.ja.md#自分で動かすブリッジ)を参照してください。
 
 ### NapCat（OneBot）経由の QQ
 
@@ -185,7 +185,7 @@ direct プロセスとここにある 3 つのコネクターは、ボットが�
 
 ## ボットが黙ったとき
 
-原因は多いものから順に挙げています。ローカルページがエージェントを動かしているなら、[アクティビティ](guide.md#activity)でメッセージが届いているか、なぜ黙ったかがわかります。サーバーではサービスのログを読み、学習内容には `personagent learned` を使ってください。
+原因は多いものから順に挙げています。ローカルページがエージェントを動かしているなら、[アクティビティ](guide.ja.md#アクティビティ)でメッセージが届いているか、なぜ黙ったかがわかります。サーバーではサービスのログを読み、学習内容には `personagent learned` を使ってください。
 
 1. **何も届いていない。** ローカルページでプラットフォームが接続済みとして表示されているか確認し、`runtime/desktop/direct.log` か `astrbot.log` を読んでください。QQ 公式ボットはグループにいる必要があり、どのグループメッセージを受け取るかは QQ が決めます。個人の WeChat ボットはグループを受け取りません。自分で動かす AstrBot では、プラグインの `groups`（DM には `dm_users` も）を埋め、NapCat なら `excluded_platforms` から `aiocqhttp` を外してください。Satori と Matrix のコネクターには `.env` に独自の許可リストがあります。それぞれの README を参照してください。この場合、チャットはアクティビティに現れません。
 2. **エージェントがオフ。** `personagent run` のバナーに `agent: OFF` と理由と対処が表示されます。`LLM_API_KEY` がなければ、ローカルページでキーを追加して（または `LLM_API_KEY` を設定して）再起動してください。`AGENT_ENABLED=false` なら `<home>/.env` で `true` にして再起動してください。それまですべてのイベントは `owned: false` を受け取り、最初のイベントで同じ助言の ERROR 行が 1 行記録されます。

@@ -1,6 +1,6 @@
 # Empezar a usar personagent
 
-[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · Español · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [Guía completa](guide.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · Español · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [Guía completa](guide.es.md)
 
 ## Ábrelo
 
@@ -53,4 +53,4 @@ Vuelve a abrir personagent. Tus ajustes se conservan y las aplicaciones conectad
 
 Cuando hay una versión más reciente en PyPI, la vista **Chat** muestra un aviso con un enlace a las notas de la versión y el comando de actualización según cómo se instaló esta copia. Una copia descomprimida del ZIP del código fuente recibe en su lugar un enlace para descargar el nuevo código desde la página de versiones. personagent consulta pypi.org como máximo una vez al día, y la solicitud solo lleva su número de versión. Define `UPDATE_CHECK_ENABLED=false` en `.env` para desactivar la comprobación.
 
-Si prefieres la línea de comandos, usa `personagent start --terminal`, `personagent init --terminal`, `personagent up` o los comandos `chat`, `demo` (no necesita clave), `run` y `connect`. Conservan tu `.env`, tu persona editada y los recuerdos aprendidos. La [guía completa](guide.md) cubre las demás plataformas.
+Si prefieres la línea de comandos, usa `personagent start --terminal`, `personagent init --terminal`, `personagent up` o los comandos `chat`, `demo` (no necesita clave), `run` y `connect`. Conservan tu `.env`, tu persona editada y los recuerdos aprendidos. La [guía completa](guide.es.md) cubre las demás plataformas.

@@ -2,7 +2,7 @@
 
 [English](deploy.md) · [简体中文](deploy.zh-CN.md) · [繁體中文](deploy.zh-TW.md) · [日本語](deploy.ja.md) · 한국어 · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
-[빠른 시작](start.ko.md)과 [사용자 가이드](guide.md)는 첫 채팅까지 안내해요. 설치, [홈 폴더](guide.md#install-and-the-home-folder), 로컬 페이지에서의 설정, 플랫폼 연결을 다뤄요. 이 가이드는 실제 운영에 필요한 것과, 봇이 조용해졌을 때 확인할 것을 설명해요.
+[빠른 시작](start.ko.md)과 [사용자 가이드](guide.ko.md)는 첫 채팅까지 안내해요. 설치, [홈 폴더](guide.ko.md#설치와-홈-폴더), 로컬 페이지에서의 설정, 플랫폼 연결을 다뤄요. 이 가이드는 실제 운영에 필요한 것과, 봇이 조용해졌을 때 확인할 것을 설명해요.
 
 ## 동작하는 가장 짧은 설정
 
@@ -35,13 +35,13 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 로컬 페이지와 `personagent up`은 하루에 많아야 한 번 새 personagent가 나왔는지 pypi.org에 물어봐요. 나왔다면 채팅 보기와 터미널에 이 사본을 업데이트하는 명령이 표시돼요. 요청에는 버전 번호만 담기고, `UPDATE_CHECK_ENABLED=false`로 확인을 끌 수 있어요.
 
-`personagent run`은 에이전트만 시작해요. [서비스 실행하기](guide.md#run-the-service)에서 설명해요. 직접 운영하는 커넥터(직접 실행하는 AstrBot, Satori, Matrix)가 연결할 때 사용하세요. `personagent doctor`는 설정을 확인하고 모든 상위 서비스를 점검해요.
+`personagent run`은 에이전트만 시작해요. [서비스 실행하기](guide.ko.md#서비스-실행하기)에서 설명해요. 직접 운영하는 커넥터(직접 실행하는 AstrBot, Satori, Matrix)가 연결할 때 사용하세요. `personagent doctor`는 설정을 확인하고 모든 상위 서비스를 점검해요.
 
 **1.0에서 이름이 바뀐 설정.** 1.0에서 폐지된 설정 이름이 남아 있으면 시작이 종료 코드 2로 거부되고, 각각을 `OLD -> NEW`로 나열해요. `personagent doctor --fix`는 `<home>/.env`에서 이름을 바꿔요. 값과 주석은 유지하고, 이전 파일을 `.env.bak`으로 저장하며, 새 이름이 이미 설정된 이전 줄은 주석 처리해요. `.env`가 아니라 환경에 설정된 폐지 이름은 설정한 곳에서 바꿔야 해요. `personagent doctor`는 남아 있는 동안 1로 종료하고, `--json`은 `retired_settings` 아래에 나열해요. `HOST`, `PORT`, `LOG_FILE`은 `.env`에 적혀 있을 때만 해당돼요.
 
 ### 활동
 
-[활동](guide.md#activity)은(는) 로컬 페이지의 보기 중 하나예요. 추가 설치가 필요 없고, 인터넷에서 아무것도 불러오지 않으며, 키나 토큰을 보여 주지 않아요. 로컬 페이지가 시작한 에이전트 서비스의 JSON API를 읽어요. `personagent run`만 쓴다면 서비스 로그를 읽고 대신 `personagent learned`를 사용하세요. `DASHBOARD_ENABLED=false`는 API를 꺼요. 그러면 보기에 그렇게 표시되고, `personagent doctor`는 `activity: off (...)`를 출력해요.
+[활동](guide.ko.md#활동)은(는) 로컬 페이지의 보기 중 하나예요. 추가 설치가 필요 없고, 인터넷에서 아무것도 불러오지 않으며, 키나 토큰을 보여 주지 않아요. 로컬 페이지가 시작한 에이전트 서비스의 JSON API를 읽어요. `personagent run`만 쓴다면 서비스 로그를 읽고 대신 `personagent learned`를 사용하세요. `DASHBOARD_ENABLED=false`는 API를 꺼요. 그러면 보기에 그렇게 표시되고, `personagent doctor`는 `activity: off (...)`를 출력해요.
 
 API는 에이전트 서비스의 `/api/dashboard/` 아래에 있어요.
 
@@ -114,7 +114,7 @@ personagent를 업그레이드한 뒤에는 `connect astrbot`을 다시 실행�
 - `ADMIN_IDS`는 관리자의 계정을 `<platform>:<id>`(`telegram:12345`, `discord:4242`)로 나열해요. ID만 있거나 `qq:<id>`면 QQ 번호예요. `ADMIN_NAME`은 관리자의 이름을 설정해요. 나열된 계정은 모두 한 사람의 것이고, 그 사람은 그룹과 DM에서 더 친밀한 페르소나를 받으며, 봇이 그룹에 대해 기억하는 내용을 관리할 수 있고, 혼자서 가르칠 수 있어요. AstrBot을 통할 때 플랫폼은 AstrBot이 보여 주는 어댑터 이름이고, 채팅에서 `/sid`를 쓰면 ID가 표시돼요.
 - `ACCESS_GROUPS`와 `ACCESS_DM_USERS`는 같은 `<platform>:<id>` 형식으로 personagent가 직접 플랫폼을 제한하게 해요. 플랫폼마다 따로 제한돼요. 항목이 없는 플랫폼은 커넥터에 맡겨지고, 항목이 하나라도 있으면 그 플랫폼은 항목으로만 제한돼요. personagent가 거부한 턴은 처리되지 않은 채 돌아가므로 AstrBot 자체 모델이 답할 수 있어요.
 
-Docker나 다른 호스트의 AstrBot은 [사용자 가이드](guide.md#bridges-you-run-yourself)를 참고하세요.
+Docker나 다른 호스트의 AstrBot은 [사용자 가이드](guide.ko.md#직접-실행하는-브리지)를 참고하세요.
 
 ### NapCat(OneBot)을 통한 QQ
 
@@ -185,7 +185,7 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 
 ## 봇이 조용해졌을 때
 
-원인은 흔한 순서로 나열했어요. 로컬 페이지가 에이전트를 실행한다면 [활동](guide.md#activity)에서 메시지가 도착하는지, 왜 조용했는지 알 수 있어요. 서버에서는 서비스 로그를 읽고, 학습 내용은 `personagent learned`를 사용하세요.
+원인은 흔한 순서로 나열했어요. 로컬 페이지가 에이전트를 실행한다면 [활동](guide.ko.md#활동)에서 메시지가 도착하는지, 왜 조용했는지 알 수 있어요. 서버에서는 서비스 로그를 읽고, 학습 내용은 `personagent learned`를 사용하세요.
 
 1. **아무것도 도착하지 않아요.** 로컬 페이지에서 플랫폼이 연결됨으로 표시되는지 확인하고 `runtime/desktop/direct.log`나 `astrbot.log`를 읽으세요. QQ 공식 봇은 그룹에 있어야 하고, 어떤 그룹 메시지를 받을지는 QQ가 정해요. 개인 WeChat 봇은 그룹을 받지 않아요. 직접 실행하는 AstrBot에서는 플러그인의 `groups`(DM은 `dm_users`도)를 채우고, NapCat이라면 `excluded_platforms`에서 `aiocqhttp`를 빼세요. Satori와 Matrix 커넥터는 각자의 `.env`에 자체 허용 목록이 있어요. 각 README를 참고하세요. 이 경우 채팅은 활동에 나타나지 않아요.
 2. **에이전트가 꺼져 있어요.** `personagent run` 배너에 `agent: OFF`와 이유, 해결법이 표시돼요. `LLM_API_KEY`가 없으면 로컬 페이지에서 키를 추가하고(또는 `LLM_API_KEY`를 설정하고) 재시작하세요. `AGENT_ENABLED=false`라면 `<home>/.env`에서 `true`로 바꾸고 재시작하세요. 그때까지 모든 이벤트는 `owned: false`를 받고, 첫 이벤트에서 같은 조언을 담은 ERROR 줄이 한 번 기록돼요.

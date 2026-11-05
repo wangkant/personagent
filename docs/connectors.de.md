@@ -13,7 +13,7 @@ Dieses Repository enthält vier Konnektoren:
 | Satori | Jede Satori-Implementierung (Koishi und andere, von Drittanbietern): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, E-Mail und mehr. | `integrations/satori/` |
 | Matrix | Matrix-Räume und über mautrix-Brücken von Drittanbietern WhatsApp, Signal, Messenger, Instagram, Google Messages und mehr. | `integrations/matrix/` |
 
-Coding-Agenten sind keine Chat-Plattformen und haben deshalb ihren eigenen Weg: einen MCP-Server, `personagent mcp`, beschrieben in der [Benutzeranleitung](guide.md#coding-agents).
+Coding-Agenten sind keine Chat-Plattformen und haben deshalb ihren eigenen Weg: einen MCP-Server, `personagent mcp`, beschrieben in der [Benutzeranleitung](guide.de.md#coding-agenten).
 
 Alle vier sprechen das auf dieser Seite beschriebene Protokoll. Um einen neuen zu schreiben, brauchst du diese Seite und einen HTTP-Client. Der Python-Helfer in `integrations/sdk/personagent_connector.py` signiert Anfragen und führt die Outbox-Schleife für dich aus. Er nimmt die Basis-URL, das Token und die `connector_id` des Konnektors und braucht `httpx`.
 

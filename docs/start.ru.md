@@ -1,6 +1,6 @@
 # Начало работы с personagent
 
-[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · Русский · [Полное руководство](guide.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · Русский · [Полное руководство](guide.ru.md)
 
 ## Откройте его
 
@@ -53,4 +53,4 @@ personagent
 
 Когда на PyPI выходит новая версия, в разделе **Чат** появляется уведомление со ссылкой на примечания к выпуску и команду обновления для того способа, которым установлена эта копия. Копия, распакованная из ZIP с исходным кодом, вместо этого получает ссылку для загрузки нового кода со страницы выпусков. personagent обращается к pypi.org не чаще раза в день, и запрос содержит только номер его версии. Чтобы отключить проверку, задайте `UPDATE_CHECK_ENABLED=false` в `.env`.
 
-Если вам удобнее командная строка, используйте `personagent start --terminal`, `personagent init --terminal`, `personagent up` или команды `chat`, `demo` (ключ не нужен), `run` и `connect`. Они сохраняют ваш `.env`, изменённую персону и усвоенные воспоминания. Другие платформы описаны в [полном руководстве](guide.md).
+Если вам удобнее командная строка, используйте `personagent start --terminal`, `personagent init --terminal`, `personagent up` или команды `chat`, `demo` (ключ не нужен), `run` и `connect`. Они сохраняют ваш `.env`, изменённую персону и усвоенные воспоминания. Другие платформы описаны в [полном руководстве](guide.ru.md).

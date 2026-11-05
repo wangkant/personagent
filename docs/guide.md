@@ -1,6 +1,6 @@
 # personagent user guide
 
-**English** · [简体中文](guide.zh-CN.md)
+English · [简体中文](guide.zh-CN.md) · [繁體中文](guide.zh-TW.md) · [日本語](guide.ja.md) · [한국어](guide.ko.md) · [Español](guide.es.md) · [Français](guide.fr.md) · [Deutsch](guide.de.md) · [Português (Brasil)](guide.pt-BR.md) · [Русский](guide.ru.md)
 
 This guide covers setting personagent up, putting it in your chats, teaching it and looking after it. The [README](../README.md) is the short version, and [Getting started](start.md) walks through the local page screen by screen.
 

@@ -1,6 +1,6 @@
 # personagent 使用手册
 
-[English](guide.md) · **简体中文**
+[English](guide.md) · 简体中文 · [繁體中文](guide.zh-TW.md) · [日本語](guide.ja.md) · [한국어](guide.ko.md) · [Español](guide.es.md) · [Français](guide.fr.md) · [Deutsch](guide.de.md) · [Português (Brasil)](guide.pt-BR.md) · [Русский](guide.ru.md)
 
 [README](../README.zh-CN.md) 介绍它是什么，[简明入门](start.zh-CN.md)按页面一步步带你用起来。这份手册覆盖其余的内容：安装、本地页面、终端命令、接入聊天平台、教它、查看「动态」、效果评测和问题排查。
 

@@ -13,7 +13,7 @@
 | Satori | 모든 Satori 구현(Koishi 등 서드파티): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, 이메일 등. | `integrations/satori/` |
 | Matrix | Matrix 방, 그리고 서드파티 mautrix 브리지를 통한 WhatsApp, Signal, Messenger, Instagram, Google Messages 등. | `integrations/matrix/` |
 
-코딩 에이전트는 채팅 플랫폼이 아니어서 전용 경로가 있어요. MCP 서버 `personagent mcp`이고, [사용자 가이드](guide.md#coding-agents)에서 다뤄요.
+코딩 에이전트는 채팅 플랫폼이 아니어서 전용 경로가 있어요. MCP 서버 `personagent mcp`이고, [사용자 가이드](guide.ko.md#코딩-에이전트)에서 다뤄요.
 
 네 커넥터 모두 이 페이지에서 설명하는 프로토콜을 써요. 새 커넥터를 만들려면 이 페이지와 HTTP 클라이언트만 있으면 돼요. `integrations/sdk/personagent_connector.py`의 Python 도우미가 요청에 서명하고 아웃박스 루프를 대신 돌려 줘요. 기본 URL, 토큰, 커넥터의 `connector_id`를 받고 `httpx`가 필요해요.
 

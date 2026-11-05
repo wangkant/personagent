@@ -13,7 +13,7 @@
 | Satori | Все реализации Satori (Koishi и другие, сторонние): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, электронная почта и другие. | `integrations/satori/` |
 | Matrix | Комнаты Matrix, а через сторонние мосты mautrix — WhatsApp, Signal, Messenger, Instagram, Google Messages и другие. | `integrations/matrix/` |
 
-Агенты для программирования — не чат-платформы, поэтому у них свой путь: MCP-сервер `personagent mcp`, описанный в [руководстве пользователя](guide.md#coding-agents).
+Агенты для программирования — не чат-платформы, поэтому у них свой путь: MCP-сервер `personagent mcp`, описанный в [руководстве пользователя](guide.ru.md#агенты-для-кода).
 
 Все четыре используют протокол, описанный на этой странице. Чтобы написать новый, нужны эта страница и HTTP-клиент. Помощник на Python в `integrations/sdk/personagent_connector.py` подписывает запросы и запускает цикл исходящей очереди за вас. Он принимает базовый URL, токен и `connector_id` коннектора и требует `httpx`.
 

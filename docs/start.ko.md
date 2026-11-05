@@ -1,6 +1,6 @@
 # personagent 시작하기
 
-[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · 한국어 · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [전체 가이드](guide.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · 한국어 · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [전체 가이드](guide.ko.md)
 
 ## 열기
 
@@ -53,4 +53,4 @@ personagent를 다시 여세요. 설정은 그대로 있고, 연결된 앱은 �
 
 PyPI에 새 버전이 나오면 **채팅** 화면에 릴리스 노트 링크와, 이 사본을 설치한 방식에 맞는 업데이트 명령이 표시돼요. 소스 ZIP에서 푼 사본에는 대신 릴리스 페이지에서 새 소스를 내려받는 링크가 나와요. personagent는 pypi.org에 많아야 하루 한 번 물어보고, 요청에는 버전 번호만 담겨요. 확인을 끄려면 `.env`에 `UPDATE_CHECK_ENABLED=false`를 설정하세요.
 
-명령줄이 더 좋다면 `personagent start --terminal`, `personagent init --terminal`, `personagent up`, 또는 `chat`, `demo`(키 불필요), `run`, `connect` 명령을 쓰세요. 기존 `.env`, 수정한 페르소나, 학습한 기억은 유지돼요. 다른 플랫폼은 [전체 가이드](guide.md)에서 다뤄요.
+명령줄이 더 좋다면 `personagent start --terminal`, `personagent init --terminal`, `personagent up`, 또는 `chat`, `demo`(키 불필요), `run`, `connect` 명령을 쓰세요. 기존 `.env`, 수정한 페르소나, 학습한 기억은 유지돼요. 다른 플랫폼은 [전체 가이드](guide.ko.md)에서 다뤄요.

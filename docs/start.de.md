@@ -1,6 +1,6 @@
 # Erste Schritte mit personagent
 
-[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · Deutsch · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [Vollständige Anleitung](guide.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · Deutsch · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [Vollständige Anleitung](guide.de.md)
 
 ## Öffnen
 
@@ -53,4 +53,4 @@ Wenn ein QR-Code abläuft, fordere einen neuen an. Schlägt ein Download fehl, w
 
 Wenn eine neuere Version auf PyPI liegt, zeigt die Ansicht **Chat** einen Hinweis mit einem Link zu den Versionshinweisen und dem Update-Befehl für die Art, wie diese Kopie installiert wurde. Eine aus dem Quellcode-ZIP entpackte Kopie bekommt stattdessen einen Link, um den neuen Quellcode von der Release-Seite herunterzuladen. personagent fragt pypi.org höchstens einmal am Tag, und die Anfrage enthält nur seine Versionsnummer. Setze `UPDATE_CHECK_ENABLED=false` in `.env`, um die Prüfung abzuschalten.
 
-Wenn du die Kommandozeile bevorzugst, nutze `personagent start --terminal`, `personagent init --terminal`, `personagent up` oder die Befehle `chat`, `demo` (kein Schlüssel nötig), `run` und `connect`. Sie behalten deine `.env`, deine bearbeitete Persona und die gelernten Erinnerungen. Die [vollständige Anleitung](guide.md) behandelt die anderen Plattformen.
+Wenn du die Kommandozeile bevorzugst, nutze `personagent start --terminal`, `personagent init --terminal`, `personagent up` oder die Befehle `chat`, `demo` (kein Schlüssel nötig), `run` und `connect`. Sie behalten deine `.env`, deine bearbeitete Persona und die gelernten Erinnerungen. Die [vollständige Anleitung](guide.de.md) behandelt die anderen Plattformen.

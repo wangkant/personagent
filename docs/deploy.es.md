@@ -2,7 +2,7 @@
 
 [English](deploy.md) · [简体中文](deploy.zh-CN.md) · [繁體中文](deploy.zh-TW.md) · [日本語](deploy.ja.md) · [한국어](deploy.ko.md) · Español · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
-El [inicio rápido](start.es.md) y la [guía de usuario](guide.md) te llevan hasta el primer chat. Cubren la instalación, la [carpeta de inicio](guide.md#install-and-the-home-folder), la configuración en la página local y la conexión de una plataforma. Esta guía cubre lo que necesita un despliegue real y qué revisar cuando el bot se queda callado.
+El [inicio rápido](start.es.md) y la [guía de usuario](guide.es.md) te llevan hasta el primer chat. Cubren la instalación, la [carpeta de inicio](guide.es.md#instalación-y-carpeta-de-inicio), la configuración en la página local y la conexión de una plataforma. Esta guía cubre lo que necesita un despliegue real y qué revisar cuando el bot se queda callado.
 
 ## La configuración más corta que funciona
 
@@ -35,13 +35,13 @@ En ambos casos, esos procesos terminan con él, sea como sea que termine. Lo que
 
 La página local y `personagent up` preguntan a pypi.org como mucho una vez al día si hay un personagent más nuevo. Si lo hay, la vista Chat y el terminal muestran el comando que actualiza esta copia. La petición lleva solo el número de versión, y `UPDATE_CHECK_ENABLED=false` desactiva la comprobación.
 
-`personagent run` inicia solo el agente, como describe [Ejecutar el servicio](guide.md#run-the-service). Úsalo cuando tus propios conectores (un AstrBot que ejecutas tú, Satori, Matrix) hablen con él. `personagent doctor` comprueba los ajustes y sondea todos los servicios externos.
+`personagent run` inicia solo el agente, como describe [Ejecutar el servicio](guide.es.md#ejecutar-el-servicio). Úsalo cuando tus propios conectores (un AstrBot que ejecutas tú, Satori, Matrix) hablen con él. `personagent doctor` comprueba los ajustes y sondea todos los servicios externos.
 
 **Ajustes renombrados en 1.0.** Mientras siga definido algún nombre de ajuste que 1.0 retiró, el inicio se niega con el código de salida 2 y lista cada uno como `OLD -> NEW`. `personagent doctor --fix` los renombra en `<home>/.env`. Conserva los valores y comentarios, guarda el archivo antiguo como `.env.bak` y comenta una línea antigua cuyo nombre nuevo ya esté definido. Un nombre retirado definido en el entorno y no en `.env` hay que renombrarlo donde esté definido. `personagent doctor` sale con 1 mientras quede alguno, y `--json` los lista en `retired_settings`. `HOST`, `PORT` y `LOG_FILE` solo cuentan cuando están escritos en `.env`.
 
 ### Actividad
 
-[Actividad](guide.md#activity) es una vista de la página local. No necesita instalación adicional, no carga nada de internet y nunca muestra claves ni tokens. Lee la API JSON del servicio del agente que inició la página local. Con `personagent run` solo, lee el registro del servicio y usa `personagent learned` en su lugar. `DASHBOARD_ENABLED=false` desactiva la API. La vista entonces lo indica, y `personagent doctor` imprime `activity: off (...)`.
+[Actividad](guide.es.md#actividad) es una vista de la página local. No necesita instalación adicional, no carga nada de internet y nunca muestra claves ni tokens. Lee la API JSON del servicio del agente que inició la página local. Con `personagent run` solo, lee el registro del servicio y usa `personagent learned` en su lugar. `DASHBOARD_ENABLED=false` desactiva la API. La vista entonces lo indica, y `personagent doctor` imprime `activity: off (...)`.
 
 La API está bajo `/api/dashboard/` en el servicio del agente:
 
@@ -114,7 +114,7 @@ El plugin niega por defecto. Rellena `groups`, y `dm_users` para mensajes direct
 - `ADMIN_IDS` lista las cuentas del administrador como `<platform>:<id>` (`telegram:12345`, `discord:4242`). Un ID solo o `qq:<id>` es un número de QQ. `ADMIN_NAME` define el nombre del administrador. Todas las cuentas listadas pertenecen a una sola persona, que recibe la persona más cercana en grupos y mensajes directos, puede gestionar lo que el bot recuerda sobre un grupo y puede enseñarle por sí sola. A través de AstrBot, la plataforma es el nombre de adaptador que muestra AstrBot, y `/sid` en un chat muestra un ID.
 - `ACCESS_GROUPS` y `ACCESS_DM_USERS` permiten que personagent restrinja una plataforma por sí mismo, con la misma forma `<platform>:<id>`. Cada plataforma se restringe por separado. Una plataforma sin entradas se deja al conector, y una sola entrada restringe esa plataforma a sus entradas. Un turno que personagent rechaza vuelve sin reclamar, así que puede responderlo el propio modelo de AstrBot.
 
-Para AstrBot en Docker o en otro host, consulta [la guía de usuario](guide.md#bridges-you-run-yourself).
+Para AstrBot en Docker o en otro host, consulta [la guía de usuario](guide.es.md#puentes-que-ejecutas-tú).
 
 ### QQ a través de NapCat (OneBot)
 
@@ -185,7 +185,7 @@ Un proxy en el mismo host que no añada ninguna de estas sigue pareciendo local.
 
 ## Cuando el bot se queda callado
 
-Las causas están ordenadas de más a menos comunes. Cuando la página local ejecuta el agente, [Actividad](guide.md#activity) muestra si llegan mensajes y por qué se quedó callado. En un servidor, lee el registro del servicio y usa `personagent learned` para lo aprendido.
+Las causas están ordenadas de más a menos comunes. Cuando la página local ejecuta el agente, [Actividad](guide.es.md#actividad) muestra si llegan mensajes y por qué se quedó callado. En un servidor, lee el registro del servicio y usa `personagent learned` para lo aprendido.
 
 1. **No le llega nada.** En la página local, comprueba que la plataforma aparece como conectada y lee `runtime/desktop/direct.log` o `astrbot.log`. El bot oficial de QQ debe estar en el grupo, y QQ decide qué mensajes de grupo recibe. Un bot de WeChat personal nunca recibe grupos. En un AstrBot que ejecutas tú, rellena `groups` del plugin (y `dm_users` para mensajes directos), y para NapCat saca `aiocqhttp` de `excluded_platforms`. Los conectores Satori y Matrix tienen sus propias listas de permitidos en su `.env`. Consulta sus README. En este caso el chat nunca aparece en Actividad.
 2. **El agente está apagado.** El aviso de `personagent run` dice `agent: OFF`, con el motivo y la solución. Sin `LLM_API_KEY`, añade una clave en la página local (o define `LLM_API_KEY`) y reinicia. Con `AGENT_ENABLED=false`, ponlo en `true` en `<home>/.env` y reinicia. Hasta entonces, cada evento recibe `owned: false`, y el primero registra una sola línea ERROR con el mismo consejo.
