@@ -14,6 +14,7 @@ import unicodedata
 
 from persona_agent import reactions
 from persona_agent.agent import Agent
+from persona_agent.prompt import _TURN_CONTEXT_OPEN
 from persona_agent.textproc import (
     _PROMPT_SENTINELS,
     _RESERVED_DEFAULT_IGNORABLES,
@@ -78,14 +79,16 @@ async def test_dm_prompt_fences_user_data_and_preserves_web_fence(
         await agent.aclose()
 
     msgs = captured["messages"]
+    words, _, context = msgs[-1]["content"].partition(_TURN_CONTEXT_OPEN)
+    turns = [m["content"] for m in msgs[:-1] if m["role"] == "user"] + [words]
     check("every user turn is framed as data",
-          all(m["content"].startswith(_USER_DATA_OPEN)
-              and m["content"].endswith(_USER_DATA_CLOSE)
-              for m in msgs if m["role"] == "user"), repr(msgs))
+          all(t.startswith(_USER_DATA_OPEN) and t.endswith(_USER_DATA_CLOSE)
+              for t in turns), repr(msgs))
     check("the attack and the enrichment span sit inside the frame intact",
-          msgs[-1]["content"]
-          == f"{_USER_DATA_OPEN}{attack} {web_desc}{_USER_DATA_CLOSE}",
+          words == f"{_USER_DATA_OPEN}{attack} {web_desc}{_USER_DATA_CLOSE}",
           repr(msgs[-1]))
+    check("the app's context for the turn stays outside the frame",
+          context and _USER_DATA_OPEN not in context, repr(context[:200]))
     check("the persona's own turn is not framed",
           msgs[1] == {"role": "assistant", "content": "my own turn"},
           repr(msgs[1]))
@@ -1094,7 +1097,7 @@ async def test_a_few_shot_row_cannot_restructure_the_prompt(tmp: Path) -> None:
     captured: dict = {}
 
     async def fake_call(system, messages, **kwargs):
-        captured.update(system=system)
+        captured.update(system=system + messages[-1]["content"])
         return json.dumps({"reply": "safe", "intent": "chat", "mem": ""})
 
     async def no_search(_messages, hint=""):

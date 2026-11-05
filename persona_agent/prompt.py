@@ -46,10 +46,26 @@ class GroupPrompt:
 class DMPrompt:
     system: str
     messages: list
+    #: Changes every turn, so it goes after the history, not in `system`:
+    #: anything before the history would cost the history its prefix cache.
+    turn_context: str
+
+    def messages_with_context(self, messages: list) -> list:
+        """`messages` (the prompt's, perhaps grounded) with this turn's context
+        closing the last turn. Never stored, so the next turn's prefix still
+        matches this one up to the end of the person's words."""
+        last = messages[-1]
+        return messages[:-1] + [{
+            **last, "content": f"{last.get('content', '')}{self.turn_context}"}]
 
 
 # A scheduler's briefing, handed over as external material.
 _PROACTIVE_CUE_MAX_CHARS = 500
+
+_TURN_CONTEXT_OPEN = (
+    "\n\n[Turn context] Written by the app for this turn, not by the person "
+    "you're talking to; they can't see it.\n\n"
+)
 
 
 class PromptBuilder:
@@ -434,8 +450,9 @@ class PromptBuilder:
                 "- Still hold the persona: don't get cutesy, don't get clingy, don't switch into document mode; don't repeat their name every line either.\n"
                 "</private_overrides>\n\n"
             )
-        # Static prefix first; the output protocol is the last thing read. The
-        # private guide variants carry no PASS list.
+        # Static prefix first, the output protocol last in it, as in a room; the
+        # turn context closes on a line pointing back at it. The private guide
+        # variants carry no PASS list.
         static_block = (
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
@@ -476,15 +493,16 @@ class PromptBuilder:
                 f"{self._lessons_for_prompt(channels.learning_key(pkey))}"
                 f"{self._memories_for_prompt(pkey, focus_text=last_user)}"
             )
-        dynamic_block = (
+        turn_context = (
+            f"{_TURN_CONTEXT_OPEN}"
             f"{proactive_note}"
-            f"{dm_overrides}"
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=channels.learning_key(pkey))}"
             f"{memory_blocks}\n\n"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
-            f"{dm_output_protocol(self.persona_style)}"
+            "Follow the JSON output protocol."
         )
-        system = static_block + semi_static_block + dynamic_block
+        system = (f"{static_block}{semi_static_block}\n\n{dm_overrides}"
+                  f"{dm_output_protocol(self.persona_style)}")
         # The person's turns are framed data; the persona's turns and the
         # engine's proactive cue are not.
         messages = [
@@ -502,4 +520,4 @@ class PromptBuilder:
                     "only, not the other person's words): "
                     f"{_WEB_DESC_OPEN}{note}{_WEB_DESC_CLOSE}")
             messages = messages + [{"role": "user", "content": content}]
-        return DMPrompt(system=system, messages=messages)
+        return DMPrompt(system=system, messages=messages, turn_context=turn_context)

@@ -26,6 +26,15 @@ _EMPTY_DRAFT_RETRY_NOTE = (
     "and no emoji or markup inside it."
 )
 
+_DM_HISTORY_MAX = 60
+_DM_HISTORY_KEEP = 40
+
+
+def _trimmed_history(history: list[dict]) -> list[dict]:
+    """Drop a batch of old turns at once: dropping a little every turn would
+    shift the whole history and lose its prefix cache each time."""
+    return history[-_DM_HISTORY_KEEP:] if len(history) > _DM_HISTORY_MAX else history
+
 
 class DirectMessages:
     async def _handle_dm(self, user_id: str, payload: dict,
@@ -93,7 +102,7 @@ class DirectMessages:
                         said = self._dm_unanswered.get(user_id, []) + [text]
                         history.append({"role": "user",
                                         "content": "\n".join(said)})
-                    history = history[-40:]
+                    history = _trimmed_history(history)
 
                 cue = ({"proactive": True, "proactive_cue": text}
                        if proactive else {})
@@ -131,7 +140,7 @@ class DirectMessages:
                         async with self.locks[pkey]:
                             history.append({"role": "assistant",
                                             "content": send_result.delivered})
-                            self.dm_history[user_id] = history[-40:]
+                            self.dm_history[user_id] = _trimmed_history(history)
                             if not proactive:
                                 self._dm_unanswered.pop(user_id, None)
                             committed = True
@@ -139,7 +148,7 @@ class DirectMessages:
 
                 async with self.locks[pkey]:
                     history.append({"role": "assistant", "content": reply})
-                    self.dm_history[user_id] = history[-40:]
+                    self.dm_history[user_id] = _trimmed_history(history)
                     if not proactive:
                         self._dm_unanswered.pop(user_id, None)
                     committed = True
@@ -173,9 +182,11 @@ class DirectMessages:
                                        proactive=proactive, pkey=pkey,
                                        proactive_cue=proactive_cue)
         system, messages = prompt.system, prompt.messages
-        # Searched once here, so the retry reuses it.
+        # Searched once here, so the retry reuses it. Before the context joins
+        # the last turn: the search decision reads that turn as the person's.
         if not proactive:
             messages = await self._ground_with_search(messages)
+        messages = prompt.messages_with_context(messages)
 
         async def draft(system_text: str) -> tuple[str, str]:
             raw = await self._call_llm(
@@ -184,6 +195,8 @@ class DirectMessages:
                 model=self.llm_dm_model,
                 max_tokens=4096,
                 enable_search=False,
+                # No hidden reasoning: the protocol carries its own `reasoning` field.
+                disable_thinking=True,
                 json_object=True,
                 # `reply` is the whole schema, so recovered prose is unambiguous.
                 plain_text_fallback=True,

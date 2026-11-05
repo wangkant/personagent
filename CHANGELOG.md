@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Longer DM history stays in the prompt cache.** The clock, memory and examples now close the last turn, after the history, and the output protocol joins the cached system prompt. Old turns drop in a batch, from 60 messages to 40, not one pair a turn. Mean input grows about 3%, so a provider without caching costs slightly more.
+- **Replies no longer use hidden thinking.** Group and DM replies now turn it off, as the gate already did, because the protocol carries its own `reasoning` field. An endpoint that insists on reasoning keeps its minimum.
+
 - **A new setup starts on OpenRouter's free models.** OpenRouter is the first preset, with `openrouter/free`, so the only thing to get is a free key. The limit is 50 requests a day, and the local page says so under the service. A home that already names a service keeps it, and a `.env` with only a key still means DeepSeek. On a new home, `init --no-input` with a key from `--key-env` or the shell's `LLM_API_KEY` now needs `--provider` or `--base-url`, so an existing script cannot send its key to the wrong company. A 429 now logs the provider's reason, and the page says when a service is out of requests.
 
 - **Less defensive code.** Guards for states the code itself never produces are gone: type checks on its own files and values, catch-alls around its own calls, misuse warnings. A corrupt state file (`connector_handles.json`, `stickers.json`, the direct-app credentials and others) now stops with an error instead of reading as empty. Network and model failures, the auth and SSRF checks and the handling of what chat users send are unchanged. Comments and docs lost their hedging.

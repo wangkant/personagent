@@ -99,10 +99,12 @@ class ReplyDecision:
             system=prompt.system,
             messages=[{"role": "user", "content": prompt.user}],
             model=model_to_use,
-            # Hidden reasoning tokens count against this cap.
+            # An endpoint that insists on reasoning spends it against this cap.
             max_tokens=3000,
             enable_search=enable_search,
-            disable_thinking=False,
+            # No hidden reasoning: the protocol carries its own `reasoning`
+            # field, and thinking on opens a different prompt than the gate's.
+            disable_thinking=True,
             json_object=True,
             # Never on the gate: recovered prose would read as "decided to speak".
             plain_text_fallback=True,

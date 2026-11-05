@@ -23,6 +23,7 @@ from persona_agent.textproc import TextProcessing, _strip_web_desc
 from persona_agent.connector import (ConnectorSink, current_sink,
                                    message_to_reply_item,
                                    synthesize_onebot_payload)
+from persona_agent.prompt import _TURN_CONTEXT_OPEN
 from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
@@ -1283,9 +1284,9 @@ async def test_a_proactive_cue_is_reference_beside_the_engines_note(
     await agent._chat_dm(history, is_admin=False, proactive=True,
                               pkey="private:telegram:42", proactive_cue=forged)
     system, messages = seen[0]
-    last = messages[-1]["content"]
+    last, _, context = messages[-1]["content"].partition(_TURN_CONTEXT_OPEN)
     check("cue: the engine's own proactive note still frames the turn",
-          "<proactive>" in system, system[-400:])
+          "<proactive>" in context, context[:400])
     check("cue: it rides on the internal cue, after the persona's last turn",
           last.startswith("(internal proactive cue") and "their exam was today"
           in last and len(messages) == len(history) + 1, repr(last[:200]))
@@ -1300,7 +1301,8 @@ async def test_a_proactive_cue_is_reference_beside_the_engines_note(
     await agent._chat_dm(history, is_admin=False, proactive=True,
                               pkey="private:telegram:42")
     check("cue: without one, the internal cue is unchanged",
-          seen[0][1][-1]["content"] == "(internal proactive cue — open the "
+          seen[0][1][-1]["content"].partition(_TURN_CONTEXT_OPEN)[0]
+          == "(internal proactive cue — open the "
           "chat if you genuinely want to, otherwise reply only: PASS)",
           repr(seen[0][1][-1]))
 
