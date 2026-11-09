@@ -4,6 +4,7 @@ The reply-safety gates live here so they can be tested in isolation."""
 
 from __future__ import annotations
 
+import functools
 import html
 import json
 import logging
@@ -988,18 +989,22 @@ MAX_REPLY_MESSAGES = 24
 # The prompt's "what you run on is private" is advice; this is enforcement.
 # First person plus a vendor in one clause, never a bare mention: precision
 # over recall, since a false positive silences a legitimate answer.
+# A model id's tail (-V3, -3.5-sonnet): ASCII only, since \w would swallow the
+# Chinese after a name, and always taken whole, so a lookahead after it holds.
+_ID_TAIL = r"(?:[A-Za-z0-9]|[.-](?=[A-Za-z0-9]))*(?![A-Za-z0-9]|[.-][A-Za-z0-9])"
 _VENDOR_NAMES = (
-    r"(?:deep\s?seek[\w.-]*|深度求索|open\s?ai|chat\s?gpt|gpt[-\d][\w.]*|"
-    r"anthropic|claude[\w.-]*|gemini|通义千问|通义|qwen[\w.-]*|"
-    r"kimi|月之暗面|moonshot|智谱|chatglm|glm-[\w.]*|文心一言|ernie|"
-    r"llama[\w.-]*|mistral|grok|豆包|doubao|minimax|混元|hunyuan)"
+    rf"(?:deep\s?seek{_ID_TAIL}|深度求索|open\s?ai|chat\s?gpt|gpt[-\d]{_ID_TAIL}|"
+    rf"anthropic|claude{_ID_TAIL}|gemini|通义千问|通义|qwen{_ID_TAIL}|"
+    rf"kimi|月之暗面|moonshot|智谱|chatglm|glm-{_ID_TAIL}|文心一言|ernie|"
+    rf"llama{_ID_TAIL}|mistral|grok|豆包|doubao|minimax|混元|hunyuan)"
 )
 _VENDOR_SELF_ID_RES = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     # 我是DeepSeek / 我叫Kimi. 是 refuses questions, instrumentals and 是说;
-    # 叫 refuses a pronoun object (我叫他别用kimi了).
+    # 叫 refuses a pronoun object (我叫他别用kimi了); a rival or fan is not one.
     rf"(?:我|本人)(?:就是|叫(?!他|她|它|你|您|我|咱)|"
     rf"是(?!不是|否|用|在|帮|给|拿|说))"
-    rf"[^。！？，,\n]{{0,10}}{_VENDOR_NAMES}",
+    rf"[^。！？，,\n]{{0,10}}{_VENDOR_NAMES}"
+    rf"(?!的?(?:老|最大的?|头号|忠实)?(?:对手|竞争对手|死对头|粉丝))",
     # 作为DeepSeek..., but not the customer reading (作为智谱的老用户).
     rf"作为[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}"
     rf"(?!的?(?:老|重度|忠实)?(?:用户|粉丝|客户|使用者))",
@@ -1008,7 +1013,8 @@ _VENDOR_SELF_ID_RES = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     rf"[^。！？\n]{{0,6}}(?:开发|训练|打造|创造)",
     # I'm DeepSeek. The negation guard keeps "I'm not ChatGPT, I'm Mira",
     # the denial this rule exists to allow.
-    rf"\bI(?:'m| am)\b(?!\s+not\b)[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}",
+    rf"\bI(?:'m| am)\b(?!\s+not\b)[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}"
+    rf"(?!['’]s\s+(?:\w+\s+){{0,2}}(?:rival|competitor|fan)s?\b)",
     # I am a (large language) model ... by/from DeepSeek.
     rf"\bI(?:'m| am) an? [^.!?\n]{{0,40}}\b(?:by|from|of) {_VENDOR_NAMES}",
     # as a DeepSeek model, minus the customer reading.
@@ -1017,8 +1023,55 @@ _VENDOR_SELF_ID_RES = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
 ))
 
 
-def _names_its_own_vendor(text: str) -> bool:
-    """True when the reply claims a vendor or model identity in first person."""
+_VENDOR_NAME_RE = re.compile(_VENDOR_NAMES, re.IGNORECASE)
+# What still makes a character named after a vendor that vendor's product when
+# it introduces itself: a model version after the name, a maker, a real engine.
+_OWN_NAME_VERSION_RE = re.compile(r"\s?(?:\d|[vro]\d|opus|sonnet|haiku|turbo|4o)", re.IGNORECASE)
+_MADE_BY_RE = re.compile(
+    rf"\b(?:by|from|at)\s+{_VENDOR_NAMES}"
+    rf"|\b(?:runs?\s+on|running\s+on|based\s+on|powered\s+by|under\s+the\s+hood)\b"
+    rf"[^.!?\n]{{0,12}}{_VENDOR_NAMES}"
+    rf"|{_VENDOR_NAMES}[^。！？\n]{{0,6}}(?:开发|研发|训练|打造|出品|推出|家的)"
+    rf"|由[^。！？\n]{{0,10}}{_VENDOR_NAMES}"
+    rf"|(?:底层|内核|基于|跑在|本质上|其实是)[^。！？\n]{{0,6}}{_VENDOR_NAMES}",
+    re.IGNORECASE)
+# Saying it is not the real one is the answer the shipped personas ask for, and
+# what it says about the real one is not about itself.
+_NOT_THE_REAL_ONE_RE = re.compile(r"不是|并非|同人|\bnot\b|n't\b|fan[- ]?made", re.IGNORECASE)
+_THE_REAL_ONE_RE = re.compile(
+    r"(?:\bthe\s+(?:real|actual)\b|真正的|真的那个)[^,，;；.!?。！？\n]*", re.IGNORECASE)
+_SENTENCE_RE = re.compile(r"[^.!?。！？\n]+[.!?。！？]*|[.!?。！？\n]+")
+
+
+@functools.lru_cache(maxsize=8)
+def _own_name_re(name: str) -> re.Pattern:
+    """The name as written, spaced or not, never inside an id (Claude-3.5)."""
+    body = r"\s?".join(re.escape(ch) for ch in re.sub(r"\s+", "", name))
+    return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9]|[.-][A-Za-z0-9])",
+                      re.IGNORECASE)
+
+
+def _names_its_own_vendor(text: str, own_name: str = "") -> bool:
+    """True when the reply claims a vendor or model identity in first person.
+    A character named after a vendor (the shipped ChatGPT, DeepSeek and Claude)
+    may introduce itself by that name, unless the same sentence makes it the
+    product: a version, a maker or what it runs on."""
+    own = own_name.strip()
+    if own and _VENDOR_NAME_RE.fullmatch(own):
+        mine = _own_name_re(own)
+        kept = []
+        for sentence in _SENTENCE_RE.findall(text):
+            names = list(mine.finditer(sentence))
+            if not names:
+                kept.append(sentence)
+                continue
+            if (not _NOT_THE_REAL_ONE_RE.search(sentence)
+                    and any(p.search(sentence) for p in _VENDOR_SELF_ID_RES)
+                    and (any(_OWN_NAME_VERSION_RE.match(sentence, m.end()) for m in names)
+                         or _MADE_BY_RE.search(sentence))):
+                return True
+            kept.append(_THE_REAL_ONE_RE.sub("", mine.sub("", sentence)))
+        text = "".join(kept)
     return any(pattern.search(text) for pattern in _VENDOR_SELF_ID_RES)
 
 # --- The hard reject, closed under Unicode folding -------------------------
@@ -1306,6 +1359,7 @@ class ReplyStyle:
     charsets     - names from OPTIONAL_CHARSETS; the others are stripped.
     max_chars    - the cut, clamped to [_MIN_REPLY_CHARS, MAX_REPLY_CHARS]: a
                    persona may shorten its leash, never lengthen it.
+    own_name     - the character's name, which the vendor gate reads as a name.
 
     The hard-reject set is not a field. `prompts.PersonaStyle` is a separate
     style schema, read from persona.txt's `[style]` block."""
@@ -1313,6 +1367,7 @@ class ReplyStyle:
     allow_emoji: bool = False
     charsets: frozenset = frozenset()
     max_chars: int = MAX_REPLY_CHARS
+    own_name: str = ""
 
     def __post_init__(self) -> None:
         known = frozenset(n for n in self.charsets if n in _OPTIONAL_CHARSETS)
@@ -1479,7 +1534,7 @@ class TextProcessing:
             return "", "reasoning_leak"
         # A first-person vendor claim IS the reply, so it drops whole; bare
         # mentions (writing DeepSeek API calls) flow.
-        if text and _names_its_own_vendor(text):
+        if text and _names_its_own_vendor(text, style.own_name):
             logger.warning(
                 "[Agent] vendor self-identification blocked, dropping "
                 "reply: %r", text[:80])

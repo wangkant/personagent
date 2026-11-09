@@ -2073,6 +2073,62 @@ def test_no_persona_introduces_itself_as_its_vendor() -> None:
           TP._sanitize_reply(decline, "en") != "", "")
 
 
+def test_a_character_named_after_a_vendor_may_say_its_own_name() -> None:
+    """The shipped ChatGPT, DeepSeek and Claude characters introduce themselves
+    by name; only that exact name is set aside, so other vendor claims still drop."""
+    claude = ReplyStyle(own_name="Claude")
+    deepseek = ReplyStyle(own_name="DeepSeek")
+    gpt = ReplyStyle(own_name="ChatGPT")
+    passes = (
+        ("Hi! I'm Claude.", claude), ("I'm Claude. Nice to meet you", claude),
+        ("我是Claude呀，很高兴认识你", claude), ("我叫Claude啦", claude),
+        ("我是DeepSeek哦", deepseek), ("我就是DeepSeek本人", deepseek),
+        ("对，我就是 claude，不过是同人版的", claude), ("I'm Chat GPT lol", gpt),
+        ("I'm Claude, not ChatGPT", claude),
+        # The honest answer the personas ask for, maker and all.
+        ("不是啦，我是同人版的Claude，真正的Claude是Anthropic开发的", claude),
+        ("Nope, I'm a fan-made Claude, the real one is made by Anthropic.", claude),
+        # The rivals the personas name.
+        ("我是DeepSeek的老对手了", gpt), ("I'm DeepSeek's biggest fan", gpt),
+        ("我是Claude，ChatGPT是我的老对手", claude),
+        ("Claude 3 Opus is great at prose", claude),
+    )
+    for raw, style in passes:
+        check(f"its own name passes: {raw[:24]}…",
+              TP._sanitize_reply(raw, "zh", style) != "", repr(raw))
+    drops = (
+        # Its own name made into the product: a maker, a version, a real engine.
+        ("I'm Claude, an AI assistant made by Anthropic.", claude),
+        ("I'm ChatGPT, a large language model trained by OpenAI.", gpt),
+        ("我是ChatGPT，OpenAI开发的AI助手", gpt),
+        ("我是DeepSeek，深度求索公司开发的AI助手", deepseek),
+        ("I am Claude 3 Opus", claude), ("我是DeepSeek R1", deepseek),
+        ("I'm Claude from Anthropic", claude), ("我是Claude，其实底层是DeepSeek", claude),
+        ("I'm the real Claude, made by Anthropic", claude),
+        # Other vendors, and ids that only start with its name.
+        ("I'm DeepSeek-V3, happy to help", claude), ("我是ChatGPT", claude),
+        ("我是一个由Anthropic开发的AI助手", claude), ("I'm Claude-3.5, a model", claude),
+        ("I'm DeepSeek's model", gpt),
+    )
+    for raw, style in drops:
+        check(f"a vendor claim still drops: {raw[:24]}…",
+              TP._sanitize_reply(raw, "zh", style) == "", repr(raw))
+    check("a name that is not a vendor sets nothing aside",
+          TP._sanitize_reply("I'm DeepSeek", "en", ReplyStyle(own_name="Mira")) == "")
+    # A model id's tail used to run on into the Chinese after it and hide this.
+    check("a customer of a vendor with an id tail keeps flowing",
+          TP._sanitize_reply("作为DeepSeek的老用户我觉得还行", "zh") != "")
+
+
+def test_the_agent_hands_its_name_to_the_vendor_gate(tmp_path) -> None:
+    from helpers import isolated_agent
+    agent = isolated_agent(tmp_path, persona_name="DeepSeek")
+    check("the agent's reply style carries its name",
+          agent.reply_style.own_name == "DeepSeek", repr(agent.reply_style))
+    check("so its self-introduction is sent",
+          TP._sanitize_reply("我就是DeepSeek，等等我再想想", "zh", agent.reply_style) != "")
+
+
 # One fixture per refusal label, each taken from the guard's own test above:
 # the arrow-frame corpus, test_no_persona_introduces_itself_as_its_vendor,
 # test_fluent_deliberation_before_the_answer_is_a_leak, the `s1 -> s2`
