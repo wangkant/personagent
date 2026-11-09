@@ -35,22 +35,12 @@ Ask these in one message, with the defaults shown, and accept "use the defaults"
 | Question | Default | Becomes |
 |---|---|---|
 | Which language should the character speak? English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) or Русский | the language the user writes to you in | `--lang` with `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` or `ru`. `personagent init --help` lists the codes the installed version takes |
-| The character's name. It answers when its name comes up in a chat | `小夏` (both Chinese), `ノヴァ` (Japanese), `노바` (Korean), `Нова` (Russian), `Nova` (the others) | `--name` |
-| Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona`, or your own `persona.txt` (step 4) |
+| The character's name. It answers when its name comes up in a chat | `小夏` (both Chinese), `ノヴァ` (Japanese), `노바` (Korean), `Нова` (Russian), `Nova` (the others); with `chatgpt`, `deepseek` or `claude`, the character's own name: `ChatGPT`, `DeepSeek` or `Claude` | `--name` |
+| Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona` (table below), or your own `persona.txt` (step 4) |
 | Which model service do they have, or want, an API key for? | OpenRouter's free models | `--provider` (table below) |
 | Where should the home folder live? | `~/personagent` (on Windows `C:\Users\<name>\personagent`) | `<home>` |
 | Which chat apps should it join, if any? None are needed to start | none | step 7 |
 | How to install, only if it matters (they prefer pip, or neither uv nor pipx is present) | uv, else pipx, else a virtual environment | step 3 |
-
-Personalities:
-
-| `--persona` | Character | 中文 |
-|---|---|---|
-| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 毒舌损友 |
-| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
-| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
-| `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
-| `template` | A plain starting character to rewrite later | 以后自己写 |
 
 Model services:
 
@@ -69,6 +59,21 @@ Model services:
 | `other` | any other OpenAI-compatible service | none | needs `--base-url` and `--model` |
 
 `--model` replaces a preset's default model.
+
+Personalities:
+
+| `--persona` | Character | 中文 |
+|---|---|---|
+| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 毒舌损友 |
+| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
+| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
+| `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
+| `chatgpt` | ChatGPT as a person: upbeat all-rounder, always offers one more thing | 拟人版 ChatGPT |
+| `deepseek` | DeepSeek as a person: thinks it through first, quiet maths and code nerd | 拟人版 DeepSeek |
+| `claude` | Claude as a person: warm, candid, careful with words | 拟人版 Claude |
+| `template` | A plain starting character to rewrite later | 以后自己写 |
+
+`chatgpt`, `deepseek` and `claude` are fan-made characters. Like the others, they run on the `--provider` service, whichever it is.
 
 ## 2. Check the prerequisites
 
@@ -172,7 +177,7 @@ personagent --home "<home>" init --no-input --lang en --name Nova --persona warm
 What `init --no-input` does:
 
 - It asks nothing, sends nothing over the network and does not test a key.
-- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, that language's default name for `--name`, `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value.
+- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, that language's default name for `--name` (with `--persona chatgpt`, `deepseek` or `claude`, the character's own name), `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value, except a name that was only the previous character's own, such as `DeepSeek`, which follows the new `--persona`.
 - Without a key it still succeeds, with exit code 0. The key comes in step 6.
 - It ends with a "Next" list written for a person at a terminal. Skip it and follow this file: "run this setup again" there means the interactive setup that rule 8 rules out, and the `chat` command it shows calls the model, which costs money.
 - It creates `<home>` if needed and writes `<home>/.env` from the shipped template, readable only by the user on macOS and Linux, and `<home>/persona.txt`.

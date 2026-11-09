@@ -36,7 +36,7 @@ personagent
 
 Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` es ohne separaten Installationsschritt.
 
-Der Browser öffnet eine lokale Seite mit drei Ansichten: **Chat**, **Apps verbinden** und **Charakter & Einstellungen**. Füge deinen API-Schlüssel für das Modell ein und klick auf **Prüfen & Chat starten**; eine kleine Anfrage prüft ihn. Vorausgewählt sind die kostenlosen Modelle von OpenRouter: Der Schlüssel kostet nichts, das Limit liegt bei 50 Anfragen pro Tag, und das Modell kann von Anfrage zu Anfrage wechseln. Es gibt 10 Voreinstellungen für Modelldienste plus jeden anderen OpenAI-kompatiblen Dienst sowie Voreinstellungen für Namen und Persönlichkeit des Charakters. Das Feld **Persona** enthält `persona.txt`; Speichern startet den Agenten neu und behält, was er gelernt hat. **Weitere Funktionen** schaltet Websuche, Bildverständnis und das Von-sich-aus-Ansprechen ein. Ein erneuter Aufruf von `personagent` verwendet eine bereits offene Seite weiter. Über das Menü oben rechts zeigst du die Seite auf Englisch, Chinesisch oder in acht weiteren Sprachen an. Der Charakter antwortet in der Sprache des Chats; seine eingebauten Prompts und Daten sind Englisch und Chinesisch.
+Der Browser öffnet eine lokale Seite mit drei Ansichten: **Chat**, **Apps verbinden** und **Charakter & Einstellungen**. Füge deinen API-Schlüssel für das Modell ein und klick auf **Prüfen & Chat starten**; eine kleine Anfrage prüft ihn. Vorausgewählt sind die kostenlosen Modelle von OpenRouter: Der Schlüssel kostet nichts, das Limit liegt bei 50 Anfragen pro Tag, und das Modell kann von Anfrage zu Anfrage wechseln. Es gibt 10 Voreinstellungen für Modelldienste plus jeden anderen OpenAI-kompatiblen Dienst sowie Voreinstellungen für Namen und Persönlichkeit des Charakters, drei davon ChatGPT, DeepSeek und Claude als Menschen gedacht, mit animierten Porträts. Das Feld **Persona** enthält `persona.txt`; Speichern startet den Agenten neu und behält, was er gelernt hat. **Weitere Funktionen** schaltet Websuche, Bildverständnis und das Von-sich-aus-Ansprechen ein. Ein erneuter Aufruf von `personagent` verwendet eine bereits offene Seite weiter. Über das Menü oben rechts zeigst du die Seite auf Englisch, Chinesisch oder in acht weiteren Sprachen an. Der Charakter antwortet in der Sprache des Chats; seine eingebauten Prompts und Daten sind Englisch und Chinesisch.
 
 Unter Windows kannst du auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken. Python 3.10–3.14. Siehe die [kurze Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md); Terminalbefehle und Connectoren stehen in der [vollständigen Anleitung](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md).
 
@@ -91,6 +91,14 @@ Jede Änderung wird festgehalten, und jede lässt sich zurücknehmen.
 <strong>Er ist schnell gestartet und lebt dort, wo deine Gruppe ist.</strong><br>
 Einrichtung und Chat im Browser auf Englisch, Chinesisch oder in acht weiteren Sprachen, mit 11 Modelldiensten und optionalen erweiterten Einstellungen.<br>
 Er tritt QQ, WeChat, Telegram und Discord selbst bei und einem Dutzend weiterer Apps über dieselbe Seite; seine Ansicht Aktivität zeigt, was er getan hat.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td valign="top">
+<strong>Er kann ein fertiger Charakter sein oder dein eigener.</strong><br>
+Sieben fertige Persönlichkeiten, drei davon Fan-Versionen von ChatGPT, DeepSeek und Claude.<br>
+Diese drei haben Porträts, die blinzeln, nachdenken, während eine Antwort unterwegs ist, und sprechen, wenn sie ankommt.
 </td>
 </tr>
 </table>

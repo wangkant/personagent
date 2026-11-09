@@ -34,7 +34,7 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
-The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. The preselected service is OpenRouter's free models: the key costs nothing, the limit is 50 requests a day, and the model can change from one request to the next. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open. The menu at the top right shows the page in English, Chinese or eight more languages. The character answers in the language the chat uses; its built-in prompts and data are English and Chinese.
+The browser opens on a local page with three views: **Chat**, **Connect apps** and **Character & settings**. Paste your model API key and click **Verify & start chatting**; one small request checks it. The preselected service is OpenRouter's free models: the key costs nothing, the limit is 50 requests a day, and the model can change from one request to the next. There are 10 model service presets plus any other OpenAI-compatible one, and name and personality presets for the character, three of them ChatGPT, DeepSeek and Claude imagined as people, with animated portraits. The **Persona** box holds `persona.txt`; saving it restarts the agent and keeps what it learned. **More features** turns on web search, image understanding and speaking first. Running `personagent` again reuses a page that is already open. The menu at the top right shows the page in English, Chinese or eight more languages. The character answers in the language the chat uses; its built-in prompts and data are English and Chinese.
 
 On Windows you can also download the source ZIP and double-click `start.bat`. Python 3.10–3.14. See the [short getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md); terminal commands and connectors are in the [full guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md).
 
@@ -89,6 +89,14 @@ Every change is on record, and any of them can be rolled back.
 <strong>It is easy to start, and lives where your group is.</strong><br>
 Browser setup and chat in English, Chinese or eight more languages, with 11 model services and optional advanced settings.<br>
 It joins QQ, WeChat, Telegram and Discord by itself and a dozen more apps from the same page; its Activity view shows what it did.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td valign="top">
+<strong>It can be a ready character, or your own.</strong><br>
+Seven ready personalities, three of them fan-made takes on ChatGPT, DeepSeek and Claude.<br>
+Those three have portraits that blink, think while a reply is on its way and talk when it arrives.
 </td>
 </tr>
 </table>

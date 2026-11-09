@@ -24,6 +24,12 @@ Si usas alguno de estos, usa una cuenta dedicada que puedas permitirte perder, n
 - Mantenlo fuera de grupos donde sus respuestas puedan dañar o engañar a la gente, como grupos sobre temas médicos, legales, financieros o de crisis, y grupos con menores.
 - Si alguien le pide que se vaya, o pregunta qué sabe de él, tómatelo en serio. El administrador puede hacer que olvide una nota (`<name>, forget ...`), y todo lo que guarda está en su carpeta de inicio (ver más abajo).
 
+## Los personajes de ChatGPT, DeepSeek y Claude
+
+Estos tres personajes listos son personificaciones hechas por fans. ChatGPT, DeepSeek y Claude son marcas de OpenAI, DeepSeek y Anthropic, respectivamente. personagent no está afiliado a ninguna de ellas ni cuenta con su respaldo. Los retratos son ilustraciones originales; toman prestado un color o un motivo, como una ballena o una estrella radiante, pero ninguno de los logotipos de las empresas.
+
+El personaje funciona con el servicio de modelos que elijas, no con esos productos, salvo que elijas uno de ellos. Si le preguntan si es el de verdad, dice que no.
+
 ## Qué ve tu proveedor de modelos
 
 Cada respuesta envía al proveedor de modelos un prompt formado por la persona, los mensajes recientes del chat (con nombres), las notas que el bot ha guardado sobre el chat y lo que ha recuperado de lo aprendido. Si configuras un modelo de visión, las imágenes van a él. Otros servicios que actives también ven partes de esto. Entre ellos están los endpoints de respaldo, juez, autoevaluación y embeddings que configures, y la búsqueda web, que envía una consulta breve a Tavily si defines una clave y a DuckDuckGo si no. La comprobación de actualizaciones solo envía a pypi.org el número de versión de personagent, como máximo una vez al día; `UPDATE_CHECK_ENABLED=false` la desactiva.

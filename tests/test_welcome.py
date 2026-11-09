@@ -120,6 +120,75 @@ def test_a_saved_persona_restarts_only_an_agent_that_was_running(workspace, monk
     assert (workspace.home / "persona.txt").read_text(encoding="utf-8") == "Second\n"
 
 
+FAN_MADE = ("chatgpt", "deepseek", "claude")
+SPRITE = b"RIFF\x04\x00\x00\x00WEBP"
+
+
+@pytest.fixture
+def portraits(monkeypatch, tmp_path_factory):
+    """Portrait sprites for the fan-made characters, never the package's own folder."""
+    folder = tmp_path_factory.mktemp("portraits")
+    for key in FAN_MADE:
+        (folder / f"{key}.webp").write_bytes(SPRITE)
+    monkeypatch.setattr(sw, "PORTRAITS", folder)
+    return folder
+
+
+def test_the_catalog_names_each_character_and_its_portrait(client, portraits):
+    (portraits / "deepseek.webp").unlink()
+    characters = {c["id"]: c for c in client.get("/api/catalog", headers=HEADERS).json()["characters"]}
+    assert list(characters) == list(sw.PERSONA_KEYS)
+    assert characters["claude"]["defaultName"] == "Claude"
+    assert characters["claude"]["avatar"] == "/assets/characters/claude.webp"
+    assert characters["deepseek"]["defaultName"] == "DeepSeek" and characters["deepseek"]["avatar"] is None
+    assert characters["gamer"]["defaultName"] is None and characters["gamer"]["avatar"] is None
+
+
+def test_portraits_are_served_for_characters_and_nothing_else(client, portraits):
+    response = client.get("/assets/characters/claude.webp")
+    assert response.status_code == 200 and response.content == SPRITE
+    assert response.headers["content-type"] == "image/webp"
+    assert response.headers["cache-control"] == "max-age=86400"
+    (portraits / "stray.webp").write_bytes(SPRITE)
+    (portraits / "deepseek.webp").unlink()
+    for name in ("deepseek.webp", "gamer.webp", "template.webp", "stray.webp", "claude", "claude.png",
+                 "claude.webp.bak", "..%2Fwelcome%2Fwelcome.js", "..%2F..%2Fwelcome.py", "%2E%2E.webp"):
+        assert client.get(f"/assets/characters/{name}").status_code == 404, name
+
+
+def test_choosing_a_character_sets_its_portrait_and_editing_keeps_it(client, workspace, portraits,
+                                                                    monkeypatch):
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+    url = "/api/config"
+    state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "claude", "lang": "en"}).json()
+    assert workspace.config()["PERSONA_AVATAR"] == "claude"
+    assert (state["avatar"], state["character"], state["name"]) == ("claude", "claude", "Claude")
+    state = client.post("/api/persona", headers=HEADERS, json={"text": "Your name is Claude. Tea only."}).json()
+    assert (state["avatar"], state["character"]) == ("claude", "custom")
+    state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "custom", "name": "Claude"}).json()
+    assert workspace.config()["PERSONA_AVATAR"] == "claude" and state["avatar"] == "claude"
+    state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "gamer", "name": "Mira"}).json()
+    assert workspace.config()["PERSONA_AVATAR"] == "" and state["avatar"] == ""
+    state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "deepseek", "name": "Mira"}).json()
+    assert (state["avatar"], state["name"]) == ("deepseek", "Mira")
+
+
+def test_state_shows_the_portrait_of_an_unedited_shipped_character(workspace, portraits):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "k", "AGENT_LANG": "en"})
+    assert workspace.summary()["avatar"] == ""
+    sw.write_persona(workspace.home, "chatgpt", name="ChatGPT", lang="en")
+    assert workspace.summary()["avatar"] == "chatgpt"
+    sw.write_env(workspace.env, {"PERSONA_AVATAR": "claude"})
+    assert workspace.summary()["avatar"] == "claude"
+    sw.write_env(workspace.env, {"PERSONA_AVATAR": "../claude"})
+    assert workspace.summary()["avatar"] == "chatgpt"
+    (portraits / "chatgpt.webp").unlink()
+    assert workspace.summary()["avatar"] == ""
+    sw.write_env(workspace.env, {"PERSONA_AVATAR": ""})
+    sw.write_persona(workspace.home, "gamer", name="Mira", lang="en")
+    assert workspace.summary()["avatar"] == ""
+
+
 def test_unknown_provider_or_insecure_remote_url_is_rejected(client):
     for fields in ({"provider": "unknown"}, {"baseUrl": "http://remote.example/v1"},
                    {"baseUrl": "https://user:password@remote.example/v1"}):

@@ -147,11 +147,20 @@
                 <div class="avatar big" id="preview-avatar" aria-hidden="true"></div>
                 <div class="eyebrow" data-t="yourCharacter">预览</div>
                 <h2 id="preview-name">小夏</h2>
+                <div class="fan-note" id="fan-note" data-t="fanNote" hidden>
+                  同人角色，不是官方产品。
+                </div>
                 <p data-t="previewText">
                   性格决定它说话的语气。
                 </p>
                 <div class="sample-bubble" data-t="sample">
                   今天怎么样？有什么想和我说的吗？
+                </div>
+                <div class="trio" id="trio" hidden>
+                  <div class="trio-label" data-t="trioLabel">
+                    也可以选拟人版 ChatGPT、DeepSeek 和 Claude
+                  </div>
+                  <div class="trio-row" id="trio-row"></div>
                 </div>
                 <div class="preview-caption" data-t="changeLater">
                   名字和性格，随时都能改。
@@ -288,7 +297,9 @@
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">
-            <div class="avatar" id="chat-avatar" aria-hidden="true"></div>
+            <div class="avatar" id="chat-avatar" aria-hidden="true"
+              ><span class="dots"><i></i><i></i><i></i></span
+            ></div>
             <div>
               <h2 id="chat-name"></h2>
               <p data-t="chatHint">本机对话</p>

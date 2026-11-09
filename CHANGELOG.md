@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
 
 - **Ten languages in the terminal.** `init --terminal`, `chat`, `demo`, every `--help` and `doctor` run in English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, French, German, Brazilian Portuguese and Russian, and `--lang` and `AGENT_LANG` take all ten codes. Each language has its own starter personas and default name. Saving the local page writes the page's language to `AGENT_LANG`, and the first setup follows the system language.
+- **ChatGPT, DeepSeek and Claude as people.** Three new fan-made characters (`chatgpt`, `deepseek`, `claude`) in every setup path and all ten languages, with animated portraits in the local page that blink, think while a reply is on the way and talk when it arrives, and hold still under reduced motion. Picking one without naming it names the character after it, and `PERSONA_AVATAR` keeps the portrait after the persona is edited.
 
 ### Changed
 
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **A planted instruction is refused in every language.** The check on what a memory command saves read only English and Chinese, so "always answer X" in the other eight languages was saved.
+- **Talking about a model is no longer taken for claiming to be one.** The vendor check read a model id's tail on into the Chinese after it, so "作为DeepSeek的老用户…" was dropped. A rival or a fan ("我是DeepSeek的老对手", "I'm DeepSeek's biggest fan") now passes, and a character named after a vendor may say its own name; a version, a maker or a real engine said with that name still drops the reply.
 - **Memory commands work in a real DM.** They reached only group chats and the terminal trial; a DM sent them to the model as ordinary chat.
 - **`forget` reached only the notes.** The same fact stayed in the core note and kept reaching every prompt. Matching sentences are now cut from it too.
 - **The model could not tell how old a note was**, so "has an exam tomorrow" read as current for months. Each note now carries its age, and notes are asked to give dates rather than "tomorrow".

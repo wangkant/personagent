@@ -442,6 +442,7 @@ details[open] summary {
   border: 1px solid var(--line);
 }
 .avatar {
+  position: relative;
   width: 36px;
   height: 36px;
   display: grid;
@@ -458,6 +459,115 @@ details[open] summary {
   height: 56px;
   font-size: 22px;
   margin: 0 auto 16px;
+}
+#preview-avatar.portrait {
+  width: 96px;
+  height: 96px;
+}
+#empty-avatar.portrait {
+  width: 88px;
+  height: 88px;
+}
+.avatar .face {
+  display: none;
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.avatar.portrait .face {
+  display: block;
+}
+.avatar.portrait .letter {
+  display: none;
+}
+/* Larger than the circle, so breathing never shows an edge. */
+.avatar .sprite {
+  position: absolute;
+  inset: -4%;
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  background-position: 0 0;
+  animation:
+    breathe 4.8s ease-in-out var(--blink-delay, 0s) infinite,
+    blink var(--blink-period, 5s) step-end var(--blink-delay, 0s) infinite;
+}
+/* Small avatars crop to the face, or blinks and lines would be a few pixels. */
+#chat-avatar .sprite,
+.trio-pick .sprite {
+  inset: auto;
+  left: -22%;
+  top: -10%;
+  width: 144%;
+  height: 144%;
+}
+.avatar.thinking .sprite {
+  background-position-x: 100%;
+  animation: breathe 4.8s ease-in-out var(--blink-delay, 0s) infinite;
+}
+.avatar.talking .sprite {
+  animation:
+    breathe 4.8s ease-in-out var(--blink-delay, 0s) infinite,
+    talk 0.33s step-end infinite;
+}
+@keyframes breathe {
+  50% {
+    transform: translateY(-1.5%) scale(1.012);
+  }
+}
+/* Frame i of the four sits at i * 100% / 3. */
+@keyframes blink {
+  0%,
+  97.3% {
+    background-position-x: 0;
+  }
+  97.4%,
+  100% {
+    background-position-x: 33.333%;
+  }
+}
+@keyframes talk {
+  0%,
+  49.9% {
+    background-position-x: 0;
+  }
+  50%,
+  100% {
+    background-position-x: 66.667%;
+  }
+}
+.avatar .dots {
+  display: none;
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  gap: 2px;
+  padding: 4px 5px;
+  border-radius: 999px;
+  background: var(--fill);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.avatar.thinking .dots {
+  display: flex;
+}
+.dots i {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.3;
+  animation: dot 1.2s ease-in-out infinite;
+}
+.dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes dot {
+  30% {
+    opacity: 1;
+  }
 }
 .character-preview .eyebrow {
   margin-bottom: 2px;
@@ -484,6 +594,44 @@ details[open] summary {
   font-size: 12px;
   color: var(--faint);
   margin-top: 18px;
+}
+.fan-note {
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 2px;
+}
+.trio {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.trio-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.trio-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+.trio-pick {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  transition: box-shadow 0.12s;
+}
+.trio-pick:hover {
+  box-shadow:
+    0 0 0 2px var(--side),
+    0 0 0 3px var(--line-strong);
+}
+.trio-pick[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--side),
+    0 0 0 3.5px var(--ink);
 }
 .small-note {
   margin: 16px 4px;
@@ -1623,5 +1771,18 @@ label.check input {
   }
   .spinner {
     animation-duration: 2s;
+  }
+  .avatar .sprite,
+  .avatar.talking .sprite {
+    animation: none;
+    background-position-x: 0;
+  }
+  .avatar.thinking .sprite {
+    animation: none;
+    background-position-x: 100%;
+  }
+  .dots i {
+    animation: none;
+    opacity: 0.7;
   }
 }

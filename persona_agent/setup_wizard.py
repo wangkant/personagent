@@ -167,6 +167,7 @@ _TEXT: dict[str, tuple[str, str]] = {
     "name": ("Bot name", "机器人名字"),
     "renamed": ("(a new name starts a new character: what {old} learned does not carry over)",
                 "（改名等于换一个新角色：{old}学到的东西不会带过来）"),
+    "name_follows": ("(the name follows the character: {name})", "（名字跟着角色改成了{name}）"),
     "lang_switched": ("(the examples, filters and checks switch to {lang} as well)",
                       "（示例、过滤规则和检查也会一起切换到{lang}）"),
     "char_intro": ("Pick a character. It is written to persona.txt, which you can edit any time.",
@@ -628,6 +629,8 @@ def warn_if_agent_home_diverges(env_path: Path, home: Path) -> None:
 class Character:
     key: str
     title: tuple[str, str]
+    # The character's own name, which a name nobody chose follows.
+    name: str = ""
 
     @property
     def label(self) -> str:
@@ -644,10 +647,44 @@ CHARACTERS: tuple[Character, ...] = (
                         "游戏搭子：合作射击和肉鸽，爱互相嘴几句")),
     Character("bookworm", ("Bookworm: careful words, recommends books when asked",
                            "文艺书虫：用词讲究，被问到才推荐书")),
+    Character("chatgpt", ("ChatGPT as a person: upbeat all-rounder, always offers one more thing",
+                          "拟人版 ChatGPT：热情的全能型，总想再多帮一点"), name="ChatGPT"),
+    Character("deepseek", ("DeepSeek as a person: thinks it through first, quiet maths and code nerd",
+                           "拟人版 DeepSeek：先把问题想透，安静的理工宅"), name="DeepSeek"),
+    Character("claude", ("Claude as a person: warm, candid, careful with words",
+                         "拟人版 Claude：温和坦诚，说话有分寸"), name="Claude"),
     Character(TEMPLATE, ("Write my own later: a plain starting character to edit",
                          "以后自己写：先放一个朴素的起步角色，之后再改")),
 )
 PERSONA_KEYS = tuple(c.key for c in CHARACTERS)
+# The local page's portrait sprites, <key>.webp.
+PORTRAITS = Path(__file__).with_name("static") / "characters"
+
+
+def character_for(key: str) -> Character:
+    return CHARACTERS[PERSONA_KEYS.index(key)]
+
+
+def portrait(key: str) -> Path | None:
+    """The portrait sprite of character `key`, when it ships one."""
+    path = PORTRAITS / f"{key}.webp"
+    return path if key in PERSONA_KEYS and path.is_file() else None
+
+
+def avatar_for(key: str) -> str:
+    """PERSONA_AVATAR for a persona written as character `key`."""
+    return key if portrait(key) else ""
+
+
+OWN_NAMES = frozenset(c.name for c in CHARACTERS if c.name)
+
+
+def name_for(key: str, name: str, lang: str) -> str:
+    """`name`, unless nobody chose it (the default, or a character's own):
+    then character `key`'s own name, or the default when it has none."""
+    if name == DEFAULT_NAMES[lang] or name in OWN_NAMES:
+        return character_for(key).name or DEFAULT_NAMES[lang]
+    return name
 
 NAME_LINE = {"en": "Your name is {name}.", "zh": "你叫{name}。", "zh-TW": "你叫{name}。",
              "ja": "あなたの名前は{name}です。", "ko": "당신의 이름은 {name}입니다.",
@@ -1305,26 +1342,29 @@ def check_key(values: dict) -> bool:
 
 def step_character(home: Path, current: dict, lang: str) -> tuple[str, str]:
     """The bot's name and which persona to write ('' = leave persona.txt alone)."""
-    default_name = current["PERSONA_NAME"] or DEFAULT_NAMES[lang]
+    old = current["PERSONA_NAME"]
     _say(t("name_explain"))
-    name = ask(t("name"), default=default_name, required=True)
-    if current["PERSONA_NAME"] and name != current["PERSONA_NAME"]:
-        _say(t("renamed", old=current["PERSONA_NAME"]))
+    name = ask(t("name"), default=old or DEFAULT_NAMES[lang], required=True)
 
     persona_path = home / "persona.txt"
-    origin = None
-    if persona_path.is_file():
-        origin = shipped_persona(persona_path.read_text(encoding="utf-8"))
-        if origin is None:
-            _say(t("char_custom"))
-            return name, ""
-    print()
-    _say(t("char_intro"))
-    for i, character in enumerate(CHARACTERS, 1):
-        print(f"    {i}. {character.label}")
-    default = PERSONA_KEYS.index(default_character(origin)) + 1
-    prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
-    return name, CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
+    origin = shipped_persona(persona_path.read_text(encoding="utf-8")) if persona_path.is_file() else None
+    key = ""
+    if persona_path.is_file() and origin is None:
+        _say(t("char_custom"))
+    else:
+        print()
+        _say(t("char_intro"))
+        for i, character in enumerate(CHARACTERS, 1):
+            print(f"    {i}. {character.label}")
+        default = PERSONA_KEYS.index(default_character(origin)) + 1
+        prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
+        key = CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
+        if name_for(key, name, lang) != name:
+            name = name_for(key, name, lang)
+            _say(t("name_follows", name=name))
+    if old and name != old:
+        _say(t("renamed", old=old))
+    return name, key
 
 
 PLATFORM_MENU = ("qq", "telegram", "discord", "slack", "kook", "lark", "other")
@@ -1559,8 +1599,8 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
         admin_name = answers.get("ADMIN_NAME", current["ADMIN_NAME"])
         write_persona(home, persona, name=name, lang=lang, admin_name=admin_name,
                       admin_relationship=current["ADMIN_RELATIONSHIP"])
-        character = CHARACTERS[PERSONA_KEYS.index(persona)]
-        _say(t("persona_written", what=short_label(character)))
+        write_env(env_path, {"PERSONA_AVATAR": avatar_for(persona)})
+        _say(t("persona_written", what=short_label(character_for(persona))))
     finish(launcher, home, name=name, has_key=True, astrbot=astrbot, offer_chat=True)
 
 
@@ -1612,15 +1652,24 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
         if not key:
             raise SystemExit(langs.term(f"--key-env {args.key_env}: that environment variable is empty"))
         values["LLM_API_KEY"] = key
-    name = args.name or env_get(env_path, "PERSONA_NAME") or DEFAULT_NAMES[lang]
-    values["PERSONA_NAME"] = name
-    write_env(env_path, values)
-
     persona_path = home / "persona.txt"
     origin = (shipped_persona(persona_path.read_text(encoding="utf-8"))
               if persona_path.is_file() else ("", "", ""))
+    key = ""
     if origin is not None:
         key = args.persona or (default_character(origin) if origin[0] else TEMPLATE)
+        values["PERSONA_AVATAR"] = avatar_for(key)
+    saved = env_get(env_path, "PERSONA_NAME")
+    if args.name:
+        name = args.name
+    elif saved:
+        # A saved name stays, unless it is only the last character's own.
+        name = name_for(key, saved, lang) if key and saved in OWN_NAMES else saved
+    else:
+        name = (character_for(key).name if key else "") or DEFAULT_NAMES[lang]
+    values["PERSONA_NAME"] = name
+    write_env(env_path, values)
+    if key:
         write_persona(home, key, name=name, lang=lang,
                       admin_name=env_get(env_path, "ADMIN_NAME"),
                       admin_relationship=env_get(env_path, "ADMIN_RELATIONSHIP"))

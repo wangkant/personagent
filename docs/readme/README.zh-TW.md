@@ -32,7 +32,7 @@ personagent
 
 如果裝了 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 不必另外安裝就能執行。
 
-瀏覽器會開啟一個本機頁面，分成三個分頁：「開始聊天」「連接平台」「角色與設定」。填入模型 API 金鑰，按下「驗證並開始聊天 →」，它會送出一次小請求來驗證金鑰。預設選中的是 OpenRouter 的免費模型：金鑰不用付費，每天限 50 次請求，每次用的模型可能不同。模型服務有 10 種預設，也可以選其他相容 OpenAI 的服務；角色有名字和個性的預設。「人設」框裡的內容就是 `persona.txt`，儲存後會重新啟動角色服務，學到的東西不會遺失。「更多功能」裡可以開啟網路搜尋、看圖和主動說話。再次執行 `personagent` 會沿用已經開啟的頁面。右上角的選單可以把頁面切換成英文、中文或另外八種語言。角色會用聊天裡的語言回覆；內建的提示詞和資料是中文和英文。
+瀏覽器會開啟一個本機頁面，分成三個分頁：「開始聊天」「連接平台」「角色與設定」。填入模型 API 金鑰，按下「驗證並開始聊天 →」，它會送出一次小請求來驗證金鑰。預設選中的是 OpenRouter 的免費模型：金鑰不用付費，每天限 50 次請求，每次用的模型可能不同。模型服務有 10 種預設，也可以選其他相容 OpenAI 的服務；角色有名字和個性的預設，其中三個是擬人版的 ChatGPT、DeepSeek 和 Claude，附會動的立繪。「人設」框裡的內容就是 `persona.txt`，儲存後會重新啟動角色服務，學到的東西不會遺失。「更多功能」裡可以開啟網路搜尋、看圖和主動說話。再次執行 `personagent` 會沿用已經開啟的頁面。右上角的選單可以把頁面切換成英文、中文或另外八種語言。角色會用聊天裡的語言回覆；內建的提示詞和資料是中文和英文。
 
 Windows 也可以下載原始碼 ZIP，解壓縮後雙擊 `start.bat`。需要 Python 3.10–3.14。詳見[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)；命令列和連接器的用法在[完整手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md)裡。
 
@@ -88,6 +88,14 @@ personagent connect dsh
       在瀏覽器裡設定和聊天，頁面有中英文和另外八種語言，11 種模型服務可選。<br>
       QQ、微信、Telegram、Discord 由它自己連接，另外十幾個平台也在同一個頁面裡接入。<br>
       在「動態」裡能看到它做了什麼。
+    </td>
+  </tr>
+  <tr>
+    <td width="220"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="擬人版的 ChatGPT、DeepSeek 和 Claude" width="220"></td>
+    <td>
+      <b>現成角色可以挑，也能自己寫</b><br>
+      七個現成個性，其中三個是同人擬人版的 ChatGPT、DeepSeek 和 Claude。<br>
+      這三個有會動的立繪：平時會眨眼，等回覆時在思考，回覆到了就開口說話。
     </td>
   </tr>
 </table>

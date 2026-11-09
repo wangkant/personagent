@@ -129,6 +129,8 @@ const translations = {
     previewText: "性格决定它说话的语气。",
     sample: "今天怎么样？有什么想和我说的吗？",
     changeLater: "名字和性格，随时都能改。",
+    trioLabel: "也可以选拟人版 ChatGPT、DeepSeek 和 Claude",
+    fanNote: "同人角色，不是官方产品。",
     qqLater: "也可以把它带到 QQ、微信、Telegram…",
     qqLaterHint: "先聊起来。想接入时，在「连接平台」里选一个，扫码或填一两项就好。",
     chatHint: "本机对话",
@@ -374,6 +376,8 @@ const translations = {
     previewText: "The personality sets how it talks.",
     sample: "How was your day? Anything you want to talk about?",
     changeLater: "You can change the name and personality anytime.",
+    trioLabel: "Or meet ChatGPT, DeepSeek and Claude as people",
+    fanNote: "A fan-made character, not the official product.",
     qqLater: "Bring your character to QQ, WeChat, Telegram…",
     qqLaterHint:
       "Start with a chat. Then pick an app under Connect apps: a scan or one or two values.",
@@ -635,19 +639,90 @@ function renderLanguage() {
   if (!saving)
     $("save").textContent = t(state.configured ? "saveAgain" : "saveStart");
 }
+const characterSpec = (id) => catalog.characters.find((c) => c.id === id);
+const portraitOf = (id) => characterSpec(id)?.avatar || "";
+// An avatar is a letter, or a portrait sprite of four square frames side by
+// side (idle, blink, talk, think) that the stylesheet animates.
+function avatarParts(node) {
+  if (node.querySelector(".face")) return node;
+  const letter = document.createElement("span");
+  letter.className = "letter";
+  const face = document.createElement("span");
+  face.className = "face";
+  const sprite = document.createElement("span");
+  sprite.className = "sprite";
+  face.append(sprite);
+  node.prepend(letter, face);
+  // Each avatar blinks on its own clock, so two never blink together.
+  node.style.setProperty("--blink-period", `${(4.6 + Math.random()).toFixed(2)}s`);
+  node.style.setProperty("--blink-delay", `${(-Math.random() * 5).toFixed(2)}s`);
+  return node;
+}
+function paintAvatar(node, src, name) {
+  avatarParts(node);
+  node.classList.toggle("portrait", Boolean(src));
+  node.querySelector(".letter").textContent = src ? "" : Array.from(name)[0] || "";
+  node.querySelector(".sprite").style.backgroundImage = src ? `url("${src}")` : "";
+}
+function previewPortrait() {
+  const id = $("character").value || state.character;
+  return portraitOf(id === "custom" ? state.avatar : id);
+}
 function updateNames() {
   const name =
     $("character-name").value.trim() || state.name || defaultName();
   $("preview-name").textContent = name;
   $("chat-name").textContent = state.name || name;
-  // Avatars show the first character of the name.
-  $("preview-avatar").textContent = Array.from(name)[0];
+  const preview = previewPortrait();
+  paintAvatar($("preview-avatar"), preview, name);
+  $("fan-note").hidden = !preview;
   for (const id of ["chat-avatar", "empty-avatar"])
-    $(id).textContent = Array.from(state.name || name)[0];
+    paintAvatar($(id), portraitOf(state.avatar), state.name || name);
   $("chat-greeting").textContent = t("greeting", { name: state.name || name });
   $("platforms-title").textContent = t("platformsTitle", {
     name: state.name || name,
   });
+  syncTrio();
+}
+// The characters with a portrait, as round buttons under the sample.
+function buildTrio() {
+  const row = $("trio-row");
+  row.replaceChildren();
+  for (const item of catalog.characters.filter((c) => c.avatar)) {
+    const button = avatarParts(document.createElement("button"));
+    button.type = "button";
+    button.className = "avatar portrait trio-pick";
+    button.dataset.character = item.id;
+    button.querySelector(".sprite").style.backgroundImage = `url("${item.avatar}")`;
+    button.addEventListener("click", () => {
+      $("character").value = item.id;
+      $("character").dispatchEvent(new Event("change"));
+    });
+    row.append(button);
+  }
+  $("trio").hidden = !row.children.length;
+}
+function syncTrio() {
+  for (const button of $("trio-row").children) {
+    const item = characterSpec(button.dataset.character);
+    button.setAttribute("aria-label", pick(item.name).split(/[:：]/)[0].trim());
+    button.setAttribute("aria-pressed", String($("character").value === item.id));
+  }
+}
+// A name nobody chose (empty, the default, or a character's own) follows
+// the character; a typed one stays.
+function characterChanged() {
+  const field = $("character-name");
+  const current = field.value.trim();
+  const chosen = characterSpec($("character").value);
+  if (
+    chosen &&
+    (!current ||
+      current === defaultName() ||
+      catalog.characters.some((c) => c.defaultName === current))
+  )
+    field.value = chosen.defaultName || defaultName();
+  updateNames();
 }
 function characterOptions() {
   const chars = [...catalog.characters];
@@ -659,7 +734,8 @@ function characterOptions() {
 function populate() {
   options($("provider"), catalog.providers, state.provider);
   characterOptions();
-  $("character-name").value = state.name || defaultName();
+  $("character-name").value =
+    state.name || characterSpec(state.character)?.defaultName || defaultName();
   $("api-key").value = "";
   $("api-key").type = "password";
   $("show-key").textContent = t("show");
@@ -1548,6 +1624,20 @@ function bubble(text, kind) {
   $("messages").scrollTop = $("messages").scrollHeight;
   return node;
 }
+let talkTimer = null;
+// The chat avatar thinks while a reply is on its way, then talks for a
+// while that grows with the reply.
+function avatarMood(mood, length = 0) {
+  const node = $("chat-avatar");
+  clearTimeout(talkTimer);
+  node.classList.toggle("thinking", mood === "thinking");
+  node.classList.toggle("talking", mood === "talking");
+  if (mood === "talking")
+    talkTimer = setTimeout(
+      () => node.classList.remove("talking"),
+      Math.min(3200, Math.max(900, 45 * length)),
+    );
+}
 async function send(text, repeat = false) {
   if (chatting || !text.trim()) return;
   chatting = true;
@@ -1556,11 +1646,14 @@ async function send(text, repeat = false) {
   $("message").value = "";
   if (!repeat) bubble(text, "user");
   const pending = bubble(t("thinking"), "bot pending");
+  avatarMood("thinking");
   try {
     const value = await api("chat", { text });
     pending.textContent = value.reply || t("noReply");
     pending.classList.remove("pending");
+    avatarMood(value.reply ? "talking" : "", Array.from(value.reply || "").length);
   } catch (error) {
+    avatarMood("");
     pending.textContent = t(error.message);
     pending.className = "bubble failed";
     const retry = document.createElement("button");
@@ -1600,6 +1693,7 @@ $("language").addEventListener("change", async () => {
 $("provider").addEventListener("change", () => providerChanged());
 $("model").addEventListener("input", freeNoteChanged);
 $("character-name").addEventListener("input", updateNames);
+$("character").addEventListener("change", characterChanged);
 $("show-key").addEventListener("click", async () => {
   try {
     if ($("api-key").type === "password") {
@@ -1722,6 +1816,7 @@ $("persona-save").addEventListener("click", async () => {
     personaEdited();
     // The file is now the user's own, so a saved form must not replace it.
     characterOptions();
+    updateNames();
     renderStatus();
     toast(t("personaSaved"));
   } catch (error) {
@@ -1891,6 +1986,10 @@ $("exit").addEventListener("click", async () => {
   }
   try {
     [state, catalog] = await Promise.all([api("state"), api("catalog")]);
+    // Loaded once up front, so switching characters never shows an empty circle.
+    for (const item of catalog.characters)
+      if (item.avatar) new Image().src = item.avatar;
+    buildTrio();
     // With no choice saved, the page speaks the language the character was set up in.
     if (!storedLang() && state.lang) {
       lang = state.lang;

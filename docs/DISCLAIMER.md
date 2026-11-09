@@ -58,6 +58,18 @@ mautrix and others) accept liability for a lost or restricted account.
   seriously. The admin can make it forget a note (`<name>, forget ...`), and
   everything it stores is in its home folder (see below).
 
+## The ChatGPT, DeepSeek and Claude characters
+
+These three ready characters are fan-made personifications. ChatGPT, DeepSeek
+and Claude are trademarks of OpenAI, DeepSeek and Anthropic respectively.
+personagent is not affiliated with or endorsed by any of them. The portraits
+are original illustrations; they borrow a colour or a motif, such as a whale
+or a starburst, but none of the companies' logos.
+
+The character runs on whichever model service you pick, not on those products
+unless you pick one of them. Asked whether it is the real one, it says it is
+not.
+
 ## What your model provider sees
 
 Each reply sends the model provider a prompt made of the persona, recent
