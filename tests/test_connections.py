@@ -119,3 +119,20 @@ def test_the_slack_guide_creates_an_app_with_socket_mode_and_what_the_adapter_re
     assert {"app_mention", "message.im", "message.channels"} <= set(
         manifest["settings"]["event_subscriptions"]["bot_events"])
     assert {"chat:write", "app_mentions:read", "im:history"} <= set(manifest["oauth_config"]["scopes"]["bot"])
+
+
+@pytest.mark.parametrize("kind", ["mattermost", "misskey", "kook", "satori"])
+def test_each_platform_says_where_its_values_come_from_in_every_page_language(kind):
+    import json
+
+    from persona_agent import welcome
+
+    item = conn.platform(kind)
+    assert all(item.note) and len(item.steps) >= 3
+    assert item.guide.startswith("https://")
+    english = [item.note[0], *(step[0] for step in item.steps)]
+    for code in welcome.PAGE_LANGUAGES:
+        page = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))
+        missing = [text for text in english if text not in page["catalog"]]
+        assert not missing, (code, missing)
+        assert conn.say(item.note, code) != item.note[0]

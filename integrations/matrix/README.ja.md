@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · 日本語 · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-このコネクターは [personagent](https://github.com/wangkant/personagent) を Matrix のルームに、さらに [mautrix ブリッジ](https://docs.mau.fi/bridges/)を通じて WhatsApp、Signal、Messenger、Instagram、Google Messages などのネットワークに置きます。Matrix とブリッジはサードパーティのソフトウェアで、自分で運用します。personagent がローカルページから接続するプラットフォームには必要ありません。
+このコネクターは [personagent](https://github.com/wangkant/personagent) を Matrix のルームに、さらに [mautrix ブリッジ](https://docs.mau.fi/bridges/)を通じて WhatsApp、Signal、Messenger、Instagram、Google Messages などのネットワークに置きます。ブリッジはサードパーティのソフトウェアで、自分で管理するホームサーバー上で運用します。personagent がローカルページから接続するプラットフォームには必要ありません。
+
+personagent はこのコネクターを使わずに Matrix に直接接続することもできます。ローカルページの「プラットフォーム連携」画面、または `personagent connect matrix` で、ホームサーバーのアドレス、ボットアカウントのアクセストークン、ご自身の Matrix ID を入力します。この組み込みの接続はエンドツーエンド暗号化のないルームだけを読み、その Matrix ID から招待したルームにだけ参加します。ボットが暗号化されたルームを読む必要がある場合、ブリッジのポータルや他の人に招待されたルームで返信する必要がある場合、またはルームと人を許可リストで指定したい場合は、代わりにこのコネクターを使ってください。
 
 コネクターは [matrix-nio](https://github.com/matrix-nio/matrix-nio) で作られた小さな独立プロセスで、libolm なしでエンドツーエンド暗号化に対応します。普通の Matrix ユーザーとしてホームサーバーにログインし、許可されたルームの各メッセージをプラットフォーム中立のイベントとしてエージェントの `POST /v1/events` に転送し（[docs/connectors.md](../../docs/connectors.ja.md)）、エージェントの返信をルームに投稿します。エージェントのアウトボックスもポーリングするので、予定された話しかけ、追加の質問、言い訳も Matrix に届きます。
 
@@ -100,7 +102,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 
 ## ブリッジ：WhatsApp、Signal、Messenger、Instagram など
 
-mautrix ブリッジは別のネットワークにそのネットワークのアカウントとしてログインし、チャットをポータルと呼ばれる Matrix ルームにミラーします。向こう側の全員が `@whatsapp_4912345:example.org` のようなゴーストユーザーとして Matrix に現れます。ブリッジにログインしているのがボットの Matrix アカウントなら、ペルソナはそのネットワークに住むことになります。WhatsApp の連絡先がペルソナの番号に書き込むと、ブリッジがメッセージをポータルルームに投稿し、このコネクターが転送し、返信は同じ道を戻ります。
+mautrix ブリッジは別のネットワークにそのネットワークのアカウントとしてログインし、チャットをポータルと呼ばれる Matrix ルームにミラーします。向こう側の全員が `@whatsapp_4912345:example.org` のようなゴーストユーザーとして Matrix に現れます。ブリッジにログインしているのがボットの Matrix アカウントなら、ペルソナはそのネットワーク上で活動します。WhatsApp の連絡先がペルソナの番号に書き込むと、ブリッジがメッセージをポータルルームに投稿し、このコネクターが転送し、返信は同じ道を戻ります。
 
 | ネットワーク | ブリッジ |
 |---|---|
@@ -108,8 +110,8 @@ mautrix ブリッジは別のネットワークにそのネットワークのア
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger、Instagram の DM | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages（Android スマートフォン経由の RCS と SMS） | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice、LinkedIn、Twitter/X の DM、Bluesky の DM、Google Chat、Zulip、IRC、iMessage | ほかの [mautrix ブリッジ](https://github.com/mautrix) |
-| Telegram、Discord、Slack | mautrix ブリッジはありますが、これらのネットワークには公式のボット API があります。personagent は Telegram と Discord に自分で接続し、Slack にはローカルページが動かす AstrBot 経由で接続します。 |
+| Google Voice、LinkedIn、Twitter/X の DM、Bluesky の DM、Google Chat、iMessage | ほかの [mautrix ブリッジ](https://github.com/mautrix) |
+| Telegram、Discord、Slack、Zulip、IRC | ブリッジはありますが、これらのネットワークにはブリッジなしで接続できます。personagent は Telegram、Discord、Zulip、IRC に自分で接続し、Slack にはローカルページが動かす AstrBot 経由で接続します。 |
 
 セットアップ手順：
 
@@ -124,7 +126,7 @@ mautrix ブリッジは別のネットワークにそのネットワークのア
    MATRIX_GROUPS=!groupPortal:example.org
    ```
 
-   `MATRIX_IGNORE_USERS` の 2 番目のエントリーは、ペルソナ自身の番号のブリッジ上のゴーストです。[ダブルパペッティング](https://docs.mau.fi/bridges/general/double-puppeting.html)がないと、ペルソナのスマートフォンで打ったメッセージがそのゴーストから Matrix に届き、ボットが自分に答えてしまいます。`MATRIX_GROUPS=*` はボットがいるすべてのグループポータルを転送し、personagent は `ACCESS_GROUPS` に `matrix:!room:server` として載っているルームだけで答えます。ここにルーム ID を書けば、コネクター側でルームを選べます。
+   `MATRIX_IGNORE_USERS` の 2 番目のエントリーは、ペルソナ自身の番号のブリッジ上のゴーストです。[ダブルパペッティング](https://docs.mau.fi/bridges/general/double-puppeting.html)がないと、ペルソナのスマートフォンで打ったメッセージがそのゴーストから Matrix に届き、ボットが自分自身のメッセージに返信することになります。`MATRIX_GROUPS=*` はボットがいるすべてのグループポータルを転送し、personagent は `ACCESS_GROUPS` に `matrix:!room:server` として載っているルームだけで答えます。ここにルーム ID を書けば、コネクター側でルームを選べます。
 
 ### パペッティング
 

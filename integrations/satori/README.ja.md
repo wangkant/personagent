@@ -5,7 +5,7 @@
 
 このコネクターは [personagent](https://github.com/wangkant/personagent) を [Satori](https://satori.chat) サーバーにつなぎます。Satori はクロスプラットフォームのチャットプロトコルです。[Koishi](https://koishi.chat)（`server-satori` プラグイン付き）、Chronocat、LLOneBot などのサーバーがチャットプラットフォームにログインし、このようなクライアントは 1 本の websocket ですべてのログインのすべてのメッセージを受け取ります。そのため、1 つのコネクタープロセスで、サーバーにアダプターがあるすべてのプラットフォームにペルソナを置けます。
 
-Satori と Koishi はサードパーティのソフトウェアです。personagent が自分で接続する QQ、WeChat、Telegram、Discord や、ローカルページが AstrBot 経由で設定するプラットフォームには必要ありません。すでに Koishi を動かしている場合や、Koishi でしか届かないプラットフォームを使いたい場合に、このコネクターを使ってください。
+Satori と Koishi はサードパーティのソフトウェアです。personagent が自分で接続する QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat や、ローカルページが AstrBot 経由で設定するプラットフォームには必要ありません。すでに Koishi を動かしている場合や、Koishi でしか届かないプラットフォームを使いたい場合に、このコネクターを使ってください。
 
 コネクターは許可された各メッセージを中立イベントとしてエージェントの `POST /v1/events` に転送し（[docs/connectors.md](../../docs/connectors.ja.md)）、返信を Satori 経由で送り返します。エージェントのアウトボックスも取得するので、予定された話しかけ、追加の質問、言い訳もチャットに届きます。
 
@@ -15,7 +15,7 @@ Satori と Koishi はサードパーティのソフトウェアです。personag
 
 1. **Koishi。** デスクトップランチャーまたは `npm init koishi@latest` で Koishi をインストールします。コンソールで `adapter-telegram` や `adapter-discord` などプラットフォームのアダプターを追加して設定し、ボットがオンラインであることを確認します。`server` と `server-satori` プラグインを有効にします。すると Koishi は `http://127.0.0.1:5140/satori` で Satori を提供します。このマシン以外からそのポートに届く場合は、`server-satori` に `token` を設定してください。
 
-   Koishi はほかのプラグインも動かし続けます。チャットモデルや返信プラグインなど、メッセージに答えるものがあると、ペルソナと一緒に答えてしまい、コネクターでは黙らせられません。そのプラグインを無効にするか、転送する会話の対象外にしてください。
+   Koishi はほかのプラグインも動かし続けます。チャットモデルや返信プラグインなど、メッセージに答えるものがあると、ペルソナと一緒に返信し、コネクターではそれを止められません。そのプラグインを無効にするか、転送する会話の対象外にしてください。
 
 2. **エージェント。** personagent を実行します（`personagent run`、README を参照）。コネクターとエージェントが別のホストにある場合は、エージェントの `.env` に `CONNECTOR_TOKEN` を設定し、エージェントを HTTPS の背後に置きます。1 台のホストでも、プロキシやトンネルを追加する前にトークンを設定してください。
 

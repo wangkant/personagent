@@ -5,9 +5,18 @@ English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) ·
 This connector puts [personagent](https://github.com/wangkant/personagent)
 in Matrix rooms, and through [mautrix bridges](https://docs.mau.fi/bridges/)
 on WhatsApp, Signal, Messenger, Instagram, Google Messages and other
-networks. Matrix and the bridges are third-party software that you run
-yourself. personagent does not need them for the platforms it connects from
-its local page.
+networks. The bridges are third-party software that you run yourself, on a
+homeserver you control. personagent does not need them for the platforms it
+connects from its local page.
+
+personagent also connects Matrix itself, without this connector: the
+**Connect apps** view of its local page, or `personagent connect matrix`,
+asks for the homeserver address, the bot account's access token and your
+own Matrix ID. That built-in connection reads only rooms without end-to-end
+encryption, and joins only rooms to which you invite the bot from that
+Matrix ID. Use this connector instead when the bot must read encrypted
+rooms, answer in bridge portals or in rooms to which other people invite
+it, or follow allowlists of rooms and people.
 
 The connector is a small standalone process built on
 [matrix-nio](https://github.com/matrix-nio/matrix-nio), which supports
@@ -173,8 +182,8 @@ way.
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger, Instagram DMs | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages (RCS and SMS through an Android phone) | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice, LinkedIn, Twitter/X DMs, Bluesky DMs, Google Chat, Zulip, IRC, iMessage | The other [mautrix bridges](https://github.com/mautrix) |
-| Telegram, Discord, Slack | mautrix bridges exist, but these networks have official bot APIs. personagent connects Telegram and Discord itself, and Slack through the AstrBot its local page runs. |
+| Google Voice, LinkedIn, Twitter/X DMs, Bluesky DMs, Google Chat, iMessage | The other [mautrix bridges](https://github.com/mautrix) |
+| Telegram, Discord, Slack, Zulip, IRC | Bridges exist, but these networks can be reached without one. personagent connects Telegram, Discord, Zulip and IRC itself, and Slack through the AstrBot its local page runs. |
 
 To set one up:
 

@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import binascii
 from concurrent.futures import ThreadPoolExecutor
+import contextlib
 from contextlib import asynccontextmanager
 import functools
+import hashlib
 import importlib
 import json
 import os
@@ -32,8 +36,9 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__, access, candidates, home as homes, langs
 from . import connections as conn
-from . import direct
+from . import direct  # noqa: F401  tests reach the platforms through welcome.direct
 from .direct import base as direct_base
+from . import direct_setup
 from . import setup_wizard as sw
 from . import updates
 from . import window as appwindow
@@ -61,27 +66,31 @@ REJECT_WINDOW = 12
 # How long a direct platform may take to accept a new session.
 DIRECT_WINDOW = 40
 # Refusals a direct platform names, which the page explains one by one.
-NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_content_intent_off",
-                  "intents_not_allowed", "session_expired", "bot_offline", "bot_banned",
-                  "account_deactivated", "insecure_address", "homeserver_invalid", "owner_invalid",
-                  "channel_not_found", "nick_in_use", "nick_invalid", "password_rejected",
-                  "sasl_required", "long_poll_off", "message_events_off", "token_rights_missing",
-                  "not_a_bot", "wrong_bot_type", "not_zulip_site"}
+NAMED_REFUSALS = direct_setup.NAMED_REFUSALS
 # The Activity view reads the character service's own API with the token it
 # keeps in its runtime folder; these are the decisions the view can make.
 ACTIVITY_ACTIONS = frozenset({"promote", "replace", "reject", "rollback"})
 ACTIVITY_RECENT = 40
 CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
+# The page's own connector: the outbox hands it only what is for this page's chat.
+PAGE_CONNECTOR = "local-welcome"
+CHAT_KEPT = 50
+# A picture the character sent, stored by its content hash; nothing else is served.
+PICTURE_NAME = re.compile(r"[0-9a-f]{40}\.(png|jpg|gif|webp)")
+PICTURE_TYPES = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+MAX_PICTURE = 8 * 1024 * 1024
+# Seconds between outbox pulls while the character service is not running.
+OUTBOX_IDLE_S = 3.0
 
 
 def _connector_type():
     return direct_base.sdk().Connector
 
 
-async def send_chat_event(url: str, token: str, conversation: str, text: str, *,
-                          connector_id: str = "local-welcome", timeout_s: float = 120,
-                          **fields) -> str:
-    """One message in the owner's one-to-one chat; the text of what comes back."""
+async def send_chat_items(url: str, token: str, conversation: str, text: str, *,
+                          connector_id: str = PAGE_CONNECTOR, timeout_s: float = 120,
+                          **fields) -> list:
+    """One message in the owner's one-to-one chat; the reply items that come back."""
     async with httpx.AsyncClient(trust_env=False) as client:
         connector = _connector_type()(url, token, connector_id=connector_id,
                                       timeout_s=timeout_s, client=client)
@@ -93,8 +102,26 @@ async def send_chat_event(url: str, token: str, conversation: str, text: str, *,
             "text": text, "segments": [{"type": "text", "text": text}], "prefiltered": True,
             **fields,
         })
-    return "\n".join(str(item.get("text", "")) for item in response.get("replies", [])
-                     if item.get("type") == "text")
+    return [item for item in response.get("replies") or [] if isinstance(item, dict)]
+
+
+async def send_chat_event(url: str, token: str, conversation: str, text: str, **kwargs) -> str:
+    """One message in the owner's one-to-one chat; the text of what comes back."""
+    items = await send_chat_items(url, token, conversation, text, **kwargs)
+    return "\n".join(str(item.get("text", "")) for item in items if item.get("type") == "text")
+
+
+def _picture_kind(data: bytes) -> str:
+    """The file extension of an image the page can show, or ""."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
 
 
 class Workspace:
@@ -104,6 +131,8 @@ class Workspace:
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="personagent-setup")
         self._lock = threading.RLock()
         self._chat_lock = asyncio.Lock()
+        self._forgetting = False
+        self._pulling = False
         self._future = None
         self._closed = False
         self._cancelled = False
@@ -112,9 +141,17 @@ class Workspace:
         # A platform whose saved state belongs to a login that just ended.
         self._stale_state = ""
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
+        self._pictures = self._history_path.with_name("chat-pictures")
         saved = sw._read_json(self._history_path)
         self._conversation = str(saved.get("conversation") or secrets.token_hex(12))[:64]
-        self._history = saved.get("messages", [])[-50:]
+        self._history = [m for m in saved.get("messages", []) if isinstance(m, dict)][-CHAT_KEPT:]
+        self._seq = int(saved.get("seq") or 0) if str(saved.get("seq") or 0).isdigit() else 0
+        for message in self._history:
+            # An earlier release kept no numbers; each message needs one to be fetched after.
+            if not isinstance(message.get("seq"), int):
+                self._seq += 1
+                message["seq"] = self._seq
+            self._seq = max(self._seq, message["seq"])
         self.job = {"state": "idle", "stage": "", "error": ""}
 
     @property
@@ -329,18 +366,197 @@ class Workspace:
             self._restart_agent()
             return self.summary()
 
-    def history(self) -> dict:
-        return {"messages": list(self._history)}
+    def history(self, after: int | None = None) -> dict:
+        """The chat as the page shows it; with `after`, only what came since that number.
+        `chat` changes when a new chat starts, so the page knows to start over."""
+        messages = [dict(m) for m in self._history if after is None or m["seq"] > after]
+        return {"messages": messages, "chat": self._chat_tag(), "last": self._seq, "kept": CHAT_KEPT}
+
+    def _chat_tag(self) -> str:
+        return hashlib.sha256(self._conversation.encode()).hexdigest()[:12]
+
+    def _page_key(self) -> str:
+        return f"private:{access.PAGE_PLATFORM}:{self._conversation}"
 
     def reset_chat(self) -> None:
         self._conversation = secrets.token_hex(12)
         self._history = []
         self._save_chat()
 
+    def _append(self, entries: list[dict]) -> list[dict]:
+        for entry in entries:
+            self._seq += 1
+            entry["seq"] = self._seq
+        self._history = (self._history + entries)[-CHAT_KEPT:]
+        return entries
+
+    def _entry(self, item: dict) -> dict | None:
+        """A reply item as a chat message: text, or a picture stored for the page
+        to show; None for what the page cannot show."""
+        kind = item.get("type")
+        if kind == "text" and str(item.get("text") or "").strip():
+            return {"role": "assistant", "text": str(item["text"])}
+        if kind == "image":
+            name = self._keep_picture(item.get("b64"))
+            if name:
+                return {"role": "assistant", "picture": name}
+        return None
+
+    def _entries(self, items: list) -> list[dict]:
+        return [entry for entry in map(self._entry, items) if entry]
+
+    def _keep_picture(self, encoded) -> str:
+        """Store a picture the character sent; its file name, or "" when it is not one."""
+        text = str(encoded or "")
+        if not text or len(text) > MAX_PICTURE * 4 // 3 + 4:
+            return ""
+        try:
+            data = base64.b64decode(text, validate=True)
+        except (binascii.Error, ValueError):
+            return ""
+        kind = _picture_kind(data)
+        if not kind:
+            return ""
+        name = f"{hashlib.sha256(data).hexdigest()[:40]}.{kind}"
+        path = self._pictures / name
+        try:
+            self._pictures.mkdir(parents=True, exist_ok=True)
+            if not self._own_folder() or path.is_symlink():
+                return ""
+            if not path.is_file():
+                # Exclusive: never through a link or file that appeared since the check.
+                with open(path, "xb") as file:
+                    file.write(data)
+        except FileExistsError:
+            return name if path.is_file() and not path.is_symlink() else ""
+        except OSError:
+            return ""
+        return name
+
+    def picture(self, name: str) -> Path | None:
+        """A picture a message in this chat shows; None for any other name, link or missing file."""
+        if not PICTURE_NAME.fullmatch(str(name or "")) or not any(
+                m.get("picture") == name for m in self._history):
+            return None
+        folder = self._pictures
+        path = folder / name
+        try:
+            # Resolving follows links and junctions: one leading out is refused.
+            if not path.is_file() or not self._own_folder() or path.resolve() != folder.resolve() / name:
+                return None
+        except OSError:
+            return None
+        return path
+
+    def _own_folder(self) -> bool:
+        """The pictures folder exists and is not a link to another place."""
+        folder = self._pictures
+        try:
+            return folder.is_dir() and folder.resolve() == folder.parent.resolve() / folder.name
+        except OSError:
+            return False
+
+    def _prune_pictures(self) -> None:
+        """Pictures no message shows any more are removed with the messages."""
+        kept = {m.get("picture") for m in self._history}
+        try:
+            stored = list(self._pictures.iterdir()) if self._own_folder() else []
+        except OSError:
+            return
+        for path in stored:
+            if PICTURE_NAME.fullmatch(path.name) and path.name not in kept and not path.is_symlink():
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
     def _save_chat(self) -> None:
-        atomic_write_text(self._history_path, json.dumps({"conversation": self._conversation,
+        atomic_write_text(self._history_path, json.dumps({"conversation": self._conversation, "seq": self._seq,
                                                         "messages": self._history}, ensure_ascii=False))
+        self._prune_pictures()
         self._name_owner()
+
+    def take_delivery(self, delivery: dict) -> tuple[str, int]:
+        """A message the character sends on its own (an outbox delivery) joins this chat."""
+        if str(delivery.get("conversation_key") or "") != self._page_key():
+            # A chat that has since been replaced: nothing is shown for it again.
+            return "unsupported", 0
+        if self._forgetting:
+            # The chat is being forgotten and replaced: shown now, it would vanish yet count as sent.
+            return "failed", 0
+        items = delivery.get("items") or []
+        entries = []
+        # An ack counts the leading items that went out, so showing stops at the first that cannot be shown.
+        for item in items:
+            entry = self._entry(item) if isinstance(item, dict) else None
+            if entry is None:
+                break
+            entries.append(entry)
+        if entries:
+            self._append(entries)
+            self._save_chat()
+        if not entries:
+            return "failed", 0
+        return ("sent" if len(entries) == len(items) else "partial"), len(entries)
+
+    async def outbox_loop(self) -> None:
+        """Collect what the character sends to this page's chat after a reply,
+        or on its own, while the character service runs. Only deliveries
+        addressed to this page's connector are ever handed to it."""
+        async def take(delivery: dict) -> tuple[str, int]:
+            return self.take_delivery(delivery)
+
+        # One loop per page: a second pull under the same connector would settle the first one's deliveries.
+        if self._pulling:
+            return
+        self._pulling = True
+        connector, address, process, wait, resume = None, None, None, 0.0, 0.0
+        try:
+            async with httpx.AsyncClient(trust_env=False) as client:
+                while not self._closed:
+                    if wait:
+                        await asyncio.sleep(wait)
+                    wait = OUTBOX_IDLE_S
+                    try:
+                        token = self.config().get("CONNECTOR_TOKEN", "")
+                        if not self.services.running("agent") or not token:
+                            continue
+                        current = (self.services.agent_url, token)
+                        agent = self.services.processes.get("agent")
+                        if connector is None or current != address or agent is not process:
+                            # A service started since has a new outbox: pull it at once.
+                            connector, address, process, resume = _connector_type()(
+                                *current, connector_id=PAGE_CONNECTOR, client=client), current, agent, 0.0
+                    except Exception:
+                        # Unreadable settings (a bad port, say) may be fixed while the page runs.
+                        connector = None
+                        continue
+                    if time.monotonic() < resume:
+                        continue
+                    started = time.monotonic()
+                    try:
+                        answer = await connector.pull_once(wait_s=25)
+                    except httpx.HTTPStatusError as error:
+                        # 404: the outbox is switched off in this service's settings.
+                        resume = time.monotonic() + (60.0 if error.response.status_code == 404 else 5.0)
+                        continue
+                    except Exception:
+                        # Most often a service still starting; cheap to ask again soon.
+                        wait = 1.0
+                        continue
+                    received = time.monotonic()
+                    deliveries = answer.get("deliveries") or []
+                    try:
+                        for delivery in deliveries:
+                            # Acknowledged on the next pull, as every connector does.
+                            await connector._deliver_one(delivery, take, received)
+                    except Exception:
+                        # Unacknowledged, it counts as not sent; the next pull goes on.
+                        pass
+                    # An answer that came back at once with nothing: the service did not hold the pull.
+                    wait = 0.0 if deliveries or received - started >= 1.0 else 1.0
+        finally:
+            self._pulling = False
 
     def _runtime(self) -> Path:
         # Where the service keeps its state, read the way its own process gets
@@ -369,27 +585,34 @@ class Workspace:
 
     async def forget_chat(self) -> dict:
         """Forget what the character noted in this page's chat, then start a new one."""
-        chat = f"private:{access.PAGE_PLATFORM}:{self._conversation}"
         async with self._chat_lock:
-            await asyncio.to_thread(self.services.start_agent)
-            raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
-            if raw is None:
-                raise ValueError("activity_unavailable")
-            if raw.get("off"):
-                # Memory is read and forgotten through the Activity data, which is switched off.
-                raise ValueError("forget_needs_activity")
-            # Each note by its id, then the core note, which has none.
-            notes = [(str(m.get("conv") or chat), str(m.get("id") or "")) for m in raw.get("memories") or []]
-            forgotten = 0
-            for conv, note in [n for n in notes if n[1]] + ([(chat, "")] if raw.get("core_note") else []):
-                try:
-                    await self._activity_call("POST", "/api/dashboard/memory/forget",
-                                              json={"conv": conv, "note": note})
-                    forgotten += 1
-                except ValueError:
-                    pass  # already gone
-            self.reset_chat()
-            return {"ok": True, "forgotten": forgotten}
+            chat = self._page_key()
+            self._forgetting = True
+            try:
+                return await self._forget(chat)
+            finally:
+                self._forgetting = False
+
+    async def _forget(self, chat: str) -> dict:
+        await asyncio.to_thread(self.services.start_agent)
+        raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
+        if raw is None:
+            raise ValueError("activity_unavailable")
+        if raw.get("off"):
+            # Memory is read and forgotten through the Activity data, which is switched off.
+            raise ValueError("forget_needs_activity")
+        # Each note by its id, then the core note, which has none.
+        notes = [(str(m.get("conv") or chat), str(m.get("id") or "")) for m in raw.get("memories") or []]
+        forgotten = 0
+        for conv, note in [n for n in notes if n[1]] + ([(chat, "")] if raw.get("core_note") else []):
+            try:
+                await self._activity_call("POST", "/api/dashboard/memory/forget",
+                                          json={"conv": conv, "note": note})
+                forgotten += 1
+            except ValueError:
+                pass  # already gone
+        self.reset_chat()
+        return {"ok": True, "forgotten": forgotten}
 
     def start_job(self, action: str, kind: str = "", values: dict | None = None) -> None:
         """Run `action` in the background: "start", or "scan", "connect" or
@@ -487,12 +710,7 @@ class Workspace:
         self.job = {**self.job, "stage": stage}
 
     def _connect_plugin(self) -> None:
-        data = AstrBotInstallation(self.home).root / "data"
-        values = {}
-        # OneBot (NapCat) carries QQ numbers, which the agent reads bare.
-        sw.connect_astrbot(self.env, values, data_dir=data, qq="aiocqhttp" in conn.connected(data),
-                           groups=None, dm_users=None)
-        sw.write_env(self.env, values)
+        direct_setup.connect_plugin(self.home)
 
     def _install(self) -> Path:
         run = functools.partial(self.services.run, "install",
@@ -518,57 +736,29 @@ class Workspace:
         self._add(self._install(), spec, values)
 
     def _disconnect(self, spec: conn.Platform) -> None:
-        data = AstrBotInstallation(self.home).root / "data"
-        conn.remove_entry(data, spec.kind)
-        self._connect_plugin()
-        sw.write_astrbot_config(data, conn.scope(sw.read_astrbot_config(data), spec.kind, allow=False))
+        direct_setup.astrbot_disconnect(self.home, spec)
 
     # ---- platforms personagent connects itself
 
     def _store_direct(self, spec: conn.Platform, values: dict) -> None:
         self._stale_state = spec.kind
-        direct_base.save_credentials(self.home, spec.kind, values)
-        self._release_from_astrbot(spec)
-
-    def _release_from_astrbot(self, spec: conn.Platform) -> None:
-        """One bot cannot be served twice: drop an AstrBot connection of the
-        same platform, made before personagent connected it itself."""
-        if spec.kind in conn.connected(AstrBotInstallation(self.home).root / "data"):
-            self._disconnect(spec)
+        if direct_setup.store(self.home, spec, values):
             self._astrbot_changed = True
 
     def _connect_direct(self, spec: conn.Platform, values: dict) -> None:
-        flow = direct.sign_in_for(spec.kind) if spec.sign_in else None
-        if flow is not None:
+        if spec.sign_in:
             # The fields name the app; the sign-in adds the tokens, then the whole is checked.
-            values = self._sign_in(flow, values)
+            values = self._sign_in(spec, values)
             self._stage("check")
-        platform = direct.platform_for(spec.kind, values, self.home)
-
-        async def check() -> None:
-            try:
-                await platform.check()
-            finally:
-                await platform.close()
-        try:
-            asyncio.run(check())
-        except direct_base.Refused as exc:
-            raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "platform_rejected") from None
-        except ConnectionError:
-            raise RuntimeError("network_failed") from None
+        direct_setup.check(self.home, spec, values)
         self._store_direct(spec, values)
 
     def _scan_direct(self, spec: conn.Platform) -> None:
-        flow = direct.sign_in_for(spec.kind)
-        if flow is None:
-            raise RuntimeError("platform_rejected")
-        self._store_direct(spec, self._sign_in(flow, {}))
+        self._store_direct(spec, self._sign_in(spec, {}))
 
-    def _sign_in(self, flow: tuple, values: dict) -> dict:
+    def _sign_in(self, spec: conn.Platform, values: dict) -> dict:
         """Run a platform's QR or link login, showing what it asks to show;
         the values to store."""
-        scan, failed = flow
-
         def show(content: str) -> None:
             import base64
             import io
@@ -579,33 +769,18 @@ class Workspace:
             self.job = {**self.job, "stage": "scan", "qrUrl": content,
                         "qrImage": "data:image/png;base64," + base64.b64encode(image.getvalue()).decode()}
 
-        async def login() -> dict:
-            async with httpx.AsyncClient() as client:
-                task = asyncio.create_task(scan(client, show, values))
-                while not task.done():
-                    if self._cancelled or self._closed:
-                        task.cancel()
-                        raise RuntimeError("cancelled")
-                    await asyncio.sleep(0.3)
-                return task.result()
-        try:
-            return asyncio.run(login())
-        except failed as exc:
-            # A login may name a refusal the page explains, such as an app it does not accept.
-            raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "scan_failed") from None
-        except (httpx.HTTPError, ValueError):
-            raise RuntimeError("network_failed") from None
+        return direct_setup.sign_in(spec, values, show, lambda: self._cancelled or self._closed)
 
     def _disconnect_direct(self, spec: conn.Platform) -> None:
-        direct_base.remove_credentials(self.home, spec.kind)
         self._stale_state = spec.kind
-        self._release_from_astrbot(spec)
+        if direct_setup.remove(self.home, spec):
+            self._astrbot_changed = True
 
     def _clear_stale_state(self) -> None:
         """Run between stopping and starting the direct process: the old
         process would otherwise write the ended login's state back."""
         if self._stale_state:
-            direct.state_path(self.home, self._stale_state).unlink(missing_ok=True)
+            direct_setup.clear_state(self.home, self._stale_state)
 
     def _await_direct(self, spec: conn.Platform) -> None:
         """Wait for the new session to be accepted; a refusal is rolled back."""
@@ -626,7 +801,9 @@ class Workspace:
     def cancel(self) -> None:
         self._cancelled = True
 
-    async def chat(self, text: str) -> dict:
+    async def chat(self, text: str, after: int | None = None) -> dict:
+        """Send `text`; the reply, and every message since `after` in order,
+        including what the character sent on its own meanwhile."""
         if not self.config().get("LLM_API_KEY"):
             raise ValueError("key_required")
         if not text.strip():
@@ -636,12 +813,29 @@ class Workspace:
         async with self._chat_lock:
             self._name_owner()
             await asyncio.to_thread(self.services.start_agent)
-            reply = await send_chat_event(self.services.agent_url, self.config().get("CONNECTOR_TOKEN", ""),
-                                          self._conversation, text)
-            self._history.extend([{"role": "user", "text": text}, {"role": "assistant", "text": reply}])
-            self._history = self._history[-50:]
+            # Recorded first, so a message sent on its own during the reply comes after it.
+            (said,) = self._append([{"role": "user", "text": text}])
+            try:
+                items = await send_chat_items(self.services.agent_url, self.config().get("CONNECTOR_TOKEN", ""),
+                                              self._conversation, text, capabilities=["outbox"],
+                                              # The outbox reaches only a conversation with a handle.
+                                              reply_handle=self._conversation)
+            except BaseException:
+                self._history = [m for m in self._history if m is not said]
+                with contextlib.suppress(OSError):
+                    self._save_chat()
+                raise
+            if any(item.get("reason") == "excuse" for item in items):
+                # The model failed: here the admin checks the setup, so it is reported, not chatted about.
+                self._history = [m for m in self._history if m is not said]
+                with contextlib.suppress(OSError):
+                    self._save_chat()
+                raise RuntimeError("the model did not answer")
+            self._append(self._entries(items))
             self._save_chat()
-            return {"reply": reply}
+            reply = "\n".join(str(i.get("text", "")) for i in items if i.get("type") == "text")
+            since = said["seq"] - 1 if after is None else after
+            return {"reply": reply, **self.history(since)}
 
     def _activity_token(self) -> str:
         try:
@@ -780,11 +974,15 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
 
     @asynccontextmanager
     async def lifespan(app):
+        later = asyncio.create_task(workspace.outbox_loop())
         try:
             if workspace.summary()["platforms"] and workspace.config().get("LLM_API_KEY"):
                 workspace.start_job("start")
             yield
         finally:
+            later.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await later
             for stop in app.state.closers:
                 await asyncio.to_thread(stop)
             await asyncio.to_thread(workspace.close)
@@ -816,7 +1014,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
             "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         return response
 
@@ -953,8 +1151,10 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/chat")
     async def chat(request: Request):
         payload = await body(request)
+        after = payload.get("after")
         try:
-            return await workspace.chat(str(payload.get("text") or ""))
+            return await workspace.chat(str(payload.get("text") or ""),
+                                        after if isinstance(after, int) and not isinstance(after, bool) else None)
         except ValueError:
             raise
         except Exception as error:
@@ -975,8 +1175,16 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         return await workspace.forget_chat()
 
     @app.get("/api/chat/history")
-    async def history():
-        return workspace.history()
+    async def history(after: int | None = None):
+        return workspace.history(after)
+
+    @app.get("/api/chat/picture/{name}")
+    async def chat_picture(name: str):
+        path = workspace.picture(name)
+        if path is None:
+            raise HTTPException(404)
+        # Not cached: a picture removed since must show as removed.
+        return FileResponse(path, media_type=PICTURE_TYPES[path.suffix[1:]])
 
     @app.get("/api/activity")
     async def activity():

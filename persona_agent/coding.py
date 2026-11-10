@@ -172,7 +172,7 @@ class Character:
         if answer.json().get("error") == "key_required":
             raise RuntimeError(NO_KEY)
         raise RuntimeError(f"{_name(self.home)} could not answer. The model service may be down; "
-                           f"see {_desktop(self.home) / 'agent.log'}, or run `personagent doctor`.")
+                           f"see {_desktop(self.home) / 'agent.log'}, or run `{sw.command('doctor', self.home)}`.")
 
     def character(self) -> str:
         path = self.home / "persona.txt"
@@ -300,7 +300,15 @@ def hook_main(argv: list[str] | None = None, prog: str = "personagent hook") -> 
     argparse.ArgumentParser(
         prog=prog, description=langs.term("A coding agent's Stop hook: reads the event on stdin and "
                                "lets the character react.")).parse_args(argv)
-    data = json.loads(sys.stdin.buffer.read() or b"{}")
+    try:
+        data = json.loads(sys.stdin.buffer.read() or b"{}")
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        # Exit 1, not 2: a Stop hook's 2 would keep the coding agent from stopping.
+        print(langs.term("The hook expects the coding agent's event as a JSON object on standard input."),
+              file=sys.stderr)
+        return 1
     home = homes.find_home()
     stamp = _desktop(home) / "coding-react.json"
     cooldown = int(sw.env_get(home / ".env", "CODING_REACT_COOLDOWN_S") or DEFAULT_REACT_COOLDOWN_S)

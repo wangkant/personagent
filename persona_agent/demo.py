@@ -243,11 +243,12 @@ _TEXT = {
         "memory_refused": "memory: nothing saved; notes keep facts, not instructions",
         "memory_saved": "memory: saved",
         "chain": "what the ledger recorded, in order (rows are only added, never edited):",
-        "chain_line": "{i}. {who} {verb} {said} - {strength}{tag}",
-        "verbs": {"rejection": "rejected", "correction": "corrected",
-                  "positive": "liked", "neutral": "moved on from"},
-        "verb_retry": "accepted the second try",
-        "verb_retry_moved": "moved on from the second try",
+        "chain_line": "{i}. {what} - {strength}{tag}",
+        # Whole sentences: a verb alone would share its key with a state such as "rejected".
+        "verbs": {"rejection": "{who} rejected {said}", "correction": "{who} corrected {said}",
+                  "positive": "{who} liked {said}", "neutral": "{who} moved on from {said}"},
+        "verb_retry": "{who} accepted the second try {said}",
+        "verb_retry_moved": "{who} moved on from the second try {said}",
         "dismissed_tag": ", dismissed",
         "fix": 'fix: "{a}" -> "{b}"',
         "no_fix": "no fix was proposed: the judge did not accept any reaction",
@@ -274,7 +275,7 @@ _TEXT = {
         "would_say": "{name} would say: {reply}",
         "would_pass": "{name} would stay quiet",
         "troll_sum": ("ledger: {events} {reactions} recorded, {dismissed} dismissed; "
-                      "{proposals} {proposal_word} proposed, {promoted} in use."),
+                      "{proposals} {proposal_word} drafted, {promoted} in use."),
         "unchanged": "Nothing {name} says has changed.",
         "stopped": "The demo stopped: the model did not answer. {why}",
         "needs_key": "--online needs a model key. Run {init} to set one, or leave --online off.",
@@ -320,11 +321,11 @@ _TEXT = {
         "memory_refused": "记忆：未保存；记忆仅保存事实，不保存指令",
         "memory_saved": "记忆：已保存",
         "chain": "学习记录中的条目（按时间顺序排列，只追加、不修改）：",
-        "chain_line": "{i}. {who}{verb}{said}，{strength}{tag}",
-        "verbs": {"rejection": "否定了", "correction": "纠正了",
-                  "positive": "认可了", "neutral": "未回应"},
-        "verb_retry": "接受了第二次回复",
-        "verb_retry_moved": "未对第二次回复表态",
+        "chain_line": "{i}. {what}，{strength}{tag}",
+        "verbs": {"rejection": "{who}否定了{said}", "correction": "{who}纠正了{said}",
+                  "positive": "{who}认可了{said}", "neutral": "{who}未回应{said}"},
+        "verb_retry": "{who}接受了第二次回复{said}",
+        "verb_retry_moved": "{who}未对第二次回复表态{said}",
         "dismissed_tag": "，不采信",
         "fix": "改写：「{a}」->「{b}」",
         "no_fix": "未提出改写：判定模型未采信任何反应。",
@@ -350,7 +351,7 @@ _TEXT = {
         "would_say": "{name}将回复：{reply}",
         "would_pass": "{name}将不发言",
         "troll_sum": ("学习记录：共记录 {events} 条反应，其中 {dismissed} 条未采信；"
-                      "产生 {proposals} 条提议，{promoted} 条已生效。"),
+                      "拟定 {proposals} 条改写，{promoted} 条已生效。"),
         "unchanged": "{name}的表达方式未发生任何改变。",
         "stopped": "演示已中止：模型未作出回答。{why}",
         "needs_key": "--online 需要模型密钥。请运行 {init} 进行设置，或不使用 --online。",
@@ -665,11 +666,11 @@ class Demo:
                               else "verb_retry_moved"]
                 said = adj.get("better", "")
             else:
-                verb = verbs.get(e.get("reaction_type", ""), e.get("reaction_type", ""))
+                rtype = str(e.get("reaction_type", ""))
+                verb = verbs.get(rtype, "{who} " + rtype.replace("{", "").replace("}", "") + " {said}")
                 said = e.get("reply", "")
             self.out("    " + self.t["chain_line"].format(
-                i=i, who=e.get("speaker_name") or "?", verb=verb,
-                said=self._quote(said),
+                i=i, what=verb.format(who=e.get("speaker_name") or "?", said=self._quote(said)),
                 strength=strength_label(self.lang, e.get("strength", "")),
                 tag="" if adj.get("accept") else self.t["dismissed_tag"]))
 
@@ -748,7 +749,7 @@ class Demo:
             dismissed=sum(not (e.get("adjudication") or {}).get("accept")
                           for e in events),
             proposals=len(cands),
-            proposal_word=plural(self.lang, len(cands), "proposal", "proposals"),
+            proposal_word=plural(self.lang, len(cands), "fix", "fixes"),
             promoted=promoted)
         self.out("  " + summary)
         if not promoted:
@@ -803,10 +804,12 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     mode.add_argument("--offline", action="store_true",
                       help=langs.term("the scripted model, with no key and no network "
                            "(the default)"))
-    p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
+    from persona_agent.setup_wizard import lang_option
+
+    p.add_argument("--lang", type=lang_option, default=None,
                    help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
     args = p.parse_args(argv)
-    lang = normalize_lang(args.lang)
+    lang = args.lang or normalize_lang(os.getenv("AGENT_LANG", "en"))
     if args.online and not os.getenv("LLM_API_KEY", "").strip():
         print(_in(_TEXT, lang)["needs_key"].format(init=hint("init", lang)))
         return 1

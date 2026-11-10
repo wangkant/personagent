@@ -290,7 +290,8 @@ def test_weixin_keeps_context_tokens_and_echoes_them_when_replying(tmp_path):
         run(bot.run(on_event, lambda: None))
     event, target = seen[0]
     assert event["conversation_type"] == "dm" and event["text"] == "你好" and target == "u@im.wechat"
-    assert json.loads(state.read_text(encoding="utf-8")) == {"cursor": "c1", "contexts": {"u@im.wechat": "ctx-1"}}
+    assert json.loads(state.read_text(encoding="utf-8")) == {"owner": bot.owner, "cursor": "c1",
+                                                             "contexts": {"u@im.wechat": "ctx-1"}}
 
     again = weixin.Weixin({"weixin_oc_token": "bt"}, state=state, client=mock(handler))
     assert again.target({"reply_handle": "u@im.wechat"}) == "u@im.wechat"

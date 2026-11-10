@@ -83,6 +83,9 @@ _TEXT = {
         "reset": "(started over: this chat and what the trial learned have been cleared)",
         "nothing_to_quote": "(no reply from {name} is waiting to be quoted)",
         "usage_as": "usage: /as Name your message",
+        "usage_reply": "usage: /reply your message",
+        "usage_admin": "usage: /admin your message",
+        "you": "you",
         "unknown": "unknown command {cmd}; the commands are:",
         "error": "[error: {error}]",
         "failures": {
@@ -187,6 +190,9 @@ _TEXT = {
         "reset": "（已重新开始：本聊天及试用中学到的内容均已清空）",
         "nothing_to_quote": "（当前没有可引用的{name}的回复）",
         "usage_as": "用法：/as 名字 消息内容",
+        "usage_reply": "用法：/reply 消息内容",
+        "usage_admin": "用法：/admin 消息内容",
+        "you": "用户",
         "unknown": "未知命令 {cmd}。可用命令如下：",
         "error": "[错误：{error}]",
         "failures": {
@@ -1103,6 +1109,9 @@ class ChatSession:
             return True
         (name, uid), quote, msg = self.you, False, line
         command, _, rest = line.partition(" ")
+        if command in ("/admin", "/reply") and not rest.strip():
+            print("  " + self.t["usage_admin" if command == "/admin" else "usage_reply"])
+            return True
         if command == "/admin":
             (name, uid), msg = self.admin, rest
         elif command == "/as":
@@ -1156,18 +1165,20 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     home.load_env()
     p = argparse.ArgumentParser(
         prog=prog, description=langs.term("Talk to the character in a simulated group chat."))
-    p.add_argument("--lang", default=os.getenv("AGENT_LANG", "en"),
+    from persona_agent.setup_wizard import lang_option
+
+    p.add_argument("--lang", type=lang_option, default=None,
                    help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
     p.add_argument("--admin", action="store_true",
                    help=langs.term("speak as the configured admin (closer relationship)"))
-    p.add_argument("--name", default="you", help=langs.term("your display name in the chat"))
+    p.add_argument("--name", default=None, help=langs.term("your display name in the chat"))
     p.add_argument("--dm", action="store_true",
                    help=langs.term("a one-to-one chat instead of a group"))
     p.add_argument("--trigger", type=int, default=TRIAL_TRIGGER,
                    help=langs.term(f"messages before it considers joining in (default "
                         f"{TRIAL_TRIGGER}; the live bot uses CHAT_TRIGGER_COUNT)"))
     args = p.parse_args(argv)
-    lang = normalize_lang(args.lang)
+    lang = args.lang or normalize_lang(os.getenv("AGENT_LANG", "en"))
     trigger = max(1, args.trigger)
 
     live = AgentSettings.from_env(lang=lang)
@@ -1182,10 +1193,10 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     trial = Trial(agent, dm=args.dm, state_dir=state,
                   factory=lambda: build_agent(lang, trigger)[0])
     session = ChatSession(
-        trial, lang=lang, you=args.name, admin=args.admin,
+        trial, lang=lang, you=args.name or text_for(lang)["you"], admin=args.admin,
         live_trigger=live.chat_trigger_count, resumed=resumed,
         name_unset=not os.getenv("PERSONA_NAME", "").strip(),
-        name_ignored=args.admin and args.name != "you")
+        name_ignored=args.admin and args.name is not None)
     session.banner()
     # The trial words every failure itself; the agent's log lines would repeat it.
     logger = logging.getLogger("agent")

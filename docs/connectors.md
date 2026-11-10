@@ -232,7 +232,17 @@ as `private:telegram:42` for a DM. `conversation_id` is the raw id the event
 carried, which for a DM is the user id. The agent remembers `reply_handle`,
 `connector_id` and `capabilities` from the latest admitted event in each
 conversation, so a conversation becomes reachable once it has sent one
-message.
+message. One exception keeps a pulling connector in place: an event from a
+connector without the `outbox` capability does not replace what a different
+connector with that capability stored for the same conversation. A
+connector that pulls the outbox therefore keeps reaching the conversation
+after another program, such as a coding assistant, has spoken there. An
+event from the same connector, or from any connector that declares
+`outbox`, replaces the stored values as before.
+
+The local page is itself an outbox connector, with the `connector_id`
+`local-welcome`. It receives only the deliveries for the page's own chat and
+shows them in the Chat view.
 
 Report each delivery in `acks` on the next pull:
 

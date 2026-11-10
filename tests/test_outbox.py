@@ -161,6 +161,71 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
           "unsupported" not in store.get("a"))
 
 
+def test_a_connector_that_cannot_pull_leaves_another_connectors_route(tmp: Path) -> None:
+    store = HandleStore(tmp / "h.json")
+    box = Outbox(store)
+    box._stamp("page")
+
+    def put(key, connector_id, capabilities, handle="h"):
+        store.record(key, reply_handle=handle, connector_id=connector_id,
+                     capabilities=capabilities, platform="browser", native=False,
+                     conversation_type="dm", conversation_id="c")
+
+    put("a", "page", ["outbox"])
+    before = store.get("a")
+    put("a", "coding", [], handle="")
+    kept = store.get("a")
+    check("kept: the pulling connector's route survives an event from one that cannot pull",
+          kept["connector_id"] == "page" and kept["reply_handle"] == "h"
+          and kept["capabilities"] == ["outbox"]
+          and kept["updated_at"] >= before["updated_at"], repr(kept))
+    check("kept: the file holds the same route",
+          HandleStore(tmp / "h.json").get("a")["connector_id"] == "page")
+
+    put("b", "fw1", ["outbox"])
+    put("b", "fw1", [])
+    check("unchanged: the same connector without outbox replaces its own route",
+          store.get("b")["capabilities"] == [])
+    put("c", "fw1", ["outbox"])
+    put("c", "fw2", ["outbox"], handle="h2")
+    check("unchanged: another pulling connector takes the route over",
+          store.get("c")["connector_id"] == "fw2" and store.get("c")["reply_handle"] == "h2")
+    put("d", "fw1", [])
+    put("d", "fw2", [], handle="h2")
+    check("unchanged: without outbox on either side the latest event wins",
+          store.get("d")["connector_id"] == "fw2")
+    put("e", "fw1", [])
+    put("e", "fw2", ["outbox"], handle="h2")
+    check("unchanged: a pulling connector replaces one that cannot pull",
+          store.get("e")["connector_id"] == "fw2")
+
+
+def test_a_silent_connectors_route_does_not_come_back_when_it_pulls_again(tmp: Path) -> None:
+    """A conversation that moved to a connector without the outbox while the
+    old one was silent never routes to the old one's handle again."""
+    store = HandleStore(tmp / "h.json")
+    box = Outbox(store)
+    box.liveness_s = 0.05
+
+    def put(connector_id, capabilities, handle):
+        store.record("a", reply_handle=handle, connector_id=connector_id,
+                     capabilities=capabilities, platform="telegram", native=False,
+                     conversation_type="dm", conversation_id="c")
+
+    box._stamp("old")
+    put("old", ["outbox"], "old-handle")
+    time.sleep(0.1)
+    put("new", [], "new-handle")
+    check("replaced: a silent connector's route gives way, as before the rule",
+          store.get("a")["connector_id"] == "new"
+          and store.get("a")["reply_handle"] == "new-handle", repr(store.get("a")))
+    box._stamp("old")
+    check("replaced: the old connector pulling again gets no route back",
+          box.route("a") is None)
+    check("replaced: a store no outbox reads keeps the latest event",
+          HandleStore(tmp / "h.json").get("a")["connector_id"] == "new")
+
+
 def _put(store: HandleStore, key: str) -> None:
     store.record(key, reply_handle="h", connector_id="fw", capabilities=["outbox"],
                  platform="telegram", native=False, conversation_type="group",

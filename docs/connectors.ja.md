@@ -9,11 +9,11 @@
 | コネクター | つながる先 | パス |
 |---|---|---|
 | 直接接続 | QQ 公式ボット、個人の WeChat（iLink）、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat。ほかのソフトウェアは不要です。ローカルページと `personagent up` は 1 つのプロセス `python -m persona_agent.direct` として動かします。 | `persona_agent/direct/` |
-| AstrBot プラグイン | サードパーティのブリッジ AstrBot のプラットフォーム。KOOK、Feishu/Lark、DingTalk、Slack、WeCom、Mattermost、Misskey、OneBot v11 などのために personagent が管理する AstrBot には、プラグインが自動で入ります。すでに動かしている AstrBot には `personagent connect astrbot` で設定します。GitHub Release の `astrbot_plugin_personagent.zip` を AstrBot の「ファイルからインストール」でアップロードし、`connector_token` を自分で設定することもできます。 | `integrations/astrbot/` |
+| AstrBot プラグイン | サードパーティのブリッジ AstrBot のプラットフォーム。KOOK、Feishu/Lark、DingTalk、Slack、WeCom、Mattermost、Misskey、OneBot v11 などのために personagent が管理する AstrBot には、プラグインが自動で入ります。すでに動かしている AstrBot には `personagent connect astrbot` で設定します。GitHub Release の `astrbot_plugin_personagent.zip` を AstrBot の **Install from File** でアップロードし、`connector_token` を自分で設定することもできます。 | `integrations/astrbot/` |
 | Satori | すべての Satori 実装（Koishi などサードパーティ）：QQ、Telegram、Discord、KOOK、Lark、DingTalk、LINE、WhatsApp、Matrix、Zulip、メールなど。 | `integrations/satori/` |
 | Matrix | Matrix のルーム。さらにサードパーティの mautrix ブリッジ経由で WhatsApp、Signal、Messenger、Instagram、Google Messages など。 | `integrations/matrix/` |
 
-コーディングエージェントはチャットプラットフォームではないので、専用の経路があります。MCP サーバー `personagent mcp` で、[ユーザーガイド](guide.ja.md#コーディングエージェント)で説明しています。
+コーディングアシスタントはチャットプラットフォームではないため、専用の経路を使います。MCP サーバー `personagent mcp` で、[ユーザーガイド](guide.ja.md#コーディングアシスタント)で説明しています。
 
 4 つとも、このページで説明するプロトコルを話します。新しいコネクターを書くのに必要なのは、このページと HTTP クライアントです。`integrations/sdk/personagent_connector.py` の Python ヘルパーは、リクエストの署名とアウトボックスのループを代わりに行います。ベース URL、トークン、コネクターの `connector_id` を受け取り、`httpx` が必要です。
 
@@ -159,7 +159,9 @@ QQ は唯一の例外で、互換性のために残しています。ID はそ�
 }
 ```
 
-`items` は `replies` と同じ形です。`reason` は `proactive`、`follow_up`、`excuse` のいずれかで、`conversation_type` は `group` か `dm` です。`conversation_key` はエージェントが会話を保存するキーで、DM なら `private:telegram:42` のようになります。`conversation_id` はイベントが運んだ生の ID で、DM ではユーザー ID です。エージェントは各会話で最後に受け入れたイベントの `reply_handle`、`connector_id`、`capabilities` を覚えているので、会話は 1 通送れば到達可能になります。
+`items` は `replies` と同じ形です。`reason` は `proactive`、`follow_up`、`excuse` のいずれかで、`conversation_type` は `group` か `dm` です。`conversation_key` はエージェントが会話を保存するキーで、DM なら `private:telegram:42` のようになります。`conversation_id` はイベントが運んだ生の ID で、DM ではユーザー ID です。エージェントは各会話で最後に受け入れたイベントの `reply_handle`、`connector_id`、`capabilities` を覚えているので、会話は 1 通送れば到達可能になります。ただし、取得するコネクターを維持するための例外が 1 つあります。`outbox` 機能を持たないコネクターからのイベントは、その機能を持つ別のコネクターが同じ会話について保存した値を置き換えません。したがって、アウトボックスを取得するコネクターは、コーディングアシスタントなどの別のプログラムがその会話で発言した後も、その会話に到達し続けます。同じコネクターからのイベント、または `outbox` を宣言しているコネクターからのイベントは、これまでどおり保存された値を置き換えます。
+
+ローカルページ自体も、`connector_id` が `local-welcome` のアウトボックスコネクターです。ページ自身のチャット宛ての配信だけを受け取り、それをチャットビューに表示します。
 
 次の取得の `acks` で各配信を報告してください。
 

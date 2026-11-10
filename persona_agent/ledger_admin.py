@@ -3,6 +3,7 @@
 Candidates the promotion policy will not promote on its own (a single
 correction, laughter only, contradicting suggestions) wait here for a human.
 
+    personagent learned                       # the same as `list`
     personagent learned list                  # pending proposals
     personagent learned list --state promoted # what is live now
     personagent learned show <id>             # with its evidence
@@ -55,6 +56,17 @@ def _paths(lang: str) -> dict:
     }
 
 
+def _say(text: str) -> None:
+    print(langs.term(text))
+
+
+def _command(sub: str) -> str:
+    """How this install spells `personagent learned <sub>`."""
+    from persona_agent.setup_wizard import command
+
+    return command(f"learned {sub}")
+
+
 def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
     """Exact id, or the single candidate whose id starts with `wanted`."""
     wanted = (wanted or "").strip()
@@ -67,9 +79,9 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
     if len(hits) == 1:
         return hits[0]
     if not hits:
-        print(f"no candidate matches {wanted!r}")
+        _say(f"No candidate matches {wanted!r}.")
     else:
-        print(f"{wanted!r} is ambiguous: {', '.join(h[:12] for h in hits[:6])}")
+        _say(f"{wanted!r} matches more than one candidate: {', '.join(h[:12] for h in hits[:6])}")
     return None
 
 
@@ -88,6 +100,15 @@ def _short(text, width: int = 60) -> str:
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
+def _pad(text: str, width: int) -> str:
+    """`text` filled to `width` terminal columns, and at least one space after it."""
+    return text + " " * max(1, width - langs.width(text))
+
+
+def _field(label: str, value) -> None:
+    print(f"{_pad(langs.term(label), 11)}{value}")
+
+
 def cmd_list(args, ledger, log, policy) -> int:
     rows = [c for c in ledger.all()
             if (not args.state or c.get("state") == args.state)
@@ -96,9 +117,10 @@ def cmd_list(args, ledger, log, policy) -> int:
     if args.limit > 0:
         rows = rows[-args.limit:]
     if not rows:
-        print("no candidates" + (f" in state {args.state}" if args.state else ""))
+        _say(f"No candidates are in the state {args.state}." if args.state else "There are no candidates.")
         return 0
-    print(f"{'id':14} {'type':17} {'state':11} {'ev':3} reply -> better")
+    print(f"{_pad(langs.term('id'), 14)}{_pad(langs.term('type'), 18)}{_pad(langs.term('state'), 12)}"
+          f"{_pad(langs.term('ev'), 4)}{langs.term('reply -> better')}")
     for cand in rows:
         line = _short(cand.get("reply"), 40)
         if cand.get("better"):
@@ -108,31 +130,32 @@ def cmd_list(args, ledger, log, policy) -> int:
               f"{len(cand.get('evidence') or []):<3} {line}")
         if cand.get("state") == candidates.STATE_PROPOSED:
             decision = _decide(ledger, log, cand, policy)
-            print(f"{'':14} why not: {decision.reason}")
-    print(f"\n{len(rows)} candidate(s). "
-          f"'show <id>' for the evidence behind one.")
+            print(f"{'':14}{langs.term(f'Not promoted yet: {decision.reason}')}")
+    print()
+    _say(f"Candidates shown: {len(rows)}. Run `{_command('show <id>')}` to see the evidence behind one.")
     return 0
 
 
 def cmd_lineage(args, lineages, paths) -> int:
     if args.action == "adopt":
         if not args.persona_hash:
-            print("adopt needs the persona hash to fold in (see a candidate's scope)")
+            _say("Adopting needs the persona hash to fold in; a candidate's scope shows it.")
             return 1
         if lineages.adopt(args.version, args.persona_hash):
-            print(f"adopted {args.persona_hash} into PERSONA_VERSION={args.version or '(unset)'}; "
-                  f"run `rebuild` so the views pick it up")
+            version = args.version or langs.term("(not set)")
+            _say(f"Adopted {args.persona_hash} into PERSONA_VERSION={version}. "
+                 f"Run `{_command('rebuild')}` so that the views include it.")
         else:
-            print("already in the lineage")
+            _say("That hash is already in the lineage.")
         return 0
     versions = lineages.versions()
     if not versions:
-        print("no lineage recorded yet (written on the agent's first learning turn)")
+        _say("No lineage has been recorded yet. It is written on the agent's first learning turn.")
         return 0
     for version, hashes in versions.items():
-        print(f"PERSONA_VERSION={version or '(unset)'}")
+        print(f"PERSONA_VERSION={version or langs.term('(not set)')}")
         for i, h in enumerate(hashes):
-            print(f"  {h}  {'root' if i == 0 else 'revision ' + str(i)}")
+            print(f"  {h}  {langs.term('root') if i == 0 else langs.term(f'revision {i}')}")
     return 0
 
 
@@ -141,62 +164,70 @@ def cmd_show(args, ledger, log, policy) -> int:
     if cid is None:
         return 1
     cand = ledger.get(cid)
-    print(f"candidate  {cid}")
-    print(f"type       {cand.get('type')}")
-    print(f"state      {cand.get('state')}")
-    print(f"created    {cand.get('created_at')}")
-    print(f"adjudicated by  {cand.get('adjudication_version') or '?'}")
+    _field("candidate", cid)
+    _field("type", cand.get("type"))
+    _field("state", cand.get("state"))
+    _field("created", cand.get("created_at"))
+    _field("adjudicated by", cand.get("adjudication_version") or "?")
     scope = cand.get("scope") or {}
-    print("scope      " + ", ".join(
+    _field("scope", ", ".join(
         f"{k}={scope.get(k) or '-'}" for k in
         ("lang", "platform", "conv_id", "persona", "persona_hash",
          "persona_version", "scenario", "mode")))
-    print(f"\nreply      {cand.get('reply')}")
+    print()
+    _field("reply", cand.get("reply"))
     if cand.get("better"):
-        print(f"better     {cand.get('better')}")
+        _field("better", cand.get("better"))
     if (cand.get("payload") or {}).get("lesson"):
-        print(f"lesson     {cand['payload']['lesson']}")
+        _field("lesson", cand["payload"]["lesson"])
     for line in (cand.get("payload") or {}).get("context") or []:
-        print(f"context    {line}")
+        _field("context", line)
 
-    print("\nevidence")
+    print()
+    _say("evidence")
     linked = {e["event_id"]: e for e in log.many(cand.get("evidence") or [])}
     for eid in cand.get("evidence") or []:
         ev = linked.get(eid)
         if ev is None:
-            print(f"  {eid[:12]}  (not in the evidence log)")
+            print(f"  {eid[:12]}  {langs.term('(not in the evidence log)')}")
             continue
-        counts = "supports" if promotion.supports_candidate(
-            ev, cand, policy=policy) else "does not support this proposal"
+        counts = langs.term("(supports this proposal)" if promotion.supports_candidate(
+            ev, cand, policy=policy) else "(does not support this proposal)")
         print(f"  {eid[:12]}  {ev.get('ts')}  {ev.get('kind')}/"
-              f"{ev.get('reaction_type') or '-'}  {ev.get('strength')}  ({counts})")
+              f"{ev.get('reaction_type') or '-'}  {ev.get('strength')}  {counts}")
         who = ev.get("speaker_name") or ev.get("speaker_id") or "-"
-        print(f"    from {who} (recipient {ev.get('recipient_id') or '-'}, "
-              f"{ev.get('direction') or 'undirected'})")
+        recipient = ev.get("recipient_id") or "-"
+        direction = ev.get("direction")
+        print("    " + langs.term(f"From {who} (recipient {recipient}, matched by {direction})" if direction
+                                  else f"From {who} (recipient {recipient}, undirected)"))
         if ev.get("reaction_text"):
-            print(f"    said: {_short(ev.get('reaction_text'), 100)}")
+            print("    " + langs.term(f"Said: {_short(ev.get('reaction_text'), 100)}"))
         reason = (ev.get("adjudication") or {}).get("reason")
         if reason:
-            print(f"    verdict: {_short(reason, 100)}")
+            print("    " + langs.term(f"Verdict: {_short(reason, 100)}"))
         if ev.get("parent_event_id"):
-            print(f"    follows: {ev['parent_event_id'][:12]}")
+            print("    " + langs.term(f"Follows: {ev['parent_event_id'][:12]}"))
 
     if cand.get("history"):
-        print("\nlifecycle")
+        print()
+        _say("lifecycle")
         for h in cand["history"]:
             print(f"  {h.get('ts') or '?':20} {h.get('state'):11} "
                   f"{h.get('actor') or '?':6} {_short(h.get('reason'), 70)}")
     if cand.get("superseded_by"):
-        print(f"\nsuperseded by {cand['superseded_by']}")
+        print()
+        _field("superseded by", cand["superseded_by"])
     if cand.get("supersedes"):
-        print(f"\nsupersedes    {cand['supersedes']}")
+        print()
+        _field("supersedes", cand["supersedes"])
 
     if cand.get("state") == candidates.STATE_PROPOSED:
         decision = _decide(ledger, log, cand, policy)
-        print(f"\npolicy: {'would promote' if decision.promote else 'holding'} "
-              f"— {decision.reason}")
+        print()
+        _say(f"Policy: would promote: {decision.reason}" if decision.promote
+             else f"Policy: holding: {decision.reason}")
         if decision.blocked_by:
-            print(f"        blocked by {decision.blocked_by}")
+            _say(f"Blocked by {decision.blocked_by}")
     return 0
 
 
@@ -204,8 +235,8 @@ def _rebuild(paths: dict, ledger) -> None:
     n_ex, n_fb = candidates.rebuild_views(
         ledger, paths["examples_view"], paths["feedback_view"],
         max_examples=PROMOTE_MAX_EXAMPLES, max_pairs=PROMOTE_MAX_FEEDBACK)
-    print(f"views rebuilt: {n_ex} example row(s) -> {paths['examples_view'].name}, "
-          f"{n_fb} pair(s) -> {paths['feedback_view'].name}")
+    _say(f"Views rebuilt. Example rows in {paths['examples_view'].name}: {n_ex}. "
+         f"Pairs in {paths['feedback_view'].name}: {n_fb}.")
 
 
 def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
@@ -222,13 +253,14 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
               if action == "promote" else [])
     if rivals:
         rival = rivals[0]["candidate_id"]
-        print(f"refused: {rival[:12]} already rewrites this reply, as "
-              f"{_short(rivals[0].get('better'), 50)!r}. One reply keeps one "
-              f"rewrite; to replace it run:\n"
-              f"  {args.prog} supersede {rival[:12]} {cid[:12]}")
+        _say(f"Refused: {rival[:12]} already rewrites this reply, as "
+             f"{_short(rivals[0].get('better'), 50)!r}. A reply keeps one rewrite; to replace it, run:")
+        print(f"  {_command(f'supersede {rival[:12]} {cid[:12]}')}")
         return 1
     if not fn(cid, ts=now, actor=args.actor, reason=reason):
-        print(f"refused: cannot {action} a candidate in state {before!r}")
+        _say({"promote": f"Refused: a candidate in the state {before} cannot be promoted.",
+              "reject": f"Refused: a candidate in the state {before} cannot be rejected.",
+              "rollback": f"Refused: a candidate in the state {before} cannot be rolled back."}[action])
         return 1
     print(f"{cid}: {before} -> {ledger.get(cid).get('state')}")
     if action == "promote":
@@ -237,7 +269,7 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
                                                policy=policy):
             if ledger.reject(other, ts=now, actor=args.actor,
                              reason=f"answered by {cid}"):
-                print(f"{other}: proposed -> rejected (answered by {cid[:12]})")
+                print(f"{other}: proposed -> rejected " + langs.term(f"(answered by {cid[:12]})"))
     _rebuild(paths, ledger)
     return 0
 
@@ -250,19 +282,17 @@ def cmd_supersede(args, ledger, log, policy, paths) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     if not ledger.supersede(old, new, ts=now, actor=args.actor,
                             reason=args.reason or "superseded by operator"):
-        print(f"refused: {old[:12]} is {ledger.get(old).get('state')} and "
-              f"{new[:12]} is {ledger.get(new).get('state')}")
+        _say(f"Refused: {old[:12]} is {ledger.get(old).get('state')} and "
+             f"{new[:12]} is {ledger.get(new).get('state')}.")
         return 1
-    print(f"{old[:12]} superseded; {new[:12]} promoted")
+    _say(f"{old[:12]} was superseded, and {new[:12]} was promoted.")
     _rebuild(paths, ledger)
     return 0
 
 
 def cmd_rebuild(args, ledger, log, policy, paths) -> int:
     _rebuild(paths, ledger)
-    active = ledger.active()
-    print(f"{len(active)} active candidate(s) from "
-          f"{len(ledger.all())} in {paths['ledger'].name}")
+    _say(f"Active candidates: {len(ledger.active())} of {len(ledger.all())} in {paths['ledger'].name}.")
     return 0
 
 
@@ -274,7 +304,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                    help=langs.term("language pool to operate on (default AGENT_LANG)"))
     p.add_argument("--actor", default="admin",
                    help=langs.term("recorded as the actor on lifecycle events"))
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd")
 
     lst = sub.add_parser("list", help=langs.term("list candidates (default: pending)"))
     lst.add_argument("--state", default=candidates.STATE_PROPOSED,
@@ -307,6 +337,9 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                      help=langs.term("PERSONA_VERSION the hash belongs to (default: current)"))
 
     args = p.parse_args(argv)
+    if args.cmd is None:
+        # `personagent learned` alone lists, as `personagent chat` suggests.
+        args = p.parse_args([*(sys.argv[1:] if argv is None else argv), "list"])
     paths = _paths(args.lang.strip().lower())
     ledger = candidates.CandidateLedger(paths["ledger"])
     log = evidence.EvidenceLog(paths["evidence"])

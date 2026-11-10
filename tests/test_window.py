@@ -212,6 +212,24 @@ def test_no_pywebview_means_no_window(tmp_path, monkeypatch) -> None:
     assert window.available() is False
 
 
+def test_linux_with_qt_and_no_gtk_asks_for_qt_by_name(monkeypatch) -> None:
+    """pywebview tries GTK first and prints a traceback when it is absent."""
+    installed = {"qtpy"}
+    monkeypatch.setattr(window.importlib.util, "find_spec",
+                        lambda name: object() if name in installed else None)
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert window._toolkit() == "qt"
+    installed.add("gi")
+    assert window._toolkit() is None
+    installed.clear()
+    assert window._toolkit() is None
+    monkeypatch.setattr(sys, "platform", "darwin")
+    installed.add("qtpy")
+    assert window._toolkit() is None
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert window._toolkit() == "edgechromium"
+
+
 def test_a_toolkit_that_fails_to_start_is_reported_not_raised(webview, tmp_path) -> None:
     def start(func, **options):
         raise RuntimeError("no display")

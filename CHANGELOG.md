@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`personagent connect <platform>` connects a platform from the terminal.** QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are connected with the same steps, checks and saved form as **Connect apps**, so a server without a display needs no page. `personagent connect` alone lists the ten platforms and which of them are connected. Each value is also an option; `--no-input` asks nothing and exits with code 2, naming any missing value; `--remove` disconnects. QQ and WeChat print their QR code in the terminal, with the personagent window as the fallback, and Twitch prints a link and a code and waits for the approval. `personagent up` then runs personagent with its connected platforms. In `personagent start --terminal`, option 3 offers these platforms and option 5 starts personagent with them.
+- **The page's chat shows pictures.** Stickers and pictures the character sends appear in the Chat view and stay in its history. A picture that is no longer stored shows a short note in its place, and the page serves a stored picture only while a message in its chat shows it.
+- **The page's chat shows what the character sends later.** The answer to a memory command sent while a reply was on its way, the message sent when the model fails, and a message the character starts itself appear within a few seconds while the Chat view is open, without a reload, and stay in the history. The local page is an outbox connector of its own (`connector_id` `local-welcome`) and receives only the deliveries for its own chat. A message that arrives while the chat is being forgotten is not counted as delivered, and a restarted character service is pulled at once.
+- **The app window is tested on Linux, macOS and Windows.** A CI workflow installs personagent with the app extra, opens the window, sets the page up and chats inside it with a stand-in model (`tools/window_smoke.py`).
+
+### Changed
+
+- **A connector that pulls the outbox keeps its conversations.** An event from a connector without the outbox capability no longer replaces the route that a different connector with it holds for the same conversation. A pulling connector, the local page among them, therefore keeps reaching a conversation after another program, such as a coding assistant, has spoken there, and the character's own messages keep reaching the page. An event from the same connector, or from any connector with the outbox, replaces the route as before.
+- **The Twitch tile on Connect apps says "Channels only"**, where it said "Groups and DMs". The character chats only in the listed channels; Twitch whispers are not supported.
+- **One formal register in every language.** The documents and the terminal text in all ten languages use formal written language and the names the app shows. The German terminal chat says "Auf Wiedersehen." on exit.
+- **The terminal setup names the platforms personagent connects itself** and points to `personagent connect <platform>`; its AstrBot step covers the other platforms.
+
+### Fixed
+
+- **On Linux the app window no longer prints a GTK traceback at start.** Where the app extra installed Qt and GTK is absent, the window asks for Qt by name.
+
 ## [1.4.1] — 2026-11-11
 
 ### Licence

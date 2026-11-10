@@ -8,9 +8,10 @@ allowed message to the agent and sends the agent's replies back to the chat.
 
 ## Do you need it?
 
-You do not need it for QQ, WeChat, Telegram or Discord. personagent connects
-those itself, without AstrBot. Run `personagent` to open its local page and
-add them under **Connect apps**.
+You do not need it for QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC,
+Zulip, VK or Stoat. personagent connects those itself, without AstrBot. Run
+`personagent` to open its local page and add them under **Connect apps**, or
+run `personagent connect <platform>` in a terminal.
 
 You need this plugin when AstrBot carries the conversation. That happens in
 two cases.

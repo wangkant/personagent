@@ -545,7 +545,8 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     argparse.ArgumentParser(prog=prog, description=langs.term("Start personagent and its connected platforms together")).parse_args(argv)
     home = homes.find_home()
     if not env_get(home / ".env", "LLM_API_KEY"):
-        print(langs.term("Open personagent start to finish setup first."))
+        from .setup_wizard import command
+        print(langs.term(f"Finish the setup first: {command('start', home)}"))
         return 2
     from . import updates
     from .setup_wizard import connect_astrbot

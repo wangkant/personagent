@@ -141,6 +141,16 @@ Add platforms under **Connect apps** on the local page. personagent checks
 the credentials against the platform before it saves anything. If the
 platform refuses them, the page shows the refusal and keeps nothing.
 
+On a server without a display, connect the platforms personagent connects
+itself from a terminal with `personagent connect <platform>`, for example
+`personagent connect telegram`. The command performs the same steps and checks
+as the page and saves the values in the same form. QQ and WeChat print their
+QR code in the terminal, and Twitch prints a link and a code. With
+`--no-input` and every value given as an option, it asks nothing and exits
+with code 2 when a required value is missing. `personagent up` then starts
+personagent with its connected platforms. The user guide describes
+[the command and its options](guide.md#connect-a-platform-in-the-terminal).
+
 **Connected by personagent itself.** QQ, personal WeChat, Telegram,
 Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat run in one "direct"
 process, with no AstrBot and no NapCat. A platform that cannot be loaded is
@@ -331,6 +341,11 @@ with its events and long-polls `/v1/outbox` (see
 personagent speaks only inside the request that brought a message. The
 proactive loops skip those conversations, and the question and the excuse
 are not sent.
+
+The local page also pulls the outbox, for its own chat only. An event from a
+program that does not pull the outbox, such as a coding assistant speaking
+in a chat, does not take that chat away from a connector that pulls it (see
+[the connector protocol](connectors.md#outbox-post-v1outbox)).
 
 `PROACTIVE_PLATFORMS` limits where the proactive loop may speak first.
 `PROACTIVE_PLATFORMS=qq_official` keeps it on the official QQ bot, and `qq`

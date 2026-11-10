@@ -6,9 +6,10 @@ O personagent é distribuído sob a [PolyForm Noncommercial License 1.0.0](../LI
 
 ## Plataformas de chat e suas contas
 
-O personagent chega a uma plataforma de chat de duas formas. Ele conecta por conta própria os bots oficiais do QQ, o WeChat pessoal, o Telegram e o Discord. Qualquer outra plataforma passa por uma ponte de terceiros, normalmente o AstrBot que o personagent baixa e executa para você. Seu risco depende de como a conexão faz login.
+O personagent alcança uma plataforma de chat de duas formas. Ele conecta por conta própria dez plataformas: os bots oficiais do QQ, o WeChat pessoal, o Telegram, o Discord, o Matrix, a Twitch, o IRC, o Zulip, o VK e o Stoat. Qualquer outra plataforma passa por uma ponte de terceiros, normalmente o AstrBot que o personagent baixa e executa para você. Seu risco depende de como a conexão faz login.
 
-- **APIs oficiais de bots** são feitas para bots. Elas incluem a API oficial de bots do QQ, a API de bots iLink da Tencent para WeChat pessoal, Telegram, Discord, Slack, KOOK, Feishu/Lark, DingTalk, WeCom e plataformas parecidas. Você ainda precisa seguir os termos para desenvolvedores e os limites de taxa de cada plataforma.
+- **APIs oficiais de bots** são feitas para bots. Elas incluem a API oficial de bots do QQ, a API de bots iLink da Tencent para WeChat pessoal, as APIs de bots do Telegram e do Discord, um Generic bot no Zulip, a Bots Long Poll API de uma comunidade do VK com uma chave de acesso da comunidade, um bot no Stoat, além de Slack, KOOK, Feishu/Lark, DingTalk, WeCom e plataformas parecidas. Você ainda precisa seguir os termos para desenvolvedores e os limites de taxa de cada plataforma.
+- **Contas próprias em redes abertas.** No Matrix, na Twitch e no IRC, um bot é uma conta comum que você cria para ele, e o personagent usa a interface documentada da rede: a Matrix Client-Server API no homeserver que hospeda a conta do bot, a API da Twitch com um login que a conta do personagem aprova para um aplicativo que você registra, e o protocolo IRC sobre TLS com o apelido próprio do bot. Aplicam-se os termos desse homeserver, da Twitch e de cada rede IRC, assim como as regras de cada sala e canal. Algumas exigem permissão antes que um bot entre: a Libera.Chat, por exemplo, exige a permissão explícita dos operadores de um canal antes que um bot de IA entre nele.
 - **Clientes não oficiais** fazem login como uma conta de usuário comum e a controlam por software. A plataforma não autoriza isso e pode proibir em seus termos. Ela pode restringir, congelar ou banir a conta permanentemente. Isso abrange:
   - **QQ por meio de NapCat, LLOneBot, Lagrange ou qualquer outra implementação de OneBot**, que é a opção avançada OneBot v11. Um bot oficial do QQ não precisa de nenhum deles. A Tencent não os autoriza, e o risco é maior a partir de endereços IP de nuvem ou do exterior.
   - **WhatsApp, Signal, Messenger, Instagram, Google Messages e outros por meio de uma ponte mautrix**, que é como o conector do Matrix chega até eles. A ponte é um cliente não oficial de cada rede, e algumas dessas redes tratam de mensagens automatizadas em seus termos. Veja [as notas do conector do Matrix](../integrations/matrix/README.pt-BR.md#termos-de-cada-rede).
@@ -18,11 +19,11 @@ Se você usar um desses, use uma conta dedicada que possa perder, nunca a princi
 
 ## Diga às pessoas que é um bot
 
-- Diga às pessoas de uma conversa que estão falando com uma IA, e obtenha a concordância do dono ou dos administradores do grupo antes de adicioná-lo. Dê à conta um nome que deixe isso óbvio, e diga isso no perfil dela se a plataforma tiver um.
+- Diga às pessoas de uma conversa que estão falando com uma IA, e obtenha a concordância do proprietário ou dos administradores do grupo antes de adicioná-lo. Dê à conta um nome que deixe isso evidente, e diga isso no perfil dela se a plataforma tiver um.
 - Quando alguém pergunta sinceramente se é uma IA, o personagent é feito para dizer que sim. Não edite a persona para fazê-lo negar.
-- Não use para se passar por uma pessoa real nem para enganar alguém sobre com quem ou com o que está falando. Algumas plataformas e alguns países exigem que bots sejam identificados ou restringem contas automatizadas. Verifique as regras que se aplicam a você.
+- Não o utilize para se passar por uma pessoa real nem para enganar alguém sobre com quem ou com o que está falando. Algumas plataformas e alguns países exigem que bots sejam identificados ou restringem contas automatizadas. Verifique as regras que se aplicam a você.
 - Mantenha-o fora de grupos em que as respostas possam prejudicar ou enganar as pessoas, como grupos sobre temas médicos, jurídicos, financeiros ou de crise, e grupos com crianças.
-- Se alguém pedir que ele saia, ou perguntar o que ele sabe sobre essa pessoa, leve a sério. O administrador pode fazê-lo esquecer uma nota (`<name>, forget ...`), e tudo o que ele guarda está na pasta inicial dele (veja abaixo).
+- Se alguém pedir que ele saia, ou perguntar o que ele sabe sobre essa pessoa, trate o pedido com seriedade. O administrador pode fazê-lo esquecer uma nota (`<name>, forget ...`), e tudo o que ele guarda está na pasta inicial dele (veja abaixo).
 
 ## Créditos dos retratos
 
@@ -38,7 +39,7 @@ Leia a política de retenção de dados de cada provedor antes de usá-lo. Algun
 
 Tudo o que ele guarda fica na pasta inicial dele. As configurações e as chaves de API estão em `.env`. As credenciais dos bots e o AstrBot que ele executa para você estão em `platforms/`. `runtime/` contém as notas das conversas, as reações que ele avaliou (citadas literalmente), o registro do que aprendeu e os exemplos aprendidos. Se você definir `SERVER_LOG_FILE`, os logs também podem conter detalhes das conversas. Mantenha a pasta privada. Nunca a publique nem a anexe a uma issue, e faça backup se o que ele aprendeu importa para você. As leis sobre guardar e tratar mensagens de outras pessoas variam entre países, e cumprir as suas é responsabilidade sua.
 
-Ele pode aprender algo errado. Uma mudança precisa de duas reações concordantes da mesma conversa, pelo menos uma da pessoa a quem a resposta se destinava. Cada mudança fica em um registro somente de acréscimo, que você pode revisar e desfazer com `personagent learned` ou na visão Atividade da página local. Confira de vez em quando.
+Ele pode aprender algo errado. Uma mudança precisa de duas reações concordantes da mesma conversa, pelo menos uma da pessoa a quem a resposta se destinava. Cada mudança fica em um registro somente de acréscimo, que você pode revisar e desfazer com `personagent learned` ou na visão Atividade da página local. Revise-o periodicamente.
 
 ## Sem garantia
 

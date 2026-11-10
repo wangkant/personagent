@@ -138,6 +138,28 @@
 .health-row .field-note {
   margin: 4px 0 0;
 }
+.health-row .health-tech {
+  border-top: 0;
+  margin: 2px 0 0;
+  padding: 0;
+}
+.health-row .health-tech > summary {
+  display: inline-block;
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 12px;
+  list-style: none;
+}
+.health-row .health-tech > summary::-webkit-details-marker {
+  display: none;
+}
+.health-row .health-tech > summary::before {
+  content: "▸ ";
+}
+.health-row .health-tech[open] > summary::before {
+  content: "▾ ";
+}
 .health-toggle {
   margin: 4px 0 0 -9px;
 }

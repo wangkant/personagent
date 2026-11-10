@@ -27,7 +27,7 @@ Choose a model service, paste its API key and click **Verify & start chatting**.
 
 The key stays on your computer; click **Show** to check it. Chat messages go to the model service you choose, at that service's usual rates.
 
-Your character replies in the page. Your settings are saved, so the next launch goes straight to chat.
+Your character replies in the page, with stickers and pictures where it sends them. Messages it sends later, such as one it starts itself, appear in the chat within a few seconds. Your settings are saved, so the next launch goes straight to chat.
 
 Once it is set up, **Character & settings** has a **Persona** box with the text the character runs on. Rewrite who it is and how it talks, then click **Save persona**. The change applies at once, and what the character has learned is kept.
 
@@ -46,6 +46,7 @@ Two more views need no app. **Practice** plays a scripted demo and runs a practi
 2. personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The other apps go through AstrBot, a third-party bridge. The first time you connect one of them, personagent downloads AstrBot with a separate Python 3.12 runtime, so keep the page open until it finishes. AstrBot then runs in the background, with no dashboard to sign in to.
 3. personagent checks the credentials with the app before saving them. If the app refuses them, the page tells you and nothing is saved.
 4. Connected apps are listed at the top of **Connect apps**, where you can set one up again or disconnect it.
+5. Without the page, for example on a server without a display, `personagent connect <platform>` connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK or Stoat from the terminal, with the same steps and checks. `personagent connect` alone lists them. The [full guide](guide.md#connect-a-platform-in-the-terminal) describes the command.
 
 To find a QQ bot, open mobile QQ and go to Contacts → Bots. Chat with it privately, or add it to a group you own. This route uses QQ's official bot platform, so you need no personal QQ account and no extra software. QQ decides where the bot may go. Until the bot is certified, it can join only groups its admin owns, and there is no sandbox to set up. In a group it sees only messages that @ it, unless the group owner turns on receiving all messages on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification and the rest of the account side.
 

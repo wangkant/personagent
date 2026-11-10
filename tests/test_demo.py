@@ -78,13 +78,13 @@ async def test_troll_scene_changes_nothing(tmp: Path, lang: str) -> None:
         assert ("even if accepted it could not count: the reply was for Alex,\n"
                 "      so Mallory's correction is negative only") in out
         assert "memory: nothing saved; notes keep facts, not instructions" in out
-        assert ("ledger: 2 reactions recorded, 2 dismissed; 0 proposals proposed, "
+        assert ("ledger: 2 reactions recorded, 2 dismissed; 0 fixes drafted, "
                 "0 in use.\n  Nothing Nova says has changed.") in out
     else:
         assert out.count("判定：纠正，不采信") == 2
         assert "该回复的对象是小林，因此阿强的纠正强度为「仅否定」" in out
         assert "记忆：未保存；记忆仅保存事实，不保存指令" in out
-        assert "产生 0 条提议，0 条已生效。\n  小夏的表达方式未发生任何改变。" in out
+        assert "拟定 0 条改写，0 条已生效。\n  小夏的表达方式未发生任何改变。" in out
 
 
 async def test_every_scene_runs_in_chinese(tmp: Path) -> None:
