@@ -76,7 +76,7 @@ def _no_hidden_reasoning(payload: dict, url: str) -> dict:
     # Imported here: llm loads httpx, which a doctor run otherwise never does.
     from .llm import known_to_take_thinking, thinking_off
     return thinking_off(payload, url, known_to_take_thinking(
-        url, str(payload.get("model") or "")))
+        url, str(payload.get("model") or "")), k2_temperature=True)
 
 
 def _llm_endpoint(model: str) -> tuple[str, str]:

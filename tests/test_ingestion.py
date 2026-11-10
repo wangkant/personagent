@@ -25,6 +25,7 @@ import pytest
 
 from persona_agent.agent import Agent
 from persona_agent.ingestion import ContentIngestion, safe_fetch_url
+from persona_agent.llm import ModelCalls
 from tools.bootstrap_from_history import download_sticker
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
@@ -478,16 +479,23 @@ class ScriptedVision:
         return outcome
 
 
-class VisionHarness(Harness):
+class VisionHarness(Harness, ModelCalls):
     vision_model = "vision-model"
     vision_api_key = "vision-key"
     vision_base_url = VISION_BASE
+    # What ModelCalls reads to tell whether an endpoint takes `thinking`.
+    base_url = llm_fallback_base_url = ""
+    llm_fallback_thinking = False
 
     def __init__(self, image: bytes | None = PNG, *outcomes) -> None:
         super().__init__()
         self.image = image
         self.vision = ScriptedVision(*outcomes)
         self._http = self.vision
+        # Already known to refuse `thinking`, so these tests see the vision
+        # call alone; an endpoint still to be asked has its own tests below.
+        self._api_quirks[("thinking", f"{VISION_BASE}/chat/completions",
+                          "vision-model")] = False
 
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
         return self.image
@@ -534,7 +542,8 @@ async def test_vision_caption_request_shape(sleeps) -> None:
     check("caption: posts to chat/completions",
           post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
     check("caption: bearer key", post["headers"] == {
-        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+        "Authorization": "Bearer vision-key",
+        "Content-Type": "application/json"}, repr(post["headers"]))
     expected = _expected_payload(ContentIngestion.VISION_PROMPT,
                                  _data_url("image/png", PNG), 120, 0.3)
     check("caption: payload shape", post["json"] == expected, repr(post["json"])[:300])
@@ -644,7 +653,8 @@ async def test_vision_aesthetic_request_shape(sleeps) -> None:
     check("aesthetic: posts to chat/completions",
           post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
     check("aesthetic: bearer key", post["headers"] == {
-        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+        "Authorization": "Bearer vision-key",
+        "Content-Type": "application/json"}, repr(post["headers"]))
     expected = _expected_payload(ContentIngestion.VISION_AESTHETIC_PROMPT,
                                  _data_url("image/png", PNG), 60, 0)
     check("aesthetic: payload shape", post["json"] == expected, repr(post["json"])[:300])
@@ -757,16 +767,111 @@ async def test_vision_requests_apply_the_reasoning_quirks(path, sleeps) -> None:
     check(f"{path}: OpenRouter reasoning switched off",
           payload.get("reasoning") == {"enabled": False}, repr(payload.get("reasoning")))
 
-    agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
-    agent.vision_model = "kimi-k2.6"
-    if path == "caption":
-        await agent._describe_image_vision(IMAGE_URL)
-    else:
-        await agent._judge_sticker_aesthetic(PNG)
-    payload = agent.vision.posts[0]["json"]
-    check(f"{path}: K2 thinking off at its fixed temperature",
-          payload.get("thinking") == {"type": "disabled"}
-          and payload.get("temperature") == 0.6, repr(payload)[:200])
+    asked = 0.3 if path == "caption" else 0
+    for base, model, thinking, temperature in (
+            (VISION_BASE, "kimi-k2.6", {"type": "disabled"}, 0.6),
+            ("https://openrouter.ai/api/v1", "moonshotai/kimi-k2", None, asked),
+            ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6v",
+             {"type": "disabled"}, asked)):
+        agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
+        agent.vision_base_url, agent.vision_model = base, model
+        if path == "caption":
+            await agent._describe_image_vision(IMAGE_URL)
+        else:
+            await agent._judge_sticker_aesthetic(PNG)
+        payload = agent.vision.posts[0]["json"]
+        check(f"{path}: {model}: thinking off where it is taken, and only K2 "
+              "with it off is moved to its one temperature",
+              payload.get("thinking") == thinking
+              and payload.get("temperature") == temperature, repr(payload)[:200])
+
+
+class RefusesThinking:
+    """Stands in for `agent._http`: a 400 saying `words` to any POST that
+    carries `thinking`, a caption to any other. `posts` keeps which did."""
+
+    def __init__(self, words: str) -> None:
+        self.words = words
+        self.posts: list[bool] = []
+
+    def __call__(self, **kwargs):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.posts.append("thinking" in json)
+        if "thinking" in json:
+            refusal = VisionResponse(400)
+            refusal.text = self.words
+            return refusal
+        return VisionResponse(200, "a cat on a mat")
+
+
+@pytest.mark.parametrize("base, model, words", [
+    ("https://open.bigmodel.cn/api/paas/v4", "vision-model",
+     "property 'thinking' is unsupported"),
+    (VISION_BASE, "kimi-k2.6", "bad request"),
+    (VISION_BASE, "vision-model", "bad request"),
+], ids=["a-listed-host-names-the-field", "k2-refused-in-other-words",
+        "an-unknown-host-is-asked-once"])
+async def test_vision_remembers_an_endpoint_that_refuses_thinking(
+        base, model, words, tmp: Path, sleeps) -> None:
+    """Replies learn per endpoint when `thinking` is refused. The vision call
+    kept no memory, so a vision model that refused it cost a second round
+    trip on every image, and every image failed when the 400 did not name
+    the field. It goes through the replies' own call now."""
+    agent = isolated_agent(tmp)
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = (
+        model, "vision-key", base)
+    http = RefusesThinking(words)
+    agent._http = http
+
+    async def fetch(url):
+        return PNG
+
+    agent._fetch_image_bytes = fetch
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("first image: refused, resent at once without the switch, captioned",
+          got == "a cat on a mat" and http.posts == [True, False],
+          repr((got, http.posts)))
+    http.posts.clear()
+    got = await agent._describe_image_vision("https://img.example/b.png")
+    check("second image: no switch, and answered on the first try",
+          got == "a cat on a mat" and http.posts == [False],
+          repr((got, http.posts)))
+    http.posts.clear()
+    await agent._judge_sticker_aesthetic(PNG)
+    check("the sticker judge goes by what the caption call learned",
+          http.posts == [False], repr(http.posts))
+    check("none of it waited on a backoff", sleeps == [], repr(sleeps))
+
+
+async def test_a_vision_400_from_an_endpoint_still_to_be_asked(sleeps) -> None:
+    """A 400 or 422 to the first call may be about `thinking` in words that
+    do not name it, so it is resent once without. A second refusal teaches
+    nothing: the image may have been the reason."""
+    agent = VisionHarness(PNG, *[VisionResponse(400)] * 4)
+    agent._api_quirks.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    sent = ["thinking" in p["json"] for p in agent.vision.posts]
+    check("caption 400: three tries, the first resent without the switch",
+          got is None and sent == [True, False, False, False], repr((got, sent)))
+    check("caption 400: 1 s then 2 s backoff", sleeps == [1, 2], repr(sleeps))
+    check("caption 400: the endpoint is still to be asked",
+          agent._api_quirks == {}, repr(agent._api_quirks))
+
+    agent = VisionHarness(PNG, VisionResponse(422), VisionResponse(422))
+    agent._api_quirks.clear()
+    sleeps.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption 422: resent once without the switch, then given up",
+          got is None and len(agent.vision.posts) == 2 and sleeps == [],
+          repr((got, len(agent.vision.posts), sleeps)))
 
 
 # ---------------------------------------------------------------------------

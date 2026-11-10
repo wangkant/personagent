@@ -7,6 +7,8 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
+
 from persona_agent import evidence
 from persona_agent import prompt as prompt_mod
 from persona_agent import views as views_mod
@@ -34,9 +36,9 @@ def test_the_pools_and_views_reload_through_one_helper(tmp: Path) -> None:
     seen = []
     real = a._reload_if_stale
 
-    def spy(paths, stamp_attr, load, name):
+    def spy(paths, stamp_attr, load):
         seen.append(stamp_attr)
-        return real(paths, stamp_attr, load, name)
+        return real(paths, stamp_attr, load)
 
     a._reload_if_stale = spy
     a._reload_examples_if_stale()
@@ -47,8 +49,7 @@ def test_the_pools_and_views_reload_through_one_helper(tmp: Path) -> None:
                    "_view_examples_stamp", "_view_pairs_stamp"], repr(seen))
 
 
-def test_a_pool_is_reread_only_when_a_file_changes(tmp: Path, caplog) -> None:
-    caplog.set_level(logging.WARNING, logger="agent")
+def test_a_pool_is_reread_only_when_a_file_changes(tmp: Path) -> None:
     a = isolated_agent(tmp, seeds=True)
     reads = []
     real_read = a._read_pool
@@ -76,27 +77,6 @@ def test_a_pool_is_reread_only_when_a_file_changes(tmp: Path, caplog) -> None:
     a._reload_examples_if_stale()
     check("examples: a cleared stamp forces a reload", len(reads) == 3)
 
-    def failing(seed, runtime):
-        reads.append("failed")
-        raise PermissionError("locked")
-
-    stamp = a._examples_mtime
-    a._read_pool = failing
-    _write_rows(a.examples_file, [EXAMPLE, dict(EXAMPLE, reply="hello")])
-    caplog.clear()
-    a._reload_examples_if_stale()
-    said = [r.getMessage() for r in caplog.records]
-    check("examples: a read error keeps the pool and its stamp, with a warning",
-          {r["reply"] for r in a._examples_cache} == {"sup", "  "}
-          and a._examples_mtime == stamp
-          and len(said) == 1 and "examples.jsonl reload failed" in said[0],
-          repr(said))
-    a._read_pool = counting
-    a._reload_examples_if_stale()
-    check("examples: and the next turn tries again",
-          {r["reply"] for r in a._examples_cache} == {"sup", "hello"}
-          and a._auto_examples_seen == {"sup", "hello"})
-
     reads.clear()
     _write_rows(a.feedback_file, [PAIR, dict(PAIR, rating="worse"),
                                   dict(PAIR, better="")])
@@ -106,15 +86,120 @@ def test_a_pool_is_reread_only_when_a_file_changes(tmp: Path, caplog) -> None:
           reads == [a.feedback_file.name]
           and [r["better"] for r in a._pairs_cache] == ["check the logs first"]
           and "_rt" in a._pairs_cache[0], repr((reads, a._pairs_cache)))
-    a._read_pool = failing
+
+
+def _locked(seed, runtime):
+    raise PermissionError("locked")
+
+
+def test_an_examples_read_error_keeps_the_pool_and_tries_again(
+        tmp: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="agent")
+    a = isolated_agent(tmp, seeds=True)
+    _write_rows(a.examples_file, [EXAMPLE, dict(EXAMPLE, reply="  ")])
+    a._reload_examples_if_stale()
+    stamp, real_read = a._examples_mtime, a._read_pool
+    a._read_pool = _locked
+    _write_rows(a.examples_file, [EXAMPLE, dict(EXAMPLE, reply="hello")])
+    caplog.clear()
+    a._reload_examples_if_stale()
+    said = [r.getMessage() for r in caplog.records]
+    check("examples: a read error keeps the pool and its stamp, with a warning",
+          {r["reply"] for r in a._examples_cache} == {"sup", "  "}
+          and a._auto_examples_seen == {"sup"}
+          and a._examples_mtime == stamp
+          and len(said) == 1 and "examples.jsonl reload failed" in said[0],
+          repr(said))
+    a._read_pool = real_read
+    a._reload_examples_if_stale()
+    check("examples: and the next turn tries again",
+          {r["reply"] for r in a._examples_cache} == {"sup", "hello"}
+          and a._auto_examples_seen == {"sup", "hello"}
+          and a._examples_mtime != stamp)
+
+
+def test_a_pairs_read_error_keeps_the_pairs_and_tries_again(
+        tmp: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="agent")
+    a = isolated_agent(tmp, seeds=True)
+    _write_rows(a.feedback_file, [PAIR])
+    a._reload_pairs_if_stale()
+    stamp, real_read = a._pairs_mtime, a._read_pool
+    a._read_pool = _locked
     _write_rows(a.feedback_file, [])
     caplog.clear()
     a._reload_pairs_if_stale()
     said = [r.getMessage() for r in caplog.records]
-    check("pairs: a read error keeps the pairs, with a warning",
-          len(a._pairs_cache) == 1
+    check("pairs: a read error keeps the pairs and their stamp, with a warning",
+          [r["better"] for r in a._pairs_cache] == ["check the logs first"]
+          and a._pairs_mtime == stamp
           and len(said) == 1 and "feedback.jsonl reload failed" in said[0],
           repr(said))
+    a._read_pool = real_read
+    a._reload_pairs_if_stale()
+    check("pairs: and the next turn tries again",
+          a._pairs_cache == [] and a._pairs_mtime != stamp)
+
+
+@pytest.mark.parametrize("attr, file_attr, row", [
+    ("_view_examples", "promoted_examples_file", EXAMPLE),
+    ("_view_pairs", "promoted_feedback_file", PAIR),
+])
+def test_a_promoted_view_read_error_is_raised_not_passed_over(
+        tmp: Path, monkeypatch, caplog, attr: str, file_attr: str, row: dict) -> None:
+    """Unlike a pool: the view is where a rollback takes a row out of the
+    prompt, so its old rows are never kept behind a warning."""
+    caplog.set_level(logging.WARNING, logger="agent")
+    a = isolated_agent(tmp, seeds=True)
+    path = getattr(a, file_attr)
+    _write_rows(path, [row])
+    a._reload_views_if_stale()
+    stamp = getattr(a, attr + "_stamp")
+    check("views: the row is loaded", len(getattr(a, attr + "_cache")) == 1)
+    real_read = views_mod.read_jsonl
+
+    def locked(paths):
+        if path in paths:
+            raise PermissionError("locked")
+        return real_read(paths)
+
+    monkeypatch.setattr(views_mod, "read_jsonl", locked)
+    _write_rows(path, [row, dict(row, reply="another one")])
+    caplog.clear()
+    with pytest.raises(PermissionError, match="locked"):
+        a._reload_views_if_stale()
+    check("views: a read error reaches the caller, with no warning in its place",
+          not caplog.records, repr([r.getMessage() for r in caplog.records]))
+    check("views: and leaves the stamp, so the file is not taken as read",
+          getattr(a, attr + "_stamp") == stamp)
+    with pytest.raises(PermissionError, match="locked"):
+        a._reload_views_if_stale()
+    monkeypatch.setattr(views_mod, "read_jsonl", real_read)
+    a._reload_views_if_stale()
+    check("views: the next turn that can read it loads the file",
+          len(getattr(a, attr + "_cache")) == 2
+          and getattr(a, attr + "_stamp") != stamp)
+
+
+def test_a_promoted_view_that_cannot_be_read_gives_no_rows(
+        tmp: Path, monkeypatch) -> None:
+    a = isolated_agent(tmp, seeds=True)
+    path = a.promoted_examples_file
+    _write_rows(path, [EXAMPLE])
+    a._reload_views_if_stale()
+    check("views: the row is loaded", len(a._view_examples_cache) == 1)
+    real_read = Path.read_bytes
+
+    def locked(self):
+        if self == path:
+            raise PermissionError("locked")
+        return real_read(self)
+
+    monkeypatch.setattr(Path, "read_bytes", locked)
+    _write_rows(path, [EXAMPLE, dict(EXAMPLE, reply="yo")])
+    a._reload_views_if_stale()
+    check("views: a file the disk will not hand over leaves nothing in the prompt",
+          a._view_examples_cache == [])
 
 
 def test_a_promoted_view_is_reread_only_when_its_file_changes(

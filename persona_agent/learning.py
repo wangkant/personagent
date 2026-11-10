@@ -348,8 +348,9 @@ class Learning:
                 "max_tokens": 1500,
                 "response_format": {"type": "json_object"},
             }
-            # A short answer: hidden reasoning off, as for a reply.
-            self._thinking_off(eval_payload, eval_url)
+            # A short answer: hidden reasoning off, as for a reply, and K2 at
+            # the one temperature it takes that way.
+            self._thinking_off(eval_payload, eval_url, k2_temperature=True)
             r = await self._post_chat(eval_url, eval_auth, eval_payload, timeout=15)
             r.raise_for_status()
             # Some reasoning models route output into `reasoning_content`.
@@ -672,16 +673,20 @@ class Learning:
             if not ask:
                 return
             await asyncio.sleep(max(0.0, self.react_elicit_delay_s))
-            if self._complaint_answered(parent_evidence_id):
-                return
-            now_mono = time.time()
-            if now_mono - self._last_elicit_at[conv_id] < self.react_elicit_cooldown_s:
-                return
             uid = ""
             route_key = conv_id
             if is_dm:
                 uid = conv_id.split(":", 1)[1] if ":" in conv_id else reactor_uid
                 route_key = channels.dm_routing_key(uid)
+            # A turn in flight goes first: the ask follows its reply, and is
+            # on record where the next turn reads it.
+            while (line := self._pending_outbound.get(route_key)) is not None:
+                await line.wait()
+            if self._complaint_answered(parent_evidence_id):
+                return
+            now_mono = time.time()
+            if now_mono - self._last_elicit_at[conv_id] < self.react_elicit_cooldown_s:
+                return
             # Unreachable now: leave the cooldown unspent for a later one.
             if self._background_route(route_key) is None:
                 self._log_no_route(route_key, "follow_up")
@@ -690,42 +695,42 @@ class Learning:
             # handed back below if the ask never reached anyone.
             spent_before = self._last_elicit_at[conv_id]
             self._last_elicit_at[conv_id] = now_mono
-            if is_dm:
-                async with self.send_locks[route_key]:
-                    self._dm_send_tasks[route_key] = asyncio.current_task()
-                    try:
+            # A turn of its own: what arrives while it is sent waits behind it.
+            gate = self._begin_turn(route_key)
+            try:
+                if is_dm:
+                    async with self._dm_sending(route_key):
                         result = await self._send_background(
                             route_key, lambda: self._send_dm(uid, ask),
                             reason="follow_up")
-                    finally:
-                        if (self._dm_send_tasks.get(route_key)
-                                is asyncio.current_task()):
-                            self._dm_send_tasks.pop(route_key, None)
-                if result.success:
-                    self.dm_history.setdefault(uid, []).append(
-                        {"role": "assistant", "content": ask})
-            else:
-                async with self.send_locks[conv_id]:
-                    result = await self._send_background(
-                        conv_id,
-                        lambda: self._send_group(conv_id, ask, reactor_uid),
-                        reason="follow_up")
-                if result.success:
-                    self._append_buffer(conv_id, self.persona_name, ask)
-            if not result.success:
-                logger.warning("[Agent] elicitation delivery failed (conv=%s, partial=%s)",
-                               conv_id, result.partial)
-                if self._last_elicit_at[conv_id] == now_mono:
-                    self._last_elicit_at[conv_id] = spent_before
-                return
-            # Re-register the original reply for the rejector's answer, keeping
-            # its recipient; the ask's ids let a quote-reply find it.
-            self.pending_reactions.record(
-                conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
-                mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
-                target_uid=str(entry.get("target_uid") or ""),
-                elicited_uid=reactor_uid, mids=list(result.message_ids or ()),
-                ts=time.time(), parent_evidence_id=parent_evidence_id)
+                    if result.success:
+                        self.dm_history.setdefault(uid, []).append(
+                            {"role": "assistant", "content": ask})
+                else:
+                    async with self.send_locks[conv_id]:
+                        result = await self._send_background(
+                            conv_id,
+                            lambda: self._send_group(conv_id, ask, reactor_uid),
+                            reason="follow_up")
+                    if result.success:
+                        self._append_buffer(conv_id, self.persona_name, ask)
+                if not result.success:
+                    logger.warning("[Agent] elicitation delivery failed "
+                                   "(conv=%s, partial=%s)", conv_id, result.partial)
+                    if self._last_elicit_at[conv_id] == now_mono:
+                        self._last_elicit_at[conv_id] = spent_before
+                    return
+                # Re-register the original reply for the rejector's answer,
+                # keeping its recipient; the ask's ids let a quote-reply find
+                # it. On record before the line moves: the answer may be next.
+                self.pending_reactions.record(
+                    conv_id, reply=entry["reply"], ctx_lines=entry.get("ctx_lines", []),
+                    mode=entry.get("mode", "called"), intent=entry.get("intent", ""),
+                    target_uid=str(entry.get("target_uid") or ""),
+                    elicited_uid=reactor_uid, mids=list(result.message_ids or ()),
+                    ts=time.time(), parent_evidence_id=parent_evidence_id)
+            finally:
+                self._end_turn(route_key, gate)
             logger.info("[Agent] elicitation sent (conv=%s): %s", conv_id, ask[:60])
         except Exception as e:
             logger.warning("[Agent] elicitation failed: %s: %s",

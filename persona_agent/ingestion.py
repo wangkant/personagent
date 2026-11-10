@@ -30,9 +30,7 @@ import httpx
 from httpcore._backends.auto import AutoBackend
 
 from .config_env import env_int
-from .endpoints import adapt_rejected_payload
 from .connector import current_sink
-from .llm import known_to_take_thinking, thinking_off
 from .textproc import (_detect_image_mime, _truncate_framed,
                        salvage_json_object, strip_json_fences)
 
@@ -1143,8 +1141,8 @@ class ContentIngestion:
         """POST one image prompt, retrying `retryable` statuses (and transport
         errors when `retry_errors`, else they raise) with exponential backoff.
         A 400 refusing a field is resent at once in the spelling the endpoint
-        takes. Returns the last response (None if every try raised) and the
-        last error."""
+        takes, which `_post_chat` remembers as it does for a reply. Returns
+        the last response (None if every try raised) and the last error."""
         payload = {
             "model": self.vision_model,
             "messages": [{
@@ -1157,33 +1155,24 @@ class ContentIngestion:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        # This loop cannot learn from a refusal, so only where it is known.
-        thinking_off(payload, self.vision_base_url, known_to_take_thinking(
-            self.vision_base_url, self.vision_model))
+        url = f"{self.vision_base_url}/chat/completions"
+        # Hidden reasoning off, and K2 at the one temperature it takes that way.
+        self._thinking_off(payload, url, k2_temperature=True)
         r = None
         last_exc = None
-        async with self._http(timeout=30) as c:
-            async def send() -> httpx.Response:
-                return await c.post(
-                    f"{self.vision_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.vision_api_key}"},
-                    json=dict(payload),
-                )
-            for attempt in range(attempts):
-                try:
-                    r = await send()
-                    if (r.status_code in (400, 422)
-                            and adapt_rejected_payload(payload, r.text)):
-                        r = await send()
-                except Exception as e:
-                    if not retry_errors:
-                        raise
-                    r, last_exc = None, e
-                else:
-                    if r.status_code not in retryable:
-                        break
-                if attempt < attempts - 1:
-                    await asyncio.sleep(backoff * 2 ** attempt)
+        for attempt in range(attempts):
+            try:
+                r = await self._post_chat(url, self.vision_api_key, payload,
+                                          timeout=30)
+            except Exception as e:
+                if not retry_errors:
+                    raise
+                r, last_exc = None, e
+            else:
+                if r.status_code not in retryable:
+                    break
+            if attempt < attempts - 1:
+                await asyncio.sleep(backoff * 2 ** attempt)
         return r, last_exc
 
     @staticmethod

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pytest
 
 from helpers import check
 from persona_agent import astrbot_install as installer
+from persona_agent import services as svc
 from persona_agent import setup_wizard as sw
 
 
@@ -122,6 +125,41 @@ def test_a_stopped_download_leaves_nothing_half_made_and_the_next_one_starts_cle
           and not (tools / "envs" / "astrbot" / "half-made").exists())
     installer.install_astrbot(tmp_path, run=lambda argv, **kw: pytest.fail("a finished install runs nothing"))
     check("a finished install is kept", installation.executable.is_file() and len(built) == 2)
+
+
+def test_a_leftover_installer_is_ended_before_its_files_are_removed(monkeypatch, tmp_path):
+    """A killed app can leave `uv tool install` running. Removing the
+    environment under it while a second install starts leaves neither whole."""
+    home = tmp_path.resolve()
+    installation = installer.AstrBotInstallation(home)
+    tools = installation.tools
+    monkeypatch.setattr(installer.venv.EnvBuilder, "create", lambda self, path: None)
+    python = tools / "installer" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    uv = [str(python), "-m", "uv", "--no-config", "tool", "install", "--python", "3.12", "astrbot>=4.29,<5"]
+    half_made = tools / "envs" / "astrbot" / "half-made"
+    _touch(half_made)
+    gone_app = 2 ** 30 + 1
+    record = home / "runtime" / "desktop" / f"children-{gone_app}.json"
+    _touch(record, json.dumps({"owner": gone_app, "command": "personagent start",
+                               "children": {"install": {"pid": 41, "argv": uv}}}))
+    monkeypatch.setattr(svc, "_command_line", lambda pid: " ".join(uv) if pid == 41 else "")
+    monkeypatch.setattr(svc, "_leads_group", lambda pid: True, raising=False)
+    events = []
+    monkeypatch.setattr(svc, "_end", lambda pid, command: events.append(("ended", pid, half_made.exists())))
+    finish = _finish(installation)
+
+    def run(argv, **kw):
+        events.append(("step", argv[-1], half_made.exists()))
+        finish(argv, **kw)
+    installer.install_astrbot(tmp_path, run=run)
+    check("the leftover installer is ended first, with its files still in place",
+          events[0] == ("ended", 41, True), str(events))
+    check("only then is the half-made environment removed, and the first step run",
+          events[1] == ("step", "--default-pip", False), str(events))
+    check("and its record is done with", not record.exists())
+
+    installer.install_astrbot(tmp_path, run=lambda argv, **kw: pytest.fail("a finished install runs nothing"))
+    check("a finished install ends nothing", [event[0] for event in events].count("ended") == 1, str(events))
 
 
 def test_start_runs_without_a_dashboard_or_password(monkeypatch, tmp_path):

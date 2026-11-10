@@ -114,7 +114,7 @@ personagent 默认监听 `127.0.0.1:8080`。如果把它的 `SERVER_HOST` 设为
 
 每次请求持续到 personagent 完成一个回合，包括一小段防抖时间，以及每次模型调用和重试。`timeout_s` 用尽后，personagent 仍会完成这个回合并保留学到的内容，但回复会丢失，AstrBot 自带的模型转而回答这条消息。
 
-让 personagent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` 低于 `timeout_s`。按 personagent 的默认值（`LLM_TIMEOUT_S=120`、`LLM_MAX_RETRIES=2`），模型调用不断超时的回合可能超过 360 秒，默认的 `timeout_s` 420 足以覆盖。如果调大 personagent 的其中一项，`timeout_s` 也要调大。
+让 personagent 的 3 × `LLM_TIMEOUT_S` 低于 `timeout_s`。一个回合的所有模型调用（含重试）共用 1.5 × `LLM_TIMEOUT_S`，而且消息要先等它到达时正在思考的那个回合结束。按 personagent 的默认值（`LLM_TIMEOUT_S=120`），这是 360 秒，默认的 `timeout_s` 420 足以覆盖。如果调大 personagent 的 `LLM_TIMEOUT_S`，`timeout_s` 也要调大。
 
 只要签名后的请求还新鲜，插件会对 personagent 返回的 429 或 500 最多重试两次，429 时遵循 `Retry-After`。
 

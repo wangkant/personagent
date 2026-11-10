@@ -447,20 +447,6 @@ def _as_protocol_object(content: str) -> str:
                        "reply": content, "mem": ""}, ensure_ascii=False)
 
 
-def apply_k2_quirks(payload: dict, model: str, base_url: str) -> dict:
-    """Turn hidden reasoning off for a short-answer call, or it eats the budget.
-
-    The endpoint decides first because a wrong switch is ignored:
-    OpenRouter needs `reasoning`, K2 models `thinking` off at temperature 0.6."""
-    if "openrouter.ai" in (base_url or ""):
-        # The exclude/max_tokens form is 400-rejected by some upstreams.
-        payload["reasoning"] = {"enabled": False}
-    elif "k2" in (model or "").lower():
-        payload["thinking"] = {"type": "disabled"}
-        payload["temperature"] = 0.6
-    return payload
-
-
 # `_REPLY_MARKER_RE` must keep accepting whatever this does, or a marker stays
 # literal and the validator drops the whole reply.
 _STICKER_MARKER_RE = re.compile(r"\[STICKER:\s*([^\]]+?)\s*\]")

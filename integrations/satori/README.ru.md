@@ -62,7 +62,7 @@ Satori и Koishi — сторонние программы. personagent не н�
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Переименовывает платформы так, как их видит агент: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Забирать исходящую очередь агента. |
 | `SATORI_CONNECTOR_ID` | из `SATORI_URL` | Идентификатор этого коннектора у агента. Не меняйте его. |
-| `SATORI_TIMEOUT_S` | `420` | Сколько может длиться один ход. Держите выше `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` агента. |
+| `SATORI_TIMEOUT_S` | `420` | Сколько может длиться один ход. Держите выше 3 × `LLM_TIMEOUT_S` агента. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Скачивать публичные URL изображений в коннекторе вместо передачи URL агенту. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

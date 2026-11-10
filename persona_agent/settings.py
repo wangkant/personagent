@@ -91,8 +91,8 @@ class AgentSettings:
     #: LLM transient-error retry count (jittered backoff; 0 disables).
     api_max_retries: int = _env(
         lambda env: env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env))
-    #: Main LLM call timeout (seconds); reasoning models can be slow. A group
-    #: turn as a whole gets one and a half of it (``turns._TURN_BUDGET_CALLS``).
+    #: Main LLM call timeout (seconds); reasoning models can be slow. A turn
+    #: as a whole gets one and a half of it (``turns._TURN_BUDGET_CALLS``).
     llm_timeout_s: float = _env(
         lambda env: env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env))
 

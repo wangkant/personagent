@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A turn has one time budget.** A reply gets 1.5 × `LLM_TIMEOUT_S` in all, in a group, in a DM and when the character speaks first, where it used to get the timeout again for every retry and every model. A connector should allow 3 × `LLM_TIMEOUT_S` for a request, since a message first waits for the turn that was thinking when it arrived; the defaults (420 s against 360 s) already do. `LLM_MAX_RETRIES` no longer enters that sum.
+- **DMs sent while a reply is on the way are answered together.** Someone who sends three more messages while the model is thinking gets one reply to all three, as a group already did, where each used to queue a reply of its own.
+- **A memory command sent while a reply is on the way is answered after it** without holding its request open: through the outbox as `follow_up` where the connector pulls one, and otherwise in a response of the same conversation.
+- **The Activity API sends what the page shows.** `GET /api/dashboard/conversation` no longer carries the checklists, history, full evidence, past proposals and totals that `personagent learned` prints; on a busy chat that is 0.7 ms and 30 KB in place of 4.3 ms and 197 KB, every 8 seconds. `GET /api/dashboard/status`, which nothing read, is removed.
+- **The README has a product cover.** The wordmark and two real screens of the local page replace the hand-drawn scene, and the feature table reads as two plain columns.
+- **`start.ps1` finds Python through `py -3`** and names a Python older than 3.10, or a `.venv` whose Python is gone, where it used to fail inside pip.
+- **`init` flags typed at a terminal carry into the questions.** `--provider`, `--model`, `--name` and the rest answer their question; only `--lang` used to.
+
+### Fixed
+
+- **A stuck model no longer blocks everyone.** While one group waited for a reply, each later message of that group held one of the 64 request slots until the model answered, so one busy group and a hanging model could turn every chat's requests into 429s. Messages that arrive during a turn are now set aside at once and enter the chat behind the reply, in the order they came. The same holds for DMs, for memory commands and for the character's own openers, which used to hold a conversation's lock for as long as the model took.
+- **The follow-up question after a complaint waits for the reply in flight.** In a group it could land in the middle of a turn, ahead of a reply that had not seen it.
+- **A connector conversation is not forgotten while the character's opener for it is being written.** With more than 256 connector conversations open, the room could be dropped mid-turn.
+- **A power cut no longer keeps the service from starting.** `pending_reactions.json` and `connector_handles.json` are written without waiting for the disk; a cut-off copy of the first stopped the start, and of the second failed every turn after the model was paid. A damaged one is now moved aside as `<name>.corrupt` and the store starts empty. Every other state file still stops with an error.
+- **The first AstrBot download can be cancelled**, and stops when the page quits; a half-made environment is removed so the next attempt starts clean. On Linux and macOS a download left running by a killed app is stopped at the next start or the next install.
+- **A new image is downloaded once**, not once for the caption and again for the sticker library.
+- **Self-evaluation, vision and the health probes turn hidden reasoning off** the way replies do, so they no longer pay for it on DeepSeek, Zhipu and Moonshot. An endpoint that rejects the switch is asked once, not on every image.
+
 ## [1.4.0] — 2026-11-10
 
 Three characters the community already draws, with animated portraits; the character inside your coding agent; memory that stays current and can be forgotten; the local page, the terminal and the guides in ten languages; and a calmer local page.

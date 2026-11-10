@@ -141,7 +141,7 @@ AstrBot、NapCat（OneBot）、Koishi（經 Satori 聯結器）和 Matrix（經 
 2. **回覆來自 AstrBot 自帶的模型（語氣突然變了）。** 檢視 AstrBot 的日誌：
    - `refusing unsafe personagent_url`：外掛裡的 `personagent_url` 不正確。在同一臺電腦上應填 `http://127.0.0.1:8080`。
    - `agent refused the request (403)`：兩邊的 `CONNECTOR_TOKEN` 不一致，或者兩臺電腦的時鐘相差超過五分鐘。重新執行 `personagent connect astrbot` 會把兩邊改成同一個令牌。
-   - `timed out waiting for the agent`：模型響應太慢。外掛的 `timeout_s` 預設為 420 秒，足以覆蓋 personagent 預設設定下最長的 360 秒；如果調大了 `LLM_TIMEOUT_S` 或 `LLM_MAX_RETRIES`，也要相應調大 `timeout_s`。
+   - `timed out waiting for the agent`：模型響應太慢。外掛的 `timeout_s` 預設為 420 秒，足以覆蓋 personagent 預設設定下最長的 360 秒；如果調大了 `LLM_TIMEOUT_S`，也要相應調大 `timeout_s`。
    - `agent request failed`：personagent 沒有執行，或者地址、埠填寫有誤。
 3. **QQ 私聊被攔下。** 經 NapCat 進來的 QQ 私聊，必須來自管理員（`ADMIN_IDS`），或者在 `ACCESS_DM_USERS` 之中。
 4. **`QQ_BOT_ID` 未填寫或填寫錯誤。** 這裡應填小號的 QQ 號。
@@ -341,7 +341,7 @@ AstrBot 在 Docker 裡或另一臺主機上時，見[使用指南](guide.zh-TW.m
 
 1. **訊息沒有送達。** 在本地頁面確認平臺顯示為已連線，並讀 `runtime/desktop/direct.log` 或 `astrbot.log`。QQ 官方機器人必須在群裡，QQ 決定它能收到哪些群訊息。個人微信機器人收不到群訊息。在你執行的 AstrBot 中，填寫外掛的 `groups`（私聊填 `dm_users`），NapCat 還要把 `aiocqhttp` 從 `excluded_platforms` 中移除。Satori 和 Matrix 聯結器在各自的 `.env` 裡有自己的白名單，見它們的 README。這種情況下，聊天不會出現在「動態」裡。
 2. **角色服務沒開。** `personagent run` 的啟動資訊顯示 `agent: OFF`，並給出原因和解決辦法。沒有 `LLM_API_KEY` 時，在本地頁面新增 key（或設定 `LLM_API_KEY`）並重啟。`AGENT_ENABLED=false` 時，在 `<home>/.env` 裡改為 `true` 並重啟。在此之前，每個事件都得到 `owned: false`，第一個事件會記錄一行內容相同的 ERROR。
-3. **AstrBot 自帶的模型代為回答。** 外掛回退了，因為請求失敗、personagent 拒絕了這條訊息（第 5 項），或角色服務沒開（第 2 項）。AstrBot 的日誌顯示 `refusing unsafe personagent_url`、`agent refused the request (403): <message>`（或其他狀態，見下表）或 `timed out waiting for the agent`。`timeout_s` 必須覆蓋防抖和回合內的每次模型呼叫，所以讓 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` 低於它。它的預設值（420）覆蓋角色服務的預設值（120 × 3 = 360 秒）。調大那兩項時也要調大它。
+3. **AstrBot 自帶的模型代為回答。** 外掛回退了，因為請求失敗、personagent 拒絕了這條訊息（第 5 項），或角色服務沒開（第 2 項）。AstrBot 的日誌顯示 `refusing unsafe personagent_url`、`agent refused the request (403): <message>`（或其他狀態，見下表）或 `timed out waiting for the agent`。`timeout_s` 必須覆蓋防抖和回合內的模型呼叫，還要算上訊息到達時仍在思考的那個回合。不論群聊還是私聊，一個回合的所有模型呼叫共用 1.5 × `LLM_TIMEOUT_S`，所以讓 3 × `LLM_TIMEOUT_S` 低於它。它的預設值（420）覆蓋角色服務的預設值（3 × 120 = 360 秒）。調大 `LLM_TIMEOUT_S` 時也要調大它。
 4. **沒有叫到它。** 在群裡，它回應自己的名字（`PERSONA_NAME`）或 @。其他情況下，它等到聊夠（`CHAT_TRIGGER_COUNT`，預設 30 條）才考慮，也可能仍然不說。在它所在時區的 02:00 到 07:00，它大多不參與沒有叫它的聊天。時區是 `PERSONA_TZ_OFFSET_HOURS`。留空時，`AGENT_LANG` 為 `zh` 或 `zh-TW` 按 UTC+8，其他語言按本機時區。「動態」顯示最近每個回合的原因。要離線觀察同樣的判斷，執行 `personagent chat --trigger 4`。
 5. **personagent 自己的白名單。** `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 在每條路徑上都生效，不帶字首 ID 的 QQ 私聊還需要是管理員或有條目。被它們攔下的訊息不會被接管，所以經 AstrBot 時，它自帶的模型可能回答。personagent 對每個被拒絕的會話以 INFO 記錄一次，並寫明拒絕它的設定。
 6. **模型呼叫失敗。** key 被拒（401 或 403）或餘額耗盡（402 或配額用完）時，記錄一行 ERROR，寫明服務商主機和要修改的設定。執行 `personagent doctor`，它向每個模型介面發一個很小的請求並顯示狀態，也能查出錯誤的 `LLM_BASE_URL` 或 `LLM_MODEL`。模型不可用期間，被叫到時角色會發一句符合人設的簡短致歉，每個會話每五分鐘最多一次。

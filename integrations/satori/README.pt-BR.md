@@ -62,7 +62,7 @@ O [satori-python](https://github.com/RF-Tar-Railt/satori-python) cuida do lado d
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Renomeia as plataformas como o agente as vê: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Buscar a caixa de saída do agente. |
 | `SATORI_CONNECTOR_ID` | a partir de `SATORI_URL` | O id deste conector no agente. Mantenha estável. |
-| `SATORI_TIMEOUT_S` | `420` | Quanto um turno pode durar. Mantenha acima de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` do agente. |
+| `SATORI_TIMEOUT_S` | `420` | Quanto um turno pode durar. Mantenha acima de 3 × `LLM_TIMEOUT_S` do agente. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Baixar URLs de imagens públicas no conector em vez de passar a URL ao agente. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

@@ -77,6 +77,9 @@ def install_astrbot(home: Path, *, run: Optional[Callable[..., object]] = None) 
     if not (installation.executable.is_file() and installation.python.is_file()):
         bootstrap = installation.tools / "installer"
         python = bootstrap / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        # A killed app can leave its installer running: end it before its files go.
+        from .services import stop_leftovers   # imported here: services imports this module
+        stop_leftovers(installation.home, under=installation.tools)
         # An attempt that never got to clean up, such as a closed window.
         _discard(installation)
         try:

@@ -95,7 +95,7 @@ O protocolo define a regra. `PERSONAGENT_URL` precisa ser um endereço de loopba
 | `MATRIX_INVITE_FROM` | Usuários cujos convites o bot aceita. Convites para salas nomeadas em `MATRIX_GROUPS` e convites de chat direto de `MATRIX_DM_USERS` são sempre aceitos. Os outros ficam pendentes. |
 | `MATRIX_IGNORE_USERS` | Nunca recebem resposta e não contam como membros quando o conector distingue um chat direto de um grupo. |
 | `MATRIX_E2EE_ENABLED` | Criptografia de ponta a ponta. Veja abaixo. |
-| `MATRIX_TIMEOUT_S` | Quanto um turno pode durar. Mantenha acima de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` do agente. |
+| `MATRIX_TIMEOUT_S` | Quanto um turno pode durar. Mantenha acima de 3 × `LLM_TIMEOUT_S` do agente. |
 | `MATRIX_OUTBOX_ENABLED` | Consultar a caixa de saída do agente. |
 
 ## Pontes: WhatsApp, Signal, Messenger, Instagram e mais

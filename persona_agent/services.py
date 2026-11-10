@@ -218,25 +218,69 @@ class Stopped(RuntimeError):
     app closed."""
 
 
-def stop_leftovers(home: Path) -> list[str]:
+def _leads_group(pid: int) -> bool:
+    """Whether `pid` leads its own process group, as every child is started on
+    POSIX. A program the child replaced itself with still does; a later
+    process that was given its number seldom does."""
+    if os.name == "nt":
+        return False
+    try:
+        return os.getpgid(pid) == pid
+    except OSError:
+        return False
+
+
+def _still_child(line: str, argv: list, home: str, leads: bool) -> bool:
+    """Whether the process now holding a recorded child's number is still that
+    child, started as `argv` for `home`: `line` is its command line, and
+    `leads` whether it leads its own process group."""
+    if not line or home not in line:
+        return False
+    if all(str(arg) in line for arg in argv[1:]):
+        return True
+    # On POSIX a module can replace itself with a program of its own, as uv
+    # does: the same process and group, no longer `python -m module`. Only
+    # the program of that name beside the interpreter: a group leader that
+    # merely names the home and an argument is someone else's.
+    if not leads or len(argv) < 3 or argv[1] != "-m":
+        return False
+    interpreter = str(argv[0])
+    program = interpreter[:len(interpreter) - len(os.path.basename(interpreter))] + str(argv[2])
+    return (line.startswith(program + " ")
+            and all(str(arg) in line for arg in argv[3:]))
+
+
+def stop_leftovers(home: Path, under: Optional[Path] = None) -> list[str]:
     """Stop what an earlier run of the app for `home` left running, and return
-    their names. A child is stopped only once its app is gone and while its
-    command line is still the recorded one. Call before starting any child."""
+    their names. A child is stopped only once its app is gone and while it is
+    still the process that was recorded. Call before starting any child; with
+    `under`, at any time, for only the children whose program is in that
+    directory."""
     home = home.resolve()
     stopped = []
     for path in sorted((home / "runtime" / "desktop").glob("children-*.json")):
         record = _read_json(path)
         owner, command = record["owner"], record["command"]
+        if owner == os.getpid() and under is not None:
+            continue    # this app's own children, which it may be running
+        # Before any child is started, a record under this number is an earlier process's.
         running = _command_line(owner) if owner != os.getpid() else ""
         if running and (running == command or not command):
             continue    # that app is still running and stops them itself
+        kept = {}
         for name, child in record["children"].items():
             pid, argv = child["pid"], child["argv"]
+            if under is not None and not Path(argv[0]).is_relative_to(under):
+                kept[name] = child
+                continue
             line = _command_line(pid)
-            if line and str(home) in line and all(str(arg) in line for arg in argv[1:]):
+            if _still_child(line, argv, str(home), _leads_group(pid)):
                 _end(pid, line)
                 stopped.append(name)
-        path.unlink(missing_ok=True)
+        if kept:
+            atomic_write_text(path, json.dumps({**record, "children": kept}), fsync=False)
+        else:
+            path.unlink(missing_ok=True)
     return stopped
 
 
@@ -264,8 +308,9 @@ class Services:
     def _spawn(self, name: str, argv: list[str], *, cwd: Optional[Path], env: dict) -> None:
         """Start `argv` with its output in its log, so that it ends when this
         process does, and record it for `stop_leftovers`. On POSIX only a
-        `python -m module ...` command ends with a killed app; any other
-        ends when it is stopped."""
+        `python -m module ...` command ends with a killed app, and not once
+        the module has replaced itself with another program, as uv does; the
+        rest end when they are stopped, or at the next start."""
         logs = self.home / "runtime" / "desktop"
         logs.mkdir(parents=True, exist_ok=True)
         fd = os.open(logs / f"{name}.log", os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)

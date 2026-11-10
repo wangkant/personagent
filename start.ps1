@@ -76,9 +76,14 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
     & $py.Source @pre -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
-    # A .venv made with an older Python would fail in pip and read as a network problem.
+    # A .venv whose Python was uninstalled, or made with an older one, would fail
+    # in pip and read as a network problem.
     $venvVersion = Get-PythonVersion $venvPy
-    if ($venvVersion -and $venvVersion -lt $minPython) {
+    if (-not $venvVersion) {
+        Write-Host "error: .venv here no longer runs; most often the Python it was made with is gone (uninstalled or moved). Delete the .venv folder, then start this again to rebuild it." -ForegroundColor Red
+        exit 1
+    }
+    if ($venvVersion -lt $minPython) {
         Write-Host "error: .venv here was made with Python $venvVersion, but personagent needs Python $minPython or newer. Install a newer Python, move .venv aside, then start this again." -ForegroundColor Red
         exit 1
     }

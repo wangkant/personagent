@@ -65,15 +65,21 @@ class DataViews:
         except OSError as e:
             logger.warning("[Agent] %s save failed: %s", label, e)
 
-    def _reload_if_stale(self, paths, stamp_attr: str, load, name: str) -> None:
+    def _reload_if_stale(self, paths, stamp_attr: str, load) -> None:
         """Run `load()` when a file in `paths` changed since the stamp kept in
-        `stamp_attr`; a read error keeps the cache and retries next turn."""
+        `stamp_attr`. An error from `load` is the caller's: the stamp stays,
+        so the next turn loads again."""
         stamp = self._pool_stamp(paths)
         if stamp == getattr(self, stamp_attr):
             return
+        load()
+        setattr(self, stamp_attr, stamp)
+
+    def _reload_pool_if_stale(self, files, stamp_attr: str, load, name: str) -> None:
+        """`_reload_if_stale` for a retrieval pool, which keeps its cache
+        through a read error. The promoted views must not: see there."""
         try:
-            load()
-            setattr(self, stamp_attr, stamp)
+            self._reload_if_stale(files, stamp_attr, load)
         except OSError as e:
             logger.warning("[Agent] %s reload failed: %s", name, e)
 
@@ -90,7 +96,7 @@ class DataViews:
                 if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
 
-        self._reload_if_stale(files, "_examples_mtime", load, "examples.jsonl")
+        self._reload_pool_if_stale(files, "_examples_mtime", load, "examples.jsonl")
 
     def _reload_pairs_if_stale(self) -> None:
         """Hot-reload the seed + runtime preference pairs (rating=better only)."""
@@ -100,7 +106,7 @@ class DataViews:
             self._pairs_cache = [r for r in self._read_pool(*files)
                                  if self._is_better_pair(r)]
 
-        self._reload_if_stale(files, "_pairs_mtime", load, "feedback.jsonl")
+        self._reload_pool_if_stale(files, "_pairs_mtime", load, "feedback.jsonl")
 
     def _live_scope(self, conv_id: str) -> dict:
         """This turn's scope, normalised the way the ledger stores one."""
@@ -272,7 +278,8 @@ class DataViews:
 
     def _reload_views_if_stale(self) -> None:
         """Hot-reload the promoted views, the only rows automatic learning can
-        put in a prompt; a rollback takes effect on the next turn."""
+        put in a prompt; a rollback takes effect on the next turn. A read
+        error is raised, never met by keeping rows that may be rolled back."""
         def load(path: Path, attr: str, pairs_only: bool) -> None:
             rows = read_jsonl((path,))
             if pairs_only:
@@ -284,8 +291,7 @@ class DataViews:
             (self.promoted_feedback_file, "_view_pairs", True),
         ):
             self._reload_if_stale(
-                (path,), attr + "_stamp",
-                partial(load, path, attr, pairs_only), path.name)
+                (path,), attr + "_stamp", partial(load, path, attr, pairs_only))
 
     @staticmethod
     def _is_better_pair(r: dict) -> bool:

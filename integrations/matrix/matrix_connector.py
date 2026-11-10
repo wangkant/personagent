@@ -140,8 +140,8 @@ class Settings:
     store_dir: Path = DEFAULT_STORE
     outbox_enabled: bool = True
     read_receipts_enabled: bool = True
-    # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
-    # debounce: 360 s and change with its defaults.
+    # The agent's own ceiling is 3 x LLM_TIMEOUT_S (the turn in flight, then
+    # this one) plus a debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
     max_event_age_s: float = 300.0
     log_level: str = "INFO"
@@ -798,7 +798,7 @@ class MatrixConnector:
                 return
             except httpx.TimeoutException:
                 logger.warning("timed out waiting for the agent (MATRIX_TIMEOUT_S=%.0f); "
-                               "it should cover LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES)",
+                               "it should cover 3 x LLM_TIMEOUT_S",
                                self.settings.timeout_s)
                 return
             except httpx.HTTPError as exc:

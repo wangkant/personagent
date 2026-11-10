@@ -1,7 +1,9 @@
-"""How a message becomes a turn: intake, admission and the group turn."""
+"""How a message becomes a turn: intake, admission, a conversation's line
+and the group turn."""
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import random
 import time
@@ -34,55 +36,74 @@ _EXCUSE_COOLDOWN_S = 300.0
 # A bare call ("@Bot", "Bot?") waits this long for the message that follows it.
 BARE_CALL_DEBOUNCE_S = 5.0
 
-# A group turn's whole model time, in LLM_TIMEOUT_S: one full-length call and
-# half of another, however many calls, retries and models it goes through.
+# A turn's whole model time, in LLM_TIMEOUT_S: one full-length call and half
+# of another, however many calls, retries and models it goes through.
 _TURN_BUDGET_CALLS = 1.5
 
-# Messages one turn holds back; a flood past it loses its oldest.
+# Arrivals one conversation holds back; a flood past it loses its oldest.
 _MAX_HELD = 256
+
+# Held memory commands that keep their handler, where an answer can only
+# travel in a response; a later one's answer rides in the last keeper's.
+_MAX_COMMAND_WAITERS = 2
 
 
 class _Held:
-    """A message that arrived during a turn. `absorb` is its intake, run when
-    the turn ends; `waiter` then carries what it returned, or None as soon as
-    a newer message has taken this one's place."""
+    """One arrival in a conversation's line. `absorb` is its intake, run in
+    arrival order (None while the message is still being read); `waiter` then
+    carries what it returned, or None once its handler has no reason to stay.
+    `message`: a chat message, of which only the newest keeps its handler.
+    `turn`: its handler runs the next turn as soon as it is let in.
+    `say`: sends a memory command's answer (`absorb` returned it)."""
 
-    __slots__ = ("absorb", "command", "waiter")
+    __slots__ = ("absorb", "message", "turn", "say", "waiter", "context",
+                 "ticket", "carrier", "carried", "owing", "outcome",
+                 "absorbed", "granted", "dropped")
 
-    def __init__(self, absorb: Callable[[], tuple], command: bool) -> None:
-        self.absorb = absorb
-        self.command = command
+    def __init__(self) -> None:
+        self.absorb: Optional[Callable[[], object]] = None
+        self.message = self.turn = False
+        self.say: Optional[Callable] = None
         self.waiter: asyncio.Future = asyncio.get_running_loop().create_future()
+        # Intake runs as its own request, whichever task lets it in.
+        self.context = contextvars.copy_context()
+        self.ticket = 0
+        # The waiting command whose response carries this one's answer.
+        self.carrier: Optional[_Held] = None
+        # (say, answer) of the commands this one carries, and how many more.
+        self.carried: list[tuple] = []
+        self.owing = 0
+        self.outcome: object = None
+        self.absorbed = self.granted = self.dropped = False
 
-    def release(self, outcome: Optional[tuple]) -> None:
+    def release(self, outcome) -> None:
         if not self.waiter.done():
             self.waiter.set_result(outcome)
 
+    def carried_one(self) -> None:
+        """One carried answer is settled; the last lets the handler go."""
+        self.owing -= 1
+        if self.owing == 0 and self.absorbed:
+            self.release(self.outcome)
+
 
 class _TurnGate(asyncio.Event):
-    """One group turn, from its model call to its commit. What arrives
-    meanwhile is held here in order and enters the buffer when the turn ends,
-    so a reply is never placed after a message it did not see. An Event
-    because eviction sets whatever `_pending_outbound` holds."""
+    """A conversation's line: the turn in flight, from its model call to its
+    commit, and what arrived meanwhile or is still being read, in order. It
+    is let in when the turn ends, so a reply is never placed after a message
+    it did not see. An Event, set once the line is empty again."""
 
     def __init__(self) -> None:
         super().__init__()
         self.held: list[_Held] = []
-        # The one handler still waiting to run the next turn.
+        # A turn is in flight: nothing behind it is let in.
+        self.busy = False
+        # The one chat message whose handler still waits to run a turn.
         self.newest: Optional[_Held] = None
+        # Held commands that kept their handler (see _MAX_COMMAND_WAITERS).
+        self.keepers: list[_Held] = []
+        self.tickets = 0
         self.overflowed = False
-
-    def hold(self, item: _Held) -> None:
-        # Only the newest message can still become a turn (the debounce rule),
-        # so the handler before it leaves, and with it its admission slot.
-        if not item.command:
-            if self.newest is not None:
-                self.newest.release(None)
-            self.newest = item
-        self.held.append(item)
-        if len(self.held) > _MAX_HELD:
-            self.overflowed = True
-            self.held.pop(0).release(None)
 
 
 class Turns:
@@ -92,40 +113,210 @@ class Turns:
         # handle_event); `proactive` text is the caller's cue (see _handle_dm).
         return await self._handle_inner(payload, proactive=proactive)
 
+    # ---- a conversation's line ---------------------------------------------
+
+    def _begin_turn(self, key: str) -> _TurnGate:
+        """Reserve `key`'s next reply before the model is asked: what arrives
+        from here on is held behind it."""
+        gate = self._pending_outbound.get(key)
+        if gate is None:
+            gate = self._pending_outbound[key] = _TurnGate()
+        gate.busy = True
+        return gate
+
+    def _end_turn(self, key: str, gate: _TurnGate) -> None:
+        """Close a turn and let in what was held behind it. Synchronous, so
+        nothing can come between a commit and this."""
+        gate.busy = False
+        self._drain(key, gate)
+
+    def _enter_line(self, key: str) -> tuple[_TurnGate, _Held]:
+        """Take the next place in `key`'s line for a message not read yet, so
+        it keeps its arrival order however long reading it takes."""
+        gate = self._pending_outbound.get(key)
+        if gate is None:
+            gate = self._pending_outbound[key] = _TurnGate()
+        item = _Held()
+        if self._place(gate, item):
+            self._drain(key, gate)
+        return gate, item
+
+    def _leave_line(self, key: str, gate: _TurnGate, item: _Held) -> None:
+        """Give up a place taken with `_enter_line`: nothing came of it."""
+        if item in gate.held:
+            gate.held.remove(item)
+        item.release(None)
+        self._drain(key, gate)
+
+    @staticmethod
+    def _place(gate: _TurnGate, item: _Held) -> bool:
+        """Append `item`; True when the bound made the line drop an arrival."""
+        gate.tickets += 1
+        item.ticket = gate.tickets
+        gate.held.append(item)
+        if len(gate.held) <= _MAX_HELD:
+            return False
+        gate.overflowed = True
+        # Chatter first: a command changes what is remembered. Then one that
+        # carries no other's answer, which would run and never be answered.
+        victim = next(
+            (held for held in gate.held if held.message and held is not item),
+            next((held for held in gate.held
+                  if not held.owing and held is not item), gate.held[0]))
+        gate.held.remove(victim)
+        victim.dropped = True
+        if gate.newest is victim:
+            gate.newest = None
+        victim.release(None)
+        if victim.carrier is not None:
+            victim.carrier.carried_one()
+        return True
+
+    def _ready(self, key: str, gate: _TurnGate, item: _Held,
+               absorb: Callable[[], object], *, message: bool,
+               turn: bool = False, say: Optional[Callable] = None) -> None:
+        """`item` has been read: decide whether its handler stays, then let
+        in whatever the line can now let in."""
+        if item.dropped:
+            return
+        item.absorb, item.message, item.turn, item.say = absorb, message, turn, say
+        if message:
+            # Only the newest message can still become a turn (the debounce
+            # rule), so the others' handlers leave, and with them their slots.
+            if gate.newest is not None and gate.newest.ticket > item.ticket:
+                item.release(None)
+            else:
+                if gate.newest is not None:
+                    gate.newest.release(None)
+                gate.newest = item
+        elif say is not None and (gate.busy or gate.held[0] is not item):
+            self._settle_held_command(key, gate, item)
+        self._drain(key, gate)
+
+    def _settle_held_command(self, key: str, gate: _TurnGate,
+                             item: _Held) -> None:
+        """A memory command that must wait its turn in line: does its handler
+        wait too? Only where the answer has no other way out."""
+        # NapCat, or a connector that pulls the outbox: answered from a
+        # background task once the command has run.
+        if current_sink.get() is None or self._background_route(key) is not None:
+            item.release(None)
+            return
+        gate.keepers = [k for k in gate.keepers if not k.waiter.done()]
+        if len(gate.keepers) < _MAX_COMMAND_WAITERS:
+            gate.keepers.append(item)
+            return
+        item.carrier = gate.keepers[-1]
+        item.carrier.owing += 1
+        item.release(None)
+
+    def _drain(self, key: str, gate: _TurnGate) -> None:
+        """Let in, in order, what the line holds: up to the first message
+        still being read, or the one whose handler takes the next turn."""
+        later: list[tuple] = []
+        while gate.held and not gate.busy:
+            item = gate.held[0]
+            if item.absorb is None:
+                break
+            del gate.held[0]
+            if gate.newest is item:
+                gate.newest = None
+            staying = not item.waiter.done()
+            try:
+                outcome = item.context.run(item.absorb)
+            except Exception as e:
+                # The handler that would have raised it still does.
+                if staying:
+                    item.waiter.set_exception(e)
+                else:
+                    logger.warning("[Agent] held message intake failed "
+                                   "(conversation=%s): %s", key, e)
+                if item.carrier is not None:
+                    item.carrier.carried_one()
+                continue
+            item.outcome, item.absorbed = outcome, True
+            if staying:
+                # Its handler runs the next turn: the rest stays behind it.
+                gate.busy = item.granted = item.turn
+                if not item.owing:
+                    item.release(outcome)
+            elif item.say is not None:
+                carrier = item.carrier
+                if carrier is not None and not carrier.waiter.done():
+                    carrier.carried.append((item.say, outcome))
+                    carrier.carried_one()
+                else:
+                    later.append((item.say, outcome))
+        if later:
+            self._spawn(self._say_later(key, later))
+        if gate.overflowed:
+            gate.overflowed = False
+            logger.warning("[Agent] over %d messages waited in one line "
+                           "(conversation=%s); the oldest were dropped",
+                           _MAX_HELD, key)
+        if not gate.busy and not gate.held:
+            if self._pending_outbound.get(key) is gate:
+                del self._pending_outbound[key]
+            gate.set()
+
+    async def _say_later(self, key: str, answers: list[tuple]) -> None:
+        """Answer, in order, the held commands whose handlers have left."""
+        for say, answer in answers:
+            try:
+                await say(answer, background=True)
+            except Exception as e:
+                logger.warning("[Agent] memory command answer failed "
+                               "(conversation=%s): %s", key, e)
+
+    async def _say_carried(self, key: str, answers: list[tuple]) -> None:
+        """Answer, in this request's response, the commands it carries."""
+        for say, answer in answers:
+            try:
+                await say(answer)
+            except Exception as e:
+                logger.warning("[Agent] memory command answer failed "
+                               "(conversation=%s): %s", key, e)
+
     async def _group_intake(self, group_id: str, absorb: Callable[[], tuple],
-                            *, command: bool) -> Optional[tuple]:
+                            say: Optional[Callable]) -> tuple[Optional[tuple], list]:
         """Run `absorb`, one message's intake, in arrival order: now, or when
-        the turn in flight ends. None when a newer message took its place.
-        `command`: a memory command, whose handler must stay to answer it."""
+        the turn in flight ends. Returns what it returned, None when the
+        handler has no reason to stay, and the answers it carries for others.
+        `say`: set for a memory command, and sends its answer."""
         async with self.locks[group_id]:
             gate = self._pending_outbound.get(group_id)
             if gate is None:
-                return absorb()
-            item = _Held(absorb, command)
-            gate.hold(item)
-        return await item.waiter
+                return absorb(), []
+            item = _Held()
+            self._place(gate, item)
+            self._ready(group_id, gate, item, absorb,
+                        message=say is None, say=say)
+        # Cancelled only at shutdown, so what it displaced needs no other turn.
+        return await item.waiter, item.carried
 
-    def _end_group_turn(self, group_id: str, gate: _TurnGate) -> None:
-        """Close a turn: what was held behind it enters the buffer, in order.
-        Synchronous, so nothing can come between a commit and this."""
-        if self._pending_outbound.get(group_id) is gate:
-            del self._pending_outbound[group_id]
-        held, gate.held, gate.newest = gate.held, [], None
-        if gate.overflowed:
-            logger.warning("[Agent] over %d messages arrived during one turn "
-                           "(group=%s); the oldest were dropped",
-                           _MAX_HELD, group_id)
-        for item in held:
-            try:
-                item.release(item.absorb())
-            except Exception as e:
-                # The handler that would have raised it still does.
-                if item.waiter.done():
-                    logger.warning("[Agent] held message intake failed "
-                                   "(group=%s): %s", group_id, e)
-                else:
-                    item.waiter.set_exception(e)
-        gate.set()
+    async def _say_memory_answer(self, group_id: str, answer: str,
+                                 at_uid: str, *, background: bool = False) -> bool:
+        """Send a memory command's answer to a group and put it on record.
+        `background`: no request of the conversation is open to carry it."""
+        async with self.send_locks[group_id]:
+            if background:
+                send_result = await self._send_background(
+                    group_id,
+                    lambda: self._send_group(group_id, answer, at_uid),
+                    reason="follow_up")
+            else:
+                send_result = await self._send_group(group_id, answer, at_uid)
+        if not send_result.success:
+            logger.warning("[Agent] memory command delivery failed (group=%s)",
+                           group_id)
+            return send_result.partial
+        async with self.locks[group_id]:
+            self.last_reply_at[group_id] = time.time()
+            self._append_buffer(group_id, self.persona_name, answer)
+        if self.on_reply:
+            await self.on_reply(group_id, answer)
+        logger.info("[Agent] memory command (group=%s): %s", group_id, answer[:60])
+        return True
 
     async def handle_event(self, event: dict) -> dict:
         """Handle one connector event synchronously: a ConnectorSink contextvar
@@ -244,15 +435,13 @@ class Turns:
         code = chatlangs.detect(text, self.chat_lang) if text else self.chat_lang
         return random.choice(chatlangs.spec(code).failure_excuses)
 
-    async def _think_within_budget(self, group_id: str, mode: str, text: str,
-                                   caller_override) -> tuple[str, str, str]:
-        """`_think` under the turn's one time budget; past it the model call
-        is abandoned and the turn fails like any other model failure."""
+    async def _within_turn_budget(self, model_work):
+        """Await a turn's model work (`_think`, `_chat_dm`) under its one time
+        budget; past it the work is abandoned and the turn fails like any
+        other model failure."""
         budget = self.llm_timeout_s * _TURN_BUDGET_CALLS
         try:
-            return await asyncio.wait_for(
-                self._think(group_id, mode, text,
-                            caller_override=caller_override), budget)
+            return await asyncio.wait_for(model_work, budget)
         except asyncio.TimeoutError:
             raise TimeoutError(
                 f"no answer within the turn's {budget:g} s budget") from None
@@ -399,27 +588,33 @@ class Turns:
             self._msg_seq[group_id] += 1
             return self._msg_seq[group_id], None
 
-        absorbed = await self._group_intake(group_id, absorb, command=is_command)
+        caller = user_id  # a sticky call rebinds user_id further down
+
+        async def say(outcome: tuple, *, background: bool = False) -> bool:
+            return await self._say_memory_answer(
+                group_id, outcome[1], caller, background=background)
+
+        absorbed, carried = await self._group_intake(
+            group_id, absorb, say if is_command else None)
         if absorbed is None:
-            # Held behind a turn and overtaken: the debounce would drop it.
+            # A message overtaken behind a turn, which the debounce would
+            # drop, or a command that is answered once the turn is over.
             return False
         my_seq, mem_reply = absorbed
 
         if mem_reply is not None:
-            async with self.send_locks[group_id]:
-                send_result = await self._send_group(
-                    group_id, mem_reply, user_id if addressed else "")
-            if not send_result.success:
-                logger.warning("[Agent] memory command delivery failed (group=%s)",
-                               group_id)
-                return send_result.partial
-            async with self.locks[group_id]:
-                self.last_reply_at[group_id] = time.time()
-                self._append_buffer(group_id, self.persona_name, mem_reply)
-            if self.on_reply:
-                await self.on_reply(group_id, mem_reply)
-            logger.info("[Agent] memory command (group=%s): %s", group_id, mem_reply[:60])
-            return True
+            try:
+                handled = await say(absorbed)
+            except Exception as e:
+                if not carried:
+                    raise
+                # The response must still be given: others' answers ride in it.
+                logger.warning("[Agent] memory command answer failed "
+                               "(conversation=%s): %s", group_id, e)
+                handled = False
+            # Later commands whose answers had no way out but this response.
+            await self._say_carried(group_id, carried)
+            return handled
 
         # Debounce outside the lock so a burst batches into one turn.
         bare_after_strip = (
@@ -439,6 +634,12 @@ class Turns:
             vision_waited += 0.3
         if vision_waited > 0:
             logger.debug("[Agent] waited %.1fs for vision in group=%s", vision_waited, group_id)
+
+        # A turn begun meanwhile without a newer message (a proactive one) is
+        # waited out: two turns of one group never run side by side.
+        while (self._msg_seq.get(group_id, 0) == my_seq
+               and (running := self._pending_outbound.get(group_id)) is not None):
+            await running.wait()
 
         # Phase 2: only the latest message of the burst reaches the model.
         async with self.locks[group_id]:
@@ -496,15 +697,15 @@ class Turns:
 
             # The reply reserves its place before the model is asked: what
             # arrives from here on is held behind it.
-            gate = _TurnGate()
-            self._pending_outbound[group_id] = gate
+            gate = self._begin_turn(group_id)
 
         # Outside the group lock: no handler queues on it for the length of a
         # model call or of a send, each holding a webhook admission slot.
         try:
             try:
-                reply, _intent, auto_mem = await self._think_within_budget(
-                    group_id, mode, text, caller_override)
+                reply, _intent, auto_mem = await self._within_turn_budget(
+                    self._think(group_id, mode, text,
+                                caller_override=caller_override))
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 # Sent from a background task under the send lock, like a reply.
@@ -581,7 +782,7 @@ class Turns:
                     "committed %d of %d chars",
                     mode, group_id, len(committed), len(reply))
         finally:
-            self._end_group_turn(group_id, gate)
+            self._end_turn(group_id, gate)
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
         decision_log.record(group_id, mode, True, why, committed,
                             answered=ctrl_text, sender=sender_name)

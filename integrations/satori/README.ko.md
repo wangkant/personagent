@@ -62,7 +62,7 @@ Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | 에이전트가 보는 플랫폼 이름을 바꿉니다: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | 에이전트의 아웃박스를 가져옵니다. |
 | `SATORI_CONNECTOR_ID` | `SATORI_URL`에서 생성 | 에이전트 쪽의 이 커넥터 ID. 바꾸지 마세요. |
-| `SATORI_TIMEOUT_S` | `420` | 한 턴에 걸릴 수 있는 시간. 에이전트의 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`보다 크게 두세요. |
+| `SATORI_TIMEOUT_S` | `420` | 한 턴에 걸릴 수 있는 시간. 에이전트의 3 × `LLM_TIMEOUT_S`보다 크게 두세요. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | URL을 에이전트에 넘기지 않고 공개 이미지 URL을 커넥터에서 내려받습니다. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

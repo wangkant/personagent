@@ -1604,14 +1604,15 @@ async def test_self_eval_learns_an_unknown_endpoint_like_any_reply_call(
 
 
 def test_a_call_that_cannot_ask_goes_by_what_is_known_of_the_endpoint() -> None:
-    """The vision calls have a retry loop of their own and the probes none, so
-    neither can learn from a refusal: they send `thinking` only where it is
-    known to be taken, and an unknown endpoint is left alone."""
+    """The doctor's probes run once and keep no memory, so they cannot learn
+    from a refusal: they send `thinking` only where it is known to be taken,
+    and an unknown endpoint is left alone."""
     from persona_agent.llm import known_to_take_thinking, thinking_off
 
     def switched(model: str, url: str) -> dict:
         payload = {"model": model, "temperature": 0.3}
-        return thinking_off(payload, url, known_to_take_thinking(url, model))
+        return thinking_off(payload, url, known_to_take_thinking(url, model),
+                            k2_temperature=True)
 
     check("a host that takes it gets it, for any model",
           switched("vision-model", "https://open.bigmodel.cn/api/paas/v4")
@@ -1620,11 +1621,21 @@ def test_a_call_that_cannot_ask_goes_by_what_is_known_of_the_endpoint() -> None:
     check("an unknown host is not asked",
           switched("vision-model", "https://vision.example/v1")
           == {"model": "vision-model", "temperature": 0.3})
+    check("a K2 model on its own host: thinking off at its one temperature",
+          switched("kimi-k2.6", "https://api.moonshot.cn/v1")
+          == {"model": "kimi-k2.6", "temperature": 0.6,
+              "thinking": {"type": "disabled"}})
     check("a K2 model takes it wherever it is served, at its one temperature",
           switched("kimi-k2.6", "https://gateway.example/v1")
           == {"model": "kimi-k2.6", "temperature": 0.6,
               "thinking": {"type": "disabled"}})
-    check("OpenRouter gets its own switch, whatever the model",
+    # OpenRouter ignores `thinking` rather than refusing it: a reasoning
+    # vision model there spent its whole budget thinking and captioned nothing.
+    check("OpenRouter gets its own switch, for any model",
+          switched("qwen/qwen3.7-flash", "https://openrouter.ai/api/v1")
+          == {"model": "qwen/qwen3.7-flash", "temperature": 0.3,
+              "reasoning": {"enabled": False}})
+    check("...and the endpoint wins over a K2 model's name",
           switched("moonshotai/kimi-k2", "https://openrouter.ai/api/v1")
           == {"model": "moonshotai/kimi-k2", "temperature": 0.3,
               "reasoning": {"enabled": False}})
@@ -1633,30 +1644,88 @@ def test_a_call_that_cannot_ask_goes_by_what_is_known_of_the_endpoint() -> None:
           == {"model": "moonshotai/kimi-k2-instruct", "temperature": 0.3})
 
 
-async def test_k2_gets_its_one_temperature_from_one_place(tmp: Path) -> None:
-    """With thinking off K2 answers at one temperature. The rule lived in the
-    older switch only, so a reply-path call that set its own was sent as is."""
+def test_k2s_one_temperature_is_given_only_to_a_caller_that_asks() -> None:
+    """One function holds the rule. `textproc.apply_k2_quirks`, the older
+    switch, had no caller left but its own tests and would have drifted."""
+    from persona_agent import textproc
     from persona_agent.llm import thinking_off
 
-    agent = isolated_agent(tmp, base_url="https://api.moonshot.cn/v1")
-    http = _Scripted(*[_answer('{"reply":"ok"}', tokens=1)] * 3)
-    agent._http = http
-
-    async def call(**kw) -> dict:
-        await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
-                              model="kimi-k2.6", max_tokens=50, enable_search=False,
-                              **kw)
-        return http.payloads[-1]
-
-    p = await call(disable_thinking=True, temperature=0.3)
-    check("a gate-style call: thinking off, K2's temperature",
-          p.get("thinking") == {"type": "disabled"} and p["temperature"] == 0.6,
-          repr(p))
-    p = await call(disable_thinking=True)
-    check("a call that sets none is not given one", "temperature" not in p, repr(p))
-    p = await call(temperature=0.3)
-    check("a call that keeps its thinking keeps its temperature",
-          "thinking" not in p and p["temperature"] == 0.3, repr(p))
+    check("the older switch is gone", not hasattr(textproc, "apply_k2_quirks"))
+    moonshot = "https://api.moonshot.cn/v1/chat/completions"
+    off = {"type": "disabled"}
+    check("unasked, a K2 call keeps the temperature it set",
+          thinking_off({"model": "kimi-k2.6", "temperature": 0.3}, moonshot, True)
+          == {"model": "kimi-k2.6", "temperature": 0.3, "thinking": off})
+    check("asked, a call that set none is given it too",
+          thinking_off({"model": "kimi-k2.6"}, moonshot, True, k2_temperature=True)
+          == {"model": "kimi-k2.6", "temperature": 0.6, "thinking": off})
+    check("it goes with the switch: K2 left thinking keeps its temperature",
+          thinking_off({"model": "kimi-k2.6", "temperature": 0.3}, moonshot, False,
+                       k2_temperature=True)
+          == {"model": "kimi-k2.6", "temperature": 0.3})
     check("another model's temperature is its own",
-          thinking_off({"model": "chat-model", "temperature": 0}, "", True)
-          ["temperature"] == 0)
+          thinking_off({"model": "chat-model", "temperature": 0}, moonshot, True,
+                       k2_temperature=True)["temperature"] == 0)
+
+
+async def test_the_gate_keeps_its_temperature_on_a_k2_model(tmp: Path) -> None:
+    """With thinking off K2 is given one temperature by self-eval, vision and
+    the doctor's probes (tests/test_deployment.py). Moving them onto the
+    replies' switch gave it to every caller, so the gate's 0.3, chosen to keep
+    the decision to speak steady, went out as 0.6."""
+    from types import SimpleNamespace
+
+    off = {"type": "disabled"}
+    verdict = _answer('{"reply": "ok", "score": 3, "reason": "fine", '
+                      '"tacky": false}', tokens=1)
+
+    def k2_agent(name: str, base_url: str, model: str) -> tuple:
+        agent = isolated_agent(tmp / name, base_url=base_url)
+        agent.model = agent.llm_fallback_model = agent.llm_judge_model = model
+        agent.eval_model = model
+        agent.examples_seed_file = tmp / name / "examples.seed.jsonl"
+        http = _Scripted(*[verdict] * 4)
+        agent._http = http
+        return agent, http
+
+    async def evaluate(agent: Agent) -> None:
+        await agent._evaluate_reply("g", "called", "question", "a reply", None,
+                                    "chat", ["Alice: question"])
+
+    moonshot = "https://api.moonshot.cn/v1"
+    agent, http = k2_agent("moonshot", moonshot, "kimi-k2.6")
+    await agent._gate(SimpleNamespace(gate_system="sys", user="hi"))
+    p = http.payloads[-1]
+    check("the gate: thinking off, at the temperature it chose",
+          len(http.payloads) == 1 and p.get("thinking") == off
+          and p["temperature"] == 0.3, repr(p))
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                          model="kimi-k2.6", max_tokens=50, enable_search=False,
+                          disable_thinking=True)
+    p = http.payloads[-1]
+    check("a thinking-off call that sets no temperature is not given one",
+          p.get("thinking") == off and "temperature" not in p, repr(p))
+
+    await evaluate(agent)
+    p = http.payloads[-1]
+    check("self-eval: thinking off at K2's temperature",
+          len(http.payloads) == 3 and p.get("thinking") == off
+          and p["temperature"] == 0.6, repr(p))
+    agent.vision_model, agent.vision_api_key = "kimi-k2.6", "vision-key"
+    agent.vision_base_url = moonshot
+    await agent._judge_sticker_aesthetic(_noise_png())
+    p = http.payloads[-1]
+    check("a vision call: thinking off at K2's temperature",
+          len(http.payloads) == 4 and p.get("thinking") == off
+          and p["temperature"] == 0.6, repr(p))
+
+    openrouter = "https://openrouter.ai/api/v1"
+    agent, http = k2_agent("openrouter", openrouter, "moonshotai/kimi-k2")
+    await evaluate(agent)
+    agent.vision_model, agent.vision_api_key = "moonshotai/kimi-k2", "vision-key"
+    agent.vision_base_url = openrouter
+    await agent._judge_sticker_aesthetic(_noise_png())
+    check("on OpenRouter both get its switch and keep their own temperature",
+          [(p.get("reasoning"), "thinking" in p, p["temperature"])
+           for p in http.payloads] == [({"enabled": False}, False, 0)] * 2,
+          repr(http.payloads)[:400])

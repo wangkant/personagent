@@ -95,7 +95,7 @@ Das Protokoll setzt die Regel. `PERSONAGENT_URL` muss eine Loopback-Adresse sein
 | `MATRIX_INVITE_FROM` | Benutzer, deren Einladungen der Bot annimmt. Einladungen in Räume aus `MATRIX_GROUPS` und Direktchat-Einladungen von `MATRIX_DM_USERS` werden immer angenommen. Andere Einladungen bleiben offen. |
 | `MATRIX_IGNORE_USERS` | Bekommen nie eine Antwort und zählen nicht als Mitglieder, wenn der Konnektor einen Direktchat von einer Gruppe unterscheidet. |
 | `MATRIX_E2EE_ENABLED` | Ende-zu-Ende-Verschlüsselung. Siehe unten. |
-| `MATRIX_TIMEOUT_S` | Wie lange ein Zug dauern darf. Halte den Wert über `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` des Agenten. |
+| `MATRIX_TIMEOUT_S` | Wie lange ein Zug dauern darf. Halte den Wert über 3 × `LLM_TIMEOUT_S` des Agenten. |
 | `MATRIX_OUTBOX_ENABLED` | Die Outbox des Agenten abfragen. |
 
 ## Brücken: WhatsApp, Signal, Messenger, Instagram und mehr

@@ -39,25 +39,28 @@ def _on_host(host: str, domains: tuple) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
-def thinking_off(payload: dict, url: str, takes_thinking) -> dict:
+def thinking_off(payload: dict, url: str, takes_thinking, *,
+                 k2_temperature: bool = False) -> dict:
     """Ask the model behind `url` to skip hidden reasoning, in the spellings
     that endpoint accepts. `takes_thinking` is what is known of it and
     DeepSeek's `thinking` switch; None sends the switch to find out, so only
-    a caller that survives its refusal (`_post_chat`) passes None."""
+    a caller that survives its refusal (`_post_chat`) passes None.
+    `k2_temperature` also moves a K2 model to the one temperature it answers
+    at with thinking off; a caller that chose its temperature leaves it out."""
     if takes_thinking is not False:
         payload["thinking"] = {"type": "disabled"}
+        if k2_temperature and "k2" in str(payload.get("model") or "").lower():
+            payload["temperature"] = 0.6
     if "openrouter.ai" in (url or ""):
+        # The exclude/max_tokens form is 400-rejected by some upstreams.
         payload["reasoning"] = {"enabled": False}
-    # With thinking off K2 answers at one temperature, whatever the caller set.
-    if ("thinking" in payload and "temperature" in payload
-            and "k2" in str(payload.get("model") or "").lower()):
-        payload["temperature"] = 0.6
     return payload
 
 
 def known_to_take_thinking(url: str, model: str) -> bool:
-    """For a caller that cannot learn from a refusal: is `thinking` known to
-    be taken here? By a listed host, and by a K2 model wherever it is served."""
+    """For a caller that cannot learn from a refusal (the doctor's probes): is
+    `thinking` known to be taken here? By a listed host, and by a K2 model
+    wherever it is served."""
     host = _host(url)
     if _on_host(host, _NO_THINKING_HOSTS):
         return False
@@ -185,11 +188,12 @@ class ModelCalls:
             return False
         return None
 
-    def _thinking_off(self, payload: dict, url: str) -> dict:
+    def _thinking_off(self, payload: dict, url: str, *,
+                      k2_temperature: bool = False) -> dict:
         """`thinking_off` with what this endpoint has shown so far; an unknown
         one is sent `thinking`, and `_post_chat` remembers its answer."""
         return thinking_off(payload, url, self._thinking_verdict(
-            url, str(payload.get("model") or "")))
+            url, str(payload.get("model") or "")), k2_temperature=k2_temperature)
 
     def _apply_quirks(self, url: str, payload: dict) -> None:
         """Spell `payload` the way `url` has shown it accepts."""

@@ -2011,6 +2011,134 @@ async def test_connector_inflight_is_pinned(tmp: Path) -> None:
           repr(getattr(agent, "_connector_inflight", None)))
 
 
+def _room_event(room: str, mid: int, text: str, *, sender: str = "42",
+                name: str = "Alice", at_bot: bool = True) -> dict:
+    mention = [{"type": "mention", "user_id": "999000", "name": "TestBot"}]
+    return {"platform": "telegram", "conversation_type": "group",
+            "conversation_id": room, "sender_id": sender, "sender_name": name,
+            "bot_id": "999000", "message_id": mid, "addressed": at_bot,
+            "segments": (mention if at_bot else []) + [{"type": "text", "text": text}],
+            "text": text}
+
+
+async def test_a_conversation_whose_turn_asks_the_model_is_not_evicted(
+        tmp: Path, monkeypatch) -> None:
+    """Eviction told a busy conversation by its locks, and a turn holds none
+    while it asks the model. The request running the turn still pins it, and
+    so does its line: with the cap at one conversation, the room that is
+    waiting for the model outlives every room that comes and goes meanwhile."""
+    from persona_agent import transport
+
+    monkeypatch.setattr(transport, "_MAX_CONNECTOR_CONVS", 1)
+    agent = make_agent(tmp)
+    # No follow-up turn: the chatter held below stays chatter.
+    agent.chat_followup_window_s = 0
+    busy = "telegram:busy"
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def think(group_id, mode, text="", caller_override=None):
+        if group_id == busy:
+            started.set()
+            await release.wait()
+        return f"answer for {group_id}", "chat", ""
+
+    agent._think = think
+    turn = asyncio.create_task(
+        agent.handle_event(_room_event("busy", 1, " question one")))
+    await started.wait()
+    left = asyncio.create_task(agent.handle_event(_room_event(
+        "busy", 2, "chatter", sender="43", name="Bob", at_bot=False)))
+    held = asyncio.create_task(agent.handle_event(_room_event(
+        "busy", 3, "more chatter", sender="44", name="Cy", at_bot=False)))
+    for _ in range(50):
+        await asyncio.sleep(0)
+    check("no lock of the room is held while the model is asked",
+          not agent.locks[busy].locked() and not agent.send_locks[busy].locked())
+    check("a displaced handler has left, and its pin with it", left.done())
+
+    for i in range(4):
+        other = await agent.handle_event(_room_event(f"other{i}", 10 + i, " hi"))
+        check(f"room other{i} is answered meanwhile",
+              [r.get("text") for r in other["replies"]]
+              == [f"answer for telegram:other{i}"], repr(other))
+    check("the room asking the model is still there, with what it holds",
+          busy in agent._connector_conv_lru
+          and [m["text"] for m in agent.buffers[busy]] == ["@TestBot question one"]
+          and len(agent._pending_outbound[busy].held) == 2,
+          repr((list(agent._connector_conv_lru), list(agent.buffers.get(busy, [])))))
+    check("the idle rooms were evicted in its place",
+          all(f"telegram:other{i}" not in agent.buffers for i in range(3)),
+          repr(list(agent.buffers)))
+
+    release.set()
+    answered, _, _ = await asyncio.gather(turn, left, held)
+    check("its reply comes back in its own response",
+          [r.get("text") for r in answered["replies"]] == [f"answer for {busy}"],
+          repr(answered))
+    check("and nothing it held was lost",
+          [(m["name"], m["text"]) for m in agent.buffers[busy]] == [
+              ("Alice", "@TestBot question one"), ("TestBot", f"answer for {busy}"),
+              ("Bob", "chatter"), ("Cy", "more chatter")],
+          repr(list(agent.buffers[busy])))
+    check("no pin and no line is left behind",
+          not agent._connector_inflight and not agent._pending_outbound)
+
+
+async def test_a_conversation_the_agent_is_opening_in_is_not_evicted(
+        tmp: Path, monkeypatch) -> None:
+    """A proactive turn has no request to pin its conversation and holds no
+    lock while it asks the model: only its line says the room is busy. It was
+    evicted mid-turn, and the opener then written into a room the cache no
+    longer tracked."""
+    from persona_agent import transport
+
+    monkeypatch.setattr(transport, "_MAX_CONNECTOR_CONVS", 1)
+    agent = make_agent(tmp)
+    agent.proactive_prob = 1.0
+    room = "telegram:quiet"
+    sent: list = []
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def think(group_id, mode, text="", caller_override=None):
+        if mode == "proactive":
+            started.set()
+            await release.wait()
+            return "anyone still up", "chat", ""
+        return f"answer for {group_id}", "chat", ""
+
+    async def fake_send(group_id, text, at_user_id=""):
+        sent.append((group_id, text))
+        return SendResult(success=True)
+
+    agent._think = think
+    await agent.handle_event(
+        _room_event("quiet", 1, "good night all", at_bot=False))
+    agent.last_activity_at[room] = time.time() - agent.proactive_min_silence_s - 100
+    # Any route will do: the send itself is the stub above.
+    agent._background_route = lambda key: "onebot"
+    agent._send_group = fake_send
+    opener = asyncio.create_task(agent._maybe_proactive_groups())
+    await started.wait()
+    check("nothing pins the room but its line",
+          not agent._connector_inflight.get(room)
+          and not agent.locks[room].locked() and room in agent._pending_outbound)
+    for i in range(4):
+        await agent.handle_event(_room_event(f"other{i}", 10 + i, " hi"))
+    check("the room the opener is being written for is still there",
+          room in agent._connector_conv_lru
+          and [m["text"] for m in agent.buffers.get(room, [])] == ["good night all"],
+          repr((list(agent._connector_conv_lru), list(agent.buffers.get(room, [])))))
+
+    release.set()
+    check("the opener goes out", await opener is True
+          and (room, "anyone still up") in sent, repr(sent))
+    check("and is on record after what it saw",
+          [(m["name"], m["text"]) for m in agent.buffers[room]] == [
+              ("Alice", "good night all"), ("TestBot", "anyone still up")],
+          repr(list(agent.buffers[room])))
+    check("no line is left behind", room not in agent._pending_outbound)
+
+
 async def test_connector_burst_reclaims_idle_state(tmp: Path) -> None:
     from persona_agent.transport import _MAX_CONNECTOR_CONVS
 

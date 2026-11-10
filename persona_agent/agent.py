@@ -259,8 +259,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # Sends run outside the group lock (typing sleeps would block intake);
         # this lock keeps same-group sends from interleaving.
         self.send_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # A reply reserves its place before releasing the intake lock, so it is
-        # never committed behind messages it never saw.
+        # Each conversation's line (turns._TurnGate): the turn in flight and
+        # what arrived behind it, so no reply lands after a message it never saw.
         self._pending_outbound: dict[str, asyncio.Event] = {}
         # Makes a DM send lock re-entrant for the task already holding it.
         self._dm_send_tasks: dict[str, asyncio.Task] = {}
@@ -273,8 +273,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._wbi_keys: tuple[str, str] = ("", "")
         self._wbi_keys_ts: float = 0.0
         self.dm_history: dict[str, list[dict]] = {}
-        # A user's last three DM messages whose turns committed nothing, merged
-        # into their next turn (see _handle_dm).
+        # A user's DM messages let in and not answered yet, merged into their
+        # next turn; the last three once a turn committed nothing (_dm_turn).
         self._dm_unanswered: dict[str, list[str]] = {}
 
         # Silence tracking, and the last proactive opener per group / "dm:<uid>".

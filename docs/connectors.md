@@ -165,15 +165,25 @@ The response looks like this:
   handle. Either the conversation is not on the agent's allowlists, or the
   agent cannot answer at all (no `LLM_API_KEY`, or `AGENT_ENABLED=false`). In
   the second case the agent's log carries one ERROR line naming the cause.
-- The request lasts as long as the turn, which is a short debounce plus
-  every model call. Allow at least `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`
-  seconds.
+- The request lasts until the turn is over, which is a short debounce plus
+  the model's time. A turn's model calls share one budget of
+  1.5 × `LLM_TIMEOUT_S`, retries included, in a group and in a DM alike, and
+  a message that arrives while an earlier turn of its conversation is
+  thinking waits for that turn before its own. Allow at least
+  3 × `LLM_TIMEOUT_S` seconds (360 by default).
+- A memory command (such as "remember ...") that arrives while a turn of its
+  conversation is thinking is answered after that turn. A connector that
+  declared `outbox` gets `{"handled": false, "owned": true, "replies": []}`
+  at once and the answer later as a `follow_up` delivery. Without `outbox`
+  the answer comes in a response: its own, or that of another waiting
+  request of the same conversation, so a response can carry replies that
+  mention someone other than the event's sender.
 
 ## Outbox: `POST /v1/outbox`
 
 Some messages do not answer a request. Examples are a scheduled opener, the
-follow-up question after a rejection, and the excuse when the model is down
-in a group. The agent queues these per conversation, and a connector that
+follow-up question after a rejection, the answer to a memory command that
+waited behind a turn, and the excuse when the model is down in a group. The agent queues these per conversation, and a connector that
 declared `outbox` pulls them, so a connector behind NAT or a firewall works
 the same way. Conversations stored under bare QQ ids (see Addressing) also use the
 outbox while their connector is pulling. Otherwise they go through NapCat's

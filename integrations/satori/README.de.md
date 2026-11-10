@@ -62,7 +62,7 @@ Der Konnektor leitet jede erlaubte Nachricht als neutrales Ereignis an `POST /v1
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Benennt Plattformen um, wie der Agent sie sieht: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Die Outbox des Agenten abholen. |
 | `SATORI_CONNECTOR_ID` | aus `SATORI_URL` | Die ID dieses Konnektors beim Agenten. Halte sie stabil. |
-| `SATORI_TIMEOUT_S` | `420` | Wie lange ein Zug dauern darf. Halte den Wert über `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` des Agenten. |
+| `SATORI_TIMEOUT_S` | `420` | Wie lange ein Zug dauern darf. Halte den Wert über 3 × `LLM_TIMEOUT_S` des Agenten. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Öffentliche Bild-URLs im Konnektor herunterladen, statt die URL an den Agenten zu geben. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

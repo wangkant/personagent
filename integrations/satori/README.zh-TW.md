@@ -62,7 +62,7 @@ Satori 和 Koishi 是第三方軟體。QQ、微信、Telegram、Discord 由 pers
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | 改寫 agent 看到的平臺名：`satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | 拉取 agent 的發件箱。 |
 | `SATORI_CONNECTOR_ID` | 由 `SATORI_URL` 得出 | 這個聯結器在 agent 那邊的 id。請保持不變。 |
-| `SATORI_TIMEOUT_S` | `420` | 一輪最長可以花多久。要大於 agent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`。 |
+| `SATORI_TIMEOUT_S` | `420` | 一輪最長可以花多久。要大於 agent 的 3 × `LLM_TIMEOUT_S`。 |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | 在聯結器裡下載公開圖片 URL，而不是把 URL 傳給 agent。 |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

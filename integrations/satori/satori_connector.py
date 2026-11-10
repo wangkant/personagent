@@ -99,8 +99,8 @@ class Config:
     groups: frozenset = frozenset()
     dm_users: frozenset = frozenset()
     outbox_enabled: bool = True
-    # The agent's own ceiling is LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) plus a
-    # debounce: 360 s and change with its defaults.
+    # The agent's own ceiling is 3 x LLM_TIMEOUT_S (the turn in flight, then
+    # this one) plus a debounce: 360 s and change with its defaults.
     timeout_s: float = 420.0
     inline_images_enabled: bool = False
     reply_gap_s: tuple = (0.8, 1.8)
@@ -629,8 +629,8 @@ class SatoriBridge:
             except (httpx.ReadTimeout, httpx.WriteTimeout):
                 logger.error(
                     "timed out waiting for the agent (SATORI_TIMEOUT_S=%.0f). It still "
-                    "finishes the turn, so that reply is lost; keep LLM_TIMEOUT_S x "
-                    "(1 + LLM_MAX_RETRIES) under SATORI_TIMEOUT_S", self.config.timeout_s)
+                    "finishes the turn, so that reply is lost; keep 3 x LLM_TIMEOUT_S "
+                    "under SATORI_TIMEOUT_S", self.config.timeout_s)
                 return None
             except httpx.HTTPError as exc:
                 logger.warning("agent request failed: %s", exc)

@@ -107,6 +107,10 @@ class Transport:
                 continue
             if self._connector_inflight.get(old, 0):
                 continue
+            # A turn asking the model holds no lock and, when the agent
+            # speaks first, no request either: its line is what says busy.
+            if old in self._pending_outbound:
+                continue
             lock = self.locks.get(old)
             send_lock = self.send_locks.get(old)
             if (lock and lock.locked()) or (send_lock and send_lock.locked()):
@@ -376,7 +380,7 @@ class Transport:
         """Run `send()` for `key` with no inbound request open. The inherited
         (closed) sink is replaced: none for NapCat, a fresh one whose items
         become one outbox delivery, counted as acked. `reason`: proactive,
-        follow_up or excuse."""
+        follow_up (also a held memory command's answer) or excuse."""
         route = self._background_route(key)
         if route is None:
             why = ("QQ_ONEBOT_URL is not set and no connector pulls the outbox "

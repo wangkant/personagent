@@ -153,7 +153,7 @@ then decide alone, and a platform with no entries there is refused.
 | `MATRIX_INVITE_FROM` | Users whose invites the bot accepts. Invites to rooms named in `MATRIX_GROUPS`, and direct-chat invites from `MATRIX_DM_USERS`, are always accepted. Other invites are left pending. |
 | `MATRIX_IGNORE_USERS` | Never answered, and not counted as members when the connector tells a direct chat from a group. |
 | `MATRIX_E2EE_ENABLED` | End-to-end encryption. See below. |
-| `MATRIX_TIMEOUT_S` | How long one turn may take. Keep it above the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`. |
+| `MATRIX_TIMEOUT_S` | How long one turn may take. Keep it above 3 × the agent's `LLM_TIMEOUT_S`. |
 | `MATRIX_OUTBOX_ENABLED` | Poll the agent's outbox. |
 
 ## Bridges: WhatsApp, Signal, Messenger, Instagram and more

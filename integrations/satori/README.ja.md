@@ -62,7 +62,7 @@ Satori と Koishi はサードパーティのソフトウェアです。personag
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | エージェントから見たプラットフォーム名を変更します：`satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | エージェントのアウトボックスを取得します。 |
 | `SATORI_CONNECTOR_ID` | `SATORI_URL` から生成 | エージェント側でのこのコネクターの ID。変えないでください。 |
-| `SATORI_TIMEOUT_S` | `420` | 1 ターンにかけられる時間。エージェントの `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` より大きくしてください。 |
+| `SATORI_TIMEOUT_S` | `420` | 1 ターンにかけられる時間。エージェントの 3 × `LLM_TIMEOUT_S` より大きくしてください。 |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | URL をエージェントに渡さず、公開画像の URL をコネクターでダウンロードします。 |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

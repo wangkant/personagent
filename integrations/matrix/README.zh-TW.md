@@ -95,7 +95,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 | `MATRIX_INVITE_FROM` | 機器人接受誰的邀請。`MATRIX_GROUPS` 裡房間的邀請和 `MATRIX_DM_USERS` 的私聊邀請總是接受。其他邀請留著不處理。 |
 | `MATRIX_IGNORE_USERS` | 永不回應，判斷私聊還是群時也不算成員。 |
 | `MATRIX_E2EE_ENABLED` | 端到端加密。見下文。 |
-| `MATRIX_TIMEOUT_S` | 一輪最長可以花多久。要大於 agent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`。 |
+| `MATRIX_TIMEOUT_S` | 一輪最長可以花多久。要大於 agent 的 3 × `LLM_TIMEOUT_S`。 |
 | `MATRIX_OUTBOX_ENABLED` | 輪詢 agent 的發件箱。 |
 
 ## 橋：WhatsApp、Signal、Messenger、Instagram 等

@@ -95,7 +95,7 @@ La regla la fija el protocolo. `PERSONAGENT_URL` debe ser una dirección de bucl
 | `MATRIX_INVITE_FROM` | Usuarios cuyas invitaciones acepta el bot. Las invitaciones a salas nombradas en `MATRIX_GROUPS` y las de chat directo de `MATRIX_DM_USERS` siempre se aceptan. Las demás quedan pendientes. |
 | `MATRIX_IGNORE_USERS` | Nunca se les responde, y no cuentan como miembros cuando el conector distingue un chat directo de un grupo. |
 | `MATRIX_E2EE_ENABLED` | Cifrado de extremo a extremo. Consulta más abajo. |
-| `MATRIX_TIMEOUT_S` | Cuánto puede durar un turno. Mantenlo por encima de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` del agente. |
+| `MATRIX_TIMEOUT_S` | Cuánto puede durar un turno. Mantenlo por encima de 3 × `LLM_TIMEOUT_S` del agente. |
 | `MATRIX_OUTBOX_ENABLED` | Sondear la bandeja de salida del agente. |
 
 ## Puentes: WhatsApp, Signal, Messenger, Instagram y más

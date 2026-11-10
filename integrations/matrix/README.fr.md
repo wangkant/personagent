@@ -95,7 +95,7 @@ Le protocole fixe la règle. `PERSONAGENT_URL` doit être une adresse de bouclag
 | `MATRIX_INVITE_FROM` | Utilisateurs dont le bot accepte les invitations. Les invitations aux salons nommés dans `MATRIX_GROUPS` et les invitations de discussion directe de `MATRIX_DM_USERS` sont toujours acceptées. Les autres restent en attente. |
 | `MATRIX_IGNORE_USERS` | Jamais de réponse, et pas comptés comme membres quand le connecteur distingue une discussion directe d'un groupe. |
 | `MATRIX_E2EE_ENABLED` | Chiffrement de bout en bout. Voir plus bas. |
-| `MATRIX_TIMEOUT_S` | Durée maximale d'un tour. Gardez-la au-dessus de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` de l'agent. |
+| `MATRIX_TIMEOUT_S` | Durée maximale d'un tour. Gardez-la au-dessus de 3 × `LLM_TIMEOUT_S` de l'agent. |
 | `MATRIX_OUTBOX_ENABLED` | Interroger la boîte d'envoi de l'agent. |
 
 ## Ponts : WhatsApp, Signal, Messenger, Instagram et autres

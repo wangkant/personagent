@@ -103,7 +103,7 @@ for signing and the outbox loop.
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Renames platforms as the agent sees them: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Pull the agent's outbox. |
 | `SATORI_CONNECTOR_ID` | from `SATORI_URL` | This connector's id at the agent. Keep it stable. |
-| `SATORI_TIMEOUT_S` | `420` | How long one turn may take. Keep it above the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`. |
+| `SATORI_TIMEOUT_S` | `420` | How long one turn may take. Keep it above 3 × the agent's `LLM_TIMEOUT_S`. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Download public image URLs in the connector instead of passing the URL to the agent. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

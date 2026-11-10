@@ -114,7 +114,7 @@ L'agent écoute sur `127.0.0.1:8080` par défaut. Si vous réglez son `SERVER_HO
 
 Chaque requête dure autant que le tour de l'agent, soit un court debounce plus chaque appel au modèle et chaque nouvel essai. Si `timeout_s` expire, l'agent termine quand même le tour et garde ce qu'il a appris, mais la réponse est perdue et le modèle propre d'AstrBot répond au message.
 
-Gardez `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` de l'agent sous `timeout_s`. Avec les valeurs par défaut de l'agent (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`), un tour dont les appels au modèle expirent sans cesse peut dépasser 360 s, ce que couvre le `timeout_s` par défaut de 420. Si vous augmentez l'un des deux sur l'agent, augmentez aussi `timeout_s`.
+Gardez 3 × `LLM_TIMEOUT_S` de l'agent sous `timeout_s`. Les appels au modèle d'un tour se partagent 1,5 × `LLM_TIMEOUT_S`, nouvelles tentatives comprises, et un message attend d'abord le tour qui réfléchissait à son arrivée. Avec la valeur par défaut de l'agent (`LLM_TIMEOUT_S=120`), cela fait 360 s, ce que couvre le `timeout_s` par défaut de 420. Si vous augmentez `LLM_TIMEOUT_S` sur l'agent, augmentez aussi `timeout_s`.
 
 Le plugin réessaie un 429 ou un 500 de l'agent jusqu'à deux fois, en respectant `Retry-After` sur un 429, tant que la requête signée reste récente.
 

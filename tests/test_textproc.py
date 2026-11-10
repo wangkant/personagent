@@ -65,7 +65,6 @@ from persona_agent.textproc import (
     _SEARCH_HINT_RE,
     _as_protocol_object,
     _focus_tokens,
-    apply_k2_quirks,
 )
 
 from helpers import check
@@ -2710,31 +2709,6 @@ def test_parser_unwraps_a_one_element_array() -> None:
         check("...and still wraps an array the parser would not unwrap",
               TP._parse_model_output(_as_protocol_object(off_protocol))[0]
               == off_protocol, repr(off_protocol))
-
-
-def test_hidden_reasoning_is_turned_off_by_endpoint_not_model_name() -> None:
-    """OpenRouter IGNORES the generic `thinking` switch rather than rejecting
-    it, so a reasoning vision model there spent its whole 60-120 token budget
-    thinking and returned empty captions while the guard, keyed on "k2" in
-    the model name, never fired. The endpoint decides now."""
-    openrouter = "https://openrouter.ai/api/v1"
-    payload = apply_k2_quirks({"temperature": 0.3}, "qwen/qwen3.7-flash", openrouter)
-    check("openrouter: its own reasoning switch, for any model",
-          payload == {"temperature": 0.3, "reasoning": {"enabled": False}},
-          repr(payload))
-    payload = apply_k2_quirks({"temperature": 0.3}, "moonshotai/kimi-k2", openrouter)
-    check("openrouter: the endpoint wins over the model name",
-          payload == {"temperature": 0.3, "reasoning": {"enabled": False}},
-          repr(payload))
-    payload = apply_k2_quirks({"temperature": 0.3}, "kimi-k2.6",
-                              "https://api.moonshot.cn/v1")
-    check("elsewhere a K2 model still gets thinking off and its one temperature",
-          payload == {"temperature": 0.6, "thinking": {"type": "disabled"}},
-          repr(payload))
-    payload = apply_k2_quirks({"temperature": 0.3}, "vision-model",
-                              "https://vision.example/api/v4")
-    check("an ordinary model on an ordinary endpoint is left alone",
-          payload == {"temperature": 0.3}, repr(payload))
 
 
 def test_the_search_prefilter_skips_chatter_and_keeps_lookups() -> None:

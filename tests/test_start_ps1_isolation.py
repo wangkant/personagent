@@ -2,9 +2,10 @@
 
 `test_launchers.py` only drives start.ps1's happy path (repository root,
 SERVER_HOST/SERVER_PORT). The refusals here — it will not touch an incomplete
-`.venv`, it will not start the server after a failed dependency install, and
-it will not build on a Python older than 3.10 — would otherwise be guaranteed
-only by reading the script. So would its use of the `py` launcher.
+`.venv`, it will not start the server after a failed dependency install, it
+will not build on a Python older than 3.10, and it will not run pip in a
+`.venv` whose Python is gone — would otherwise be guaranteed only by reading
+the script. So would its use of the `py` launcher.
 
 No network and no real `pip install`: the interpreter is a genuine venv (a
 copied `python.exe` is not viable on Windows, which needs the real PE plus its
@@ -315,4 +316,50 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertNotIn("network", combined)
         self.assertEqual(stamp.read_text(encoding="ascii"), "", "nothing was installed")
         self.assertEqual(marker.read_text(encoding="utf-8"), "existing user files")
+        self.assertFalse(self._server_started())
+
+    def _lose_base_python(self, venv: Path) -> None:
+        """Leave `venv` as uninstalling its Python does: python.exe there is a
+        launcher, and the Python that pyvenv.cfg sends it to is not on the disk."""
+        gone = self.base / "uninstalled python"
+        cfg = venv / "pyvenv.cfg"
+        lines = []
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            key = line.partition("=")[0].strip()
+            if key == "home":
+                line = f"home = {gone}"
+            elif key == "executable":
+                line = f"executable = {gone / 'python.exe'}"
+            lines.append(line)
+        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        ran = subprocess.run([str(venv / "Scripts" / "python.exe"), "-c", "pass"],
+                             stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+        if ran.returncode == 0:
+            self.skipTest("this Python's venv runs without the Python it was made with")
+
+    def test_a_venv_whose_python_is_gone_is_named_and_left_in_place(self) -> None:
+        """Uninstalling the Python a .venv was made with used to run on into
+        pip and read as a network failure."""
+        stamp = self._venv_with_stamp("")
+        venv = self.repo / ".venv"
+        marker = venv / "keep.txt"
+        marker.write_text("existing user files", encoding="utf-8")
+        self._lose_base_python(venv)
+
+        # A working Python on PATH, and a pip that would succeed: neither is reached.
+        result = self._run(path=self._path_with_real_python(),
+                           pythonpath=str(self._fake_pip(exit_code=0)))
+        combined = result.stdout + result.stderr
+
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn(".venv", combined)
+        self.assertIn("is gone", combined)
+        self.assertIn("Delete the .venv folder", combined)
+        self.assertIn("rebuild", combined)
+        self.assertNotIn("network", combined)
+        self.assertNotIn("installing dependencies", combined)
+        self.assertEqual(stamp.read_text(encoding="ascii"), "", "nothing was installed")
+        self.assertEqual(marker.read_text(encoding="utf-8"), "existing user files")
+        self.assertTrue((venv / "Scripts" / "python.exe").is_file(),
+                        "deleting .venv is left to its owner")
         self.assertFalse(self._server_started())

@@ -102,6 +102,46 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(sent, [['max_tokens', 'messages', 'model'],
                                 ['max_completion_tokens', 'messages', 'model']])
 
+    def test_the_model_probes_give_k2_its_one_temperature(self):
+        """With thinking off K2 answers at one temperature, and the eval and
+        vision probes send it. The eval probe sets none of its own, so the
+        replies' switch, which only rewrote one already set, left it out."""
+        from persona_agent import health
+
+        def probes(base, model):
+            sent = []
+
+            def fake_post(url, payload, headers, timeout=30):
+                sent.append({k: v for k, v in payload.items() if k != 'messages'})
+                return {'choices': [{'message': {'content': 'ok'}}]}
+
+            env = {'LLM_API_KEY': 'k', 'LLM_BASE_URL': base, 'LLM_MODEL': model,
+                   'LLM_FALLBACK_MODEL': '', 'EVAL_MODEL': model,
+                   'VISION_MODEL': model, 'VISION_API_KEY': 'vision-key',
+                   'VISION_BASE_URL': base}
+            with patch.dict(os.environ, env), \
+                    patch.object(health, '_post_json', side_effect=fake_post):
+                self.assertTrue(health.check_eval()[0])
+                self.assertTrue(health.check_vision()[0])
+            return sent
+
+        off = {'type': 'disabled'}
+        self.assertEqual(probes('https://api.moonshot.cn/v1', 'kimi-k2.6'), [
+            {'model': 'kimi-k2.6', 'max_tokens': 16, 'thinking': off,
+             'temperature': 0.6},
+            {'model': 'kimi-k2.6', 'max_tokens': 64, 'thinking': off,
+             'temperature': 0.6}])
+        # OpenRouter has a switch of its own, and no rule about temperature.
+        self.assertEqual(probes('https://openrouter.ai/api/v1', 'moonshotai/kimi-k2'), [
+            {'model': 'moonshotai/kimi-k2', 'max_tokens': 16,
+             'reasoning': {'enabled': False}},
+            {'model': 'moonshotai/kimi-k2', 'max_tokens': 64, 'temperature': 0.3,
+             'reasoning': {'enabled': False}}])
+        self.assertEqual(probes('https://api.deepseek.com', 'deepseek-chat'), [
+            {'model': 'deepseek-chat', 'max_tokens': 16, 'thinking': off},
+            {'model': 'deepseek-chat', 'max_tokens': 64, 'temperature': 0.3,
+             'thinking': off}])
+
     def test_endpoint_spellings(self):
         for base in ("https://example.org", "https://example.org/",
                      "https://example.org/v1", "https://example.org/v1/",
