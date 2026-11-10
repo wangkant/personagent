@@ -32,6 +32,19 @@ def available() -> bool:
         return False
 
 
+def _toolkit() -> str | None:
+    """Which toolkit draws the window; None lets pywebview choose."""
+    if sys.platform == "win32":
+        return "edgechromium"
+    # pywebview tries GTK first and prints a traceback when it is absent,
+    # which it is where the app extra installed Qt.
+    with contextlib.suppress(ImportError, ValueError):
+        if (sys.platform.startswith("linux") and importlib.util.find_spec("gi") is None
+                and importlib.util.find_spec("qtpy") is not None):
+            return "qt"
+    return None
+
+
 def icon() -> Path:
     return ICON.with_suffix(".ico" if sys.platform == "win32" else ".png")
 
@@ -263,7 +276,7 @@ class AppWindow:
             events.maximized += self._sized(False)
             with _interrupt(self.close):
                 # Private: nothing the page stores outlives the window.
-                webview.start(ready, gui="edgechromium" if windows else None, private_mode=True,
+                webview.start(ready, gui=_toolkit(), private_mode=True,
                               storage_path=str(self.storage), icon=str(icon()))
         except Exception as error:
             self.error = repr(error)
