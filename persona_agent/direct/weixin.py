@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import random
@@ -118,15 +119,26 @@ class Weixin(Platform):
         self.cursor = str(saved.get("cursor") or "")
         self.contexts: dict[str, str] = {k: str(v) for k, v in (saved.get("contexts") or {}).items()}
 
+    @property
+    def owner(self) -> str:
+        """Which login the saved state belongs to: a digest of its token, never the token."""
+        return hashlib.sha256(self.token.encode("utf-8")).hexdigest()[:16]
+
     def _load(self) -> dict:
         if not self.state_path.exists():
             return {}
-        return json.loads(self.state_path.read_text(encoding="utf-8"))
+        try:
+            saved = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(saved, dict) or saved.get("owner") != self.owner:
+            return {}      # an ended login's cursor and reply contexts, possibly written back late
+        return saved
 
     def _save(self) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(self.state_path, json.dumps(
-            {"cursor": self.cursor, "contexts": self.contexts}, ensure_ascii=False))
+            {"owner": self.owner, "cursor": self.cursor, "contexts": self.contexts}, ensure_ascii=False))
 
     async def call(self, path: str, body: dict, timeout: float = CALL_TIMEOUT_S, *,
                    long_poll: bool = False) -> dict:

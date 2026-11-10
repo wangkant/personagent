@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from . import (candidates, channels, decision_log, embeddings, evidence,
+from . import (access, candidates, channels, decision_log, embeddings, evidence,
                langs, lineage, promotion)
 from .config_env import env_bool, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
@@ -332,7 +332,11 @@ def conversations_payload(agent) -> dict:
         elif cand.get("state") == candidates.STATE_PROPOSED:
             counts["pending"] += 1
     out = []
+    page = {channels.dm_routing_key(owner) for owner in access.page_owner(runtime_dir())}
     for key, last in _conversation_keys(agent, rows).items():
+        # A page chat replaced by New chat never comes back; only the current one is listed.
+        if page and channels.platform_of(key) == access.PAGE_PLATFORM and key not in page:
+            continue
         counts = by_conv.get(key, {})
         out.append({
             "id": key,

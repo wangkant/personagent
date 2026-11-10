@@ -415,3 +415,135 @@ def test_history_since_a_number_and_older_files_without_numbers(client, workspac
         older.close()
     assert client.get("/api/chat/history?after=0", headers=HEADERS).json()["messages"] == []
     assert client.get("/api/chat/history?after=x", headers=HEADERS).status_code == 422
+    assert workspace.history()["kept"] == welcome.CHAT_KEPT
+
+
+def test_the_pull_loop_outlives_settings_it_cannot_read(monkeypatch, workspace):
+    """A bad SERVER_PORT, say, while the page runs: the loop waits and pulls once it is fixed."""
+    async def scenario():
+        monkeypatch.setattr(welcome, "OUTBOX_IDLE_S", 0.02)
+        monkeypatch.setattr(workspace.services, "running", lambda name: name == "agent")
+        sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "token", "SERVER_PORT": "80 80"})
+        pulls = []
+
+        class Connector(welcome._connector_type()):
+            async def pull_once(self, *, wait_s=25, max_deliveries=10):
+                pulls.append(wait_s)
+                await asyncio.sleep(0.05)
+                return {"deliveries": []}
+
+        monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
+        loop = asyncio.create_task(workspace.outbox_loop())
+        try:
+            await asyncio.sleep(0.2)
+            assert not loop.done() and pulls == []
+            sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "token", "SERVER_PORT": "8080"})
+            for _ in range(100):
+                if pulls:
+                    break
+                await asyncio.sleep(0.02)
+            assert pulls and not loop.done()
+        finally:
+            workspace._closed = True
+            loop.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_only_what_the_page_can_show_is_acknowledged_as_sent(workspace):
+    key = workspace._page_key()
+    picture = {"type": "image", "b64": base64.b64encode(PNG).decode()}
+    broken = {"type": "image", "b64": base64.b64encode(b"not a picture").decode()}
+    assert workspace.take_delivery({"conversation_key": key, "items": [broken]}) == ("failed", 0)
+    assert workspace.take_delivery({"conversation_key": key, "items": [{"type": "voice"}]}) == ("failed", 0)
+    assert workspace.history()["messages"] == []
+    status = workspace.take_delivery({"conversation_key": key, "items": [
+        {"type": "text", "text": "look"}, picture, {"type": "video"}, {"type": "text", "text": "after"}]})
+    assert status == ("partial", 2)
+    shown = workspace.history()["messages"]
+    assert [m.get("text") for m in shown] == ["look", None] and shown[1]["picture"]
+    assert all(m.get("picture") != "" for m in shown)
+
+
+def test_a_reply_that_cannot_be_shown_leaves_no_empty_picture(monkeypatch, workspace):
+    _replying(monkeypatch, workspace, [{"type": "text", "text": "here"}, {"type": "image", "b64": "x"}])
+    asyncio.run(workspace.chat("hi"))
+    assert [m.get("text") for m in workspace.history()["messages"]] == ["hi", "here"]
+
+
+def _page_agent(tmp_path, fail):
+    from helpers import CLOSED_ONEBOT_URL, isolated_agent
+
+    agent = isolated_agent(tmp_path / "agent", qq_onebot_url=CLOSED_ONEBOT_URL)
+    agent._typing_delay = lambda chunk: 0.0
+
+    async def chat_dm(history, is_admin=False, pkey="", proactive=False, proactive_cue=""):
+        if fail:
+            raise TimeoutError("model down")
+        return "hi back", ""
+
+    agent._chat_dm = chat_dm
+    return agent
+
+
+def _through(monkeypatch, workspace, agent):
+    class Connector(welcome._connector_type()):
+        async def send_event(self, event):
+            return await agent.handle_event({**event, "connector_id": self.connector_id})
+
+    monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+
+
+def test_a_model_failure_is_reported_in_the_page_and_never_stored(monkeypatch, workspace, tmp_path):
+    """Every failure, not once per cooldown, and the casual excuse never becomes a message."""
+    fail = [True]
+    agent = _page_agent(tmp_path, True)
+
+    async def chat_dm(history, is_admin=False, pkey="", proactive=False, proactive_cue=""):
+        if fail[0]:
+            raise TimeoutError("model down")
+        return "hi back", ""
+
+    agent._chat_dm = chat_dm
+    _through(monkeypatch, workspace, agent)
+    with TestClient(welcome.create_app(workspace.home, TOKEN, workspace=workspace),
+                    base_url="http://127.0.0.1") as client:
+        for _ in range(2):
+            answer = client.post("/api/chat", headers=HEADERS, json={"text": "hi"})
+            assert answer.status_code == 502 and answer.json() == {"error": "chat_failed"}
+            assert workspace.history()["messages"] == []
+        fail[0] = False
+        answer = client.post("/api/chat", headers=HEADERS, json={"text": "hi"}).json()
+    assert answer["reply"] == "hi back"
+    assert [m["text"] for m in workspace.history()["messages"]] == ["hi", "hi back"]
+
+
+def test_a_chat_platform_keeps_its_marked_excuse(tmp_path):
+    agent = _page_agent(tmp_path, True)
+    event = {"platform": "telegram", "conversation_type": "dm", "sender_id": "7", "sender_name": "Kay",
+             "bot_id": "999000", "message_id": "m1", "sent_at": int(time.time()), "text": "hi",
+             "segments": [{"type": "text", "text": "hi"}]}
+    replies = asyncio.run(agent.handle_event(event))["replies"]
+    assert len(replies) == 1 and replies[0]["text"] and replies[0]["reason"] == "excuse"
+
+
+def test_the_page_chat_shows_in_activity_once_with_what_was_said(monkeypatch, workspace, tmp_path):
+    from persona_agent import dashboard, decision_log
+
+    agent = _page_agent(tmp_path, False)
+    _through(monkeypatch, workspace, agent)
+    runtime = workspace._runtime()
+    monkeypatch.setattr(dashboard, "runtime_dir", lambda: runtime)
+    decision_log.LOG.clear()
+    try:
+        asyncio.run(workspace.chat("first chat"))
+        workspace.reset_chat()
+        asyncio.run(workspace.chat("hello there"))
+        page = [c for c in dashboard.conversations_payload(agent)["conversations"]
+                if c["platform"] == welcome.access.PAGE_PLATFORM]
+        assert [c["id"] for c in page] == [workspace._page_key()]
+        recent = dashboard.conversation_payload(agent, workspace._page_key())["decisions"]
+        assert [(d["answered"], d["excerpt"], d["spoke"]) for d in recent] == [("hello there", "hi back", True)]
+    finally:
+        decision_log.LOG.clear()

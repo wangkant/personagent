@@ -35,6 +35,7 @@ PA.strings({
     health_skipped: "Not set up",
     health_needed: "Required",
     health_ms: "{ms} ms",
+    health_details: "Technical details",
     health_ledger_note: "Some records could not be read and were skipped, or the record files are large. No action is needed unless this continues to grow.",
     health_show_skipped: "Show {count} services not set up",
     health_hide_skipped: "Hide services not set up",
@@ -135,6 +136,7 @@ PA.strings({
     health_skipped: "未设置",
     health_needed: "必需",
     health_ms: "{ms} 毫秒",
+    health_details: "技术详情",
     health_ledger_note: "部分记录无法读取，已跳过；或记录文件较大。如数量未持续增加，则无需处理。",
     health_show_skipped: "显示 {count} 项未设置的服务",
     health_hide_skipped: "隐藏未设置的服务",
@@ -227,6 +229,8 @@ PA.strings({
   // Errors are kept as codes and translated when shown, so they follow a language change.
   let checkError = "";
   let showSkipped = false;
+  // Rows are rebuilt on every render; an opened detail stays open.
+  const openDetails = new Set();
   let fixing = false;
   let fixError = "";
   let starting = false;
@@ -400,7 +404,17 @@ PA.strings({
       head.append(el("span", "feature-state", s.critical ? `${word} · ${PA.t("health_needed")}` : word));
       if (s.ok !== null) head.append(el("span", "health-ms", PA.t("health_ms", { ms: s.ms })));
       main.append(head);
-      if (s.detail) main.append(el("p", "health-detail", s.detail));
+      // The service's own English diagnostic, kept out of the row's translated text.
+      if (s.detail) {
+        const tech = el("details", "health-tech");
+        tech.open = openDetails.has(s.id);
+        tech.addEventListener("toggle", () => {
+          if (tech.open) openDetails.add(s.id);
+          else openDetails.delete(s.id);
+        });
+        tech.append(el("summary", "", PA.t("health_details")), el("p", "health-detail", s.detail));
+        main.append(tech);
+      }
       if (s.id === "ledger" && s.ok === false) main.append(el("p", "field-note", PA.t("health_ledger_note")));
       row.append(mark, main);
       rows.append(row);

@@ -205,6 +205,21 @@ async def test_reply_needs_something_to_quote(tmp: Path, capsys) -> None:
         assert "waiting to be quoted" in capsys.readouterr().out
 
 
+async def test_reply_and_admin_without_text_show_their_usage(tmp: Path, capsys) -> None:
+    async with trial_in(tmp) as (trial, _model):
+        session = chat.ChatSession(trial, lang="en", you="Alex", admin=False,
+                                   live_trigger=30)
+        await session.handle("/reply")
+        assert "usage: /reply your message" in capsys.readouterr().out
+        await session.handle("/admin   ")
+        assert "usage: /admin your message" in capsys.readouterr().out
+
+
+def test_the_default_speaker_is_named_in_the_chat_language() -> None:
+    assert chat.text_for("en")["you"] == "you"
+    assert chat.text_for("zh")["you"] == "用户"
+
+
 async def test_the_trial_lives_in_its_own_folder_and_reset_wipes_it(
         tmp: Path, monkeypatch) -> None:
     monkeypatch.setenv("LLM_API_KEY", "k")
@@ -486,9 +501,9 @@ def test_language_and_key_handling_agree_between_chat_and_demo(
     assert [chat.normalize_lang(v) for v in langs] == ["en", "zh", "zh", "zh-TW", "en", "en"]
     monkeypatch.setenv("LLM_API_KEY", "   ")
     with demo.throwaway_home(str(tmp)):
-        assert chat.run(["--lang", "xx"]) == 1
+        assert chat.run(["--lang", "en"]) == 1
         assert "No model key yet" in capsys.readouterr().out
-        assert demo.main(["--online", "--lang", "xx"]) == 1
+        assert demo.main(["--online", "--lang", "en"]) == 1
         assert "--online needs a model key" in capsys.readouterr().out
 
 

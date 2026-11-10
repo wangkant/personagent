@@ -139,7 +139,8 @@ def test_doctor_help_and_hints_use_the_installed_spelling(tmp_path: Path) -> Non
     assert helped.stdout.startswith("usage: personagent doctor"), helped.stdout
     assert "tools/healthcheck.py" not in helped.stdout
     bare = _personagent("doctor", home=tmp_path)
-    assert "`personagent init`" in bare.stdout, bare.stdout
+    hint = next(line for line in bare.stdout.splitlines() if "sets up the model and key" in line)
+    assert f"--home {tmp_path} init`" in hint, hint
 
 
 def test_learned_help_names_the_command_not_a_script(capsys) -> None:

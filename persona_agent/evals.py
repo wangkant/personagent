@@ -1176,7 +1176,10 @@ def parse_args(argv=None, prog: str | None = None) -> argparse.Namespace:
         prog=prog, description=langs.term("Measure speaking, persona and learning on "
                                "labelled cases, through the real agent."))
     p.add_argument("--suite", choices=(*SUITES, "all"), default="all")
-    p.add_argument("--lang", default="", help=langs.term("en or zh (default: AGENT_LANG, else en)"))
+    from persona_agent.setup_wizard import lang_option
+
+    p.add_argument("--lang", type=lang_option, default=None,
+                   help=langs.term("en or zh (default: AGENT_LANG, else en)"))
     p.add_argument("--limit", type=int, default=0,
                    help=langs.term("cases per suite, spread across modes and labels (0: all)"))
     p.add_argument("--out", default="",

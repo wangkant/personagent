@@ -891,8 +891,10 @@ label.check input:checked {
   flex-direction: column;
   max-width: 780px;
 }
+/* Narrow or long-worded: the two actions move to a second row instead of overflowing. */
 .chat-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 11px;
   padding-bottom: 14px;
@@ -908,11 +910,24 @@ label.check input:checked {
   margin: 0;
 }
 /* The first action takes the free space; the rest sit beside it. */
-.chat-heading > .quiet {
-  margin-left: auto;
+.chat-heading > div:not(.avatar):not(.chat-actions) {
+  flex: 1 1 180px;
+  min-width: 0;
 }
-.chat-heading > .quiet + .quiet {
-  margin-left: 0;
+/* The actions stay together at the right, on the heading's row or below it. */
+.chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 4px;
+  margin-left: auto;
+  max-width: 100%;
+}
+.chat-actions > .quiet {
+  max-width: 100%;
+  height: auto;
+  min-height: 28px;
+  white-space: normal;
 }
 #messages {
   flex: 1;
@@ -1253,12 +1268,11 @@ label.check input:checked {
   font-weight: 500;
   color: var(--ink);
 }
+/* Wraps: the scope after the dot is the point of the line. */
 .tile-text small {
   font-size: 12px;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 .tile-tag:empty {
   display: none;
@@ -1922,8 +1936,23 @@ button:active:not(:disabled) {
   }
 }
 @media (max-width: 480px) {
+  /* Two fixed rows, so the language menu and Quit fit in every language. */
+  .topbar {
+    height: 80px;
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 2px;
+  }
+  .topbar > div:first-child {
+    flex-basis: 100%;
+    min-width: 0;
+  }
   .top-actions {
     gap: 0;
+    margin-left: auto;
+  }
+  .chat-page {
+    height: calc(100dvh - 80px);
   }
   .notes li {
     flex-wrap: wrap;

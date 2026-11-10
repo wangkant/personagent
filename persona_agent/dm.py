@@ -7,8 +7,10 @@ import re
 import time
 from contextlib import asynccontextmanager
 
-from .access import ADMIN_MODE
+from .access import ADMIN_MODE, PAGE_PLATFORM
 from . import channels
+from . import decision_log
+from .connector import current_sink
 from .decision import PASS, SEND
 from .textproc import (
     TextProcessing,
@@ -191,15 +193,23 @@ class DirectMessages:
                     history, is_admin=is_admin, pkey=pkey, **cue))
             except Exception as e:
                 logger.warning("[Agent] DM model call failed: %s", e)
+                # The page's chat reports every failure: there the admin checks the setup.
+                page = channels.platform_of(pkey) == PAGE_PLATFORM
                 # Tell the waiting reader; not committed to the history.
-                if not proactive and self._excuse_begin(pkey):
+                if not proactive and (page or self._excuse_begin(pkey)):
                     delivered = False
+                    sink = current_sink.get()
+                    start = len(sink.items) if sink is not None else 0
                     try:
                         async with self._dm_sending(pkey):
                             delivered = (await self._send_dm(
                                 user_id, self._model_failure_excuse(text))).success
                     finally:
-                        self._excuse_end(pkey, delivered)
+                        if not page:
+                            self._excuse_end(pkey, delivered)
+                    # Marked, so a connector can tell the excuse from a reply.
+                    for item in sink.items[start:] if sink is not None else ():
+                        item["reason"] = "excuse"
                 return False
             if not reply:
                 return False
@@ -210,6 +220,13 @@ class DirectMessages:
             if final.verdict != SEND:
                 return False
             reply, pending_core = final.text, final.core_note
+
+            def record(spoken: str) -> None:
+                # A one-on-one chat shows in Activity what was said, as a group does.
+                decision_log.record(
+                    pkey, "proactive" if proactive else ADMIN_MODE if is_admin else "called",
+                    True, "proactive" if proactive else "addressed", spoken,
+                    answered="\n".join(said))
 
             async with self._dm_sending(pkey):
                 send_result = await self._send_dm(user_id, reply)
@@ -226,6 +243,7 @@ class DirectMessages:
                         if not proactive:
                             self._dm_unanswered.pop(user_id, None)
                         committed = True
+                    record(send_result.delivered)
                 return send_result.partial
 
             async with self.locks[pkey]:
@@ -246,6 +264,7 @@ class DirectMessages:
                         mode=ADMIN_MODE if is_admin else "called",
                         target_uid=user_id, mids=send_result.message_ids,
                         ts=time.time())
+            record(reply)
             logger.info("[Agent] DM reply (%s): %s", user_id, reply[:80])
             return True
         finally:

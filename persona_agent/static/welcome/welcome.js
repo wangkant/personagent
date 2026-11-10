@@ -1783,11 +1783,20 @@ async function forget(conv, note) {
     activityLoop();
   }
 }
+// As many messages as the server keeps; the history tells the page its number.
+let chatKept = Infinity;
+function dropBubble(node) {
+  if (node.dataset.url) URL.revokeObjectURL(node.dataset.url);
+  node.remove();
+}
 function bubble(text, kind) {
   const node = document.createElement("div");
   node.className = `bubble ${kind}`;
   node.textContent = text;
   $("messages").append(node);
+  // A window left open for days holds no more than the chat keeps.
+  const shown = $("messages").querySelectorAll(".bubble");
+  for (let i = 0; i < shown.length - chatKept; i++) dropBubble(shown[i]);
   $("messages").scrollTop = $("messages").scrollHeight;
   return node;
 }
@@ -1815,12 +1824,10 @@ async function showPicture(node, name) {
     });
     if (!response.ok) throw new Error("gone");
     const blob = await response.blob();
-    const url = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    // Its bubble may have gone while the picture loaded.
+    if (!node.isConnected) return;
+    const url = URL.createObjectURL(blob);
+    node.dataset.url = url;
     const image = document.createElement("img");
     image.alt = pictureAlt();
     image.addEventListener(
@@ -1853,7 +1860,8 @@ function showMessage(item, arrived = false) {
   return node;
 }
 function showHistory(history) {
-  for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
+  for (const node of $("messages").querySelectorAll(".bubble")) dropBubble(node);
+  if (history.kept) chatKept = history.kept;
   chatSeen = 0;
   chatTag = history.chat || "";
   $("chat-empty").hidden = history.messages.length > 0;
@@ -1875,6 +1883,7 @@ async function chatLoop() {
     chatPolled = Date.now();
     try {
       const value = await api(`chat/history?after=${chatSeen}`);
+      if (value.kept) chatKept = value.kept;
       // A reply that started meanwhile brings these messages itself.
       if (!chatting) {
         if (value.chat !== chatTag) showHistory(await api("chat/history"));
@@ -1917,14 +1926,15 @@ function avatarMood(mood, length = 0) {
 async function send(text, mine = null) {
   if (chatting || !text.trim()) return;
   chatting = true;
-  $("send").disabled = true;
   $("chat-empty").hidden = true;
   $("message").value = "";
+  syncSend();
   mine ||= bubble(text, "user");
   const pending = bubble(t("thinking"), "bot pending");
   avatarMood("thinking");
   try {
     const value = await api("chat", { text, after: chatSeen });
+    if (value.kept) chatKept = value.kept;
     // The chat as recorded, in order: anything the character sent on its own
     // meanwhile, this message and the reply.
     mine.remove();
@@ -1951,7 +1961,7 @@ async function send(text, mine = null) {
     pending.append(document.createElement("br"), retry);
   } finally {
     chatting = false;
-    $("send").disabled = false;
+    syncSend();
     $("message").focus();
     $("messages").scrollTop = $("messages").scrollHeight;
     chatLoop();
@@ -2155,6 +2165,12 @@ $("settings-form").addEventListener("submit", async (event) => {
     $("save").textContent = t(state.configured ? "saveAgain" : "saveStart");
   }
 });
+// Nothing to send while the box holds only white space.
+function syncSend() {
+  $("send").disabled = chatting || !$("message").value.trim();
+}
+$("message").addEventListener("input", syncSend);
+syncSend();
 $("chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
   send($("message").value);

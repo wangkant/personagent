@@ -80,6 +80,16 @@ def detect_lang() -> str:
     return _lang_of(locale.getlocale()[0] or "") or "en"
 
 
+def lang_option(value: str) -> str:
+    """An argparse type for --lang: any spelling of a language personagent has;
+    anything else is refused as init refuses a choice it does not have."""
+    code = langs.normalize(value)
+    if not code:
+        raise argparse.ArgumentTypeError(langs.term("invalid choice: %(value)r (choose from %(choices)s)") % {
+            "value": value, "choices": ", ".join(repr(c) for c in LANGS)})
+    return code
+
+
 def t(key: str, **values) -> str:
     """The text for `key` in the current language."""
     text = langs.say(*_TEXT[key], _lang)
@@ -182,12 +192,12 @@ _TEXT: dict[str, tuple[str, str]] = {
     "connect_intro": (
         "Optional: put the bot on a chat platform.\n"
         "personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself.\n"
-        "To connect one of them, run `personagent connect <platform>` after this setup; the next steps show how.\n"
+        "To connect one of them, run `{cmd} <platform>` after this setup; the next steps show how.\n"
         "Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot, which this step\n"
         "can connect, and download and install if it is not installed yet.",
         "可选：将机器人接入聊天平台。\n"
         "personagent 可直接连接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。\n"
-        "如需连接其中之一，请在完成本设置后运行 `personagent connect <平台>`；后续步骤中会说明具体方法。\n"
+        "如需连接其中之一，请在完成本设置后运行 `{cmd} <平台>`；后续步骤中会说明具体方法。\n"
         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入。本步骤可连接 AstrBot，\n"
         "如尚未安装，也可自动下载并安装。"),
     "astrbot_install_q": ("Download and install AstrBot now? (includes Python 3.12 if needed)",
@@ -195,14 +205,24 @@ _TEXT: dict[str, tuple[str, str]] = {
     "astrbot_installing": ("Installing AstrBot in {path}. The first download may take a few minutes.",
                            "正在将 AstrBot 安装到 {path}，首次下载可能需要几分钟。"),
     "astrbot_install_failed": ("AstrBot installation failed: {error}\n"
-                               "Your agent settings are saved. Retry with `personagent connect astrbot --install`.",
+                               "Your agent settings are saved. Retry with `{cmd}`.",
                                "AstrBot 安装未完成：{error}\n"
-                               "已保留机器人设置。可运行 `personagent connect astrbot --install` 重试。"),
+                               "已保留机器人设置。可运行 `{cmd}` 重试。"),
+    "astrbot_menu_intro": ("AstrBot connects personagent to platforms that it does not connect itself, such as "
+                           "Slack, KOOK or Feishu. This step uses an existing AstrBot installation or installs "
+                           "one, and then connects it to personagent.",
+                           "AstrBot 可将 personagent 接入其不直接连接的平台，例如 Slack、KOOK 或飞书。"
+                           "此步骤将使用已有的 AstrBot 安装或新建安装，然后将其与 personagent 连接。"),
+    "astrbot_menu_q": ("Connect AstrBot now?", "是否立即连接 AstrBot？"),
+    "astrbot_menu_skipped": ("AstrBot was not connected. Nothing was changed.", "未连接 AstrBot，未作任何更改。"),
     "astrbot_start": ("Start the installed AstrBot in another terminal:",
                       "请在另一个终端中启动已安装的 AstrBot："),
     "start_title": ("personagent · Start", "personagent · 开始使用"),
     "start_status": ("Character: {name}  |  API key: {masked}", "角色：{name}  |  API Key：{masked}"),
-    "start_unset": ("not set up", "尚未配置"),
+    "start_no_name": ("not yet chosen", "尚未选择"),
+    "start_no_key": ("not yet entered", "尚未填写"),
+    "start_bad_choice": ('"{choice}" is not one of the options. Enter a number from 0 to 6.',
+                         "「{choice}」不是可选项。请输入 0 至 6 之间的数字。"),
     "start_menu": ("1. Chat (first time: set up your model and character)\n"
                    "2. Model, API key and character settings\n"
                    "3. Connect a chat platform (QQ, WeChat, Telegram, Discord, Matrix and others)\n"
@@ -321,18 +341,28 @@ _TEXT: dict[str, tuple[str, str]] = {
     "direct_on": ("connected", "已连接"),
     "direct_off": ("not connected", "未连接"),
     "direct_via_astrbot": ("connected through AstrBot", "已通过 AstrBot 连接"),
-    "direct_list_how": ("To connect one, run `personagent connect <platform>`, for example "
-                        "`personagent connect telegram`. To disconnect it, add --remove.",
-                        "如需连接，请运行 `personagent connect <平台>`，例如 "
-                        "`personagent connect telegram`。如需断开连接，请加上 --remove。"),
+    "direct_list_how": ("To connect one, run `{cmd} <platform>`, for example "
+                        "`{cmd} telegram`. To disconnect it, add --remove.",
+                        "如需连接，请运行 `{cmd} <平台>`，例如 "
+                        "`{cmd} telegram`。如需断开连接，请加上 --remove。"),
     "direct_list_more": ("Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: "
-                         "`personagent connect astrbot`. Coding assistants: `personagent connect claude-code`, "
+                         "`{cmd} astrbot`. Coding assistants: `{cmd} claude-code`, "
                          "`codex` or `dsh`.",
-                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`personagent connect astrbot`。"
-                         "编程助手：`personagent connect claude-code`、`codex` 或 `dsh`。"),
-    "direct_unknown": ("personagent cannot connect \"{name}\". Run `personagent connect` to list the "
+                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`{cmd} astrbot`。"
+                         "编程助手：`{cmd} claude-code`、`codex` 或 `dsh`。"),
+    "direct_unknown": ("personagent cannot connect \"{name}\". Run `{cmd}` to list the "
                        "platforms it can connect.",
-                       "personagent 无法连接“{name}”。请运行 `personagent connect` 查看可连接的平台。"),
+                       "personagent 无法连接“{name}”。请运行 `{cmd}` 查看可连接的平台。"),
+    "direct_no_input_qq": ("With --no-input, QQ is connected with the values of a bot created on the QQ Open "
+                           "Platform: give --appid and --secret. Scanning a code requires a terminal without "
+                           "--no-input.",
+                           "使用 --no-input 时，需通过在 QQ 开放平台创建的机器人信息连接 QQ：请提供 --appid 和 "
+                           "--secret。扫码连接须在终端中运行且不使用 --no-input。"),
+    "direct_no_input_wechat": ("WeChat is connected by scanning a code, which --no-input does not allow. Run "
+                               "this command in a terminal without --no-input, or connect WeChat in the "
+                               "personagent window.",
+                               "微信需扫码连接，而 --no-input 不允许等待扫码。请在终端中不加 --no-input 运行此命令，"
+                               "或在 personagent 窗口中连接微信。"),
     "direct_guide": ("Guide: {url}", "说明：{url}"),
     "direct_steps": ("Steps:", "操作步骤："),
     "direct_steps_here": ("Where a step mentions this page or the Connect button, enter the values below "
@@ -406,6 +436,9 @@ _TEXT: dict[str, tuple[str, str]] = {
     "refused_network_failed": ("The servers of {name} could not be reached. Check the network connection "
                                "and any proxy settings, then try again.",
                                "无法连接 {name} 的服务器。请检查网络连接及代理设置，然后重试。"),
+    "refused_display_failed": ("This terminal could not display the sign-in for {name}. Connect {name} in the "
+                               "personagent window instead.",
+                               "此终端无法显示 {name} 的登录信息。请改在 personagent 窗口中连接 {name}。"),
     "refused_scan_failed": ("The scan did not complete, or the code expired. Run the command again to "
                             "receive a new code.",
                             "扫码未完成或二维码已过期。请重新运行此命令以获取新的二维码。"),
@@ -543,6 +576,9 @@ _TEXT: dict[str, tuple[str, str]] = {
                     "原 AI 服务的 API key 已清除，不会发送至新服务。"
                     "请使用 --key-env VAR 为新服务设置 key。"),
     "skip_tty": ("input is not a terminal", "输入不是终端"),
+    "key_env_empty": ("--key-env {name}: that environment variable is empty, so there is no API key to save. "
+                      "Nothing was changed.",
+                      "--key-env {name}：该环境变量为空，没有可保存的 API key。未作任何更改。"),
     "rerun_q": ("personagent is already set up. Run the setup questions again?",
                 "personagent 已完成设置。是否重新回答设置问题？"),
     "kept_config": ("Keeping the current setup.", "保留现有设置。"),
@@ -1454,6 +1490,11 @@ class Launcher:
         return [f"{_program(self.python)} -m persona_agent {tail}"]
 
 
+def command(sub: str, home: Path | None = None) -> str:
+    """`sub` as this install spells it, on one line, for a hint inside a sentence."""
+    return Launcher(python=sys.executable, home=home or homes.find_home()).shown(sub)[-1]
+
+
 def _resolved(path: Path) -> Path:
     return Path(path).expanduser().resolve()
 
@@ -1508,7 +1549,7 @@ def _key_from_env(variable: str) -> str:
     """The key `--key-env` names; an empty variable is refused, never skipped."""
     key = os.environ.get(variable, "").strip()
     if not key:
-        raise SystemExit(langs.term(f"--key-env {variable}: that environment variable is empty"))
+        raise SystemExit(t("key_env_empty", name=variable))
     return key
 
 
@@ -1689,19 +1730,28 @@ def _astrbot_start_steps(launcher: Launcher, data_dir: Path) -> None:
         _say(t("next_restart"))
 
 
-def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
+def step_astrbot(env_path: Path, current: dict, values: dict, *,
+                 standalone: bool = False) -> dict | None:
     """Connect to AstrBot. Writes the plugin and its config; returns what the
-    next steps need, or None when skipped."""
-    _say(t("connect_intro"))
-    if not ask_yn(t("connect_q"), default_yes=False):
-        return None
+    next steps need, or None when skipped. `standalone`: asked on its own, not
+    as the setup's third step."""
+    home = env_path.parent
+    if standalone:
+        _say(t("astrbot_menu_intro"))
+        if not ask_yn(t("astrbot_menu_q"), default_yes=True):
+            _say(t("astrbot_menu_skipped"))
+            return None
+    else:
+        _say(t("connect_intro", cmd=command("connect", home)))
+        if not ask_yn(t("connect_q"), default_yes=False):
+            return None
     guess = find_astrbot_data()
     data_dir = None
     if guess is None and ask_yn(t("astrbot_install_q"), default_yes=True):
         try:
-            data_dir = _install_astrbot(env_path.parent)
+            data_dir = _install_astrbot(home)
         except (OSError, subprocess.CalledProcessError) as exc:
-            _say(t("astrbot_install_failed", error=exc))
+            _say(t("astrbot_install_failed", error=exc, cmd=command("connect astrbot --install", home)))
             return None
     if data_dir is None:
         _say(t("astrbot_explain"))
@@ -1848,6 +1898,7 @@ def run_wizard(home: Path, launcher: Launcher, *,
     """The interactive setup. Answers are written to <home>/.env and persona.txt.
     A question `init`'s flags already answered is not asked: its answer is shown."""
     flags = _NO_FLAGS if flags is None else flags
+    set_lang(flags.lang or os.environ.get("AGENT_LANG", "") or env_get(home / ".env", "AGENT_LANG") or detect_lang())
     # Refused before the first question, not after the last.
     if flags.base_url:
         _require_scheme(flags.base_url)
@@ -1862,7 +1913,8 @@ def run_wizard(home: Path, launcher: Launcher, *,
         print()
         _from_flag("Language / 语言", langs.NAMES[lang], "--lang")
     else:
-        lang = ask_language(current_lang or detect_lang())
+        # The start menu passes the language it is already shown in.
+        lang = ask_language(current_lang or langs.normalize(os.environ.get("AGENT_LANG")) or detect_lang())
     set_lang(lang)
     _header(t("title_again") if rerun else t("title_first"))
     _say(t("folder", path=home))
@@ -1914,15 +1966,17 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     if args.base_url:
         _require_scheme(args.base_url)
     existed = (home / ".env").exists()
+    lang = langs.normalize(args.lang or os.environ.get("AGENT_LANG", "").strip()
+                           or env_get(home / ".env", "AGENT_LANG")
+                           or detect_lang()) or "en"
+    set_lang(lang)
+    # Refused before anything is written, as the questions do.
+    api_key = _key_from_env(args.key_env) if args.key_env else ""
     # A key does not say whose it is, and a key alone used to mean DeepSeek.
     if (os.environ.get(args.key_env or "LLM_API_KEY", "").strip()
             and not (existed or args.provider or args.base_url)):
         raise SystemExit(langs.term("Which service is this key for? Add --provider, such as --provider openrouter"))
     env_path = copy_env_template(home)
-    lang = langs.normalize(args.lang or os.environ.get("AGENT_LANG", "").strip()
-                           or (env_get(env_path, "AGENT_LANG") if existed else "")
-                           or detect_lang()) or "en"
-    set_lang(lang)
     values: dict = {"AGENT_LANG": lang}
     keyless = False
     if args.provider and args.provider != "other":
@@ -1946,7 +2000,7 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     if args.model:
         values["LLM_MODEL"] = args.model
     if args.key_env:
-        values["LLM_API_KEY"] = _key_from_env(args.key_env)
+        values["LLM_API_KEY"] = api_key
     persona_path = home / "persona.txt"
     origin = (shipped_persona(persona_path.read_text(encoding="utf-8"))
               if persona_path.is_file() else ("", "", ""))
@@ -2019,12 +2073,17 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         from persona_agent.welcome import main as welcome_main
         return welcome_main([], prog)
     if args.no_input or not tty:
-        if not args.no_input:
+        if args.no_input:
+            return setup_without_questions(home, args, launcher)
+        again = launcher.shown("init --terminal" if getattr(args, "terminal", False) else "init")[-1]
+        if flagged:
             set_lang(args.lang or detect_lang())
-            print(t("skipped", why=t("skip_tty"), cmd=prog))
-        done = setup_without_questions(home, args, launcher)
-        # Piped without flags nothing was configured, and a script must be able to tell.
-        return 2 if strict_skip and not args.no_input and not flagged else done
+            print(t("skipped", why=t("skip_tty"), cmd=again))
+            return setup_without_questions(home, args, launcher)
+        # Piped without flags nothing was configured: no "Setup complete", and a script must be able to tell.
+        apply_flags(home, args)
+        print(t("skipped", why=t("skip_tty"), cmd=again))
+        return 2 if strict_skip else 0
     env_path = home / ".env"
     if confirm_rerun and env_get(env_path, "LLM_API_KEY"):
         set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
@@ -2092,8 +2151,8 @@ def list_platforms(home: Path) -> int:
     if others:
         _say(t("direct_via_astrbot") + ": " + ", ".join(_shown(connections.platform(k).name) for k in others))
     print()
-    _say(t("direct_list_how"))
-    _say(t("direct_list_more"))
+    _say(t("direct_list_how", cmd=command("connect", home)))
+    _say(t("direct_list_more", cmd=command("connect", home)))
     return 0
 
 
@@ -2166,6 +2225,13 @@ def print_qr(content: str) -> None:
     code.add_data(content)
     code.make(fit=True)
     sys.stdout.flush()
+    try:
+        "▀▄█".encode(sys.stdout.encoding or "ascii")
+    except (UnicodeEncodeError, LookupError):
+        # A legacy code page has no block characters: two plain ones per module.
+        for row in code.get_matrix():
+            print("".join("  " if dark else "##" for dark in row))
+        return
     code.print_ascii(out=sys.stdout, tty=_enable_ansi(), invert=True)
 
 
@@ -2238,6 +2304,11 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
             return 0
         asking = not no_input and langs.interactive()
         scan = spec.group == connections.SCAN and not given
+        if scan and no_input:
+            # A scan waits for a phone, which --no-input promises never to do.
+            print(t("direct_no_input_qq" if spec.fields else "direct_no_input_wechat"), file=sys.stderr)
+            print(t("direct_nothing_saved"), file=sys.stderr)
+            return 2
         if scan and spec.fields and asking:
             _say(t("direct_qq_ways"))
             scan = ask_number(t("direct_way"), 2, 1) == 1
@@ -2437,10 +2508,15 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
     if args.target is None or kind:
         used = _given(args, args.not_for_platforms)
         if used:
-            raise SystemExit(langs.term(f"{', '.join(used)}: used only with astrbot and the coding assistants, not with a chat platform"))
+            coding = [option for option in used if option == "--react"]
+            astrbot = [option for option in used if option != "--react"]
+            lines = ([f"{', '.join(astrbot)}: used only with astrbot, not with a chat platform"] if astrbot else []) + \
+                    ([f"{', '.join(coding)}: used only with claude-code and codex, not with a chat platform"]
+                     if coding else [])
+            raise SystemExit("\n".join(langs.term(line) for line in lines))
     if args.target is None:
         if fields or args.remove or args.no_input:
-            raise SystemExit(langs.term("Name the chat platform, for example: personagent connect telegram"))
+            raise SystemExit(langs.term(f"Name the chat platform, for example: {command('connect telegram', home)}"))
         return list_platforms(home)
     if kind:
         own = {item.key for item in connections.platform(kind).fields}
@@ -2451,7 +2527,7 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
             raise SystemExit(langs.term("--remove does not accept platform values"))
         return connect_platform(home, kind, fields, remove=args.remove, no_input=args.no_input)
     if args.target not in ("astrbot", *CODING_TARGETS):
-        print(t("direct_unknown", name=args.target), file=sys.stderr)
+        print(t("direct_unknown", name=args.target, cmd=command("connect", home)), file=sys.stderr)
         return 2
     if fields or args.no_input:
         raise SystemExit(langs.term("--no-input and the platform values apply only to the chat platforms"))
@@ -2489,7 +2565,8 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
         try:
             args.data_dir = str(_install_astrbot(home))
         except (OSError, subprocess.CalledProcessError) as exc:
-            raise SystemExit(t("astrbot_install_failed", error=exc)) from None
+            raise SystemExit(t("astrbot_install_failed", error=exc,
+                               cmd=command("connect astrbot --install", home))) from None
     if args.data_dir:
         creds = flag_platform_creds(args.platform or "", args.token, args.app_token,
                                     args.app_id, args.app_secret)
@@ -2503,7 +2580,7 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
     try:
         env_path = copy_env_template(home)
         answers: dict = {}
-        astrbot = step_astrbot(env_path, _current(env_path), answers)
+        astrbot = step_astrbot(env_path, _current(env_path), answers, standalone=True)
         if astrbot:
             launcher = Launcher(python=sys.executable, home=home)
             name = env_get(env_path, "PERSONA_NAME") or DEFAULT_NAMES.get(_lang, "Nova")
@@ -2540,7 +2617,7 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
     """A small front door; each action runs in a fresh process to reload settings."""
     argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
     if not langs.interactive():
-        print(langs.term("Open this menu in a terminal: personagent start"))
+        print(langs.term(f"Open this menu in a terminal: {command('start --terminal')}"))
         return 2
     home = homes.find_home()
     launcher = Launcher(python=sys.executable, home=home)
@@ -2548,11 +2625,13 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
         while True:
             env = home / ".env"
             set_lang(env_get(env, "AGENT_LANG") or os.getenv("AGENT_LANG") or detect_lang())
+            # What the menu runs speaks the menu's language until setup saves one.
+            child_env = {**os.environ, "AGENT_LANG": _lang}
             _header(t("start_title"))
             _say(t("folder", path=home))
             key = env_get(env, "LLM_API_KEY")
-            _say(t("start_status", name=env_get(env, "PERSONA_NAME") or t("start_unset"),
-                   masked=mask_secret(key) if key else t("start_unset")))
+            _say(t("start_status", name=env_get(env, "PERSONA_NAME") or t("start_no_name"),
+                   masked=mask_secret(key) if key else t("start_no_key")))
             _say(t("start_menu"))
             choice = ask(t("start_choose"), default="1")
             if choice == "0":
@@ -2561,17 +2640,18 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
                         "4": ["connect", "astrbot", "--start"], "5": ["up"],
                         "6": ["demo", "--offline", "--lang", _lang]}
             if choice not in commands:
+                _say(t("start_bad_choice", choice=choice))
                 continue
             if choice == "3":
                 commands["3"] = choose_platform()
                 if not commands["3"]:
                     continue
             if choice in ("1", "5") and not key:
-                code = subprocess.call([*launcher.argv("init"), "--terminal"], cwd=launcher.cwd())
+                code = subprocess.call([*launcher.argv("init"), "--terminal"], cwd=launcher.cwd(), env=child_env)
                 if code or not env_get(env, "LLM_API_KEY"):
                     continue
-            command, *extra = commands[choice]
-            code = subprocess.call([*launcher.argv(command), *extra], cwd=launcher.cwd())
+            sub, *extra = commands[choice]
+            code = subprocess.call([*launcher.argv(sub), *extra], cwd=launcher.cwd(), env=child_env)
             if code:
                 _say(t("start_failed", code=code))
     except (KeyboardInterrupt, EOFError):

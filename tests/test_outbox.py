@@ -163,6 +163,8 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
 
 def test_a_connector_that_cannot_pull_leaves_another_connectors_route(tmp: Path) -> None:
     store = HandleStore(tmp / "h.json")
+    box = Outbox(store)
+    box._stamp("page")
 
     def put(key, connector_id, capabilities, handle="h"):
         store.record(key, reply_handle=handle, connector_id=connector_id,
@@ -196,6 +198,32 @@ def test_a_connector_that_cannot_pull_leaves_another_connectors_route(tmp: Path)
     put("e", "fw2", ["outbox"], handle="h2")
     check("unchanged: a pulling connector replaces one that cannot pull",
           store.get("e")["connector_id"] == "fw2")
+
+
+def test_a_silent_connectors_route_does_not_come_back_when_it_pulls_again(tmp: Path) -> None:
+    """A conversation that moved to a connector without the outbox while the
+    old one was silent never routes to the old one's handle again."""
+    store = HandleStore(tmp / "h.json")
+    box = Outbox(store)
+    box.liveness_s = 0.05
+
+    def put(connector_id, capabilities, handle):
+        store.record("a", reply_handle=handle, connector_id=connector_id,
+                     capabilities=capabilities, platform="telegram", native=False,
+                     conversation_type="dm", conversation_id="c")
+
+    box._stamp("old")
+    put("old", ["outbox"], "old-handle")
+    time.sleep(0.1)
+    put("new", [], "new-handle")
+    check("replaced: a silent connector's route gives way, as before the rule",
+          store.get("a")["connector_id"] == "new"
+          and store.get("a")["reply_handle"] == "new-handle", repr(store.get("a")))
+    box._stamp("old")
+    check("replaced: the old connector pulling again gets no route back",
+          box.route("a") is None)
+    check("replaced: a store no outbox reads keeps the latest event",
+          HandleStore(tmp / "h.json").get("a")["connector_id"] == "new")
 
 
 def _put(store: HandleStore, key: str) -> None:

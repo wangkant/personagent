@@ -124,7 +124,11 @@ def hide_dashboard(data: Path) -> dict:
 def start_astrbot(home: Path) -> int:
     installation = AstrBotInstallation(home.resolve())
     if not installation.executable.is_file():
-        raise FileNotFoundError("AstrBot is not installed; run personagent connect astrbot --install")
+        from . import langs
+        from .setup_wizard import command
+
+        raise FileNotFoundError(langs.term(f"AstrBot is not installed. Install it with: "
+                                           f"{command('connect astrbot --install', home)}"))
     hide_dashboard(installation.root / "data")
     return subprocess.call([str(installation.executable), "run"],
                            cwd=installation.root, env=installation.environment())

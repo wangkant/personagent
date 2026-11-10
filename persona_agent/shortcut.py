@@ -66,8 +66,10 @@ def script(home: Path, *, remove: bool = False, folders: list[Path] | None = Non
     """The PowerShell that writes the links, or takes them away."""
     where = "@(" + ", ".join(map(_quoted, folders)) + ")" if folders else _where(kinds)
     if remove:
-        return (f"foreach ($folder in {where}) {{ Remove-Item -LiteralPath "
-                f"(Join-Path $folder {_quoted(LINK)}) -Force -ErrorAction SilentlyContinue }}")
+        # A link that is not there is already removed; one that stays is a failure.
+        return (f"foreach ($folder in {where}) {{ if (-not $folder) {{ continue }}; "
+                f"$path = Join-Path $folder {_quoted(LINK)}; "
+                f"if (Test-Path -LiteralPath $path) {{ Remove-Item -LiteralPath $path -Force -ErrorAction Stop }} }}")
     program, arguments = target(home)
     if kinds == LOGIN:
         arguments = _arguments(arguments, "startup")
@@ -162,7 +164,8 @@ def main(argv: list[str] | None = None, prog: str = "personagent shortcut") -> i
         return 1
     failed = run(script(homes.find_home(), remove=args.remove))
     if failed:
-        print(langs.term(f"The shortcut could not be made: {failed}"))
+        print(langs.term(f"The shortcuts could not be removed: {failed}") if args.remove
+              else langs.term(f"The shortcut could not be made: {failed}"))
         return 1
     print(langs.term("The personagent shortcuts are gone.") if args.remove
           else langs.term("personagent is on your desktop and in the Start menu."))

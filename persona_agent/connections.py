@@ -112,7 +112,25 @@ PLATFORMS: tuple[Platform, ...] = (
                    "请在 Bot 页面复制 Token，并开启 Message Content Intent。")),
     Platform("kook", ("KOOK", "KOOK"), KEY,
              (_token("kook_bot_token", "Bot token", "机器人 Token"),),
-             guide="https://developer.kookapp.cn/app/index"),
+             guide="https://developer.kookapp.cn/app/index",
+             note=("Create a bot application in the KOOK developer centre, copy its token and invite the "
+                   "bot to your server.",
+                   "请在 KOOK 开发者中心创建机器人应用，复制其 Token，并将机器人邀请至你的服务器。"),
+             steps=(
+                 ("Sign in to the KOOK developer centre with your KOOK account and create a new "
+                  "application in the application list.",
+                  "使用你的 KOOK 账号登录 KOOK 开发者中心，在应用列表中新建一个应用。"),
+                 ("Open the application's bot page. Keep WebSocket as the connection mode; "
+                  "personagent does not use a callback address.",
+                  "打开该应用的机器人页面，连接模式保持为 WebSocket；personagent 不使用回调地址。"),
+                 ("Copy the bot's token and paste it into the bot token field here.",
+                  "复制机器人的 Token，粘贴到此处的「机器人 Token」一栏。"),
+                 ("On the same bot page, generate an invitation link with the permissions to view and "
+                  "send messages, open it and add the bot to your server.",
+                  "在同一机器人页面生成邀请链接，勾选查看消息和发送消息的权限，打开该链接并将机器人加入你的"
+                  "服务器。"),
+                 ("Select Connect.", "点击「连接」。"),
+             )),
     Platform("lark", ("Feishu / Lark", "飞书"), KEY,
              (_plain("app_id", "App ID", "App ID"),
               _token("app_secret", "App Secret", "App Secret")),
@@ -144,10 +162,53 @@ PLATFORMS: tuple[Platform, ...] = (
                    "创建机器人时请选择「长连接」。")),
     Platform("mattermost", ("Mattermost", "Mattermost"), KEY,
              (_plain("mattermost_url", "Server address", "服务器地址", kind="url"),
-              _token("mattermost_bot_token", "Bot token", "机器人 Token"))),
+              _token("mattermost_bot_token", "Bot token", "机器人 Token")),
+             guide="https://docs.mattermost.com/developers/integrate/reference/bot-accounts",
+             note=("Create a bot account under Integrations and paste its access token. Only a system "
+                   "administrator can create bot accounts, and bot account creation must be enabled first.",
+                   "请在「集成」中创建机器人账号并粘贴其访问令牌。只有系统管理员可以创建机器人账号，且须先"
+                   "启用机器人账号的创建。"),
+             steps=(
+                 ("A system administrator enables bot account creation in the System Console, under the "
+                  "integration settings for bot accounts.",
+                  "由系统管理员在系统控制台（System Console）的集成设置中，启用机器人账号的创建。"),
+                 ("Open the product menu, choose Integrations, then Bot Accounts, and add a bot account "
+                  "with a username, for example the character's name.",
+                  "打开产品菜单，依次选择「集成（Integrations）」>「机器人账号（Bot Accounts）」，添加一个"
+                  "机器人账号并填写用户名，例如角色的名字。"),
+                 ("When the bot is created, copy its access token before closing the page. The token is "
+                  "not shown again.",
+                  "机器人创建完成后，请在关闭页面之前复制其访问令牌。该令牌不会再次显示。"),
+                 ("Add the bot to your team and to each channel in which it should chat.",
+                  "将机器人加入你的团队，以及它需要参与聊天的每个频道。"),
+                 ("Enter the server address, for example https://chat.example.com, and the token here, "
+                  "then select Connect.",
+                  "在此处填写服务器地址（例如 https://chat.example.com）和令牌，然后点击「连接」。"),
+             )),
     Platform("misskey", ("Misskey", "Misskey"), KEY,
              (_plain("misskey_instance_url", "Instance address", "实例地址", kind="url"),
-              _token("misskey_token", "Access token", "访问令牌"))),
+              _token("misskey_token", "Access token", "访问令牌")),
+             guide="https://misskey-hub.net/en/docs/",
+             note=("Use a separate Misskey account for the bot and create an access token for it in the "
+                   "account's settings.",
+                   "请为机器人单独使用一个 Misskey 账号，并在该账号的设置中为其创建访问令牌。"),
+             steps=(
+                 ("Create a separate account for the bot on your Misskey instance. In its profile "
+                  "settings, mark the account as a bot account.",
+                  "在你的 Misskey 实例上为机器人单独注册一个账号，并在其个人资料设置中将该账号标记为机器人"
+                  "账号。"),
+                 ("Signed in to that account, open Settings, go to the API section and generate an "
+                  "access token.",
+                  "以该账号登录后打开「设置」，进入 API 栏目，生成一个访问令牌。"),
+                 ("Grant the permissions to read the account and its notifications, to read and write "
+                  "notes and, where the instance offers them, to read and write messages. Confirm and "
+                  "copy the token.",
+                  "授予读取账号信息与通知、读写帖子（Note），以及在实例支持时读写消息的权限，确认后复制该"
+                  "令牌。"),
+                 ("Enter the instance address, for example https://misskey.io, and the token here, then "
+                  "select Connect.",
+                  "在此处填写实例地址（例如 https://misskey.io）和令牌，然后点击「连接」。"),
+             )),
     Platform("matrix", ("Matrix", "Matrix"), KEY,
              (_plain("matrix_homeserver", "Homeserver address", "服务器地址", kind="url",
                      default="https://matrix.org"),
@@ -437,7 +498,29 @@ PLATFORMS: tuple[Platform, ...] = (
                      default="http://localhost:5140/satori/v1"),
               _plain("satori_endpoint", "WebSocket address", "WebSocket 地址", kind="url",
                      default="ws://localhost:5140/satori/v1/events"),
-              Field("satori_token", ("Token", "Token"), required=False))),
+              Field("satori_token", ("Token", "Token"), required=False)),
+             guide="https://satori.chat/en-US/",
+             note=("Connects to a Satori server that you run, such as Koishi with its Satori server "
+                   "plugin. The character answers on every account that server serves.",
+                   "连接你自行运行的 Satori 服务器，例如安装了 Satori 服务端插件的 Koishi。角色将在该服务器"
+                   "所服务的每个账号上作答。"),
+             steps=(
+                 ("Run a Satori server on this computer or on one it can reach, for example Koishi with "
+                  "its Satori server plugin enabled, and connect your chat accounts to it there.",
+                  "在本机或本机可访问的计算机上运行 Satori 服务器，例如启用了 Satori 服务端插件的 Koishi，"
+                  "并在其中接入你的聊天账号。"),
+                 ("Koishi listens on port 5140 by default. With the plugin's default path, the API "
+                  "address is http://localhost:5140/satori/v1 and the WebSocket address is "
+                  "ws://localhost:5140/satori/v1/events. Change them if your server uses another "
+                  "address, port or path.",
+                  "Koishi 默认监听 5140 端口。插件路径保持默认时，API 地址为 "
+                  "http://localhost:5140/satori/v1，WebSocket 地址为 ws://localhost:5140/satori/v1/events。"
+                  "如服务器使用其他地址、端口或路径，请相应修改。"),
+                 ("If a token is set in the server plugin, enter the same token here; otherwise leave "
+                  "the field empty.",
+                  "如服务端插件中设置了令牌，请在此处填写相同的令牌；否则请留空。"),
+                 ("Select Connect.", "点击「连接」。"),
+             )),
 )
 BY_KIND = {p.kind: p for p in PLATFORMS}
 

@@ -20,7 +20,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .connector import MAX_CONNECTOR_ID_CHARS, opaque_value
 from .storage import atomic_write_text, load_rebuildable_json
@@ -97,6 +97,8 @@ class HandleStore:
         self._entries: Optional[dict[str, dict]] = None
         self._dirty = False
         self._last_flush = 0.0
+        #: Whether a connector still pulls; set by the Outbox that reads this store.
+        self.live: Optional[Callable[[str], bool]] = None
 
     def _data(self) -> dict[str, dict]:
         if self._entries is None:
@@ -138,8 +140,10 @@ class HandleStore:
         current = data.get(str(key))
         if (current and "outbox" not in capabilities
                 and "outbox" in current["capabilities"]
-                and current["connector_id"] != str(connector_id or "")):
-            # A connector that cannot pull leaves another connector's route in place.
+                and current["connector_id"] != str(connector_id or "")
+                and self.live is not None and self.live(current["connector_id"])):
+            # A connector that cannot pull leaves a live connector's route in place;
+            # a silent one's old handle must not come back when it pulls again.
             data[str(key)] = data.pop(str(key))
             current["updated_at"] = time.time()
             self._dirty = True
@@ -235,6 +239,7 @@ class Outbox:
 
     def __init__(self, handles: HandleStore) -> None:
         self.handles = handles
+        handles.live = self.live
         # Attributes rather than constants so a harness can shorten them.
         self.ttl_s = dict(REASON_TTL_S)
         self.liveness_s = LIVENESS_S

@@ -110,7 +110,7 @@ def test_the_help_follows_lang(home, capsys) -> None:
     (["telegram", "somewhere"], "DATA_DIR"),
     (["telegram", "--matrix-token", "x"], "--matrix-token"),
     (["telegram", "--remove", "--telegram-token", "x"], "--remove"),
-    (["--remove"], "personagent connect telegram"),
+    (["--remove"], "connect telegram"),
     (["astrbot", "--no-input"], "--no-input"),
 ])
 def test_options_that_do_not_belong_are_refused_by_name(home, argv, words) -> None:
@@ -123,7 +123,8 @@ def test_options_that_do_not_belong_are_refused_by_name(home, argv, words) -> No
 def test_an_unknown_platform_is_reported_in_words(home, capsys) -> None:
     check("exit 2", sw.connect_main(["myspace"]) == 2)
     err = capsys.readouterr().err
-    check("named, with the way to list", "myspace" in err and "`personagent connect`" in err, err)
+    check("named, with the way to list, home included",
+          "myspace" in err and f"--home {home} connect`" in err, err)
 
 
 # ---- the list
@@ -138,7 +139,7 @@ def test_the_list_says_what_is_connected_and_what_can_be(home, capsys) -> None:
         check(f"{word} is listed", word in rows, out)
     check("telegram is connected", rows["telegram"].rstrip().endswith(" connected"), rows["telegram"])
     check("discord is not", rows["discord"].rstrip().endswith("not connected"), rows["discord"])
-    check("the way to connect one", "personagent connect <platform>" in out, out)
+    check("the way to connect one, home included", f"--home {home} connect <platform>" in out, out)
 
 
 def test_the_list_in_chinese(home, capsys) -> None:
@@ -258,7 +259,7 @@ def test_wechat_shows_a_code_and_saves_what_the_scan_returns(home, monkeypatch, 
     monkeypatch.setattr(direct, "sign_in_for", flow("https://liteapp.example/qr?k=1", {"token": "w"}))
     direct.state_path(home, "weixin_oc").parent.mkdir(parents=True)
     direct.state_path(home, "weixin_oc").write_text("{}", encoding="utf-8")
-    check("exit 0", sw.connect_main(["wechat", "--no-input"]) == 0)
+    check("exit 0", sw.connect_main(["wechat"]) == 0)
     out = capsys.readouterr().out
     check("the code is drawn", "█" in out or "▀" in out or "▄" in out, out[:400])
     check("its address is printed", "https://liteapp.example/qr?k=1" in out)

@@ -2,7 +2,7 @@
 with the platform and the saving that the local page and
 `personagent connect <platform>` share. Each failure is a RuntimeError whose
 message is a short code (NAMED_REFUSALS, scan_failed, network_failed,
-platform_rejected or cancelled), never a credential."""
+display_failed, platform_rejected or cancelled), never a credential."""
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +21,10 @@ NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_conte
                   "channel_not_found", "nick_in_use", "nick_invalid", "password_rejected",
                   "sasl_required", "long_poll_off", "message_events_off", "token_rights_missing",
                   "not_a_bot", "wrong_bot_type", "not_zulip_site"}
+
+
+class _NotShown(Exception):
+    """The sign-in's `show` failed: the screen, not the platform."""
 
 
 def stored(home: Path) -> list[str]:
@@ -57,9 +61,16 @@ def sign_in(spec: conn.Platform, values: dict, show: Callable[[str], None],
         raise RuntimeError("platform_rejected")
     scan, failed = flow
 
+    def shown(content: str) -> None:
+        # A screen that cannot draw the code is not a network failure.
+        try:
+            show(content)
+        except Exception as exc:
+            raise _NotShown() from exc
+
     async def login() -> dict:
         async with httpx.AsyncClient() as client:
-            task = asyncio.create_task(scan(client, show, values))
+            task = asyncio.create_task(scan(client, shown, values))
             while not task.done():
                 if should_stop():
                     task.cancel()
@@ -68,6 +79,8 @@ def sign_in(spec: conn.Platform, values: dict, show: Callable[[str], None],
             return task.result()
     try:
         return asyncio.run(login())
+    except _NotShown:
+        raise RuntimeError("display_failed") from None
     except failed as exc:
         # A login may name a refusal, such as an app it does not accept.
         raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "scan_failed") from None

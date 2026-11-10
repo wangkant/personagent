@@ -370,7 +370,7 @@ class Workspace:
         """The chat as the page shows it; with `after`, only what came since that number.
         `chat` changes when a new chat starts, so the page knows to start over."""
         messages = [dict(m) for m in self._history if after is None or m["seq"] > after]
-        return {"messages": messages, "chat": self._chat_tag(), "last": self._seq}
+        return {"messages": messages, "chat": self._chat_tag(), "last": self._seq, "kept": CHAT_KEPT}
 
     def _chat_tag(self) -> str:
         return hashlib.sha256(self._conversation.encode()).hexdigest()[:12]
@@ -390,16 +390,20 @@ class Workspace:
         self._history = (self._history + entries)[-CHAT_KEPT:]
         return entries
 
+    def _entry(self, item: dict) -> dict | None:
+        """A reply item as a chat message: text, or a picture stored for the page
+        to show; None for what the page cannot show."""
+        kind = item.get("type")
+        if kind == "text" and str(item.get("text") or "").strip():
+            return {"role": "assistant", "text": str(item["text"])}
+        if kind == "image":
+            name = self._keep_picture(item.get("b64"))
+            if name:
+                return {"role": "assistant", "picture": name}
+        return None
+
     def _entries(self, items: list) -> list[dict]:
-        """Reply items as chat messages: text, or a picture stored for the page to show."""
-        entries = []
-        for item in items:
-            kind = item.get("type")
-            if kind == "text" and str(item.get("text") or "").strip():
-                entries.append({"role": "assistant", "text": str(item["text"])})
-            elif kind == "image":
-                entries.append({"role": "assistant", "picture": self._keep_picture(item.get("b64"))})
-        return entries
+        return [entry for entry in map(self._entry, items) if entry]
 
     def _keep_picture(self, encoded) -> str:
         """Store a picture the character sent; its file name, or "" when it is not one."""
@@ -480,12 +484,20 @@ class Workspace:
         if self._forgetting:
             # The chat is being forgotten and replaced: shown now, it would vanish yet count as sent.
             return "failed", 0
-        items = [i for i in delivery.get("items") or [] if isinstance(i, dict)]
-        entries = self._entries(items)
+        items = delivery.get("items") or []
+        entries = []
+        # An ack counts the leading items that went out, so showing stops at the first that cannot be shown.
+        for item in items:
+            entry = self._entry(item) if isinstance(item, dict) else None
+            if entry is None:
+                break
+            entries.append(entry)
         if entries:
             self._append(entries)
             self._save_chat()
-        return "sent", len(items)
+        if not entries:
+            return "failed", 0
+        return ("sent" if len(entries) == len(items) else "partial"), len(entries)
 
     async def outbox_loop(self) -> None:
         """Collect what the character sends to this page's chat after a reply,
@@ -505,15 +517,20 @@ class Workspace:
                     if wait:
                         await asyncio.sleep(wait)
                     wait = OUTBOX_IDLE_S
-                    token = self.config().get("CONNECTOR_TOKEN", "")
-                    if not self.services.running("agent") or not token:
+                    try:
+                        token = self.config().get("CONNECTOR_TOKEN", "")
+                        if not self.services.running("agent") or not token:
+                            continue
+                        current = (self.services.agent_url, token)
+                        agent = self.services.processes.get("agent")
+                        if connector is None or current != address or agent is not process:
+                            # A service started since has a new outbox: pull it at once.
+                            connector, address, process, resume = _connector_type()(
+                                *current, connector_id=PAGE_CONNECTOR, client=client), current, agent, 0.0
+                    except Exception:
+                        # Unreadable settings (a bad port, say) may be fixed while the page runs.
+                        connector = None
                         continue
-                    current = (self.services.agent_url, token)
-                    agent = self.services.processes.get("agent")
-                    if connector is None or current != address or agent is not process:
-                        # A service started since has a new outbox: pull it at once.
-                        connector, address, process, resume = _connector_type()(
-                            *current, connector_id=PAGE_CONNECTOR, client=client), current, agent, 0.0
                     if time.monotonic() < resume:
                         continue
                     started = time.monotonic()
@@ -529,9 +546,13 @@ class Workspace:
                         continue
                     received = time.monotonic()
                     deliveries = answer.get("deliveries") or []
-                    for delivery in deliveries:
-                        # Acknowledged on the next pull, as every connector does.
-                        await connector._deliver_one(delivery, take, received)
+                    try:
+                        for delivery in deliveries:
+                            # Acknowledged on the next pull, as every connector does.
+                            await connector._deliver_one(delivery, take, received)
+                    except Exception:
+                        # Unacknowledged, it counts as not sent; the next pull goes on.
+                        pass
                     # An answer that came back at once with nothing: the service did not hold the pull.
                     wait = 0.0 if deliveries or received - started >= 1.0 else 1.0
         finally:
@@ -804,6 +825,12 @@ class Workspace:
                 with contextlib.suppress(OSError):
                     self._save_chat()
                 raise
+            if any(item.get("reason") == "excuse" for item in items):
+                # The model failed: here the admin checks the setup, so it is reported, not chatted about.
+                self._history = [m for m in self._history if m is not said]
+                with contextlib.suppress(OSError):
+                    self._save_chat()
+                raise RuntimeError("the model did not answer")
             self._append(self._entries(items))
             self._save_chat()
             reply = "\n".join(str(i.get("text", "")) for i in items if i.get("type") == "text")
@@ -987,7 +1014,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
             "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         return response
 

@@ -4,6 +4,7 @@ The probes are shared with /health/details (health.py); the flags are in USAGE.
 """
 import json
 import sys
+from pathlib import Path
 
 from persona_agent import langs
 from persona_agent import home
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             ],
             "retired_settings": [{"old": o, "new": n, "where": w} for o, n, w in retired],
             "services": results,
+            "direct_platforms": direct_platforms(home.find_home()),
             "update": update_notice(),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
@@ -99,7 +101,9 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(langs.term("[  OK ] configuration                    no unknown or missing keys"))
         print("-" * 64)
     if any(f.key == "LLM_API_KEY" and f.level == "ERROR" for f in findings):
-        print(langs.term("  No model key yet: `personagent init` sets up the model and key."))
+        from persona_agent.setup_wizard import command
+
+        print(langs.term(f"  No model key yet: `{command('init')}` sets up the model and key."))
         print("-" * 64)
     if retired:
         print(langs.term(f"  The service will not start while these settings are in use; "
@@ -110,6 +114,8 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")
         tag = langs.term(" [critical]") if r["critical"] else ""
         print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r['detail'])}")
+    mark, detail = direct_row(direct_platforms(home.find_home()))
+    print(f"[{mark}] {_pad(langs.term('directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
     print("=" * 64)
     services_ok = all_critical_ok(results)
     if not services_ok:
@@ -137,6 +143,68 @@ def update_notice() -> dict | None:
     if not updates.enabled(found):
         return None
     return updates.notice(found, updates.check(found, timeout=10.0) if updates.stale(found) else None)
+
+
+def _direct_running(found: Path) -> bool:
+    """Whether the process serving the directly connected platforms for
+    `found` runs, as the records the app keeps of its children say."""
+    from persona_agent import services
+
+    for path in (found / "runtime" / "desktop").glob("children-*.json"):
+        try:
+            child = (json.loads(path.read_text(encoding="utf-8")).get("children") or {}).get("direct")
+            pid, argv = int(child["pid"]), list(child["argv"])
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            continue
+        if services._still_child(services._command_line(pid), argv, str(found), services._leads_group(pid)):
+            return True
+    return False
+
+
+def direct_platforms(found: Path) -> dict:
+    """The platforms personagent connects itself and, while it runs, the state
+    each one reports. Nothing is asked of a platform."""
+    from persona_agent.direct import base
+    from persona_agent.direct_setup import NAMED_REFUSALS, stored
+
+    found = found.resolve()
+    running = _direct_running(found)
+    try:
+        states = base.read_status(found) if running else {}
+    except (OSError, ValueError):
+        states = {}
+    rows = []
+    for kind in stored(found):
+        state = states.get(kind) if isinstance(states.get(kind), dict) else {}
+        detail = str(state.get("detail") or "")
+        # Only the named codes: any other detail may quote the platform's own text.
+        rows.append({"id": kind, "state": str(state.get("state") or ""),
+                     "detail": detail if detail in NAMED_REFUSALS else ""})
+    return {"running": running, "platforms": rows}
+
+
+def direct_row(found: dict) -> tuple[str, str]:
+    """The table's mark and words for `direct_platforms`."""
+    from persona_agent import connections
+
+    lang = langs.terminal_lang()
+    if not found["platforms"]:
+        return "  -  ", langs.term("none connected")
+    named = [(connections.say(connections.platform(p["id"]).name, lang), p) for p in found["platforms"]]
+    if not found["running"]:
+        return "  -  ", langs.term(f"{', '.join(name for name, _ in named)} (state unknown: personagent is not running)")
+    words = {"connected": "{0}: connected", "connecting": "{0}: connecting",
+             "refused": "{0}: refused the connection", "error": "{0}: stopped by an error"}
+    parts = []
+    for name, platform in named:
+        if platform["detail"] and platform["state"] == "refused":
+            sentence = f"{name}: refused the connection ({platform['detail']})"
+        else:
+            sentence = words.get(platform["state"], "{0}: not started yet").replace("{0}", name)
+        parts.append(langs.term(sentence))
+    failed = any(p["state"] in ("refused", "error") for _, p in named)
+    ok = all(p["state"] == "connected" for _, p in named)
+    return (" FAIL" if failed else "  OK " if ok else "  -  "), "; ".join(parts)
 
 
 def activity_off() -> str:
