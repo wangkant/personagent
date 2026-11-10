@@ -91,7 +91,8 @@ class AgentSettings:
     #: LLM transient-error retry count (jittered backoff; 0 disables).
     api_max_retries: int = _env(
         lambda env: env_int("LLM_MAX_RETRIES", 2, minimum=0, env=env))
-    #: Main LLM call timeout (seconds); reasoning models can be slow.
+    #: Main LLM call timeout (seconds); reasoning models can be slow. A group
+    #: turn as a whole gets one and a half of it (``turns._TURN_BUDGET_CALLS``).
     llm_timeout_s: float = _env(
         lambda env: env_float("LLM_TIMEOUT_S", 120.0, minimum=1.0, env=env))
 
@@ -332,45 +333,61 @@ class AgentSettings:
 
         vision_key, vision_base = vision_endpoint_from_env(env)
         identity = access.identity_from_env(env)
+        # A default is written once, on its field.
+        declared = {f.name: f.default for f in fields(cls)}
         defaults = dict(
             api_key=_str("LLM_API_KEY"),
-            base_url=_str("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
-            model=_str("LLM_MODEL", DEFAULT_LLM_MODEL),
+            base_url=_str("LLM_BASE_URL", declared["base_url"]),
+            model=_str("LLM_MODEL", declared["model"]),
             qq_bot_id=_str("QQ_BOT_ID"),
             persona_name=_str("PERSONA_NAME"),
             persona_avatar=_str("PERSONA_AVATAR"),
             llm_dm_model=_str("LLM_DM_MODEL"),
             qq_onebot_url=_str("QQ_ONEBOT_URL", strip=True),
             chat_trigger_count=env_int(
-                "CHAT_TRIGGER_COUNT", 30, minimum=1, maximum=10_000, env=env),
+                "CHAT_TRIGGER_COUNT", declared["chat_trigger_count"],
+                minimum=1, maximum=10_000, env=env),
             chat_context_messages=env_int(
-                "CHAT_CONTEXT_MESSAGES", 120, minimum=10, maximum=10_000, env=env),
+                "CHAT_CONTEXT_MESSAGES", declared["chat_context_messages"],
+                minimum=10, maximum=10_000, env=env),
             chat_followup_window_s=env_int(
-                "CHAT_FOLLOWUP_WINDOW_S", 120, minimum=0, maximum=86_400, env=env),
-            memory_file=_str("MEMORY_FILE", "memory.json"),
+                "CHAT_FOLLOWUP_WINDOW_S", declared["chat_followup_window_s"],
+                minimum=0, maximum=86_400, env=env),
+            memory_file=_str("MEMORY_FILE", declared["memory_file"]),
             memory_max_per_conversation=env_int(
-                "MEMORY_MAX_PER_CONVERSATION", 50, minimum=1, maximum=10_000, env=env),
+                "MEMORY_MAX_PER_CONVERSATION",
+                declared["memory_max_per_conversation"],
+                minimum=1, maximum=10_000, env=env),
             memory_tidy_every=env_int(
-                "MEMORY_TIDY_EVERY", 8, minimum=0, maximum=10_000, env=env),
-            memory_share_rooms=env_bool("MEMORY_SHARE_ROOMS", False, env=env),
+                "MEMORY_TIDY_EVERY", declared["memory_tidy_every"],
+                minimum=0, maximum=10_000, env=env),
+            memory_share_rooms=env_bool(
+                "MEMORY_SHARE_ROOMS", declared["memory_share_rooms"], env=env),
             admin_ids=identity.written["ADMIN_IDS"],
             admin_name=_str("ADMIN_NAME"),
             admin_relationship=_str("ADMIN_RELATIONSHIP"),
             llm_fallback_model=_str("LLM_FALLBACK_MODEL"),
             llm_fallback_base_url=_str("LLM_FALLBACK_BASE_URL"),
             llm_fallback_api_key=_str("LLM_FALLBACK_API_KEY"),
-            llm_fallback_thinking=env_bool("LLM_FALLBACK_THINKING", False, env=env),
+            llm_fallback_thinking=env_bool(
+                "LLM_FALLBACK_THINKING", declared["llm_fallback_thinking"],
+                env=env),
             llm_rate_window_s=env_int(
-                "LLM_RATE_WINDOW_S", 120, minimum=1, maximum=86_400, env=env),
+                "LLM_RATE_WINDOW_S", declared["llm_rate_window_s"],
+                minimum=1, maximum=86_400, env=env),
             llm_rate_threshold=env_int(
-                "LLM_RATE_THRESHOLD", 30, minimum=1, maximum=100_000, env=env),
+                "LLM_RATE_THRESHOLD", declared["llm_rate_threshold"],
+                minimum=1, maximum=100_000, env=env),
             llm_fallback_duration_s=env_int(
-                "LLM_FALLBACK_DURATION_S", 180, minimum=1, maximum=86_400, env=env),
+                "LLM_FALLBACK_DURATION_S", declared["llm_fallback_duration_s"],
+                minimum=1, maximum=86_400, env=env),
             llm_rate_limit_cooldown_s=env_int(
-                "LLM_RATE_LIMIT_COOLDOWN_S", 20, minimum=1, maximum=86_400, env=env),
-            eval_enabled=env_bool("EVAL_ENABLED", False, env=env),
+                "LLM_RATE_LIMIT_COOLDOWN_S", declared["llm_rate_limit_cooldown_s"],
+                minimum=1, maximum=86_400, env=env),
+            eval_enabled=env_bool(
+                "EVAL_ENABLED", declared["eval_enabled"], env=env),
             eval_model=_str("EVAL_MODEL"),
-            eval_file=_str("EVAL_FILE", "eval.jsonl"),
+            eval_file=_str("EVAL_FILE", declared["eval_file"]),
             vision_model=_str("VISION_MODEL"),
             vision_api_key=vision_key,
             vision_base_url=vision_base,

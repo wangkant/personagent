@@ -25,6 +25,8 @@ from .setup_wizard import _read_json, env_get, write_env
 from .storage import atomic_write_text
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+# How much of a failed command's log its error carries.
+TAIL_LINES = 20
 
 # On POSIX a child's `python -m module ...` runs as `python -c _GUARD <app pid>
 # -m module ...`: the module runs as -m would run it, and the child's process
@@ -79,6 +81,7 @@ def _win32():
             (kernel32.CreateJobObjectW, (ctypes.c_void_p, ctypes.c_wchar_p), handle),
             (kernel32.SetInformationJobObject, (handle, ctypes.c_int, ctypes.c_void_p, dword), ctypes.c_int),
             (kernel32.AssignProcessToJobObject, (handle, handle), ctypes.c_int),
+            (kernel32.TerminateJobObject, (handle, ctypes.c_uint32), ctypes.c_int),
             (kernel32.OpenProcess, (dword, ctypes.c_int, dword), handle),
             (kernel32.GetExitCodeProcess, (handle, ctypes.POINTER(dword)), ctypes.c_int),
             (kernel32.CloseHandle, (handle,), ctypes.c_int),
@@ -108,10 +111,12 @@ def _job():
     return None
 
 
-def _bind(pid: int) -> None:
+def _bind(pid: int) -> Optional[int]:
     """Put a child created suspended into the job, then let it run. It runs
     nothing before it is in the job, so what it starts, such as the
-    interpreter a venv's python.exe launches, is in the job as well."""
+    interpreter a venv's python.exe launches, is in the job as well.
+    Returns a job of the child's own inside that one, holding exactly the
+    child and what it starts; None when one could not be made."""
     kernel32, ntdll = _win32()
     # PROCESS_TERMINATE | PROCESS_SET_QUOTA | PROCESS_SUSPEND_RESUME
     handle = kernel32.OpenProcess(0x0001 | 0x0100 | 0x0800, False, pid)
@@ -123,9 +128,17 @@ def _bind(pid: int) -> None:
         # lets the next start stop it if this process dies first.
         if job:
             kernel32.AssignProcessToJobObject(job, handle)
+        # Assigned second, so this one nests inside the first.
+        own = kernel32.CreateJobObjectW(None, None)
+        if own and not kernel32.AssignProcessToJobObject(own, handle):
+            kernel32.CloseHandle(own)
+            own = None
         # Popen keeps no handle to the main thread, so resume the whole process.
         if ntdll.NtResumeProcess(handle):
+            if own:
+                kernel32.CloseHandle(own)
             raise OSError(f"could not resume process {pid}")
+        return own
     finally:
         kernel32.CloseHandle(handle)
 
@@ -186,15 +199,23 @@ def _end(pid: int, command: str) -> None:
             time.sleep(0.1)
 
 
-def _signal_child(process, force: bool = False) -> None:
-    """Terminate (or kill) a child; on POSIX its whole group, since it leads one."""
+def _signal_child(process, force: bool = False, job: Optional[int] = None) -> None:
+    """Terminate (or kill) a child and what it started: on POSIX its group,
+    which it leads; on Windows its own job, when it has one."""
     if os.name != "nt":
         try:
             os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)
             return
         except (OSError, AttributeError, TypeError):
             pass    # gone already, or not a real process
+    elif job and _win32()[0].TerminateJobObject(job, 1):
+        return
     process.kill() if force else process.terminate()
+
+
+class Stopped(RuntimeError):
+    """A command was ended before it finished: it was asked to stop, or the
+    app closed."""
 
 
 def stop_leftovers(home: Path) -> list[str]:
@@ -225,6 +246,8 @@ class Services:
         self.processes: dict[str, subprocess.Popen] = {}
         # What `stop_leftovers` needs to recognise each running child.
         self._launched: dict[str, dict] = {}
+        # Windows: each running child's own job, which ends what it started.
+        self._jobs: dict[str, int] = {}
         self._lock = threading.RLock()
         self._shutdown = False
         self.astrbot_log_offset = 0
@@ -238,26 +261,34 @@ class Services:
         port = int(env_get(self.home / ".env", "SERVER_PORT") or 8080)
         return f"http://127.0.0.1:{port}"
 
-    def _spawn(self, name: str, argv: list[str], *, cwd: Path, env: dict) -> None:
-        """Start `argv`, a `python -m module ...` command, so that it ends
-        when this process does, and record it for `stop_leftovers`."""
+    def _spawn(self, name: str, argv: list[str], *, cwd: Optional[Path], env: dict) -> None:
+        """Start `argv` with its output in its log, so that it ends when this
+        process does, and record it for `stop_leftovers`. On POSIX only a
+        `python -m module ...` command ends with a killed app; any other
+        ends when it is stopped."""
         logs = self.home / "runtime" / "desktop"
         logs.mkdir(parents=True, exist_ok=True)
         fd = os.open(logs / f"{name}.log", os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+        job = None
         with os.fdopen(fd, "ab") as log:
             options = dict(cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
             if os.name == "nt":
                 process = subprocess.Popen(
                     argv, creationflags=subprocess.CREATE_NO_WINDOW | _CREATE_SUSPENDED, **options)
                 try:
-                    _bind(process.pid)
+                    job = _bind(process.pid)
                 except OSError:
                     process.kill()
                     process.wait()
                     raise
             else:
-                process = subprocess.Popen([argv[0], "-c", _GUARD, str(os.getpid()), *argv[1:]],
-                                           start_new_session=True, **options)
+                guarded = argv[1:2] == ["-m"]
+                process = subprocess.Popen(
+                    [argv[0], "-c", _GUARD, str(os.getpid()), *argv[1:]] if guarded else argv,
+                    start_new_session=True, **options)
+        self._forget_job(name)
+        if job:
+            self._jobs[name] = job
         self.processes[name] = process
         self._launched[name] = {"pid": process.pid, "argv": argv}
         self._record()
@@ -364,20 +395,46 @@ class Services:
     def logged(self, name: str, offset: int, pattern: re.Pattern, seconds: float) -> bool:
         """Whether `name` logs a line matching `pattern` (colour codes removed)
         after `offset`, within `seconds` or until it exits."""
-        log = self.home / "runtime" / "desktop" / f"{name}.log"
         deadline = time.monotonic() + seconds
         while True:
-            try:
-                with log.open("rb") as stream:
-                    stream.seek(offset)
-                    text = _ANSI.sub("", stream.read().decode("utf-8", "replace"))
-            except OSError:
-                text = ""
-            if any(pattern.search(line) for line in text.splitlines()):
+            if any(pattern.search(line) for line in self._logged_since(name, offset).splitlines()):
                 return True
             if time.monotonic() >= deadline or not self.running(name):
                 return False
             time.sleep(0.5)
+
+    def _logged_since(self, name: str, offset: int) -> str:
+        """What `name` has logged after `offset`, colour codes removed."""
+        try:
+            with (self.home / "runtime" / "desktop" / f"{name}.log").open("rb") as stream:
+                stream.seek(offset)
+                return _ANSI.sub("", stream.read().decode("utf-8", "replace"))
+        except OSError:
+            return ""
+
+    def run(self, name: str, argv: list[str], *, cwd: Optional[Path] = None, env: dict,
+            should_stop: Callable[[], bool] = lambda: False) -> None:
+        """Run `argv` to its end as a child like the others, so `stop` and
+        `close` end it as well. Raises Stopped once `should_stop()` holds or
+        the app closes, and CalledProcessError, carrying the end of what it
+        logged, when it fails."""
+        log = self.home / "runtime" / "desktop" / f"{name}.log"
+        with self._lock:
+            if self._shutdown or should_stop():
+                raise Stopped(name)
+            offset = log.stat().st_size if log.is_file() else 0
+            self._spawn(name, argv, cwd=cwd, env=env)
+            process = self.processes[name]
+        try:
+            while process.poll() is None and not (self._shutdown or should_stop()):
+                time.sleep(0.1)
+        finally:
+            self.stop(name)
+        if self._shutdown or should_stop():
+            raise Stopped(name)
+        if process.returncode:
+            tail = "\n".join(self._logged_since(name, offset).splitlines()[-TAIL_LINES:])
+            raise subprocess.CalledProcessError(process.returncode, argv, output=tail)
 
     def start_direct(self) -> None:
         """The platforms personagent connects itself, in one process; nothing
@@ -410,18 +467,27 @@ class Services:
     def stop(self, name: str) -> None:
         with self._lock:
             process = self.processes.pop(name, None)
+            job = self._jobs.get(name)
             if process is not None and process.poll() is None:
-                _signal_child(process)
+                _signal_child(process, job=job)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
-                    _signal_child(process, force=True)
+                    _signal_child(process, force=True, job=job)
                     process.wait(timeout=5)
+            self._forget_job(name)
             if self._launched.pop(name, None) is not None:
                 self._record()
 
+    def _forget_job(self, name: str) -> None:
+        job = self._jobs.pop(name, None)
+        if job:
+            _win32()[0].CloseHandle(job)
+
     def close(self) -> None:
-        for name in ("direct", "astrbot", "agent"):
+        # A command still running first, then the platforms before their agent.
+        services = ("direct", "astrbot", "agent")
+        for name in [*(name for name in list(self.processes) if name not in services), *services]:
             self.stop(name)
 
     def shutdown(self) -> None:

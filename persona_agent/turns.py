@@ -5,7 +5,7 @@ import asyncio
 import logging
 import random
 import time
-from contextlib import asynccontextmanager
+from typing import Callable, Optional
 
 from . import access
 from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
@@ -34,6 +34,56 @@ _EXCUSE_COOLDOWN_S = 300.0
 # A bare call ("@Bot", "Bot?") waits this long for the message that follows it.
 BARE_CALL_DEBOUNCE_S = 5.0
 
+# A group turn's whole model time, in LLM_TIMEOUT_S: one full-length call and
+# half of another, however many calls, retries and models it goes through.
+_TURN_BUDGET_CALLS = 1.5
+
+# Messages one turn holds back; a flood past it loses its oldest.
+_MAX_HELD = 256
+
+
+class _Held:
+    """A message that arrived during a turn. `absorb` is its intake, run when
+    the turn ends; `waiter` then carries what it returned, or None as soon as
+    a newer message has taken this one's place."""
+
+    __slots__ = ("absorb", "command", "waiter")
+
+    def __init__(self, absorb: Callable[[], tuple], command: bool) -> None:
+        self.absorb = absorb
+        self.command = command
+        self.waiter: asyncio.Future = asyncio.get_running_loop().create_future()
+
+    def release(self, outcome: Optional[tuple]) -> None:
+        if not self.waiter.done():
+            self.waiter.set_result(outcome)
+
+
+class _TurnGate(asyncio.Event):
+    """One group turn, from its model call to its commit. What arrives
+    meanwhile is held here in order and enters the buffer when the turn ends,
+    so a reply is never placed after a message it did not see. An Event
+    because eviction sets whatever `_pending_outbound` holds."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: list[_Held] = []
+        # The one handler still waiting to run the next turn.
+        self.newest: Optional[_Held] = None
+        self.overflowed = False
+
+    def hold(self, item: _Held) -> None:
+        # Only the newest message can still become a turn (the debounce rule),
+        # so the handler before it leaves, and with it its admission slot.
+        if not item.command:
+            if self.newest is not None:
+                self.newest.release(None)
+            self.newest = item
+        self.held.append(item)
+        if len(self.held) > _MAX_HELD:
+            self.overflowed = True
+            self.held.pop(0).release(None)
+
 
 class Turns:
     async def handle_onebot(self, payload: dict, *,
@@ -42,25 +92,40 @@ class Turns:
         # handle_event); `proactive` text is the caller's cue (see _handle_dm).
         return await self._handle_inner(payload, proactive=proactive)
 
-    @asynccontextmanager
-    async def _ordered_group_intake(self, group_id: str):
-        """Wait for the prior outbound commit, then acquire the intake lock."""
-        lock = self.locks[group_id]
-        while True:
-            pending = self._pending_outbound.get(group_id)
-            if pending is not None:
-                await pending.wait()
-                continue
-            await lock.acquire()
-            pending = self._pending_outbound.get(group_id)
-            if pending is None:
-                break
-            lock.release()
-            await pending.wait()
-        try:
-            yield
-        finally:
-            lock.release()
+    async def _group_intake(self, group_id: str, absorb: Callable[[], tuple],
+                            *, command: bool) -> Optional[tuple]:
+        """Run `absorb`, one message's intake, in arrival order: now, or when
+        the turn in flight ends. None when a newer message took its place.
+        `command`: a memory command, whose handler must stay to answer it."""
+        async with self.locks[group_id]:
+            gate = self._pending_outbound.get(group_id)
+            if gate is None:
+                return absorb()
+            item = _Held(absorb, command)
+            gate.hold(item)
+        return await item.waiter
+
+    def _end_group_turn(self, group_id: str, gate: _TurnGate) -> None:
+        """Close a turn: what was held behind it enters the buffer, in order.
+        Synchronous, so nothing can come between a commit and this."""
+        if self._pending_outbound.get(group_id) is gate:
+            del self._pending_outbound[group_id]
+        held, gate.held, gate.newest = gate.held, [], None
+        if gate.overflowed:
+            logger.warning("[Agent] over %d messages arrived during one turn "
+                           "(group=%s); the oldest were dropped",
+                           _MAX_HELD, group_id)
+        for item in held:
+            try:
+                item.release(item.absorb())
+            except Exception as e:
+                # The handler that would have raised it still does.
+                if item.waiter.done():
+                    logger.warning("[Agent] held message intake failed "
+                                   "(group=%s): %s", group_id, e)
+                else:
+                    item.waiter.set_exception(e)
+        gate.set()
 
     async def handle_event(self, event: dict) -> dict:
         """Handle one connector event synchronously: a ConnectorSink contextvar
@@ -179,6 +244,19 @@ class Turns:
         code = chatlangs.detect(text, self.chat_lang) if text else self.chat_lang
         return random.choice(chatlangs.spec(code).failure_excuses)
 
+    async def _think_within_budget(self, group_id: str, mode: str, text: str,
+                                   caller_override) -> tuple[str, str, str]:
+        """`_think` under the turn's one time budget; past it the model call
+        is abandoned and the turn fails like any other model failure."""
+        budget = self.llm_timeout_s * _TURN_BUDGET_CALLS
+        try:
+            return await asyncio.wait_for(
+                self._think(group_id, mode, text,
+                            caller_override=caller_override), budget)
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"no answer within the turn's {budget:g} s budget") from None
+
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
         if not self.enabled:
@@ -268,11 +346,11 @@ class Turns:
         is_noise = len(text.strip()) < 4 and not addressed
 
         is_admin_msg = access.is_admin(user_id, self._admins())
+        is_command = addressed and self._is_memory_command(ctrl_text)
 
         # A directed reaction to a recent reply is adjudicated off the hot path.
         # A memory command is not one and must not consume the pending reply.
-        if self.react_learn_enabled and not (
-                addressed and self._is_memory_command(ctrl_text)):
+        if self.react_learn_enabled and not is_command:
             _quote_mid, _quote_by_bot = "", None
             for _seg in payload.get("message", []) or []:
                 if isinstance(_seg, dict) and _seg.get("type") == "reply":
@@ -293,9 +371,9 @@ class Turns:
                     _r_entry, text, nickname, user_id, is_admin_msg,
                     conv_id=group_id, is_dm=False))
 
-        mem_reply = None
-        # Phase 1: absorb the message, handle memory commands, stamp the seq.
-        async with self._ordered_group_intake(group_id):
+        def absorb() -> tuple[int, Optional[str]]:
+            """Phase 1: buffer the message, run a memory command, stamp the
+            seq. Returns (seq, the command's answer)."""
             # The cut must not leave an enrichment span open.
             self._append_buffer(group_id, nickname,
                                 _truncate_framed(text, 200), user_id)
@@ -309,18 +387,23 @@ class Turns:
             # A memory command answers at once: state settles here, the send
             # happens outside the lock.
             if addressed:
-                mem_reply = self._handle_memory_command(group_id, ctrl_text, user_id, nickname)
+                answer = self._handle_memory_command(
+                    group_id, ctrl_text, user_id, nickname)
+                if answer is not None:
+                    return 0, answer
+                self._sticky_call[group_id] = {
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "ts": time.time(),
+                }
+            self._msg_seq[group_id] += 1
+            return self._msg_seq[group_id], None
 
-            if mem_reply is None:
-                if addressed:
-                    self._sticky_call[group_id] = {
-                        "user_id": user_id,
-                        "nickname": nickname,
-                        "ts": time.time(),
-                    }
-
-                self._msg_seq[group_id] += 1
-                my_seq = self._msg_seq[group_id]
+        absorbed = await self._group_intake(group_id, absorb, command=is_command)
+        if absorbed is None:
+            # Held behind a turn and overtaken: the debounce would drop it.
+            return False
+        my_seq, mem_reply = absorbed
 
         if mem_reply is not None:
             async with self.send_locks[group_id]:
@@ -411,8 +494,17 @@ class Turns:
                                     sender=sender_name)
                 return False
 
+            # The reply reserves its place before the model is asked: what
+            # arrives from here on is held behind it.
+            gate = _TurnGate()
+            self._pending_outbound[group_id] = gate
+
+        # Outside the group lock: no handler queues on it for the length of a
+        # model call or of a send, each holding a webhook admission slot.
+        try:
             try:
-                reply, _intent, auto_mem = await self._think(group_id, mode, text, caller_override=caller_override)
+                reply, _intent, auto_mem = await self._think_within_budget(
+                    group_id, mode, text, caller_override)
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 # Sent from a background task under the send lock, like a reply.
@@ -462,13 +554,9 @@ class Turns:
             reply, at_uid = final.text, final.at_uid
             if not at_uid and mode == "called":
                 at_uid = user_id
-            # Snapshot now, inside the lock: after the send the buffer has moved on.
+            # Snapshot now: after the send the buffer has moved on.
             eval_ctx = [f"{m['name']}: {m['text']}" for m in list(self.buffers[group_id])[-5:]]
-            outbound_done = asyncio.Event()
-            self._pending_outbound[group_id] = outbound_done
 
-        # Outside the group lock, so intake continues while the bot "types".
-        try:
             async with self.send_locks[group_id]:
                 send_result = await self._send_group(group_id, reply, at_uid)
             if not send_result.success and not send_result.partial:
@@ -493,9 +581,7 @@ class Turns:
                     "committed %d of %d chars",
                     mode, group_id, len(committed), len(reply))
         finally:
-            if self._pending_outbound.get(group_id) is outbound_done:
-                self._pending_outbound.pop(group_id, None)
-                outbound_done.set()
+            self._end_group_turn(group_id, gate)
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
         decision_log.record(group_id, mode, True, why, committed,
                             answered=ctrl_text, sender=sender_name)

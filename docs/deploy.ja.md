@@ -45,7 +45,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 API はエージェントサービスの `/api/dashboard/` の下にあります。
 
-- `GET status`、`GET conversations`、`GET conversation?id=<chat id>` は、サービスの状態、把握しているチャット、1 つのチャットの詳細を読みます。
+- `GET conversations` と `GET conversation?id=<chat id>` は、サービスが把握しているチャットと、1 つのチャットの詳細を読みます。
 - `POST candidates/<id>/promote`、`replace`、`reject`、`rollback` は学習内容を変更します。各変更は `personagent learned` と同じ台帳に、アクター `dashboard` で記録されます。
 - `POST memory/forget` は、本文 `{"conv": "<chat id>", "note": "<note id>"}` で記憶メモを 1 つ削除します。`conv` と id は `GET conversation` の `memories` の項目にあるものです。`note` がなければ、そのチャットのコアノートを削除します。
 

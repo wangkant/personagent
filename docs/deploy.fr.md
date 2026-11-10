@@ -45,7 +45,7 @@ La page locale et `personagent up` demandent à pypi.org au plus une fois par jo
 
 L'API se trouve sous `/api/dashboard/` sur le service d'agent :
 
-- `GET status`, `GET conversations` et `GET conversation?id=<chat id>` lisent l'état du service, les discussions qu'il connaît et une discussion en détail.
+- `GET conversations` et `GET conversation?id=<chat id>` lisent les discussions que le service connaît et une discussion en détail.
 - `POST candidates/<id>/promote`, `replace`, `reject` et `rollback` modifient ce qu'il a appris. Chaque modification va dans le même registre que `personagent learned`, avec l'acteur `dashboard`.
 - `POST memory/forget` avec le corps `{"conv": "<chat id>", "note": "<note id>"}` supprime une note de mémoire. `conv` et l'id sont ceux d'une entrée de `memories` dans `GET conversation`. Sans `note`, il supprime la note principale de la discussion.
 

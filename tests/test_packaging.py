@@ -46,6 +46,20 @@ def test_the_dependencies_have_floors_and_stay_on_pydantic_2() -> None:
     assert all(">=" in ln for ln in requirements), "every dependency has a floor"
 
 
+def test_the_workflows_take_pytest_and_ruff_from_the_dev_extra() -> None:
+    """Their versions are written once, in pyproject.toml."""
+    extra = re.search(r"^dev = \[(.*?)\]", _pyproject(), re.MULTILINE).group(1)
+    tools = [re.match(r"[A-Za-z0-9_.-]+", spec).group(0)
+             for spec in re.findall(r'"([^"]+)"', extra)]
+    assert tools == ["pytest", "ruff"], tools
+    for name in ("ci.yml", "release.yml"):
+        text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        assert 'python -m pip install -e ".[dev]"' in text, name
+        for tool in tools:
+            assert not re.search(rf'["\s]{tool}\s*[<>=~!]', text), (
+                f"{name} writes a version for {tool}")
+
+
 def test_the_wheel_bundles_the_shared_files_under_bundled() -> None:
     """hatchling maps data/, the AstrBot plugin and .env.example under
     persona_agent/_bundled, where home.resource() looks in an installed copy;

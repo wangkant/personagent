@@ -6,8 +6,10 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 
+from helpers import check
 from persona_agent import services as svc
 from persona_agent.services import Services
 from persona_agent import setup_wizard as sw
@@ -37,6 +39,14 @@ home = Path(sys.argv[1])
 Services(home)._spawn("probe", [sys.executable, "-m", "probe_child", sys.argv[2], "60"],
                       cwd=home, env=dict(os.environ))
 time.sleep(60)
+"""
+
+# Stands in for a command that runs to its end: logs lines, then exits with a code.
+TASK = """\
+import sys
+for n in range(int(sys.argv[2])):
+    print(sys.argv[1], n, flush=True)
+sys.exit(int(sys.argv[3]))
 """
 
 NO_SUCH_PROCESS = 2 ** 30
@@ -252,5 +262,93 @@ def test_a_leftover_child_is_stopped_with_what_it_started(tmp_path):
         assert not (desktop / "children-1.json").exists()
     finally:
         process.kill()
+        for pid in pids:
+            _kill(pid)
+
+
+def test_stopping_a_child_ends_what_it_started(tmp_path):
+    env = _probe_env(tmp_path)
+    out = tmp_path / "out.txt"
+    services = Services(tmp_path)
+    services._spawn("probe", [sys.executable, "-m", "probe_child", str(out), "60"], cwd=tmp_path, env=env)
+    pids = []
+    try:
+        said = _probe_says(out)
+        pids = [int(said[0]), int(said[2])]
+        services.stop("probe")
+        check("the child and the process it started are gone", all(_gone(pid, 5) for pid in pids))
+        check("nothing is kept for it", not services.processes and not services._jobs)
+    finally:
+        services.close()
+        for pid in pids:
+            _kill(pid)
+
+
+def _task_env(tmp_path: Path) -> dict:
+    (tmp_path / "task_child.py").write_text(TASK, encoding="utf-8")
+    return _probe_env(tmp_path)
+
+
+def test_a_command_runs_to_its_end_and_a_failure_carries_the_end_of_its_log(tmp_path, capfd):
+    env = _task_env(tmp_path)
+    services = Services(tmp_path)
+    record = tmp_path / "runtime" / "desktop" / f"children-{os.getpid()}.json"
+    services.run("task", [sys.executable, "-m", "task_child", "earlier", "3", "0"], cwd=tmp_path, env=env)
+    check("a finished command is no longer a child", not services.processes and not record.exists())
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        services.run("task", [sys.executable, "-m", "task_child", "later", "50", "3"], cwd=tmp_path, env=env)
+    tail = failed.value.output.splitlines()
+    check("the error carries its exit code", failed.value.returncode == 3, str(failed.value.returncode))
+    check("and the end of what this run logged", tail[-1] == "later 49" and len(tail) == svc.TAIL_LINES, str(tail))
+    check("not an earlier run's output", "earlier" not in failed.value.output)
+    log = (tmp_path / "runtime" / "desktop" / "task.log").read_text(encoding="utf-8")
+    check("the whole output is in its log", "earlier 0" in log and "later 0" in log)
+    shown = capfd.readouterr()
+    check("none of it reaches this window", "later" not in shown.out + shown.err, shown.out + shown.err)
+
+
+def test_a_running_command_stops_when_asked_and_when_the_app_closes(tmp_path):
+    env = _probe_env(tmp_path)
+    services = Services(tmp_path)
+    pids = []
+
+    def start(out: Path, should_stop) -> tuple[threading.Thread, list]:
+        raised = []
+
+        def body():
+            try:
+                services.run("task", [sys.executable, "-m", "probe_child", str(out), "600"],
+                             cwd=tmp_path, env=env, should_stop=should_stop)
+            except Exception as exc:
+                raised.append(exc)
+        thread = threading.Thread(target=body)
+        thread.start()
+        said = _probe_says(out)
+        pids.extend([int(said[0]), int(said[2])])
+        return thread, raised
+
+    try:
+        asked = threading.Event()
+        thread, raised = start(tmp_path / "first.txt", asked.is_set)
+        began = time.monotonic()
+        asked.set()
+        thread.join(timeout=10)
+        took = time.monotonic() - began
+        check("it stops soon after it is asked to", not thread.is_alive() and took < 3, f"{took:.1f}s")
+        check("and says it was stopped", [type(exc) for exc in raised] == [svc.Stopped], repr(raised))
+        check("with what it started", all(_gone(pid, 5) for pid in pids))
+
+        thread, raised = start(tmp_path / "second.txt", lambda: False)
+        services.shutdown()
+        check("closing the app returns with the command gone",
+              not services.processes and all(_gone(pid, 2) for pid in pids))
+        thread.join(timeout=10)
+        check("and the command says it was stopped", [type(exc) for exc in raised] == [svc.Stopped], repr(raised))
+        with pytest.raises(svc.Stopped):
+            services.run("task", [sys.executable, "-m", "probe_child", str(tmp_path / "third.txt"), "600"],
+                         cwd=tmp_path, env=env)
+        check("a closed app starts no command", not (tmp_path / "third.txt").exists())
+    finally:
+        services.close()
         for pid in pids:
             _kill(pid)

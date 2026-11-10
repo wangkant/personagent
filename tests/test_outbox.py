@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -160,6 +161,61 @@ def test_the_handle_store_is_bounded_and_keeps_unsupported(tmp: Path) -> None:
           "unsupported" not in store.get("a"))
 
 
+def _put(store: HandleStore, key: str) -> None:
+    store.record(key, reply_handle="h", connector_id="fw", capabilities=["outbox"],
+                 platform="telegram", native=False, conversation_type="group",
+                 conversation_id=key)
+
+
+def test_a_damaged_handles_file_is_moved_aside_and_starts_empty(
+        tmp: Path, caplog) -> None:
+    """connector_handles.json is written without fsync, so a power cut can
+    leave it empty or cut off; every turn reads it."""
+    caplog.set_level(logging.WARNING, logger="agent.storage")
+    path = tmp / "connector_handles.json"
+    aside = tmp / "connector_handles.json.corrupt"
+    seed = HandleStore(path)
+    _put(seed, "a")
+    _put(seed, "b")
+    good = path.read_bytes()
+
+    kept = HandleStore(path)
+    check("handles file: a valid one loads and stays in place",
+          sorted(kept.keys()) == ["a", "b"] and kept.get("a") == seed.get("a")
+          and path.read_bytes() == good and not aside.exists()
+          and not caplog.records, repr(caplog.records))
+
+    record = json.loads(good)["a"]
+    cases = {
+        "zero-byte": b"",
+        "truncated": good[:len(good) // 2],
+        "wrong top-level type": b"[]",
+        "a record that is not an object": b'{"a": 3}',
+        "a record without its timestamp": json.dumps(
+            {"a": {k: v for k, v in record.items() if k != "updated_at"}}).encode(),
+        "capabilities that are not a list": json.dumps(
+            {"a": dict(record, capabilities=7)}).encode(),
+        "an address that is not text": json.dumps(
+            {"a": dict(record, reply_handle=None)}).encode(),
+    }
+    for label, blob in cases.items():
+        caplog.clear()
+        path.write_bytes(blob)
+        store = HandleStore(path)
+        check(f"handles file, {label}: starts empty",
+              store.get("a") is None and store.keys() == []
+              and Outbox(store).route("a") is None)
+        check(f"handles file, {label}: moved aside for a look",
+              not path.exists() and aside.read_bytes() == blob)
+        said = [r.getMessage() for r in caplog.records]
+        check(f"handles file, {label}: one warning names it",
+              len(said) == 1 and "connector_handles.json" in said[0], repr(said))
+        _put(store, "a")
+        check(f"handles file, {label}: the next message rebuilds its entry",
+              HandleStore(path).get("a") == store.get("a")
+              and store.get("a")["reply_handle"] == "h")
+
+
 # ---------------------------------------------------------------------------
 # The queue
 # ---------------------------------------------------------------------------
@@ -176,7 +232,8 @@ def fresh_outbox(tmp: Path) -> Outbox:
     return box
 
 
-async def test_a_long_poll_wakes_when_something_is_queued(tmp: Path) -> None:
+async def test_a_long_poll_wakes_when_something_is_queued(
+        tmp: Path, monkeypatch) -> None:
     box = fresh_outbox(tmp)
     started = time.monotonic()
     pull = asyncio.create_task(box.pull("fw1", wait_s=5))
@@ -214,10 +271,23 @@ async def test_a_long_poll_wakes_when_something_is_queued(tmp: Path) -> None:
         {"delivery_id": d["delivery_id"], "status": "failed"}])
     check("ack: a repeated ack changes nothing", result.status == "sent")
 
-    empty_started = time.monotonic()
-    empty = await box.pull("fw1", wait_s=0.2)
+    # The wait that timed out, not wall time: a coarse clock reads it short.
+    timed_out = []
+    real_wait_for = asyncio.wait_for
+
+    async def recording_wait_for(awaitable, timeout):
+        try:
+            return await real_wait_for(awaitable, timeout)
+        except asyncio.TimeoutError:
+            timed_out.append(timeout)
+            raise
+
+    with monkeypatch.context() as patched:
+        patched.setattr(outbox_mod.asyncio, "wait_for", recording_wait_for)
+        empty = await box.pull("fw1", wait_s=0.2)
     check("long-poll: an empty pull waits out wait_s and returns nothing",
-          empty["deliveries"] == [] and time.monotonic() - empty_started >= 0.18)
+          empty["deliveries"] == [] and timed_out == [0.2],
+          repr((empty, timed_out)))
 
 
 async def _settle(box: Outbox, ack: dict) -> outbox_mod.OutboxResult:
@@ -518,6 +588,39 @@ async def test_the_outbox_endpoint_is_authenticated_like_the_connector(
           local.status_code == 200, local.text)
 
 
+async def test_events_are_answered_on_a_handles_file_a_power_cut_cut_off(
+        tmp: Path) -> None:
+    """Every turn records its address, so a handles file that does not load
+    would otherwise cost each one a 500 after the model was paid for."""
+    handles = tmp / "connector_handles.json"
+    handles.write_bytes(b'{"telegram:c1": {"reply_han')
+    (tmp / "pending_reactions.json").write_bytes(b"")
+    agent = make_agent(tmp)
+    answers = []
+    with _Served(agent):
+        async with _client() as client:
+            for nonce, mid in (("c1", "m1"), ("c2", "m2")):
+                event = _body(group_event(mid, **CONNECTOR))
+                answers.append(await client.post(
+                    "/v1/events", content=event,
+                    headers=_signed(event, nonce=nonce)))
+    check("damaged handles: the agent starts and every event is answered",
+          [r.status_code for r in answers] == [200, 200]
+          and all(r.json()["owned"] is True for r in answers)
+          and answers[0].json()["replies"][0]["text"] == "on it",
+          repr([r.text for r in answers]))
+    check("damaged handles: the turn stored the address again",
+          agent.connector_handles.get("telegram:c1")["reply_handle"]
+          == CONNECTOR["reply_handle"]
+          and "telegram:c1" in json.loads(handles.read_text(encoding="utf-8")))
+    await agent.outbox.pull("fw1", wait_s=0)
+    check("damaged handles: and the conversation can be reached unprompted",
+          agent.outbox.route("telegram:c1") is not None)
+    check("damaged handles: both files were set aside",
+          (tmp / "connector_handles.json.corrupt").exists()
+          and (tmp / "pending_reactions.json.corrupt").exists())
+
+
 async def test_a_pull_over_http_delivers_and_its_ack_commits(tmp: Path) -> None:
     agent = make_agent(tmp)
     with _Served(agent):
@@ -552,21 +655,21 @@ async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
     with _Served(agent):
         taken = 0
         try:
-            while await gate.try_acquire():
+            while gate.try_acquire():
                 taken += 1
             async with _client() as client:
                 pull = await client.post("/v1/outbox", content=body,
                                          headers=_signed(body, nonce="s1"))
         finally:
             for _ in range(taken):
-                await gate.release()
+                gate.release()
         check("slots: a pull is served while every turn slot is taken",
               pull.status_code == 200, pull.text)
 
         taken = 0
         event = _body(group_event("m1"))
         try:
-            while await outbox_gate.try_acquire():
+            while outbox_gate.try_acquire():
                 taken += 1
             async with _client() as client:
                 refused = await client.post("/v1/outbox", content=body,
@@ -575,7 +678,7 @@ async def test_long_polls_and_turns_do_not_share_slots(tmp: Path) -> None:
                                          headers=_signed(event, nonce="s3"))
         finally:
             for _ in range(taken):
-                await outbox_gate.release()
+                outbox_gate.release()
     check("slots: a full outbox budget is a 429 for pulls only",
           refused.status_code == 429
           and refused.json()["code"] == "capacity_exceeded", refused.text)

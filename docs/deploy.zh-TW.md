@@ -196,7 +196,7 @@ key 只留在這臺電腦上，對話內容會發給你選的模型服務。`.en
 
 介面位於角色服務的 `/api/dashboard/` 下：
 
-- `GET status`、`GET conversations` 和 `GET conversation?id=<chat id>` 讀取服務狀態、它知道的聊天，以及某個聊天的詳情。
+- `GET conversations` 和 `GET conversation?id=<chat id>` 讀取服務知道的聊天，以及某個聊天的詳情。
 - `POST candidates/<id>/promote`、`replace`、`reject` 和 `rollback` 修改它學到的內容。每次修改都和 `personagent learned` 進同一個賬本，操作者記為 `dashboard`。
 - `POST memory/forget` 帶上請求體 `{"conv": "<chat id>", "note": "<note id>"}`，刪除一條記憶筆記，`conv` 和 id 取自 `GET conversation` 返回的 `memories` 裡的那一條。不帶 `note` 時刪除這個聊天的核心筆記。
 

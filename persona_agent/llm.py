@@ -39,6 +39,31 @@ def _on_host(host: str, domains: tuple) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
+def thinking_off(payload: dict, url: str, takes_thinking) -> dict:
+    """Ask the model behind `url` to skip hidden reasoning, in the spellings
+    that endpoint accepts. `takes_thinking` is what is known of it and
+    DeepSeek's `thinking` switch; None sends the switch to find out, so only
+    a caller that survives its refusal (`_post_chat`) passes None."""
+    if takes_thinking is not False:
+        payload["thinking"] = {"type": "disabled"}
+    if "openrouter.ai" in (url or ""):
+        payload["reasoning"] = {"enabled": False}
+    # With thinking off K2 answers at one temperature, whatever the caller set.
+    if ("thinking" in payload and "temperature" in payload
+            and "k2" in str(payload.get("model") or "").lower()):
+        payload["temperature"] = 0.6
+    return payload
+
+
+def known_to_take_thinking(url: str, model: str) -> bool:
+    """For a caller that cannot learn from a refusal: is `thinking` known to
+    be taken here? By a listed host, and by a K2 model wherever it is served."""
+    host = _host(url)
+    if _on_host(host, _NO_THINKING_HOSTS):
+        return False
+    return _on_host(host, _THINKING_HOSTS) or "k2" in (model or "").lower()
+
+
 def _status_of(e: BaseException):
     """The HTTP status an exception carries, structured or in its message."""
     status = getattr(e, "status_code", None)
@@ -161,13 +186,10 @@ class ModelCalls:
         return None
 
     def _thinking_off(self, payload: dict, url: str) -> dict:
-        """Ask the model behind `url` to skip hidden reasoning, in the spellings
-        that endpoint accepts; an unknown endpoint is sent `thinking` to learn."""
-        if self._thinking_verdict(url, str(payload.get("model") or "")) is not False:
-            payload["thinking"] = {"type": "disabled"}
-        if "openrouter.ai" in url:
-            payload["reasoning"] = {"enabled": False}
-        return payload
+        """`thinking_off` with what this endpoint has shown so far; an unknown
+        one is sent `thinking`, and `_post_chat` remembers its answer."""
+        return thinking_off(payload, url, self._thinking_verdict(
+            url, str(payload.get("model") or "")))
 
     def _apply_quirks(self, url: str, payload: dict) -> None:
         """Spell `payload` the way `url` has shown it accepts."""
@@ -451,6 +473,19 @@ class ModelCalls:
                     return True
             return False
 
+        async def _once_more(what: str, mtok: int, **force):
+            """Ask the model that answered one more time: (text, finish), or
+            None when that failed. `data` becomes the new response, whose
+            usage is the one reported."""
+            nonlocal data
+            try:
+                data = await _do_call(mtok, used_model, **force)
+                return _pick(data)
+            except Exception as e:
+                logger.warning("[Agent] %s failed: %s: %s",
+                               what, type(e).__name__, e)
+                return None
+
         if _budget_starved(text, finish):
             # A reasoning model can spend the whole budget thinking: retry once
             # with a bigger one, then say plainly what happened.
@@ -462,12 +497,9 @@ class ModelCalls:
                 "exhaust the budget before the answer; pick a non-reasoning "
                 "model or raise the cap.",
                 used_model, max_tokens, retry_tokens)
-            try:
-                data = await _do_call(retry_tokens, used_model)
-                text, finish = _pick(data)
-            except Exception as e:
-                logger.warning("[Agent] retry at a larger budget failed: %s: %s",
-                               type(e).__name__, e)
+            again = await _once_more("retry at a larger budget", retry_tokens)
+            if again is not None:
+                text, finish = again
             if not text:
                 logger.warning(
                     "[Agent] still empty at max_tokens=%d (model=%s). This model "
@@ -481,12 +513,10 @@ class ModelCalls:
                 "[Agent] blank content with %d chars of reasoning_content "
                 "(model=%s); retrying once with thinking disabled",
                 len(reasoning), used_model)
-            try:
-                data = await _do_call(max_tokens, used_model, force_disable_thinking=True)
-                text, finish = _pick(data)
-            except Exception as e:
-                logger.warning("[Agent] retry with thinking disabled failed: %s: %s",
-                               type(e).__name__, e)
+            again = await _once_more("retry with thinking disabled", max_tokens,
+                                     force_disable_thinking=True)
+            if again is not None:
+                text, finish = again
             if not text:
                 logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
                                finish, used_model)
@@ -506,13 +536,9 @@ class ModelCalls:
                 "[Agent] blank content in json_object mode (model=%s, "
                 "finish=%s); retrying once WITHOUT response_format",
                 used_model, finish)
-            try:
-                data = await _do_call(max_tokens, used_model, force_plain_text=True)
-                plain, _ = _pick(data)
-            except Exception as e:
-                logger.warning("[Agent] plain-text retry failed: %s: %s",
-                               type(e).__name__, e)
-                plain = ""
+            again = await _once_more("plain-text retry", max_tokens,
+                                     force_plain_text=True)
+            plain = again[0] if again is not None else ""
             if plain:
                 text = _as_protocol_object(plain)
                 logger.info("[Agent] plain-text retry recovered %d chars (model=%s)",

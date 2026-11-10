@@ -6,17 +6,19 @@ Run from the repo root:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import warnings
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 
 from persona_agent import (candidates, dashboard, decision_log, evidence,
-                           preflight, promotion)
+                           promotion, welcome)
 from persona_agent import server
 from persona_agent.agent import Agent
 from persona_agent.paths import runtime_dir
@@ -29,8 +31,8 @@ with warnings.catch_warnings():
     from fastapi.testclient import TestClient
 
 LOCAL = "http://127.0.0.1:8080"
-API = ("/api/dashboard/status", "/api/dashboard/conversations",
-       "/api/dashboard/conversation?id=telegram:c1")
+PROBE = "/api/dashboard/conversations"
+API = (PROBE, "/api/dashboard/conversation?id=telegram:c1")
 WRITE = {"content-type": "application/json", "x-personagent-dashboard": "1"}
 SECRET_KEY = "sk-live-SECRET-0123456789abcdef"
 SECRET_TOKEN = "connector-SECRET-token-987654"
@@ -147,20 +149,29 @@ def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
           live.candidate_ledger.get(cid)["state"] == candidates.STATE_PROPOSED)
 
     server.CONNECTOR_TOKEN = SECRET_TOKEN
-    r = looks_local.get("/api/dashboard/status", headers={"x-personagent-token": SECRET_TOKEN})
+    r = looks_local.get(PROBE, headers={"x-personagent-token": SECRET_TOKEN})
     check("CONNECTOR_TOKEN opens nothing here", r.status_code == 401, r.text)
 
     remote = client(peer="203.0.113.9", base="https://bot.example.com", signed_in=False)
-    ok = remote.get("/api/dashboard/status", headers={dashboard.TOKEN_HEADER: DASH_TOKEN})
+    ok = remote.get(PROBE, headers={dashboard.TOKEN_HEADER: DASH_TOKEN})
     check("the dashboard token in its header admits any client", ok.status_code == 200, ok.text)
-    bad = remote.get("/api/dashboard/status", headers={dashboard.TOKEN_HEADER: "nope"})
+    bad = remote.get(PROBE, headers={dashboard.TOKEN_HEADER: "nope"})
     check("a wrong one is refused", bad.status_code == 403, bad.text)
     cookie = TestClient(server.app, base_url=LOCAL, client=("127.0.0.1", 1),
                         cookies={"personagent_dashboard": DASH_TOKEN})
-    check("a cookie opens nothing", cookie.get("/api/dashboard/status").status_code == 401)
+    check("a cookie opens nothing", cookie.get(PROBE).status_code == 401)
     for site in ("cross-site", "same-site"):
-        r = client(**{"sec-fetch-site": site}).get("/api/dashboard/status")
+        r = client(**{"sec-fetch-site": site}).get(PROBE)
         check(f"a {site} fetch of the data is refused", r.status_code == 403, r.text)
+
+
+def test_the_status_route_is_gone(live) -> None:
+    for name, caller in (("with the token", client()),
+                         ("without it", client(signed_in=False))):
+        r = caller.get("/api/dashboard/status")
+        check(f"status, {name}: no such route", r.status_code == 404,
+              repr((r.status_code, r.text[:120])))
+    check("nothing builds a status payload", not hasattr(dashboard, "status_payload"))
 
 
 def test_the_root_only_points_at_the_local_page(live) -> None:
@@ -224,6 +235,30 @@ def test_state_changes_need_the_header_and_the_same_origin(live) -> None:
     check("write: the service's own origin is accepted", same.status_code == 200, same.text)
 
 
+def test_forgetting_a_note_follows_the_same_rules(live) -> None:
+    live.memories["telegram:c1"] = [{"text": "likes tea", "time": time.time()}]
+    c = client()
+    url = "/api/dashboard/memory/forget"
+    note = c.get("/api/dashboard/conversation",
+                 params={"id": "telegram:c1"}).json()["memories"][0]
+    body = {"conv": note["conv"], "note": note["id"]}
+    refused = {
+        "a caller without the token": client(signed_in=False).post(url, json=body, headers=WRITE),
+        "no custom header": c.post(url, json=body),
+        "foreign origin": c.post(url, json=body,
+                                 headers={**WRITE, "origin": "https://evil.example"}),
+    }
+    for name, r in refused.items():
+        check(f"forget: {name} refused", r.status_code in (401, 403),
+              repr((r.status_code, r.text)))
+    check("forget: the note is still there", len(live.memories["telegram:c1"]) == 1)
+    done = c.post(url, json=body, headers=WRITE)
+    check("forget: a note goes by the conv and id its entry carries",
+          done.status_code == 200 and live.memories["telegram:c1"] == [], done.text)
+    again = c.post(url, json=body, headers=WRITE)
+    check("forget: a note already gone is a 409", again.status_code == 409, again.text)
+
+
 # --------------------------------------------------------------- actions ----
 
 def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> None:
@@ -244,6 +279,11 @@ def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> 
     live._reload_views_if_stale()
     check("promote: the running agent's view carries it",
           [row.get("candidate_id") for row in live._view_pairs_cache] == [cid])
+    learned = c.get("/api/dashboard/conversation",
+                    params={"id": "telegram:c1"}).json()["learned"]
+    check("promote: listed as learned, with who asked for it and its way back",
+          [(v["id"], v["actions"], v["evidence"]) for v in learned]
+          == [(cid, ["rollback"], [{"speaker": "Alex"}])], repr(learned))
 
     r = c.post(f"/api/dashboard/candidates/{cid}/rollback",
                json={"reason": "too pushy"}, headers=WRITE)
@@ -264,15 +304,11 @@ def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> 
     check("unknown action: 404", unknown.status_code == 404, unknown.text)
 
     detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
-    past = detail["past"]
-    check("detail: a rolled-back candidate is listed with its way back",
-          len(past) == 1 and past[0]["actions"] == ["promote", "reject"], repr(past))
-    check("detail: its evidence chain is shown",
-          past[0]["evidence"][0]["speaker"] == "Alex"
-          and past[0]["evidence"][0]["reaction_type"] == "rejection", repr(past[0]["evidence"]))
+    check("detail: a rolled-back candidate is no longer listed",
+          detail["pending"] == [] and detail["learned"] == [], repr(detail))
 
 
-def test_a_pending_proposal_explains_what_it_waits_for(live) -> None:
+def test_a_pending_proposal_carries_what_the_page_shows(live) -> None:
     ev = seed_event(live)
     pair = seed_candidate(live, ev)
     positive = seed_event(live, reply="ugh, that sounds rough",
@@ -282,29 +318,78 @@ def test_a_pending_proposal_explains_what_it_waits_for(live) -> None:
                           params={"id": "telegram:c1"}).json()
     by_id = {c["id"]: c for c in detail["pending"]}
     check("pending: both proposals listed", set(by_id) == {pair, example}, repr(list(by_id)))
+    view = by_id[pair]
+    check("pending: the reply, its rewrite and who asked for it",
+          view["type"] == candidates.TYPE_PAIR and view["reply"] == ev["reply"]
+          and view["better"] == "ugh, that sounds rough" and view["created"] > 0
+          and view["evidence"] == [{"speaker": "Alex"}], repr(view))
+    check("pending: actions offered", view["actions"] == ["promote", "reject"])
+    check("pending: an example has no rewrite",
+          by_id[example]["type"] == candidates.TYPE_EXAMPLE
+          and by_id[example]["better"] == "", repr(by_id[example]))
 
-    cl = by_id[pair]["checklist"]
-    rules = {r["id"]: r for r in cl["rules"]}
-    check("checklist: one weak event is not enough",
-          not rules["strong"]["ok"] and rules["strong"]["have"] == 0
-          and not rules["events"]["ok"] and rules["events"]["have"] == 1, repr(rules))
-    check("checklist: nothing disagrees", rules["no_disagreement"]["ok"]
-          and rules["no_conflict"]["ok"], repr(rules))
-    check("checklist: waits for a strong signal and a second event",
-          cl["waiting_for"] == ["strong", "events"], repr(cl["waiting_for"]))
-    ledger = live.candidate_ledger
-    expected = promotion.decide(
-        ledger.get(pair), linked_events=live.evidence_log.many([ev["event_id"]]),
-        related_events=promotion.related_events(ledger.get(pair), live.evidence_log.all()),
-        peers=ledger.all(), now=time.time(), policy=live.promotion_policy)
-    check("checklist: the verdict is the policy's own",
-          cl["verdict"] == expected.reason and cl["promote"] is False, cl["verdict"])
-    check("checklist: actions offered", by_id[pair]["actions"] == ["promote", "reject"])
 
-    ex = by_id[example]["checklist"]
-    check("checklist: an example waits for a person",
-          ex["waiting_for"] == ["admin"]
-          and any(r["id"] == "strong_impossible" for r in ex["rules"]), repr(ex))
+class _Seen(dict):
+    """A payload object that notes which of its keys a reader asks for."""
+
+    def __init__(self, data: dict) -> None:
+        super().__init__({key: _seen(value) for key, value in data.items()})
+        self.asked: set[str] = set()
+
+    def get(self, key, default=None):
+        self.asked.add(key)
+        return super().get(key, default)
+
+
+def _seen(value):
+    if isinstance(value, dict):
+        return _Seen(value)
+    return [_seen(v) for v in value] if isinstance(value, list) else value
+
+
+def _mismatch(value, where: str = "") -> list[str]:
+    """Keys the reader never asked for (-), or asked for and did not get (+)."""
+    if isinstance(value, list):
+        return sorted({m for v in value for m in _mismatch(v, where)})
+    if not isinstance(value, _Seen):
+        return []
+    out = [f"-{where}{key}" for key in value.keys() - value.asked]
+    out += [f"+{where}{key}" for key in value.asked - value.keys()]
+    for key, inner in value.items():
+        out += _mismatch(inner, f"{where}{key}.")
+    return sorted(out)
+
+
+def test_the_api_sends_what_the_local_page_reads_and_nothing_else(live) -> None:
+    kept = seed_candidate(live, seed_event(live))
+    live.candidate_ledger.promote(kept, ts=now_iso(), actor="auto", reason="seed")
+    seed_candidate(live, seed_event(live, reply="lol nice", reaction_type="positive",
+                                    text="haha"), ctype=candidates.TYPE_EXAMPLE)
+    live.memories["telegram:c1"] = [{"text": "likes tea", "time": time.time()}]
+    decision_log.record("telegram:c1", "called", True, "addressed", "count me in",
+                        answered="Nova?", sender="Sam")
+    c = client()
+    chat = _seen(c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json())
+    shown = welcome._activity_chat(chat)
+    check("chat: a proposal, a kept change, a note and a decision were sent",
+          all(shown[part] for part in ("review", "learned", "notes", "recent")), repr(shown))
+    check("chat: who asked for a change reaches the page",
+          shown["learned"][0]["from"] == ["Alex"], repr(shown["learned"]))
+    check("chat: every field sent is one the page reads", _mismatch(chat) == [],
+          repr(_mismatch(chat)))
+
+    listing = _seen(c.get(PROBE).json())
+
+    async def served(method, path, **kwargs):
+        return listing
+
+    listed = asyncio.run(welcome.Workspace.activity(SimpleNamespace(_activity_call=served)))
+    check("list: the chat is there, with its counts",
+          [(row["id"], row["review"], row["learned"], row["notes"]) for row in listed["chats"]]
+          == [("telegram:c1", 1, 1, 1)], repr(listed))
+    rows = listing["conversations"]
+    check("list: every field sent is one the page reads", _mismatch(rows) == [],
+          repr(_mismatch(rows)))
 
 
 # ------------------------------------------------------- data and secrets ----
@@ -327,25 +412,6 @@ def test_no_secret_reaches_any_response(live, monkeypatch) -> None:
     detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
     check("secrets: masked where they were quoted",
           detail["memories"][0]["text"] == "the key is ***", repr(detail["memories"]))
-    status = c.get("/api/dashboard/status").json()
-    check("status: model names are shown",
-          {m["role"] for m in status["models"]} >= {"reply", "gate"}, repr(status["models"]))
-    check("status: the connector is listed",
-          [k["id"] for k in status["connectors"]] == ["astrbot-home"], repr(status["connectors"]))
-
-
-def test_a_credential_inside_a_configured_url_is_not_shown(live, monkeypatch) -> None:
-    real = preflight.check_config
-    url = "https://kant:pw-0000@gw.example.com/v1beta?api-key=qk-1234"
-    monkeypatch.setattr(preflight, "check_config",
-                        lambda: real(env={"LLM_BASE_URL": url, "LLM_API_KEY": "x"}))
-    status = client().get("/api/dashboard/status").json()
-    finding = [f for f in status["preflight"] if f["key"] == "LLM_BASE_URL"]
-    check("the misjoined URL is still reported", len(finding) == 1, repr(status["preflight"]))
-    detail = finding[0]["detail"]
-    check("its user:password and query are masked",
-          "pw-0000" not in detail and "qk-1234" not in detail and "kant" not in detail
-          and "gw.example.com/v1beta/v1/chat/completions" in detail, detail)
 
 
 # ---------------------------------------------------- one active rewrite ----
@@ -361,14 +427,18 @@ def _pair(live, better: str, *, state: str = candidates.STATE_PROPOSED,
 
 
 def test_promote_never_leaves_one_reply_two_active_rewrites(live) -> None:
-    active = _pair(live, "ugh, that sounds rough", state=candidates.STATE_PROMOTED)
     other = _pair(live, "want me to look at it?", speaker="u2")
     c = client()
-    detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
-    view = {cand["id"]: cand for cand in detail["pending"]}[other]
+
+    def offered() -> list[str]:
+        detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+        return {cand["id"]: cand for cand in detail["pending"]}[other]["actions"]
+
+    check("with no rewrite in use, the page offers Promote",
+          offered() == ["promote", "reject"], repr(offered()))
+    active = _pair(live, "ugh, that sounds rough", state=candidates.STATE_PROMOTED)
     check("the page offers Replace, not Promote",
-          view["actions"] == ["replace", "reject"]
-          and [r["id"] for r in view["replaces"]] == [active], repr(view))
+          offered() == ["replace", "reject"], repr(offered()))
 
     r = c.post(f"/api/dashboard/candidates/{other}/promote", json={}, headers=WRITE)
     check("promote: refused while the other is in use",
@@ -416,62 +486,56 @@ def test_a_dashboard_promote_retires_the_drafts_it_answered(live) -> None:
 
 # ------------------------------------------------------------- big chats ----
 
-def test_a_busy_chat_reads_the_log_once_and_sends_the_newest(live, monkeypatch) -> None:
+def test_a_busy_chat_sends_the_newest_and_judges_nothing(live, monkeypatch) -> None:
     n = dashboard.LIST_LIMIT + 30
     for i in range(n):
         seed_candidate(live, seed_event(live, reply=f"reply {i}", reaction_type="correction",
                                         better=f"better {i}"), better=f"better {i}")
-    scanned = []
-    real = promotion.related_events
+    rules = ("decide", "related_events", "counter_evidence", "supports_candidate")
+    calls = []
 
-    def counting(cand, events):
-        events = list(events)
-        scanned.append(len(events))
-        return real(cand, events)
+    def counted(owner, name: str) -> None:
+        real = getattr(owner, name)
 
-    monkeypatch.setattr(promotion, "related_events", counting)
-    detail = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
-    check("newest first, cut to the limit, with the total",
+        def call(*args, **kwargs):
+            calls.append(name)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(owner, name, call)
+
+    for name in rules:
+        counted(promotion, name)
+    for name in ("all", "many"):
+        counted(live.evidence_log, name)
+    c = client()
+    detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    check("newest first, cut to the limit",
           len(detail["pending"]) == dashboard.LIST_LIMIT
-          and detail["totals"]["pending"] == n
           and detail["pending"][0]["created"] >= detail["pending"][-1]["created"],
-          repr(detail["totals"]))
-    check("each proposal reads only the events about its own reply",
-          sum(scanned) <= 2 * len(scanned), repr(scanned[:5]))
-    shown = live.candidate_ledger.get(detail["pending"][0]["id"])
-    events = live.evidence_log.all()
-    expected = promotion.decide(
-        shown, linked_events=live.evidence_log.many(shown["evidence"]),
-        related_events=real(shown, events), peers=live.candidate_ledger.all(),
-        now=time.time(), policy=live.promotion_policy)
-    check("the verdict is the one the whole log gives",
-          detail["pending"][0]["checklist"]["verdict"] == expected.reason,
-          repr((detail["pending"][0]["checklist"]["verdict"], expected.reason)))
+          str(len(detail["pending"])))
+    check("a poll applies no promotion rule", not set(calls) & set(rules),
+          repr(sorted(set(calls))))
+    check("and reads the evidence log once",
+          calls.count("all") + calls.count("many") == 1, repr(calls))
+    listed = c.get(PROBE).json()["conversations"]
+    check("the list of chats carries the full count",
+          [(row["id"], row["pending"]) for row in listed] == [("telegram:c1", n)], repr(listed))
 
 
 def test_a_fresh_install_has_empty_lists_not_errors(live, tmp) -> None:
     c = client()
-    status = c.get("/api/dashboard/status").json()
-    check("fresh: running", status["agent"] == "ready", repr(status["agent"]))
-    check("fresh: nothing received yet", status["activity"]["received"] is False
-          and status["activity"]["spoke"] is False, repr(status["activity"]))
-    check("fresh: no connectors", status["connectors"] == [])
-    check("fresh: persona lineage counts the running document",
-          status["persona"]["name"] == "Nova" and status["persona"]["revisions"] == 1,
-          repr(status["persona"]))
-    check("fresh: no conversations",
-          c.get("/api/dashboard/conversations").json() == {"conversations": []})
+    check("fresh: no conversations", c.get(PROBE).json() == {"conversations": []})
     detail = c.get("/api/dashboard/conversation", params={"id": "g1"}).json()
     check("fresh: an unknown conversation is empty, not missing",
-          all(detail[k] == [] for k in ("decisions", "memories", "pending", "learned", "past")),
+          all(detail[k] == [] for k in ("decisions", "memories", "pending", "learned")),
           repr(detail))
     check("fresh: a missing id is a 400",
           c.get("/api/dashboard/conversation").status_code == 400)
     server.agent = None
-    off = c.get("/api/dashboard/status").json()
-    check("agent off: still answered", off["agent"] == "off" and off["models"] == [], repr(off))
-    check("agent off: conversations still listed",
-          c.get("/api/dashboard/conversations").status_code == 200)
+    check("agent off: conversations still listed", c.get(PROBE).status_code == 200)
+    off = c.get("/api/dashboard/conversation", params={"id": "g1"})
+    check("agent off: a chat still answers, with no notes",
+          off.status_code == 200 and off.json()["memories"] == [], off.text[:200])
 
 
 def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
@@ -489,7 +553,7 @@ def test_dashboard_enabled_false_removes_the_routes(monkeypatch) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         status = TestClient(enabled, base_url=LOCAL, client=("127.0.0.1", 1)).get(
-            "/api/dashboard/status").status_code
+            PROBE).status_code
     check("enabled: the route answers (asking for its token)", status == 401, str(status))
     check("the service includes it by default", server.app.state.dashboard is True
           and server._dashboard_served())

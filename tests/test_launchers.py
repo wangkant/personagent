@@ -100,6 +100,25 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(recorded["argv"], ["run"])
         self.assertTrue((repo / ".venv" / ".personagent-installed").is_file())
 
+    def test_a_python_older_than_3_10_is_named_before_anything_is_installed(self) -> None:
+        """Python 3.9 used to run on into pip and read as a network failure."""
+        repo, caller, env = self._windows_repo()
+        # Read at startup from PYTHONPATH, so every interpreter the launcher
+        # can find (python, python3, py) answers as 3.9.7.
+        (Path(env["PYTHONPATH"]) / "sitecustomize.py").write_text(
+            "import collections, sys\n"
+            "sys.version_info = collections.namedtuple(\n"
+            "    'version_info', 'major minor micro releaselevel serial')(3, 9, 7, 'final', 0)\n",
+            encoding="utf-8")
+        result = self._run(self._powershell(repo), cwd=caller, env=env)
+        combined = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("Python 3.9.7", combined)
+        self.assertIn("3.10 or newer", combined)
+        self.assertNotIn("network", combined)
+        self.assertFalse((repo / ".venv").exists(), "no venv from a Python too old to use")
+        self.assertFalse(Path(env["LAUNCHER_CAPTURE"]).exists())
+
     def test_windows_scripts_are_crlf(self) -> None:
         bat = (ROOT / "start.bat").read_bytes()
         self.assertNotIn(b"\n", bat.replace(b"\r\n", b""))

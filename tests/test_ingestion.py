@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gc
 import gzip
 import io
+import logging
 import os
 import re
 import socket
+import sys
+import threading
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -245,24 +249,35 @@ async def test_dns_resolution_is_pinned_once() -> None:
     check("dns: validated address is pinned", pinned_ip == "93.184.216.34", pinned_ip)
 
 
-async def test_dns_resolution_obeys_timeout() -> None:
-    def slow_getaddrinfo(*args, **kwargs):
-        time.sleep(0.15)
+async def test_dns_resolution_obeys_timeout(caplog) -> None:
+    """The fetch gives up while the lookup is still running. Asserted on that
+    rather than on a stopwatch, which a loaded machine fails."""
+    release, returned = threading.Event(), threading.Event()
+
+    def stuck_getaddrinfo(*args, **kwargs):
+        release.wait(30)
+        returned.set()
         return [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
         ]
 
-    started = time.monotonic()
-    with patch("persona_agent.ingestion.socket.getaddrinfo", slow_getaddrinfo):
-        result = await safe_fetch_url(
-            "https://slow-dns.example/image",
-            timeout=0.02,
-            max_wire_bytes=1024,
-            max_decoded_bytes=1024,
-        )
-    elapsed = time.monotonic() - started
-    check("dns: resolution timeout fails closed", result is None, repr(result))
-    check("dns: resolution timeout is prompt", elapsed < 0.12, f"{elapsed:.3f}s")
+    try:
+        with patch("persona_agent.ingestion.socket.getaddrinfo", stuck_getaddrinfo), \
+                caplog.at_level(logging.WARNING, logger="agent"):
+            result = await safe_fetch_url(
+                "https://slow-dns.example/image",
+                timeout=0.02,
+                max_wire_bytes=1024,
+                max_decoded_bytes=1024,
+            )
+        check("dns: resolution timeout fails closed", result is None, repr(result))
+        check("dns: the fetch did not wait for the lookup to return",
+              not returned.is_set())
+        check("dns: it gave up on the clock, not on an unresolvable host",
+              "DNS resolution timed out" in caplog.text, caplog.text)
+    finally:
+        # The loop joins its worker threads when the test ends.
+        release.set()
 
 
 def test_url_fanout_is_capped() -> None:
@@ -1175,6 +1190,88 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
     await agent._describe_image(url)
     check("vision cache: a miss both channels answered is cached",
           agent.image_caption_cache.get(key) == "", repr(agent.image_caption_cache.get(key)))
+
+
+async def _read_one_image(agent: Agent, *, vision: bool) -> dict:
+    """Pass one group message with a new image through `_extract_text` and the
+    background sticker path; report the downloads, what the sticker path was
+    handed, and whether anything still holds a download afterwards."""
+    if vision:
+        agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
+    fetched: list = []
+    seen: dict = {"stolen": [], "text": ""}
+
+    async def fetch(url):
+        fetched.append(bytes(bytearray(PNG)))  # a new object per download
+        return fetched[-1]
+
+    async def vision_post(prompt, data_url, **kwargs):
+        return VisionResponse(200, "a cat on a mat"), None
+
+    async def ocr(url):
+        return ""
+
+    async def steal(image_bytes, url, src_user, src_group, context_before):
+        seen["stolen"].append(image_bytes == PNG)
+        return None
+
+    agent._fetch_image_bytes, agent._vision_post, agent._ocr_image = fetch, vision_post, ocr
+    agent.stickers.steal = steal
+    seen["text"] = await agent._extract_text({
+        "post_type": "message", "message_type": "group", "group_id": "555",
+        "user_id": "7", "message": [
+            {"type": "image", "data": {"url": IMAGE_URL, "file": "a.png"}}]})
+    await asyncio.gather(*agent._bg_tasks)
+    gc.collect()
+    # References beyond the ones this function and the count itself hold.
+    unheld = [sys.getrefcount(b) for b in [bytes(bytearray(PNG))]][0]
+    seen["fetches"] = len(fetched)
+    seen["held"] = [sys.getrefcount(b) - unheld for b in fetched]
+    return seen
+
+
+async def test_a_new_image_is_downloaded_once(tmp: Path) -> None:
+    """With vision on, the caption call downloaded a new image and the
+    background sticker path downloaded it again."""
+    seen = await _read_one_image(make_agent(tmp / "vision"), vision=True)
+    check("image: captioned", "a cat on a mat" in seen["text"], seen["text"])
+    check("image: one download serves the caption and the sticker path",
+          seen["fetches"] == 1, repr(seen["fetches"]))
+    check("image: the sticker path is handed those bytes",
+          seen["stolen"] == [True], repr(seen["stolen"]))
+    check("image: nothing holds them once the message is read",
+          seen["held"] == [0], repr(seen["held"]))
+
+    seen = await _read_one_image(make_agent(tmp / "plain"), vision=False)
+    check("image, no vision: the sticker path still downloads it itself",
+          seen["fetches"] == 1 and seen["stolen"] == [True], repr(seen))
+
+
+async def test_a_failed_caption_download_is_tried_again_by_the_sticker_path(
+        tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
+    outcomes = [None, PNG]
+    stolen: list = []
+
+    async def fetch(url):
+        return outcomes.pop(0)
+
+    async def ocr(url):
+        return ""
+
+    async def steal(image_bytes, url, src_user, src_group, context_before):
+        stolen.append(image_bytes)
+        return None
+
+    agent._fetch_image_bytes, agent._ocr_image, agent.stickers.steal = fetch, ocr, steal
+    await agent._extract_text({
+        "post_type": "message", "message_type": "group", "group_id": "555",
+        "user_id": "7", "message": [
+            {"type": "image", "data": {"url": IMAGE_URL, "file": "a.png"}}]})
+    await asyncio.gather(*agent._bg_tasks)
+    check("image: a download that failed for the caption gets its second try",
+          outcomes == [] and stolen == [PNG], repr((outcomes, stolen)))
 
 
 async def test_ssrf_redirect_hops(tmp: Path) -> None:

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 from .connector import MAX_CONNECTOR_ID_CHARS, opaque_value
-from .storage import atomic_write_text
+from .storage import atomic_write_text, load_rebuildable_json
 
 logger = logging.getLogger("agent.outbox")
 
@@ -104,10 +104,21 @@ class HandleStore:
         return self._entries
 
     def _load(self) -> dict[str, dict]:
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return {}
+        # Written without fsync (see flush), so a damaged file starts empty.
+        return load_rebuildable_json(self.path, self._parse) or {}
+
+    @staticmethod
+    def _parse(raw) -> dict[str, dict]:
+        """The stored records, oldest first; raises on a shape the outbox
+        cannot run on."""
+        for record in raw.values():
+            # The fields a route is read through without a default.
+            if not (all(isinstance(record[name], str) for name in
+                        ("reply_handle", "connector_id", "platform"))
+                    and isinstance(record["capabilities"], list)
+                    and "native" in record
+                    and isinstance(record["updated_at"], (int, float))):
+                raise ValueError("malformed connector handle")
         # Oldest first: eviction pops from the front.
         return dict(sorted(raw.items(), key=lambda kv: kv[1]["updated_at"]))
 

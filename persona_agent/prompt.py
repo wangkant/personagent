@@ -20,6 +20,7 @@ from .prompts import (
     dm_output_protocol,
     dm_style_guide,
 )
+from .storage import file_stamp
 from .textproc import (
     _WEB_DESC_CLOSE,
     _WEB_DESC_OPEN,
@@ -69,6 +70,10 @@ _TURN_CONTEXT_OPEN = (
 
 
 class PromptBuilder:
+    # owner_profile.json as last parsed, and the path and stamp it was read at.
+    _owner_profile = None
+    _owner_profile_stamp: tuple = ()
+
     def _build_group_prompt(
         self,
         group_id: str,
@@ -346,7 +351,7 @@ class PromptBuilder:
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
-        profile = json.loads(profile_file.read_text(encoding="utf-8"))
+        profile = self._read_owner_profile(profile_file)
         total = profile.get("total_msgs", 0)
         with_sticker = profile.get("msgs_with_image", 0)
         sticker_only = profile.get("sticker_only_msgs", 0)
@@ -361,6 +366,15 @@ class PromptBuilder:
             f"- Match this cadence — neither more frequent nor zero\n"
             f"\n"
         )
+
+    def _read_owner_profile(self, path):
+        """`path` parsed once per change, not on every prompt. A file that
+        does not parse is not cached, so it raises on every build."""
+        stamp = (path, file_stamp(path))
+        if stamp != self._owner_profile_stamp:
+            self._owner_profile = json.loads(path.read_text(encoding="utf-8"))
+            self._owner_profile_stamp = stamp
+        return self._owner_profile
 
     @staticmethod
     def _at_example(group_id: str) -> str:

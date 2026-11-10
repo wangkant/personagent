@@ -2,6 +2,7 @@
 health probes."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -167,20 +168,48 @@ def test_import_has_no_file_logging_side_effect() -> None:
           repr(handlers))
 
 
-async def test_admission_limiter_is_bounded() -> None:
+def test_admission_limiter_is_bounded() -> None:
     limiter_cls = getattr(main_module, "AdmissionLimiter", None)
     check("admission limiter exists", limiter_cls is not None)
     if limiter_cls is None:
         return
     limiter = limiter_cls(2)
-    first = await limiter.try_acquire()
-    second = await limiter.try_acquire()
-    third = await limiter.try_acquire()
+    first = limiter.try_acquire()
+    second = limiter.try_acquire()
+    third = limiter.try_acquire()
     check("admission limiter rejects overflow",
-          first and second and not third, repr((first, second, third)))
-    await limiter.release()
+          first is True and second is True and third is False,
+          repr((first, second, third)))
+    limiter.release()
     check("admission limiter admits after release",
-          await limiter.try_acquire())
+          limiter.try_acquire() is True and limiter.inflight == 2)
+
+
+async def test_admission_is_exact_under_concurrent_callers() -> None:
+    """The limiter holds no lock: its check and its count run without a
+    yield, so tasks arriving together still cannot over-admit."""
+    limiter = main_module.AdmissionLimiter(3)
+    admitted, peak = 0, 0
+
+    async def caller() -> None:
+        nonlocal admitted, peak
+        if not limiter.try_acquire():
+            return
+        admitted += 1
+        peak = max(peak, limiter.inflight)
+        try:
+            await asyncio.sleep(0)
+        finally:
+            limiter.release()
+
+    await asyncio.gather(*(caller() for _ in range(50)))
+    check("admission: a burst admits exactly the limit",
+          (admitted, peak) == (3, 3), repr((admitted, peak)))
+    check("admission: every slot comes back", limiter.inflight == 0,
+          repr(limiter.inflight))
+    await asyncio.gather(*(caller() for _ in range(50)))
+    check("admission: and the next burst is admitted the same",
+          (admitted, limiter.inflight) == (6, 0), repr((admitted, limiter.inflight)))
 
 
 async def test_public_health_is_a_cheap_liveness_check() -> None:
@@ -1016,7 +1045,7 @@ async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> Non
     limiter = main_module._connector_admission
     taken = 0
     try:
-        while await limiter.try_acquire():
+        while limiter.try_acquire():
             taken += 1
         async with _loopback_client() as client:
             response = await client.post(
@@ -1024,7 +1053,7 @@ async def test_a_caller_without_the_token_cannot_hold_an_admission_slot() -> Non
                 headers={"content-type": "application/json"})
     finally:
         for _ in range(taken):
-            await limiter.release()
+            limiter.release()
         main_module.CONNECTOR_TOKEN = original_token
     check("admission: a tokenless caller is refused before admission",
           response.status_code == 403, repr((response.status_code, response.text)))

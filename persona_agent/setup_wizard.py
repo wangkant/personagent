@@ -13,7 +13,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL
+from persona_agent import connections
 from persona_agent import home as homes
 from persona_agent import langs
 from persona_agent.prompts import render_persona_template
@@ -1099,30 +1099,36 @@ def connect_astrbot(env_path: Path, values: dict, *, data_dir: Path, qq: bool | 
     return path
 
 
-# AstrBot platform adapters this setup can switch on, in AstrBot's own config
-# shape (its 4.x template); only the credential fields are filled in.
-PLATFORMS = {
-    "qq_official": (("appid", ("QQ bot AppID", "QQ 官方机器人 AppID")),
-                    ("secret", ("QQ bot AppSecret", "QQ 官方机器人 AppSecret"))),
-    "telegram": (("telegram_token", ("Telegram bot token (from @BotFather)",
-                                     "Telegram 机器人 token（找 @BotFather 创建）")),),
-    "discord": (("discord_token", ("Discord bot token (Developer Portal > Bot)",
-                                   "Discord 机器人 token（Developer Portal > Bot）")),),
-    "slack": (("bot_token", ("Slack bot token (xoxb-...)", "Slack bot token（xoxb-...）")),
-              ("app_token", ("Slack app-level token (xapp-..., Socket Mode)",
-                             "Slack app-level token（xapp-...，Socket Mode）"))),
-    "kook": (("kook_bot_token", ("KOOK bot token", "KOOK 机器人 token")),),
-    "lark": (("app_id", ("Lark / Feishu app id", "飞书 / Lark App ID")),
-             ("app_secret", ("Lark / Feishu app secret", "飞书 / Lark App Secret"))),
+# The AstrBot adapters this setup can switch on: how a terminal, with no card
+# around a field, asks for each field connections.py lists, in that order.
+_PLATFORM_PROMPTS = {
+    "qq_official": (("QQ bot AppID", "QQ 官方机器人 AppID"),
+                    ("QQ bot AppSecret", "QQ 官方机器人 AppSecret")),
+    "telegram": (("Telegram bot token (from @BotFather)",
+                  "Telegram 机器人 token（找 @BotFather 创建）"),),
+    "discord": (("Discord bot token (Developer Portal > Bot)",
+                 "Discord 机器人 token（Developer Portal > Bot）"),),
+    "slack": (("Slack bot token (xoxb-...)", "Slack bot token（xoxb-...）"),
+              ("Slack app-level token (xapp-..., Socket Mode)",
+               "Slack app-level token（xapp-...，Socket Mode）")),
+    "kook": (("KOOK bot token", "KOOK 机器人 token"),),
+    "lark": (("Lark / Feishu app id", "飞书 / Lark App ID"),
+             ("Lark / Feishu app secret", "飞书 / Lark App Secret")),
 }
-PLATFORM_LABELS = {"telegram": "Telegram", "discord": "Discord", "slack": "Slack",
-                   "kook": "KOOK", "lark": "Lark / Feishu"}
+# kind -> ((field key, its prompt), ...)
+PLATFORMS = {
+    kind: tuple(zip((f.key for f in connections.platform(kind).fields), prompts, strict=True))
+    for kind, prompts in _PLATFORM_PROMPTS.items()}
+# The menu also lists QQ through NapCat, and names Lark before Feishu.
+_OWN_LABELS = {"qq_official": ("QQ official bot", "QQ 官方机器人"),
+               "lark": ("Lark / Feishu", "Lark / Feishu")}
 
 
 def platform_label(kind: str) -> str:
-    if kind == "qq_official":
-        return langs.say("QQ official bot", "QQ 官方机器人", _lang)
-    return PLATFORM_LABELS[kind]
+    return langs.say(*(_OWN_LABELS.get(kind) or connections.platform(kind).name), _lang)
+
+
+# AstrBot's own config shape (its 4.x template) around the credential fields.
 _PLATFORM_DEFAULTS = {
     "qq_official": {"enable_group_c2c": True, "enable_guild_direct_message": True,
                     "use_markdown": True},
@@ -1230,9 +1236,7 @@ class Launcher:
                 pass
             return [f"cd {_quote(str(homes.CHECKOUT))}",
                     f"{_program(str(python))} -m persona_agent {tail}"]
-        # uvx runs from a throwaway environment in uv's cache, under archive-v<N>.
-        prefix = sys.prefix.replace("\\", "/").lower()
-        if "/archive-v" in prefix:
+        if langs.under_uvx():
             return [f"uvx personagent {tail}"]
         if shutil.which("personagent"):
             return [f"personagent {tail}"]
@@ -1258,14 +1262,9 @@ def _program(path: str) -> str:
 # The wizard
 # ---------------------------------------------------------------------------
 
-def _width(text: str) -> int:
-    """Columns `text` takes in a terminal: CJK characters take two."""
-    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
-
-
 def _header(text: str) -> None:
     print()
-    print(f"-- {text} " + "-" * max(4, 60 - _width(text)))
+    print(f"-- {text} " + "-" * max(4, 60 - langs.width(text)))
 
 
 def ask_language(default: str) -> str:
@@ -1284,54 +1283,102 @@ def _current(env_path: Path) -> dict:
     return {key: env_get(env_path, key) for key in keys}
 
 
-def step_model(current: dict, retry: bool = False) -> dict:
-    """Provider, model and key; on a retry the Base URL is asked too."""
-    if not retry:
-        _say(t("provider_intro"))
-    for i, provider in enumerate(PROVIDERS, 1):
-        where = urllib.parse.urlsplit(provider.base_url).hostname or ""
-        print(f"   {i:>2}. {provider.label}{' ' * max(1, 36 - _width(provider.label))}{where}")
+# `init`'s flags with none given: every question is asked.
+_NO_FLAGS = argparse.Namespace(provider=None, base_url=None, model=None, key_env=None,
+                               name=None, lang=None, persona=None)
+
+
+def _from_flag(label: str, value: str, flag: str) -> None:
+    """Say the answer a flag already gave, in place of asking its question."""
+    _say(f"{label}: {value} ({flag})")
+
+
+def _key_from_env(variable: str) -> str:
+    """The key `--key-env` names; an empty variable is refused, never skipped."""
+    key = os.environ.get(variable, "").strip()
+    if not key:
+        raise SystemExit(langs.term(f"--key-env {variable}: that environment variable is empty"))
+    return key
+
+
+def _require_scheme(base_url: str) -> None:
+    if not has_scheme(base_url):
+        raise SystemExit(langs.term("--base-url needs https:// or http:// in front, such as https://api.deepseek.com"))
+
+
+def _ask_key(provider: Provider, current: dict, same: bool) -> str:
+    visible = provider.needs_key and ask_yn(t("key_visible"), default_yes=False)
+    if not provider.needs_key:
+        return current["LLM_API_KEY"] if same and current["LLM_API_KEY"] else "ollama"
+    if same and current["LLM_API_KEY"]:
+        masked = mask_secret(current["LLM_API_KEY"])
+        if visible:
+            _say(t("key_current", value=current["LLM_API_KEY"]))
+        api_key = ask(t("key_keep", masked=masked), default=current["LLM_API_KEY"],
+                      shown_default="", secret=not visible)
+    else:
+        if provider.key_url:
+            _say(t("key_where", url=provider.key_url))
+        api_key = ask(t("key_prompt"), required=True, secret=not visible)
+    _say(t("key_got", masked=mask_secret(api_key)))
+    return api_key
+
+
+def step_model(current: dict, retry: bool = False,
+               flags: argparse.Namespace | None = None) -> dict:
+    """Provider, model and key. A flag answers its own question; on a retry
+    every question is asked, the Base URL too, with the last answers as defaults."""
+    given = _NO_FLAGS if flags is None or retry else flags
     known = provider_for_base(current["LLM_BASE_URL"]) if current["LLM_BASE_URL"] else None
     if current["LLM_BASE_URL"] and known is None:
         known = provider_named("other")
     if current["LLM_API_KEY"] and not current["LLM_BASE_URL"]:
         known = provider_for_base(DEFAULT_LLM_BASE_URL)
-    default = PROVIDERS.index(known) + 1 if known else 1
-    provider = PROVIDERS[ask_number(t("provider_choose"), len(PROVIDERS), default) - 1]
+    if given.provider:
+        provider = provider_named(given.provider)
+        _from_flag(t("provider_choose"), provider.label, "--provider")
+    elif given.base_url:
+        # The address says which service it is.
+        provider = provider_for_base(given.base_url) or provider_named("other")
+    else:
+        if not retry:
+            _say(t("provider_intro"))
+        for i, provider in enumerate(PROVIDERS, 1):
+            where = urllib.parse.urlsplit(provider.base_url).hostname or ""
+            print(f"   {i:>2}. {provider.label}{' ' * max(1, 36 - langs.width(provider.label))}{where}")
+        default = PROVIDERS.index(known) + 1 if known else 1
+        provider = PROVIDERS[ask_number(t("provider_choose"), len(PROVIDERS), default) - 1]
     same = known is not None and known.key == provider.key
     if provider.hint:
         _say(provider.hint)
 
     # The same service keeps its address as written (a region, a proxy).
     base_url = current["LLM_BASE_URL"] if same and current["LLM_BASE_URL"] else provider.base_url
-    if not base_url or retry:
+    if given.base_url:
+        base_url = given.base_url
+        _from_flag(t("base_url"), base_url, "--base-url")
+    elif not base_url or retry:
         _say(t("base_url_explain"))
         base_url = ask(t("base_url"), default=base_url, required=True)
         while not has_scheme(base_url):
             _say(t("base_url_scheme"))
             base_url = ask(t("base_url"), required=True)
-    if provider.key == "ollama":
-        _say(t("ollama_model"))
-    elif not provider.model:
-        _say(t("model_explain", example="deepseek-flash"))
-    model = ask(t("model"), default=(current["LLM_MODEL"] if same and current["LLM_MODEL"]
-                                     else provider.model), required=True)
-
-    visible = provider.needs_key and ask_yn(t("key_visible"), default_yes=False)
-    if not provider.needs_key:
-        api_key = current["LLM_API_KEY"] if same and current["LLM_API_KEY"] else "ollama"
-    elif same and current["LLM_API_KEY"]:
-        masked = mask_secret(current["LLM_API_KEY"])
-        if visible:
-            _say(t("key_current", value=current["LLM_API_KEY"]))
-        api_key = ask(t("key_keep", masked=masked), default=current["LLM_API_KEY"],
-                      shown_default="", secret=not visible)
-        _say(t("key_got", masked=mask_secret(api_key)))
+    if given.model:
+        model = given.model
+        _from_flag(t("model"), model, "--model")
     else:
-        if provider.key_url:
-            _say(t("key_where", url=provider.key_url))
-        api_key = ask(t("key_prompt"), required=True, secret=not visible)
-        _say(t("key_got", masked=mask_secret(api_key)))
+        if provider.key == "ollama":
+            _say(t("ollama_model"))
+        elif not provider.model:
+            _say(t("model_explain", example="deepseek-flash"))
+        model = ask(t("model"), default=(current["LLM_MODEL"] if same and current["LLM_MODEL"]
+                                         else provider.model), required=True)
+
+    if given.key_env:
+        api_key = _key_from_env(given.key_env)
+        _say(f"{t('key_got', masked=mask_secret(api_key))} (--key-env {given.key_env})")
+    else:
+        api_key = _ask_key(provider, current, same)
     return {"LLM_BASE_URL": base_url, "LLM_MODEL": model, "LLM_API_KEY": api_key,
             "_provider": provider.key}
 
@@ -1351,11 +1398,18 @@ def check_key(values: dict) -> bool:
     return False
 
 
-def step_character(home: Path, current: dict, lang: str) -> tuple[str, str]:
-    """The bot's name and which persona to write ('' = leave persona.txt alone)."""
+def step_character(home: Path, current: dict, lang: str,
+                   flags: argparse.Namespace | None = None) -> tuple[str, str]:
+    """The bot's name and which persona to write ('' = leave persona.txt alone).
+    --name and --persona answer their own questions."""
+    given = _NO_FLAGS if flags is None else flags
     old = current["PERSONA_NAME"]
-    _say(t("name_explain"))
-    name = ask(t("name"), default=old or DEFAULT_NAMES[lang], required=True)
+    if given.name:
+        name = given.name
+        _from_flag(t("name"), name, "--name")
+    else:
+        _say(t("name_explain"))
+        name = ask(t("name"), default=old or DEFAULT_NAMES[lang], required=True)
 
     persona_path = home / "persona.txt"
     origin = shipped_persona(persona_path.read_text(encoding="utf-8")) if persona_path.is_file() else None
@@ -1363,14 +1417,19 @@ def step_character(home: Path, current: dict, lang: str) -> tuple[str, str]:
     if persona_path.is_file() and origin is None:
         _say(t("char_custom"))
     else:
-        print()
-        _say(t("char_intro"))
-        for i, character in enumerate(CHARACTERS, 1):
-            print(f"    {i}. {character.label}")
-        default = PERSONA_KEYS.index(default_character(origin)) + 1
-        prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
-        key = CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
-        if name_for(key, name, lang) != name:
+        if given.persona:
+            key = given.persona
+            _from_flag(t("char_choose"), short_label(character_for(key)), "--persona")
+        else:
+            print()
+            _say(t("char_intro"))
+            for i, character in enumerate(CHARACTERS, 1):
+                print(f"    {i}. {character.label}")
+            default = PERSONA_KEYS.index(default_character(origin)) + 1
+            prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
+            key = CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
+        # A name given as a flag stays, as it does with --no-input.
+        if not given.name and name_for(key, name, lang) != name:
             name = name_for(key, name, lang)
             _say(t("name_follows", name=name))
     if old and name != old:
@@ -1485,9 +1544,9 @@ def step_astrbot(env_path: Path, current: dict, values: dict) -> dict | None:
     else:
         if kind in PLATFORMS:
             _say(t("token_skip"))
+            secret = {f.key: f.secret for f in connections.platform(kind).fields}
             for key, prompts in PLATFORMS[kind]:
-                prompt = langs.say(*prompts, _lang)
-                creds[key] = ask(prompt, secret="token" in key or "secret" in key)
+                creds[key] = ask(langs.say(*prompts, _lang), secret=secret[key])
             if not all(creds.values()):
                 creds = {}
         groups = ask_ids(t("groups_other"), existing.get("groups"))
@@ -1569,13 +1628,26 @@ def finish(launcher: Launcher, home: Path, *, name: str, has_key: bool,
         subprocess.call(launcher.argv("chat"), cwd=launcher.cwd())
 
 
-def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> None:
-    """The interactive setup. Answers are written to <home>/.env and persona.txt."""
+def run_wizard(home: Path, launcher: Launcher, *,
+               flags: argparse.Namespace | None = None) -> None:
+    """The interactive setup. Answers are written to <home>/.env and persona.txt.
+    A question `init`'s flags already answered is not asked: its answer is shown."""
+    flags = _NO_FLAGS if flags is None else flags
+    # Refused before the first question, not after the last.
+    if flags.base_url:
+        _require_scheme(flags.base_url)
+    if flags.key_env:
+        _key_from_env(flags.key_env)
     env_path = copy_env_template(home)
     rerun = bool(env_get(env_path, "LLM_API_KEY"))
     current = _current(env_path) if rerun else {k: "" for k in _current(env_path)}
     current_lang = langs.normalize(current["AGENT_LANG"]) if rerun else ""
-    lang = ask_language(current_lang or lang_default or detect_lang())
+    if flags.lang:
+        lang = flags.lang
+        print()
+        _from_flag("Language / 语言", langs.NAMES[lang], "--lang")
+    else:
+        lang = ask_language(current_lang or detect_lang())
     set_lang(lang)
     _header(t("title_again") if rerun else t("title_first"))
     _say(t("folder", path=home))
@@ -1587,7 +1659,7 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
     _header(t("step", n=1, what=t("step_model")))
     retry = False
     while True:
-        values = step_model(current, retry=retry)
+        values = step_model(current, retry=retry, flags=flags)
         if check_key(values):
             break
         if not ask_yn(t("retry"), default_yes=True):
@@ -1600,7 +1672,7 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
                          "LLM_API_KEY": values["LLM_API_KEY"], "AGENT_LANG": lang})
 
     _header(t("step", n=2, what=t("step_character")))
-    name, persona = step_character(home, current, lang)
+    name, persona = step_character(home, current, lang, flags)
     write_env(env_path, {"PERSONA_NAME": name})
 
     _header(t("step", n=3, what=t("step_chat")))
@@ -1624,8 +1696,8 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     shipped persona.txt follows the flags; an edited one is never touched."""
     if args.provider == "other" and not args.base_url:
         raise SystemExit(langs.term("--provider other needs --base-url"))
-    if args.base_url and not has_scheme(args.base_url):
-        raise SystemExit(langs.term("--base-url needs https:// or http:// in front, such as https://api.deepseek.com"))
+    if args.base_url:
+        _require_scheme(args.base_url)
     existed = (home / ".env").exists()
     # A key does not say whose it is, and a key alone used to mean DeepSeek.
     if (os.environ.get(args.key_env or "LLM_API_KEY", "").strip()
@@ -1659,10 +1731,7 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     if args.model:
         values["LLM_MODEL"] = args.model
     if args.key_env:
-        key = os.environ.get(args.key_env, "").strip()
-        if not key:
-            raise SystemExit(langs.term(f"--key-env {args.key_env}: that environment variable is empty"))
-        values["LLM_API_KEY"] = key
+        values["LLM_API_KEY"] = _key_from_env(args.key_env)
     persona_path = home / "persona.txt"
     origin = (shipped_persona(persona_path.read_text(encoding="utf-8"))
               if persona_path.is_file() else ("", "", ""))
@@ -1721,26 +1790,17 @@ def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
     return p
 
 
-def _prepare_output() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(errors="replace")
-        except (AttributeError, ValueError):
-            pass
-
-
 def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         confirm_rerun: bool = False, args: argparse.Namespace | None = None,
         strict_skip: bool = False) -> int:
     """`init` with an interpreter of choice, and flags already parsed."""
-    _prepare_output()
     args = args if args is not None else init_parser(prog).parse_args(argv)
     home = homes.find_home()
     launcher = Launcher(python=python or sys.executable, home=home)
     tty = langs.interactive()
-    flags = any((args.provider, args.base_url, args.model, args.key_env,
-                 args.name, args.lang, args.persona))
-    if tty and not args.no_input and not getattr(args, "terminal", False) and not flags:
+    flagged = any((args.provider, args.base_url, args.model, args.key_env,
+                   args.name, args.lang, args.persona))
+    if tty and not args.no_input and not getattr(args, "terminal", False) and not flagged:
         from persona_agent.welcome import main as welcome_main
         return welcome_main([], prog)
     if args.no_input or not tty:
@@ -1748,8 +1808,6 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
             set_lang(args.lang or detect_lang())
             print(t("skipped", why=t("skip_tty"), cmd=prog))
         done = setup_without_questions(home, args, launcher)
-        flagged = any((args.provider, args.base_url, args.model, args.key_env,
-                       args.name, args.lang, args.persona))
         # Piped without flags nothing was configured, and a script must be able to tell.
         return 2 if strict_skip and not args.no_input and not flagged else done
     env_path = home / ".env"
@@ -1758,7 +1816,7 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         if not ask_yn(t("rerun_q"), default_yes=False):
             print(t("kept_config"))
             return 0
-    run_wizard(home, launcher, lang_default=args.lang or "")
+    run_wizard(home, launcher, flags=args)
     return 0
 
 
@@ -1849,7 +1907,6 @@ def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
 
 
 def connect_main(argv: list[str] | None = None, prog: str = "personagent connect") -> int:
-    _prepare_output()
     args = connect_parser(prog).parse_args(argv)
     home = homes.find_home()
     env_path = home / ".env"
@@ -1917,7 +1974,6 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
 def start_main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     """A small front door; each action runs in a fresh process to reload settings."""
     argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
-    _prepare_output()
     if not langs.interactive():
         print(langs.term("Open this menu in a terminal: personagent start"))
         return 2

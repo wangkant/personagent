@@ -89,8 +89,8 @@ and `personagent doctor` prints `activity: off (...)`.
 
 The API lives under `/api/dashboard/` on the agent service:
 
-- `GET status`, `GET conversations` and `GET conversation?id=<chat id>` read
-  the service's state, the chats it knows and one chat in detail.
+- `GET conversations` and `GET conversation?id=<chat id>` read the chats the
+  service knows and one chat in detail.
 - `POST candidates/<id>/promote`, `replace`, `reject` and `rollback` change
   what it has learned. Each change goes into the same ledger as
   `personagent learned`, with the actor `dashboard`.

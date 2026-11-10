@@ -45,7 +45,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 API находится под `/api/dashboard/` в службе агента:
 
-- `GET status`, `GET conversations` и `GET conversation?id=<chat id>` читают состояние службы, известные ей чаты и один чат подробно.
+- `GET conversations` и `GET conversation?id=<chat id>` читают известные службе чаты и один чат подробно.
 - `POST candidates/<id>/promote`, `replace`, `reject` и `rollback` меняют то, чему он научился. Каждое изменение попадает в тот же журнал, что и `personagent learned`, с исполнителем `dashboard`.
 - `POST memory/forget` с телом `{"conv": "<chat id>", "note": "<note id>"}` удаляет одну заметку памяти. `conv` и id берутся из записи `memories` в `GET conversation`. Без `note` удаляет главную заметку чата.
 

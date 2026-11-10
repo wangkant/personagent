@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 from .chatlangs import CODES
@@ -126,6 +127,17 @@ def interactive() -> bool:
     except (AttributeError, OSError, ValueError):
         return True  # no real handle to ask: a stand-in that says it is one
     return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(ctypes.c_uint32())))
+
+
+def width(text: str) -> int:
+    """Columns `text` takes in a terminal: CJK characters take two."""
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
+def under_uvx() -> bool:
+    """Run by uvx, from a throwaway environment in uv's cache under archive-v<N>;
+    a folder that only starts that way (Archive-Videos) is not it."""
+    return bool(re.search(r"/archive-v\d+/", sys.prefix.replace("\\", "/").lower() + "/"))
 
 
 _terminal_lang: dict = {}

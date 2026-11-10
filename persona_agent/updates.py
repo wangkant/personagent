@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import __version__, home as homes
+from . import __version__, home as homes, langs
 from .config_env import env_bool
 from .storage import atomic_write_text
 
@@ -137,8 +137,8 @@ def how_to_update() -> tuple[str, bool]:
         # A pull can bring new dependencies.
         return f"git -C {root} pull\n{_program(sys.executable)} -m pip install -e {root}", False
     prefix = Path(sys.prefix)
-    if re.search(r"/archive-v\d+/", sys.prefix.replace("\\", "/").lower() + "/"):
-        return "uvx personagent@latest", True  # a throwaway environment in uv's cache
+    if langs.under_uvx():
+        return "uvx personagent@latest", True
     if (prefix / "uv-receipt.toml").is_file():
         return "uv tool upgrade personagent", False
     if (prefix / "pipx_metadata.json").is_file():

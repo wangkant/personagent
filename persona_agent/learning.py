@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 from . import access, candidates, channels, evidence, evolution, promotion, reactions
-from .textproc import (_fence_user_data, _truncate_framed, apply_k2_quirks,
+from .textproc import (_fence_user_data, _truncate_framed,
                        salvage_json_object)
 from .storage import append_jsonl_rotating
 
@@ -348,7 +348,8 @@ class Learning:
                 "max_tokens": 1500,
                 "response_format": {"type": "json_object"},
             }
-            apply_k2_quirks(eval_payload, em, eval_url)
+            # A short answer: hidden reasoning off, as for a reply.
+            self._thinking_off(eval_payload, eval_url)
             r = await self._post_chat(eval_url, eval_auth, eval_payload, timeout=15)
             r.raise_for_status()
             # Some reasoning models route output into `reasoning_content`.

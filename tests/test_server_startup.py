@@ -99,9 +99,9 @@ def test_a_specific_address_answers_the_activity_api(monkeypatch) -> None:
     monkeypatch.setattr(dashboard, "_token", TOKEN)
     caller = TestClient(server.app, base_url="http://100.64.1.5:8080",
                         client=("100.64.1.5", 50000))
-    assert caller.get("/api/dashboard/status",
+    assert caller.get("/api/dashboard/conversations",
                       headers={dashboard.TOKEN_HEADER: TOKEN}).status_code == 200
-    assert caller.get("/api/dashboard/status").status_code == 401
+    assert caller.get("/api/dashboard/conversations").status_code == 401
 
 
 def test_a_turned_off_agent_is_told_how_to_turn_it_on(monkeypatch, caplog) -> None:

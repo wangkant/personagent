@@ -331,14 +331,9 @@ class EvidenceLog:
         """Append one event. Returns False when it was already recorded."""
         eid = event["event_id"]
         with append_lock(self.path):
-            # Another process may have appended: re-read only if the stamp moved.
-            if self._events is None or file_stamp(self.path) != self._stamp:
-                result = read_validated_jsonl(self.path, _validate_event)
-                self._events = result.rows
-                self._ids = {row["event_id"] for row in result.rows}
-                self._quarantined = result.quarantined
+            # Another process may have appended: re-read if the stamp moved.
+            self._load()
             if eid in self._ids:
-                self._stamp = file_stamp(self.path)
                 return False
             append_jsonl_unlocked(self.path, event)
             # Rebound, not mutated: callers may hold the list all() returned.

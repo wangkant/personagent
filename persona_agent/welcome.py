@@ -7,7 +7,7 @@ import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-import importlib.util
+import functools
 import json
 import os
 from pathlib import Path
@@ -15,6 +15,7 @@ import re
 import secrets
 import socket
 import subprocess
+import sys
 import threading
 import time
 from urllib.parse import urlsplit
@@ -61,11 +62,7 @@ CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
 
 
 def _connector_type():
-    source = homes.resource("integrations", "astrbot", sw.PLUGIN_NAME, "personagent_connector.py")
-    spec = importlib.util.spec_from_file_location("_personagent_local_connector", source)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.Connector
+    return direct_base.sdk().Connector
 
 
 async def send_chat_event(url: str, token: str, conversation: str, text: str, *,
@@ -195,11 +192,7 @@ class Workspace:
                 key = key or "ollama"
             if not key or len(key) > 4096:
                 raise ValueError("key_required")
-            parsed = urlsplit(base)
-            if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password:
-                raise ValueError("invalid_url")
-            if parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
-                raise ValueError("https_required")
+            base = _endpoint(base)
             model = str(payload.get("model") or provider.model).strip()
             if not model or len(model) > 256:
                 raise ValueError("model_required")
@@ -214,8 +207,6 @@ class Workspace:
             # dotenv would read ${VAR} back as another setting, a key included.
             if _expands(key):
                 raise ValueError("key_required")
-            if _expands(base):
-                raise ValueError("invalid_url")
             if _expands(model):
                 raise ValueError("model_required")
             try:
@@ -287,7 +278,7 @@ class Workspace:
                 if vision.get("sameAsChat"):
                     base, key = old.get("LLM_BASE_URL", ""), old.get("LLM_API_KEY", "")
                 else:
-                    base = _endpoint(vision.get("baseUrl"))
+                    base = _endpoint(vision.get("baseUrl")).rstrip("/")
                     key = _key(vision.get("apiKey"))
                     # A key is never forwarded to an address it was not saved for.
                     if not key and base.rstrip("/") == old.get("VISION_BASE_URL", "").rstrip("/"):
@@ -437,7 +428,15 @@ class Workspace:
         sw.write_env(self.env, values)
 
     def _install(self) -> Path:
-        data = install_astrbot(self.home)
+        run = functools.partial(self.services.run, "install",
+                                should_stop=lambda: self._cancelled or self._closed)
+        try:
+            data = install_astrbot(self.home, run=run)
+        except subprocess.CalledProcessError as exc:
+            # The page says only that the download failed; why is for this window.
+            print(langs.term("install stopped; see runtime/desktop/install.log."), file=sys.stderr)
+            print(exc.output or "", file=sys.stderr, flush=True)
+            raise
         if self._closed or self._cancelled:
             raise RuntimeError("cancelled")
         return data
@@ -704,7 +703,7 @@ def _endpoint(value) -> str:
         raise ValueError("invalid_url")
     if parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("https_required")
-    return base.rstrip("/")
+    return base
 
 
 def create_app(home: Path, token: str, *, workspace: Workspace | None = None) -> FastAPI:

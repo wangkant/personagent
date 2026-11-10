@@ -18,19 +18,70 @@ if ([Console]::IsInputRedirected -and -not (Test-Path -LiteralPath (Join-Path $P
     exit 1
 }
 
+# The oldest Python the dependencies install on (requires-python in pyproject.toml).
+$minPython = [version]'3.10'
+
+function Get-PythonVersion {
+    # $null when it does not run: the Microsoft Store alias named python.exe is not Python.
+    param([string]$Exe, [string[]]$Pre = @())
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $said = $null
+    try {
+        $said = & $Exe @Pre -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>$null
+        if ($LASTEXITCODE -ne 0) { $said = $null }
+    } catch {
+        $said = $null
+    }
+    $ErrorActionPreference = $prevEAP
+    $line = @($said) | Where-Object { "$_" -match '^\d+\.\d+\.\d+$' } | Select-Object -Last 1
+    if ($line) { return [version]"$line" }
+    return $null
+}
+
 if (-not (Test-Path -LiteralPath $venvPy)) {
-    $py = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+    # python.org's installer leaves Python off PATH by default, but installs the py launcher.
+    $candidates = @(
+        @{ Name = 'python'; Pre = @() },
+        @{ Name = 'python3'; Pre = @() },
+        @{ Name = 'py'; Pre = @('-3') }
+    )
+    $py = $null
+    $tooOld = $null
+    foreach ($candidate in $candidates) {
+        $found = Get-Command $candidate.Name -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if (-not $found) { continue }
+        $version = Get-PythonVersion $found.Source $candidate.Pre
+        if (-not $version) { continue }
+        if ($version -ge $minPython) {
+            $py = @{ Source = $found.Source; Pre = $candidate.Pre }
+            break
+        }
+        if (-not $tooOld) { $tooOld = "Python $version ($($found.Source))" }
+    }
+    if (-not $py -and $tooOld) {
+        Write-Host "error: found $tooOld, but personagent needs Python $minPython or newer. Install a newer Python, then start this again." -ForegroundColor Red
+        exit 1
+    }
     if (-not $py) {
-        Write-Host "error: python / python3 not found. Install Python 3.10 or newer, then start this again." -ForegroundColor Red
+        Write-Host "error: python / python3 / py not found. Install Python $minPython or newer, then start this again." -ForegroundColor Red
         exit 1
     }
     if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.venv')) {
         Write-Error "Incomplete .venv. Move it aside, then start this again."
         exit 1
     }
-    & $py.Source -m venv (Join-Path $PSScriptRoot '.venv')
+    $pre = $py.Pre
+    & $py.Source @pre -m venv (Join-Path $PSScriptRoot '.venv')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    # A .venv made with an older Python would fail in pip and read as a network problem.
+    $venvVersion = Get-PythonVersion $venvPy
+    if ($venvVersion -and $venvVersion -lt $minPython) {
+        Write-Host "error: .venv here was made with Python $venvVersion, but personagent needs Python $minPython or newer. Install a newer Python, move .venv aside, then start this again." -ForegroundColor Red
+        exit 1
+    }
 }
 $pySource = $venvPy
 

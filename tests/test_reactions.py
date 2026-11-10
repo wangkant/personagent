@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import tempfile
 import time
 from pathlib import Path
@@ -615,3 +616,84 @@ def test_a_lesson_is_one_clean_sentence_or_nothing() -> None:
           pair["lesson"].startswith("This group calls the gym 'the cave'.")
           and "\n" not in pair["lesson"]
           and len(pair["lesson"]) == reactions.LESSON_MAX_CHARS, repr(pair))
+
+
+def test_a_damaged_pending_file_is_moved_aside_and_starts_empty(
+        tmp: Path, caplog) -> None:
+    """pending_reactions.json is written without fsync, so a power cut can
+    leave it empty or cut off; that must not stop the service."""
+    caplog.set_level(logging.WARNING, logger="agent.storage")
+    state = tmp / "pending_reactions.json"
+    aside = tmp / "pending_reactions.json.corrupt"
+    seed = reactions.PendingReplies(state_file=state)
+    seed.record("g1", **_entry_kwargs(mids=["m1"]))
+    seed.note_rejection("g1", {"reply": "bad", "ctx_lines": [], "mode": "called"},
+                        ts=100.0, complainant_uid="42")
+    good = state.read_bytes()
+
+    kept = reactions.PendingReplies(state_file=state)
+    check("pending file: a valid one loads and stays in place",
+          set(kept._by_conv) == {"g1"} and kept.awaiting("g1", "42") is not None
+          and state.read_bytes() == good and not aside.exists()
+          and not caplog.records, repr(caplog.records))
+
+    row = json.loads(good)["pending"]["g1"][0]
+    cases = {
+        "zero-byte": b"",
+        "truncated": good[:len(good) // 2],
+        "wrong top-level type": b"[]",
+        "no order": json.dumps({"version": 1, "pending": {}}).encode(),
+        # The first conversation is fine: none of it may be kept.
+        "one bad conversation": json.dumps({
+            "version": 1, "order": ["g1", "g2"], "awaiting_fix": {},
+            "pending": {"g1": [row], "g2": "oops"}}).encode(),
+        "a row without its timestamp": json.dumps({
+            "version": 1, "order": ["g1"], "awaiting_fix": {},
+            "pending": {"g1": [{"reply": "sup"}]}}).encode(),
+        "a complaint that is not an object": json.dumps({
+            "version": 1, "order": ["g1"], "pending": {},
+            "awaiting_fix": {"g1": {"42": "oops"}}}).encode(),
+    }
+    for label, blob in cases.items():
+        caplog.clear()
+        state.write_bytes(blob)
+        p = reactions.PendingReplies(state_file=state)
+        check(f"pending file, {label}: starts empty",
+              not p._by_conv and not p._awaiting_fix and not p._conversation_order,
+              repr((p._by_conv, p._awaiting_fix)))
+        check(f"pending file, {label}: moved aside for a look",
+              not state.exists() and aside.read_bytes() == blob)
+        said = [r.getMessage() for r in caplog.records]
+        check(f"pending file, {label}: one warning names it",
+              len(said) == 1 and "pending_reactions.json" in said[0], repr(said))
+        check(f"pending file, {label}: nothing is matched from it",
+              p.match("g1", sender_uid="7", quote_mid="m1", now=110) is None)
+        p.record("g1", **_entry_kwargs(mids=["m2"]))
+        again = reactions.PendingReplies(state_file=state)
+        check(f"pending file, {label}: and the store works again",
+              again.match("g1", sender_uid="7", quote_mid="m2", now=110) is not None)
+
+
+def test_the_agent_starts_on_a_pending_file_a_power_cut_emptied(tmp: Path) -> None:
+    state = tmp / "pending_reactions.json"
+    state.write_bytes(b"")
+    a = isolated_agent(tmp)
+    check("agent: the pending store it opened is the damaged one",
+          a.pending_reactions.state_file.resolve() == state.resolve())
+    check("agent: it starts, with nothing pending and the file set aside",
+          not a.pending_reactions._by_conv and not state.exists()
+          and (tmp / "pending_reactions.json.corrupt").exists())
+
+
+def test_a_cut_off_file_written_with_fsync_still_stops(tmp: Path) -> None:
+    """Only the two rebuildable files start empty; the rest keep their error."""
+    path = tmp / "teacher_stats.json"
+    path.write_text('{"u1": {"accepted": 1', encoding="utf-8")
+    stopped = False
+    try:
+        reactions.TeacherStats(path)
+    except ValueError:
+        stopped = True
+    check("teacher stats: a cut-off file is an error, and stays where it is",
+          stopped and path.exists()
+          and not (tmp / "teacher_stats.json.corrupt").exists())

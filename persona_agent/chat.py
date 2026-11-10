@@ -24,7 +24,6 @@ import re
 import shutil
 import sys
 import time
-import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1076,10 +1075,7 @@ class ChatSession:
     def commands(self) -> None:
         print()
         for cmd, desc in self.t["commands"]:
-            # Wide (CJK) characters take two columns in a terminal.
-            width = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1
-                        for c in cmd)
-            print(f"  {cmd}{' ' * max(1, 16 - width)}{desc.format(name=self.name)}")
+            print(f"  {cmd}{' ' * max(1, 16 - langs.width(cmd))}{desc.format(name=self.name)}")
         print()
 
     async def handle(self, line: str) -> bool:

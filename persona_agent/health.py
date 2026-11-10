@@ -18,7 +18,6 @@ from urllib.parse import urlsplit
 from .config_env import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, vision_endpoint_from_env
 from .endpoints import (adapt_rejected_payload, chat_completions_url,
                         embedding_endpoint, endpoint_for)
-from .textproc import apply_k2_quirks
 
 # A loopback service (NapCat, a local model) must not be reached through the
 # HTTP(S)_PROXY the shell may set for the internet.
@@ -69,6 +68,15 @@ def _post_json(url, payload, headers, timeout=30):
 def _get(url, timeout=10):
     with _open(urllib.request.Request(url), timeout) as r:
         return json.load(r)
+
+
+def _no_hidden_reasoning(payload: dict, url: str) -> dict:
+    """The switch the agent's own calls use, sent only where it is known to
+    be taken: a probe keeps no memory of an endpoint that refuses it."""
+    # Imported here: llm loads httpx, which a doctor run otherwise never does.
+    from .llm import known_to_take_thinking, thinking_off
+    return thinking_off(payload, url, known_to_take_thinking(
+        url, str(payload.get("model") or "")))
 
 
 def _llm_endpoint(model: str) -> tuple[str, str]:
@@ -130,7 +138,7 @@ def check_vision():
     payload = {"model": model, "max_tokens": 64, "temperature": 0.3, "messages": [{"role": "user", "content": [
         {"type": "text", "text": "What color? one word."},
         {"type": "image_url", "image_url": {"url": data_url}}]}]}
-    apply_k2_quirks(payload, model, base)
+    _no_hidden_reasoning(payload, base)
     r = _post_json(f"{base}/chat/completions", payload, {"Authorization": f"Bearer {key}"})
     txt = (r["choices"][0]["message"].get("content") or "").strip()
     return True, f"{model} -> {txt[:20]!r}"
@@ -166,7 +174,7 @@ def check_eval():
     if not key or url.startswith("/"):  # empty base URL
         return None, "not configured"
     payload = {"model": model, "max_tokens": 16, "messages": [{"role": "user", "content": "reply with: ok"}]}
-    apply_k2_quirks(payload, model, url)
+    _no_hidden_reasoning(payload, url)
     r = _post_json(url, payload, {"Authorization": f"Bearer {key}"})
     txt = (r["choices"][0]["message"].get("content") or "").strip()
     return True, f"{model} -> {txt[:20]!r}"

@@ -67,7 +67,7 @@ class MessageParsing:
                         entry["md5"], group_id, sender_uid,
                     ))
                     continue
-                desc = await self._describe_image(url)
+                desc, downloaded = await self._describe_image_keeping(url)
                 parts.append(_fence(f"[{kind}: {desc}]") if desc else f"[{kind}]")
                 # Sticker stealing is QQ-only.
                 if group_id and sender_uid != self.qq_bot_id \
@@ -76,6 +76,7 @@ class MessageParsing:
                         url=url,
                         sender_uid=sender_uid,
                         group_id=group_id,
+                        downloaded=downloaded,
                     ))
             elif t == "face":
                 # Fenced: whoever named a custom emoji is not the sender.

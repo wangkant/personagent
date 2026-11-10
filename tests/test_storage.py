@@ -7,6 +7,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing
 import os
 import stat
@@ -282,3 +283,90 @@ def test_appended_rows_are_byte_exact(tmp: Path) -> None:
     check("append: no CR anywhere in the file", cr not in raw2, repr(raw2))
     check("append: second row appended cleanly",
           raw2 == b'{"x":1}' + lf + b'{"y":2}' + lf, repr(raw2))
+
+
+def test_a_rebuildable_file_loads_or_is_moved_aside(tmp: Path, caplog) -> None:
+    """State written without fsync can come back empty or cut off after a
+    power cut: its loader starts empty and keeps the file for a look."""
+    caplog.set_level(logging.WARNING, logger="agent.storage")
+
+    def as_dict(data):
+        if not isinstance(data, dict):
+            raise ValueError("not an object")
+        return data
+
+    check("rebuildable: an absent file is nothing, and nothing is said",
+          storage.load_rebuildable_json(tmp / "absent.json", as_dict) is None
+          and not caplog.records and not list(tmp.iterdir()))
+
+    good = tmp / "good.json"
+    good.write_text('{"a": 1}', encoding="utf-8")
+    check("rebuildable: a valid file is parsed and left in place",
+          storage.load_rebuildable_json(good, as_dict) == {"a": 1}
+          and good.read_text(encoding="utf-8") == '{"a": 1}'
+          and not (tmp / "good.json.corrupt").exists() and not caplog.records)
+
+    path, aside = tmp / "state.json", tmp / "state.json.corrupt"
+    cases = (
+        ("zero-byte", b"", as_dict),
+        ("truncated", b'{"a": {"b": [1, 2', as_dict),
+        ("not utf-8", b'{"a": "' + bytes([0xff, 0xfe]) + b'"}', as_dict),
+        ("wrong top-level type", b"[1, 2]", as_dict),
+        ("missing key", b"{}", lambda data: data["rows"]),
+        ("wrong inner type", b'{"rows": 3}', lambda data: sorted(data["rows"])),
+        ("not a mapping", b"7", lambda data: data.items()),
+    )
+    for label, blob, parse in cases:
+        caplog.clear()
+        path.write_bytes(blob)
+        loaded = storage.load_rebuildable_json(path, parse)
+        check(f"rebuildable, {label}: starts empty", loaded is None, repr(loaded))
+        check(f"rebuildable, {label}: moved aside, replacing an older one",
+              not path.exists() and aside.read_bytes() == blob)
+        said = [r.getMessage() for r in caplog.records]
+        check(f"rebuildable, {label}: one warning names the file",
+              len(said) == 1 and str(path) in said[0], repr(said))
+    check("rebuildable: only one file is kept aside",
+          sorted(p.name for p in tmp.iterdir()) == ["good.json", "state.json.corrupt"])
+
+
+def test_a_rebuildable_loader_hides_only_a_bad_file(
+        tmp: Path, caplog, monkeypatch) -> None:
+    caplog.set_level(logging.WARNING, logger="agent.storage")
+    path = tmp / "state.json"
+    path.write_text("{}", encoding="utf-8")
+
+    def broken(data):
+        raise RuntimeError("a bug in the loader")
+
+    raised = False
+    try:
+        storage.load_rebuildable_json(path, broken)
+    except RuntimeError:
+        raised = True
+    check("rebuildable: a loader bug is not mistaken for a bad file",
+          raised and path.exists() and not (tmp / "state.json.corrupt").exists())
+
+    folder = tmp / "folder.json"
+    folder.mkdir()
+    raised = False
+    try:
+        storage.load_rebuildable_json(folder, dict)
+    except OSError:
+        raised = True
+    check("rebuildable: a file that cannot be read still stops",
+          raised and folder.is_dir())
+
+    def locked(src, dst):
+        raise PermissionError("in use")
+
+    path.write_bytes(b"")
+    caplog.clear()
+    with monkeypatch.context() as patched:
+        patched.setattr(storage.os, "replace", locked)
+        loaded = storage.load_rebuildable_json(path, dict)
+    said = [r.getMessage() for r in caplog.records]
+    check("rebuildable: a bad file that cannot be moved still starts empty, "
+          "with the one warning saying so",
+          loaded is None and path.exists() and len(said) == 1
+          and "could not be moved aside" in said[0], repr(said))

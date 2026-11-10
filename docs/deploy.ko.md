@@ -45,7 +45,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 API는 에이전트 서비스의 `/api/dashboard/` 아래에 있어요.
 
-- `GET status`, `GET conversations`, `GET conversation?id=<chat id>`는 서비스 상태, 알고 있는 채팅, 채팅 하나의 세부 내용을 읽어요.
+- `GET conversations`와 `GET conversation?id=<chat id>`는 서비스가 알고 있는 채팅과 채팅 하나의 세부 내용을 읽어요.
 - `POST candidates/<id>/promote`, `replace`, `reject`, `rollback`은 학습한 내용을 바꿔요. 각 변경은 `personagent learned`와 같은 원장에 행위자 `dashboard`로 기록돼요.
 - `POST memory/forget`은 본문 `{"conv": "<chat id>", "note": "<note id>"}`로 기억 메모 하나를 삭제해요. `conv`와 id는 `GET conversation`의 `memories` 항목에 있는 값이에요. `note`가 없으면 그 채팅의 핵심 메모를 삭제해요.
 

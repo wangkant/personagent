@@ -15,7 +15,7 @@ import time
 from collections import deque
 from pathlib import Path
 
-from .storage import atomic_write_text
+from .storage import atomic_write_text, load_rebuildable_json
 from .textproc import _fence_user_data, _truncate_framed, strip_json_fences
 
 logger = logging.getLogger("agent")
@@ -148,29 +148,47 @@ class PendingReplies:
     def _load(self) -> None:
         if self.state_file is None:
             return
-        if not self.state_file.exists():
-            return
-        raw = json.loads(self.state_file.read_text(encoding="utf-8"))
-        pending = raw["pending"]
-        awaiting = raw["awaiting_fix"]
-        for key in raw["order"]:
-            rows = pending.get(key, [])
+        # Written without fsync (see _save), so a damaged file starts empty.
+        state = load_rebuildable_json(self.state_file, self._parse_state)
+        for key, rows, slots in state or ():
             for row in rows:
                 self._seq = max(self._seq, row.get("seq", 0))
             if rows:
                 self._by_conv[key] = deque(rows[-self.max_per_conv:],
                                            maxlen=self.max_per_conv)
-            fix = awaiting.get(key)
-            if fix:
-                # A single row is the one-slot shape of earlier state files,
-                # which may not name its complainant.
-                armed = [fix] if "reply" in fix else list(fix.values())
-                slots = {bad["complainant_uid"]: bad for bad in armed
-                         if bad.get("complainant_uid")}
-                if slots:
-                    self._awaiting_fix[key] = slots
+            if slots:
+                self._awaiting_fix[key] = slots
             if key in self._by_conv or key in self._awaiting_fix:
                 self._touch(key)
+
+    @staticmethod
+    def _parse_state(raw) -> list[tuple[str, list[dict], dict[str, dict]]]:
+        """Each conversation's pending rows and armed complaints, oldest
+        conversation first; raises on a shape the store cannot run on."""
+        pending, awaiting = raw["pending"], raw["awaiting_fix"]
+        state = []
+        for key in raw["order"]:
+            rows = pending.get(key, [])
+            fix = awaiting.get(key) or {}
+            # A single row is the one-slot shape of earlier state files,
+            # which may not name its complainant.
+            armed = [fix] if "reply" in fix else list(fix.values())
+            # The fields match() and record() read without a default.
+            rows_ok = isinstance(rows, list) and all(
+                isinstance(row["reply"], str) and isinstance(row["mids"], list)
+                and isinstance(row["target_uid"], str)
+                and isinstance(row["ts"], (int, float))
+                and isinstance(row.get("seq", 0), int) for row in rows)
+            armed_ok = all(
+                isinstance(bad["reply"], str)
+                and isinstance(bad.get("rejected_ts", 0.0), (int, float))
+                for bad in armed)
+            if not (rows_ok and armed_ok):
+                raise ValueError("malformed pending reactions state")
+            slots = {bad["complainant_uid"]: bad for bad in armed
+                     if bad.get("complainant_uid")}
+            state.append((key, rows, slots))
+        return state
 
     def _save(self) -> None:
         if self.state_file is None:

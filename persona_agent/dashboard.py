@@ -19,10 +19,8 @@ import functools
 import json
 import logging
 import os
-import re
 import secrets
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -30,8 +28,8 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from . import (__version__, access, candidates, channels, decision_log,
-               embeddings, evidence, home, langs, lineage, preflight, promotion)
+from . import (candidates, channels, decision_log, embeddings, evidence,
+               langs, lineage, promotion)
 from .config_env import env_bool, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
 from .settings import content_lang
@@ -44,8 +42,7 @@ TOKEN_HEADER = "x-personagent-dashboard-token"
 TOKEN_FILE = "dashboard.token"
 ACTOR = "dashboard"
 _MAX_BODY = 4096
-_STARTED = time.time()
-# Newest first; the rest of a long list is counted, not sent every poll.
+# Newest first; the list of chats carries the full counts.
 LIST_LIMIT = 50
 
 _DATA_CSP = "default-src 'none'; frame-ancestors 'none'"
@@ -221,15 +218,6 @@ def _scrub(obj, secrets: list[str]):
     return obj
 
 
-_URL_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^\s/?#@]+@")
-_URL_QUERY = re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://[^\s?#]*)\?[^\s#)]*")
-
-
-def _redact_urls(text: str) -> str:
-    """A URL's user:password@ and ?query, where a credential may hide."""
-    return _URL_QUERY.sub(r"\1?***", _URL_USERINFO.sub(r"\1***@", str(text or "")))
-
-
 def _json(payload, agent, status: int = 200) -> Response:
     return _harden(JSONResponse(_scrub(payload, _secret_values(agent)),
                                 status_code=status))
@@ -272,7 +260,6 @@ class _Learning:
             self.ledger = agent.candidate_ledger
             self.log = agent.evidence_log
             self.policy = agent.promotion_policy
-            self.admins = agent._admins()
             lineage_file = agent.learning_dir / lineage.FILE_NAME
         else:
             self.ledger = candidates.CandidateLedger(
@@ -280,7 +267,6 @@ class _Learning:
             self.log = evidence.EvidenceLog(
                 resolve_runtime_lang_file("evidence", "jsonl", self.lang))
             self.policy = promotion.Policy.from_env()
-            self.admins = access.identity_from_env().admins
             lineage_file = Path(self.log.path).parent / lineage.FILE_NAME
         # Read, never extended: scope comparisons need every known revision.
         self.lineage = lineage.PersonaLineage(lineage_file)
@@ -300,148 +286,6 @@ class _Learning:
         except OSError:
             return False
         return True
-
-
-# ----------------------------------------------------------------- status ---
-
-def _shown_path(path) -> str:
-    """A path under the user's home directory, written from ``~``."""
-    try:
-        return str(Path("~") / Path(path).resolve().relative_to(Path.home().resolve()))
-    except ValueError:
-        return str(path)
-
-
-def _persona_file(lang: str) -> tuple[str, str]:
-    configured = ROOT / os.getenv("PERSONA_FILE", "persona.txt")
-    if configured.is_file():
-        return str(configured), "file"
-    for example in (ROOT / "data" / f"persona.example.{lang}.txt",
-                    home.resource("data", f"persona.example.{lang}.txt")):
-        if example.is_file():
-            return str(example), "example"
-    return str(configured), "builtin"
-
-
-def _persona(agent, learning: _Learning) -> dict:
-    if agent is None:
-        return {"name": os.getenv("PERSONA_NAME", "").strip(), "file": "",
-                "source": "", "version": "", "hash": "", "revisions": 0}
-    path, source = _persona_file(agent.chat_lang)
-    version = agent.persona_version or ""
-    hashes = learning.lineage.hashes(version)
-    current = agent.persona_hash
-    return {
-        "name": agent.persona_name or "",
-        "file": _shown_path(path),
-        "source": source,
-        "version": version,
-        "hash": current,
-        # The running document counts even before its first learning turn
-        # records it in the lineage.
-        "revisions": len(hashes) + (0 if current in hashes else 1),
-    }
-
-
-def _models(agent) -> list[dict]:
-    if agent is None:
-        return []
-    fallback = agent.llm_fallback_model
-    roles = [("reply", agent.model), ("gate", agent.llm_judge_model),
-             ("dm", agent.llm_dm_model),
-             ("fallback", fallback if fallback != agent.model else ""),
-             ("react", agent.react_model if agent.react_learn_enabled else ""),
-             ("eval", agent.eval_model if agent.eval_enabled else ""),
-             ("evolve", agent.evolve_model if agent.evolve_auto_enabled else ""),
-             ("vision", agent.vision_model), ("embedding", agent.embedding_model)]
-    return [{"role": role, "name": str(name)} for role, name in roles if name]
-
-
-def _connectors(agent) -> list[dict]:
-    if agent is None:
-        return []
-    seen: dict[str, dict] = {}
-    store = agent.connector_handles
-    for key in store.keys():
-        record = store.get(key) or {}
-        cid = record.get("connector_id") or ""
-        entry = seen.setdefault(cid, {
-            "id": cid, "platforms": set(), "capabilities": set(),
-            "last_event": 0.0, "conversations": 0})
-        if record.get("platform"):
-            entry["platforms"].add(record["platform"])
-        entry["capabilities"].update(record.get("capabilities") or ())
-        entry["last_event"] = max(entry["last_event"],
-                                  float(record.get("updated_at") or 0.0))
-        entry["conversations"] += 1
-    # A connector that pulls the outbox but has not forwarded a message yet.
-    for cid in agent.outbox._last_pull:
-        seen.setdefault(cid, {"id": cid, "platforms": set(),
-                              "capabilities": set(), "last_event": 0.0,
-                              "conversations": 0})
-    out = []
-    for cid, entry in seen.items():
-        out.append({
-            "id": cid,
-            "platforms": sorted(entry["platforms"]),
-            "capabilities": sorted(entry["capabilities"]),
-            "last_event": entry["last_event"],
-            "conversations": entry["conversations"],
-            "pulling": bool(cid) and agent.outbox.live(cid),
-        })
-    out.sort(key=lambda c: -c["last_event"])
-    return out
-
-
-def _activity(agent) -> dict:
-    srv = _server()
-    out = {"received": False, "spoke": False, "refused": [],
-           "trigger_count": 0, "persona_name": "",
-           "connector_token": bool(srv.CONNECTOR_TOKEN)}
-    if agent is None:
-        return out
-    refused = []
-    for key in list(agent._refusals_logged)[-10:]:
-        conv, _, reason = str(key).partition("\x00")
-        refused.append({"conversation": conv, "reason": reason})
-    dm_spoke = any(turn.get("role") == "assistant"
-                   for turns in agent.dm_history.values() for turn in turns)
-    out.update({
-        "received": bool(any(agent.last_activity_at.values())
-                         or any(agent.last_dm_activity_at.values())
-                         or refused or decision_log.LOG.last_seen()),
-        "spoke": bool(any(agent.last_reply_at.values()) or dm_spoke),
-        "refused": refused,
-        "trigger_count": int(agent.chat_trigger_count),
-        "persona_name": agent.persona_name or "",
-    })
-    return out
-
-
-def status_payload(agent) -> dict:
-    learning = _Learning(agent)
-    if agent is None:
-        state = "off"
-    else:
-        state = "ready" if agent.enabled else "no_key"
-    findings = [{"level": f.level, "key": f.key, "detail": langs.term(_redact_urls(f.detail))}
-                for f in preflight.check_config()]
-    now = time.time()
-    return {
-        "version": __version__,
-        "now": now,
-        "uptime_s": max(0.0, now - _STARTED),
-        "home": _shown_path(ROOT),
-        "lang": learning.lang,
-        "agent": state,
-        "persona": _persona(agent, learning),
-        "models": _models(agent),
-        "connectors": _connectors(agent),
-        "outbox": bool(agent is not None and agent.connector_outbox_enabled),
-        "preflight": findings,
-        "activity": _activity(agent),
-        "cli": _cli(),
-    }
 
 
 # ---------------------------------------------------------- conversations ---
@@ -511,25 +355,6 @@ def _allowed_actions(state: str) -> list[str]:
             and not (name == "reject" and state == candidates.STATE_PROMOTED)]
 
 
-def _event_view(event: dict, cand: dict, policy) -> dict:
-    adj = event.get("adjudication") or {}
-    return {
-        "id": event.get("event_id", ""),
-        "ts": _epoch(event.get("ts")),
-        "kind": event.get("kind", ""),
-        "reaction_type": event.get("reaction_type", ""),
-        "strength": evidence.classify_strength(event),
-        "speaker": event.get("speaker_name") or event.get("speaker_id") or "",
-        "speaker_is_recipient": bool(event.get("speaker_id"))
-        and event.get("speaker_id") == event.get("recipient_id"),
-        "said": _clip(event.get("reaction_text"), 200),
-        "verdict": _clip(adj.get("reason"), 200),
-        "accepted": bool(adj.get("accept")),
-        "better": _clip(adj.get("better"), 300),
-        "counts": promotion.supports_candidate(event, cand, policy=policy),
-    }
-
-
 def _active_rivals(cand: dict, peers: list[dict], policy) -> list[dict]:
     """Other rewrites of the same reply already in use: one reply never has
     two active rewrites, so promoting `cand` must replace them."""
@@ -538,105 +363,25 @@ def _active_rivals(cand: dict, peers: list[dict], policy) -> list[dict]:
             and p.get("state") == candidates.STATE_PROMOTED]
 
 
-def _checklist(cand: dict, learning: _Learning, index: promotion.EvidenceIndex,
-               now: float) -> dict:
-    """Each promotion rule, passed or not, in the order `promotion.decide`
-    applies them; the verdict itself is `decide`'s."""
-    policy = learning.policy
-    linked = index.linked(cand)
-    related = index.related(cand)
-    peers = index.peers(cand)
-    decision = promotion.decide(cand, linked_events=linked, related_events=related,
-                                peers=peers, now=now, policy=policy,
-                                admin_ids=learning.admins)
-    max_age = policy.max_evidence_age_days * 86400.0
-    supporting, ids = [], set()
-    for ev in linked:
-        eid = ev.get("event_id")
-        if eid in ids or not promotion.supports_candidate(ev, cand, policy=policy):
-            continue
-        if max_age > 0 and now - promotion.epoch(ev.get("ts")) > max_age:
-            continue
-        ids.add(eid)
-        supporting.append(ev)
-    strong = [e for e in supporting
-              if evidence.classify_strength(e) == evidence.STRONG]
-    speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
-    admins = {evidence._text(a, 64) for a in learning.admins} - {""}
-    admin_spoke = bool(admins & speakers)
-    against = promotion.counter_evidence(cand, related, now=now, policy=policy)
-    conflicts = promotion.find_conflicts(cand, peers, policy=policy,
-                                         related_events=related)
-    can_be_strong = evidence.can_be_strong(str(cand.get("type") or ""))
-    speakers_ok = (not speakers or admin_spoke
-                   or len(speakers) >= policy.min_speakers)
-    rules = [
-        {"id": "auto", "ok": policy.auto_promote},
-        {"id": "no_disagreement", "ok": not against, "ids": against[:3]},
-        {"id": "no_conflict", "ok": not conflicts, "ids": conflicts[:3]},
-        {"id": "strong" if can_be_strong else "strong_impossible",
-         "ok": len(strong) >= policy.min_strong,
-         "have": len(strong), "need": policy.min_strong},
-        {"id": "events", "ok": len(supporting) >= policy.min_events,
-         "have": len(supporting), "need": policy.min_events,
-         "max_age_days": policy.max_evidence_age_days},
-        {"id": "speakers", "ok": speakers_ok, "have": len(speakers),
-         "need": policy.min_speakers, "admin": admin_spoke},
-        {"id": "same_chat", "ok": True, "on": policy.require_same_conversation},
-    ]
-    waiting = []
-    if not policy.auto_promote:
-        waiting.append("auto")
-    if against or conflicts or not can_be_strong:
-        waiting.append("admin")
-    else:
-        if len(strong) < policy.min_strong:
-            waiting.append("strong")
-        if len(supporting) < policy.min_events:
-            waiting.append("events")
-        if not speakers_ok:
-            waiting.append("speakers")
-    return {"rules": rules, "waiting_for": waiting,
-            "promote": decision.promote, "verdict": decision.reason}
-
-
-def _candidate_view(cand: dict, learning: _Learning, index: promotion.EvidenceIndex,
-                    now: float) -> dict:
-    by_id = index.by_id
+def _candidate_view(cand: dict, events: dict, in_use: dict, policy) -> dict:
+    """One candidate as the local page shows it; `personagent learned` has the rest."""
     actions = _allowed_actions(cand.get("state", ""))
-    rivals = (_active_rivals(cand, index.peers(cand), learning.policy)
-              if "promote" in actions else [])
-    if rivals:
+    if "promote" in actions and _active_rivals(
+            cand, in_use.get(str(cand.get("reply") or ""), []), policy):
         actions = ["replace" if a == "promote" else a for a in actions]
-    payload = cand.get("payload") or {}
-    context = payload.get("context") or []
-    view = {
+    linked = sorted((events[eid] for eid in cand.get("evidence") or [] if eid in events),
+                    key=lambda ev: _epoch(ev.get("ts")))
+    return {
         "id": cand.get("candidate_id", ""),
         "type": cand.get("type", ""),
-        "state": cand.get("state", ""),
         "created": _epoch(cand.get("created_at")),
         "reply": _clip(cand.get("reply"), 1000),
         "better": _clip(cand.get("better"), 1000),
-        "lesson": _clip(payload.get("lesson"), 300),
-        "context": [_clip(line, 200) for line in context[-4:]],
-        "history": [{"state": h.get("state", ""), "ts": _epoch(h.get("ts")),
-                     "actor": h.get("actor", ""), "reason": _clip(h.get("reason"), 300)}
-                    for h in cand.get("history") or []],
-        "evidence": sorted(
-            (_event_view(by_id[eid], cand, learning.policy)
-             for eid in cand.get("evidence") or [] if eid in by_id),
-            key=lambda ev: ev["ts"]),
-        "missing_evidence": sum(1 for eid in cand.get("evidence") or []
-                                if eid not in by_id),
+        "lesson": _clip((cand.get("payload") or {}).get("lesson"), 300),
+        "evidence": [{"speaker": ev.get("speaker_name") or ev.get("speaker_id") or ""}
+                     for ev in linked],
         "actions": actions,
-        "replaces": [{"id": r.get("candidate_id", ""), "better": _clip(r.get("better"), 300)}
-                     for r in rivals],
-        "superseded_by": cand.get("superseded_by", ""),
-        "supersedes": cand.get("supersedes", ""),
     }
-    if cand.get("state") == candidates.STATE_PROPOSED:
-        view["checklist"] = _checklist(cand, learning, index, now)
-    return view
 
 
 def _decision_view(row: dict) -> dict:
@@ -649,25 +394,31 @@ def _decision_view(row: dict) -> dict:
             "answered": row.get("answered", ""), "sender": row.get("sender", "")}
 
 
+_GROUPS = {candidates.STATE_PROPOSED: "pending", candidates.STATE_PROMOTED: "learned"}
+
+
 def conversation_payload(agent, conv_id: str) -> dict:
     learning = _Learning(agent)
     learning_key = channels.learning_key(conv_id)
-    peers = learning.ledger.all()
-    index = promotion.EvidenceIndex(learning.log.all(), peers)
-    now = time.time()
-    mine = [c for c in peers
+    rows = learning.ledger.all()
+    mine = [c for c in rows
             if str((c.get("scope") or {}).get("conv_id") or "") == learning_key]
     mine.sort(key=lambda c: str(c.get("created_at") or ""), reverse=True)
-    groups = {"pending": [], "learned": [], "past": []}
-    totals = dict.fromkeys(groups, 0)
+    shown: dict[str, list[dict]] = {"pending": [], "learned": []}
     for cand in mine:
-        state = cand.get("state")
-        group = ("pending" if state == candidates.STATE_PROPOSED
-                 else "learned" if state == candidates.STATE_PROMOTED else "past")
-        totals[group] += 1
-        if len(groups[group]) < LIST_LIMIT:
-            groups[group].append(_candidate_view(cand, learning, index, now))
-    memories, core, counter, trigger = [], "", 0, 0
+        group = _GROUPS.get(cand.get("state"))
+        if group and len(shown[group]) < LIST_LIMIT:
+            shown[group].append(cand)
+    wanted = {eid for group in shown.values() for cand in group
+              for eid in cand.get("evidence") or []}
+    events = ({e.get("event_id"): e for e in learning.log.many(wanted)}
+              if wanted else {})
+    # Only a rewrite in use can stand in a pending one's way.
+    in_use: dict[str, list[dict]] = {}
+    for cand in rows if shown["pending"] else ():
+        if cand.get("state") == candidates.STATE_PROMOTED:
+            in_use.setdefault(str(cand.get("reply") or ""), []).append(cand)
+    memories, core = [], ""
     if agent is not None:
         kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
         # What its prompt also reads, so the page shows all it knows here.
@@ -676,23 +427,18 @@ def conversation_payload(agent, conv_id: str) -> dict:
             by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
             memories.append({"text": _clip(item.get("text"), 500),
                              "time": _epoch(item.get("time")), "by": by,
-                             "about": item.get("user_name") or "",
-                             "auto": bool(item.get("auto")), "conv": where,
+                             "about": item.get("user_name") or "", "conv": where,
                              "id": embeddings.text_key(item["text"])})
         core = _clip(agent.core_memory.get(conv_id, ""), 600)
-        counter = int(agent.counters.get(conv_id, 0))
-        trigger = int(agent.chat_trigger_count)
     return {
         "id": conv_id,
         "platform": channels.platform_of(conv_id),
         "kind": "dm" if channels.is_dm(conv_id) else "group",
-        "counter": counter,
-        "trigger_count": trigger,
         "decisions": [_decision_view(row) for row in decision_log.LOG.recent(conv_id)],
         "memories": memories,
         "core_note": core,
-        **groups,
-        "totals": totals,
+        **{group: [_candidate_view(c, events, in_use, learning.policy) for c in cands]
+           for group, cands in shown.items()},
     }
 
 
@@ -775,15 +521,6 @@ def _pointer() -> str:
 @router.get("/", include_in_schema=False)
 async def dashboard_pointer():
     return _harden(PlainTextResponse(_pointer()))
-
-
-@router.get("/api/dashboard/status", include_in_schema=False)
-async def dashboard_status(request: Request):
-    refused = _check(request)
-    if refused is not None:
-        return refused
-    agent = _server().agent
-    return _json(status_payload(agent), agent)
 
 
 @router.get("/api/dashboard/conversations", include_in_schema=False)

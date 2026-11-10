@@ -1,6 +1,7 @@
 """`personagent init` / `connect`: the questions, the files they write, the key probe."""
 from __future__ import annotations
 
+import builtins
 import contextlib
 import hashlib
 import io
@@ -711,3 +712,246 @@ def test_a_base_url_without_its_scheme_is_asked_again(monkeypatch) -> None:
           values["LLM_BASE_URL"] == "https://api.example.com", repr(values))
     with pytest.raises(SystemExit):
         sw.main(["--no-input", "--provider", "other", "--base-url", "api.example.com"])
+
+
+# ---------------------------------------------------------------------------
+# Flags typed at a terminal
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def at_a_terminal(monkeypatch, tmp_path) -> Path:
+    """`init` run by a person: a terminal on stdin, and a home of its own."""
+    monkeypatch.setattr(sw.langs, "interactive", lambda: True)
+    # At a terminal a key is read hidden; the script answers that too.
+    monkeypatch.setattr(sw.getpass, "getpass", lambda prompt="": builtins.input(prompt))
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    return tmp_path
+
+
+def _asked(script: Script, *needles: str) -> list[str]:
+    return [p for p in script.prompts if any(n in p for n in needles)]
+
+
+def test_flags_at_a_terminal_answer_their_questions(monkeypatch, at_a_terminal, capsys) -> None:
+    home = at_a_terminal
+    monkeypatch.setenv("MY_KEY", "sk-from-env-123456")
+    script = Script([("Connect to AstrBot", "n"), ("Chat with the bot", "n")])
+    calls = _wire(monkeypatch, script)
+    code = sw.main(["--provider", "siliconflow", "--key-env", "MY_KEY", "--name", "Mika",
+                    "--lang", "en", "--persona", "bookworm"])
+    out = capsys.readouterr().out
+    get = lambda key: sw.env_get(home / ".env", key)  # noqa: E731
+    check("flags: the wizard finished", code == 0)
+    check("flags: --provider chose the service",
+          (get("LLM_BASE_URL"), get("LLM_MODEL"))
+          == ("https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3.2"))
+    check("flags: --key-env gave the key, and it was tested",
+          get("LLM_API_KEY") == "sk-from-env-123456"
+          and ("probe", "https://api.siliconflow.cn/v1", "sk-from-env-123456",
+               "deepseek-ai/DeepSeek-V3.2") in calls, repr(calls))
+    check("flags: --name and --lang", (get("PERSONA_NAME"), get("AGENT_LANG")) == ("Mika", "en"))
+    persona = (home / "persona.txt").read_text(encoding="utf-8")
+    check("flags: --persona chose the character",
+          persona.startswith("Your name is Mika.") and "reader" in persona, persona)
+    answered = _asked(script, "Choose / 选择", "Service", "API key", "Bot name", "Character")
+    check("flags: no question a flag answered is asked", not answered, "\n".join(script.prompts))
+    check("flags: the model, which no flag gave, is still asked",
+          len(_asked(script, "Model")) == 1, "\n".join(script.prompts))
+    for flag in ("--provider", "--key-env MY_KEY", "--name", "--lang", "--persona"):
+        check(f"flags: says what {flag} answered", f"({flag})" in out, out)
+    check("flags: the answers themselves are shown",
+          all(said in out for said in ("SiliconFlow", "Mika", "English", "Bookworm", "sk-…3456")), out)
+    check("flags: the key is never printed", "sk-from-env-123456" not in out)
+
+
+def test_an_address_flag_names_the_service_and_a_typed_name_stays(monkeypatch, at_a_terminal,
+                                                                    capsys) -> None:
+    home = at_a_terminal
+    script = Script([("Choose / 选择", "1"), ("API key (paste", "sk-test-1234567890"),
+                     ("Connect to AstrBot", "n"), ("Chat with the bot", "n")])
+    calls = _wire(monkeypatch, script)
+    sw.main(["--base-url", "https://llm.example.com/v1", "--model", "my-model",
+             "--name", "Nova", "--persona", "claude"])
+    out = capsys.readouterr().out
+    check("flags: --base-url and --model reach the probe and the file",
+          ("probe", "https://llm.example.com/v1", "sk-test-1234567890", "my-model") in calls
+          and sw.env_get(home / ".env", "LLM_MODEL") == "my-model", repr(calls))
+    check("flags: neither the service, the address nor the model is asked",
+          not _asked(script, "Service", "Base URL", "Model"), "\n".join(script.prompts))
+    check("flags: what they answered is shown",
+          "(--base-url)" in out and "my-model (--model)" in out, out)
+    check("flags: the questions no flag answered are asked",
+          len(_asked(script, "Choose / 选择")) == 1 and len(_asked(script, "API key (paste")) == 1,
+          "\n".join(script.prompts))
+    check("flags: a name given as a flag does not follow the character",
+          sw.env_get(home / ".env", "PERSONA_NAME") == "Nova"
+          and (home / "persona.txt").read_text(encoding="utf-8").startswith("Your name is Nova."))
+
+
+def test_a_failed_probe_asks_again_with_the_flags_as_defaults(monkeypatch, at_a_terminal) -> None:
+    home = at_a_terminal
+    monkeypatch.setenv("MY_KEY", "sk-wrong-12345678")
+    outcomes = [401, 200]
+    script = Script([("Choose / 选择", "1"), ("try again", "y"), ("Enter keeps", "sk-right-12345678"),
+                     ("Connect to AstrBot", "n"), ("Chat with the bot", "n")])
+    _wire(monkeypatch, script)
+    keys: list = []
+
+    def probe(base, key, model, timeout=30):
+        keys.append((base, key))
+        return sw.Probe(sw.completions_url(base), outcomes.pop(0))
+
+    monkeypatch.setattr(sw, "probe_key", probe)
+    with contextlib.redirect_stdout(io.StringIO()):
+        sw.main(["--provider", "deepseek", "--key-env", "MY_KEY"])
+    deepseek = sw.PROVIDER_KEYS.index("deepseek") + 1
+    check("retry: the flag's service is the default of the question now asked",
+          _asked(script, "Service") == [f"  Service [{deepseek}]: "], "\n".join(script.prompts))
+    check("retry: the flag's key was tried, then the typed one",
+          keys == [("https://api.deepseek.com", "sk-wrong-12345678"),
+                   ("https://api.deepseek.com", "sk-right-12345678")], repr(keys))
+    check("retry: the typed key is the one saved",
+          sw.env_get(home / ".env", "LLM_API_KEY") == "sk-right-12345678")
+
+
+def test_a_language_flag_wins_over_the_saved_language(monkeypatch, at_a_terminal, capsys) -> None:
+    home = at_a_terminal
+    (home / ".env").write_text(
+        "LLM_API_KEY=sk-test-abcd\nLLM_BASE_URL=https://api.openai.com/v1\n"
+        "LLM_MODEL=gpt-6-luna\nPERSONA_NAME=Mika\nAGENT_LANG=zh\n", encoding="utf-8")
+    (home / "persona.txt").write_text("My own character.\n", encoding="utf-8")
+    script = Script([("[Y/n]", "n"), ("[y/N]", "n")])
+    _wire(monkeypatch, script)
+    sw.main(["--lang", "en", "--persona", "gamer"])
+    out = capsys.readouterr().out
+    check("rerun: --lang replaces the saved language",
+          sw.env_get(home / ".env", "AGENT_LANG") == "en" and "Reconfigure" in out, out)
+    check("rerun: the language is not asked", not _asked(script, "Choose / 选择"))
+    check("rerun: an edited persona.txt is kept, and --persona is told why",
+          (home / "persona.txt").read_text(encoding="utf-8") == "My own character.\n"
+          and "left as it is" in out, out)
+
+
+@pytest.mark.parametrize("flags, why", [
+    (["--key-env", "NO_SUCH_VARIABLE_SET"], "that environment variable is empty"),
+    (["--provider", "other", "--base-url", "llm.example.com"], "--base-url needs https://")])
+def test_a_flag_that_cannot_be_used_stops_before_the_first_question(monkeypatch, at_a_terminal,
+                                                                     flags, why) -> None:
+    monkeypatch.setenv("AGENT_LANG", "en")
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("asked a question"))
+    with pytest.raises(SystemExit) as stop:
+        sw.main(flags)
+    check("refused in words", why in str(stop.value.code), repr(stop.value.code))
+    check("nothing was written", not (at_a_terminal / ".env").exists())
+
+
+# ---------------------------------------------------------------------------
+# One place for each shared answer
+# ---------------------------------------------------------------------------
+
+def test_uvx_is_recognised_in_one_place(monkeypatch, tmp_path) -> None:
+    from persona_agent import coding, updates
+
+    monkeypatch.delenv("AGENT_HOME", raising=False)
+    monkeypatch.setattr(homes, "is_checkout", lambda path=None: False)
+    monkeypatch.setattr(homes, "default_home", lambda: tmp_path)
+    launcher = sw.Launcher(python="python", home=tmp_path)
+    # A folder that merely starts with "archive-v" is not uv's cache.
+    monkeypatch.setattr(sw.sys, "prefix", str(tmp_path / "Archive-Videos" / ".venv"))
+    check("a look-alike folder: not uvx in the next steps",
+          not launcher.shown("demo")[0].startswith("uvx"), repr(launcher.shown("demo")))
+    check("a look-alike folder: not uvx for the coding agents", coding._launcher()[0] != "uvx")
+    monkeypatch.setattr(sw.sys, "prefix", "/home/a/.cache/uv/archive-v0/x")
+    check("uv's cache: uvx for the coding agents", coding._launcher() == ["uvx", "personagent"])
+
+    monkeypatch.setattr(sw.sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(sw.langs, "under_uvx", lambda: True)
+    check("the next steps ask it", launcher.shown("demo") == ["uvx personagent demo"])
+    check("the coding agents' launcher asks it", coding._launcher() == ["uvx", "personagent"])
+    check("the update notice asks it", updates.how_to_update() == ("uvx personagent@latest", True))
+
+
+def test_terminal_columns_are_counted_in_one_place(monkeypatch, capsys) -> None:
+    from persona_agent import chat, doctor
+
+    check("CJK takes two columns", sw.langs.width("中a文") == 5 and sw.langs.width("abc") == 3)
+    monkeypatch.setattr(sw.langs, "width", lambda text: 2)
+    check("doctor's table asks it", doctor._pad("中文字", 5) == "中文字" + " " * 3)
+    sw._header("中文字")
+    check("the wizard's headers ask it", capsys.readouterr().out == "\n-- 中文字 " + "-" * 58 + "\n")
+
+    class Session:
+        t = {"commands": [("/命令", "does it")]}
+        name = "Nova"
+
+    chat.ChatSession.commands(Session())
+    check("the trial's command list asks it",
+          capsys.readouterr().out == "\n  /命令" + " " * 14 + "does it\n\n")
+
+
+#: What each adapter's fields were asked as before connections.py named them.
+ADAPTER_PROMPTS = {
+    "qq_official": {"appid": "QQ bot AppID", "secret": "QQ bot AppSecret"},
+    "telegram": {"telegram_token": "Telegram bot token (from @BotFather)"},
+    "discord": {"discord_token": "Discord bot token (Developer Portal > Bot)"},
+    "slack": {"bot_token": "Slack bot token (xoxb-...)",
+              "app_token": "Slack app-level token (xapp-..., Socket Mode)"},
+    "kook": {"kook_bot_token": "KOOK bot token"},
+    "lark": {"app_id": "Lark / Feishu app id", "app_secret": "Lark / Feishu app secret"},
+}
+ADAPTER_LABELS = {"qq_official": ("QQ official bot", "QQ 官方机器人"),
+                  "telegram": ("Telegram", "Telegram"), "discord": ("Discord", "Discord"),
+                  "slack": ("Slack", "Slack"), "kook": ("KOOK", "KOOK"),
+                  "lark": ("Lark / Feishu", "Lark / Feishu")}
+
+
+def test_the_astrbot_adapters_are_described_once() -> None:
+    import inspect
+
+    from persona_agent import connections as conn
+
+    check("the same six adapters", list(sw.PLATFORMS) == list(ADAPTER_PROMPTS))
+    for kind, fields in sw.PLATFORMS.items():
+        spec = conn.platform(kind)
+        check(f"{kind}: its fields are the catalog's, in the catalog's order",
+              [key for key, _ in fields] == [f.key for f in spec.fields])
+        check(f"{kind}: each field is asked as before",
+              {key: prompt[0] for key, prompt in fields} == ADAPTER_PROMPTS[kind], repr(fields))
+        for lang, label in zip(("en", "zh"), ADAPTER_LABELS[kind]):
+            sw.set_lang(lang)
+            check(f"{kind}: named as before in {lang}", sw.platform_label(kind) == label,
+                  sw.platform_label(kind))
+        check(f"{kind}: what is typed hidden is the catalog's decision too",
+              {f.key: f.secret for f in spec.fields}
+              == {key: "token" in key or "secret" in key for key, _ in fields})
+    check("no second table of names", not hasattr(sw, "PLATFORM_LABELS"))
+    # --token and its siblings map onto the keys once; nothing else spells them.
+    source = inspect.getsource(sw)
+    for key in sorted({key for fields in ADAPTER_PROMPTS.values() for key in fields}):
+        check(f"the wizard spells {key} once", source.count(f'"{key}"') == 1,
+              str(source.count(f'"{key}"')))
+
+
+def test_the_console_is_prepared_once_by_the_command(monkeypatch, tmp_path) -> None:
+    from persona_agent import cli
+
+    class Stream(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.reconfigured: list[dict] = []
+
+        def reconfigure(self, **how) -> None:
+            self.reconfigured.append(how)
+
+    out, err = Stream(), Stream()
+    monkeypatch.setattr("sys.stdout", out)
+    monkeypatch.setattr("sys.stderr", err)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    code = cli.main(["init", "--no-input", "--lang", "en"])
+    check("init ran", code == 0 and (tmp_path / ".env").is_file(), out.getvalue())
+    once = [{"encoding": "utf-8", "errors": "replace"}]
+    check("the command prepares each stream, and init does not repeat it",
+          out.reconfigured == once and err.reconfigured == once,
+          repr((out.reconfigured, err.reconfigured)))
