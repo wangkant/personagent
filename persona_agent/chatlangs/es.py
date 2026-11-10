@@ -63,7 +63,7 @@ SPEC = Spec(
     learned_text={
         "head": ("notas: {memories}, respuestas aprendidas: {examples}, "
                  "correcciones: {fixes}, esperando a otra persona: {voice}, "
-                 "esperando al admin: {admin}"),
+                 "pendientes de mi propia decisión: {admin}"),
         "score": ", autoevaluación reciente: {score}/5",
         "pair": "antes: {was}, ahora: {better}",
         "someone_else": "alguien en otro chat",

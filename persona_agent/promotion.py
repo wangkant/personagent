@@ -2,9 +2,10 @@
 
 Promotion needs ``MIN_EVENTS`` compatible events (same persona, language and
 conversation), ``MIN_STRONG`` of them strong, and no compatible evidence
-pointing the other way; contradictions are left for a human. Weak evidence
-never promotes at any quantity. Also ``retract_example``, how a human
-disagreement pulls a row out of the hand-approved example pool.
+pointing the other way. Weak evidence never promotes at any quantity. Holds
+no further reaction can clear (contradictions, conflicts, examples) go to the
+character's own judgement (``needs_character``). Also ``retract_example``, how
+a human disagreement pulls a row out of the legacy example pool.
 
 Pure logic: no clock reads, no LLM. Callers pass `now`.
 """
@@ -24,14 +25,14 @@ MIN_EVENTS = 2
 MIN_STRONG = 1
 # Distinct people, admin exempt. 1 by default: one person's correction then
 # acceptance is how a real clarification looks. Set PROMOTE_MIN_SPEAKERS=2
-# where strangers should not teach unaided; blocked candidates wait for a human.
+# where strangers should not teach unaided; such candidates keep observing.
 MIN_SPEAKERS = 1
 # Older evidence stops counting. 0 disables the window in both directions,
 # so stale rejections keep vetoing too.
 MAX_EVIDENCE_AGE_DAYS = 30.0
 # Cross-room combination would let one loud teacher reach the threshold everywhere.
 REQUIRE_SAME_CONVERSATION = True
-# Master switch: false leaves every candidate for human review.
+# Master switch: false applies nothing new, by the policy or the character.
 AUTO_PROMOTE = True
 
 
@@ -72,6 +73,22 @@ class Policy:
 DEFAULT_POLICY = Policy()
 
 
+# Which check stopped a candidate (Decision.gate), in decide's order.
+GATE_OFF = "off"
+GATE_STATE = "state"
+GATE_AGAINST = "against"
+GATE_CONFLICT = "conflict"
+GATE_PERSON = "person"
+GATE_STRONG = "strong"
+GATE_EVENTS = "events"
+GATE_SPEAKERS = "speakers"
+GATE_OK = "ok"
+GATES = (GATE_OFF, GATE_STATE, GATE_AGAINST, GATE_CONFLICT, GATE_PERSON,
+         GATE_STRONG, GATE_EVENTS, GATE_SPEAKERS, GATE_OK)
+# The holds no further reaction clears: the character judges these.
+CHARACTER_GATES = frozenset({GATE_AGAINST, GATE_CONFLICT, GATE_PERSON})
+
+
 @dataclass(frozen=True)
 class Decision:
     """Why a candidate was or was not promoted — logged and auditable."""
@@ -81,6 +98,13 @@ class Decision:
     supporting: int = 0
     strong: int = 0
     blocked_by: str = ""
+    gate: str = ""
+    # Every check other than `gate` passes (the person gate stands in for strong).
+    otherwise_ready: bool = False
+    # A person the rewrite concerns refused it: never adoptable.
+    refused: bool = False
+    # Accepted positive reactions from people (not self-evaluation).
+    person_support: int = 0
 
     def __bool__(self) -> bool:
         return self.promote
@@ -335,9 +359,11 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     """Should `cand` be promoted automatically, right now. `related_events`
     are searched for contradictions, `peers` for conflicting proposals."""
     if not policy.auto_promote:
-        return Decision(False, "automatic promotion disabled (PROMOTE_AUTO_ENABLED)")
+        return Decision(False, "automatic promotion disabled (PROMOTE_AUTO_ENABLED)",
+                        gate=GATE_OFF)
     if cand.get("state") != candidates.STATE_PROPOSED:
-        return Decision(False, f"state is {cand.get('state')}, not proposed")
+        return Decision(False, f"state is {cand.get('state')}, not proposed",
+                        gate=GATE_STATE)
 
     ctype = str(cand.get("type") or "")
     max_age = policy.max_evidence_age_days * 86400.0
@@ -359,16 +385,41 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     # Re-derived, not read: `strength` is outside the event id, so a hand edit
     # could change it without breaking the row.
     strong = [e for e in supporting if anchors(e, cand)]
+    # Distinct people, not events; the admin may teach alone.
+    speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
+    # Compared as stored: make_event cuts speaker_id at 64 characters.
+    admins = {evidence._text(o, 64) for o in admin_ids} - {""}
+    admin_spoke = bool(admins & speakers)
+    # No attribution at all must not veto: the event count decides.
+    speakers_ok = not (speakers and not admin_spoke
+                       and len(speakers) < policy.min_speakers)
+    strong_ok = len(strong) >= policy.min_strong
+    events_ok = len(supporting) >= policy.min_events
+    # Everything but against/conflict; a type that cannot be strong is the person gate's.
+    ready = (events_ok and speakers_ok
+             and (strong_ok or not evidence.can_be_strong(ctype)))
+    person_support = sum(
+        1 for e in supporting
+        if e.get("kind") == evidence.KIND_REACTION
+        and e.get("reaction_type") == "positive")
+    counts = dict(supporting=len(supporting), strong=len(strong),
+                  person_support=person_support)
+
     against = counter_evidence(cand, related_events, now=now, policy=policy)
-    if against:
-        return Decision(False, "compatible evidence disagrees — left for review",
-                        len(supporting), len(strong), ",".join(against[:3]))
     conflicting = find_conflicts(cand, peers, policy=policy,
                                  related_events=related_events)
+    if against:
+        return Decision(False, "compatible evidence disagrees — left for review",
+                        blocked_by=",".join(against[:3]), gate=GATE_AGAINST,
+                        otherwise_ready=ready,
+                        refused=_refused(cand, related_events, against,
+                                         supporting, admins),
+                        **counts)
     if conflicting:
         return Decision(False, "a conflicting candidate exists — left for review",
-                        len(supporting), len(strong), ",".join(conflicting[:3]))
-    if len(strong) < policy.min_strong:
+                        blocked_by=",".join(conflicting[:3]), gate=GATE_CONFLICT,
+                        otherwise_ready=ready, **counts)
+    if not strong_ok:
         # A type no event can make strong must not read like a reachable count.
         if not evidence.can_be_strong(ctype):
             return Decision(
@@ -376,33 +427,87 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
                 f"{ctype} is promotable only by a person: nothing that "
                 f"supports one classifies strong ({len(supporting)} "
                 f"supporting)",
-                len(supporting), len(strong))
+                gate=GATE_PERSON, otherwise_ready=ready, **counts)
         return Decision(
             False,
             f"{len(strong)}/{policy.min_strong} strong events "
             f"({len(supporting)} supporting)",
-            len(supporting), len(strong))
-    if len(supporting) < policy.min_events:
+            gate=GATE_STRONG, **counts)
+    if not events_ok:
         return Decision(
             False,
             f"{len(supporting)}/{policy.min_events} compatible events",
-            len(supporting), len(strong))
-    # Distinct people, not events; the admin may teach alone.
-    speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
-    # Compared as stored: make_event cuts speaker_id at 64 characters.
-    admins = {evidence._text(o, 64) for o in admin_ids} - {""}
-    admin_spoke = bool(admins & speakers)
-    # No attribution at all must not veto: the event count decides.
-    if speakers and not admin_spoke and len(speakers) < policy.min_speakers:
+            gate=GATE_EVENTS, **counts)
+    if not speakers_ok:
         return Decision(
             False,
             f"{len(speakers)}/{policy.min_speakers} distinct speakers "
             f"({len(supporting)} events, but corroboration means people)",
-            len(supporting), len(strong))
+            gate=GATE_SPEAKERS, **counts)
     return Decision(
         True,
         f"{len(supporting)} compatible events, {len(strong)} strong",
-        len(supporting), len(strong))
+        gate=GATE_OK, otherwise_ready=True, **counts)
+
+
+def _refused(cand: dict, related, against_ids, supporting, admins) -> bool:
+    """Did the person a rewrite concerns (or the admin) refuse it: the
+    recipient of the reply it said, or of the reply it replaces."""
+    better = str(cand.get("better") or "").strip()
+    if cand.get("type") != candidates.TYPE_PAIR or not better:
+        return False
+    against_ids = set(against_ids)
+    recipients = {str(e.get("recipient_id") or "") for e in supporting} - {""}
+    for ev in related or ():
+        if ev.get("event_id") not in against_ids:
+            continue
+        if str(ev.get("reply") or "").strip() != better:
+            continue
+        speaker = str(ev.get("speaker_id") or "")
+        if speaker and (evidence._same_person(ev) or speaker in recipients
+                        or speaker in admins):
+            return True
+    return False
+
+
+def needs_character(decision: Decision, cand: dict) -> bool:
+    """Is this hold one for the character to judge: a hold no reaction clears,
+    with every other threshold met; an example needs a person's approval
+    among its support, never self-evaluation alone."""
+    if decision.gate not in CHARACTER_GATES or not decision.otherwise_ready:
+        return False
+    if (cand.get("type") == candidates.TYPE_EXAMPLE
+            and decision.person_support < 1):
+        return False
+    return True
+
+
+def may_adopt(decision: Decision) -> bool:
+    """May the character's judgement put it in use: never over a refusal."""
+    return not decision.refused
+
+
+def conflict_group(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
+                   related_events=()) -> list[dict]:
+    """`cand` first, then each live rival `find_conflicts` names, so one
+    judgement chooses among them."""
+    rivals = find_conflicts(cand, peers, policy=policy,
+                            related_events=related_events)
+    by_id = {str(p.get("candidate_id") or ""): p for p in peers or ()}
+    return [cand] + [by_id[cid] for cid in rivals if cid in by_id]
+
+
+def disputes(cand: dict, linked_events) -> list[str]:
+    """Accepted objections, linked to a candidate in use, to the text it
+    teaches: a bystander's dispute for the character to judge."""
+    taught = str((cand.get("better") if cand.get("type") == candidates.TYPE_PAIR
+                  else cand.get("reply")) or "").strip()
+    if not taught:
+        return []
+    return [str(ev.get("event_id") or "") for ev in linked_events or ()
+            if ev.get("event_id")
+            and str(ev.get("reply") or "").strip() == taught
+            and evidence.opposes_rewrite(ev)]
 
 
 def retract_example(path: Path, reply: str) -> int:

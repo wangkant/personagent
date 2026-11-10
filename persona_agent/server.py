@@ -625,6 +625,7 @@ async def lifespan(app: FastAPI):
         _spawn(agent.loop_check_missed())
         _spawn(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLED
         _spawn(agent.loop_evolve())     # self-guards on EVOLVE_AUTO_ENABLED
+        _spawn(agent.loop_adoption())   # self-guards on PROMOTE_JUDGE_ENABLED
         _spawn(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():

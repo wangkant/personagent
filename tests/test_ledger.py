@@ -1133,12 +1133,37 @@ def test_the_live_projection_equals_a_cold_replay(tmp: Path) -> None:
     live.rollback(ids[3], ts=stamp(NOW), actor="admin", reason="undo")
     live.supersede(ids[4], ids[5], ts=stamp(NOW), actor="admin", reason="new")
     live.propose(pair(0))   # a re-proposal must add evidence, not reset state
+    # The character's rows: a review, decisions that name their judge, a restore.
+    judged = []
+    for i in range(6, 10):
+        cand = pair(i)
+        live.propose(cand)
+        judged.append(cand["candidate_id"])
+    live.review(ids[0], ts=stamp(NOW), reason="not clear yet",
+                seen=["ev0", "ev-extra"], peers=[ids[0]],
+                judge="adoption-judge/1", model="m")
+    live.promote(judged[0], ts=stamp(NOW), actor=candidates.ACTOR_CHARACTER,
+                 reason="fits", judge="adoption-judge/1", model="m")
+    live.reject(judged[1], ts=stamp(NOW), actor=candidates.ACTOR_CHARACTER,
+                reason="unkind", judge="adoption-judge/1", model="m")
+    live.restore(judged[1], ts=stamp(NOW), actor="dashboard", reason="local page")
+    live.supersede(judged[0], judged[2], ts=stamp(NOW),
+                   actor=candidates.ACTOR_CHARACTER, reason="better",
+                   judge="adoption-judge/1", model="m")
+    live.review(judged[3], ts=stamp(NOW), reason="first look", seen=["ev9"])
+    live.review(judged[3], ts=stamp(NOW + 1), reason="second look",
+                seen=["ev9", "ev10"])
 
     incremental = json.dumps(live.all(), sort_keys=True)
     replayed = json.dumps(candidates.CandidateLedger(path).all(), sort_keys=True)
     check("projection: advancing in place equals replaying the file",
           incremental == replayed,
           f"{len(incremental)} vs {len(replayed)} chars")
+    check("projection: the character's rows were all written",
+          live.get(judged[3])["review"]["reason"] == "second look"
+          and live.get(judged[1])["state"] == candidates.STATE_PROMOTED
+          and live.get(judged[2])["history"][-1]["judge"] == "adoption-judge/1",
+          json.dumps(live.get(judged[1])))
 
     # A SECOND WRITER must invalidate the stamp rather than be dropped. The
     # stamp is compared inside the append's own lock precisely so that this
@@ -1495,7 +1520,7 @@ async def test_the_operator_cannot_leave_two_live_rewrites(
     code, out = run("promote", second[:8])
     check("cli: a second live rewrite is refused", code == 1, out)
     check("cli: and the refusal names the command that replaces it",
-          f"personagent learned supersede {first[:12]} {second[:12]}" in out, out)
+          f"learned supersede {first[:12]} {second[:12]}" in out, out)
     ledger = candidates.CandidateLedger(a.candidate_ledger_file)
     check("cli: nothing changed", ledger.get(second)["state"] == "proposed"
           and [r["better"] for r in view_pairs(a)] == ["check the logs first"],
@@ -1504,3 +1529,118 @@ async def test_the_operator_cannot_leave_two_live_rewrites(
           run("supersede", first[:8], second[:8])[0] == 0
           and [r["better"] for r in view_pairs(a)]
           == ["logs first, then restart if clean"], str(view_pairs(a)))
+
+
+def _ledger_pair(i: int) -> dict:
+    scope = dict(lang="en", platform="qq", conv_id="g1", persona="B",
+                 persona_hash="h", persona_version="v1")
+    return candidates.make_candidate(
+        ctype=candidates.TYPE_PAIR, scope=scope, created_at=stamp(NOW),
+        evidence=[f"ev{i}"],
+        payload={"reply": f"reply {i}", "better": f"fix {i}", "mode": "called"})
+
+
+def test_the_character_keeps_observing_on_record(tmp: Path) -> None:
+    tmp.mkdir(parents=True, exist_ok=True)
+    path = tmp / "ledger.jsonl"
+    ledger = candidates.CandidateLedger(path)
+    cand = _ledger_pair(1)
+    ledger.propose(cand)
+    cid = cand["candidate_id"]
+    check("review: recorded on a proposed candidate",
+          ledger.review(cid, ts=stamp(NOW), reason="Only one person has spoken.",
+                        seen=["ev2", "ev1", "ev1"], peers=[cid],
+                        judge="adoption-judge/1", model="judge-m"))
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+    check("review: the row says who, why and on what evidence",
+          row == {"schema": candidates.SCHEMA, "kind": "review",
+                  "candidate_id": cid, "ts": stamp(NOW),
+                  "actor": candidates.ACTOR_CHARACTER, "verdict": "observe",
+                  "reason": "Only one person has spoken.", "seen": ["ev1", "ev2"],
+                  "peers": [cid], "judge": "adoption-judge/1", "model": "judge-m"},
+          json.dumps(row))
+    replayed = candidates.CandidateLedger(path).get(cid)
+    check("review: it changes no state and replays as the latest look",
+          replayed["state"] == candidates.STATE_PROPOSED
+          and replayed["history"] == []
+          and replayed["review"]["seen"] == ["ev1", "ev2"]
+          and replayed["review"]["actor"] == "character", json.dumps(replayed))
+    ledger.reject(cid, ts=stamp(NOW), actor="admin", reason="no")
+    check("review: nothing to observe once it is decided",
+          not ledger.review(cid, ts=stamp(NOW), reason="late")
+          and not ledger.review("missing", ts=stamp(NOW), reason="none"))
+
+    good = json.loads(path.read_text(encoding="utf-8").splitlines()[1])
+    bad = [dict(good, verdict="adopt"), dict(good, seen="ev1"),
+           dict(good, peers=[1]), dict(good, schema=1), dict(good, reason=7),
+           dict(good, model=3)]
+    lifecycle = {"schema": candidates.SCHEMA, "kind": "lifecycle",
+                 "candidate_id": cid, "state": "promoted", "evidence": [],
+                 "judge": ["not", "a", "string"]}
+    path.write_text("\n".join(json.dumps(r) for r in
+                              [cand, good, *bad, lifecycle]) + "\n",
+                    encoding="utf-8")
+    loaded = candidates.CandidateLedger(path)
+    check("review: malformed review rows are quarantined, the good one kept",
+          loaded.get(cid)["review"]["reason"] == "Only one person has spoken."
+          and loaded.get(cid)["state"] == candidates.STATE_PROPOSED
+          and loaded.health_metadata()["quarantined_rows"] == len(bad) + 1,
+          str(loaded.health_metadata()))
+
+
+def test_a_person_can_bring_back_only_what_the_character_discarded(
+        tmp: Path, monkeypatch, capsys) -> None:
+    tmp.mkdir(parents=True, exist_ok=True)
+    path = tmp / "ledger.jsonl"
+    ledger = candidates.CandidateLedger(path)
+    by_character, by_person, by_rule = _ledger_pair(1), _ledger_pair(2), _ledger_pair(3)
+    for c in (by_character, by_person, by_rule):
+        ledger.propose(c)
+    mine, theirs, rule = (c["candidate_id"] for c in (by_character, by_person, by_rule))
+    ledger.reject(mine, ts=stamp(NOW), actor=candidates.ACTOR_CHARACTER,
+                  reason="It would mock the person it was for.",
+                  judge="adoption-judge/1", model="m")
+    ledger.reject(theirs, ts=stamp(NOW), actor="dashboard", reason="local page")
+    ledger.reject(rule, ts=stamp(NOW), actor=candidates.ACTOR_AUTO,
+                  reason="no new reactions for 30 days")
+    check("restore: the character's discard names its judge",
+          ledger.get(mine)["history"][-1]["judge"] == "adoption-judge/1"
+          and ledger.get(mine)["history"][-1]["model"] == "m")
+    check("restore: only the character's discard is restorable",
+          candidates.restorable(ledger.get(mine))
+          and not candidates.restorable(ledger.get(theirs))
+          and not candidates.restorable(ledger.get(rule)))
+
+    for actor in (candidates.ACTOR_AUTO, candidates.ACTOR_CHARACTER, ""):
+        check(f"restore: no automatic actor brings it back ({actor!r})",
+              not ledger.restore(mine, ts=stamp(NOW), actor=actor))
+    check("restore: a person's discard stays final",
+          not ledger.restore(theirs, ts=stamp(NOW), actor="admin")
+          and ledger.get(theirs)["state"] == candidates.STATE_REJECTED)
+    check("restore: the transition table is not wider for anyone",
+          not ledger.promote(mine, ts=stamp(NOW), actor="admin")
+          and not ledger.promote(theirs, ts=stamp(NOW), actor="auto")
+          and candidates.STATE_REJECTED
+          not in candidates._ALLOWED_FROM[candidates.STATE_PROMOTED])
+
+    from persona_agent import ledger_admin
+    monkeypatch.setattr(ledger_admin, "_paths", lambda lang: {
+        "evidence": tmp / "evidence.jsonl", "ledger": path,
+        "examples_view": tmp / "promoted.examples.jsonl",
+        "feedback_view": tmp / "promoted.feedback.jsonl"})
+    code = ledger_admin.main(["promote", mine[:8]], prog="personagent learned")
+    capsys.readouterr()
+    check("restore: the terminal's promote does not revive a discard either",
+          code == 1 and candidates.CandidateLedger(path).get(mine)["state"]
+          == candidates.STATE_REJECTED)
+
+    check("restore: a person brings back the character's discard",
+          ledger.restore(mine, ts=stamp(NOW), actor="dashboard", reason="local page"))
+    back = candidates.CandidateLedger(path).get(mine)
+    check("restore: it is in use, on record as the person's act",
+          back["state"] == candidates.STATE_PROMOTED
+          and back["history"][-1] == {"state": "promoted", "ts": stamp(NOW),
+                                      "actor": "dashboard", "reason": "local page"},
+          json.dumps(back))
+    check("restore: once, not twice", not ledger.restore(
+        mine, ts=stamp(NOW), actor="dashboard"))

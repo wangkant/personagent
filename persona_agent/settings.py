@@ -264,6 +264,23 @@ class AgentSettings:
         lambda env: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env))
     #: When evidence may grant a candidate authority.
     promotion_policy: promotion.Policy = _env(promotion.Policy.from_env)
+    #: The character decides the holds no further reaction can clear
+    #: (disagreeing evidence, rival rewrites, liked replies, disputes).
+    promote_judge_enabled: bool = _env(
+        lambda env: env_bool("PROMOTE_JUDGE_ENABLED", True, env=env))
+    #: Blank resolves to ``react_model``.
+    promote_judge_model: str = _env(
+        lambda env: env_str("PROMOTE_JUDGE_MODEL", "", strip=True, env=env))
+    promote_judge_interval_s: float = _env(
+        lambda env: env_float("PROMOTE_JUDGE_INTERVAL_S", 900.0, minimum=60.0,
+                              env=env))
+    #: Judgements per interval, shared by the sweep and the reaction triggers.
+    promote_judge_batch: int = _env(
+        lambda env: env_int("PROMOTE_JUDGE_BATCH", 5, minimum=1, env=env))
+    #: A waiting item with no new reaction for this long is set aside; 0 = never.
+    promote_observe_max_days: float = _env(
+        lambda env: env_float("PROMOTE_OBSERVE_MAX_DAYS", 30.0, minimum=0.0,
+                              env=env))
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -294,6 +311,7 @@ class AgentSettings:
         self.eval_model = self.eval_model or self.llm_fallback_model or self.model
         self.evolve_model = self.evolve_model or self.eval_model
         self.react_model = self.react_model or self.llm_judge_model
+        self.promote_judge_model = self.promote_judge_model or self.react_model
         # Canonical ids: "qq:1" and a native "aiocqhttp:1" both read as "1".
         natives = self.connector_qq_platforms = access.split_ids(
             self.connector_qq_platforms)

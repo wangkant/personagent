@@ -46,7 +46,7 @@ from pathlib import Path
 import httpx
 
 from . import langs
-from persona_agent import __version__, channels, paths
+from persona_agent import __version__, candidates, channels, paths, promotion
 from persona_agent.agent import Agent
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
 from persona_agent.endpoints import chat_completions_url
@@ -71,7 +71,9 @@ POLICY_NOTE = (
     "one of them strong: a correction with a better line from the person the "
     "reply was for, or a retry that person accepted. This eval runs the "
     "automatic policy as configured and promotes nothing itself; under a "
-    "stricter policy than the default, every case is expected to be held.")
+    "stricter policy than the default, every case is expected to be held. "
+    "Holds no further reaction can clear are the character's own decision; "
+    "`character_decides` marks a held item that reached one.")
 NOISE_NOTE = (
     "Without a promotion the probe prompt is unchanged, so flips in the "
     "not_promoted row are sampling noise.")
@@ -912,8 +914,15 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
                 "reply": cand.get("reply"), "better": cand.get("better"),
                 "lesson": (cand.get("payload") or {}).get("lesson", "")}
         if cand.get("state") == "proposed":
-            item["held_because"] = agent._decide_promotion(
-                cand["candidate_id"]).reason
+            decision = agent._decide_promotion(cand["candidate_id"])
+            item["held_because"] = decision.reason
+            item["held_gate"] = decision.gate
+            item["character_decides"] = promotion.needs_character(decision, cand)
+        if (cand.get("review") or {}).get("reason"):
+            item["observing_because"] = cand["review"]["reason"]
+        last = (cand.get("history") or [{}])[-1]
+        if last.get("actor") == candidates.ACTOR_CHARACTER:
+            item["decided_by_character"] = last.get("reason", "")
         row["candidates"].append(item)
     row["promoted"] = any(c["state"] == "promoted" for c in row["candidates"])
     if row["expect"]:

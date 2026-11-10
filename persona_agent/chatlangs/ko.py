@@ -80,7 +80,7 @@ SPEC = Spec(
     # 의 and labels, so no particle has to agree with a name or a number.
     learned_text={
         "head": ("기억 {memories}개, 배운 답변 {examples}개, 고친 것 {fixes}개, "
-                 "두 번째 확인 대기 {voice}개, 관리자 확인 대기 {admin}개"),
+                 "두 번째 확인 대기 {voice}개, 스스로 판단 중 {admin}개"),
         "score": ", 최근 자체 평가 {score}/5",
         "pair": "원래: {was}, 고친 거: {better}",
         "someone_else": "다른 채팅방의 누군가",

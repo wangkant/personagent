@@ -223,6 +223,11 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # Learning writes the ledger and promoted views, never examples_file
         # or feedback_file (see learning.py).
         self.promotion_policy = s.promotion_policy
+        self.promote_judge_enabled = s.promote_judge_enabled
+        self.promote_judge_model = s.promote_judge_model
+        self.promote_judge_interval_s = s.promote_judge_interval_s
+        self.promote_judge_batch = s.promote_judge_batch
+        self.promote_observe_max_days = s.promote_observe_max_days
 
     def _init_runtime_state(self) -> None:
         """The empty per-process state: locks, windows, caches, de-dup rings.
@@ -237,6 +242,12 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._http_pool: dict = {}
         # Strong refs: asyncio only weak-refs running tasks.
         self._bg_tasks: set[asyncio.Task] = set()
+        # The character's judgements (learning.py): backoff per item, items in
+        # flight, recent call times, one lock per ledger language.
+        self._adoption_retry: dict[str, tuple[int, float]] = {}
+        self._adoption_inflight: set[str] = set()
+        self._adoption_calls: list[float] = []
+        self._adoption_locks: dict[str, asyncio.Lock] = {}
 
         # See _throttle_send; the gate lock never holds another lock.
         self._send_gate = asyncio.Lock()

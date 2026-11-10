@@ -1,7 +1,9 @@
-"""The learning loops: self-eval, reaction adjudication, evolution.
+"""The learning loops: self-eval, reaction adjudication, evolution, and the
+character's own judgement.
 
 Every automatic signal is recorded (evidence.py), proposed (candidates.py)
-and promoted only if the policy allows (promotion.py)."""
+and promoted only if the policy allows (promotion.py). What no further
+reaction can settle, the character decides itself (adoption.py)."""
 
 from __future__ import annotations
 
@@ -9,16 +11,66 @@ import asyncio
 import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 
-from . import access, candidates, channels, evidence, evolution, promotion, reactions
-from .textproc import (_fence_user_data, _truncate_framed,
+from . import (access, adoption, candidates, channels, evidence, evolution,
+               promotion, reactions)
+from .textproc import (TextProcessing, _fence_user_data, _truncate_framed,
                        salvage_json_object)
 from .storage import append_jsonl_rotating
 
 logger = logging.getLogger("agent")
+
+#: Stamped on a decision the code made before any model was asked.
+RULES_VERSION = "adoption-rules/1"
+#: The longest wait between retries of a failed judgement.
+MAX_BACKOFF_S = 86400.0
+
+# Reasons written into the ledger when a rule decides.
+REASON_POLICY = "Discarded by rule: the wording does not pass the character's reply policy."
+REASON_LESSON = "Discarded by rule: the lesson does not pass the memory filter."
+REASON_BLOCKED = "Discarded by rule: a teacher whose corrections are blocked supports it."
+REASON_EXPIRED = "Set aside by rule: no new reactions for {days} days."
+REASON_CONFIRMED = ("Kept by rule: the person it was taught for has confirmed it "
+                    "since the objection.")
+
+
+def put_in_use(ledger, cid: str, *, ts: str, actor: str, reason: str,
+               policy=promotion.DEFAULT_POLICY, judge: str = "",
+               model: str = "") -> bool:
+    """Promote `cid`, replacing every live rewrite of its reply: the first is
+    superseded, the rest rolled back. The page's Keep (dashboard._promote) does
+    the same."""
+    cand = ledger.get(cid)
+    if cand is None:
+        return False
+    stamp = {"judge": judge, "model": model}
+    rivals = promotion.active_rivals(cand, ledger.all(), policy=policy)
+    if not rivals:
+        return ledger.promote(cid, ts=ts, actor=actor, reason=reason, **stamp)
+    ok = ledger.supersede(rivals[0].get("candidate_id", ""), cid, ts=ts,
+                          actor=actor, reason=reason, **stamp)
+    for extra in rivals[1:] if ok else ():
+        ledger.rollback(extra.get("candidate_id", ""), ts=ts, actor=actor,
+                        reason=f"replaced by {cid}", **stamp)
+    return ok
+
+
+@dataclass(frozen=True)
+class Basis:
+    """What a judgement is made on; `key` changes whenever any of it does."""
+
+    cand: dict
+    decision: promotion.Decision
+    linked: list
+    related: list
+    group: list
+    seen: tuple
+    peers: tuple
+    key: tuple
 
 
 class Learning:
@@ -81,6 +133,8 @@ class Learning:
                 logger.info("[Agent] candidate PROMOTED %s (corroborated): "
                             "%s", cid, decision.reason)
                 self._retire_answered_drafts(cid, ts)
+            elif promotion.needs_character(decision, cand):
+                self._queue_judgement(cid)
         if promoted:
             self._rebuild_promoted_views()
         return promoted
@@ -112,6 +166,13 @@ class Learning:
         fresh = self.evidence_log.append(event)
         if fresh:
             self._corroborate_existing(event, ts)
+            # Counter-evidence is related, not linked: corroboration never sees it.
+            if self._judging_on():
+                text = str(event.get("reply") or "").strip()
+                for cand in self.candidate_ledger.pending():
+                    if text and text in (str(cand.get("reply") or "").strip(),
+                                         str(cand.get("better") or "").strip()):
+                        self._queue_judgement(cand["candidate_id"])
         return fresh
 
     def _propose_candidate(self, event: dict, ctype: str, payload: dict,
@@ -151,6 +212,8 @@ class Learning:
                             str(payload.get("reply") or "")[:50])
                 return "promoted"
             return label
+        if promotion.needs_character(decision, ledger.get(cid) or projected):
+            self._queue_judgement(cid)
         if decision.blocked_by:
             logger.info("[Agent] candidate %s BLOCKED (%s): %s [%s]",
                         cid, ctype, decision.reason, decision.blocked_by)
@@ -228,7 +291,7 @@ class Learning:
 
     def _dispute_promoted_for(self, reply: str, ts: str, event_id: str) -> int:
         """A bystander disagreed with `reply`: link their event to every
-        promoted candidate teaching it, for a person to review."""
+        promoted candidate teaching it, for the character to judge."""
         reply = (reply or "").strip()
         disputed = 0
         for cand in self.candidate_ledger.active():
@@ -237,7 +300,9 @@ class Learning:
                     note="disputed by someone the reply was not for"):
                 disputed += 1
                 logger.info("[Agent] candidate %s DISPUTED by a bystander, "
-                            "kept for review: %r", cand["candidate_id"], reply[:50])
+                            "left to the character: %r", cand["candidate_id"],
+                            reply[:50])
+                self._queue_dispute(cand["candidate_id"])
         return disputed
 
     def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
@@ -745,6 +810,508 @@ class Learning:
             and e.get("parent_event_id") == complaint_id
             and (e.get("adjudication") or {}).get("accept")
             for e in self.evidence_log.all())
+
+    # ---------------- The character decides (adoption.py) ----------------
+
+    def _adoption_state(self, name: str, factory):
+        """Per-process judgement state; built lazily for agents made without
+        __init__ (test harnesses)."""
+        value = self.__dict__.get(name)
+        if value is None:
+            value = factory()
+            self.__dict__[name] = value
+        return value
+
+    def _judging_on(self) -> bool:
+        """The character may decide: its switch is on and the operator has
+        not stopped automatic learning."""
+        policy = getattr(self, "promotion_policy", None)
+        return bool(getattr(self, "promote_judge_enabled", False)
+                    and policy is not None and policy.auto_promote)
+
+    def _queue_judgement(self, cid: str) -> None:
+        """Judge `cid` off the reply path; the sweep catches what this misses."""
+        self._queue(self._character_decide, cid, cid)
+
+    def _queue_dispute(self, cid: str) -> None:
+        self._queue(self._character_review_promoted, cid, f"dispute:{cid}")
+
+    def _queue(self, judge, cid: str, key: str) -> None:
+        if not self._judging_on():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if key in self._adoption_state("_adoption_inflight", set):
+            return
+        self._spawn(judge(cid))
+
+    def _adoption_lock(self) -> asyncio.Lock:
+        """One lock per ledger language: a verdict is applied only after the
+        candidate is re-read under it."""
+        locks = self._adoption_state("_adoption_locks", dict)
+        return locks.setdefault(self.agent_lang, asyncio.Lock())
+
+    def _backing_off(self, key: str, now: float) -> bool:
+        _attempts, next_at = self._adoption_state(
+            "_adoption_retry", dict).get(key, (0, 0.0))
+        return next_at > now
+
+    def _back_off(self, key: str, now: float) -> None:
+        """No row is written for a failure; the next try waits twice as long."""
+        retry = self._adoption_state("_adoption_retry", dict)
+        attempts = retry.get(key, (0, 0.0))[0] + 1
+        delay = min(float(self.promote_judge_interval_s) * 2 ** (attempts - 1),
+                    MAX_BACKOFF_S)
+        retry[key] = (attempts, now + delay)
+
+    def _judgement_budget(self, now: float) -> bool:
+        """At most PROMOTE_JUDGE_BATCH judgements per interval, whatever
+        asked for them: the model API is paid."""
+        calls = self._adoption_state("_adoption_calls", list)
+        window = float(self.promote_judge_interval_s)
+        calls[:] = [t for t in calls if now - t < window]
+        if len(calls) >= max(1, int(self.promote_judge_batch)):
+            return False
+        calls.append(now)
+        return True
+
+    def _basis(self, cid: str, index: promotion.EvidenceIndex | None = None,
+               ) -> Basis | None:
+        """`cid` as a judgement sees it: decision, conflict group, and the
+        evidence and rivals it would be judged on."""
+        ledger = self.candidate_ledger
+        cand = ledger.get(cid)
+        if cand is None:
+            return None
+        if index is None:
+            index = promotion.EvidenceIndex(self.evidence_log.all(), ledger.all())
+        linked, related = index.linked(cand), index.related(cand)
+        peers = index.peers(cand)
+        decision = promotion.decide(
+            cand, linked_events=linked, related_events=related, peers=peers,
+            now=time.time(), policy=self.promotion_policy,
+            admin_ids=self._admins())
+        group = promotion.conflict_group(cand, peers, policy=self.promotion_policy,
+                                         related_events=related)
+        seen = tuple(sorted({str(e.get("event_id") or "") for e in linked + related}
+                            - {""}))
+        rivals = tuple(sorted(str(c.get("candidate_id") or "") for c in group[1:]))
+        key = (cand.get("state"), seen, rivals,
+               tuple(sorted((str(c.get("candidate_id")), str(c.get("state")))
+                            for c in group)))
+        return Basis(cand, decision, linked, related, group, seen, rivals, key)
+
+    @staticmethod
+    def _judged_on(cand: dict, seen, peers) -> bool:
+        """Has the character already looked at exactly this evidence."""
+        review = cand.get("review") or {}
+        return (bool(review) and sorted(review.get("seen") or []) == sorted(seen)
+                and sorted(review.get("peers") or []) == sorted(peers))
+
+    @staticmethod
+    def _taught_text(cand: dict) -> str:
+        return str((cand.get("better") if cand.get("type") == candidates.TYPE_PAIR
+                    else cand.get("reply")) or "").strip()
+
+    def _rule_refusal(self, cand: dict, linked) -> str:
+        """The content rules the character already applies in code; a
+        failure is a discard with no model asked."""
+        text = self._taught_text(cand)
+        if text and TextProcessing._sanitize_reply(
+                text, self.agent_lang, self.reply_style) != text:
+            return REASON_POLICY
+        lesson = str((cand.get("payload") or {}).get("lesson") or "").strip()
+        if lesson and not self._validate_memory_candidate(
+                lesson, max_chars=reactions.LESSON_MAX_CHARS):
+            return REASON_LESSON
+        admins = self._admins()
+        for ev in linked:
+            uid = str(ev.get("speaker_id") or "")
+            if (uid and uid not in admins
+                    and promotion.supports_candidate(ev, cand, policy=self.promotion_policy)
+                    and self.teacher_stats.hard_block(uid)):
+                return REASON_BLOCKED
+        return ""
+
+    def _evidence_items(self, members: list[dict], against: list[dict],
+                        index: promotion.EvidenceIndex) -> list[dict]:
+        """For each option its supporting events, then what argues against;
+        who someone is comes from ids."""
+        admins = self._admins()
+        texts = {self._taught_text(m): adoption.LETTERS[i]
+                 for i, m in enumerate(members)}
+        recipients = {str(e.get("recipient_id") or "")
+                      for m in members for e in index.linked(m)} - {""}
+        original = str(members[0].get("reply") or "").strip()
+        items, seen = [], set()
+
+        def add(ev: dict, stance: str) -> None:
+            eid = ev.get("event_id")
+            if eid in seen:
+                return
+            seen.add(eid)
+            uid = str(ev.get("speaker_id") or "")
+            record = ("" if not uid or uid in admins else
+                      self.teacher_stats.history_line(uid, self.agent_lang))
+            said = str(ev.get("reply") or "").strip()
+            about = "" if said == original else texts.get(said, "")
+            items.append(adoption.evidence_item(
+                ev, stance=stance, about=about, admin_ids=admins,
+                recipients=recipients, record=record))
+
+        for m in members:
+            for ev in index.linked(m):
+                if promotion.supports_candidate(ev, m, policy=self.promotion_policy):
+                    add(ev, "for")
+        for ev in against:
+            add(ev, "against")
+        return items
+
+    def _prompt_for(self, members: list[dict], against: list[dict], hold: str,
+                    allow_adopt: bool, index: promotion.EvidenceIndex) -> str:
+        first = members[0]
+        options = [{
+            "text": self._taught_text(m),
+            "lesson": str((m.get("payload") or {}).get("lesson") or ""),
+            "kind": "rewrite" if m.get("type") == candidates.TYPE_PAIR else "example",
+            "in_use": m.get("state") == candidates.STATE_PROMOTED,
+        } for m in members]
+        return adoption.build_adoption_prompt(
+            persona_name=self.persona_name or "", persona=self.persona or "",
+            lang=self.agent_lang,
+            context=list((first.get("payload") or {}).get("context") or []),
+            reply=str(first.get("reply") or ""), options=options,
+            evidence=self._evidence_items(members, against, index), hold=hold,
+            allow_adopt=allow_adopt)
+
+    async def _ask_character(self, prompt: str, options: int,
+                             allow_adopt: bool) -> dict | None:
+        """The reaction judge's call path: once more on unusable output, then
+        None. Raises what _call_llm raises."""
+        for attempt in range(2):
+            raw = await self._call_llm(
+                "", [{"role": "user", "content": prompt}],
+                model=self.promote_judge_model, max_tokens=1000,
+                enable_search=False, json_object=True)
+            verdict = adoption.parse_adoption(raw, options, allow_adopt=allow_adopt)
+            if verdict:
+                return verdict
+            logger.warning("[Agent] adoption judge output unusable%s: %r",
+                           ", asking again" if not attempt else "", str(raw)[:120])
+        return None
+
+    def _adoptable(self, cand: dict, index: promotion.EvidenceIndex) -> bool:
+        """May a proposed rival be offered for adoption: its own hold is the
+        character's, nobody it concerns refused it, and the rules pass."""
+        basis = self._basis(str(cand.get("candidate_id") or ""), index)
+        return (basis is not None
+                and promotion.needs_character(basis.decision, basis.cand)
+                and promotion.may_adopt(basis.decision)
+                and not self._rule_refusal(basis.cand, basis.linked))
+
+    async def _judge(self, key: str, prompt: str, options: int,
+                     allow_adopt: bool, now: float) -> dict | None:
+        try:
+            verdict = await self._ask_character(prompt, options, allow_adopt)
+        except Exception as e:
+            logger.warning("[Agent] adoption judge failed for %s: %s: %s",
+                           key, type(e).__name__, e)
+            verdict = None
+        if verdict is None:
+            self._back_off(key, now)
+            return None
+        self._adoption_state("_adoption_retry", dict).pop(key, None)
+        return verdict
+
+    async def _character_decide(self, cid: str) -> str:
+        """Decide a held candidate whose hold no reaction clears: adopt,
+        discard or keep observing, recorded with the character as the actor.
+        Returns what happened (off, busy, backoff, none, ruled, seen,
+        deferred, failed, stale, adopted, discarded, observed)."""
+        if not self._judging_on():
+            return "off"
+        inflight = self._adoption_state("_adoption_inflight", set)
+        if cid in inflight:
+            return "busy"
+        inflight.add(cid)
+        try:
+            return await self._decide_once(cid)
+        finally:
+            inflight.discard(cid)
+
+    async def _decide_once(self, cid: str) -> str:
+        now = time.time()
+        if self._backing_off(cid, now):
+            return "backoff"
+        ledger = self.candidate_ledger
+        index = promotion.EvidenceIndex(self.evidence_log.all(), ledger.all())
+        basis = self._basis(cid, index)
+        if basis is None or not promotion.needs_character(basis.decision, basis.cand):
+            return "none"
+        refusal = self._rule_refusal(basis.cand, basis.linked)
+        if refusal:
+            async with self._adoption_lock():
+                again = self._basis(cid)
+                if again is None or again.key != basis.key or not self._judging_on():
+                    return "stale"
+                ledger.reject(cid, ts=datetime.now().isoformat(timespec="seconds"),
+                              actor=candidates.ACTOR_AUTO, reason=refusal,
+                              judge=RULES_VERSION)
+            logger.info("[Agent] candidate %s REJECTED by rule: %s", cid, refusal)
+            return "ruled"
+        if self._judged_on(basis.cand, basis.seen, basis.peers):
+            return "seen"
+        allow = promotion.may_adopt(basis.decision)
+        members = [basis.cand]
+        if allow:
+            members += [c for c in basis.group[1:]
+                        if c.get("state") == candidates.STATE_PROMOTED
+                        or self._adoptable(c, index)]
+        members = members[:adoption.MAX_OPTIONS]
+        against_ids = set(promotion.counter_evidence(
+            basis.cand, basis.related, now=now, policy=self.promotion_policy))
+        against = [e for e in basis.related if e.get("event_id") in against_ids]
+        if not self._judgement_budget(now):
+            return "deferred"
+        prompt = self._prompt_for(members, against, basis.decision.gate, allow, index)
+        verdict = await self._judge(cid, prompt, len(members), allow, now)
+        if verdict is None:
+            return "failed"
+        async with self._adoption_lock():
+            again = self._basis(cid)
+            if (again is None or again.key != basis.key or not self._judging_on()
+                    or not promotion.needs_character(again.decision, again.cand)):
+                logger.info("[Agent] candidate %s changed while judged; dropped", cid)
+                return "stale"
+            return self._apply_verdict(again, members, verdict)
+
+    def _apply_verdict(self, basis: Basis, members: list[dict],
+                       verdict: dict) -> str:
+        ledger = self.candidate_ledger
+        cid = basis.cand["candidate_id"]
+        ts = datetime.now().isoformat(timespec="seconds")
+        reason = verdict["reason"]
+        stamp = {"judge": adoption.ADOPTION_VERSION, "model": self.promote_judge_model}
+        actor = candidates.ACTOR_CHARACTER
+        decision = verdict["decision"]
+        if decision == adoption.DECISION_OBSERVE:
+            ledger.review(cid, ts=ts, reason=reason, seen=basis.seen,
+                          peers=basis.peers, **stamp)
+            logger.info("[Agent] candidate %s OBSERVED by the character: %s",
+                        cid, reason)
+            return "observed"
+        if decision == adoption.DECISION_DISCARD:
+            ledger.reject(cid, ts=ts, actor=actor, reason=reason, **stamp)
+            logger.info("[Agent] candidate %s DISCARDED by the character: %s",
+                        cid, reason)
+            return "discarded"
+        chosen_id = str(members[verdict["index"]].get("candidate_id") or "")
+        chosen = ledger.get(chosen_id)
+        if chosen is None:
+            return "stale"
+        if chosen.get("state") == candidates.STATE_PROPOSED:
+            if chosen_id != cid and not self._adoptable(chosen, None):
+                return "stale"
+            if not put_in_use(ledger, chosen_id, ts=ts, actor=actor, reason=reason,
+                              policy=self.promotion_policy, **stamp):
+                return "stale"
+        # Adopting one discards the other proposed options.
+        for other in members:
+            oid = str(other.get("candidate_id") or "")
+            current = ledger.get(oid) or {}
+            if oid != chosen_id and current.get("state") == candidates.STATE_PROPOSED:
+                ledger.reject(oid, ts=ts, actor=actor, reason=reason, **stamp)
+        self._retire_answered_drafts(chosen_id, ts)
+        self._rebuild_promoted_views()
+        logger.info("[Agent] candidate %s ADOPTED by the character: %s",
+                    chosen_id, reason)
+        return "adopted"
+
+    def _dispute_basis(self, cid: str):
+        """(cand, linked, dispute ids, seen) for an item in use, or None."""
+        cand = self.candidate_ledger.get(cid)
+        if cand is None or cand.get("state") != candidates.STATE_PROMOTED:
+            return None
+        linked = self.evidence_log.many(cand.get("evidence") or [])
+        disputed = promotion.disputes(cand, linked)
+        if not disputed:
+            return None
+        seen = tuple(sorted({str(e.get("event_id") or "") for e in linked} - {""}))
+        return cand, linked, disputed, seen
+
+    def _confirmed_since(self, cand: dict, linked, disputed) -> bool:
+        """Was it taught by the person it was for, who confirmed it after the
+        latest objection."""
+        policy = self.promotion_policy
+        supporting = [e for e in linked
+                      if promotion.supports_candidate(e, cand, policy=policy)]
+        teachers = {str(e.get("speaker_id") or "") for e in supporting
+                    if evidence._same_person(e)} - {""}
+        if not teachers:
+            return False
+        objected = max((promotion.epoch(e.get("ts")) for e in linked
+                        if e.get("event_id") in set(disputed)), default=0.0)
+        taught = self._taught_text(cand)
+        for ev in linked + promotion.related_events(cand, self.evidence_log.all()):
+            if str(ev.get("speaker_id") or "") not in teachers:
+                continue
+            if promotion.epoch(ev.get("ts")) <= objected:
+                continue
+            if not (ev.get("adjudication") or {}).get("accept"):
+                continue
+            if (promotion.supports_candidate(ev, cand, policy=policy)
+                    or (str(ev.get("reply") or "").strip() == taught
+                        and ev.get("reaction_type") == "positive")):
+                return True
+        return False
+
+    def _taught_by_its_recipient(self, cand: dict, linked) -> bool:
+        return any(evidence._same_person(e) for e in linked
+                   if promotion.supports_candidate(e, cand,
+                                                   policy=self.promotion_policy))
+
+    async def _character_review_promoted(self, cid: str) -> str:
+        """A bystander's accepted objection to an item in use: the character
+        keeps it (recorded) or stops using it. What the person it was for
+        taught and has confirmed since is kept by rule."""
+        if not self._judging_on():
+            return "off"
+        key = f"dispute:{cid}"
+        inflight = self._adoption_state("_adoption_inflight", set)
+        if key in inflight:
+            return "busy"
+        inflight.add(key)
+        try:
+            return await self._review_once(cid, key)
+        finally:
+            inflight.discard(key)
+
+    async def _review_once(self, cid: str, key: str) -> str:
+        now = time.time()
+        if self._backing_off(key, now):
+            return "backoff"
+        found = self._dispute_basis(cid)
+        if found is None:
+            return "none"
+        cand, linked, disputed, seen = found
+        if self._judged_on(cand, seen, ()):
+            return "seen"
+        ledger = self.candidate_ledger
+        if self._confirmed_since(cand, linked, disputed):
+            async with self._adoption_lock():
+                again = self._dispute_basis(cid)
+                if again is None or again[3] != seen or not self._judging_on():
+                    return "stale"
+                ledger.review(cid, ts=datetime.now().isoformat(timespec="seconds"),
+                              reason=REASON_CONFIRMED, seen=seen,
+                              judge=RULES_VERSION, actor=candidates.ACTOR_AUTO)
+            return "kept"
+        if not self._judgement_budget(now):
+            return "deferred"
+        index = promotion.EvidenceIndex(self.evidence_log.all(), ledger.all())
+        against = [e for e in linked if e.get("event_id") in set(disputed)]
+        prompt = self._prompt_for([cand], against, "dispute", True, index)
+        verdict = await self._judge(key, prompt, 1, True, now)
+        if verdict is None:
+            return "failed"
+        async with self._adoption_lock():
+            again = self._dispute_basis(cid)
+            if again is None or again[3] != seen or not self._judging_on():
+                return "stale"
+            ts = datetime.now().isoformat(timespec="seconds")
+            stamp = {"judge": adoption.ADOPTION_VERSION,
+                     "model": self.promote_judge_model}
+            if verdict["decision"] == adoption.DECISION_DISCARD:
+                ledger.rollback(cid, ts=ts, actor=candidates.ACTOR_CHARACTER,
+                                reason=verdict["reason"], evidence=disputed, **stamp)
+                self._rebuild_promoted_views()
+                logger.info("[Agent] candidate %s WITHDRAWN by the character: %s",
+                            cid, verdict["reason"])
+                return "withdrawn"
+            ledger.review(cid, ts=ts, reason=verdict["reason"], seen=seen, **stamp)
+            return "kept"
+
+    def _expire_observing(self, now: float) -> int:
+        """Set aside, by rule, what has had no new reaction for
+        PROMOTE_OBSERVE_MAX_DAYS: nothing waits for ever."""
+        days = float(self.promote_observe_max_days or 0)
+        if days <= 0:
+            return 0
+        ledger = self.candidate_ledger
+        index = promotion.EvidenceIndex(self.evidence_log.all(), ledger.all())
+        ts = datetime.now().isoformat(timespec="seconds")
+        reason = REASON_EXPIRED.format(days=f"{days:g}")
+        expired = 0
+        for cand in ledger.pending():
+            stamps = [promotion.epoch(e.get("ts"))
+                      for e in index.linked(cand) + index.related(cand)]
+            stamps.append(promotion.epoch(cand.get("created_at")))
+            newest = max(stamps)
+            if newest and now - newest > days * 86400.0 and ledger.reject(
+                    cand["candidate_id"], ts=ts, actor=candidates.ACTOR_AUTO,
+                    reason=reason, judge=RULES_VERSION):
+                expired += 1
+        if expired:
+            logger.info("[Agent] %d waiting candidate(s) set aside after %s days "
+                        "without a new reaction", expired, f"{days:g}")
+        return expired
+
+    async def _adoption_tick(self) -> dict:
+        """One sweep: set aside what expired, then judge what waits for the
+        character, at most PROMOTE_JUDGE_BATCH items. Returns outcome counts."""
+        out: dict[str, int] = {}
+        if not self._judging_on():
+            return out
+        now = time.time()
+        expired = self._expire_observing(now)
+        if expired:
+            out["expired"] = expired
+        ledger = self.candidate_ledger
+        index = promotion.EvidenceIndex(self.evidence_log.all(), ledger.all())
+        due = []
+        for cand in ledger.all():
+            cid = str(cand.get("candidate_id") or "")
+            state = cand.get("state")
+            if state == candidates.STATE_PROPOSED:
+                if self._backing_off(cid, now):
+                    continue
+                basis = self._basis(cid, index)
+                if (basis is not None
+                        and promotion.needs_character(basis.decision, basis.cand)
+                        and not self._judged_on(basis.cand, basis.seen, basis.peers)):
+                    due.append(self._character_decide(cid))
+            elif state == candidates.STATE_PROMOTED:
+                found = (None if self._backing_off(f"dispute:{cid}", now)
+                         else self._dispute_basis(cid))
+                if found is not None and not self._judged_on(found[0], found[3], ()):
+                    due.append(self._character_review_promoted(cid))
+        batch = max(1, int(self.promote_judge_batch))
+        for job in due[batch:]:
+            job.close()
+        for job in due[:batch]:
+            outcome = await job
+            out[outcome] = out.get(outcome, 0) + 1
+        return out
+
+    async def loop_adoption(self) -> None:
+        """Background sweep (PROMOTE_JUDGE_ENABLED): what the reaction
+        triggers missed, failed or deferred, retried with a doubling delay."""
+        if not self.enabled or not self.promote_judge_enabled:
+            return
+        logger.info("[Agent] adoption loop ON (every %.0fs, batch=%d, model=%s)",
+                    self.promote_judge_interval_s, self.promote_judge_batch,
+                    self.promote_judge_model)
+        while True:
+            try:
+                await asyncio.sleep(self.promote_judge_interval_s)
+                await self._adoption_tick()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning("[Agent] adoption tick failed: %s: %s",
+                               type(e).__name__, e)
 
     # ---------------- Self-evolution (eval -> gated candidates) ----------------
     async def loop_evolve(self) -> None:

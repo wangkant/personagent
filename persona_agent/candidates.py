@@ -6,7 +6,11 @@ lifecycle event, not a field:
     proposed --promote--> promoted --rollback--> rolled_back
         |                     |
         |                     +--supersede--> superseded  (replacement promoted)
-        +--reject---------> rejected
+        +--reject---------> rejected --restore--> promoted  (a person, only
+                                                  after the character's discard)
+
+A ``review`` row records that the character looked and keeps observing; it
+changes no state.
 
 Rows are only ever appended; current state is a replay of the log. Retrieval
 reads view files materialized from active candidates (``rebuild_views``),
@@ -50,6 +54,15 @@ ROW_CANDIDATE = "candidate"
 ROW_LIFECYCLE = "lifecycle"
 ROW_EVIDENCE = "evidence_link"
 ROW_SUPERSESSION = "supersession"
+# "The character looked and keeps observing": no state change.
+ROW_REVIEW = "review"
+VERDICT_OBSERVE = "observe"
+
+# Who decided: the evidence policy, or the character's own judgement.
+ACTOR_AUTO = "auto"
+ACTOR_CHARACTER = "character"
+# Discards a person may reverse with `restore`; a person's own stays final.
+RESTORABLE_ACTORS = frozenset({ACTOR_CHARACTER})
 
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
 _WARN_BYTES_ENV = "LEDGER_CANDIDATES_WARN_BYTES"
@@ -142,6 +155,9 @@ def _validate_row(row: dict) -> str | None:
     if not isinstance(cid, str) or not cid:
         return "candidate_id must be a non-empty string"
     kind = row.get("kind")
+    for key in ("judge", "model"):
+        if key in row and not isinstance(row[key], str):
+            return f"{key} must be a string"
     if kind == ROW_CANDIDATE:
         if row.get("type") not in TYPES:
             return "unknown candidate type"
@@ -173,7 +189,47 @@ def _validate_row(row: dict) -> str | None:
         if not isinstance(replacement, str) or not replacement:
             return "replacement_id must be a non-empty string"
         return None
+    if kind == ROW_REVIEW:
+        if schema != SCHEMA:
+            return "review requires current schema"
+        if row.get("verdict") != VERDICT_OBSERVE:
+            return "unknown review verdict"
+        for key in ("actor", "reason"):
+            if not isinstance(row.get(key, ""), str):
+                return f"{key} must be a string"
+        for key in ("seen", "peers"):
+            value = row.get(key)
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                return f"{key} must be a list of strings"
+        return None
     return "unknown ledger row kind"
+
+
+def _stamp_judge(entry: dict, row: dict) -> dict:
+    """Carry which judgement and model decided, only when a row names them."""
+    for key in ("judge", "model"):
+        if row.get(key):
+            entry[key] = str(row[key])
+    return entry
+
+
+def _review_entry(row: dict) -> dict:
+    """The projection of a review row: the character's latest look."""
+    return {"verdict": row.get("verdict", ""), "ts": row.get("ts", ""),
+            "actor": row.get("actor", ""), "reason": row.get("reason", ""),
+            "seen": [str(v) for v in row.get("seen") or []],
+            "peers": [str(v) for v in row.get("peers") or []],
+            "judge": row.get("judge", ""), "model": row.get("model", "")}
+
+
+def restorable(cand: dict | None) -> bool:
+    """Was this candidate discarded by the character, so a person may bring
+    it back; a person's discard stays final."""
+    if not cand or cand.get("state") != STATE_REJECTED:
+        return False
+    history = cand.get("history") or []
+    return (bool(history) and history[-1].get("state") == STATE_REJECTED
+            and history[-1].get("actor") in RESTORABLE_ACTORS)
 
 
 class CandidateLedger:
@@ -228,16 +284,16 @@ class CandidateLedger:
                 return
             old["state"] = STATE_SUPERSEDED
             old["superseded_by"] = replacement_id
-            old.setdefault("history", []).append({
+            old.setdefault("history", []).append(_stamp_judge({
                 "state": STATE_SUPERSEDED, "ts": row.get("ts", ""),
                 "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-            })
+            }, row))
             new["state"] = STATE_PROMOTED
             new["supersedes"] = cid
-            new.setdefault("history", []).append({
+            new.setdefault("history", []).append(_stamp_judge({
                 "state": STATE_PROMOTED, "ts": row.get("ts", ""),
                 "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-            })
+            }, row))
             return
         cand = out.get(cid)
         if cand is None:
@@ -249,6 +305,9 @@ class CandidateLedger:
         if kind == ROW_EVIDENCE:
             self._merge_evidence(cand, row.get("evidence"))
             return
+        if kind == ROW_REVIEW:
+            cand["review"] = _review_entry(row)
+            return
         if kind == ROW_LIFECYCLE:
             state = row.get("state")
             if state in STATES:
@@ -258,10 +317,10 @@ class CandidateLedger:
                 cand["superseded_by"] = row["superseded_by"]
             if row.get("supersedes"):
                 cand["supersedes"] = row["supersedes"]
-            cand["history"].append({
+            cand["history"].append(_stamp_judge({
                 "state": row.get("state", ""), "ts": row.get("ts", ""),
                 "actor": row.get("actor", ""), "reason": row.get("reason", ""),
-            })
+            }, row))
 
     @staticmethod
     def _merge_evidence(cand: dict, ids) -> None:
@@ -348,7 +407,8 @@ class CandidateLedger:
         return fresh
 
     def transition(self, cid: str, state: str, *, ts: str, actor: str,
-                   reason: str = "", evidence=()) -> bool:
+                   reason: str = "", evidence=(), judge: str = "",
+                   model: str = "") -> bool:
         """Append one lifecycle event; False (nothing written) when it is not
         legal from the current state. Supersession goes through `supersede()`."""
         cand = self.get(cid)
@@ -356,34 +416,81 @@ class CandidateLedger:
             return False
         if cand.get("state") not in _ALLOWED_FROM[state]:
             return False
-        row = {"schema": SCHEMA, "kind": ROW_LIFECYCLE, "candidate_id": cid,
+        return self._write_lifecycle(cand, state, ts=ts, actor=actor,
+                                     reason=reason, evidence=evidence,
+                                     judge=judge, model=model)
+
+    def _write_lifecycle(self, cand: dict, state: str, *, ts: str, actor: str,
+                         reason: str, evidence=(), judge: str = "",
+                         model: str = "") -> bool:
+        row = {"schema": SCHEMA, "kind": ROW_LIFECYCLE,
+               "candidate_id": cand["candidate_id"],
                "state": state, "ts": ts, "actor": actor,
                "reason": str(reason or "")[:300],
                "evidence": [str(e) for e in (evidence or ())]}
+        if judge:
+            row["judge"] = str(judge)[:64]
+        if model:
+            row["model"] = str(model)[:128]
         self._append(row)
         cand["state"] = state
         self._merge_evidence(cand, row["evidence"])
-        cand.setdefault("history", []).append(
-            {"state": state, "ts": ts, "actor": actor, "reason": row["reason"]})
+        cand.setdefault("history", []).append(_stamp_judge(
+            {"state": state, "ts": ts, "actor": actor, "reason": row["reason"]},
+            row))
         return True
 
     def promote(self, cid: str, *, ts: str, actor: str, reason: str = "",
-                evidence=()) -> bool:
+                evidence=(), judge: str = "", model: str = "") -> bool:
         return self.transition(cid, STATE_PROMOTED, ts=ts, actor=actor,
-                               reason=reason, evidence=evidence)
+                               reason=reason, evidence=evidence,
+                               judge=judge, model=model)
 
-    def reject(self, cid: str, *, ts: str, actor: str, reason: str = "") -> bool:
+    def reject(self, cid: str, *, ts: str, actor: str, reason: str = "",
+               judge: str = "", model: str = "") -> bool:
         return self.transition(cid, STATE_REJECTED, ts=ts, actor=actor,
-                               reason=reason)
+                               reason=reason, judge=judge, model=model)
 
     def rollback(self, cid: str, *, ts: str, actor: str, reason: str = "",
-                 evidence=()) -> bool:
+                 evidence=(), judge: str = "", model: str = "") -> bool:
         """Revoke a promoted candidate's authority. History is untouched."""
         return self.transition(cid, STATE_ROLLED_BACK, ts=ts, actor=actor,
-                               reason=reason, evidence=evidence)
+                               reason=reason, evidence=evidence,
+                               judge=judge, model=model)
+
+    def restore(self, cid: str, *, ts: str, actor: str,
+                reason: str = "") -> bool:
+        """A person puts back in use what the character discarded. Not a wider
+        transition table: a person's discard stays final, and no automatic
+        actor may restore anything."""
+        if actor in (ACTOR_AUTO, ACTOR_CHARACTER) or not str(actor or "").strip():
+            return False
+        cand = self.get(cid)
+        if not restorable(cand):
+            return False
+        return self._write_lifecycle(cand, STATE_PROMOTED, ts=ts, actor=actor,
+                                     reason=reason)
+
+    def review(self, cid: str, *, ts: str, reason: str, seen=(), peers=(),
+               judge: str = "", model: str = "",
+               actor: str = ACTOR_CHARACTER) -> bool:
+        """Record that the character looked and keeps observing, with why and
+        the evidence it judged; the state is unchanged."""
+        cand = self.get(cid)
+        if cand is None or cand.get("state") not in (STATE_PROPOSED, STATE_PROMOTED):
+            return False
+        row = {"schema": SCHEMA, "kind": ROW_REVIEW, "candidate_id": cid,
+               "ts": ts, "actor": str(actor), "verdict": VERDICT_OBSERVE,
+               "reason": str(reason or "")[:300],
+               "seen": sorted({str(e) for e in seen or () if str(e)}),
+               "peers": sorted({str(p) for p in peers or () if str(p)}),
+               "judge": str(judge or "")[:64], "model": str(model or "")[:128]}
+        self._append(row)
+        cand["review"] = _review_entry(row)
+        return True
 
     def supersede(self, old_cid: str, new_cid: str, *, ts: str, actor: str,
-                  reason: str = "") -> bool:
+                  reason: str = "", judge: str = "", model: str = "") -> bool:
         """Deactivate `old_cid` and activate `new_cid` in one row: either half
         failing writes nothing."""
         old, new = self.get(old_cid), self.get(new_cid)
@@ -402,19 +509,23 @@ class CandidateLedger:
             "actor": actor,
             "reason": str(reason or f"supersedes {old_cid}")[:300],
         }
+        if judge:
+            row["judge"] = str(judge)[:64]
+        if model:
+            row["model"] = str(model)[:128]
         self._append(row)
         old["state"] = STATE_SUPERSEDED
         old["superseded_by"] = new_cid
-        old.setdefault("history", []).append({
+        old.setdefault("history", []).append(_stamp_judge({
             "state": STATE_SUPERSEDED, "ts": ts, "actor": actor,
             "reason": row["reason"],
-        })
+        }, row))
         new["state"] = STATE_PROMOTED
         new["supersedes"] = old_cid
-        new.setdefault("history", []).append({
+        new.setdefault("history", []).append(_stamp_judge({
             "state": STATE_PROMOTED, "ts": ts, "actor": actor,
             "reason": row["reason"],
-        })
+        }, row))
         return True
 
 
