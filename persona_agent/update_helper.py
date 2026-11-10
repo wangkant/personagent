@@ -39,8 +39,19 @@ def gone(pid: int, seconds: float) -> bool:
             return True
         except OSError:
             pass
+        if _zombie(pid):
+            return True
         time.sleep(0.3)
     return False
+
+
+def _zombie(pid: int) -> bool:
+    """Ended, but its parent has not collected it yet (Linux): it holds no file any more."""
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as stat:
+            return stat.read().rpartition(")")[2].split()[:1] == ["Z"]
+    except OSError:
+        return False
 
 
 def reopen(command: list[str]) -> None:

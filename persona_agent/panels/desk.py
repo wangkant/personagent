@@ -226,7 +226,9 @@ class Desk:
                         continue
             partial.replace(path)
         except OSError:
-            partial.unlink(missing_ok=True)
+            # The folder itself may be what is wrong, so tidying up can fail too.
+            with contextlib.suppress(OSError):
+                partial.unlink()
             raise ValueError("desk_backup_failed") from None
         return path
 
