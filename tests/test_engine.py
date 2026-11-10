@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from persona_agent.agent import Agent
@@ -424,3 +425,16 @@ async def test_the_offline_tools_post_where_the_agent_does(monkeypatch) -> None:
         [{"item_id": "1", "reply": "hi"}], "glm")
     check("both post to the version base's own endpoint",
           posted == [base + "/chat/completions"] * 2, repr(posted))
+
+
+def test_a_sticker_is_picked_for_what_it_shows_not_for_being_popular(tmp: Path) -> None:
+    from persona_agent.stickers import StickerLibrary
+    library = StickerLibrary(tmp / "stickers", tmp / "stickers.json", tmp / "unknown.jsonl")
+    (library.dir / "smug.png").write_bytes(b"png")
+    library.entries["smug.png"] = {"auto_tagged": True, "tags": ["smug", "doge"],
+                                   "meaning": "teasing", "use_count": 25,
+                                   "first_seen": time.time(), "md5": "m"}
+    check("a new, much-used sticker does not answer an unrelated tag",
+          all(library.pick_by_tag("hug") is None for _ in range(50)))
+    check("it still answers its own tag",
+          library.pick_by_tag("smug") == library.dir / "smug.png")

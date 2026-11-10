@@ -25,6 +25,7 @@ prompt change, use `personagent chat`. To measure one, use `personagent eval`.
 | `package_smoke.py` | Checks an installed `personagent` command end to end: version, `init --no-input`, `chat`, `run` with `/health`, and `doctor --json` | An installed `personagent` (`--personagent PATH`) and nothing else | No, a stand-in server answers | Supported. CI runs it on Linux and Windows |
 | `welcome_smoke.py` | Checks the installed local page end to end: `start --no-browser`, saving a key, one chat with the real character, a second launch that reuses the page, and a clean exit | An installed `personagent` (`--personagent PATH`) and nothing else | No, the same stand-in server answers | Supported. CI runs it on Linux and Windows |
 | `release_notes.py` | Checks a release tag against `pyproject.toml` and prints that version's CHANGELOG section | The tag, such as `v1.1.0` | No | Supported. The release workflow runs it |
+| `locale_gaps.py` | Counts, for each language in `persona_agent/locales/`, how many sentences of the setup wizard, the terminal chat and the demo have a translation. With a language code, such as `ja`, it prints the ones still missing, which would show in English | Nothing | No | Supported. `tests/test_locales.py` fails on a gap |
 
 Experimental scripts are research and maintenance aids and can change or be
 removed without a deprecation period. Scripts that call a model spend credit on

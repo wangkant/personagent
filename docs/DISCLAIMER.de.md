@@ -24,6 +24,10 @@ Wenn du eines davon nutzt, nimm ein eigenes Konto, dessen Verlust du verkraften 
 - Halte es aus Gruppen heraus, in denen seine Antworten Menschen schaden oder sie irreführen könnten, etwa Gruppen zu medizinischen, rechtlichen, finanziellen oder Krisenthemen und Gruppen mit Kindern.
 - Wenn jemand es bittet zu gehen oder fragt, was es über ihn weiß, nimm das ernst. Der Admin kann es eine Notiz vergessen lassen (`<name>, forget ...`), und alles, was es speichert, liegt in seinem Home-Ordner (siehe unten).
 
+## Bildnachweis für die Porträts
+
+Die Porträts des DeepSeek-Walmädchens, des GPT-Drachenmädchens und der Claude-Dame wurden für personagent nach Entwürfen gezeichnet, die die Community bereits zeichnet. Das Walmädchen geht auf 溟月 zurück, eine Originalfigur des Bilibili-Creators 上善无形 (CC BY-NC-SA 4.0), im Dienstmädchen-Outfit, das ZipZipPipe ihr gegeben hat. Das Drachenmädchen folgt ZipZipPipes weißer Drachin. Die Claude-Dame folgt einem Community-Entwurf, bei dem nicht bekannt ist, wer ihn zuerst gezeichnet hat. Die Porträts stehen unter CC BY-NC-SA 4.0, nicht unter MIT wie der Code: Behalte die Namensnennung bei, nutze sie nicht kommerziell und gib Änderungen unter derselben Lizenz weiter. Siehe `persona_agent/static/characters/LICENSE.md`.
+
 ## Was dein Modellanbieter sieht
 
 Jede Antwort schickt dem Modellanbieter einen Prompt aus der Persona, den letzten Nachrichten des Chats (mit Namen), den Notizen, die der Bot über den Chat führt, und dem, was er aus dem Gelernten abgerufen hat. Wenn du ein Vision-Modell einstellst, gehen Bilder dorthin. Andere Dienste, die du einschaltest, sehen ebenfalls Teile davon. Dazu gehören die von dir konfigurierten Endpunkte für Fallback, Richter, Selbstbewertung und Embeddings sowie die Websuche, die eine kurze Anfrage an Tavily schickt, wenn du einen Schlüssel setzt, und sonst an DuckDuckGo. Die Update-Prüfung schickt pypi.org nur die Versionsnummer von personagent, höchstens einmal am Tag; `UPDATE_CHECK_ENABLED=false` schaltet sie ab.

@@ -21,5 +21,6 @@
 | `package_smoke.py` | 설치된 `personagent` 명령을 처음부터 끝까지 확인해요. 버전, `init --no-input`, `chat`, `/health`를 포함한 `run`, `doctor --json`이에요 | 설치된 `personagent`(`--personagent PATH`)만 | 아니요, 대역 서버가 응답해요 | 지원. CI가 Linux와 Windows에서 실행해요 |
 | `welcome_smoke.py` | 설치된 로컬 페이지를 처음부터 끝까지 확인해요. `start --no-browser`, 키 저장, 실제 캐릭터와 한 번 채팅, 페이지를 재사용하는 두 번째 실행, 깨끗한 종료예요 | 설치된 `personagent`(`--personagent PATH`)만 | 아니요, 같은 대역 서버가 응답해요 | 지원. CI가 Linux와 Windows에서 실행해요 |
 | `release_notes.py` | 릴리스 태그를 `pyproject.toml`과 대조하고 그 버전의 CHANGELOG 절을 출력해요 | `v1.1.0` 같은 태그 | 아니요 | 지원. 릴리스 워크플로가 실행해요 |
+| `locale_gaps.py` | `persona_agent/locales/`의 언어마다 설정 마법사, 터미널 채팅, 데모의 문장 중 번역된 수를 출력해요. `ja` 같은 언어 코드를 붙이면 아직 번역이 없어 영어로 보이는 문장을 출력해요 | 없음 | 아니요 | 지원. 빠진 문장이 있으면 `tests/test_locales.py`가 실패해요 |
 
 실험적 스크립트는 연구와 유지 보수를 위한 보조 도구이며, 지원 중단 기간 없이 바뀌거나 삭제될 수 있어요. 모델을 호출하는 스크립트는 `.env`에 있는 계정의 크레딧을 써요. 먼저 `--help`를 읽고, `--dry-run`이 있으면 시험해 보세요.

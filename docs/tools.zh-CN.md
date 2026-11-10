@@ -21,5 +21,6 @@
 | `package_smoke.py` | 端到端检查已安装的 `personagent` 命令：版本、`init --no-input`、`chat`、带 `/health` 的 `run`，以及 `doctor --json` | 一个已安装的 `personagent`（`--personagent PATH`），别的都不要 | 否，由替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |
 | `welcome_smoke.py` | 端到端检查已安装的本地页面：`start --no-browser`、保存密钥、和真实角色聊一次、第二次启动复用页面、干净退出 | 一个已安装的 `personagent`（`--personagent PATH`），别的都不要 | 否，由同一个替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |
 | `release_notes.py` | 对照 `pyproject.toml` 检查发布标签，并打印该版本的 CHANGELOG 段落 | 标签，比如 `v1.1.0` | 否 | 受支持。发布工作流会运行它 |
+| `locale_gaps.py` | 统计 `persona_agent/locales/` 里每种语言已经翻译了多少句，范围是终端设置向导、终端聊天和演示用到的句子。带上语言代码（比如 `ja`）时，列出还没翻译、会以英文显示的句子 | 无 | 否 | 受支持。有缺漏时 `tests/test_locales.py` 会失败 |
 
 实验性脚本是研究和维护用的辅助工具，可能改动或删除，不设弃用期。调用模型的脚本会花 `.env` 里账户的额度；先读 `--help`，有 `--dry-run` 的先试它。

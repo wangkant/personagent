@@ -80,6 +80,7 @@
 "Lark / Feishu app id": "Lark / Feishu のアプリ ID",
 "Lark / Feishu app secret": "Lark / Feishu のアプリシークレット",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "プラグインの送信先アドレス。https:// のものなど（既定 http://127.0.0.1:<SERVER_PORT>）",
+"Port {0} is in use. Leave --port out to pick a free one.": "ポート {0} は使用中です。--port を外すと空いているポートが選ばれます。",
 "--provider other needs --base-url": "--provider other には --base-url が必要です",
 "--base-url needs https:// or http:// in front, such as https://api.deepseek.com": "--base-url の先頭には https:// か http:// が必要です。例：https://api.deepseek.com",
 "Which service is this key for? Add --provider, such as --provider openrouter": "このキーはどのサービスのものですか？ --provider openrouter のように --provider を追加してください",

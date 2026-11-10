@@ -134,11 +134,13 @@ class Retrieval:
         identity = self.persona_identity
         lessons: list[str] = []
         for row in reversed(self._view_pairs_cache):
+            raw = str(row.get("lesson") or "")
+            if not raw or not self._scope_authorizes(
+                    row.get("scope"), current_scope, identity):
+                continue
             # Filtered again here: a view file is hand-editable.
-            lesson = _example_field(self._validate_memory_candidate(
-                str(row.get("lesson") or "")))
-            if (lesson and lesson not in lessons and self._scope_authorizes(
-                    row.get("scope"), current_scope, identity)):
+            lesson = _example_field(self._validate_memory_candidate(raw))
+            if lesson and lesson not in lessons:
                 lessons.append(lesson)
                 if len(lessons) >= limit:
                     break

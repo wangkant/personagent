@@ -3,9 +3,24 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 from pathlib import Path
 
 import pytest
+
+from persona_agent import home as _home
+
+_real_load_env = _home.load_env
+
+
+def _load_env_outside_the_checkout() -> Path:
+    """Modules load <home>/.env as they import; a developer's own .env in the
+    checkout, with its keys and language, must not reach the tests."""
+    found = _home.find_home()
+    return found if found == _home.CHECKOUT else _real_load_env()
+
+
+_home.load_env = _load_env_outside_the_checkout
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -25,6 +40,14 @@ def _no_bare_call_wait(request: pytest.FixtureRequest,
 def _no_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test asks PyPI; tests/test_updates.py turns the check back on."""
     monkeypatch.setenv("UPDATE_CHECK_ENABLED", "false")
+
+
+@pytest.fixture(autouse=True)
+def _same_on_every_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """English output whatever the system language, and no waiting on the
+    disk: no test checks that a write was flushed."""
+    monkeypatch.setenv("AGENT_LANG", "en")
+    monkeypatch.setattr(os, "fsync", lambda fd: None)
 
 
 @pytest.fixture

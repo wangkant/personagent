@@ -47,6 +47,7 @@ API はエージェントサービスの `/api/dashboard/` の下にあります
 
 - `GET status`、`GET conversations`、`GET conversation?id=<chat id>` は、サービスの状態、把握しているチャット、1 つのチャットの詳細を読みます。
 - `POST candidates/<id>/promote`、`replace`、`reject`、`rollback` は学習内容を変更します。各変更は `personagent learned` と同じ台帳に、アクター `dashboard` で記録されます。
+- `POST memory/forget` は、本文 `{"conv": "<chat id>", "note": "<note id>"}` で記憶メモを 1 つ削除します。`conv` と id は `GET conversation` の `memories` の項目にあるものです。`note` がなければ、そのチャットのコアノートを削除します。
 
 すべての呼び出しには、ランタイムフォルダー（`AGENT_RUNTIME_DIR` で移さない限り `<home>/runtime/`）の `dashboard.token` にあるトークンを、ヘッダー `X-Personagent-Dashboard-Token` に入れる必要があります。このファイルを読めるのは所有者だけで、サービスは起動時に作成します。ヘッダーのない呼び出しは 401（`dashboard_token`）、誤ったトークンは 403（`wrong_token`）になります。`CONNECTOR_TOKEN` と `X-Personagent-Token` では開けません。これらはコネクターと `/health/details` 専用です。
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import getpass
 import hashlib
 import json
@@ -167,6 +168,7 @@ _TEXT: dict[str, tuple[str, str]] = {
     "name": ("Bot name", "机器人名字"),
     "renamed": ("(a new name starts a new character: what {old} learned does not carry over)",
                 "（改名等于换一个新角色：{old}学到的东西不会带过来）"),
+    "name_follows": ("(the name follows the character: {name})", "（名字跟着角色改成了{name}）"),
     "lang_switched": ("(the examples, filters and checks switch to {lang} as well)",
                       "（示例、过滤规则和检查也会一起切换到{lang}）"),
     "char_intro": ("Pick a character. It is written to persona.txt, which you can edit any time.",
@@ -441,7 +443,7 @@ def provider_for_base(base_url: str) -> Provider | None:
 
 def _read_secret(prompt: str) -> str:
     """getpass in a terminal; a plain read otherwise (tests, IDE consoles)."""
-    if sys.stdin is not None and sys.stdin.isatty():
+    if langs.interactive():
         return getpass.getpass(prompt)
     return input(prompt)
 
@@ -628,6 +630,8 @@ def warn_if_agent_home_diverges(env_path: Path, home: Path) -> None:
 class Character:
     key: str
     title: tuple[str, str]
+    # The character's own name, which a name nobody chose follows.
+    name: str = ""
 
     @property
     def label(self) -> str:
@@ -644,10 +648,44 @@ CHARACTERS: tuple[Character, ...] = (
                         "游戏搭子：合作射击和肉鸽，爱互相嘴几句")),
     Character("bookworm", ("Bookworm: careful words, recommends books when asked",
                            "文艺书虫：用词讲究，被问到才推荐书")),
+    Character("chatgpt", ("The GPT dragon girl: proud, well-read, fond of treasure",
+                          "GPT 娘（白龙）：傲娇自信，博学，爱财宝"), name="ChatGPT"),
+    Character("deepseek", ("The DeepSeek whale girl: clever, a bit lazy, lives on white rice",
+                           "DeepSeek 鲸鱼娘：聪明但爱偷懒，傲娇嘴甜，主食白饭"), name="DeepSeek"),
+    Character("claude", ("The Claude lady: well-bred, gentle and candid, strict house rules",
+                         "Claude 娘（豪门圣女）：温柔端庄，坦诚，家规很严"), name="Claude"),
     Character(TEMPLATE, ("Write my own later: a plain starting character to edit",
                          "以后自己写：先放一个朴素的起步角色，之后再改")),
 )
 PERSONA_KEYS = tuple(c.key for c in CHARACTERS)
+# The local page's portrait sprites, <key>.webp.
+PORTRAITS = Path(__file__).with_name("static") / "characters"
+
+
+def character_for(key: str) -> Character:
+    return CHARACTERS[PERSONA_KEYS.index(key)]
+
+
+def portrait(key: str) -> Path | None:
+    """The portrait sprite of character `key`, when it ships one."""
+    path = PORTRAITS / f"{key}.webp"
+    return path if key in PERSONA_KEYS and path.is_file() else None
+
+
+def avatar_for(key: str) -> str:
+    """PERSONA_AVATAR for a persona written as character `key`."""
+    return key if portrait(key) else ""
+
+
+OWN_NAMES = frozenset(c.name for c in CHARACTERS if c.name)
+
+
+def name_for(key: str, name: str, lang: str) -> str:
+    """`name`, unless nobody chose it (the default, or a character's own):
+    then character `key`'s own name, or the default when it has none."""
+    if name == DEFAULT_NAMES[lang] or name in OWN_NAMES:
+        return character_for(key).name or DEFAULT_NAMES[lang]
+    return name
 
 NAME_LINE = {"en": "Your name is {name}.", "zh": "你叫{name}。", "zh-TW": "你叫{name}。",
              "ja": "あなたの名前は{name}です。", "ko": "당신의 이름은 {name}입니다.",
@@ -693,22 +731,32 @@ def shipped_persona(text: str) -> tuple[str, str, str] | None:
     norm = _normal(text)
     if hashlib.sha256(norm.encode("utf-8")).hexdigest() in _LEGACY_PERSONA_SHA256:
         return ("legacy", "", "")
+    for key, lang, raw, pattern in _shipped_shapes(str(homes.resource("data"))):
+        if norm == raw:
+            return (key, lang, "")
+        found = pattern.fullmatch(norm)
+        if found:
+            return (key, lang, found.group(1))
+    return None
+
+
+@functools.lru_cache(maxsize=2)
+def _shipped_shapes(data_dir: str) -> tuple:
+    """Every shipped character under `data_dir` as (key, lang, its text, its
+    text with a name slot). Read once: the local page asks on every poll."""
     sentinel = "\x00NAME\x00"
+    shapes = []
     for lang in LANGS:
         for character in CHARACTERS:
             source = persona_source(character.key, lang)
             if not source.is_file():
                 continue
             raw = source.read_text(encoding="utf-8")
-            if norm == _normal(raw):
-                return (character.key, lang, "")
             shape = _normal(render_persona(raw, name=sentinel, lang=lang))
             pattern = re.escape(shape).replace(re.escape(sentinel), r"(.+?)", 1)
             pattern = pattern.replace(re.escape(sentinel), r"\1")
-            found = re.fullmatch(pattern, norm)
-            if found:
-                return (character.key, lang, found.group(1))
-    return None
+            shapes.append((character.key, lang, _normal(raw), re.compile(pattern)))
+    return tuple(shapes)
 
 
 def short_label(character: Character) -> str:
@@ -1305,26 +1353,29 @@ def check_key(values: dict) -> bool:
 
 def step_character(home: Path, current: dict, lang: str) -> tuple[str, str]:
     """The bot's name and which persona to write ('' = leave persona.txt alone)."""
-    default_name = current["PERSONA_NAME"] or DEFAULT_NAMES[lang]
+    old = current["PERSONA_NAME"]
     _say(t("name_explain"))
-    name = ask(t("name"), default=default_name, required=True)
-    if current["PERSONA_NAME"] and name != current["PERSONA_NAME"]:
-        _say(t("renamed", old=current["PERSONA_NAME"]))
+    name = ask(t("name"), default=old or DEFAULT_NAMES[lang], required=True)
 
     persona_path = home / "persona.txt"
-    origin = None
-    if persona_path.is_file():
-        origin = shipped_persona(persona_path.read_text(encoding="utf-8"))
-        if origin is None:
-            _say(t("char_custom"))
-            return name, ""
-    print()
-    _say(t("char_intro"))
-    for i, character in enumerate(CHARACTERS, 1):
-        print(f"    {i}. {character.label}")
-    default = PERSONA_KEYS.index(default_character(origin)) + 1
-    prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
-    return name, CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
+    origin = shipped_persona(persona_path.read_text(encoding="utf-8")) if persona_path.is_file() else None
+    key = ""
+    if persona_path.is_file() and origin is None:
+        _say(t("char_custom"))
+    else:
+        print()
+        _say(t("char_intro"))
+        for i, character in enumerate(CHARACTERS, 1):
+            print(f"    {i}. {character.label}")
+        default = PERSONA_KEYS.index(default_character(origin)) + 1
+        prompt = t("char_keep") if origin and origin[0] in PERSONA_KEYS else t("char_choose")
+        key = CHARACTERS[ask_number(prompt, len(CHARACTERS), default=default) - 1].key
+        if name_for(key, name, lang) != name:
+            name = name_for(key, name, lang)
+            _say(t("name_follows", name=name))
+    if old and name != old:
+        _say(t("renamed", old=old))
+    return name, key
 
 
 PLATFORM_MENU = ("qq", "telegram", "discord", "slack", "kook", "lark", "other")
@@ -1559,8 +1610,8 @@ def run_wizard(home: Path, launcher: Launcher, *, lang_default: str = "") -> Non
         admin_name = answers.get("ADMIN_NAME", current["ADMIN_NAME"])
         write_persona(home, persona, name=name, lang=lang, admin_name=admin_name,
                       admin_relationship=current["ADMIN_RELATIONSHIP"])
-        character = CHARACTERS[PERSONA_KEYS.index(persona)]
-        _say(t("persona_written", what=short_label(character)))
+        write_env(env_path, {"PERSONA_AVATAR": avatar_for(persona)})
+        _say(t("persona_written", what=short_label(character_for(persona))))
     finish(launcher, home, name=name, has_key=True, astrbot=astrbot, offer_chat=True)
 
 
@@ -1612,15 +1663,24 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
         if not key:
             raise SystemExit(langs.term(f"--key-env {args.key_env}: that environment variable is empty"))
         values["LLM_API_KEY"] = key
-    name = args.name or env_get(env_path, "PERSONA_NAME") or DEFAULT_NAMES[lang]
-    values["PERSONA_NAME"] = name
-    write_env(env_path, values)
-
     persona_path = home / "persona.txt"
     origin = (shipped_persona(persona_path.read_text(encoding="utf-8"))
               if persona_path.is_file() else ("", "", ""))
+    key = ""
     if origin is not None:
         key = args.persona or (default_character(origin) if origin[0] else TEMPLATE)
+        values["PERSONA_AVATAR"] = avatar_for(key)
+    saved = env_get(env_path, "PERSONA_NAME")
+    if args.name:
+        name = args.name
+    elif saved:
+        # A saved name stays, unless it is only the last character's own.
+        name = name_for(key, saved, lang) if key and saved in OWN_NAMES else saved
+    else:
+        name = (character_for(key).name if key else "") or DEFAULT_NAMES[lang]
+    values["PERSONA_NAME"] = name
+    write_env(env_path, values)
+    if key:
         write_persona(home, key, name=name, lang=lang,
                       admin_name=env_get(env_path, "ADMIN_NAME"),
                       admin_relationship=env_get(env_path, "ADMIN_RELATIONSHIP"))
@@ -1677,7 +1737,7 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
     args = args if args is not None else init_parser(prog).parse_args(argv)
     home = homes.find_home()
     launcher = Launcher(python=python or sys.executable, home=home)
-    tty = sys.stdin is not None and sys.stdin.isatty()
+    tty = langs.interactive()
     flags = any((args.provider, args.base_url, args.model, args.key_env,
                  args.name, args.lang, args.persona))
     if tty and not args.no_input and not getattr(args, "terminal", False) and not flags:
@@ -1837,7 +1897,7 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
                                          url=args.url)
     if args.qq is not None or args.platform or args.url:
         raise SystemExit(langs.term("--qq, --no-qq, --platform and --url need DATA_DIR"))
-    if not (sys.stdin is not None and sys.stdin.isatty()):
+    if not langs.interactive():
         raise SystemExit(langs.term(f"{prog}: give AstrBot's folder (DATA_DIR), or run this in a terminal"))
     try:
         env_path = copy_env_template(home)
@@ -1858,7 +1918,7 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
     """A small front door; each action runs in a fresh process to reload settings."""
     argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
     _prepare_output()
-    if sys.stdin is None or not sys.stdin.isatty():
+    if not langs.interactive():
         print(langs.term("Open this menu in a terminal: personagent start"))
         return 2
     home = homes.find_home()

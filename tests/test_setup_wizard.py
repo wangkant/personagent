@@ -63,6 +63,19 @@ def _launcher(home: Path) -> sw.Launcher:
     return sw.Launcher(python="python", home=home)
 
 
+FAN_MADE = ("chatgpt", "deepseek", "claude")
+
+
+@pytest.fixture
+def portraits(monkeypatch, tmp_path_factory) -> Path:
+    """Portrait sprites for the fan-made characters, never the package's own folder."""
+    folder = tmp_path_factory.mktemp("portraits")
+    for key in FAN_MADE:
+        (folder / f"{key}.webp").write_bytes(b"RIFF\x04\x00\x00\x00WEBP")
+    monkeypatch.setattr(sw, "PORTRAITS", folder)
+    return folder
+
+
 # ---------------------------------------------------------------------------
 # Text, language, providers
 # ---------------------------------------------------------------------------
@@ -176,6 +189,26 @@ def test_only_an_unedited_shipped_persona_is_offered_for_replacement(monkeypatch
           sw.default_character(("legacy", "", "")) == sw.TEMPLATE)
 
 
+def test_the_fan_made_characters_come_last_with_their_own_names(portraits) -> None:
+    check("menu: the three after the original four, the template last",
+          sw.PERSONA_KEYS == ("dry-wit", "warm-listener", "gamer", "bookworm", *FAN_MADE, sw.TEMPLATE),
+          repr(sw.PERSONA_KEYS))
+    check("menu: only they have names of their own",
+          [c.name for c in sw.CHARACTERS if c.name] == ["ChatGPT", "DeepSeek", "Claude"])
+    check("name: the default follows the character", sw.name_for("claude", "Nova", "en") == "Claude")
+    check("name: the language's default too", sw.name_for("deepseek", "小夏", "zh") == "DeepSeek")
+    check("name: another character's own name follows", sw.name_for("claude", "ChatGPT", "en") == "Claude")
+    check("name: a chosen name stays", sw.name_for("claude", "Mira", "en") == "Mira")
+    check("name: a character without one keeps the name", sw.name_for("gamer", "Nova", "en") == "Nova")
+    check("name: leaving a fan-made character goes back to the default, as on the page",
+          sw.name_for("gamer", "Claude", "en") == "Nova")
+    check("portrait: the fan-made ones", [k for k in sw.PERSONA_KEYS if sw.portrait(k)] == list(FAN_MADE))
+    check("portrait: none for a name that is not a character",
+          sw.portrait("../portraits/claude") is None and sw.avatar_for("gamer") == "")
+    (portraits / "claude.webp").unlink()
+    check("portrait: a missing file means none", sw.avatar_for("claude") == "")
+
+
 # ---------------------------------------------------------------------------
 # .env.example
 # ---------------------------------------------------------------------------
@@ -186,9 +219,10 @@ def test_the_env_template_reads_top_down() -> None:
     text = (ROOT / ".env.example").read_text(encoding="utf-8")
     values = dotenv_values(ROOT / ".env.example")
     keys = list(values)
-    check("template: the required settings come first",
-          keys[:5] == ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "PERSONA_NAME", "AGENT_LANG"],
-          repr(keys[:5]))
+    check("template: the settings the page fills in come first",
+          keys[:6] == ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "PERSONA_NAME", "PERSONA_AVATAR",
+                       "AGENT_LANG"],
+          repr(keys[:6]))
     check("template: the QQ / OneBot block comes last",
           all(k.startswith("QQ_") for k in keys[-5:]), repr(keys[-5:]))
     inline = [line for line in text.splitlines()
@@ -523,7 +557,68 @@ def test_no_input_writes_the_flags_and_asks_nothing(monkeypatch, tmp_path, capsy
         sw.main(["--no-input", "--provider", "other"])
 
 
+def _name_and_avatar(home: Path) -> tuple[str, str]:
+    return sw.env_get(home / ".env", "PERSONA_NAME"), sw.env_get(home / ".env", "PERSONA_AVATAR")
+
+
+def test_the_wizard_names_a_fan_made_character_after_itself(monkeypatch, tmp_path, portraits,
+                                                            capsys) -> None:
+    claude = str(sw.PERSONA_KEYS.index("claude") + 1)
+    gamer = str(sw.PERSONA_KEYS.index("gamer") + 1)
+    answers = [("Choose / 选择", "1"), ("Service", "1"), ("API key", "sk-test-1234567890"),
+               ("[Y/n]", "n"), ("[y/N]", "n")]
+    _wire(monkeypatch, Script([("Character", claude), *answers]))
+    sw.run_wizard(tmp_path, _launcher(tmp_path))
+    check("wizard: Enter on the default name takes the character's own",
+          _name_and_avatar(tmp_path) == ("Claude", "claude"), repr(_name_and_avatar(tmp_path)))
+    check("wizard: the persona carries it",
+          (tmp_path / "persona.txt").read_text(encoding="utf-8").startswith("Your name is Claude."))
+    check("wizard: says why the name changed", "the name follows the character: Claude"
+          in capsys.readouterr().out)
+
+    _wire(monkeypatch, Script([("Bot name", "Mira"), ("Character", claude), *answers]))
+    sw.run_wizard(tmp_path, _launcher(tmp_path))
+    check("wizard: a typed name stays", _name_and_avatar(tmp_path) == ("Mira", "claude"))
+
+    _wire(monkeypatch, Script([("Character", gamer), *answers]))
+    sw.run_wizard(tmp_path, _launcher(tmp_path))
+    check("wizard: the saved name stays, and no portrait without one",
+          _name_and_avatar(tmp_path) == ("Mira", ""))
+
+
+def test_no_input_names_a_fan_made_character_unless_a_name_is_given(monkeypatch, tmp_path,
+                                                                      portraits) -> None:
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("asked a question"))
+    # A key in the environment would need --provider; this test is about names.
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    first, second = tmp_path / "first", tmp_path / "second"
+    monkeypatch.setenv("AGENT_HOME", str(first))
+    sw.main(["--no-input", "--lang", "en", "--persona", "deepseek"])
+    check("no-input: no name given or saved takes the character's own",
+          _name_and_avatar(first) == ("DeepSeek", "deepseek"), repr(_name_and_avatar(first)))
+    check("no-input: the persona carries it",
+          (first / "persona.txt").read_text(encoding="utf-8").startswith("Your name is DeepSeek."))
+    sw.main(["--no-input", "--persona", "claude"])
+    check("no-input: a name that was only the last character's own follows the new one",
+          _name_and_avatar(first) == ("Claude", "claude"), repr(_name_and_avatar(first)))
+    sw.main(["--no-input", "--persona", "gamer"])
+    check("no-input: and goes back to the default for one without a name",
+          _name_and_avatar(first) == ("Nova", ""), repr(_name_and_avatar(first)))
+
+    monkeypatch.setenv("AGENT_HOME", str(second))
+    sw.main(["--no-input", "--lang", "en", "--persona", "chatgpt", "--name", "Mika"])
+    check("no-input: --name wins", _name_and_avatar(second) == ("Mika", "chatgpt"))
+    sw.main(["--no-input", "--persona", "bookworm"])
+    check("no-input: a character without a portrait clears it", _name_and_avatar(second) == ("Mika", ""))
+    sw.main(["--no-input", "--persona", "claude"])
+    check("no-input: the saved name wins", _name_and_avatar(second) == ("Mika", "claude"))
+    (second / "persona.txt").write_text("Mine.\n", encoding="utf-8")
+    sw.main(["--no-input", "--persona", "gamer"])
+    check("no-input: an edited persona keeps its portrait", _name_and_avatar(second)[1] == "claude")
+
+
 def test_a_piped_stdin_says_the_questions_were_skipped(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("AGENT_HOME", str(tmp_path))
     monkeypatch.setattr("sys.stdin", io.StringIO("1\n1\nsk-x\n"))
     monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("asked a question"))

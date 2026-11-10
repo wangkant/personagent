@@ -143,7 +143,7 @@ class StartPs1IsolationTests(unittest.TestCase):
         # in it, so start.ps1's dependency probe fails exactly as it would on
         # a fresh checkout — then its `pip install` hits the stub below.
         subprocess.run(
-            [sys.executable, "-m", "venv", str(self.repo / ".venv")],
+            [sys.executable, "-m", "venv", "--without-pip", str(self.repo / ".venv")],
             check=True, capture_output=True, timeout=180,
         )
         self.assertTrue((self.repo / ".venv" / "Scripts" / "python.exe").is_file())
@@ -157,7 +157,7 @@ class StartPs1IsolationTests(unittest.TestCase):
 
     def _venv_with_stamp(self, stamp: str) -> Path:
         subprocess.run(
-            [sys.executable, "-m", "venv", str(self.repo / ".venv")],
+            [sys.executable, "-m", "venv", "--without-pip", str(self.repo / ".venv")],
             check=True, capture_output=True, timeout=180,
         )
         path = self.repo / ".venv" / ".personagent-installed"

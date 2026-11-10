@@ -44,7 +44,7 @@ SERVER_NAME = "personagent"
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 #: One turn of the character: a debounce plus its model calls.
 TURN_TIMEOUT_S = 120
-#: What the page takes in one message: it refuses 8000 characters or 16 KB, whichever comes first.
+#: What the page takes in one message: it refuses 8000 characters or 32 KB, whichever comes first.
 MAX_MESSAGE_CHARS = 5000
 #: What a Stop hook may keep the coding agent waiting for.
 HOOK_TIMEOUT_S = 60

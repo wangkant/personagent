@@ -21,5 +21,6 @@
 | `package_smoke.py` | 端到端檢查已安裝的 `personagent` 命令：版本、`init --no-input`、`chat`、帶 `/health` 的 `run`，以及 `doctor --json` | 一個已安裝的 `personagent`（`--personagent PATH`），別的都不要 | 否，由替身伺服器應答 | 受支援。CI 在 Linux 和 Windows 上執行 |
 | `welcome_smoke.py` | 端到端檢查已安裝的本地頁面：`start --no-browser`、儲存金鑰、和真實角色聊一次、第二次啟動複用頁面、乾淨退出 | 一個已安裝的 `personagent`（`--personagent PATH`），別的都不要 | 否，由同一個替身伺服器應答 | 受支援。CI 在 Linux 和 Windows 上執行 |
 | `release_notes.py` | 對照 `pyproject.toml` 檢查釋出標籤，並列印該版本的 CHANGELOG 段落 | 標籤，比如 `v1.1.0` | 否 | 受支援。釋出工作流會執行它 |
+| `locale_gaps.py` | 統計 `persona_agent/locales/` 裡每種語言已經翻譯了多少句，範圍是終端設定嚮導、終端聊天和演示用到的句子。帶上語言程式碼（比如 `ja`）時，列出還沒翻譯、會以英文顯示的句子 | 無 | 否 | 受支援。有缺漏時 `tests/test_locales.py` 會失敗 |
 
 實驗性指令碼是研究和維護用的輔助工具，可能改動或刪除，不設棄用期。呼叫模型的指令碼會花 `.env` 裡賬戶的額度；先讀 `--help`，有 `--dry-run` 的先試它。

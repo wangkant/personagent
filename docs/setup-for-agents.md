@@ -1,6 +1,6 @@
 # Set up personagent: instructions for a coding agent
 
-A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.3.0 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
+A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.0 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
 
 ## What you are setting up
 
@@ -10,7 +10,7 @@ Everything it stores lives in one **home folder**: `.env` (settings and keys), `
 
 When you are done:
 
-1. `personagent --version` prints `personagent 1.3.0` or later.
+1. `personagent --version` prints `personagent 1.4.0` or later.
 2. The home folder has `.env` with the user's language, character name and model service, and `persona.txt` with the personality.
 3. The local page is running, the user has the link, has entered their model key there and has chatted with the character.
 4. Any chat apps the user wanted are connected, by the user, in the page.
@@ -35,22 +35,12 @@ Ask these in one message, with the defaults shown, and accept "use the defaults"
 | Question | Default | Becomes |
 |---|---|---|
 | Which language should the character speak? English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) or Русский | the language the user writes to you in | `--lang` with `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` or `ru`. `personagent init --help` lists the codes the installed version takes |
-| The character's name. It answers when its name comes up in a chat | `小夏` (both Chinese), `ノヴァ` (Japanese), `노바` (Korean), `Нова` (Russian), `Nova` (the others) | `--name` |
-| Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona`, or your own `persona.txt` (step 4) |
+| The character's name. It answers when its name comes up in a chat | `小夏` (both Chinese), `ノヴァ` (Japanese), `노바` (Korean), `Нова` (Russian), `Nova` (the others); with `chatgpt`, `deepseek` or `claude`, the character's own name: `ChatGPT`, `DeepSeek` or `Claude` | `--name` |
+| Its personality: one of the table below, or their own description | warm listener (`warm-listener`) | `--persona` (table below), or your own `persona.txt` (step 4) |
 | Which model service do they have, or want, an API key for? | OpenRouter's free models | `--provider` (table below) |
 | Where should the home folder live? | `~/personagent` (on Windows `C:\Users\<name>\personagent`) | `<home>` |
 | Which chat apps should it join, if any? None are needed to start | none | step 7 |
 | How to install, only if it matters (they prefer pip, or neither uv nor pipx is present) | uv, else pipx, else a virtual environment | step 3 |
-
-Personalities:
-
-| `--persona` | Character | 中文 |
-|---|---|---|
-| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 毒舌损友 |
-| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
-| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
-| `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
-| `template` | A plain starting character to rewrite later | 以后自己写 |
 
 Model services:
 
@@ -69,6 +59,21 @@ Model services:
 | `other` | any other OpenAI-compatible service | none | needs `--base-url` and `--model` |
 
 `--model` replaces a preset's default model.
+
+Personalities:
+
+| `--persona` | Character | 中文 |
+|---|---|---|
+| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 毒舌损友 |
+| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
+| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
+| `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
+| `chatgpt` | The GPT dragon girl: proud, well-read, fond of treasure | GPT 娘（白龙） |
+| `deepseek` | The DeepSeek whale girl: clever, a bit lazy, lives on white rice | DeepSeek 鲸鱼娘 |
+| `claude` | The Claude lady: well-bred, gentle and candid, strict house rules | Claude 娘（豪门圣女） |
+| `template` | A plain starting character to rewrite later | 以后自己写 |
+
+`chatgpt`, `deepseek` and `claude` run on the `--provider` service like the others, whichever it is.
 
 ## 2. Check the prerequisites
 
@@ -147,7 +152,7 @@ Check the install:
 personagent --version
 ```
 
-It prints `personagent 1.3.0` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
+It prints `personagent 1.4.0` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
 
 ## 4. Create the home folder
 
@@ -172,7 +177,7 @@ personagent --home "<home>" init --no-input --lang en --name Nova --persona warm
 What `init --no-input` does:
 
 - It asks nothing, sends nothing over the network and does not test a key.
-- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, that language's default name for `--name`, `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value.
+- No flag is required. On a fresh home, a flag left out gives the system language for `--lang`, that language's default name for `--name` (with `--persona chatgpt`, `deepseek` or `claude`, the character's own name), `template` for `--persona` and OpenRouter for `--provider`. On a home that is already set up, it keeps the saved value, except a name that was only the previous character's own, such as `DeepSeek`, which follows the new `--persona`.
 - Without a key it still succeeds, with exit code 0. The key comes in step 6.
 - It ends with a "Next" list written for a person at a terminal. Skip it and follow this file: "run this setup again" there means the interactive setup that rule 8 rules out, and the `chat` command it shows calls the model, which costs money.
 - It creates `<home>` if needed and writes `<home>/.env` from the shipped template, readable only by the user on macOS and Linux, and `<home>/persona.txt`.
@@ -256,7 +261,7 @@ sleep 5
 grep -Eo 'http://127\.0\.0\.1:[0-9]+/#token=[^[:space:]]+' "<home>/start.log"
 ```
 
-Note the process id the second line prints. The log starts with `personagent 1.3.0`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
+Note the process id the second line prints. The log starts with `personagent 1.4.0`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
 
 The port is chosen anew at every start; `--port N` fixes one. `SERVER_PORT=8080` in `.env` is not the page's port: it belongs to the character's own service, which the page starts behind it.
 
@@ -316,7 +321,7 @@ From the command line, personagent connects only AstrBot:
 
 The [deployment guide](deploy.md) covers AstrBot, NapCat, Satori, Matrix and public addresses in full.
 
-**Coding agents.** Only if the user asks for the character inside Claude Code, Codex or DeepSeek Harness, and only with a personagent newer than 1.3.1: run `personagent --home "<home>" connect claude-code`, `personagent --home "<home>" connect codex` or `personagent --home "<home>" connect dsh`. It changes that coding agent's configuration and asks nothing. The user then starts a new session there, after restarting DeepSeek Harness if that is the one. On Claude Code or Codex, add `--react` only if the user wants remarks at the end of a turn, after telling them that the folder's name and the start of the coding agent's last message then go to their model service. `--remove` undoes it. [The guide](guide.md#coding-agents) has the details.
+**Coding agents.** Only if the user asks for the character inside Claude Code, Codex or DeepSeek Harness: run `personagent --home "<home>" connect claude-code`, `personagent --home "<home>" connect codex` or `personagent --home "<home>" connect dsh`. It changes that coding agent's configuration and asks nothing. The user then starts a new session there, after restarting DeepSeek Harness if that is the one. On Claude Code or Codex, add `--react` only if the user wants remarks at the end of a turn, after telling them that the folder's name and the start of the coding agent's last message then go to their model service. `--remove` undoes it. [The guide](guide.md#coding-agents) has the details.
 
 ## 8. Daily use
 

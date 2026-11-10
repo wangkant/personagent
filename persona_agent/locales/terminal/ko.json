@@ -80,6 +80,7 @@
 "Lark / Feishu app id": "Lark / Feishu 앱 ID",
 "Lark / Feishu app secret": "Lark / Feishu 앱 시크릿",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "플러그인이 전송할 주소. https:// 주소 등 (기본값 http://127.0.0.1:<SERVER_PORT>)",
+"Port {0} is in use. Leave --port out to pick a free one.": "{0}번 포트는 이미 사용 중입니다. --port를 빼면 빈 포트를 자동으로 고릅니다.",
 "--provider other needs --base-url": "--provider other에는 --base-url이 필요합니다",
 "--base-url needs https:// or http:// in front, such as https://api.deepseek.com": "--base-url 앞에는 https:// 또는 http://가 필요합니다. 예: https://api.deepseek.com",
 "Which service is this key for? Add --provider, such as --provider openrouter": "이 키는 어느 서비스의 것인가요? --provider openrouter처럼 --provider를 추가하세요",

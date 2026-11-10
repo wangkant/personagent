@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "personagent"
-version = "1.3.1"
+version = "1.4.0"
 description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
-license-files = ["LICENSE"]
+# The code is MIT; the three character portraits are CC BY-NC-SA 4.0.
+license = "MIT AND CC-BY-NC-SA-4.0"
+license-files = ["LICENSE", "persona_agent/static/characters/LICENSE.md"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
     "llm", "agent", "persona", "chatbot", "group-chat", "astrbot", "onebot",
@@ -43,11 +44,11 @@ dependencies = [
     # Direct, not transitive: ingestion.py's SSRF guard imports httpcore._backends.auto.
     "httpcore>=1.0,<2",
     # Decodes the first frame of a GIF for vision endpoints that reject GIFs.
-    "Pillow>=10.4,<13",
+    "Pillow>=10.4,<14",
     # The no-key web search backend (DuckDuckGo).
     "ddgs>=9,<10",
     # Discord's and QQ's gateways for the platforms personagent connects itself.
-    "websockets>=13,<16",
+    "websockets>=13,<18",
     # Draws the WeChat login QR code for the local page (with Pillow, above).
     "qrcode>=7.4,<9",
     # Unseals the bot secret QQ's scan-to-bind flow returns (AES-GCM).
@@ -67,6 +68,7 @@ personagent = "persona_agent.cli:main"
 Homepage = "https://github.com/wangkant/personagent"
 Issues = "https://github.com/wangkant/personagent/issues"
 Changelog = "https://github.com/wangkant/personagent/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/wangkant/personagent/blob/main/docs/guide.md"
 
 # The checkout's shared files ship inside the package as persona_agent/_bundled,
 # where home.resource() finds them in an installed copy.
@@ -79,6 +81,8 @@ only-include = ["persona_agent", "data", ".env.example",
 [tool.hatch.build.targets.wheel]
 core-metadata-version = "2.4"
 only-include = ["persona_agent", "data", "integrations/astrbot/astrbot_plugin_personagent"]
+# README illustrations: linked from published READMEs, read by nothing installed.
+exclude = ["persona_agent/static/*.webp"]
 # An editable install imports the checkout itself, which reads these files in place.
 dev-mode-dirs = ["."]
 

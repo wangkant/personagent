@@ -60,7 +60,7 @@
             ><button class="quiet" id="exit" data-t="exit">退出</button>
           </div>
         </header>
-        <section id="setup-view" class="page setup-page">
+        <section id="setup-view" class="page setup-page" hidden>
           <h1 data-t="hero">设置你的角色</h1>
           <p class="lead" data-t="intro">
             填一个模型密钥就能开始聊天，其他都有默认值。
@@ -152,6 +152,12 @@
                 </p>
                 <div class="sample-bubble" data-t="sample">
                   今天怎么样？有什么想和我说的吗？
+                </div>
+                <div class="trio" id="trio" hidden>
+                  <div class="trio-label" data-t="trioLabel">
+                    也可以选 GPT 娘、鲸鱼娘或 Claude 娘
+                  </div>
+                  <div class="trio-row" id="trio-row"></div>
                 </div>
                 <div class="preview-caption" data-t="changeLater">
                   名字和性格，随时都能改。
@@ -288,7 +294,9 @@
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">
-            <div class="avatar" id="chat-avatar" aria-hidden="true"></div>
+            <div class="avatar" id="chat-avatar" aria-hidden="true"
+              ><span class="dots"><i></i><i></i><i></i></span
+            ></div>
             <div>
               <h2 id="chat-name"></h2>
               <p data-t="chatHint">本机对话</p>

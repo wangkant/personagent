@@ -24,6 +24,10 @@ Se você usar um desses, use uma conta dedicada que possa perder, nunca a princi
 - Mantenha-o fora de grupos em que as respostas possam prejudicar ou enganar as pessoas, como grupos sobre temas médicos, jurídicos, financeiros ou de crise, e grupos com crianças.
 - Se alguém pedir que ele saia, ou perguntar o que ele sabe sobre essa pessoa, leve a sério. O administrador pode fazê-lo esquecer uma nota (`<name>, forget ...`), e tudo o que ele guarda está na pasta inicial dele (veja abaixo).
 
+## Créditos dos retratos
+
+Os retratos da garota-baleia do DeepSeek, da garota-dragão do GPT e da senhorita Claude foram desenhados para o personagent a partir de designs que a comunidade já desenha. A garota-baleia deriva de 溟月, personagem original do criador do Bilibili 上善无形 (CC BY-NC-SA 4.0), com a roupa de empregada que ZipZipPipe deu a ela. A garota-dragão segue a dragoa branca de ZipZipPipe. A senhorita Claude segue um design da comunidade cujo primeiro artista não é conhecido. Os retratos são licenciados sob CC BY-NC-SA 4.0, não sob MIT como o código: mantenha o crédito, não os use comercialmente e compartilhe as alterações sob a mesma licença. Veja `persona_agent/static/characters/LICENSE.md`.
+
 ## O que seu provedor de modelos vê
 
 Cada resposta envia ao provedor de modelos um prompt feito da persona, das mensagens recentes da conversa (com nomes), das notas que o bot guardou sobre a conversa e do que ele recuperou do que aprendeu. Se você definir um modelo de visão, as imagens vão para ele. Outros serviços que você ativar também veem partes disso. Eles incluem os endpoints de fallback, juiz, autoavaliação e embeddings que você configurar, e a busca na web, que envia uma consulta curta ao Tavily se você definir uma chave e ao DuckDuckGo caso contrário. A verificação de atualizações envia ao pypi.org apenas o número da versão do personagent, no máximo uma vez por dia; `UPDATE_CHECK_ENABLED=false` a desativa.

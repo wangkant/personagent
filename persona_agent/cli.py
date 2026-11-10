@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     argparse._ = langs.term
     p = _parser()
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
-    if not args.command and sys.stdin is not None and sys.stdin.isatty():
+    if not args.command and langs.interactive():
         args.command = "start"
     if not args.command:
         p.print_help()

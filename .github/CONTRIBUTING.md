@@ -76,7 +76,7 @@ python -m pip install build
 python -m build
 python -m venv /tmp/smoke-env
 /tmp/smoke-env/bin/python -m pip install dist/*.whl     # Windows: Scripts\python.exe
-python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version 1.2.2
+python tools/package_smoke.py --personagent /tmp/smoke-env/bin/personagent --version X.Y.Z
 python tools/welcome_smoke.py --personagent /tmp/smoke-env/bin/personagent
 ```
 
@@ -153,15 +153,16 @@ The entry points:
 
 | Entry | What it is |
 |---|---|
-| `personagent` (`persona_agent/cli.py`) | The command: `start` (the default), `up`, `init`, `chat`, `demo`, `run`, `connect`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
-| `persona_agent/welcome.py`, `static/welcome/` | The local page `personagent start` opens on 127.0.0.1: Chat, Activity, Connect apps, Character & settings, with its JSON API. Activity reads the agent service's `/api/dashboard/` with the token in `<runtime>/dashboard.token`. A second `start` reuses an open page. The images at the top of `static/` are the page's and the README's illustrations |
+| `personagent` (`persona_agent/cli.py`) | The command: `start` (the default), `up`, `init`, `chat`, `demo`, `run`, `connect`, `mcp`, `hook`, `doctor`, `learned`, `eval`. Each subcommand imports its module only when it runs, so `--home` is in the environment first. Also `python -m persona_agent` |
+| `persona_agent/welcome.py`, `static/welcome/` | The local page `personagent start` opens on 127.0.0.1: Chat, Activity, Connect apps, Character & settings, with its JSON API. Activity reads the agent service's `/api/dashboard/` with the token in `<runtime>/dashboard.token`. A second `start` reuses an open page. `static/characters/` holds the character portraits, under their own `LICENSE.md`. The images at the top of `static/` are the README's illustrations only, and the wheel leaves them out |
 | `persona_agent/connections.py` | The catalog of platforms the page can connect, and which go direct or through the managed AstrBot |
 | `persona_agent/direct/` | QQ official bots, personal WeChat, Telegram and Discord, connected by personagent itself in one process (`python -m persona_agent.direct`), with credentials in `platforms/direct.json` |
 | `persona_agent/astrbot_install.py` | The managed AstrBot for every other platform: downloaded into the home on its own Python 3.12, run headless with no dashboard |
 | `persona_agent/services.py` | The processes the page or `up` starts (agent, direct, managed AstrBot): they end with it, and what a crashed run left is stopped at the next start |
 | `persona_agent/home.py` | Where a deployment lives (`AGENT_HOME`, the checkout, the working folder, `~/personagent`) and where shipped files are found. Stdlib only |
 | `persona_agent/server.py` | The FastAPI service: `/v1/events`, `/v1/outbox`, `/health`, the deprecated `/v1/onebot`, startup checks. `personagent run` starts it |
-| `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: bilingual terminal questions, the key test, the handshake with an AstrBot you already run |
+| `persona_agent/setup_wizard.py` | `init --terminal` and `connect`: the terminal questions in the language of the install, the key test, the handshake with an AstrBot you already run |
+| `persona_agent/coding.py` | The character inside coding agents: `mcp`, the stdio MCP server Claude Code, Codex or DeepSeek Harness starts, `hook`, the optional Stop hook, and what `connect claude-code`, `connect codex` and `connect dsh` write into the coding agent's configuration |
 | `persona_agent/chat.py`, `demo.py` | The simulated group chat and the scripted demo |
 | `persona_agent/dashboard.py` | The agent service's Activity API under `/api/dashboard/`, its token, and the plain-text note at `/`. `decision_log.py` keeps the recent speak decisions it returns |
 | `persona_agent/doctor.py`, `ledger_admin.py`, `evals.py` | `doctor`, `learned` and `eval` |
@@ -189,6 +190,8 @@ The rest of the package:
 | `persona_agent/views.py` | Seed and learned data kept fresh from disk: pools, promoted views, filters, lorebook |
 | `persona_agent/settings.py` | `AgentSettings`: everything the agent is configured with, built once and passed in |
 | `persona_agent/config_env.py` | The one way to read a setting from the environment (`env_int`, `env_bool`, `env_str`, ...) |
+| `persona_agent/langs.py`, `locales/` | The ten languages personagent speaks to the person running it. English and Chinese sit next to the code that prints them. `locales/<code>.json` holds the other eight for the setup wizard, the terminal chat and the demo, and `locales/terminal/<code>.json` holds every language but English for `--help`, `doctor` and the refusals of a start. Both are keyed by the English sentence. `tools/locale_gaps.py` lists what a language still lacks, and `tests/test_locales.py` fails on a gap |
+| `persona_agent/chatlangs/` | The languages people chat in, one module each: how a memory command in that language is read, and the fixed lines the agent says without the model |
 | `persona_agent/prompts.py` | The persona contract (style guide, output protocol, intent rules) and the `[style]` block parser |
 | `persona_agent/textproc.py` | Pure text: tokenising, sanitising, the whitelist validator, splitting, the prompt's data frames |
 | `persona_agent/ingestion.py` | Links, share cards, images, OCR, vision, SSRF guard |
@@ -255,17 +258,25 @@ model, because both change what a reply looks like.
 
 ## Documentation
 
-The English page is the source of truth. Some pages have a `*.zh-CN.md`
-twin: `README`, `docs/start`, `docs/guide`, `docs/DISCLAIMER` and the
-AstrBot plugin README. The Chinese twin is written in natural Chinese for
-Chinese readers rather than translated line by line. When you change a fact
-in one, change it in the other.
+The English page is the source of truth. These pages exist in ten
+languages (English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français,
+Deutsch, Português (Brasil) and Русский): `README`, `docs/start`,
+`docs/guide`, `docs/connectors`, `docs/tools`, `docs/DISCLAIMER`, and the
+READMEs of the AstrBot plugin and of the Satori and Matrix connectors. A
+translation sits next to its page as `<page>.<code>.md`. The README's are
+`README.zh-CN.md` at the root and the other eight in `docs/readme/`. A
+translation is written in natural language for its readers rather than
+translated line by line. When you change a fact in the English page, change
+it in every translation.
 
-`docs/deploy.zh-CN.md` is not a twin. It is a separate step-by-step guide in
-Chinese that covers installing, connecting QQ by scan, other platforms and
-troubleshooting, and closes with a section on the third-party AstrBot and
-NapCat route. Images in a README use absolute `raw.githubusercontent.com`
-URLs so they render on PyPI.
+`docs/deploy.md` has seven translations and no Chinese one.
+`docs/deploy.zh-CN.md` is a separate step-by-step guide in Chinese that
+covers installing, connecting QQ by scan, other platforms, troubleshooting
+and the third-party AstrBot and NapCat route, and closes with the reference
+part of `docs/deploy.md`. `docs/deploy.zh-TW.md` is that guide in
+Traditional Chinese. `docs/setup-for-agents.md` is in English only. Images
+in a README use absolute `raw.githubusercontent.com` URLs so they render on
+PyPI.
 
 ## Releasing
 
@@ -274,14 +285,23 @@ A release is a tag. Only the maintainer cuts one.
 1. Put the version in `pyproject.toml`, `persona_agent/__init__.py`
    (`__version__`) and the plugin's `metadata.yaml`. A test fails if the
    three differ.
-2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
+2. Put it in the pages that name a version. No test checks these.
+   - The status line in the last section of `docs/guide.md` and its nine
+     translations ("personagent X.Y.Z is on PyPI").
+   - `docs/setup-for-agents.md` names the oldest release its commands work
+     with in four places: "works with personagent X.Y.Z from PyPI and
+     later" at the top, then `personagent X.Y.Z` in the checklist, in the
+     install check and in the start log. Raise the four when the file uses
+     something the release adds. A step that waits for a release says
+     "newer than A.B.C". Make that line name the release.
+3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
    (an em dash) and put a new, empty `## [Unreleased]` above it. In the link
    list at the end, add
    `[X.Y.Z]: https://github.com/wangkant/personagent/compare/vA.B.C...vX.Y.Z`
    under the `[Unreleased]` line and point that line at `vX.Y.Z...HEAD`. The
    section under the version becomes the release notes.
-3. Merge to `main` and wait for CI to pass.
-4. Tag `main` and push the tag:
+4. Merge to `main` and wait for CI to pass.
+5. Tag `main` and push the tag:
 
    ```bash
    git tag vX.Y.Z

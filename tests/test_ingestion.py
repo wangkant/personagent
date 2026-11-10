@@ -1155,6 +1155,15 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
     check("vision cache: an outage yields no caption", got == "", repr(got))
     check("vision cache: an outage is not cached", key not in agent.image_caption_cache)
 
+    async def ocr_reads_nothing(_url):
+        agent.image_caption_cache[key] = ""   # what _ocr_image caches on a reply
+        return ""
+
+    agent._ocr_image = ocr_reads_nothing
+    await agent._describe_image(url)
+    check("vision cache: what OCR cached during the outage is not kept either",
+          key not in agent.image_caption_cache)
+
     async def vision_empty(_url):
         return ""
 

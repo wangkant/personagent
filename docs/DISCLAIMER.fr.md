@@ -24,6 +24,10 @@ Si vous utilisez l'un de ces moyens, utilisez un compte dédié que vous pouvez 
 - Gardez-le hors des groupes où ses réponses pourraient nuire aux gens ou les induire en erreur, comme les groupes sur des sujets médicaux, juridiques, financiers ou de crise, et les groupes avec des enfants.
 - Si quelqu'un lui demande de partir, ou demande ce qu'il sait sur lui, prenez-le au sérieux. L'administrateur peut lui faire oublier une note (`<name>, forget ...`), et tout ce qu'il stocke se trouve dans son dossier personnel (voir ci-dessous).
 
+## Crédits des portraits
+
+Les portraits de la fille-baleine de DeepSeek, de la fille-dragon GPT et de la demoiselle Claude ont été dessinés pour personagent d'après des designs que la communauté dessine déjà. La fille-baleine dérive de 溟月, un personnage original du créateur Bilibili 上善无形 (CC BY-NC-SA 4.0), dans la tenue de soubrette que ZipZipPipe lui a donnée. La fille-dragon suit la dragonne blanche de ZipZipPipe. La demoiselle Claude suit un design de la communauté dont le premier artiste n'est pas connu. Les portraits sont sous licence CC BY-NC-SA 4.0, et non MIT comme le code : conservez le crédit, ne les utilisez pas à des fins commerciales et partagez vos modifications sous la même licence. Voir `persona_agent/static/characters/LICENSE.md`.
+
 ## Ce que voit votre fournisseur de modèles
 
 Chaque réponse envoie au fournisseur de modèles un prompt composé de la persona, des messages récents de la discussion (noms compris), des notes que le bot a gardées sur la discussion et de ce qu'il a retrouvé dans ce qu'il a appris. Si vous définissez un modèle de vision, les images vont vers lui. D'autres services que vous activez en voient aussi une partie. Ils comprennent les points d'accès de secours, de jugement, d'auto-évaluation et d'embeddings que vous configurez, et la recherche web, qui envoie une courte requête à Tavily si vous définissez une clé et à DuckDuckGo sinon. La vérification des mises à jour n'envoie à pypi.org que le numéro de version de personagent, au plus une fois par jour ; `UPDATE_CHECK_ENABLED=false` la désactive.

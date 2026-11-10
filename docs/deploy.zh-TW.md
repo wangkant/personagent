@@ -198,6 +198,7 @@ key 只留在這臺電腦上，對話內容會發給你選的模型服務。`.en
 
 - `GET status`、`GET conversations` 和 `GET conversation?id=<chat id>` 讀取服務狀態、它知道的聊天，以及某個聊天的詳情。
 - `POST candidates/<id>/promote`、`replace`、`reject` 和 `rollback` 修改它學到的內容。每次修改都和 `personagent learned` 進同一個賬本，操作者記為 `dashboard`。
+- `POST memory/forget` 帶上請求體 `{"conv": "<chat id>", "note": "<note id>"}`，刪除一條記憶筆記，`conv` 和 id 取自 `GET conversation` 返回的 `memories` 裡的那一條。不帶 `note` 時刪除這個聊天的核心筆記。
 
 每次呼叫都要帶 `X-Personagent-Dashboard-Token` 請求頭，值是執行目錄（預設 `<home>/runtime/`，除非 `AGENT_RUNTIME_DIR` 改了它）裡 `dashboard.token` 檔案中的 token。這個檔案只有本人能讀，服務啟動時生成。不帶這個請求頭的呼叫得到 401（`dashboard_token`），token 錯誤得到 403（`wrong_token`）。`CONNECTOR_TOKEN` 和 `X-Personagent-Token` 打不開它，它們只用於聯結器和 `/health/details`。
 

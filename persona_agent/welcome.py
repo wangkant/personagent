@@ -40,9 +40,9 @@ ASSETS = Path(__file__).with_name("static") / "welcome"
 # ASSETS/i18n/<code>.json. The character still speaks en or zh prompts.
 PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 TOKEN_HEADER = "x-personagent-setup-token"
-MAX_BODY = 16_384
-# Characters; the shipped personas are under 800, and 4000 CJK characters
-# still fit in MAX_BODY.
+# Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
+MAX_BODY = 32_768
+# Characters; the shipped personas are under 800.
 PERSONA_LIMIT = 4000
 # Platforms a setting may name: the ones the page knows, or QQ through NapCat.
 PLATFORM_KINDS = frozenset(p.kind for p in conn.PLATFORMS) | {"qq"}
@@ -138,6 +138,9 @@ class Workspace:
                 else:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
             updates.refresh_soon(self.home)
+            avatar = values.get("PERSONA_AVATAR", "").strip()
+            if not sw.portrait(avatar):
+                avatar = origin[0] if origin and sw.portrait(origin[0]) else ""
             return {"version": __version__, "update": updates.notice(self.home),
                     "configured": bool(values.get("LLM_API_KEY")),
                     "provider": known.key if known else ("other" if values.get("LLM_BASE_URL")
@@ -146,7 +149,9 @@ class Workspace:
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
                     "name": values.get("PERSONA_NAME", ""), "lang": langs.normalize(values.get("AGENT_LANG")),
-                    "character": origin[0] if origin else ("custom" if card.is_file() else "warm-listener"),
+                    # An earlier release's template is on no menu: it maps to the plain one.
+                    "character": sw.default_character(origin) if origin else ("custom" if card.is_file() else "warm-listener"),
+                    "avatar": avatar,
                     "platformInstalled": installation.python.is_file(),
                     "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
@@ -199,10 +204,12 @@ class Workspace:
             if not model or len(model) > 256:
                 raise ValueError("model_required")
             lang = langs.normalize(payload.get("lang")) or "en"
-            name = str(payload.get("name") or sw.DEFAULT_NAMES[lang]).strip()
             character = str(payload.get("character") or "warm-listener")
-            if (not name or len(name) > 64 or _expands(name)
-                    or character not in (*sw.PERSONA_KEYS, "custom")):
+            if character not in (*sw.PERSONA_KEYS, "custom"):
+                raise ValueError("invalid_character")
+            own = sw.character_for(character).name if character != "custom" else ""
+            name = str(payload.get("name") or own or sw.DEFAULT_NAMES[lang]).strip()
+            if not name or len(name) > 64 or _expands(name):
                 raise ValueError("invalid_character")
             # dotenv would read ${VAR} back as another setting, a key included.
             if _expands(key):
@@ -223,6 +230,9 @@ class Workspace:
             values = {"LLM_BASE_URL": base, "LLM_MODEL": model, "LLM_API_KEY": key,
                       "PERSONA_NAME": name, "AGENT_LANG": lang,
                       "CONNECTOR_TOKEN": old.get("CONNECTOR_TOKEN") or secrets.token_urlsafe(32)}
+            # Kept for "custom", so an edited character keeps its portrait.
+            if character != "custom":
+                values["PERSONA_AVATAR"] = sw.avatar_for(character)
             sw.write_env(self.env, values)
             if character != "custom":
                 sw.write_persona(self.home, character, name=name, lang=lang,
@@ -544,7 +554,9 @@ class Workspace:
     async def chat(self, text: str) -> dict:
         if not self.config().get("LLM_API_KEY"):
             raise ValueError("key_required")
-        if not text.strip() or len(text) > 8000:
+        if not text.strip():
+            raise ValueError("generic")
+        if len(text) > 8000:
             raise ValueError("invalid_message")
         async with self._chat_lock:
             await asyncio.to_thread(self.services.start_agent)
@@ -727,7 +739,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
             if any(request.headers.get(key) for key in ("x-forwarded-host", "forwarded", "x-forwarded-for")):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
         response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
+        # Only the portraits set their own: they never change while the page runs.
+        response.headers.setdefault("Cache-Control", "no-store")
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
@@ -777,6 +790,13 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
             raise HTTPException(404)
         return FileResponse(path, media_type="application/json")
 
+    @app.get("/assets/characters/{name}")
+    async def character_portrait(name: str):
+        path = sw.portrait(name.removesuffix(".webp")) if name.endswith(".webp") else None
+        if path is None:
+            raise HTTPException(404)
+        return FileResponse(path, media_type="image/webp", headers={"Cache-Control": "max-age=86400"})
+
     @app.get("/api/state")
     async def state():
         return await asyncio.to_thread(workspace.summary)
@@ -785,7 +805,9 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def catalog():
         return {"providers": [{"id": p.key, "name": list(p.name), "baseUrl": p.base_url,
                                "model": p.model, "keyUrl": p.key_url} for p in sw.PROVIDERS],
-                "characters": [{"id": c.key, "name": list(c.title)} for c in sw.CHARACTERS],
+                "characters": [{"id": c.key, "name": list(c.title), "defaultName": c.name or None,
+                                "avatar": f"/assets/characters/{c.key}.webp" if sw.portrait(c.key) else None}
+                               for c in sw.CHARACTERS],
                 "platforms": conn.catalog()}
 
     @app.post("/api/config")
@@ -925,7 +947,11 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         stopped = stop_leftovers(home)
         if stopped:
             print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
-        sock.bind(("127.0.0.1", args.port))
+        try:
+            sock.bind(("127.0.0.1", args.port))
+        except (OSError, OverflowError):
+            print(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
+            return 1
         sock.listen(128)
         port = sock.getsockname()[1]
         url = f"http://127.0.0.1:{port}/#token={token}"
@@ -933,9 +959,10 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
         notice = updates.line(updates.notice(home))
         if notice:
-            print(notice, flush=True)
+            print(langs.term(notice), flush=True)
         if not args.no_browser:
-            timer = threading.Timer(0.8, webbrowser.open, args=(url,))
+            # The socket already listens, so an early request waits its turn.
+            timer = threading.Timer(0, webbrowser.open, args=(url,))
             timer.daemon = True
             timer.start()
         app = create_app(home, token)

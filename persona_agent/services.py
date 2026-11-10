@@ -462,7 +462,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         print(langs.term(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop."))
         notice = updates.line(updates.notice(home), sub="up")
         if notice:
-            print(notice)
+            print(langs.term(notice))
         direct_running = services.running("direct")
         # The direct process ends on its own when every platform in it was
         # refused; the agent and AstrBot keep running without it.

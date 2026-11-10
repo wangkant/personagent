@@ -24,6 +24,10 @@ Si usas alguno de estos, usa una cuenta dedicada que puedas permitirte perder, n
 - Mantenlo fuera de grupos donde sus respuestas puedan dañar o engañar a la gente, como grupos sobre temas médicos, legales, financieros o de crisis, y grupos con menores.
 - Si alguien le pide que se vaya, o pregunta qué sabe de él, tómatelo en serio. El administrador puede hacer que olvide una nota (`<name>, forget ...`), y todo lo que guarda está en su carpeta de inicio (ver más abajo).
 
+## Créditos de los retratos
+
+Los retratos de la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude se dibujaron para personagent a partir de diseños que la comunidad ya dibuja. La chica ballena deriva de 溟月, un personaje original del creador de Bilibili 上善无形 (CC BY-NC-SA 4.0), con el traje de sirvienta que le puso ZipZipPipe. La chica dragón sigue a la dragona blanca de ZipZipPipe. La señorita Claude sigue un diseño de la comunidad cuyo primer artista se desconoce. Los retratos tienen licencia CC BY-NC-SA 4.0, no MIT como el código: conserva la atribución, no los uses con fines comerciales y comparte los cambios bajo la misma licencia. Consulta `persona_agent/static/characters/LICENSE.md`.
+
 ## Qué ve tu proveedor de modelos
 
 Cada respuesta envía al proveedor de modelos un prompt formado por la persona, los mensajes recientes del chat (con nombres), las notas que el bot ha guardado sobre el chat y lo que ha recuperado de lo aprendido. Si configuras un modelo de visión, las imágenes van a él. Otros servicios que actives también ven partes de esto. Entre ellos están los endpoints de respaldo, juez, autoevaluación y embeddings que configures, y la búsqueda web, que envía una consulta breve a Tavily si defines una clave y a DuckDuckGo si no. La comprobación de actualizaciones solo envía a pypi.org el número de versión de personagent, como máximo una vez al día; `UPDATE_CHECK_ENABLED=false` la desactiva.

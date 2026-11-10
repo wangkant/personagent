@@ -4,6 +4,7 @@ Each probe spends a few tokens (or one test image or search credit). Reads
 os.getenv only: the caller loads .env first.
 """
 import base64
+import functools
 import io
 import ipaddress
 import json
@@ -21,7 +22,10 @@ from .textproc import apply_k2_quirks
 
 # A loopback service (NapCat, a local model) must not be reached through the
 # HTTP(S)_PROXY the shell may set for the internet.
-_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+@functools.lru_cache(maxsize=1)
+def _direct() -> urllib.request.OpenerDirector:
+    """Built on first use: it creates an SSL context, 12 ms of every start."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def _is_loopback(url: str) -> bool:
@@ -36,7 +40,7 @@ def _is_loopback(url: str) -> bool:
 
 def _open(req, timeout):
     if _is_loopback(req.full_url):
-        return _DIRECT.open(req, timeout=timeout)
+        return _direct().open(req, timeout=timeout)
     return urllib.request.urlopen(req, timeout=timeout)
 
 
