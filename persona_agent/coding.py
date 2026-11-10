@@ -111,12 +111,21 @@ def _conversation(home: Path) -> str:
 
 
 def _send_to_service(home: Path, url: str, text: str, *, timeout_s: float, **fields) -> str:
-    """One signed event to a running service; the text of what comes back."""
-    from persona_agent.welcome import send_chat_event
+    """One signed event to a running service; the text of what comes back,
+    which also joins the page's chat, as the page's own turns do."""
+    from persona_agent.welcome import append_saved_chat, send_chat_items
 
     token = dotenv_values(home / ".env").get("CONNECTOR_TOKEN") or ""
-    return asyncio.run(send_chat_event(url, token, _conversation(home), text,
-                                       connector_id="coding-agent", timeout_s=timeout_s, **fields))
+    conversation = _conversation(home)
+    items = asyncio.run(send_chat_items(url, token, conversation, text,
+                                        connector_id="coding-agent", timeout_s=timeout_s, **fields))
+    said = [str(item.get("text", "")) for item in items if item.get("type") == "text"]
+    # A hook's cue is the engine's words, not the user's.
+    entries = [] if fields.get("proactive") else [{"role": "user", "text": text, "via": "coding"}]
+    entries += [{"role": "assistant", "text": line, "via": "coding"} for line in said if line.strip()]
+    if entries:
+        append_saved_chat(home, conversation, entries)
+    return "\n".join(said)
 
 
 class Character:

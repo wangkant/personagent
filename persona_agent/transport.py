@@ -12,6 +12,8 @@ import random
 import re
 import time
 from functools import partial
+from pathlib import Path
+from typing import Optional
 
 import httpx
 
@@ -134,6 +136,11 @@ class Transport:
         self._last_excuse_at.pop(key, None)
         self._send_window.pop(f"group:{key}", None)
         reaction_key = channels.learning_key(key)
+        openers = vars(self).get("_opener_sent_at", {})
+        openers.pop(key, None)
+        openers.pop(reaction_key, None)
+        vars(self).get("_followup_passed", {}).pop(key, None)
+        vars(self).get("_declined_retry_at", {}).pop(key, None)
         if channels.is_dm(key):
             uid = key.split(":", 1)[1]
             self.dm_history.pop(uid, None)
@@ -276,29 +283,38 @@ class Transport:
         sent_stickers: list[str] = []
         # Never the same sticker twice in one reply.
         used_md5s: set[str] = set()
+        unmatched = False
+
+        async def send_sticker(file_path: Path) -> bool:
+            nonlocal at_head, sendable, sent_any
+            rel = file_path.relative_to(self.stickers.dir).as_posix()
+            used_md5s.add(self.stickers.entries[rel].get("md5", ""))
+            if not collected:
+                await asyncio.sleep(random.uniform(0.6, 1.4))
+            img_b64 = base64.b64encode(file_path.read_bytes()).decode()
+            sendable = True
+            message = at_head + [
+                {"type": "image", "data": {"file": f"base64://{img_b64}"}}]
+            at_head = []
+            if not await send(message):
+                logger.warning("[Agent] send aborted (sticker chunk failed), "
+                               "dropping remaining segments (%s)", target_key)
+                return False
+            sent_any = True
+            sent_stickers.append(rel)
+            return True
+
         for kind, value in TextProcessing._delivery_units(segments, cap):
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
                 if not file_path:
                     logger.info("[Agent] sticker tag %r → no match, skipping%s",
                                 value, label)
+                    unmatched = True
                     continue
-                rel = file_path.relative_to(self.stickers.dir).as_posix()
-                used_md5s.add(self.stickers.entries[rel].get("md5", ""))
-                if not collected:
-                    await asyncio.sleep(random.uniform(0.6, 1.4))
-                img_b64 = base64.b64encode(file_path.read_bytes()).decode()
-                sendable = True
-                message = at_head + [
-                    {"type": "image", "data": {"file": f"base64://{img_b64}"}}]
-                at_head = []
-                if not await send(message):
+                if not await send_sticker(file_path):
                     failed = True
-                    logger.warning("[Agent] send aborted (sticker chunk failed), "
-                                   "dropping remaining segments (%s)", target_key)
                     break
-                sent_any = True
-                sent_stickers.append(rel)
                 continue
             sendable = True
             if not collected:
@@ -315,6 +331,13 @@ class Transport:
                 break
             sent_any = True
             delivered.append(value)
+        # A sticker-only answer is still an answer: send the favourite.
+        if unmatched and not sendable:
+            stand_in = self._most_used_sticker(used_md5s)
+            if stand_in is not None:
+                logger.info("[Agent] no sticker matched, sending %s instead%s",
+                            stand_in.name, label)
+                failed = not await send_sticker(stand_in)
         return SendResult(
             success=sendable and not failed,
             partial=sent_any and failed,
@@ -322,6 +345,20 @@ class Transport:
             message_ids=list(self._sent_mids.get(target_key, [])),
             sticker_files=sent_stickers,
         )
+
+    def _most_used_sticker(self, exclude_md5s: set) -> Optional[Path]:
+        """The most used tagged sticker that may be sent, or None."""
+        best: Optional[tuple[int, str]] = None
+        for rel, entry in self.stickers.entries.items():
+            if (not entry.get("auto_tagged") or not entry.get("tags")
+                    or entry.get("persona_fit") is False
+                    or entry.get("md5", "") in exclude_md5s
+                    or not (self.stickers.dir / rel).exists()):
+                continue
+            uses = int(entry.get("use_count") or 0)
+            if best is None or uses > best[0]:
+                best = (uses, rel)
+        return None if best is None else self.stickers.dir / best[1]
 
     async def _send_group(self, group_id: str, text: str,
                        at_user_id: str = "") -> SendResult:

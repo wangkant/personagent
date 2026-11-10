@@ -1742,6 +1742,62 @@ label.check input:checked {
   color: var(--faint);
   white-space: nowrap;
 }
+/* What a chat remembers: the text, its details under it, its actions beside it. */
+.memory-group {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.memory-group:first-of-type {
+  margin-top: 4px;
+}
+.memory-body {
+  flex: 1;
+  min-width: 0;
+}
+.memory-body span {
+  display: block;
+}
+.notes .memory-body small {
+  display: block;
+  margin: 2px 0 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.notes li button + button {
+  margin-left: 0;
+}
+.memory-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.toast-action {
+  margin-left: 10px;
+  padding: 0 8px;
+  height: 24px;
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bg);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.toast-action:hover {
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
+}
+.toast-action:active {
+  background: color-mix(in srgb, var(--bg) 28%, transparent);
+}
+.toast-action:focus-visible {
+  outline: 2px solid var(--bg);
+  outline-offset: 1px;
+}
 .recent li {
   padding: 9px 0;
   border-top: 1px solid var(--line);
@@ -1957,7 +2013,8 @@ button:active:not(:disabled) {
   .notes li {
     flex-wrap: wrap;
   }
-  .notes li span {
+  .notes li span,
+  .notes li .memory-body {
     flex-basis: 100%;
   }
   .page {

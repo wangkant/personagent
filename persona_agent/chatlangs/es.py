@@ -43,6 +43,16 @@ SPEC = Spec(
     # Spanish drops the subject, so a few first-person verbs count too.
     first_person=(r"(?<!\w)(?:yo|me|mi|mis|mí|mío|mía|míos|mías|conmigo|soy|estoy"
                   r"|tengo|quiero|prefiero|necesito|odio|detesto|adoro)(?!\w)"),
+    self_id=r"(?<!\w)(?<!no\s)(?:yo\s+)?soy(?:\s+(?:el|la|un|una))?(?!\w)",
+    made_by=r"(?:cread|hech|desarrollad|entrenad)[oa]\s+por",
+    from_maker=r"(?<!\w)de",
+    leak_labels=r"entrada|hablante|intención|decisión|estilo|análisis",
+    assistant_tells=(r"(?:lo\s+siento|lo\s+lamento|disculpa(?:me|s)?|perdón)[,.!\s]+(?:pero\s+)?"
+                     r"no\s+(?:puedo|me\s+es\s+posible)\s+(?:ayudar(?:te|le)?|asistir(?:te|le)?|proporcionar|"
+                     r"responder|cumplir)\s+(?:con\s+)?(?:eso|esto|esa\s+\w+|esta\s+\w+|tu\s+solicitud|"
+                     r"su\s+solicitud|a\s+(?:eso|esa\s+pregunta))"
+                     r"|espero\s+que\s+(?:esto|eso)?\s*(?:te|le)?\s*(?:ayude|sirva|sea\s+útil)"
+                     r"|espero\s+haber(?:te|le)?\s+ayudado"),
     replies={
         "remember_what": ("¿recordar qué? no dijiste nada", "venga, suéltalo",
                           "¿qué apunto?"),

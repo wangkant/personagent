@@ -373,3 +373,27 @@ def test_settings_named_in_log_messages_exist() -> None:
                                 for setting in name.findall(part.value)
                                 if setting not in known]
     check("log messages name only real settings", not unknown, repr(unknown))
+
+
+def test_the_memory_settings_round_trip_and_keep_their_old_defaults() -> None:
+    """The four memory settings read from the environment and fall back on a
+    bad value; the two whose meaning changed keep their defaults."""
+    s = AgentSettings.from_env(env={
+        "LLM_API_KEY": "k", "MEMORY_CALLS_PER_DAY": "0", "MEMORY_PROMPT_CHARS": "900",
+        "MEMORY_EPISODES_MAX": "7", "MEMORY_KEEP_RECENT": "false"})
+    check("from_env: the memory settings are read",
+          (s.memory_calls_per_day, s.memory_prompt_chars, s.memory_episodes_max,
+           s.memory_keep_recent) == (0, 900, 7, False),
+          repr((s.memory_calls_per_day, s.memory_prompt_chars)))
+    plain = AgentSettings(api_key="k")
+    check("the defaults", (plain.memory_calls_per_day, plain.memory_prompt_chars,
+                           plain.memory_episodes_max, plain.memory_keep_recent)
+          == (40, 2400, 120, True))
+    check("the changed-meaning settings keep their defaults",
+          (plain.chat_context_messages, plain.memory_tidy_every) == (120, 8))
+    bad = AgentSettings.from_env(env={
+        "LLM_API_KEY": "k", "MEMORY_CALLS_PER_DAY": "-1", "MEMORY_PROMPT_CHARS": "5",
+        "MEMORY_EPISODES_MAX": "x"})
+    check("bad values fall back to the defaults",
+          (bad.memory_calls_per_day, bad.memory_prompt_chars,
+           bad.memory_episodes_max) == (40, 2400, 120))

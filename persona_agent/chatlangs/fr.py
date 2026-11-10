@@ -55,6 +55,16 @@ SPEC = Spec(
                           "toute ta mémoire", "ta mémoire"}),
     first_person=(r"(?<![\w'’-])(?:je|moi|me|mon|ma|mes|mien|mienne|miens|miennes"
                   r"|moi-même)(?![\w'’-])|(?<![\w'’-])[jm]['’](?=\w)"),
+    self_id=r"(?<!\w)je\s+suis(?!\s+pas\b)(?:\s+(?:le|la|un|une))?(?!\w)",
+    made_by=r"(?:créé|développé|conçu|entraîné|fabriqué)e?\s+par",
+    from_maker=r"(?<!\w)(?:de|d['’])",
+    leak_labels=r"entrée|locuteur|intention|décision|style|analyse",
+    assistant_tells=(r"(?:désolée?|navrée?)[,.!\s]+(?:mais\s+)?je\s+ne\s+"
+                     r"(?:(?:peux|pourrai)\s+pas|suis\s+pas\s+en\s+mesure\s+d['’e])\s*(?:vous\s+|t['’]\s*)?"
+                     r"(?:aider|répondre|fournir|assister)\s+(?:avec\s+|à\s+)?"
+                     r"(?:cela|ça|ceci|cette\s+(?:demande|question)|votre\s+demande|ta\s+demande)"
+                     r"|j['’]esp[èe]re\s+que\s+(?:cela|ça|ceci)\s+(?:vous|t['’])\s*(?:aide|aidera|sera\s+utile)"
+                     r"|en\s+esp[ée]rant\s+(?:que\s+)?(?:cela|ça)\s+(?:vous|t['’])\s*aide"),
     replies={
         "remember_what": ("retenir quoi ? t'as rien dit", "vas-y, dis",
                           "je retiens quoi lol"),

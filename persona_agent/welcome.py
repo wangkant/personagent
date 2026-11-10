@@ -76,6 +76,9 @@ ACTIVITY_STANDING = ("stage", "missing", "reason", "expires", "events", "needEve
                      "strong", "needStrong", "speakers", "needSpeakers")
 ACTIVITY_RECENT = 40
 CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
+# What a chat remembers that the view can forget, and a removal's trash id.
+MEMORY_KINDS = ("note", "episode", "thread", "core")
+MEMORY_TID = re.compile(r"r[0-9a-f]{10}")
 # The page's own connector: the outbox hands it only what is for this page's chat.
 PAGE_CONNECTOR = "local-welcome"
 CHAT_KEPT = 50
@@ -113,6 +116,25 @@ async def send_chat_event(url: str, token: str, conversation: str, text: str, **
     """One message in the owner's one-to-one chat; the text of what comes back."""
     items = await send_chat_items(url, token, conversation, text, **kwargs)
     return "\n".join(str(item.get("text", "")) for item in items if item.get("type") == "text")
+
+
+def append_saved_chat(home: Path, conversation: str, entries: list[dict]) -> None:
+    """Add messages to the page's saved chat while no page holds it, numbered
+    as `Workspace._append` numbers them; nothing if a new chat has started."""
+    path = home / "runtime" / "desktop" / "browser-chat.json"
+    with FileLock(path.with_name("browser-chat.lock"), timeout=10):
+        saved = sw._read_json(path)
+        if str(saved.get("conversation") or "") != conversation:
+            return
+        messages = [m for m in saved.get("messages", []) if isinstance(m, dict)]
+        seq = max([int(saved.get("seq") or 0) if str(saved.get("seq") or 0).isdigit() else 0]
+                  + [m["seq"] for m in messages if isinstance(m.get("seq"), int)])
+        for entry in entries:
+            seq += 1
+            entry["seq"] = seq
+        atomic_write_text(path, json.dumps({"conversation": conversation, "seq": seq,
+                                            "messages": (messages + entries)[-CHAT_KEPT:]},
+                                           ensure_ascii=False))
 
 
 def _picture_kind(data: bytes) -> str:
@@ -339,6 +361,8 @@ class Workspace:
                         key = old.get("VISION_API_KEY", "")
                     if not key:
                         raise ValueError("key_required")
+                if not _vision_works(model, base, key):
+                    raise ValueError("vision_unsupported")
                 values.update(VISION_MODEL=model, VISION_BASE_URL=base, VISION_API_KEY=key)
             else:
                 values["VISION_MODEL"] = ""
@@ -588,7 +612,8 @@ class Workspace:
             pass
 
     async def forget_chat(self) -> dict:
-        """Forget what the character noted in this page's chat, then start a new one."""
+        """Forget everything this page's chat remembers, then start a new one.
+        What other chats remember about the page's owner is kept."""
         async with self._chat_lock:
             chat = self._page_key()
             self._forgetting = True
@@ -599,24 +624,15 @@ class Workspace:
 
     async def _forget(self, chat: str) -> dict:
         await asyncio.to_thread(self.services.start_agent)
-        raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
+        raw = await self._activity_call("POST", "/api/dashboard/memory/forget_chat",
+                                        json={"conv": chat})
         if raw is None:
             raise ValueError("activity_unavailable")
         if raw.get("off"):
-            # Memory is read and forgotten through the Activity data, which is switched off.
+            # Memory is forgotten through the Activity data, which is switched off.
             raise ValueError("forget_needs_activity")
-        # Each note by its id, then the core note, which has none.
-        notes = [(str(m.get("conv") or chat), str(m.get("id") or "")) for m in raw.get("memories") or []]
-        forgotten = 0
-        for conv, note in [n for n in notes if n[1]] + ([(chat, "")] if raw.get("core_note") else []):
-            try:
-                await self._activity_call("POST", "/api/dashboard/memory/forget",
-                                          json={"conv": conv, "note": note})
-                forgotten += 1
-            except ValueError:
-                pass  # already gone
         self.reset_chat()
-        return {"ok": True, "forgotten": forgotten}
+        return {"ok": True, "forgotten": int(raw.get("forgotten") or 0)}
 
     def start_job(self, action: str, kind: str = "", values: dict | None = None) -> None:
         """Run `action` in the background: "start", or "scan", "connect" or
@@ -866,6 +882,8 @@ class Workspace:
             return {"off": True}
         if response.status_code == 409:
             raise ValueError("activity_changed")
+        if response.status_code == 404 and value.get("code") == "restore_gone":
+            raise ValueError("activity_restore_gone")
         if response.status_code != 200:
             raise ValueError("activity_unavailable")
         return value
@@ -903,15 +921,48 @@ class Workspace:
         return await self.activity_chat(chat)
 
     async def activity_forget(self, payload: dict) -> dict:
+        """Forget one remembered item; the trash id comes back for Undo."""
         chat, conv = str(payload.get("chat") or ""), str(payload.get("conv") or "")
-        if not chat or len(chat) > 512 or len(conv) > 512:
+        item = str(payload.get("id") or payload.get("note") or "")
+        kind = str(payload.get("kind") or ("note" if item else "core"))
+        if (not chat or len(chat) > 512 or len(conv) > 512 or kind not in MEMORY_KINDS
+                or len(item) > 128):
             raise ValueError("invalid_chat")
         result = await self._activity_call(
             "POST", "/api/dashboard/memory/forget",
-            json={"conv": conv or chat, "note": str(payload.get("note") or "")})
+            json={"conv": conv or chat, "kind": kind, "id": item})
+        if result is None or result.get("off"):
+            raise ValueError("activity_unavailable")
+        return {"tid": str(result.get("tid") or ""), "chat": await self.activity_chat(chat)}
+
+    async def activity_restore(self, payload: dict) -> dict:
+        """Bring back an item the character or a person removed."""
+        chat, tid = str(payload.get("chat") or ""), str(payload.get("tid") or "")
+        if not chat or len(chat) > 512 or not MEMORY_TID.fullmatch(tid):
+            raise ValueError("invalid_chat")
+        try:
+            result = await self._activity_call("POST", "/api/dashboard/memory/restore",
+                                               json={"tid": tid})
+        except ValueError as error:
+            if str(error) == "activity_changed":
+                raise ValueError("activity_restore_exists") from None
+            raise
         if result is None or result.get("off"):
             raise ValueError("activity_unavailable")
         return await self.activity_chat(chat)
+
+    async def activity_forget_chat(self, payload: dict) -> dict:
+        """Forget all one chat remembers; this page's own chat also starts anew."""
+        chat = str(payload.get("chat") or "")
+        if not chat or len(chat) > 512:
+            raise ValueError("invalid_chat")
+        if chat == self._page_key():
+            return await self.forget_chat()
+        result = await self._activity_call("POST", "/api/dashboard/memory/forget_chat",
+                                           json={"conv": chat})
+        if result is None or result.get("off"):
+            raise ValueError("activity_unavailable")
+        return {"ok": True, "forgotten": int(result.get("forgotten") or 0)}
 
     def close(self) -> None:
         with self._lock:
@@ -941,13 +992,31 @@ def _activity_chat(raw: dict) -> dict:
             out["by"] = {"by": str(by.get("by") or ""), "why": str(by.get("why") or "")}
         return out
 
+    thread, status = raw.get("thread"), raw.get("memory_status")
     return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
             "observing": [item(c) for c in raw.get("observing") or []],
             "learned": [item(c) for c in raw.get("learned") or []],
             "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "about": m.get("about", ""),
-                       "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", "")}
+                       "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", ""),
+                       "born": m.get("born", 0), "used": m.get("used", 0),
+                       "saidBy": m.get("said_by_name", "")}
                       for m in raw.get("memories") or []],
             "core": raw.get("core_note", ""),
+            "coreAt": raw.get("core_at") or 0,
+            "thread": {"id": thread.get("id", ""), "text": thread.get("text", ""),
+                       "from": thread.get("from_t", 0), "to": thread.get("to_t", 0)}
+            if isinstance(thread, dict) else None,
+            "events": [{"id": e.get("id", ""), "text": e.get("text", ""), "from": e.get("t0", 0),
+                        "to": e.get("t1", 0), "names": list(e.get("names") or [])}
+                       for e in raw.get("episodes") or []],
+            "removed": [{"tid": r.get("tid", ""), "kind": r.get("kind", ""), "why": r.get("why", ""),
+                         "by": r.get("by", ""), "at": r.get("at", 0), "text": r.get("text", ""),
+                         "until": r.get("until", 0)}
+                        for r in raw.get("removed") or []],
+            # Only while consolidation is on: today's calls, or when it tries again.
+            "status": {"used": status.get("calls_today", 0), "cap": status.get("cap", 0),
+                       "paused": status.get("paused_until", 0), "next": status.get("next_at", 0)}
+            if isinstance(status, dict) else None,
             "recent": [{"when": d.get("ts", 0), "spoke": bool(d.get("spoke")), "mode": d.get("mode", ""),
                         "reason": d.get("reason", ""), "text": d.get("excerpt", ""),
                         "answered": d.get("answered", ""), "sender": d.get("sender", ""),
@@ -967,6 +1036,31 @@ def _key(value) -> str:
     if len(text) > 4096 or any(c.isspace() for c in text) or _expands(text):
         raise ValueError("invalid_feature")
     return text
+
+
+_VISION_VARS = ("VISION_MODEL", "VISION_BASE_URL", "VISION_API_KEY")
+_vision_probe_lock = threading.Lock()
+
+
+def _vision_works(model: str, base: str, key: str) -> bool:
+    """One `doctor` vision probe against values not saved yet. The check
+    reads the environment, so they stand in there for its length."""
+    from . import health
+
+    with _vision_probe_lock:
+        before = {name: os.environ.get(name) for name in _VISION_VARS}
+        os.environ.update(VISION_MODEL=model, VISION_BASE_URL=base, VISION_API_KEY=key)
+        try:
+            ok, _ = health.check_vision()
+        except Exception:
+            ok = False
+        finally:
+            for name, value in before.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+    return ok is True
 
 
 def _endpoint(value) -> str:
@@ -1048,9 +1142,11 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def bad_value(request, exc):
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
                    "model_required", "invalid_character", "key_rejected", "model_limited", "model_unreachable",
+                   "vision_unsupported",
                    "permission_required", "invalid_message", "invalid_platform",
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
-                   "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity"}
+                   "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity",
+                   "activity_restore_gone", "activity_restore_exists"}
         error = str(exc)
         known = error in allowed or any(
             error in importlib.import_module(f"{__package__}.panels.{name}").ERRORS for name in PANELS)
@@ -1213,6 +1309,14 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/activity/forget")
     async def activity_forget(request: Request):
         return await workspace.activity_forget(await body(request))
+
+    @app.post("/api/activity/restore")
+    async def activity_restore(request: Request):
+        return await workspace.activity_restore(await body(request))
+
+    @app.post("/api/activity/forget_chat")
+    async def activity_forget_chat(request: Request):
+        return await workspace.activity_forget_chat(await body(request))
 
     @app.post("/api/show")
     async def show(request: Request):

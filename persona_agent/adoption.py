@@ -24,7 +24,7 @@ DECISION_OBSERVE = "observe"
 DECISIONS = (DECISION_ADOPT, DECISION_DISCARD, DECISION_OBSERVE)
 
 # The hold the prompt explains; "dispute" is an item already in use.
-HOLDS = ("against", "conflict", "person", "dispute")
+HOLDS = ("against", "conflict", "person", "dispute", "events", "strong")
 
 MAX_OPTIONS = 8
 LETTERS = string.ascii_uppercase[:MAX_OPTIONS]
@@ -120,6 +120,8 @@ _TEXT = {
             "conflict": "There is more than one rewrite of the same reply; at most one may be used.",
             "person": "This is a reply worth repeating. Only positive reactions support it, and no reaction can make it certain.",
             "dispute": "This change is already in use, and someone the reply was not for disagreed with it. \"adopt\" keeps it, \"discard\" stops using it.",
+            "events": "Only the person the reply was for, or the admin, corrected it, and nobody has confirmed the change since.",
+            "strong": "This wording comes from your own review of the reply; no person proposed it. The person the reply was for, or the admin, also objected to the original reply.",
         },
     },
     "zh": {
@@ -145,6 +147,8 @@ _TEXT = {
             "conflict": "同一条回复有不止一种改写，最多只能用一种。",
             "person": "这是一条值得重复的回复。支持它的只有正向反应，没有哪条反应能让它确定下来。",
             "dispute": "这项改动已经在使用，有一位回复并非回给他的人表示不同意。\"adopt\" 表示继续使用，\"discard\" 表示停止使用。",
+            "events": "只有这条回复原本回给的人（或管理员）纠正过它，此后没有人再确认这项改动。",
+            "strong": "这个说法来自你自己对这条回复的复盘，不是任何人提出的。这条回复原本回给的人（或管理员）也对原回复提出了异议。",
         },
     },
 }

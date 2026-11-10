@@ -182,6 +182,29 @@ def test_only_holds_no_reaction_clears_go_to_the_character() -> None:
         check(f"{name}: never judged", not judged(d, pair()), repr(d))
 
 
+def test_a_lone_correction_from_its_recipient_goes_to_the_character() -> None:
+    lone = [event("alice", "correction", better=FIX)]
+    late = promotion.Policy(fix_window_s=30)
+    check("within the fix window: not yet",
+          not promotion.needs_character(decide(pair(), lone), pair()))
+    check("past it: the character decides",
+          promotion.needs_character(decide(pair(), lone, fix_window_s=30), pair()))
+    by = [event("bob", "correction", better=FIX, recipient="alice")]
+    check("a bystander's lone correction never",
+          not promotion.needs_character(decide(pair(), by, fix_window_s=30), pair()))
+    admin = promotion.decide(pair(), linked_events=[event("root", "rejection")],
+                             now=NOW, policy=late, admin_ids=["root"])
+    check("nor anything with no strong event",
+          admin.gate == promotion.GATE_STRONG
+          and not promotion.needs_character(admin, pair()), repr(admin))
+    check("nor without a clock",
+          not promotion.needs_character(promotion.decide(
+              pair(), linked_events=lone, policy=late), pair()))
+    check("the window is REACT_FIX_WINDOW_S",
+          promotion.Policy.from_env({"REACT_FIX_WINDOW_S": "45"}).fix_window_s == 45.0
+          and promotion.Policy.from_env({}).fix_window_s == 600.0)
+
+
 def test_a_rewrite_its_recipient_refused_is_never_adoptable() -> None:
     later = event("alice", "rejection", reply=FIX)        # alice refused FIX
     refused = decide(pair(), STRONG_PAIR, related=[later])

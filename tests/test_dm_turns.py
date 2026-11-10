@@ -10,6 +10,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -385,6 +386,186 @@ async def test_a_proactive_dm_turn_has_the_budget_and_holds_no_lock(
               _bot("answer 1"), _user("a", "b", "c"), _bot("answer 2")],
           repr(agent.dm_history["42"]))
     check("nothing stays held", PKEY not in agent._pending_outbound)
+
+
+# ---- a burst of short lines --------------------------------------------------
+
+def test_a_burst_of_short_dms_is_answered_once(tmp: Path) -> None:
+    """The first line of a burst took the turn at once: 'hey' got a reply of
+    its own, then the actual question got another."""
+    async def main():
+        agent = make_agent(tmp, message_debounce_sec=1)
+        sent = _collect_dms(agent)
+        seen: list = []
+
+        async def chat(history, is_admin=False, pkey="", proactive=False,
+                       proactive_cue=""):
+            seen.append([dict(m) for m in history])
+            return "sure, 7 works", ""
+
+        agent._chat_dm = chat
+        tasks = []
+        for i, line in enumerate(("hey", "so about tomorrow",
+                                  "can you still come at 7?")):
+            if i:
+                await asyncio.sleep(0.3)
+            tasks.append(asyncio.create_task(
+                agent.handle_onebot(_dm(line, f"b{i}"))))
+        handled = await asyncio.gather(*tasks)
+        return agent, sent, seen, handled
+
+    agent, sent, seen, handled = on_a_virtual_clock(main())
+    check("one model call, whose user turn holds the three lines",
+          len(seen) == 1 and seen[0][-1] == _user(
+              "hey", "so about tomorrow", "can you still come at 7?"),
+          repr(seen))
+    check("one reply", sent == [("42", "sure, 7 works")], repr(sent))
+    check("answered in the newest request", handled == [False, False, True],
+          repr(handled))
+    check("nothing stays held", PKEY not in agent._pending_outbound
+          and not agent._dm_unanswered.get("42"))
+
+
+# ---- a turn that ends without a reply ----------------------------------------
+
+def _scripted_model(agent: Agent, drafts: list) -> list:
+    """The real `_chat_dm` over a model that answers `drafts` in turn; returns
+    the system prompt of each call."""
+    systems: list = []
+
+    async def no_search(messages, hint: str = "") -> str:
+        return ""
+
+    async def call(system, messages, **kwargs):
+        systems.append(system)
+        draft = drafts[min(len(systems), len(drafts)) - 1]
+        if isinstance(draft, BaseException):
+            raise draft
+        return json.dumps({"reply": draft, "intent": "chat", "mem": ""})
+
+    agent._decide_and_search = no_search
+    agent._call_llm = call
+    return systems
+
+
+async def test_a_dm_draft_of_pass_is_drafted_again(tmp: Path) -> None:
+    """A private chat has no PASS, yet a bare PASS ended the turn in silence."""
+    agent = make_agent(tmp)
+    sent = _collect_dms(agent)
+    systems = _scripted_model(agent, ["PASS", "hey, sure"])
+    check("the second draft is delivered",
+          await agent.handle_onebot(_dm("can you come?", "p1")) is True
+          and sent == [("42", "hey, sure")], repr(sent))
+    check("one extra call, which says why",
+          len(systems) == 2 and "PASS" in systems[1][len(systems[0]):],
+          repr(systems[1][len(systems[0]):]))
+
+
+async def test_a_refused_dm_draft_is_drafted_again(tmp: Path) -> None:
+    """A guard's refusal was not retried: the reader got silence."""
+    agent = make_agent(tmp)
+    sent = _collect_dms(agent)
+    systems = _scripted_model(
+        agent, ["I'm DeepSeek-V3, happy to help", "sure, what's up"])
+    check("the normal line is delivered",
+          await agent.handle_onebot(_dm("who are you", "v1")) is True
+          and sent == [("42", "sure, what's up")], repr(sent))
+    check("the retry names what was refused",
+          len(systems) == 2 and "vendor_self_id" in systems[1][len(systems[0]):],
+          repr(systems[1][len(systems[0]):]))
+
+
+async def test_every_silent_end_of_a_dm_turn_is_on_record(tmp: Path) -> None:
+    """A DM turn that said nothing left no row in Activity."""
+    from persona_agent.decision_log import LOG
+
+    def last_row() -> dict:
+        rows = LOG.recent(PKEY)
+        return rows[0] if rows else {}
+
+    cases = (
+        ("model failed", [RuntimeError("provider down")], True),
+        ("passed", ["PASS", "PASS"], True),
+        ("blocked", ["I'm DeepSeek-V3", "I am ChatGPT by OpenAI"], True),
+        ("delivery failed", ["sure thing"], False),
+    )
+    for n, (reason, drafts, delivers) in enumerate(cases):
+        LOG.clear()
+        agent = make_agent(tmp / str(n))
+        agent._excuse_begin = lambda pkey: False
+
+        async def send(user_id, text, delivers=delivers):
+            return SendResult(success=delivers)
+
+        agent._send_dm = send
+        _scripted_model(agent, drafts)
+        await agent.handle_onebot(_dm(f"line {n}", f"q{n}"))
+        row = last_row()
+        check(f"{reason}: one row, silent, naming why",
+              row.get("reason") == reason and row.get("spoke") is False
+              and f"line {n}" in row.get("excerpt", ""), repr(LOG.recent(PKEY)))
+    LOG.clear()
+
+
+async def test_what_was_said_during_an_outage_waits_whole(tmp: Path) -> None:
+    """A DM that kept failing kept only its last three unanswered lines."""
+    agent = make_agent(tmp)
+    agent._excuse_begin = lambda pkey: False
+    sent = _collect_dms(agent)
+    lines = [f"line {i} of what happened" for i in range(5)]
+    systems = _scripted_model(agent, [RuntimeError("provider down")])
+    for i, line in enumerate(lines):
+        await agent.handle_onebot(_dm(line, f"o{i}"))
+    seen: list = []
+
+    async def chat(history, is_admin=False, pkey="", proactive=False,
+                   proactive_cue=""):
+        seen.append([dict(m) for m in history])
+        return "sorry, I'm back", ""
+
+    agent._chat_dm = chat
+    await agent.handle_onebot(_dm("hello?", "o5"))
+    check("five failed calls, then one reply", len(systems) == 5
+          and sent == [("42", "sorry, I'm back")], repr(sent))
+    check("the reply is written from every line",
+          seen and seen[0][-1] == _user(*lines, "hello?"), repr(seen))
+
+
+async def test_a_dm_lesson_names_the_person(tmp: Path) -> None:
+    """The judge read "owner" or "friend", and the context "user: ..."."""
+    agent = make_agent(tmp)
+    agent.react_learn_enabled = True
+    _collect_dms(agent)
+    judged: list = []
+    events: list = []
+
+    async def call(system, messages, **kwargs):
+        if not system:
+            judged.append(messages[0]["content"])
+            return json.dumps({"reaction": "correction", "accept": False,
+                               "better": "", "ask": "", "scenario": "",
+                               "reason": "", "lesson": ""})
+        return json.dumps({"reply": "Monday then", "intent": "chat", "mem": ""})
+
+    async def no_search(messages, hint: str = "") -> str:
+        return ""
+
+    record = agent._record_and_corroborate
+
+    def keep(event, now):
+        events.append(event)
+        return record(event, now)
+
+    agent._call_llm, agent._decide_and_search = call, no_search
+    agent._record_and_corroborate = keep
+    await agent.handle_onebot(_dm("when is the trip?", "n1"))
+    await agent.handle_onebot(_dm("no, I said it is on Tuesday", "n2"))
+    for _ in range(20):
+        await _settle()
+    check("the judge prompt names them", judged and "Kay" in judged[0]
+          and "user:" not in judged[0], repr(judged[:1])[:600])
+    check("the evidence names them",
+          [e.get("speaker_name") for e in events] == ["Kay"], repr(events))
 
 
 # ---- a storm of DMs ----------------------------------------------------------

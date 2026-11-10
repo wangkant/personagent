@@ -102,7 +102,8 @@ def test_synthesize_mention_other_user() -> None:
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("other mention: prefixed qq",
-          p["message"][0] == {"type": "at", "data": {"qq": "discord:77"}}, repr(p["message"]))
+          p["message"][0] == {"type": "at", "data": {"qq": "discord:77", "name": "Carl"}},
+          repr(p["message"]))
     check("other mention: no message_id key", "message_id" not in p, repr(p.keys()))
 
 
@@ -229,7 +230,7 @@ def test_a_native_platform_mints_the_ids_onebot_would() -> None:
     check("native: the group id is bare",
           native["group_id"] == "220000", repr(native["group_id"]))
     check("native: a third-party mention is bare",
-          native["message"][0] == {"type": "at", "data": {"qq": "10002"}},
+          native["message"][0] == {"type": "at", "data": {"qq": "10002", "name": "Bob"}},
           repr(native["message"][0]))
     # Not merely "unprefixed" — the conversation must not be folded in either.
     # The dedupe ring already holds NapCat's bare mids, so a namespaced one
@@ -2988,11 +2989,11 @@ async def test_a_twice_unrenderable_dm_turn_stays_empty(tmp: Path) -> None:
     check("no third call", len(calls) == 2, repr(len(calls)))
 
 
-async def test_a_refused_dm_draft_is_not_retried(tmp: Path) -> None:
-    """The retry answers an accident, never a refusal. A guard that dropped
-    the draft whole decided on the words the model produced; asking again
-    pays twice for the same no, and a message that reliably induces the
-    refused shape would double the provider spend on every turn."""
+async def test_a_refused_dm_draft_is_retried_once_in_a_while(tmp: Path) -> None:
+    """A refused draft would leave the reader in silence, so it is written
+    once more with the reason. A message that reliably induces the refused
+    shape must not double the provider spend on every turn: the same reader
+    gets that second draft only once in a while."""
     agent = make_agent(tmp)
     agent._decide_and_search = _no_search
     calls: list = []
@@ -3004,10 +3005,14 @@ async def test_a_refused_dm_draft_is_not_retried(tmp: Path) -> None:
 
     agent._call_llm = fake_call
     result = await agent.handle_event(_dm_turn_event(9312))
-    check("a refused draft costs exactly one call", len(calls) == 1,
+    check("a refused draft is written once more, with the reason", len(calls) == 2
+          and "vendor_self_id" in calls[1] and "vendor_self_id" not in calls[0],
           repr(len(calls)))
-    check("...and the turn still ships nothing",
+    check("...and two refusals still ship nothing",
           result["handled"] is False and not result["replies"], repr(result))
+    await agent.handle_event(_dm_turn_event(9313))
+    check("the same reader's next refused draft costs exactly one call",
+          len(calls) == 3, repr(len(calls)))
 
 
 async def test_the_retry_answers_from_the_first_drafts_research(tmp: Path) -> None:
@@ -3320,7 +3325,7 @@ async def test_a_half_delivered_dm_commits_what_the_reader_saw(
 
 async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
     """A PASS sends nothing, and the reader's words went with it. They are
-    kept for the next turn, at most the last three of them, and a proactive
+    kept for the next turn, as many as fit a small budget, and a proactive
     turn neither reads nor spends them: its text is the caller's cue."""
     agent = make_agent(tmp)
     seen: list = []
@@ -3363,8 +3368,8 @@ async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
     for i, word in enumerate(("one", "two", "three", "four", "five")):
         await agent._handle_dm(
             "42", _dm_payload(word, f"dm-pass-cap-{i}"), is_admin=False)
-    check("PASS: only the last three unanswered messages are kept",
-          seen[-1][-1] == {"role": "user", "content": "two\nthree\nfour\nfive"},
+    check("PASS: short unanswered messages are all kept",
+          seen[-1][-1] == {"role": "user", "content": "one\ntwo\nthree\nfour\nfive"},
           repr(seen[-1][-1]))
     check("PASS: the stored history still alternates",
           _alternates(agent.dm_history["42"]),

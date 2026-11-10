@@ -20,7 +20,7 @@ from ..storage import atomic_write_text
 # Reply length bounds and charsets, as textproc.ReplyStyle clamps them.
 MIN_REPLY_CHARS, MAX_REPLY_CHARS = 50, 800
 CHARSETS = ("ellipsis", "music", "arrows")
-SECTIONS = ("who", "talk", "models", "learning", "more")
+SECTIONS = ("who", "talk", "models", "learning", "memory", "more")
 DAY = 86_400
 _TRUE, _FALSE = ("1", "true", "yes", "on"), ("0", "false", "no", "off")
 
@@ -58,6 +58,13 @@ FIELDS: tuple[Field, ...] = (
     Field("PROMOTE_MIN_SPEAKERS", "learning", "choice", "1", options=("1", "2")),
     Field("PROMOTE_JUDGE_ENABLED", "learning", "bool", True),
     Field("PROMOTE_OBSERVE_MAX_DAYS", "learning", "float", 30, 0, 3650),
+    # MEMORY_TIDY_EVERY and CHAT_CONTEXT_MESSAGES kept their names with a new meaning.
+    Field("MEMORY_CALLS_PER_DAY", "memory", "int", 40, 0, 10_000),
+    Field("MEMORY_TIDY_EVERY", "memory", "int", 8, 0, 10_000),
+    Field("CHAT_CONTEXT_MESSAGES", "memory", "int", 120, 10, 10_000),
+    Field("MEMORY_PROMPT_CHARS", "memory", "int", 2400, 200, 100_000),
+    Field("MEMORY_EPISODES_MAX", "memory", "int", 120, 1, 10_000),
+    Field("MEMORY_KEEP_RECENT", "memory", "bool", True),
     Field("AGENT_ENABLED", "more", "bool", True),
     Field("DASHBOARD_ENABLED", "more", "bool", True),
     Field("UPDATE_CHECK_ENABLED", "more", "bool", True, live=True),
@@ -68,7 +75,6 @@ FIELDS: tuple[Field, ...] = (
     Field("PROACTIVE_DM_MIN_SILENCE_S", "more", "int", 14400, 0, 30 * DAY),
     Field("PROACTIVE_DM_COOLDOWN_S", "more", "int", 86400, 0, 30 * DAY),
     Field("PROACTIVE_DM_PROB", "more", "float", 0.2, 0, 1),
-    Field("CHAT_CONTEXT_MESSAGES", "more", "int", 120, 10, 10_000),
     Field("CHAT_FOLLOWUP_WINDOW_S", "more", "int", 120, 0, DAY),
     Field("REACT_TTL_S", "more", "float", 900, 0, 7 * DAY),
     Field("REACT_MAX_PENDING", "more", "int", 4, 1, 100),

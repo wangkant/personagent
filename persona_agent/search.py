@@ -15,6 +15,20 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
+#: Chat lines before the trigger that the search decision reads.
+SEARCH_CONTEXT_LINES = 3
+
+
+class SearchHint(str):
+    """The trigger, which alone decides whether to ask; `lines` is what the
+    decision then reads: the lines before it as `name: text`, trigger last."""
+    lines: tuple[str, ...] = ()
+
+    def __new__(cls, trigger: str, lines=()):
+        hint = super().__new__(cls, trigger)
+        hint.lines = tuple(lines)
+        return hint
+
 
 class WebSearch:
     def _might_need_search(self, text: str) -> bool:
@@ -91,9 +105,11 @@ class WebSearch:
     async def _decide_and_search(self, messages: list[dict], hint: str = "") -> str:
         """Let the judge model decide on a web search and its query; the results,
         or '' (never raises). `hint` is the trigger message, since a rendered
-        group prompt opens with its oldest history."""
+        group prompt opens with its oldest history; a `SearchHint` also
+        carries the lines before it, read only once the decision runs."""
         if not (self.base_url and self.api_key):
             return ""
+        context = getattr(hint, "lines", ())
         latest = (hint or "").strip()
         if not latest:
             for m in reversed(messages):
@@ -102,6 +118,9 @@ class WebSearch:
                     break
         if not self._might_need_search(latest):
             return ""
+        decided_on = "\n".join(
+            [_truncate_framed(line, 200) for line in context[:-1]]
+            + [_truncate_framed(context[-1] if context else latest, 800)])
         try:
             tool = {
                 "type": "function",
@@ -130,13 +149,17 @@ class WebSearch:
                         "the character, the conversation, or the character's "
                         "own home, friends and story are answered in "
                         "character and are NEVER searched; neither are "
-                        "greetings, feelings or everyday small talk.\n\n"
+                        "greetings, feelings or everyday small talk.\n"
+                        "The message to decide on is the last line. Any lines "
+                        "before it are the chat just before, as `name: text`: "
+                        "use them only to tell what the last line refers to, "
+                        "and search for that thing by name.\n\n"
                         f"{_UNTRUSTED_INPUT_RULES}"
                     )},
                     # The trigger is a person's words, and this call picks
                     # what gets fetched into the reply's prompt.
                     {"role": "user",
-                     "content": _fence_user_data(_truncate_framed(latest, 800))},
+                     "content": _fence_user_data(decided_on)},
                 ],
                 "tools": [tool],
                 "tool_choice": "auto",

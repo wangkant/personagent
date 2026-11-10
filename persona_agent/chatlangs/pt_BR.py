@@ -43,6 +43,16 @@ SPEC = Spec(
     everything=frozenset({"tudo", "tudo isso", "tudinho", "todas", "todos",
                           "tudo que você sabe", "tudo que vc sabe"}),
     first_person=r"(?<![\w'])(?:eu|me|mim|comigo|meu|meus|minha|minhas)(?![\w'])",
+    self_id=r"(?<!\w)(?<!não\s)(?<!nao\s)(?:eu\s+)?sou(?:\s+(?:o|a|um|uma))?(?!\w)",
+    made_by=r"(?:criad|desenvolvid|treinad|feit)[oa]\s+(?:pela?|por)",
+    from_maker=r"(?<!\w)(?:da|do|de)",
+    leak_labels=r"entrada|falante|intenção|decisão|estilo|análise",
+    assistant_tells=(r"(?:desculpe|me\s+desculpe|sinto\s+muito|lamento)[,.!\s]+(?:mas\s+)?(?:eu\s+)?"
+                     r"não\s+(?:posso|consigo|sou\s+capaz\s+de)\s+(?:te\s+|lhe\s+)?"
+                     r"(?:ajudar|responder|fornecer|atender|auxiliar)\s+(?:com\s+|a\s+)?"
+                     r"(?:isso|isto|essa\s+\w+|esta\s+\w+|sua\s+solicitação|seu\s+pedido)"
+                     r"|espero\s+que\s+(?:isso|isto)\s+(?:te\s+|lhe\s+)?(?:ajude|seja\s+útil)"
+                     r"|espero\s+ter\s+ajudado"),
     replies={
         "remember_what": ("lembrar o quê? você não falou nada", "fala aí, anotar o quê",
                           "anotar o quê kkk"),

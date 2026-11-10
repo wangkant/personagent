@@ -262,7 +262,7 @@ def test_photos_are_fetched_and_inlined_and_other_attachments_described():
     event = run(bot.event(message(text="", peer_id=42, attachments=[
         photo, {"type": "audio_message"}, {"type": "sticker", "sticker": {"sticker_id": 9}}])))
     assert event["segments"][0] == {"type": "image", "b64": base64.b64encode(PNG).decode()}
-    assert event["segments"][1] == {"type": "text", "text": "(sent a voice message)"}
+    assert event["segments"][1] == {"type": "media", "kind": "voice"}
     assert event["segments"][2]["type"] == "emoji"
     fetched = [str(r.url) for r in fake.requests if r.url.host == "sun.userapi.test"]
     assert fetched == ["https://sun.userapi.test/x.jpg"]
@@ -274,7 +274,7 @@ def test_a_photo_over_the_cap_is_described_not_inlined(monkeypatch):
     bot.group_id, bot.bot_id = 77, "-77"
     event = run(bot.event(message(text="", peer_id=42, attachments=[
         {"type": "photo", "photo": {"sizes": [{"width": 1, "height": 1, "url": "https://sun.userapi.test/a"}]}}])))
-    assert event["segments"] == [{"type": "text", "text": "(sent a photo)"}]
+    assert event["segments"] == [{"type": "media", "kind": "photo"}]
 
 
 # ---------------------------------------------------------------- send

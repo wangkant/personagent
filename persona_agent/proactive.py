@@ -8,6 +8,7 @@ import time
 
 from . import access
 from . import channels
+from . import decision_log
 from .decision import SEND
 from .textproc import (
     TextProcessing,
@@ -40,6 +41,10 @@ class Proactive:
             except Exception as e:
                 logger.warning("[Agent] proactive loop iteration failed: %s", e)
 
+    def _openers(self) -> dict[str, float]:
+        """When the loop's last opener went out: group id, or "dm:<uid>"."""
+        return vars(self).setdefault("_opener_sent_at", {})
+
     def _proactive_platform_ok(self, key: str) -> bool:
         """Whether PROACTIVE_PLATFORMS lets the loop speak first on the
         platform of `key` (a routing key or a user id); empty allows all."""
@@ -59,6 +64,9 @@ class Proactive:
             last_act = self.last_activity_at.get(gid, 0.0)
             # Only a group active this run, and quiet long enough.
             if not last_act or now - last_act < self.proactive_min_silence_s:
+                continue
+            # The last thing said there was an opener nobody answered.
+            if self._openers().get(gid, 0.0) > last_act:
                 continue
             if now - self.last_proactive_at.get(gid, 0.0) < self.proactive_cooldown_s:
                 continue
@@ -86,11 +94,13 @@ class Proactive:
                 self._think(gid, mode="proactive"))
         except Exception as e:
             logger.warning("[Agent] proactive group think failed (%s): %s", gid, e)
+            decision_log.record(gid, "proactive", False, "model failed")
             return False
         # Mark the attempt either way so a PASS doesn't re-roll every tick.
         self.last_proactive_at[gid] = now
         final = self._final_reply(reply, log_ctx=f"mode=proactive, group={gid}")
         if final.verdict != SEND:
+            decision_log.record(gid, "proactive", False, "proactive")
             return False
         reply, at_uid = final.text, final.at_uid
         # Buffered below: NapCat does not echo the bot's own messages.
@@ -105,13 +115,29 @@ class Proactive:
             # The room read the delivered part, so it is on record.
             if result.partial and result.delivered:
                 self.last_reply_at[gid] = now
+                self._openers()[gid] = now
                 self._append_buffer(gid, self.persona_name, result.delivered)
+                decision_log.record(gid, "proactive", True, "proactive",
+                                    result.delivered)
+            else:
+                decision_log.record(gid, "proactive", False, "delivery failed")
             return result.partial
+        # Read before the opener joins the buffer: what it was said after.
+        ctx_lines = [f"{m['name']}: {m['text']}"
+                     for m in list(self.buffers[gid])[-5:]]
         self.last_reply_at[gid] = now
+        self._openers()[gid] = now
         self._append_buffer(gid, self.persona_name, reply)
         self._commit_core_memory(gid, final.core_note)
         if mem:
             self._save_auto_memory(gid, mem)
+        decision_log.record(gid, "proactive", True, "proactive", reply)
+        # A quote or an @ in answer to it is a reaction like any other.
+        if self.react_learn_enabled:
+            self.pending_reactions.record(
+                gid, reply=reply, ctx_lines=ctx_lines, mode="proactive",
+                intent=intent, target_uid=at_uid or "", target_name="",
+                mids=result.message_ids, ts=time.time())
         logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
         return True
 
@@ -147,6 +173,9 @@ class Proactive:
             key = channels.dm_learning_key(uid)
             if now - self.last_proactive_at.get(key, 0.0) < self.proactive_dm_cooldown_s:
                 continue
+            # They have not answered the last opener.
+            if self._openers().get(key, 0.0) > last_act:
+                continue
             if random.random() > self.proactive_dm_prob:
                 continue
             # Their own message is being read or answered: not the moment.
@@ -173,6 +202,7 @@ class Proactive:
                 history, is_admin=is_admin, proactive=True, pkey=pkey))
         except Exception as e:
             logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
+            decision_log.record(pkey, "proactive", False, "model failed")
             return False
         # Marked either way so a PASS doesn't re-roll every tick; the
         # learning key, which eviction also pops.
@@ -180,6 +210,7 @@ class Proactive:
 
         final = self._final_reply(reply, log_ctx=f"proactive DM user={uid}")
         if final.verdict != SEND:
+            decision_log.record(pkey, "proactive", False, "proactive")
             return False
         reply = final.text
 
@@ -193,9 +224,16 @@ class Proactive:
             if result.partial and result.delivered:
                 self.dm_history.setdefault(uid, []).append(
                     {"role": "assistant", "content": result.delivered})
+                self._openers()[channels.dm_learning_key(uid)] = now
+                decision_log.record(pkey, "proactive", True, "proactive",
+                                    result.delivered)
+            else:
+                decision_log.record(pkey, "proactive", False, "delivery failed")
             return result.partial
         self.dm_history.setdefault(uid, []).append(
             {"role": "assistant", "content": reply})
+        self._openers()[channels.dm_learning_key(uid)] = now
+        decision_log.record(pkey, "proactive", True, "proactive", reply)
         self._commit_core_memory(pkey, final.core_note)
         if mem:
             self._save_auto_memory(pkey, mem)

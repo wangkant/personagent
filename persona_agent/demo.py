@@ -132,7 +132,7 @@ SCRIPTS: dict[str, dict[str, list[Beat]]] = {
                  reply="the final? count me in, I'll bring snacks"),
             Beat("alex", "Nova, you don't even like football",
                  reply="I like the snacks. close enough"),
-            Beat("sam", "lol", gate=False),
+            Beat("sam", "lol"),
             Beat("priya", "ok, back to my report", gate=False),
         ],
         "teach": [
@@ -170,7 +170,7 @@ SCRIPTS: dict[str, dict[str, list[Beat]]] = {
             Beat("sam", "决赛！八点，来我家", gate=True,
                  reply="决赛？算我一个，我带零食"),
             Beat("alex", "小夏，你又不看球", reply="我看零食，差不多"),
-            Beat("sam", "哈哈", gate=False),
+            Beat("sam", "哈哈"),
             Beat("priya", "好了我先把报告写完", gate=False),
         ],
         "teach": [

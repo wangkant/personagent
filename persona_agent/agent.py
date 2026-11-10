@@ -60,6 +60,15 @@ def _load_persona_card() -> Optional[dict]:
     return json.loads(card_path.read_text(encoding="utf-8"))
 
 
+def _card_aliases(card: Optional[dict]) -> tuple[str, ...]:
+    """The card's optional `aliases`: nicknames that call the persona too."""
+    raw = card.get("aliases") if isinstance(card, dict) else None
+    if not isinstance(raw, list):
+        return ()
+    names = (" ".join(a.split()) for a in raw if isinstance(a, str))
+    return tuple(dict.fromkeys(n for n in names if n))
+
+
 _persona_sources_logged: set[str] = set()
 
 
@@ -162,8 +171,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
                     "note to the reader")
         # A trailing [style] block is stripped from the prose and kept as knobs.
         self.persona_style, self.persona = parse_persona_style(raw_persona)
+        card = _load_persona_card()
+        self.persona_aliases = _card_aliases(card)
         self.reply_style = dataclasses.replace(
-            ReplyStyle.from_card(_load_persona_card()),
+            ReplyStyle.from_card(card),
             # Its name, and the shipped character it was set up as: renamed or
             # not, the whale girl may say she is DeepSeek's.
             own_names=(s.persona_name, s.persona_avatar))
@@ -285,14 +296,21 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._wbi_keys_ts: float = 0.0
         self.dm_history: dict[str, list[dict]] = {}
         # A user's DM messages let in and not answered yet, merged into their
-        # next turn; the last three once a turn committed nothing (_dm_turn).
+        # next turn; what fits 1500 characters once a turn committed nothing
+        # (_dm_turn).
         self._dm_unanswered: dict[str, list[str]] = {}
+        # A reader's last declined-draft retry, by DM routing key (dm.py).
+        self._declined_retry_at: dict[str, float] = {}
+        # Who passed in a room's follow-up window (turns.py).
+        self._followup_passed: dict[str, tuple] = {}
 
         # Silence tracking, and the last proactive opener per group / "dm:<uid>".
         self.last_activity_at: dict[str, float] = defaultdict(float)
         self.last_dm_activity_at: dict[str, float] = defaultdict(float)
         self.last_proactive_at: dict[str, float] = defaultdict(float)
         self._last_elicit_at: dict[str, float] = defaultdict(float)
+        # When an opener went out, by group / "dm:<uid>" (proactive.py).
+        self._opener_sent_at: dict[str, float] = {}
         # Written under the send lock, read right after it.
         self._sent_mids: dict[str, list[str]] = {}
 

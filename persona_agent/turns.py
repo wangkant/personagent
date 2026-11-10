@@ -10,8 +10,8 @@ import time
 from typing import Callable, Optional
 
 from . import access
-from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
-                       choose_group_mode, pacing_skip)
+from .decision import (BLOCKED, EMPTY_DRAFT_RETRY_NOTE, PASS, SEND,
+                       SLEEP_WINDOW, STICKY_CALL, choose_group_mode, pacing_skip)
 from . import channels
 from . import paths
 from . import chatlangs
@@ -312,8 +312,9 @@ class Turns:
                            group_id)
             return send_result.partial
         async with self.locks[group_id]:
-            self.last_reply_at[group_id] = time.time()
+            self._spoke_in(group_id)
             self._append_buffer(group_id, self.persona_name, answer)
+        self._index_own(send_result.message_ids, answer)
         if self.on_reply:
             await self.on_reply(group_id, answer)
         logger.info("[Agent] memory command (group=%s): %s", group_id, answer[:60])
@@ -431,6 +432,54 @@ class Turns:
         if len(self._last_excuse_at) > _MAX_REFUSALS_LOGGED:
             self._last_excuse_at.pop(next(iter(self._last_excuse_at)))
 
+    # ---- the follow-up window ------------------------------------------------
+
+    def _followup_table(self) -> dict:
+        """conv -> (last_reply_at when they passed, who passed)."""
+        return self.__dict__.setdefault("_followup_passed", {})
+
+    def _followup_open(self, conv: str, user_id: str) -> bool:
+        """Is `user_id`'s line in `conv` inside the follow-up window? Not once
+        a follow-up turn on their line passed, until the character speaks."""
+        last = self.last_reply_at[conv]
+        if time.time() - last >= self.chat_followup_window_s:
+            return False
+        stamp, passers = self._followup_table().get(conv, (None, ()))
+        # The stamp catches a send that did not go through `_spoke_in`.
+        return stamp != last or user_id not in passers
+
+    def _followup_pass(self, conv: str, user_id: str) -> None:
+        """A follow-up turn on `user_id`'s line passed: close the window for
+        them alone, so a bystander's PASS does not end the conversation."""
+        table, last = self._followup_table(), self.last_reply_at[conv]
+        stamp, passers = table.pop(conv, (None, set()))
+        table[conv] = (last, (passers if stamp == last else set()) | {user_id})
+        if len(table) > _MAX_REFUSALS_LOGGED:
+            table.pop(next(iter(table)))
+
+    def _spoke_in(self, conv: str) -> None:
+        """The character spoke in `conv`: the window opens again for everyone."""
+        self.last_reply_at[conv] = time.time()
+        self._followup_table().pop(conv, None)
+
+    def _index_own(self, mids, text: str) -> None:
+        """Index what the character sent, so a quote of it reads as a call."""
+        for sent_mid in mids or ():
+            self._index_msg(sent_mid, f"{self.persona_name}: {text[:200]}")
+
+    def _quotes_me(self, payload: dict) -> bool:
+        """Does the message quote one of the character's own messages?"""
+        own = self.persona_name + ": "
+        for seg in payload.get("message", []) or []:
+            if isinstance(seg, dict) and seg.get("type") == "reply":
+                data = seg.get("data") or {}
+                if data.get("quote_self") is True:
+                    return True
+                quoted = data.get("id")
+                return (quoted is not None
+                        and self._msg_index.get(str(quoted), "").startswith(own))
+        return False
+
     def _model_failure_excuse(self, text: str = "") -> str:
         """A line for when the model call failed, in the language `text`, the
         message waiting for an answer, was written in."""
@@ -533,7 +582,8 @@ class Turns:
 
         is_at = self._is_at_me(payload)
         is_called = self._names_me(ctrl_text)
-        addressed = is_at or is_called
+        # Quoting its message is how people answer it on QQ.
+        addressed = is_at or is_called or self._quotes_me(payload)
         is_noise = len(text.strip()) < 4 and not addressed
 
         is_admin_msg = access.is_admin(user_id, self._admins())
@@ -569,7 +619,7 @@ class Turns:
             self._append_buffer(group_id, nickname,
                                 _truncate_framed(text, 200), user_id)
             if mid is not None:
-                self._index_msg(mid, f"{nickname}: {text[:60]}")
+                self._index_msg(mid, f"{nickname}: {text[:200]}")
             self.last_activity_at[group_id] = time.time()
             self.active_users[group_id].append((user_id, nickname))
             if not is_noise:
@@ -660,11 +710,13 @@ class Turns:
                 addressed=addressed, is_admin=is_admin_msg,
                 sticky_admin=(access.is_admin(sticky["user_id"], self._admins())
                               if sticky_active else None),
-                in_followup=(time.time() - self.last_reply_at[group_id]
-                             < self.chat_followup_window_s),
+                in_followup=self._followup_open(group_id, user_id),
                 counter=self.counters[group_id],
                 trigger_count=self.chat_trigger_count,
                 never_replied=never_replied)
+            if mode == "followup" and is_noise:
+                # A "lol" in the window takes no turn and no gate call.
+                mode, why = "", "below the trigger count"
             if not mode:
                 decision_log.record(group_id, mode, False, why, ctrl_text,
                                     sender=nickname)
@@ -701,15 +753,35 @@ class Turns:
             # arrives from here on is held behind it.
             gate = self._begin_turn(group_id)
 
+        asked = mode in ("called", access.ADMIN_MODE)
+        log_ctx = f"mode={mode}, group={group_id}"
+
+        async def draft() -> tuple:
+            reply, intent, mem = await self._think(
+                group_id, mode, text, caller_override=caller_override)
+            # Asked and answered with nothing: a failure, not a decision.
+            if asked and not (reply or "").strip():
+                raise RuntimeError("the model answered nothing")
+            final = self._final_reply(reply, log_ctx=log_ctx)
+            if final.verdict == BLOCKED and asked:
+                logger.info("[Agent] called draft blocked, retrying once (%s)", log_ctx)
+                reply, retry_intent, retry_mem = await self._think(
+                    group_id, mode, text, caller_override=caller_override,
+                    retry_note=EMPTY_DRAFT_RETRY_NOTE)
+                retried = self._final_reply(reply, log_ctx=log_ctx)
+                if retried.verdict == SEND:
+                    final, intent, mem = retried, retry_intent, retry_mem or mem
+            return final, intent, mem
+
         # Outside the group lock: no handler queues on it for the length of a
         # model call or of a send, each holding a webhook admission slot.
         try:
             try:
-                reply, _intent, auto_mem = await self._within_turn_budget(
-                    self._think(group_id, mode, text,
-                                caller_override=caller_override))
+                final, _intent, auto_mem = await self._within_turn_budget(draft())
             except Exception as e:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
+                decision_log.record(group_id, mode, False, "model failed",
+                                    ctrl_text, sender=sender_name)
                 # Sent from a background task under the send lock, like a reply.
                 if mode in ("called", access.ADMIN_MODE) and self._excuse_begin(group_id):
                     fallback = self._model_failure_excuse(text)
@@ -727,7 +799,7 @@ class Turns:
                             if result.success:
                                 delivered = True
                                 async with self.locks[group_id]:
-                                    self.last_reply_at[group_id] = time.time()
+                                    self._spoke_in(group_id)
                                     self._append_buffer(
                                         group_id, self.persona_name, fallback)
                             else:
@@ -742,20 +814,20 @@ class Turns:
 
             # A PASS commits nothing, neither core note nor auto-memory: both
             # describe a reply that was never sent.
-            final = self._final_reply(reply, log_ctx=f"mode={mode}, group={group_id}")
-            # Blocked is not a PASS: no log line, no follow-up reset.
+            # Blocked is not a PASS: no follow-up reset.
             if final.verdict == BLOCKED:
+                decision_log.record(group_id, mode, False, "blocked", ctrl_text,
+                                    sender=sender_name)
                 return False
             if final.verdict == PASS:
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 decision_log.record(group_id, mode, False, "passed", ctrl_text,
                                     sender=sender_name)
                 if mode == "followup":
-                    self.last_reply_at[group_id] = (
-                        time.time() - self.chat_followup_window_s - 1)
+                    self._followup_pass(group_id, user_id)
                 return False
             reply, at_uid = final.text, final.at_uid
-            if not at_uid and mode == "called":
+            if not at_uid and asked:
                 at_uid = user_id
             # Snapshot now: after the send the buffer has moved on.
             eval_ctx = [f"{m['name']}: {m['text']}" for m in list(self.buffers[group_id])[-5:]]
@@ -765,15 +837,18 @@ class Turns:
             if not send_result.success and not send_result.partial:
                 logger.warning("[Agent] reply delivery failed (mode=%s, group=%s)",
                                mode, group_id)
+                decision_log.record(group_id, mode, False, "delivery failed",
+                                    ctrl_text, sender=sender_name)
                 return False
 
             # A partial send is committed as delivered; core note, auto-memory
             # and self-eval describe the whole answer and are withheld.
             committed = reply if send_result.success else send_result.delivered
             async with self.locks[group_id]:
-                self.last_reply_at[group_id] = time.time()
+                self._spoke_in(group_id)
                 if committed:
                     self._append_buffer(group_id, self.persona_name, committed)
+                    self._index_own(send_result.message_ids, committed)
                 if send_result.success:
                     self._commit_core_memory(group_id, final.core_note)
                     if auto_mem:

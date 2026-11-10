@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
-                   plain_name, raw_id, split_text)
+                   has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.vk")
 
@@ -204,7 +204,7 @@ class VK(Platform):
             segments.append(await self._attachment(attachment))
         if message.get("fwd_messages"):
             segments.append({"type": "text", "text": "(forwarded messages)"})
-        if not any(s["type"] in ("text", "image", "emoji") for s in segments):
+        if not has_content(segments, self.bot_id):
             return None
         return {"conversation_type": "dm" if is_dm else "group",
                 **({} if is_dm else {"conversation_id": str(peer)}),
@@ -237,13 +237,22 @@ class VK(Platform):
         kind = str(attachment.get("type") or "")
         if kind == "photo":
             image = await self._photo(attachment.get("photo") or {})
-            return image or {"type": "text", "text": "(sent a photo)"}
+            return image or media("photo")
         if kind == "sticker":
             sticker = attachment.get("sticker") or {}
             return {"type": "emoji", "name": "sticker", "id": str(sticker.get("sticker_id") or "")}
-        notes = {"audio_message": "(sent a voice message)", "video": "(sent a video)",
-                 "doc": "(sent a file)", "audio": "(sent a song)", "wall": "(shared a post)",
-                 "link": "(sent a link)", "poll": "(sent a poll)", "graffiti": "(sent a drawing)"}
+        body = attachment.get(kind) if isinstance(attachment.get(kind), dict) else {}
+        if kind == "audio_message":
+            return media("voice", transcript=body.get("transcript"))
+        if kind == "video":
+            return media("video")
+        if kind == "graffiti":
+            return media("photo")
+        if kind == "doc":
+            return media("file", name=body.get("title"))
+        if kind == "audio":
+            return media("file", name=" - ".join(filter(None, (body.get("artist"), body.get("title")))))
+        notes = {"wall": "(shared a post)", "link": "(sent a link)", "poll": "(sent a poll)"}
         return {"type": "text", "text": notes.get(kind, "(sent an attachment)")}
 
     async def _photo(self, photo: dict) -> dict | None:

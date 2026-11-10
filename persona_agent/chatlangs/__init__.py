@@ -94,6 +94,23 @@ class Spec:
     failure_excuses: tuple = ()
     #: The learned summary, per `LEARNED_FIELDS`; empty for English.
     learned_text: dict = field(default_factory=dict)
+    # -- what the agent must not send -------------------------------------------
+    # Every language's entries are read together: a reply's language is not
+    # known before it is checked.
+    #: "I am" opening a self-introduction, with an optional article and a
+    #: denial ("no soy") excluded. English and Chinese are in textproc.py.
+    self_id: str = ""
+    #: A maker named as such: "creado por", "が開発" (before or after the name).
+    made_by: str = ""
+    #: A bare "from" that names a maker only right after the name ("von").
+    from_maker: str = ""
+    #: What must follow "I am <name>" for it to be a claim, where word order
+    #: lets the name be an object ("私はChatGPTを使う"): a copula, a comma.
+    name_end: str = ""
+    #: Protocol labels a model leaks as "Label: ...", one alternation.
+    leak_labels: str = ""
+    #: An assistant's refusal or "hope this helps", never a person's chat.
+    assistant_tells: str = ""
     # -- telling Latin-script languages apart -----------------------------------
     #: Common short words of this language.
     stopwords: frozenset = frozenset()

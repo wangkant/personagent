@@ -98,10 +98,13 @@ def parse_review(raw: str) -> dict | None:
 
 
 def load_evals(path: Path, threshold: int) -> list[dict]:
-    """Eval entries with score <= threshold, in file order."""
+    """Eval entries with score <= threshold, in file order; a row whose score
+    is not a whole number from 1 to 5 is skipped."""
     out: list[dict] = []
     for r in read_jsonl((path,)):
-        if int(r.get("score", 5)) <= threshold:
+        score = r.get("score")
+        if (isinstance(score, int) and not isinstance(score, bool)
+                and 1 <= score <= min(threshold, 5)):
             out.append(r)
     return out
 

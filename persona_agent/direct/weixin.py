@@ -21,7 +21,7 @@ from urllib.parse import quote
 import httpx
 
 from .. import __version__
-from .base import Platform, Refused, Unsupported, backoff_sleep, split_text
+from .base import Platform, Refused, Unsupported, backoff_sleep, media, split_text
 from ..storage import atomic_write_text
 
 logger = logging.getLogger("personagent.direct.weixin")
@@ -239,13 +239,11 @@ class Weixin(Platform):
                     segments.append({"type": "text", "text": text})
             elif kind == 3:
                 transcript = str((item.get("voice_item") or {}).get("text") or "")
-                note = f"(voice message) {transcript}" if transcript else "(sent a voice message)"
-                texts.append(note)
-                segments.append({"type": "text", "text": note})
+                segments.append(media("voice", transcript=transcript))
             elif kind in (2, 4, 5):
                 name = str((item.get("file_item") or {}).get("file_name") or "")
-                note = {2: "(sent an image)", 4: f"(sent a file: {name})", 5: "(sent a video)"}[kind]
-                segments.append({"type": "text", "text": note})
+                segments.append(media({2: "photo", 4: "file", 5: "video"}[kind],
+                                      name=name if kind == 4 else ""))
         if not segments:
             return None
         group = str(message.get("group_id") or "")

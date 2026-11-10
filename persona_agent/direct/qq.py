@@ -21,7 +21,7 @@ from urllib.parse import quote
 
 import httpx
 
-from .base import Platform, Refused, Unsupported, backoff_sleep, split_text
+from .base import Platform, Refused, Unsupported, backoff_sleep, media, split_text
 
 logger = logging.getLogger("personagent.direct.qq")
 
@@ -306,10 +306,17 @@ class QQ(Platform):
             url = str(attachment.get("url") or "")
             if url.startswith("//"):
                 url = "https:" + url
-            if str(attachment.get("content_type") or "").startswith("image/") and url.startswith("http"):
+            kind = str(attachment.get("content_type") or "")
+            if kind.startswith("image/") and url.startswith("http"):
                 segments.append({"type": "image", "url": url})
+            elif kind.startswith("image/"):
+                segments.append(media("photo"))
+            elif kind.startswith(("voice", "audio/")):
+                segments.append(media("voice"))
+            elif kind.startswith("video/"):
+                segments.append(media("video"))
             else:
-                segments.append({"type": "text", "text": f"(sent a file: {attachment.get('filename', '')})"})
+                segments.append(media("file", name=attachment.get("filename")))
         if not segments:
             return None, target
         try:

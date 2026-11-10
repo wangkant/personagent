@@ -1,0 +1,60 @@
+{"lang": "en", "name": "Luna", "aliases": [], "text": "ＬＵＮＡ are you there", "addressed": true}
+{"lang": "en", "name": "Luna", "aliases": [], "text": "luna, you up?", "addressed": true}
+{"lang": "en", "name": "Luna", "aliases": ["Lu"], "text": "lu you around?", "addressed": true}
+{"lang": "en", "name": "Luna", "aliases": ["Lu"], "text": "my cousin Lulu is visiting", "addressed": false}
+{"lang": "en", "name": "Luna", "aliases": [], "text": "Lunar eclipse tonight", "addressed": false}
+{"lang": "en", "name": "Sam", "aliases": [], "text": "my Samsung died again", "addressed": false}
+{"lang": "zh", "name": "Luna", "aliases": [], "text": "ＬＵＮＡ在吗", "addressed": true}
+{"lang": "zh", "name": "鲸鱼娘", "aliases": ["鲸鱼"], "text": "鲸鱼你在吗", "addressed": true}
+{"lang": "zh", "name": "鲸鱼娘", "aliases": ["鲸鱼"], "text": "问问鲸鱼娘吧", "addressed": true}
+{"lang": "zh", "name": "小夏", "aliases": ["夏夏"], "text": "夏夏，帮我看看这个", "addressed": true}
+{"lang": "zh", "name": "小夏", "aliases": ["夏夏"], "text": "今天好热啊", "addressed": false}
+{"lang": "zh", "name": "鲸鱼娘", "aliases": ["鲸鱼"], "text": "晚饭吃什么", "addressed": false}
+{"lang": "zh-TW", "name": "小夏", "aliases": ["夏夏"], "text": "小夏在嗎", "addressed": true}
+{"lang": "zh-TW", "name": "小夏", "aliases": ["夏夏"], "text": "夏夏你覺得呢", "addressed": true}
+{"lang": "zh-TW", "name": "Luna", "aliases": [], "text": "ｌｕｎａ快來看", "addressed": true}
+{"lang": "zh-TW", "name": "Luna", "aliases": [], "text": "Lunar 新年快樂", "addressed": false}
+{"lang": "zh-TW", "name": "小夏", "aliases": ["夏夏"], "text": "今天好熱", "addressed": false}
+{"lang": "zh-TW", "name": "小夏", "aliases": ["夏夏"], "text": "我們去吃飯吧", "addressed": false}
+{"lang": "ja", "name": "ルナ", "aliases": [], "text": "ルナちゃんいる？", "addressed": true}
+{"lang": "ja", "name": "ルナ", "aliases": [], "text": "ﾙﾅ、起きてる？", "addressed": true}
+{"lang": "ja", "name": "ルナ", "aliases": ["ルーちゃん"], "text": "ルーちゃん聞いて", "addressed": true}
+{"lang": "ja", "name": "Luna", "aliases": [], "text": "ＬＵＮＡさん、おはよう", "addressed": true}
+{"lang": "ja", "name": "ルナ", "aliases": [], "text": "今日は月がきれいだね", "addressed": false}
+{"lang": "ja", "name": "Luna", "aliases": [], "text": "Lunarモジュールの話", "addressed": false}
+{"lang": "ko", "name": "루나", "aliases": [], "text": "루나야 뭐해?", "addressed": true}
+{"lang": "ko", "name": "루나", "aliases": [], "text": "루나씨 안녕하세요", "addressed": true}
+{"lang": "ko", "name": "루나", "aliases": ["루루"], "text": "루루 이거 봐봐", "addressed": true}
+{"lang": "ko", "name": "Luna", "aliases": [], "text": "ｌｕｎａ 있어?", "addressed": true}
+{"lang": "ko", "name": "루나", "aliases": ["루루"], "text": "오늘 날씨 좋다", "addressed": false}
+{"lang": "ko", "name": "Luna", "aliases": [], "text": "Lunar 탐사선 뉴스 봤어?", "addressed": false}
+{"lang": "es", "name": "Sofía", "aliases": [], "text": "sofia, ¿estás?", "addressed": true}
+{"lang": "es", "name": "Sofía", "aliases": ["Sofi"], "text": "Sofi ven acá", "addressed": true}
+{"lang": "es", "name": "Sofía", "aliases": [], "text": "SOFÍA, mira esto", "addressed": true}
+{"lang": "es", "name": "Sofía", "aliases": [], "text": "me encanta la filosofía", "addressed": false}
+{"lang": "es", "name": "Sofía", "aliases": ["Sofi"], "text": "compré un sofá nuevo", "addressed": false}
+{"lang": "es", "name": "Sofía", "aliases": [], "text": "Sofíaland abre mañana", "addressed": false}
+{"lang": "fr", "name": "Chloé", "aliases": [], "text": "chloe tu es là ?", "addressed": true}
+{"lang": "fr", "name": "Chloé", "aliases": [], "text": "CHLOÉ !", "addressed": true}
+{"lang": "fr", "name": "Chloé", "aliases": ["Clo"], "text": "clo, t'en penses quoi ?", "addressed": true}
+{"lang": "fr", "name": "Chloé", "aliases": ["Clo"], "text": "on se voit au cloître", "addressed": false}
+{"lang": "fr", "name": "Chloé", "aliases": [], "text": "Chloéane arrive demain", "addressed": false}
+{"lang": "fr", "name": "Chloé", "aliases": [], "text": "il pleut encore", "addressed": false}
+{"lang": "de", "name": "Zoë", "aliases": [], "text": "zoe bist du da?", "addressed": true}
+{"lang": "de", "name": "Jürgen", "aliases": [], "text": "jurgen, hilf mal", "addressed": true}
+{"lang": "de", "name": "Zoë", "aliases": ["Zo"], "text": "Zo, schau mal", "addressed": true}
+{"lang": "de", "name": "Zoë", "aliases": ["Zo"], "text": "wir gehen in den Zoo", "addressed": false}
+{"lang": "de", "name": "Luna", "aliases": [], "text": "morgen in den Lunapark", "addressed": false}
+{"lang": "de", "name": "Jürgen", "aliases": [], "text": "das Wetter ist schön", "addressed": false}
+{"lang": "pt-BR", "name": "João", "aliases": [], "text": "joao, tá aí?", "addressed": true}
+{"lang": "pt-BR", "name": "João", "aliases": ["Jo"], "text": "Jo, cadê você?", "addressed": true}
+{"lang": "pt-BR", "name": "Luna", "aliases": [], "text": "ＬＵＮＡ, bom dia", "addressed": true}
+{"lang": "pt-BR", "name": "João", "aliases": ["Jo"], "text": "li o jornal de hoje", "addressed": false}
+{"lang": "pt-BR", "name": "João", "aliases": [], "text": "o Joãozinho chegou", "addressed": false}
+{"lang": "pt-BR", "name": "Luna", "aliases": [], "text": "fomos ao Lunapark", "addressed": false}
+{"lang": "ru", "name": "Луна", "aliases": [], "text": "луна, ты тут?", "addressed": true}
+{"lang": "ru", "name": "Алёна", "aliases": [], "text": "алена, привет", "addressed": true}
+{"lang": "ru", "name": "Алёна", "aliases": ["Лёля"], "text": "Леля, глянь", "addressed": true}
+{"lang": "ru", "name": "Луна", "aliases": [], "text": "ЛУНА!", "addressed": true}
+{"lang": "ru", "name": "Луна", "aliases": [], "text": "лунатик опять не спит", "addressed": false}
+{"lang": "ru", "name": "Алёна", "aliases": ["Лёля"], "text": "пойдём гулять", "addressed": false}

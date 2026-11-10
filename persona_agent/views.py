@@ -231,7 +231,10 @@ class DataViews:
                 if promotion_mod.needs_character(decision, c):
                     # With its own decisions switched off the character reviews nothing.
                     admin += 1 if self._judging_on() else 0
-                elif strong:
+                elif strong and not any(
+                        e.get("kind") == evidence_mod.KIND_SELF_REVIEW
+                        for e in index.linked(c)):
+                    # The agent's own rewrite: no person's event can make it strong.
                     voice += 1
         active = [c for c in cands
                   if c.get("state") == candidates_mod.STATE_PROMOTED

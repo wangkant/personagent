@@ -15,6 +15,7 @@ import time
 from collections import deque
 from pathlib import Path
 
+from . import langs
 from .storage import atomic_write_text, load_rebuildable_json
 from .textproc import _fence_user_data, _truncate_framed, strip_json_fences
 
@@ -388,7 +389,23 @@ class PendingReplies:
             # Quoting another member is about their message, address or not.
             if quote_by_bot is False:
                 return None
-        if at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
+        if at_bot and not quote_mid:
+            # An @ is about the sender's own reply, else one meant for nobody.
+            sender = str(sender_uid)
+            for want in (sender, ""):
+                for i in range(len(q) - 1, -1, -1):
+                    if q[i]["target_uid"] == want:
+                        return self._take(conv_id, q, i, "at", now)
+            # A bystander's @ reacts to the latest reply without taking it
+            # from the person it was for, once per bystander.
+            latest = q[-1]
+            if sender and sender not in latest.get("reacted_by", ()):
+                latest["reacted_by"] = [*latest.get("reacted_by", ()), sender][-16:]
+                seen = {k: v for k, v in latest.items() if k != "reacted_by"}
+                seen.update(matched_by="at", matched_at=now, match_seq=self._seq)
+                self._save()
+                return seen
+        elif at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
             return self._take(conv_id, q, -1, "at" if at_bot else "dm", now)
         for i in range(len(q) - 1, -1, -1):
             e = q[i]
@@ -401,9 +418,11 @@ class PendingReplies:
 def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
                              is_admin: bool, persona_name: str, lang: str,
                              reactor_history: str = "",
-                             reactor_is_recipient: bool = False) -> str:
+                             reactor_is_recipient: bool = False,
+                             chat_lang: str = "") -> str:
     """The adjudicator's prompt, every chat-authored span fenced so a
-    reaction cannot instruct the judge."""
+    reaction cannot instruct the judge. `chat_lang` is the chat's language
+    code: what the judge writes for the chat is written in it."""
     tmpl = ADJUDICATOR_PROMPTS.get(lang, ADJUDICATOR_PROMPTS["en"])
     zh = lang == "zh"
     if zh:
@@ -421,7 +440,7 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
     else:
         recipient = ("他不是这条回复原本回给的人" if zh
                      else "they are not the person the reply was for")
-    return tmpl.format(
+    prompt = tmpl.format(
         bot_name=persona_name or "bot",
         context=_fence_user_data(
             "\n".join(entry.get("ctx_lines") or []) or "(none)"),
@@ -432,6 +451,17 @@ def build_adjudicator_prompt(entry: dict, reaction_text: str, reactor_name: str,
         reactor_role=role,
         reactor_history=(" " + reactor_history) if reactor_history else "",
     )
+    name = langs.NAMES.get(chat_lang)
+    if not name:
+        return prompt
+    # The prompt is English or Chinese; the chat may be neither.
+    if zh:
+        line, marker = (f"\"better\"、\"ask\" 和 \"lesson\" 请用{name}书写，"
+                        f"这是这个群聊使用的语言。"), "只输出一行 JSON"
+    else:
+        line, marker = (f"Write \"better\", \"ask\" and \"lesson\" in {name}, "
+                        f"the language this chat is in."), "Output ONE line of JSON"
+    return prompt.replace(marker, f"{line}\n\n{marker}", 1)
 
 
 def parse_adjudication(raw: str) -> dict | None:

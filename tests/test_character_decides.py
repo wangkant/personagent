@@ -342,6 +342,48 @@ async def test_a_single_correction_makes_no_judgement_call(tmp: Path) -> None:
           await a._adoption_tick() == {} and model.calls == ["judge"])
 
 
+async def test_a_recipients_lone_correction_is_judged_after_the_fix_window(
+        tmp: Path, monkeypatch) -> None:
+    """Nobody confirms a clear correction from the person the reply was for:
+    once a retry could no longer settle it, the character decides."""
+    a, model = make_agent(tmp, judging=True)
+    lesson = "Alex wants sympathy when venting, not fixes."
+    send(a, REPLY, "42")
+    await react(a, model, "42", dict(CORRECTION, lesson=lesson))
+    await settle(a)
+    cid = cand(a, CORRECTION["better"])["candidate_id"]
+    check("setup: one event short", a._decide_promotion(cid).gate == "events")
+    check("within the fix window: no judgement",
+          await a._adoption_tick() == {} and model.calls == ["judge"], str(model.calls))
+
+    real = time.time
+    monkeypatch.setattr(time, "time",
+                        lambda: real() + a.promotion_policy.fix_window_s + 1)
+    model.say("adopt", "Alex told me what they wanted.")
+    out = await a._adoption_tick()
+    check("after it: one judgement, adopted",
+          out == {"adopted": 1} and model.calls == ["judge", "adopt"], str(out))
+    check("the prompt says why it was not settled",
+          "nobody has confirmed" in model.prompts[0], model.prompts[0][-600:])
+    check("the rewrite is in use, and its lesson reaches the prompt",
+          pairs(a) == [(REPLY, CORRECTION["better"])]
+          and lesson in a._lessons_for_prompt(CONV), str(pairs(a)))
+
+
+async def test_a_bystanders_lone_correction_is_not_judged(
+        tmp: Path, monkeypatch) -> None:
+    a, model = make_agent(tmp, judging=True)
+    send(a, REPLY, "42")
+    await react(a, model, "7", CORRECTION, name="bob")
+    await settle(a)
+    real = time.time
+    monkeypatch.setattr(time, "time",
+                        lambda: real() + a.promotion_policy.fix_window_s + 1)
+    check("a bystander's correction is not strong: no judgement",
+          await a._adoption_tick() == {} and "adopt" not in model.calls,
+          str(model.calls))
+
+
 async def test_the_master_switch_off_makes_no_call(tmp: Path) -> None:
     a, model = make_agent(tmp)
     cid = await rival(a, model)

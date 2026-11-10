@@ -24,6 +24,13 @@ SPEC = Spec(
     everything=frozenset({"everything", "all", "all of it", "all of that",
                           "all that", "every note"}),
     first_person=FIRST_PERSON,
+    leak_labels=r"input|speaker|intent|decision|style",
+    # A refusal needs its object: "sorry I can't help it" is a person.
+    assistant_tells=(r"(?:i'?m\s+sorry|i\s+apologi[sz]e|my\s+apologies|sorry)[,.!\s]+(?:but\s+)?"
+                     r"i\s+(?:can'?t|cannot|am\s+unable\s+to|am\s+not\s+able\s+to)\s+"
+                     r"(?:help|assist|provide|comply\s+with|fulfill|answer)\s+"
+                     r"(?:with\s+(?:that|this|it)|that|this|your\s+request|you\s+with\s+(?:that|this))"
+                     r"|\bhope\s+(?:this|that)\s+(?:helps|was\s+helpful)\b"),
     replies={
         "remember_what": ("remember what? you didn't say anything", "spill it",
                           "remember what lol"),

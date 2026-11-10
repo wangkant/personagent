@@ -34,6 +34,8 @@ MAX_EVIDENCE_AGE_DAYS = 30.0
 REQUIRE_SAME_CONVERSATION = True
 # Master switch: false applies nothing new, by the policy or the character.
 AUTO_PROMOTE = True
+# REACT_FIX_WINDOW_S's default: how long a complaint waits for its retry.
+FIX_WINDOW_S = 600.0
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,8 @@ class Policy:
     max_evidence_age_days: float = MAX_EVIDENCE_AGE_DAYS
     require_same_conversation: bool = REQUIRE_SAME_CONVERSATION
     auto_promote: bool = AUTO_PROMOTE
+    # A lone correction waits this long for its retry before the character judges it.
+    fix_window_s: float = FIX_WINDOW_S
 
     @classmethod
     def from_env(cls, env=None) -> "Policy":
@@ -67,6 +71,8 @@ class Policy:
                 "PROMOTE_REQUIRE_SAME_CONVERSATION", REQUIRE_SAME_CONVERSATION,
                 env=env),
             auto_promote=env_bool("PROMOTE_AUTO_ENABLED", AUTO_PROMOTE, env=env),
+            fix_window_s=env_float("REACT_FIX_WINDOW_S", FIX_WINDOW_S,
+                                   minimum=0.0, env=env),
         )
 
 
@@ -105,6 +111,12 @@ class Decision:
     refused: bool = False
     # Accepted positive reactions from people (not self-evaluation).
     person_support: int = 0
+    # Events gate only: a strong event from the recipient or the admin, and
+    # the fix window passed with no second voice.
+    taught_alone: bool = False
+    # Strong gate only: the agent's own rewrite, and the recipient or the
+    # admin complained about the same reply.
+    complained: bool = False
 
     def __bool__(self) -> bool:
         return self.promote
@@ -428,16 +440,30 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
                 f"supports one classifies strong ({len(supporting)} "
                 f"supporting)",
                 gate=GATE_PERSON, otherwise_ready=ready, **counts)
+        complained = (
+            events_ok and speakers_ok
+            and any(e.get("kind") == evidence.KIND_SELF_REVIEW for e in supporting)
+            and any(e.get("kind") == evidence.KIND_REACTION
+                    and e.get("reaction_type") in ("rejection", "correction")
+                    and (evidence._same_person(e)
+                         or evidence._text(e.get("speaker_id"), 64) in admins)
+                    for e in supporting))
         return Decision(
             False,
             f"{len(strong)}/{policy.min_strong} strong events "
             f"({len(supporting)} supporting)",
-            gate=GATE_STRONG, **counts)
+            gate=GATE_STRONG, complained=complained, **counts)
     if not events_ok:
+        created = epoch(cand.get("created_at"))
+        alone = (speakers_ok and bool(now) and created > 0
+                 and now - created >= policy.fix_window_s
+                 and any(evidence._same_person(e)
+                         or evidence._text(e.get("speaker_id"), 64) in admins
+                         for e in strong))
         return Decision(
             False,
             f"{len(supporting)}/{policy.min_events} compatible events",
-            gate=GATE_EVENTS, **counts)
+            gate=GATE_EVENTS, taught_alone=alone, **counts)
     if not speakers_ok:
         return Decision(
             False,
@@ -473,7 +499,13 @@ def _refused(cand: dict, related, against_ids, supporting, admins) -> bool:
 def needs_character(decision: Decision, cand: dict) -> bool:
     """Is this hold one for the character to judge: a hold no reaction clears,
     with every other threshold met; an example needs a person's approval
-    among its support, never self-evaluation alone."""
+    among its support, never self-evaluation alone. A lone correction from
+    the person it concerns is one too, once its fix window has passed, and
+    so is the agent's own rewrite of a reply that person complained about."""
+    if decision.gate == GATE_EVENTS:
+        return decision.taught_alone
+    if decision.gate == GATE_STRONG:
+        return decision.complained
     if decision.gate not in CHARACTER_GATES or not decision.otherwise_ready:
         return False
     if (cand.get("type") == candidates.TYPE_EXAMPLE

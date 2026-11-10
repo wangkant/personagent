@@ -4,11 +4,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from .access import ADMIN_MODE
-from . import channels
+from . import channels, ranking
 from .prompts import (
     DM_TOOL_GUIDE,
     HONEST_DISCLOSURE,
@@ -34,6 +36,31 @@ logger = logging.getLogger("agent")
 
 # A platform name safe to quote in an engine-written line (see _at_example).
 _PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
+
+#: A pause between two chat lines that the prompt marks.
+_GAP_MARK_S = 1800.0
+#: A first shown line older than this gets its time.
+_EARLIEST_MARK_S = 3600.0
+
+
+def _stamp(value) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _dm_gap_note(history: list[dict]) -> str:
+    """How long the person was away before this message, when 30 minutes or
+    more: a turn context line, never part of the cached turns."""
+    if len(history) < 2 or history[-1].get("role") != "user":
+        return ""
+    before = _stamp(history[-2].get("t1")) or _stamp(history[-2].get("t"))
+    now = _stamp(history[-1].get("t")) or time.time()
+    if not before or now - before < _GAP_MARK_S:
+        return ""
+    pause = ranking.gap_phrase(now - before).removesuffix(" later")
+    return f"[Pause] The message before this one came {pause} earlier.\n\n"
 
 
 @dataclass(frozen=True)
@@ -83,17 +110,10 @@ class PromptBuilder:
     ) -> GroupPrompt:
         all_history = list(self.buffers[group_id])
         # Wider for judge/proactive, still capped: the gate pays for every line.
-        history = all_history[-30:] if mode in ("followup", "called", ADMIN_MODE) else all_history[-60:]
-        # A name is as sender-authored as a message; neither may forge a frame.
-        def _fmt_line(m: dict) -> str:
-            name = _clean_prompt_source(m.get("name", ""))
-            uid = _clean_prompt_source(m.get("user_id", ""))
-            if uid:
-                return f"[{name}|id={uid}] {m['text']}"
-            return f"[{name}] {m['text']}"
-        # One data span; the instructions around it stay outside the frame.
-        history_text = _fence_user_data(
-            "\n".join(_fmt_line(m) for m in history))
+        # A smaller CHAT_CONTEXT_MESSAGES narrows what a reply reads.
+        cap = 30 if mode in ("followup", "called", ADMIN_MODE) else 60
+        history = all_history[-max(1, min(int(self.chat_context_messages or cap), cap)):]
+        history_text = self._history_text(history)
 
         # A trigger the bot cannot see: tell it not to make the content up.
         blind_note = ""
@@ -277,16 +297,53 @@ class PromptBuilder:
         semi_static_block = self._sticker_guide_for_prompt()
         examples_block = self._examples_for_prompt(
             focus_text=latest_text, mode=mode, conv_id=group_id)
-        context_block = (
+        standing_block = (
             f"{self._lorebook_for_prompt(all_history, focus_text=latest_text)}"
             f"{self._core_memory_for_prompt(group_id)}"
             f"{self._lessons_for_prompt(group_id)}"
-            f"{self._memories_for_prompt(group_id, focus_text=latest_text)}"
         )
-        system_content = static_block + semi_static_block + examples_block + context_block
-        gate_system_content = static_block + context_block
+        memory_block, placed = self._memory_block(group_id, latest_text)
+        self._remember_recalled(group_id, placed)
+        thread_block, _ = self._memory_block(group_id, latest_text, for_gate=True)
+        system_content = (static_block + semi_static_block + examples_block
+                          + standing_block + memory_block)
+        # Whether to speak needs the thread, not the facts and events.
+        gate_system_content = static_block + standing_block + thread_block
         return GroupPrompt(system=system_content,
                            gate_system=gate_system_content, user=user_prompt)
+
+    def _history_text(self, history: list[dict]) -> str:
+        """The chat lines as data spans. A pause of 30 minutes or more, and
+        the time of a first line over an hour old, are marked between the
+        spans, written by the engine."""
+        # A name is as sender-authored as a message; neither may forge a frame.
+        def _fmt_line(m: dict) -> str:
+            name = _clean_prompt_source(m.get("name", ""))
+            uid = _clean_prompt_source(m.get("user_id", ""))
+            if uid:
+                return f"[{name}|id={uid}] {m['text']}"
+            return f"[{name}] {m['text']}"
+        spans: list[str] = []
+        current: list[str] = []
+        last_t = 0.0
+        for m in history:
+            t = _stamp(m.get("t"))
+            if current and t and last_t and t - last_t >= _GAP_MARK_S:
+                spans.append(_fence_user_data("\n".join(current)))
+                spans.append(f"[— {ranking.gap_phrase(t - last_t)} —]")
+                current = []
+            current.append(_fmt_line(m))
+            if t:
+                last_t = max(t, _stamp(m.get("t1")))
+        # One data span per stretch; the instructions around stay outside.
+        spans.append(_fence_user_data("\n".join(current)))
+        first_t = _stamp(history[0].get("t")) if history else 0.0
+        if first_t and time.time() - first_t >= _EARLIEST_MARK_S:
+            tz = self._prompt_tz()
+            spans.insert(0, f"[earliest line shown: "
+                            f"{datetime.fromtimestamp(first_t, tz):%H:%M}, "
+                            f"{ranking.day_label(first_t, tz)}]")
+        return "\n".join(spans)
 
     def _sticker_guide_for_prompt(self, dm: bool = False) -> str:
         """Sticker guide: with an empty library, not to invent stickers; else
@@ -502,26 +559,31 @@ class PromptBuilder:
         # Read back from the namespace _handle_dm writes (private:<uid>).
         memory_blocks = ""
         if pkey:
+            memory_block, placed = self._memory_block(pkey, last_user)
+            self._remember_recalled(pkey, placed)
             memory_blocks = (
                 f"{self._core_memory_for_prompt(pkey)}"
                 f"{self._lessons_for_prompt(channels.learning_key(pkey))}"
-                f"{self._memories_for_prompt(pkey, focus_text=last_user)}"
+                f"{memory_block}"
             )
         turn_context = (
             f"{_TURN_CONTEXT_OPEN}"
             f"{proactive_note}"
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=channels.learning_key(pkey))}"
             f"{memory_blocks}\n\n"
+            f"{'' if proactive else _dm_gap_note(history)}"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
             "Follow the JSON output protocol."
         )
         system = (f"{static_block}{semi_static_block}\n\n{dm_overrides}"
                   f"{dm_output_protocol(self.persona_style)}")
         # The person's turns are framed data; the persona's turns and the
-        # engine's proactive cue are not.
+        # engine's proactive cue are not. Only role and content go out: the
+        # stored times would break some endpoints.
         messages = [
-            {**m, "content": _fence_user_data(m.get("content", ""))}
-            if m.get("role") == "user" else dict(m)
+            {"role": m.get("role"),
+             "content": _fence_user_data(m.get("content", ""))
+             if m.get("role") == "user" else m.get("content", "")}
             for m in history
         ]
         if proactive and (not messages or messages[-1].get("role") == "assistant"):

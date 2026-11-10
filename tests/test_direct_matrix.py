@@ -279,7 +279,7 @@ def test_an_image_is_fetched_with_the_token_and_inlined(tmp_path):
                                           "origin_server_ts": now_ms(), "content": {
                                               "msgtype": "m.image", "body": "big.png", "url": "mxc://example.org/big",
                                               "info": {"size": base.MAX_INLINE_IMAGE_BYTES + 1}}}))
-    assert too_big["segments"] == [{"type": "text", "text": "(sent an image)"}]
+    assert too_big["segments"] == [{"type": "media", "kind": "photo"}]
 
 
 # ---------------------------------------------------------------- invites

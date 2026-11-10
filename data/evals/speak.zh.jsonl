@@ -58,3 +58,23 @@
 {"id": "sp-zh-58", "mode": "called", "label": "silent", "reason": "the name is only part of a band or song name in a gig plan between two members", "history": ["婷婷: @小陈 周五 livehouse 去不去", "小陈: @婷婷 谁的场"], "latest": "婷婷: @小陈 一个叫<bot-name>与卫星的乐队，在育音堂，票八十"}
 {"id": "sp-zh-59", "mode": "called", "label": "silent", "reason": "the name is part of a stranger's username, in two members' own thread", "history": ["小周: @大刘 公司象棋天梯谁一直第一", "大刘: @小周 财务部的一个哥们"], "latest": "大刘: @小周 他ID叫<bot-name>_88，没人下得过他"}
 {"id": "sp-zh-60", "mode": "called", "label": "silent", "reason": "a member's relative shares the name; nothing is addressed to the bot", "history": ["阿琳: @胖虎 你表妹来烧烤吗", "胖虎: @阿琳 来，她周五开车过来"], "latest": "胖虎: @阿琳 我表妹<bot-name>说她带她拿手的凉拌菜"}
+{"id": "sp-zh-61", "mode": "owner", "label": "speak", "reason": "问它今天过得怎么样", "history": [], "latest": "阿宁: <bot-name> 今天过得咋样"}
+{"id": "sp-zh-62", "mode": "owner", "label": "speak", "reason": "主人跟它分享好消息", "history": ["小周: 午饭一般般"], "latest": "阿宁: @<bot-name> 我拿到offer啦！！"}
+{"id": "sp-zh-63", "mode": "owner", "label": "speak", "reason": "主人向它吐槽", "history": [], "latest": "阿宁: <bot-name> 地铁又停运了，我真的服了"}
+{"id": "sp-zh-64", "mode": "owner", "label": "speak", "reason": "问它的看法", "history": ["小林: 新专辑出了"], "latest": "阿宁: <bot-name> 你听了没？咋样"}
+{"id": "sp-zh-65", "mode": "owner", "label": "speak", "reason": "直接问一个安排", "history": [], "latest": "阿宁: @<bot-name> 明天带蛋糕还是饼干"}
+{"id": "sp-zh-66", "mode": "owner", "label": "speak", "reason": "主人隔了一阵来打招呼", "history": ["阿杰: 有人吗"], "latest": "阿宁: <bot-name> 在吗"}
+{"id": "sp-zh-67", "mode": "owner", "label": "speak", "reason": "让它评理", "history": ["小周: 菠萝披萨挺好吃", "小林: 绝对不行"], "latest": "阿宁: <bot-name> 你来评评理"}
+{"id": "sp-zh-68", "mode": "owner", "label": "speak", "reason": "让它推荐东西", "history": [], "latest": "阿宁: @<bot-name> 今晚想看个剧，推荐一个"}
+{"id": "sp-zh-69", "mode": "owner", "label": "speak", "reason": "冲它开玩笑", "history": ["小林: 又是周一"], "latest": "阿宁: <bot-name> 你肯定最爱周一了吧"}
+{"id": "sp-zh-70", "mode": "owner", "label": "speak", "reason": "主人叫它的名字道谢", "history": ["<bot-name>: 面试加油！"], "latest": "阿宁: <bot-name> 面得超顺，谢谢你！！"}
+{"id": "sp-zh-71", "mode": "proactive", "label": "speak", "reason": "之前没聊完的话题值得接上", "history": ["小周: 有人去过那家新开的拉面吗", "小林: 还没，周五去"], "latest": "小林: 回来汇报"}
+{"id": "sp-zh-72", "mode": "proactive", "label": "speak", "reason": "有人留了个悬着的事，轻轻问一句合适", "history": ["阿杰: 明天考试，保佑我"], "latest": "小周: 冲"}
+{"id": "sp-zh-73", "mode": "proactive", "label": "speak", "reason": "有趣的话题聊到一半断了，接回去很自然", "history": ["小周: 披萨最好吃的配料是啥", "小林: 蘑菇"], "latest": "阿杰: 橄榄"}
+{"id": "sp-zh-74", "mode": "proactive", "label": "speak", "reason": "有人求推荐没人回", "history": [], "latest": "小美: 求推荐通勤听的播客"}
+{"id": "sp-zh-75", "mode": "proactive", "label": "speak", "reason": "有人早先报了喜，群里安静了", "history": ["小林: 今天跑完了人生第一个马拉松"], "latest": "小周: 牛"}
+{"id": "sp-zh-76", "mode": "proactive", "label": "silent", "reason": "大家都道了晚安，这时开口打扰人", "history": ["小周: 睡了睡了", "小林: 晚安"], "latest": "阿杰: 大家晚安"}
+{"id": "sp-zh-77", "mode": "proactive", "label": "silent", "reason": "两个人的严肃工作讨论刚结束", "history": ["阿杰: 线上挂了", "小美: 已经回滚了"], "latest": "阿杰: 稳住了，我去写复盘"}
+{"id": "sp-zh-78", "mode": "proactive", "label": "silent", "reason": "最后一句是坏消息，此时活泼地开场不合适", "history": ["小林: 我外婆今天早上走了"], "latest": "小周: 节哀"}
+{"id": "sp-zh-79", "mode": "proactive", "label": "silent", "reason": "两个人在私聊式地一来一回", "history": ["小周: @小林 我充电器还在你那", "小林: @小周 明天带给你"], "latest": "小周: @小林 好"}
+{"id": "sp-zh-80", "mode": "proactive", "label": "silent", "reason": "群里只剩零碎的收尾", "history": ["小周: 好累"], "latest": "小林: 嗯"}

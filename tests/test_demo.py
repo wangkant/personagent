@@ -40,12 +40,48 @@ async def play(tmp: Path, scenes, lang: str = "en") -> str:
 async def test_quiet_scene_says_why_for_every_line(tmp: Path) -> None:
     out = await play(tmp, ["quiet"])
     assert "scripted model, real ledger and promotion code" in out
-    assert out.count("(quiet: not addressed,") == 3
+    assert out.count("(quiet: not addressed,") == 4
     assert "(quiet: not addressed, 3 of 4 messages)" in out
     assert "(joins in: 4 of 4 messages, and the gate model said speak)" in out
     assert "  Nova: the final? count me in, I'll bring snacks" in out
     assert "(named, so it answers)" in out
-    assert out.count("but the gate model said stay quiet)") == 2
+    assert ("  Sam: lol\n      (quiet: not addressed, 0 of 4 messages so far; this "
+            "one is too short to count (under 4 characters))") in out
+    assert ("  Priya: ok, back to my report\n      (quiet: it spoke in the last "
+            "120 s, but the gate model said stay quiet)") in out
+    assert out.count("but the gate model said stay quiet)") == 1
+
+
+async def test_the_practice_chat_keeps_the_window_open_past_a_bystanders_lol(
+        tmp: Path) -> None:
+    """The live turn's rules: a "lol" in the window takes no gate call, and a
+    follow-up PASS closes the window only for the one who was passed on."""
+    with demo.throwaway_home(str(tmp)) as root:
+        agent, model = demo.build_agent("en", root, offline=True)
+        trial = chat.Trial(agent, conv="g1")
+
+        async def say(who, uid, text, **beat):
+            model.load(demo.Beat(who, text, **beat))
+            model.calls.clear()
+            return await trial.say(who, uid, text)
+        try:
+            turn = await say("Alex", "1001", "Nova, coming to the final?",
+                             reply="obviously")
+            assert turn.reply == "obviously"
+            turn = await say("Sam", "1002", "lol", gate=False)
+            assert (turn.quiet, model.calls) == ("below", [])
+            turn = await say("Alex", "1001", "wait what snacks are you bringing?",
+                             gate=True, reply="chips")
+            assert (turn.mode, turn.reply, model.calls) == (
+                "followup", "chips", ["gate", "reply"])
+            turn = await say("Sam", "1002", "anyway, back to work", gate=False)
+            assert (turn.mode, turn.quiet) == ("followup", "gate_pass")
+            turn = await say("Sam", "1002", "seriously, back to work", gate=True)
+            assert (turn.mode, turn.quiet, model.calls) == ("", "below", [])
+            turn = await say("Alex", "1001", "and drinks?", gate=True, reply="sure")
+            assert (turn.mode, turn.reply) == ("followup", "sure")
+        finally:
+            await trial.agent.aclose()
 
 
 @pytest.mark.parametrize("lang", ["en", "zh"])

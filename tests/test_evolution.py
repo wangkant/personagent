@@ -291,6 +291,107 @@ def _make_agent(tmp: Path) -> Agent:
     return a
 
 
+class _Scripted:
+    """The reviewer's diagnosis, the reaction judge's verdict, and the
+    character's own verdicts, told apart by their prompts."""
+
+    def __init__(self, reaction: dict) -> None:
+        self.reaction = reaction
+        self.verdicts: list[str] = []
+        self.calls: list[str] = []
+
+    async def __call__(self, system, messages, model, **kw):
+        prompt = messages[-1]["content"]
+        if "deciding for yourself whether to keep" in prompt:
+            self.calls.append("adopt")
+            return self.verdicts.pop(0) if self.verdicts else "not json"
+        if '"failure_mode"' in prompt:
+            self.calls.append("review")
+            return json.dumps(GOOD_DIAG)
+        self.calls.append("judge")
+        return json.dumps(self.reaction)
+
+
+async def _diagnosed_then_complained(tmp: Path, reactor: str):
+    from persona_agent import promotion
+
+    a = _make_agent(tmp)
+    a.promote_judge_enabled = False
+    reply = GOOD_DIAG["pair_draft"]["reply"]
+    _write_jsonl(a.eval_file, [{"ts": "t1", "group_id": "g1", "score": 1,
+                                "mode": "called", "user_msg": "is it broken",
+                                "reply": reply, "reason": "AI tone"}])
+    model = _Scripted({"reaction": "rejection", "accept": True, "reason": "missed",
+                       "better": "", "ask": "", "scenario": "s"})
+    a._call_llm = model
+    check("setup: one self-review pair", await a._evolve_tick() == 1)
+    cid = a.candidate_ledger.all()[0]["candidate_id"]
+    alone = a._basis(cid)
+    check("the self-review alone is never the character's",
+          alone.decision.gate == promotion.GATE_STRONG
+          and not promotion.needs_character(alone.decision, alone.cand), repr(alone.decision))
+    entry = {"reply": reply, "ctx_lines": ["alex: is it broken"], "mode": "called",
+             "target_uid": "42", "mids": ["m1"], "ts": 0.0}
+    await a._process_reaction(entry, "that's not what I asked", "someone", reactor,
+                              False, conv_id="g1")
+    return a, model, cid
+
+
+async def test_a_self_review_its_recipient_also_rejected_goes_to_the_character(
+        tmp: Path) -> None:
+    from persona_agent import promotion
+
+    a, model, cid = await _diagnosed_then_complained(tmp, "42")
+    basis = a._basis(cid)
+    check("the recipient's complaint plus the diagnosis: the character decides",
+          basis.decision.gate == promotion.GATE_STRONG
+          and promotion.needs_character(basis.decision, basis.cand), repr(basis.decision))
+    a.promote_judge_enabled = True
+    model.verdicts.append(json.dumps({"decision": "adopt", "choice": "",
+                                      "reason": "The person it was for disliked it."}))
+    check("adopted by the character", await a._character_decide(cid) == "adopted"
+          and model.calls.count("adopt") == 1, str(model.calls))
+    check("the rewrite is in use",
+          evolution.load_feedback_keys(a.promoted_feedback_file)
+          == {(GOOD_DIAG["pair_draft"]["reply"], GOOD_DIAG["pair_draft"]["better"])})
+
+    b, model, cid = await _diagnosed_then_complained(tmp / "b", "42")
+    b.promote_judge_enabled = True
+    model.verdicts.append(json.dumps({"decision": "discard", "choice": "",
+                                      "reason": "The new wording is not mine."}))
+    check("or discarded by it", await b._character_decide(cid) == "discarded"
+          and b.candidate_ledger.get(cid)["state"] == "rejected")
+
+
+async def test_a_self_review_no_person_can_settle_awaits_no_second_voice(
+        tmp: Path) -> None:
+    a = _make_agent(tmp)
+    a.promote_judge_enabled = True
+    _write_jsonl(a.eval_file, [{"ts": "t1", "group_id": "g1", "score": 1,
+                                "mode": "called", "user_msg": "is it broken",
+                                "reply": GOOD_DIAG["pair_draft"]["reply"],
+                                "reason": "AI tone"}])
+    a._call_llm = _Scripted({})
+    await a._evolve_tick()
+    summary = a._learned_summary("g1", "en")
+    check("its own rewrite alone is not counted as awaiting a second voice",
+          "0 awaiting a second voice, 0 under my own review" in summary, summary)
+    b, _model, _cid = await _diagnosed_then_complained(tmp / "b", "42")
+    b.promote_judge_enabled = True
+    summary = b._learned_summary("g1", "en")
+    check("with its recipient's complaint it is under my own review",
+          "0 awaiting a second voice, 1 under my own review" in summary, summary)
+
+
+async def test_a_self_review_a_bystander_rejected_is_not_judged(tmp: Path) -> None:
+    from persona_agent import promotion
+
+    a, model, cid = await _diagnosed_then_complained(tmp, "7")
+    basis = a._basis(cid)
+    check("a bystander's complaint does not make it the character's",
+          not promotion.needs_character(basis.decision, basis.cand), repr(basis.decision))
+
+
 async def test_evolve_tick(tmp: Path) -> None:
     a = _make_agent(tmp)
     _write_jsonl(a.eval_file, [

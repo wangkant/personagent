@@ -41,6 +41,17 @@ SPEC = Spec(
                           "все заметки", "всё что помнишь"}),
     first_person=(_W + r"(?:я|меня|мне|мной|мною|мой|моя|моё|мое|мои|моего|моей|"
                   r"моему|моим|моих|моими|мою)" + _E),
+    self_id=r"(?<!\w)я(?!\s+не(?!\w))(?!\w)",
+    made_by=r"(?:разработан|создан|обучен|сделан)\w*(?:\s+(?:компанией|в))?",
+    from_maker=r"(?<!\w)от",
+    # "Я ChatGPT не люблю" has the name as the object.
+    name_end=r"\s*(?:[,.!?;:)—–-]|$|от(?!\w))",
+    leak_labels=r"ввод|вход|говорящий|намерение|интент|решение|стиль|анализ",
+    assistant_tells=(r"(?:извините|простите|к\s+сожалению|мне\s+жаль)[,.!\s]+(?:но\s+)?(?:я\s+)?"
+                     r"не\s+могу\s+(?:вам\s+|тебе\s+)?(?:помочь|ответить|выполнить|предоставить)\s+"
+                     r"(?:вам\s+|тебе\s+)?(?:с\s+этим|на\s+этот\s+вопрос|этот\s+запрос|эту\s+просьбу|в\s+этом)"
+                     r"|надеюсь,?\s+это\s+(?:поможет|помогло|было\s+полезно)"
+                     r"|надеюсь,?\s+(?:я\s+)?смог(?:ла)?\s+(?:вам\s+|тебе\s+)?помочь"),
     # Neutral forms where a verb would show the persona's gender. Each line
     # ends off a letter: the note follows it, and a Cyrillic letter glued to
     # a Latin one is refused by the character policy as a mixed-script token.

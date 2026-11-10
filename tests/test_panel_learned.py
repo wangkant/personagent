@@ -152,9 +152,10 @@ def test_one_item_in_full_says_where_it_stands(client, ids):
     event = item["events"][0]
     assert event["who"] == "Alice" and event["what"] == "correction" and event["counts"] is True
     assert event["reading"] == "a short fix"
-    # One correction: the policy needs two agreeing reactions.
+    # One correction from the person it was for, past its fix window, with
+    # nobody confirming it: the character decides it.
     stand = item["standing"]
-    assert stand["stage"] == "reactions" and stand["missing"] == "events"
+    assert stand["stage"] == "deciding" and stand["missing"] == ""
     assert stand["events"] == 1 and stand["needEvents"] == 2
     assert item["actions"] == ["use", "set_aside"] and item["replaces"] == ""
     assert item["history"] == [] and item["decided"] is None

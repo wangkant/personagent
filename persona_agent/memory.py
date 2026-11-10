@@ -18,7 +18,7 @@ from . import memstore
 from . import memtrash
 from . import people
 from . import ranking
-from .addressing import _HAS_CJK, mentions_name, name_regex
+from .addressing import _HAS_CJK, mentions_name, names_regex
 from .textproc import _focus_tokens
 
 logger = logging.getLogger("agent")
@@ -63,6 +63,8 @@ STATE_FILE = "memory_state.json"
 _CORE_SHRINK_MIN_OLD = 120
 _CORE_SHRINK_LEN = 0.5
 _CORE_SHRINK_TOKENS = 0.4
+_CORE_OPEN = re.compile(r"\[\s*CORE_UPDATE\s*\]", re.IGNORECASE)
+_CORE_CLOSE = re.compile(r"\[\s*/\s*CORE_UPDATE\s*\]", re.IGNORECASE)
 
 #: Events a recall lists after the facts.
 _RECALL_EVENTS = 3
@@ -313,16 +315,27 @@ class Memory:
         return None
 
     def _extract_core_update(self, reply: str) -> tuple[str, str]:
-        """Split off a trailing [CORE_UPDATE]...[/CORE_UPDATE] note: (reply,
-        note). Parse only, so a reply the filter blocks never commits its note."""
-        m = re.search(r'\s*\[CORE_UPDATE\](.*?)\[/CORE_UPDATE\]\s*$', reply,
-                      re.DOTALL)
-        if not m:
+        """Split off [CORE_UPDATE]...[/CORE_UPDATE] notes: (reply, note). An
+        unclosed block runs to the end; words after a closed one stay in the
+        reply; the last non-empty note wins. Parse only, so a reply the filter
+        blocks never commits its note."""
+        if not _CORE_OPEN.search(reply):
             return reply, ""
-        new_note = m.group(1).strip()
+        kept: list[str] = []
+        new_note, rest = "", reply
+        while (m := _CORE_OPEN.search(rest)) is not None:
+            kept.append(rest[:m.start()])
+            rest = rest[m.end():]
+            close = _CORE_CLOSE.search(rest)
+            body, rest = (rest[:close.start()], rest[close.end():]) if close else (rest, "")
+            body = _CORE_CLOSE.sub("", _CORE_OPEN.sub("", body)).strip()
+            if body:
+                new_note = body
+        kept.append(rest)
+        reply = " ".join(p.strip() for p in kept if p.strip())
         if len(new_note) > self.CORE_MEMORY_MAX_CHARS:
             new_note = new_note[:self.CORE_MEMORY_MAX_CHARS] + "..."
-        return reply[:m.start()].strip(), new_note
+        return reply, new_note
 
     def _commit_core_memory(self, group_id: str, new_note: str) -> None:
         """Persist a note extracted by _extract_core_update. Empty notes skip."""
@@ -962,17 +975,19 @@ class Memory:
     def _names_me(self, text: str) -> bool:
         """Is this persona named in `text`: one rule for name calls, the
         missed-mention catch-up and the memory commands."""
-        return mentions_name(text, self.persona_name)
+        return mentions_name(text, self.persona_name,
+                             getattr(self, "persona_aliases", ()))
 
     def _memory_cmd_patterns(self) -> list:
         """[(code, spec, {kind: regex or [regexes]})] for every chat language,
-        cached per persona_name."""
+        cached per persona_name and aliases."""
+        names = (self.persona_name, tuple(getattr(self, "persona_aliases", ())))
         cached = getattr(self, "_mem_cmd_pats", None)
-        if cached and cached[0] == self.persona_name:
+        if cached and cached[0] == names:
             return cached[1]
         # Anchored at the start, so "I don't remember..." stays conversation.
         lead = r"^\s*(?:\[reply\]\s*)?"
-        name = name_regex(self.persona_name) if self.persona_name else ""
+        name = names_regex(*names)
         sep = r"\s*[：:，,]?\s*"
         table = []
         for code, spec in chatlangs.SPECS.items():
@@ -1003,7 +1018,7 @@ class Memory:
                                      + r"[\s?？!！.。~～]*$", re.IGNORECASE),
                 "learned": re.compile(head + f"(?:{spec.learned})", re.IGNORECASE),
             }))
-        self._mem_cmd_pats = (self.persona_name, table)
+        self._mem_cmd_pats = (names, table)
         return table
 
     @staticmethod

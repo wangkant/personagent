@@ -103,6 +103,47 @@ def test_the_character_decision_settings_save_and_read_back(client, workspace):
     assert tuning.BY_KEY["PROMOTE_JUDGE_ENABLED"].section == "learning"
 
 
+def test_the_memory_settings_save_and_read_back_as_the_character_reads_them(client, workspace):
+    from persona_agent.settings import AgentSettings
+
+    body = post(client, {"values": {"MEMORY_CALLS_PER_DAY": "12", "MEMORY_TIDY_EVERY": "5",
+                                    "CHAT_CONTEXT_MESSAGES": "90", "MEMORY_PROMPT_CHARS": "1800",
+                                    "MEMORY_EPISODES_MAX": "60", "MEMORY_KEEP_RECENT": False}}).json()
+    assert body["changed"] and workspace.restarts == [True]
+    again = client.get("/api/tuning", headers=HEADERS).json()["values"]
+    assert (again["MEMORY_CALLS_PER_DAY"], again["MEMORY_TIDY_EVERY"], again["CHAT_CONTEXT_MESSAGES"],
+            again["MEMORY_PROMPT_CHARS"], again["MEMORY_EPISODES_MAX"], again["MEMORY_KEEP_RECENT"]) == (
+        "12", "5", "90", "1800", "60", "false")
+    read = AgentSettings.from_env(env=workspace.config())
+    assert (read.memory_calls_per_day, read.memory_tidy_every, read.chat_context_messages,
+            read.memory_prompt_chars, read.memory_episodes_max, read.memory_keep_recent) == (
+        12, 5, 90, 1800, 60, False)
+    # Zero turns consolidation off; under the floors settings.py keeps is refused.
+    assert post(client, {"values": {"MEMORY_CALLS_PER_DAY": "0"}}).status_code == 200
+    for key, value in (("MEMORY_PROMPT_CHARS", "100"), ("MEMORY_EPISODES_MAX", "0"),
+                       ("MEMORY_CALLS_PER_DAY", "-1"), ("CHAT_CONTEXT_MESSAGES", "5")):
+        response = post(client, {"values": {key: value}})
+        assert response.status_code == 400 and key in response.json()["error"], (key, response.text)
+    assert {f.key for f in tuning.FIELDS if f.section == "memory"} == {
+        "MEMORY_CALLS_PER_DAY", "MEMORY_TIDY_EVERY", "CHAT_CONTEXT_MESSAGES", "MEMORY_PROMPT_CHARS",
+        "MEMORY_EPISODES_MAX", "MEMORY_KEEP_RECENT"}
+    for key in ("MEMORY_CALLS_PER_DAY", "MEMORY_PROMPT_CHARS", "MEMORY_EPISODES_MAX"):
+        field = tuning.BY_KEY[key]
+        default = AgentSettings.__dataclass_fields__[key.lower()].default
+        assert field.default == default, key
+
+
+def test_the_two_renamed_meanings_are_explained_anew():
+    found = tables()
+    assert found["en"]["tuning_f_chat_context_messages"] == "Recent messages kept per chat"
+    assert "at most the last 60" in found["en"]["tuning_h_chat_context_messages"]
+    assert "consolidation" in found["en"]["tuning_h_memory_tidy_every"]
+    assert "60" in found["zh"]["tuning_h_chat_context_messages"] and "整理" in found["zh"]["tuning_h_memory_tidy_every"]
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert '["who", "talk", "models", "learning", "memory", "more"]' in script
+    assert tuning.SECTIONS == ("who", "talk", "models", "learning", "memory", "more")
+
+
 def test_nothing_changed_writes_nothing(client, workspace):
     before = workspace.env.read_bytes()
     body = post(client, {"values": {"CHAT_TRIGGER_COUNT": "30"}}).json()

@@ -1280,11 +1280,11 @@ class ContentIngestion:
             if not data_url:
                 logger.info("[Agent] vision: skip GIF (first-frame extract failed), fallback to OCR")
                 return ""
-            # Retry throttling, 5xx, timeouts and the odd 400 some providers
-            # give a valid image.
+            # Retry throttling, 5xx and timeouts. A 400 is mostly a model that
+            # cannot read images, and _post_chat already resends one naming a field.
             r, last_exc = await self._vision_post(
                 self.VISION_PROMPT, data_url, max_tokens=120, temperature=0.3,
-                attempts=3, retryable=frozenset({400, 429, 500, 502, 503, 504}),
+                attempts=3, retryable=frozenset({429, 500, 502, 503, 504}),
                 backoff=1.0, retry_errors=True)
             if r is None or r.status_code != 200:
                 logger.warning("[Agent] vision HTTP %d: %s (exc=%s)",

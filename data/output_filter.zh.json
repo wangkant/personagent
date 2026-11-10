@@ -68,6 +68,12 @@
       "reason": "helpful-assistant sign-off - the zh counterpart of the en helpful_closer rule"
     },
     {
+      "name": "ai_apology_refusal",
+      "pattern": "(抱歉|对不起|對不起)[，,。!！\\s]*(但是?|不过|不過)?[，,\\s]*我(无法|無法|不能(?=回答|提供|协助|協助|满足|滿足|回应|回應))(回答|提供|协助|協助|满足|滿足|回应|回應|处理|處理|完成|帮助|幫助|帮你|幫你|帮您|幫您)",
+      "action": "reject",
+      "reason": "provider refusal ('抱歉，我无法回答这个问题') - the zh counterpart of the en ai_apology_refusal rule; covers the Traditional spelling zh-TW chats read here. 不能 counts only before a service verb, so a friend's '对不起，我不能帮你搬家' is kept"
+    },
+    {
       "name": "wiki_style_intro",
       "pattern": "^.{0,8}(这部|这剧|这本|这游戏|这电影|这小说|这动漫|这本书|这本小说).{0,10}(讲的是|主要讲|是一部|是一本|是一个|讲述了|讲述的是)",
       "action": "reject",

@@ -95,7 +95,7 @@ async def test_a_named_line_is_a_call_and_the_next_goes_to_the_gate(tmp: Path) -
                          reply="dune again, obviously")
         assert (turn.mode, turn.reply, model.calls) == (
             "called", "dune again, obviously", ["reply"])
-        turn = await say(trial, model, SAM, "lol", gate=False)
+        turn = await say(trial, model, SAM, "haha true", gate=False)
         assert (turn.mode, turn.quiet) == ("followup", "gate_pass")
         assert "it spoke in the last 120 s" in chat.reason("en", turn, NOVA)
 

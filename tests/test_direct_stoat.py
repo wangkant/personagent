@@ -259,8 +259,8 @@ def test_images_are_fetched_without_the_token_and_inlined():
     event, _ = run(bot.event(message(content="", attachments=[picture, huge, doc])))
     assert event["segments"] == [
         {"type": "image", "b64": base64.b64encode(b"\x89PNGpicture").decode()},
-        {"type": "text", "text": "(sent a photo)"},
-        {"type": "text", "text": "(sent a file: deck.pdf)"}]
+        {"type": "media", "kind": "photo"},
+        {"type": "media", "kind": "file", "name": "deck.pdf"}]
     fetch = next(r for r in server.requests if r.url.host == "cdn.stoat.test")
     assert str(fetch.url) == f"{AUTUMN}/attachments/F1" and "x-bot-token" not in fetch.headers
 

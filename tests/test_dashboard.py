@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 
-from persona_agent import (candidates, dashboard, decision_log, evidence,
+from persona_agent import (candidates, dashboard, decision_log, evidence, memstate,
                            promotion, welcome)
 from persona_agent import server
 from persona_agent.agent import Agent
@@ -257,6 +257,157 @@ def test_forgetting_a_note_follows_the_same_rules(live) -> None:
           done.status_code == 200 and live.memories["telegram:c1"] == [], done.text)
     again = c.post(url, json=body, headers=WRITE)
     check("forget: a note already gone is a 409", again.status_code == 409, again.text)
+
+
+# ----------------------------------------------------------------- memory ----
+
+def _remember(agent: Agent, conv: str = "telegram:c1") -> dict:
+    """A chat with a fact, an event, a summary and an always-present note."""
+    now = time.time()
+    agent._append_memory(conv, {"text": "Sam has a dog now", "time": now - 3600, "born": now - 86400,
+                                "auto": True, "user_id": "telegram:42", "user_name": "Sam",
+                                "used": now - 600, "said_by": "telegram:7", "said_by_name": "Alex"})
+    store = agent.episode_store
+    event = store.add(conv, {"text": "Sam and Alex planned a hike", "t0": now - 7200, "t1": now - 5400,
+                             "who": ["telegram:42", "telegram:7"], "names": ["Sam", "Alex"]})
+    store.set_thread(conv, "They are choosing a trail for Saturday.", now - 9000, now - 5400)
+    agent._save_episodes()
+    agent.core_memory[conv] = "Speak plainly with this group."
+    agent._save_core_memory()
+    return {"note": agent.memories[conv][0]["id"], "episode": event["id"],
+            "thread": store.thread(conv)["id"]}
+
+
+def test_the_chat_payload_carries_every_kind_of_memory(live) -> None:
+    ids = _remember(live)
+    live.memory_tidy_every = 8
+    memstate.CallBudget(live.memory_state).record_call("telegram:c1", time.time())
+    old = live.memory_trash.put("telegram:c1", "core", {"text": "Be terse."}, "rewritten", "reply")
+    detail = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    note = detail["memories"][0]
+    check("the fact: its id, who said it, when first noted and last used",
+          note["id"] == ids["note"] and note["said_by_name"] == "Alex" and note["about"] == "Sam"
+          and note["born"] < note["time"] and note["used"] > 0, repr(note))
+    check("the event, with its times and people",
+          [(e["id"], e["names"]) for e in detail["episodes"]] == [(ids["episode"], ["Sam", "Alex"])]
+          and detail["episodes"][0]["t0"] < detail["episodes"][0]["t1"], repr(detail["episodes"]))
+    check("the summary, with the stretch it covers",
+          detail["thread"]["id"] == ids["thread"] and detail["thread"]["from_t"] < detail["thread"]["to_t"],
+          repr(detail["thread"]))
+    check("the earlier always-present note can be brought back",
+          [(r["tid"], r["kind"], r["why"], r["text"]) for r in detail["removed"]]
+          == [(old, "core", "rewritten", "Be terse.")] and detail["removed"][0]["until"] > time.time(),
+          repr(detail["removed"]))
+    check("consolidation status while it is on",
+          detail["memory_status"] == {"calls_today": 1, "cap": 40, "paused_until": 0.0, "next_at": 0.0},
+          repr(detail["memory_status"]))
+    memstate.CallBudget(live.memory_state).failed("telegram:c1", time.time(), "TimeoutError")
+    backing_off = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    check("after a failed call the status says when it tries again",
+          backing_off["memory_status"]["next_at"] > time.time(), repr(backing_off["memory_status"]))
+    live.memory_tidy_every = 0
+    off = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    check("no status line while consolidation is off", off["memory_status"] is None)
+
+
+def test_each_kind_is_forgotten_and_brought_back(live) -> None:
+    ids = _remember(live)
+    c = client()
+    url = "/api/dashboard/memory/forget"
+    tids = {}
+    for kind in ("note", "episode", "thread", "core"):
+        r = c.post(url, json={"conv": "telegram:c1", "kind": kind, "id": ids.get(kind, "")}, headers=WRITE)
+        check(f"forget {kind}: done, with a trash id", r.status_code == 200 and r.json()["tid"], r.text)
+        tids[kind] = r.json()["tid"]
+    store = live.episode_store
+    check("forget: every kind is gone from its store",
+          not live.memories.get("telegram:c1") and not store.episodes("telegram:c1")
+          and store.thread("telegram:c1") is None and "telegram:c1" not in live.core_memory)
+    check("forget: a second forget of the event is a 409",
+          c.post(url, json={"conv": "telegram:c1", "kind": "episode", "id": ids["episode"]},
+                 headers=WRITE).status_code == 409)
+    check("forget: an unknown kind is refused",
+          c.post(url, json={"conv": "telegram:c1", "kind": "all"}, headers=WRITE).status_code == 400)
+    restore = "/api/dashboard/memory/restore"
+    refused = client(signed_in=False).post(restore, json={"tid": tids["note"]}, headers=WRITE)
+    check("restore: no token, refused", refused.status_code == 401, refused.text)
+    check("restore: no custom header, refused",
+          c.post(restore, json={"tid": tids["note"]}).status_code == 403)
+    for kind, tid in tids.items():
+        r = c.post(restore, json={"tid": tid}, headers=WRITE)
+        check(f"restore {kind}: done", r.status_code == 200, r.text)
+    check("restore: every kind is back",
+          live.memories["telegram:c1"][0]["id"] == ids["note"]
+          and store.get("telegram:c1", ids["episode"]) is not None
+          and store.thread("telegram:c1")["text"].startswith("They are choosing")
+          and live.core_memory["telegram:c1"] == "Speak plainly with this group.")
+    again = c.post(restore, json={"tid": tids["note"]}, headers=WRITE)
+    check("restore: a second time it is gone (404)", again.status_code == 404
+          and again.json()["code"] == "restore_gone", again.text)
+    # The same fact put back by hand while the removal is still restorable.
+    tid = c.post(url, json={"conv": "telegram:c1", "kind": "note", "id": ids["note"]}, headers=WRITE).json()["tid"]
+    live._append_memory("telegram:c1", dict(live.memory_trash.get(tid)["item"]))
+    exists = c.post(restore, json={"tid": tid}, headers=WRITE)
+    check("restore: what is already there is a 409", exists.status_code == 409, exists.text)
+    stale = live.memory_trash.put("telegram:c1", "note", {"id": "m0000000001", "text": "likes tea"},
+                                  "forgotten_page", "page", now=time.time() - 90_000)
+    late = c.post(restore, json={"tid": stale}, headers=WRITE)
+    check("restore: a page forget past its day is gone (404)", late.status_code == 404, late.text)
+    check("restore: an unknown id is gone (404)",
+          c.post(restore, json={"tid": "r0000000000"}, headers=WRITE).status_code == 404)
+
+
+def test_forget_this_chat_clears_that_chat_only(live) -> None:
+    _remember(live, "telegram:c1")
+    _remember(live, "telegram:c2")
+    live._forget_item("telegram:c1", "note", live.memories["telegram:c1"][0]["id"])
+    live._forget_item("telegram:c2", "note", live.memories["telegram:c2"][0]["id"])
+    live._recent = None
+    r = client().post("/api/dashboard/memory/forget_chat", json={"conv": "telegram:c1"}, headers=WRITE)
+    check("forget chat: done, counting what it remembered", r.status_code == 200
+          and r.json() == {"ok": True, "forgotten": 3}, r.text)
+    store = live.episode_store
+    check("forget chat: the chat's events, summary and note are gone, and nothing is restorable",
+          not store.episodes("telegram:c1") and store.thread("telegram:c1") is None
+          and "telegram:c1" not in live.core_memory and live._removed_items("telegram:c1") == [])
+    check("forget chat: the other chat keeps everything",
+          store.episodes("telegram:c2") and store.thread("telegram:c2")
+          and live.core_memory.get("telegram:c2") and len(live._removed_items("telegram:c2")) == 1)
+    check("forget chat: without a chat it is refused",
+          client().post("/api/dashboard/memory/forget_chat", json={}, headers=WRITE).status_code == 400)
+
+
+def test_the_memory_list_is_what_the_terminal_reads(live) -> None:
+    ids = _remember(live)
+    live._forget_item("telegram:c1", "episode", ids["episode"], by="terminal")
+    url = "/api/dashboard/memory/list"
+    check("list: the token is needed", client(signed_in=False).get(url).status_code == 401)
+    listed = client().get(url).json()
+    chat = listed["chats"][0]
+    check("list: the chat with its always-present note, summary and fact",
+          chat["conv"] == "telegram:c1" and chat["core"]["text"].startswith("Speak plainly")
+          and chat["thread"]["id"] == ids["thread"] and chat["facts"][0]["id"] == ids["note"]
+          and chat["events"] == [], repr(chat))
+    check("list: the forgotten event can be brought back",
+          [(r["kind"], r["by"]) for r in listed["removed"]] == [("episode", "terminal")], repr(listed["removed"]))
+    check("list: one chat only", client().get(url, params={"conv": "telegram:c9"}).json()
+          == {"chats": [], "removed": []})
+
+
+def test_a_replaced_page_chat_is_listed_while_it_remembers(live, tmp, monkeypatch) -> None:
+    runtime = tmp / "runtime"
+    runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / "page.owner").write_text("b" * 32, encoding="utf-8")
+    monkeypatch.setattr(dashboard, "runtime_dir", lambda: runtime)
+    old = "private:browser:" + "a" * 32
+    live.episode_store.add(old, {"text": "We set up the character together", "t0": time.time(),
+                                 "t1": time.time(), "who": ["browser:" + "a" * 32]})
+    live.last_dm_activity_at["browser:" + "a" * 32] = time.time()
+    listed = [c["id"] for c in client().get(PROBE).json()["conversations"]]
+    check("an old page chat with an event is listed", old in listed, repr(listed))
+    live.episode_store.drop_conv(old)
+    listed = [c["id"] for c in client().get(PROBE).json()["conversations"]]
+    check("once it remembers nothing it is not", old not in listed, repr(listed))
 
 
 # --------------------------------------------------------------- actions ----

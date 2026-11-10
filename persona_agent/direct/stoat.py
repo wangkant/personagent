@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
-                   plain_name, raw_id, split_text)
+                   has_content, media, plain_name, raw_id, split_text, tagged_segments)
 
 logger = logging.getLogger("personagent.direct.stoat")
 
@@ -327,15 +327,19 @@ class Stoat(Platform):
                                                        quoted_user.get("username"))})
         if mentioned:
             segments.append({"type": "mention", "user_id": self.bot_id, "name": ""})
-        if text:
-            segments.append({"type": "text", "text": text})
+        names = {uid: plain_name(user.get("display_name"), user.get("username"))
+                 for uid, user in self.users.items() if isinstance(user, dict)}
+        segments.extend(tagged_segments(text, names))
         for attachment in message.get("attachments") or []:
-            if str(attachment.get("content_type") or "").startswith("image/"):
+            kind = str(attachment.get("content_type") or "")
+            if kind.startswith("image/"):
                 image = await self._image(attachment)
-                segments.append(image or {"type": "text", "text": "(sent a photo)"})
+                segments.append(image or media("photo"))
+            elif kind.startswith("video/"):
+                segments.append(media("video"))
             else:
-                segments.append({"type": "text", "text": f"(sent a file: {attachment.get('filename', '')})"})
-        if not any(s["type"] in ("text", "image") for s in segments):
+                segments.append(media("file", name=attachment.get("filename")))
+        if not has_content(segments, self.bot_id):
             return None
         event = {"conversation_type": "dm" if is_dm else "group",
                  **({} if is_dm else {"conversation_id": cid}),

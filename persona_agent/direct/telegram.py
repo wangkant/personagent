@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 
 from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
-                   plain_name, raw_id, split_text)
+                   has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.telegram")
 
@@ -119,6 +119,9 @@ class Telegram(Platform):
                 addressed = True
             if entity.get("type") == "text_mention" and str((entity.get("user") or {}).get("id")) == self.bot_id:
                 addressed = True
+        origin = message.get("forward_origin")
+        if isinstance(origin, dict):
+            segments.append({"type": "forward", "name": _origin_name(origin)})
         if text:
             segments.append({"type": "text", "text": text})
         if addressed and not is_dm:
@@ -127,11 +130,8 @@ class Telegram(Platform):
         if photo:
             segments.append(photo)
         elif message.get("photo"):
-            segments.append({"type": "text", "text": "(sent a photo)"})
-        for key, note in (("voice", "(sent a voice message)"), ("video", "(sent a video)"),
-                          ("sticker", "(sent a sticker)"), ("document", "(sent a file)")):
-            if message.get(key):
-                segments.append({"type": "text", "text": note})
+            segments.append(media("photo"))
+        segments.extend(_media(message))
         quoted = message.get("reply_to_message")
         if isinstance(quoted, dict):
             author = quoted.get("from") or {}
@@ -141,7 +141,7 @@ class Telegram(Platform):
                                 "text": str(quoted.get("text") or quoted.get("caption") or ""),
                                 "sender_id": str(author.get("id") or ""),
                                 "sender_name": plain_name(author.get("first_name"), author.get("username"))})
-        if not any(s["type"] in ("text", "image") for s in segments):
+        if not has_content(segments, self.bot_id):
             return None
         return {"conversation_type": "dm" if is_dm else "group",
                 **({} if is_dm else {"conversation_id": str(chat.get("id"))}),
@@ -209,6 +209,32 @@ def _handle(chat_id: Any, message: dict) -> str:
     """Where replies go: the chat, and the forum topic the message was in."""
     thread = message.get("message_thread_id") if message.get("is_topic_message") else None
     return f"{chat_id}/{thread}" if thread else str(chat_id)
+
+
+def _media(message: dict) -> list[dict]:
+    found = []
+    if message.get("voice"):
+        found.append(media("voice"))
+    if message.get("video") or message.get("video_note") or message.get("animation"):
+        found.append(media("video"))
+    if isinstance(message.get("sticker"), dict):
+        found.append(media("sticker", emoji=message["sticker"].get("emoji")))
+    document = message.get("document")
+    # An animation also arrives as a document.
+    if isinstance(document, dict) and not message.get("animation"):
+        found.append(media("file", name=document.get("file_name")))
+    audio = message.get("audio")
+    if isinstance(audio, dict):
+        found.append(media("file", name=audio.get("file_name") or audio.get("title")))
+    return found
+
+
+def _origin_name(origin: dict) -> str:
+    """Who a forwarded message came from, as far as the platform tells."""
+    user = origin.get("sender_user") or {}
+    chat = origin.get("sender_chat") or origin.get("chat") or {}
+    return plain_name(" ".join(filter(None, (user.get("first_name"), user.get("last_name")))),
+                      user.get("username"), chat.get("title"), origin.get("sender_user_name"))
 
 
 def _entity_text(text: str, entity: dict) -> str:

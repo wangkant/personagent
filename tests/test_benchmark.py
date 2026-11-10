@@ -246,12 +246,16 @@ def test_real_evolution_pipeline_with_external_calls_stubbed() -> None:
         check("real pipeline: evaluator persisted the low score",
               len(eval_rows) == 1 and eval_rows[0]["score"] == 1,
               repr(eval_rows))
-        check("real pipeline: evolve tick recorded self-review evidence",
+        check("real pipeline: self-review evidence, then the scripted "
+              "recipient's rejection",
               [event["kind"] for event in agent.evidence_log.all()]
-              == ["self_review"],
+              == ["self_review", "reaction"],
               repr(agent.evidence_log.all()))
-        check("real pipeline: benchmark gate promoted the candidate",
-              len(promoted) == 1, repr(promoted))
+        check("real pipeline: the live policy and the character adopted it",
+              len(promoted) == 1
+              and promoted[0]["history"][-1]["actor"] == "character"
+              and promoted[0]["history"][-1]["reason"] == bench.BENCH_JUDGE_REASON,
+              repr(promoted))
         check("real pipeline: promoted correction is retrievable",
               ("Great question! Let me help.", "probably, it was your commit")
               in learned_pairs,
@@ -334,8 +338,8 @@ def test_pass_sentinel_is_protocol_not_text() -> None:
     protocol noise as learning material, and the judge inbox asked a blind
     judge to rate "PASS" as if a person had typed it."""
     check("PASS collapses to silence", bench.strip_pass_sentinel("PASS") == "")
-    check("PASS with tail collapses (production word-boundary rule)",
-          bench.strip_pass_sentinel("PASS lol") == "")
+    check("a word after PASS makes it a reply, as in production",
+          bench.strip_pass_sentinel("PASS lol") == "PASS lol")
     check("case-insensitive like production",
           bench.strip_pass_sentinel("pass.") == "")
     check("genuine reply is untouched",

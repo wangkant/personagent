@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .access import ADMIN_MODE
+from .search import SEARCH_CONTEXT_LINES, SearchHint
 from .textproc import (
     SLEEP_PASS_PROB,
     SUB_TRIGGER_PASS_PROB,
     _TOPIC_LEXICON,
     TextProcessing,
+    _clean_prompt_source,
 )
 
 logger = logging.getLogger("agent")
@@ -23,12 +25,27 @@ logger = logging.getLogger("agent")
 #: Unasked modes: the cheap gate model decides before the main model writes.
 GATED_MODES = ("judge", "followup", "proactive")
 
+_CORE_TAG_LEFT = re.compile(r"\[\s*/?\s*CORE_UPDATE", re.IGNORECASE)
+
 #: Reasons the callers act on.
 STICKY_CALL = "sticky call"
 SLEEP_WINDOW = "sleep window"
 
 #: Verdicts of `_final_reply`.
 SEND, PASS, BLOCKED = "send", "pass", "blocked"
+
+#: Appended to the system prompt for the one retry of a blocked or empty
+#: draft, in a group turn and in a private chat (dm.py).
+EMPTY_DRAFT_RETRY_NOTE = (
+    "Your previous draft could not be rendered. Emit the same JSON object "
+    "again — same keys, same shape — with a `reply` of at least one word "
+    "and no emoji or markup inside it."
+)
+
+
+def is_pass_sentinel(text: str) -> bool:
+    """The model's bare PASS; "Pass auf dich auf" or "pass the salt" is a reply."""
+    return bool(re.fullmatch(r"\W*PASS\W*", (text or "").strip(), re.IGNORECASE))
 
 
 @dataclass(frozen=True)
@@ -80,10 +97,12 @@ class ReplyDecision:
         mode: str,
         latest_text: str = "",
         caller_override: Optional[tuple] = None,
+        retry_note: str = "",
     ) -> tuple[str, str, str]:
         await self._prepare_retrieval(latest_text, group_id)
         prompt = self._build_group_prompt(group_id, mode, latest_text,
                                           caller_override)
+        system = prompt.system + ("\n\n" + retry_note if retry_note else "")
         # Unasked modes first ask the cheap gate whether to speak at all; the
         # sent line is always the main model's (_pick_group_model).
         if mode in GATED_MODES:
@@ -94,9 +113,10 @@ class ReplyDecision:
         # Counted toward the rate window that can force a downgrade.
         model_to_use = self._pick_group_model(mode)
         self.model_calls.append(time.time())
-        enable_search = mode in ("called", ADMIN_MODE, "followup")
+        # A retry fixes the draft's form; a second search would be a second call.
+        enable_search = mode in ("called", ADMIN_MODE, "followup") and not retry_note
         raw = await self._call_llm(
-            system=prompt.system,
+            system=system,
             messages=[{"role": "user", "content": prompt.user}],
             model=model_to_use,
             # An endpoint that insists on reasoning spends it against this cap.
@@ -108,8 +128,8 @@ class ReplyDecision:
             json_object=True,
             # Never on the gate: recovered prose would read as "decided to speak".
             plain_text_fallback=True,
-            # Search decides on the trigger text, not the whole prompt.
-            search_hint=latest_text,
+            # Search gates on the trigger text, not the whole prompt.
+            search_hint=self._search_hint(group_id, latest_text),
         )
         reply, reasoning, intent, mem = TextProcessing._parse_model_output(
             raw, model_to_use)
@@ -118,10 +138,28 @@ class ReplyDecision:
                          mode, intent or "?", len(reasoning))
         return reply, intent or "chat", mem
 
+    def _search_hint(self, group_id: str, latest_text: str) -> str:
+        """The trigger, carrying the buffer lines before it, so "what do you
+        think of it?" can be searched for what "it" is."""
+        if not latest_text:
+            return latest_text
+        buf = list(self.buffers.get(group_id) or ())
+        trigger = latest_text
+        # The trigger is normally the buffer's last line, merged or cut.
+        if buf and latest_text[:50] in buf[-1].get("text", ""):
+            trigger = f"{_clean_prompt_source(buf.pop().get('name'))}: {latest_text}"
+        lines = [f"{_clean_prompt_source(m.get('name'))}: {m.get('text', '')}"
+                 for m in buf[-SEARCH_CONTEXT_LINES:]]
+        return SearchHint(latest_text, lines + [trigger])
+
     def _finalize_reply(self, reply: str, *, log_ctx: str):
         """Core-memory tag, output filter, sanitize, [AT:] marker. Returns
         (reply, at_uid, pending_core, had_visible), or None if filtered."""
         reply, pending_core = self._extract_core_update(reply or "")
+        # A malformed tag left behind: what follows it may be the private note.
+        stray = _CORE_TAG_LEFT.search(reply)
+        if stray:
+            reply = reply[:stray.start()].rstrip()
         filtered, blocked = self._apply_output_filter(reply)
         if blocked:
             logger.warning("[Agent] output_filter blocked (%s): %s | original=%s",
@@ -147,7 +185,7 @@ class ReplyDecision:
         text, at_uid, core_note, had_visible = final
         if had_visible and not text:
             return FinalReply(BLOCKED)
-        if not text or re.match(r"PASS\b", text, re.IGNORECASE):
+        if not text or is_pass_sentinel(text):
             return FinalReply(PASS)
         return FinalReply(SEND, text, at_uid, core_note)
 
@@ -166,7 +204,7 @@ class ReplyDecision:
         )
         gate_reply, _gr, gate_intent, _gm = TextProcessing._parse_model_output(
             gate_raw, self.llm_judge_model)
-        speak = bool(gate_reply) and gate_reply.strip().upper() != "PASS"
+        speak = bool(gate_reply) and not is_pass_sentinel(gate_reply)
         return speak, gate_intent
 
     def _compute_chat_signals(self, group_id: str, history: list) -> dict:

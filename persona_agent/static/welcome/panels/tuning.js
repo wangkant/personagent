@@ -7,6 +7,7 @@ PA.strings({
     tuning_sec_talk: "Speaking and reply style",
     tuning_sec_models: "Models",
     tuning_sec_learning: "Learning",
+    tuning_sec_memory: "Memory",
     tuning_sec_more: "Other settings",
     tuning_more_note: "An empty field uses the default shown in grey. Times are in seconds.",
     tuning_save: "Save",
@@ -127,8 +128,18 @@ PA.strings({
     tuning_h_proactive_dm_cooldown_s: "The minimum time between two private conversations the character starts with the same person.",
     tuning_f_proactive_dm_prob: "Probability per check (private chats)",
     tuning_h_proactive_dm_prob: "From 0 to 1.",
-    tuning_f_chat_context_messages: "Messages read before replying",
-    tuning_h_chat_context_messages: "How many recent messages are included with each reply. More messages cost more per call.",
+    tuning_f_chat_context_messages: "Recent messages kept per chat",
+    tuning_h_chat_context_messages: "Messages kept for replies and for consolidation. A reply reads at most the last 60.",
+    tuning_f_memory_calls_per_day: "Memory consolidation calls per day",
+    tuning_h_memory_calls_per_day: "Model calls per day, for all chats together, that move conversation into long-term memory. Zero turns them off.",
+    tuning_f_memory_tidy_every: "Notes that start a consolidation",
+    tuning_h_memory_tidy_every: "When this many notes have been written in replies since a chat's last consolidation, that chat is consolidated. Zero turns off every memory model call.",
+    tuning_f_memory_prompt_chars: "Remembered material per reply (characters)",
+    tuning_h_memory_prompt_chars: "Characters of remembered material placed in each reply: the summary of earlier conversation, facts and events.",
+    tuning_f_memory_episodes_max: "Events kept per chat",
+    tuning_h_memory_episodes_max: "When a chat holds more events, the least useful are removed; they can be restored for 30 days.",
+    tuning_f_memory_keep_recent: "Keep recent messages on this computer",
+    tuning_h_memory_keep_recent: "The recent messages of each chat are kept on disk for 72 hours, so that a restart does not lose them. Off: they are kept only while the character runs.",
     tuning_f_chat_followup_window_s: "Follow-up window",
     tuning_h_chat_followup_window_s: "After the character replies, new messages within this time are treated as replies to it.",
     tuning_f_react_ttl_s: "Reaction window per reply",
@@ -171,6 +182,7 @@ PA.strings({
     tuning_sec_talk: "发言与回复风格",
     tuning_sec_models: "模型",
     tuning_sec_learning: "学习",
+    tuning_sec_memory: "记忆",
     tuning_sec_more: "其他设置",
     tuning_more_note: "留空即使用灰色显示的默认值。时间单位均为秒。",
     tuning_save: "保存",
@@ -291,8 +303,18 @@ PA.strings({
     tuning_h_proactive_dm_cooldown_s: "对同一用户两次主动发起私聊的最短间隔。",
     tuning_f_proactive_dm_prob: "每次检查主动发言的概率（私聊）",
     tuning_h_proactive_dm_prob: "取值 0 至 1。",
-    tuning_f_chat_context_messages: "回复时读取的消息数",
-    tuning_h_chat_context_messages: "每次回复时附带的近期聊天记录条数。条数越多，每次调用的费用越高。",
+    tuning_f_chat_context_messages: "每个聊天保留的近期消息数",
+    tuning_h_chat_context_messages: "用于回复和记忆整理的近期消息条数。每次回复最多读取最近 60 条。",
+    tuning_f_memory_calls_per_day: "每日记忆整理调用次数",
+    tuning_h_memory_calls_per_day: "所有聊天合计每天用于将对话整理为长期记忆的模型调用次数。设为 0 即关闭。",
+    tuning_f_memory_tidy_every: "触发记忆整理的笔记数",
+    tuning_h_memory_tidy_every: "某个聊天自上次整理以来在回复中记下的笔记达到此数量时，将对该聊天进行整理。设为 0 即关闭所有与记忆相关的模型调用。",
+    tuning_f_memory_prompt_chars: "每次回复附带的记忆字数",
+    tuning_h_memory_prompt_chars: "每次回复附带的记忆内容字数上限，包括此前对话的摘要、事实和事件。",
+    tuning_f_memory_episodes_max: "每个聊天保留的事件数",
+    tuning_h_memory_episodes_max: "某个聊天的事件超过此数量时，将移除最不重要的事件；移除的事件可在 30 天内恢复。",
+    tuning_f_memory_keep_recent: "在本机保留近期消息",
+    tuning_h_memory_keep_recent: "各聊天的近期消息在磁盘上保留 72 小时，重新启动后不会丢失。关闭后，近期消息仅在角色运行期间保留。",
     tuning_f_chat_followup_window_s: "接续回复时限",
     tuning_h_chat_followup_window_s: "角色回复后，此时限内的新消息均视为对角色的回复。",
     tuning_f_react_ttl_s: "回复的反应观察时长",
@@ -414,7 +436,7 @@ PA.strings({
   say(el("h2", "", card), "tuning_title");
   note(card, "tuning_lead");
   const sections = {};
-  for (const name of ["who", "talk", "models", "learning", "more"]) {
+  for (const name of ["who", "talk", "models", "learning", "memory", "more"]) {
     const box = el("details", "tuning-section", card);
     box.dataset.section = name;
     say(el("summary", "", box), "tuning_sec_" + name);

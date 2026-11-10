@@ -57,6 +57,15 @@ SPEC = Spec(
     # Whole words: "mir" and "mich", never inside "Mirabellen" or "Michael".
     first_person=(r"(?<![\wäöüß'])(?:ich|mich|mir|mein(?:e[mnrs]?)?|meins)"
                   r"(?![\wäöüß'])"),
+    self_id=r"(?<!\w)ich\s+bin(?!\s+(?:nicht|kein\w*)\b)(?:\s+(?:der|die|das|ein|eine))?(?!\w)",
+    made_by=r"(?:entwickelt|trainiert|erstellt|gebaut|programmiert)\s+von",
+    from_maker=r"(?<!\w)von",
+    leak_labels=r"eingabe|sprecher|absicht|intention|entscheidung|stil|analyse",
+    assistant_tells=(r"(?:(?:es\s+)?tut\s+mir\s+leid|leider)[,.!\s]+(?:aber\s+)?(?:ich\s+kann|kann\s+ich)"
+                     r"(?:\s+(?:dir|ihnen|euch|dabei|damit|hierbei|leider|bei\s+dieser\s+anfrage))*"
+                     r"\s+nicht\s+(?:helfen|weiterhelfen|behilflich\s+sein|beantworten|nachkommen)"
+                     r"|ich\s+hoffe,?\s+(?:das|dies)\s+(?:hilft|war\s+hilfreich)"
+                     r"|ich\s+hoffe,?\s+ich\s+konnte\s+(?:dir|ihnen|euch)\s+helfen"),
     replies={
         "remember_what": ("was soll ich mir merken? du hast nix gesagt",
                           "na sag schon", "merken, was denn"),

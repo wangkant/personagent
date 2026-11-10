@@ -941,6 +941,8 @@ async def test_a_proactive_opener_reaches_a_connector_room(tmp: Path) -> None:
 
     agent.outbox.liveness_s = 90.0
     await agent.outbox.pull("fw1", wait_s=0)
+    # As if someone had answered the first opener.
+    agent._openers().pop(room, None)
     before = list(agent.buffers[room])
     task = asyncio.create_task(agent._maybe_proactive_groups())
     await _ack_next(agent, status="failed")

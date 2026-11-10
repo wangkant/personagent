@@ -322,13 +322,14 @@ def test_evict_memory_prefers_auto() -> None:
 
 
 def test_extract_core_update_no_persist() -> None:
-    """Only a terminal core tag is accepted, and extraction never persists it."""
+    """A core tag is split off wherever it sits, and extraction never persists it."""
     with tempfile.TemporaryDirectory() as d:
         a = make_agent(Path(d))
-        malformed = "ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE] still talking"
-        stripped, note = a._extract_core_update(malformed)
-        check("core: non-terminal tag is not extracted",
-              stripped == malformed and note == "", repr((stripped, note)))
+        inside = "ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE] still talking"
+        stripped, note = a._extract_core_update(inside)
+        check("core: a block inside the reply is split off, the words around it kept",
+              stripped == "ok still talking" and note == "this group is all cat people",
+              repr((stripped, note)))
         stripped, note = a._extract_core_update(
             "ok [CORE_UPDATE]this group is all cat people[/CORE_UPDATE]")
         check("core: terminal tag stripped from reply",
@@ -339,6 +340,49 @@ def test_extract_core_update_no_persist() -> None:
         a._commit_core_memory("g", note)
         check("core: commit persists",
               a.core_memory.get("g") == "this group is all cat people", repr(dict(a.core_memory)))
+
+
+SECRET = "Alice is going through a divorce, keep it quiet"
+
+
+def test_a_private_core_note_never_reaches_the_chat(tmp: Path) -> None:
+    a = make_agent(tmp)
+    for raw, sent, note in (
+            (f"sure thing [CORE_UPDATE]{SECRET}", "sure thing", SECRET),
+            (f"sure thing\n[CORE_UPDATE]\n{SECRET}\n", "sure thing", SECRET),
+            ("sure thing [CORE_UPDATE]", "sure thing", ""),
+            (f"I think [CORE_UPDATE]{SECRET}[/CORE_UPDATE] you should rest",
+             "I think you should rest", SECRET),
+            (f"haha [CORE_UPDATE]{SECRET}[/CORE_UPDATE] [AT:telegram:5]",
+             "haha", SECRET),
+            (f"hey [CORE_UPDATE]Bob moved to Oslo[/CORE_UPDATE] bye [CORE_UPDATE]{SECRET}",
+             "hey bye", SECRET),
+            (f"ok [core_update]{SECRET}[/core_update]", "ok", SECRET)):
+        final = a._final_reply(raw, log_ctx="test")
+        check(f"{raw!r}: the note is not in what is sent",
+              "Alice" not in final.text and "Bob" not in final.text
+              and "CORE_UPDATE" not in final.text.upper(), repr(final.text))
+        check(f"{raw!r}: the words around it are sent", final.text == sent,
+              repr(final.text))
+        check(f"{raw!r}: the note is kept for core memory", final.core_note == note,
+              repr(final.core_note))
+    final = a._final_reply("[CORE_UPDATE]" + SECRET, log_ctx="test")
+    check("a reply that is only a note sends nothing", final.text == "", repr(final))
+    stray = a._final_reply(f"ok [CORE_UPDATE {SECRET}", log_ctx="test")
+    check("a malformed tag is cut with what follows it",
+          stray.text == "ok", repr(stray.text))
+
+
+def test_a_cut_off_note_still_cannot_shrink_core_memory(tmp: Path) -> None:
+    a = make_agent(tmp)
+    a._commit_core_memory("g", " ".join(f"member{i} likes topic{i}" for i in range(9)))
+    old = a.core_memory.get("g")
+    check("a long note is kept", bool(old) and len(old) > 150, repr(old))
+    final = a._final_reply("night all [CORE_UPDATE]member0 likes", log_ctx="test")
+    check("the unclosed note is not sent", final.text == "night all", repr(final.text))
+    a._commit_core_memory("g", final.core_note)
+    check("and the truncation guard keeps the old note",
+          a.core_memory.get("g") == old, repr(a.core_memory.get("g"))[:80])
 
 
 async def test_learned_summary_command(tmp: Path) -> None:

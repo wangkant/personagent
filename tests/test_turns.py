@@ -15,7 +15,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from persona_agent import memory, reactions, turns
+from persona_agent import decision_log, memory, reactions, turns
 from persona_agent.agent import Agent
 from persona_agent.prompts import MODEL_FAILURE_EXCUSES
 from persona_agent.textproc import TextProcessing
@@ -623,6 +623,239 @@ async def test_a_proactive_group_turn_has_the_budget_and_holds_what_arrives(
     check("nothing stays held", GROUP not in agent._pending_outbound)
 
 
+# ---- a called turn never ends in unexplained silence -------------------------
+
+def _scripted_think(agent: Agent, *answers):
+    """`_think` answering `answers` in turn ("raise" raises); records each
+    call's retry note."""
+    queue, notes = list(answers), []
+
+    async def think(group_id, mode, text="", caller_override=None, retry_note=""):
+        notes.append(retry_note)
+        answer = queue.pop(0) if queue else ""
+        if answer == "raise":
+            raise RuntimeError("provider blip")
+        return answer, "chat", ""
+
+    agent._think = think
+    return notes
+
+
+def _last_reason(group: str = GROUP) -> str:
+    rows = decision_log.LOG.recent(group)
+    return rows[0]["reason"] if rows else ""
+
+
+async def test_a_called_draft_that_is_blocked_is_written_once_more(tmp: Path) -> None:
+    decision_log.LOG.clear()
+    agent = make_agent(tmp)
+    sent = _collect_sends(agent)
+    notes = _scripted_think(agent, "😂😂😂", "ok sure")
+    handled = await agent.handle_onebot(_group("Luna, coming tonight?", "x1", at_bot=True))
+    check("the second draft is sent", handled is True
+          and sent == [(GROUP, "ok sure")], repr(sent))
+    check("the second call carries the retry note", notes[0] == "" and notes[1],
+          repr(notes))
+
+    blocked = make_agent(tmp / "still")
+    sent = _collect_sends(blocked)
+    notes = _scripted_think(blocked, "😂😂😂", "😂")
+    handled = await blocked.handle_onebot(_group("Luna?? hello", "x2", at_bot=True))
+    check("one retry only, then silence", handled is False and sent == []
+          and len(notes) == 2, repr((sent, notes)))
+    check("Activity says it was blocked", _last_reason() == "blocked",
+          repr(decision_log.LOG.recent(GROUP)))
+
+
+async def test_an_unasked_blocked_draft_is_not_retried_but_recorded(tmp: Path) -> None:
+    decision_log.LOG.clear()
+    agent = make_agent(tmp, chat_trigger_count=1)
+    sent = _collect_sends(agent)
+    notes = _scripted_think(agent, "😂😂😂", "ok sure")
+    await agent.handle_onebot(_group("what a match last night", "u1"))
+    check("no retry, nothing sent", sent == [] and len(notes) == 1, repr(notes))
+    check("Activity says it was blocked", _last_reason() == "blocked",
+          repr(decision_log.LOG.recent(GROUP)))
+
+
+async def test_a_called_turn_whose_model_answers_nothing_gets_the_failure_line(
+        tmp: Path) -> None:
+    decision_log.LOG.clear()
+    agent = make_agent(tmp)
+    sent = _collect_sends(agent)
+    _scripted_think(agent, "")
+    handled = await agent.handle_onebot(_group("Luna, you there?", "e1", at_bot=True))
+    await _settle()
+    check("an empty answer is a model failure: the caller is told",
+          handled is False and len(sent) == 1
+          and sent[0][1] in MODEL_FAILURE_EXCUSES["en"], repr(sent))
+    check("Activity says the model failed", _last_reason() == "model failed",
+          repr(decision_log.LOG.recent(GROUP)))
+
+
+async def test_every_exit_of_a_called_turn_reaches_activity(tmp: Path) -> None:
+    decision_log.LOG.clear()
+    agent = make_agent(tmp)
+    _collect_sends(agent)
+    _scripted_think(agent, "raise")
+    await agent.handle_onebot(_group("Luna, quick question", "m1", at_bot=True))
+    await _settle()
+    rows = decision_log.LOG.recent(GROUP)
+    check("a raised model call is recorded", _last_reason() == "model failed"
+          and rows[0]["spoke"] is False and rows[0]["sender"] == "Ann"
+          and rows[0]["excerpt"] == "@Luna Luna, quick question", repr(rows))
+
+    decision_log.LOG.clear()
+    undelivered = make_agent(tmp / "send")
+    _scripted_think(undelivered, "sure, see you there")
+
+    async def fails(group_id, text, at_user_id=""):
+        return SendResult(success=False)
+    undelivered._send_group = fails
+    await undelivered.handle_onebot(_group("Luna, see you?", "m2", at_bot=True))
+    check("a failed send is recorded", _last_reason() == "delivery failed"
+          and decision_log.LOG.recent(GROUP)[0]["spoke"] is False,
+          repr(decision_log.LOG.recent(GROUP)))
+
+
+async def test_the_owner_calling_in_a_group_is_answered_with_an_at(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    ats: list = []
+
+    async def send(group_id, text, at_user_id=""):
+        ats.append(at_user_id)
+        return SendResult(success=True)
+
+    agent._send_group = send
+    _scripted_think(agent, "on it", "sure")
+    await agent.handle_onebot(_group("Luna, check this", "o1", at_bot=True,
+                                     user="42", name="Kay"))
+    await agent.handle_onebot(_group("Luna, and this", "o2", at_bot=True,
+                                     user="7", name="Ann"))
+    check("the owner is @-ed back like anyone who calls", ats == ["42", "7"], repr(ats))
+
+
+async def test_quoting_the_characters_own_message_calls_it(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    sends: list = []
+
+    async def send(group_id, text, at_user_id=""):
+        sends.append(text)
+        return SendResult(success=True, message_ids=[f"90{len(sends)}"])
+
+    agent._send_group = send
+    calls: list = []
+
+    async def think(group_id, mode, text="", caller_override=None, retry_note=""):
+        calls.append(mode)
+        return "the blue one", "chat", ""
+
+    agent._think = think
+    await agent.handle_onebot(_group("Luna, which jacket?", "j1", at_bot=True))
+    check("its sent message is indexed as its own",
+          agent._msg_index.get("901") == "Luna: the blue one", repr(agent._msg_index))
+    await agent.handle_onebot(_group("Luna remember Ann likes blue", "j2",
+                                     at_bot=True))
+    check("so is a memory command's answer",
+          agent._msg_index.get("902", "").startswith("Luna: "), repr(agent._msg_index))
+
+    quote = _group("why that one?", "j3", user="8", name="Bob")
+    quote["message"].insert(0, {"type": "reply", "data": {"id": "901"}})
+    await agent.handle_onebot(quote)
+    check("a NapCat quote of its message, outside the window, is a call",
+          calls == ["called", "called"], repr(calls))
+
+    other = _group("and this?", "j4", user="8", name="Bob")
+    other["message"].insert(0, {"type": "reply", "data": {"id": "j1"}})
+    await agent.handle_onebot(other)
+    check("quoting someone else's message is not", calls == ["called", "called"],
+          repr(calls))
+
+    flagged = _group("really?", "j5", user="8", name="Bob")
+    flagged["message"].insert(0, {"type": "reply",
+                                  "data": {"id": "zz", "quote_self": True}})
+    await agent.handle_onebot(flagged)
+    check("a connector's quote_self flag is a call too", calls[-1] == "called"
+          and len(calls) == 3, repr(calls))
+
+
+async def test_the_quote_index_keeps_200_characters(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    _collect_sends(agent)
+    _scripted_think(agent)
+    await agent.handle_onebot(_group("x" * 300, "long1"))
+    check("a long message is indexed with 200 characters",
+          agent._msg_index.get("long1") == "Ann: " + "x" * 200,
+          repr(len(agent._msg_index.get("long1", ""))))
+
+
+# ---- the follow-up window ------------------------------------------------------
+
+def _followup_scene(tmp: Path, monkeypatch, followup_answers: list):
+    """An agent in a fresh follow-up window; `_think` answers a call with a
+    reply and a follow-up turn from `followup_answers`."""
+    monkeypatch.setattr(TextProcessing, "_is_sleep_hour", staticmethod(lambda: False))
+    decision_log.LOG.clear()
+    agent = make_agent(tmp, chat_followup_window_s=600)
+    sent = _collect_sends(agent)
+    calls: list = []
+
+    async def think(group_id, mode, text="", caller_override=None, retry_note=""):
+        calls.append((mode, text))
+        if mode == "followup":
+            return (followup_answers.pop(0) if followup_answers else ""), "chat", ""
+        return "the final? count me in", "chat", ""
+
+    agent._think = think
+    return agent, sent, calls
+
+
+async def test_a_bystanders_lol_does_not_close_the_window(tmp: Path, monkeypatch) -> None:
+    agent, sent, calls = _followup_scene(tmp, monkeypatch, ["chips, obviously"])
+    await agent.handle_onebot(_group("Luna, coming to the final?", "f1", at_bot=True,
+                                     user="1", name="Alex"))
+    await agent.handle_onebot(_group("lol", "f2", user="2", name="Sam"))
+    check("a noise line in the window takes no turn and no gate call",
+          calls == [("called", "@Luna Luna, coming to the final?")], repr(calls))
+    check("...and is recorded as below the trigger count",
+          _last_reason() == "below the trigger count",
+          repr(decision_log.LOG.recent(GROUP)))
+    await agent.handle_onebot(_group("wait what snacks are you bringing?", "f3",
+                                     user="1", name="Alex"))
+    check("the next real line still gets a follow-up turn",
+          calls[-1] == ("followup", "wait what snacks are you bringing?")
+          and sent[-1] == (GROUP, "chips, obviously"), repr((calls, sent)))
+
+
+async def test_a_followup_pass_closes_the_window_only_for_that_sender(
+        tmp: Path, monkeypatch) -> None:
+    agent, sent, calls = _followup_scene(tmp, monkeypatch, ["", "chips, obviously"])
+    await agent.handle_onebot(_group("Luna, coming to the final?", "p1", at_bot=True,
+                                     user="1", name="Alex"))
+    await agent.handle_onebot(_group("anyway back to work", "p2", user="2", name="Sam"))
+    check("Sam's line was a follow-up turn that passed",
+          calls[-1][0] == "followup" and _last_reason() == "passed", repr(calls))
+    await agent.handle_onebot(_group("wait what snacks are you bringing?", "p3",
+                                     user="1", name="Alex"))
+    check("Alex is still in the window", calls[-1][0] == "followup"
+          and sent[-1] == (GROUP, "chips, obviously"), repr((calls, sent)))
+    before = len(calls)
+    await agent.handle_onebot(_group("ok seriously back to work", "p4", user="2",
+                                     name="Sam"))
+    check("the window reopens for everyone once the character speaks again",
+          len(calls) == before + 1 and calls[-1][0] == "followup", repr(calls))
+
+    closed, _sent, calls = _followup_scene(tmp / "closed", monkeypatch, [""])
+    await closed.handle_onebot(_group("Luna, coming to the final?", "c1", at_bot=True,
+                                      user="1", name="Alex"))
+    await closed.handle_onebot(_group("anyway back to work", "c2", user="2", name="Sam"))
+    await closed.handle_onebot(_group("seriously, back to work", "c3", user="2",
+                                      name="Sam"))
+    check("a sender who passed is outside the window until it speaks again",
+          [m for m, _t in calls] == ["called", "followup"]
+          and _last_reason() == "below the trigger count", repr(calls))
+
+
 # ---- a storm: seeded interleavings of everything at once ----------------------
 
 class _VirtualClockLoop(asyncio.SelectorEventLoop):
@@ -759,7 +992,7 @@ class Storm:
         async def process_reaction(entry, text, name, uid, is_admin,
                                    conv_id="", is_dm=False):
             self.reactions.append(
-                (conv_id, _tokens([entry["reply"]]), _tokens([text])))
+                (conv_id, _tokens([entry["reply"]]), _tokens([text]), uid))
 
         agent._think, agent._chat_dm = think, chat_dm
         agent._send_group, agent._send_dm = send_group, send_dm
@@ -923,8 +1156,9 @@ class Storm:
                len(answers) == len(self.commands[conv]),
                (len(answers), len(self.commands[conv])))
 
-        matched = [r for _conv, replies, _said in self.reactions for r in replies]
-        ok("a reply is reacted to at most once",
+        # A bystander's reaction no longer takes the reply from its recipient.
+        matched = [(r, uid) for _conv, replies, _said, uid in self.reactions for r in replies]
+        ok("a reply is reacted to at most once by each person",
            len(set(matched)) == len(matched), matched)
 
     def fingerprint(self) -> tuple:

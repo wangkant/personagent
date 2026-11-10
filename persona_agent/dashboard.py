@@ -5,7 +5,9 @@ The local page's Activity view (persona_agent/welcome.py) reads
 by itself; each item says where it stands and who decided it. Everything is
 read-only except a person's optional promote, reject, roll back and restore,
 which go through the candidate ledger the way ``personagent learned`` does,
-rebuild the retrieval views, and record the actor ``dashboard``.
+rebuild the retrieval views, and record the actor ``dashboard``; and the
+forget and restore of what a chat remembers, which ``personagent memory``
+also calls while the service runs.
 
 Every request needs the header ``X-Personagent-Dashboard-Token`` with the
 secret in ``<runtime>/dashboard.token``, which the service creates when it
@@ -32,7 +34,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (access, candidates, channels, decision_log, embeddings, evidence,
-               langs, learning as learning_rules, lineage, promotion)
+               langs, learning as learning_rules, lineage, memstate, promotion)
 from .config_env import env_bool, env_float, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
 from .settings import content_lang
@@ -448,6 +450,9 @@ def _conversation_keys(agent, ledger_rows: list[dict]) -> dict[str, float]:
             touch(key, max((_epoch(i.get("time")) for i in items), default=0.0))
         for key in agent.core_memory:
             touch(key)
+        for key in agent.episode_store.convs():
+            touch(key, max((_epoch(e.get("t1")) for e in agent.episode_store.episodes(key)),
+                           default=0.0))
         for key, ts in list(agent.last_activity_at.items()):
             touch(key, ts)
         for uid, ts in list(agent.last_dm_activity_at.items()):
@@ -476,8 +481,10 @@ def conversations_payload(agent) -> dict:
     out = []
     page = {channels.dm_routing_key(owner) for owner in access.page_owner(runtime_dir())}
     for key, last in _conversation_keys(agent, rows).items():
-        # A page chat replaced by New chat never comes back; only the current one is listed.
-        if page and channels.platform_of(key) == access.PAGE_PLATFORM and key not in page:
+        # A page chat replaced by New chat never comes back; it is listed only
+        # while it still remembers something, so that can be read and forgotten.
+        if (page and channels.platform_of(key) == access.PAGE_PLATFORM and key not in page
+                and not (agent is not None and _memory_count(agent, key))):
             continue
         counts = by_conv.get(key, {})
         out.append({
@@ -546,6 +553,100 @@ def _decision_view(row: dict) -> dict:
             "answered": row.get("answered", ""), "sender": row.get("sender", "")}
 
 
+# ------------------------------------------------------------------ memory --
+
+MEMORY_KINDS = ("note", "episode", "thread", "core")
+_FORGET_BY = ("page", "terminal")
+REMOVED_LIMIT = 50
+
+
+def _note_view(where: str, item: dict) -> dict:
+    """One remembered fact: who it is about, who said it, when it was first
+    noted and last drawn on."""
+    text = str(item.get("text") or "")
+    by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
+    return {"text": _clip(text, 500), "time": _epoch(item.get("time")), "by": by,
+            "about": item.get("user_name") or "", "conv": where,
+            # The old text key still names a note that has no id yet.
+            "id": str(item.get("id") or embeddings.text_key(text)),
+            "born": _epoch(item.get("born") or item.get("time")),
+            "used": _epoch(item.get("used")),
+            "said_by_name": str(item.get("said_by_name") or "")}
+
+
+def _episode_view(row: dict) -> dict:
+    return {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 300),
+            "t0": _epoch(row.get("t0")), "t1": _epoch(row.get("t1") or row.get("t0")),
+            "names": [str(n) for n in row.get("names") or [] if n][:8]}
+
+
+def _thread_view(row: dict | None) -> dict | None:
+    if not row or not row.get("text"):
+        return None
+    return {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 500),
+            "from_t": _epoch(row.get("from_t")), "to_t": _epoch(row.get("to_t"))}
+
+
+def _removed_view(row: dict) -> dict:
+    return {"tid": str(row.get("tid") or ""), "kind": str(row.get("kind") or ""),
+            "why": str(row.get("why") or ""), "by": str(row.get("by") or ""),
+            "at": _epoch(row.get("at")), "text": _clip(row.get("text"), 500),
+            "until": _epoch(row.get("until"))}
+
+
+def _consolidation(agent, conv: str, now: float) -> dict | None:
+    """Today's consolidation calls against the cap; None while it is off."""
+    settings = getattr(agent, "settings", None)
+    cap = int(getattr(settings, "memory_calls_per_day", 0) or 0)
+    if cap <= 0 or int(getattr(agent, "memory_tidy_every", 0) or 0) <= 0:
+        return None
+    status = memstate.CallBudget(agent.memory_state).status(now, cap, conv)
+    return {key: status[key] for key in ("calls_today", "cap", "paused_until", "next_at")}
+
+
+def _remembered(agent, conv: str) -> dict:
+    """What a chat remembers beyond its facts: when the always-present note
+    changed, the summary, the events, what can be brought back."""
+    now = time.time()
+    store = agent.episode_store
+    events = sorted(store.episodes(conv), key=lambda e: _epoch(e.get("t1") or e.get("t0")),
+                    reverse=True)
+    return {"core_at": float(agent.memory_state.core_at(conv) or 0.0),
+            "thread": _thread_view(store.thread(conv)),
+            "episodes": [_episode_view(e) for e in events[:LIST_LIMIT * 3]],
+            "removed": [_removed_view(r) for r in agent._removed_items(conv, now)][:REMOVED_LIMIT],
+            "memory_status": _consolidation(agent, conv, now)}
+
+
+def memory_listing(agent, conv: str = "") -> dict:
+    """Every chat's memory, or one chat's, and what can be brought back: what
+    `personagent memory` prints."""
+    store = agent.episode_store
+    keys = [conv] if conv else sorted(
+        set(agent.memories) | set(agent.core_memory) | set(store.convs()))
+    chats = []
+    for key in keys:
+        core = agent.core_memory.get(key, "")
+        events = sorted(store.episodes(key), key=lambda e: _epoch(e.get("t0")))
+        entry = {"conv": key,
+                 "core": {"text": core, "at": float(agent.memory_state.core_at(key) or 0.0)}
+                 if core else None,
+                 "thread": _thread_view(store.thread(key)),
+                 "facts": [_note_view(key, item) for item in agent.memories.get(key, [])],
+                 "events": [_episode_view(e) for e in events]}
+        if entry["core"] or entry["thread"] or entry["facts"] or entry["events"]:
+            chats.append(entry)
+    return {"chats": chats,
+            "removed": [dict(_removed_view(r), conv=str(r.get("conv") or ""))
+                        for r in agent._removed_items(conv or None)]}
+
+
+def _memory_count(agent, conv: str) -> int:
+    store = agent.episode_store
+    return (len(agent.memories.get(conv, [])) + len(store.episodes(conv))
+            + bool(store.thread(conv)) + bool(agent.core_memory.get(conv)))
+
+
 _GROUPS = {candidates.STATE_PROPOSED: "observing", candidates.STATE_PROMOTED: "learned"}
 
 
@@ -585,17 +686,15 @@ def conversation_payload(agent, conv_id: str) -> dict:
             full = standing(cand, index, learning.policy, judge, now)
             placed[cand.get("candidate_id", "")] = {k: full[k] for k in STANDING_SENT}
     memories, core = [], ""
+    remembered = {"core_at": 0.0, "thread": None, "episodes": [], "removed": [],
+                  "memory_status": None}
     if agent is not None:
         kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
         # What its prompt also reads, so the page shows all it knows here.
         kept += agent._notes_from_rooms(conv_id)
-        for where, item in kept:
-            by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
-            memories.append({"text": _clip(item.get("text"), 500),
-                             "time": _epoch(item.get("time")), "by": by,
-                             "about": item.get("user_name") or "", "conv": where,
-                             "id": embeddings.text_key(item["text"])})
+        memories = [_note_view(where, item) for where, item in kept]
         core = _clip(agent.core_memory.get(conv_id, ""), 600)
+        remembered = _remembered(agent, conv_id)
     return {
         "id": conv_id,
         "platform": channels.platform_of(conv_id),
@@ -603,6 +702,7 @@ def conversation_payload(agent, conv_id: str) -> dict:
         "decisions": [_decision_view(row) for row in decision_log.LOG.recent(conv_id)],
         "memories": memories,
         "core_note": core,
+        **remembered,
         **{group: [_candidate_view(c, events, in_use, learning.policy,
                                    placed.get(c.get("candidate_id", ""), {}))
                    for c in cands]
@@ -745,29 +845,106 @@ async def dashboard_action(cid: str, action: str, request: Request):
     return _json(payload, agent, status)
 
 
-@router.post("/api/dashboard/memory/forget", include_in_schema=False)
-async def dashboard_forget(request: Request):
-    """Forget one note of a chat, by its id, or with no id its core note."""
+async def _memory_write(request: Request) -> tuple[dict | None, Response | None]:
+    """The JSON object a memory write sends, or the refusal."""
     refused = _check(request, write=True)
     if refused is not None:
-        return refused
+        return None, refused
     srv = _server()
     try:
         body = await srv._read_body_limited(request, _MAX_BODY)
     except srv.RequestBodyTooLarge:
-        return _refused(413, "body_too_large", "request body too large")
+        return None, _refused(413, "body_too_large", "request body too large")
     try:
         parsed = json.loads(body or b"{}")
     except ValueError:
-        return _refused(400, "invalid_json", "body is not JSON")
+        return None, _refused(400, "invalid_json", "body is not JSON")
     if not isinstance(parsed, dict):
-        return _refused(400, "invalid_json", "body is not an object")
-    conv, note = str(parsed.get("conv") or ""), str(parsed.get("note") or "")
-    if not conv or len(conv) > 512:
+        return None, _refused(400, "invalid_json", "body is not an object")
+    if srv.agent is None:
+        return None, _refused(503, "agent_off", "the character is not running")
+    return parsed, None
+
+
+def _conv_of(parsed: dict) -> str:
+    conv = str(parsed.get("conv") or "")
+    return conv if 0 < len(conv) <= 512 else ""
+
+
+@router.post("/api/dashboard/memory/forget", include_in_schema=False)
+async def dashboard_forget(request: Request):
+    """Forget one remembered item of a chat: a fact (`note`), an event, the
+    summary (`thread`) or the always-present note (`core`). It can be brought
+    back for a day with the trash id it answers."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    conv = _conv_of(parsed)
+    if not conv:
         return _refused(400, "invalid_id", "give a conversation id")
-    agent = srv.agent
+    # The older body: {conv, note} forgets a fact, {conv} the always-present note.
+    item = str(parsed.get("id") or parsed.get("note") or "")
+    kind = str(parsed.get("kind") or ("note" if item else "core"))
+    if kind not in MEMORY_KINDS or len(item) > 128:
+        return _refused(400, "invalid_kind", "kind is one of " + ", ".join(MEMORY_KINDS))
+    by = parsed.get("by") if parsed.get("by") in _FORGET_BY else "page"
+    agent = _server().agent
     async with agent.locks[conv]:
-        done = agent._forget_note(conv, note) if note else agent._forget_core(conv)
-    if not done:
-        return _refused(409, "already_forgotten", "that note is already gone")
+        tid = agent._forget_item(conv, kind, item, by=by)
+    if not tid:
+        return _refused(409, "already_forgotten", "that item is already gone")
+    # "-": forgotten, but the trash could not keep it, so there is no undo.
+    return _json({"ok": True, "tid": "" if tid == "-" else tid}, agent)
+
+
+@router.post("/api/dashboard/memory/restore", include_in_schema=False)
+async def dashboard_restore(request: Request):
+    """Bring back a removed item while it is still restorable."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    tid = str(parsed.get("tid") or "")
+    if not tid or len(tid) > 64:
+        return _refused(400, "invalid_id", "give a trash id")
+    by = parsed.get("by") if parsed.get("by") in _FORGET_BY else "page"
+    agent = _server().agent
+    row = agent.memory_trash.get(tid)
+    if row is None:
+        return _refused(404, "restore_gone", "that item can no longer be restored")
+    async with agent.locks[str(row.get("conv") or "")]:
+        result = agent._restore(tid, by=by)
+    if result == "exists":
+        return _refused(409, "already_exists", "that item already exists")
+    if result != "ok":
+        return _refused(404, "restore_gone", "that item can no longer be restored")
     return _json({"ok": True}, agent)
+
+
+@router.post("/api/dashboard/memory/forget_chat", include_in_schema=False)
+async def dashboard_forget_chat(request: Request):
+    """Forget everything one chat remembers, with nothing kept to restore."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    conv = _conv_of(parsed)
+    if not conv:
+        return _refused(400, "invalid_id", "give a conversation id")
+    agent = _server().agent
+    async with agent.locks[conv]:
+        count = _memory_count(agent, conv)
+        agent._forget_chat(conv)
+    return _json({"ok": True, "forgotten": count}, agent)
+
+
+@router.get("/api/dashboard/memory/list", include_in_schema=False)
+async def dashboard_memory_list(request: Request, conv: str = ""):
+    """What `personagent memory` lists while the service runs."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    if len(conv) > 512:
+        return _refused(400, "invalid_id", "give a conversation id")
+    agent = _server().agent
+    if agent is None:
+        return _refused(503, "agent_off", "the character is not running")
+    return _json(memory_listing(agent, conv), agent)

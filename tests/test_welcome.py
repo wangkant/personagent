@@ -32,6 +32,7 @@ HEADERS = {welcome.TOKEN_HEADER: TOKEN}
 def workspace(tmp_path, monkeypatch):
     value = welcome.Workspace(tmp_path)
     monkeypatch.setattr(sw, "probe_key", lambda *a, **kw: sw.Probe("http://127.0.0.1", 200, ""))
+    monkeypatch.setattr(welcome, "_vision_works", lambda model, base, key: True)
     yield value
     value.close()
 
@@ -895,7 +896,8 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
     assert chat["learned"][0]["by"] == {"by": "character", "why": "It fits."}
     assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "about": "", "when": 3.0,
-                              "id": "", "conv": ""}]
+                              "id": "", "conv": "", "born": 0, "used": 0, "saidBy": ""}]
+    assert chat["thread"] is None and chat["events"] == chat["removed"] == [] and chat["status"] is None
     # Oldest first, like a chat; the service lists newest first.
     assert [r["text"] for r in chat["recent"]] == ["lol", "sure"] and chat["recent"][0]["count"] == 3
     assert "checklist" not in json.dumps(chat) and "past" not in chat and "history" not in json.dumps(chat)
@@ -960,6 +962,56 @@ def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypa
     assert workspace._activity_token() == "env-token"
     sw.write_env(workspace.env, {"AGENT_RUNTIME_DIR": ""})
     assert workspace._activity_token() == "default-token"
+
+
+def test_memory_forget_restore_and_forget_chat_go_to_the_service(client, workspace, monkeypatch):
+    writes = []
+    def handler(request):
+        if request.method == "POST":
+            body = json.loads(request.content)
+            writes.append((request.url.path, body))
+            if body.get("tid") == "r00000000aa":
+                return httpx.Response(409, json={"code": "already_exists"})
+            if body.get("tid") == "r00000000bb":
+                return httpx.Response(404, json={"code": "restore_gone"})
+            if request.url.path.endswith("/forget_chat"):
+                return httpx.Response(200, json={"ok": True, "forgotten": 4})
+            return httpx.Response(200, json={"ok": True, "tid": "r1234567890"})
+        return httpx.Response(200, json=CONVERSATION)
+    _activity_service(workspace, monkeypatch, handler)
+    done = client.post("/api/activity/forget", headers=HEADERS,
+                       json={"chat": "telegram:-100", "kind": "episode", "id": "e0123456789"}).json()
+    assert done["tid"] == "r1234567890" and done["chat"]["id"] == "telegram:-100"
+    assert writes[-1] == ("/api/dashboard/memory/forget",
+                          {"conv": "telegram:-100", "kind": "episode", "id": "e0123456789"})
+    # The older body still forgets a fact, or with no id the always-present note.
+    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100", "note": "m1"})
+    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "note", "id": "m1"}
+    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100"})
+    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "core", "id": ""}
+    back = client.post("/api/activity/restore", headers=HEADERS, json={"chat": "telegram:-100", "tid": "r1234567890"})
+    assert back.json()["id"] == "telegram:-100" and writes[-1] == ("/api/dashboard/memory/restore",
+                                                                  {"tid": "r1234567890"})
+    for tid, code in (("r00000000aa", "activity_restore_exists"), ("r00000000bb", "activity_restore_gone")):
+        r = client.post("/api/activity/restore", headers=HEADERS, json={"chat": "telegram:-100", "tid": tid})
+        assert r.status_code == 400 and r.json()["error"] == code
+    count = len(writes)
+    for path, bad in (("forget", {"chat": "telegram:-100", "kind": "everything", "id": "x"}),
+                      ("restore", {"chat": "telegram:-100", "tid": "../r1"}),
+                      ("restore", {"chat": "", "tid": "r1234567890"}),
+                      ("forget_chat", {"chat": ""})):
+        r = client.post(f"/api/activity/{path}", headers=HEADERS, json=bad)
+        assert r.status_code == 400 and r.json()["error"] == "invalid_chat", bad
+    assert len(writes) == count   # nothing invalid is ever written
+    other = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": "telegram:-100"}).json()
+    assert other == {"ok": True, "forgotten": 4}
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": "telegram:-100"})
+    # This page's own chat is forgotten whole, then starts anew.
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    before = workspace._page_key()
+    own = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": before}).json()
+    assert own == {"ok": True, "forgotten": 4} and workspace._page_key() != before
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before})
 
 
 def _table(js, code, name):
@@ -1104,3 +1156,57 @@ def test_page_language_files_are_served_and_nothing_else(client):
         assert response.status_code == 200 and response.json()["strings"]
     for name in ("en.json", "zh.json", "xx.json", "ja", "ja.json.bak", "..%2Fwelcome.js", "..%2F..%2Fwelcome.py"):
         assert client.get(f"/assets/i18n/{name}").status_code == 404, name
+
+
+def test_vision_is_saved_only_when_the_model_can_read_an_image(client, workspace, monkeypatch):
+    """A model that cannot read images used to be saved as on, then refused
+    every picture three times. The save now asks it once, with the values
+    being saved."""
+    sw.write_env(workspace.env, {"LLM_API_KEY": "chat-key", "LLM_BASE_URL": "https://api.example.com/v1"})
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+    asked = []
+
+    def probe(model, base, key):
+        asked.append((model, base, key))
+        return model == "vl-model"
+    monkeypatch.setattr(welcome, "_vision_works", probe)
+    url = "/api/features"
+    refused = client.post(url, headers=HEADERS, json={"vision": {"enabled": True, "model": "text-only",
+                                                                  "baseUrl": "https://v.example.com/v1",
+                                                                  "apiKey": "vk"}})
+    check("refused by name", refused.status_code == 400 and refused.json()["error"] == "vision_unsupported",
+          refused.text)
+    check("asked once with what was being saved",
+          asked == [("text-only", "https://v.example.com/v1", "vk")], repr(asked))
+    check("and nothing was saved", not workspace.config().get("VISION_MODEL"), repr(workspace.config()))
+    saved = client.post(url, headers=HEADERS, json={"vision": {"enabled": True, "model": "vl-model",
+                                                                "sameAsChat": True}})
+    check("a model that can see is saved", saved.status_code == 200
+          and workspace.config()["VISION_MODEL"] == "vl-model", saved.text)
+    check("against the chat endpoint", asked[-1] == ("vl-model", "https://api.example.com/v1", "chat-key"))
+    asked.clear()
+    client.post(url, headers=HEADERS, json={"vision": {"enabled": False}})
+    check("turning it off asks nothing", asked == [], repr(asked))
+
+
+def test_the_vision_probe_runs_the_health_check_on_the_values_given(monkeypatch):
+    from persona_agent import health
+
+    seen = []
+
+    def check_vision():
+        seen.append((os.environ.get("VISION_MODEL"), os.environ.get("VISION_BASE_URL"),
+                     os.environ.get("VISION_API_KEY")))
+        return True, "ok"
+    monkeypatch.setattr(health, "check_vision", check_vision)
+    monkeypatch.setenv("VISION_MODEL", "before")
+    monkeypatch.delenv("VISION_API_KEY", raising=False)
+    check("a passing check", welcome._vision_works("vl", "https://v.example/v1", "vk") is True)
+    check("it saw the values given", seen == [("vl", "https://v.example/v1", "vk")], repr(seen))
+    check("and the environment is as it was", os.environ.get("VISION_MODEL") == "before"
+          and "VISION_API_KEY" not in os.environ)
+
+    def failing():
+        raise OSError("HTTP Error 400: model does not support image input")
+    monkeypatch.setattr(health, "check_vision", failing)
+    check("a refusal is a no", welcome._vision_works("vl", "https://v.example/v1", "vk") is False)

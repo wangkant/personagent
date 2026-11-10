@@ -16,8 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 
-from . import (access, adoption, candidates, channels, evidence, evolution,
-               promotion, reactions)
+from . import (access, adoption, candidates, channels, chatlangs, evidence,
+               evolution, promotion, reactions)
 from .textproc import (TextProcessing, _fence_user_data, _truncate_framed,
                        salvage_json_object)
 from .storage import append_jsonl_rotating
@@ -57,6 +57,19 @@ def put_in_use(ledger, cid: str, *, ts: str, actor: str, reason: str,
         ledger.rollback(extra.get("candidate_id", ""), ts=ts, actor=actor,
                         reason=f"replaced by {cid}", **stamp)
     return ok
+
+
+def _self_score(value) -> int | None:
+    """A self-eval score 1-5: a whole number, or text that starts with one
+    ("4/5"); None for anything else, which is stored as nothing."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, str):
+        m = re.match(r"\s*(\d+)", value)
+        value = int(m.group(1)) if m else None
+    return value if isinstance(value, int) and 1 <= value <= 5 else None
 
 
 @dataclass(frozen=True)
@@ -437,7 +450,11 @@ class Learning:
                 else:
                     logger.warning("[Agent] eval response not JSON mode=%s: %r", mode, raw[:200])
                     return
-            score = int(data.get("score", 0))
+            score = _self_score(data.get("score"))
+            if score is None:
+                logger.warning("[Agent] eval score unusable mode=%s: %r",
+                               mode, str(data.get("score"))[:40])
+                return
             reason = str(data.get("reason", ""))[:200]
             sticker_score = data.get("sticker_score")
             try:
@@ -552,10 +569,11 @@ class Learning:
                                                             self.agent_lang))
             recipient_uid = str(entry.get("target_uid") or "")
             is_recipient = bool(recipient_uid) and recipient_uid == str(reactor_uid or "")
+            chat_lang = chatlangs.detect(reaction_text or "", self.chat_lang)
             prompt = reactions.build_adjudicator_prompt(
                 entry, reaction_text, reactor_name, is_admin,
                 self.persona_name, self.agent_lang, reactor_history=history_line,
-                reactor_is_recipient=is_recipient)
+                reactor_is_recipient=is_recipient, chat_lang=chat_lang)
             adj = None
             # Once more on unusable output: a model now and then garbles a key
             # ("reaction correction"), and a lost verdict loses the reaction.
@@ -704,10 +722,15 @@ class Learning:
                         self._spawn(self._maybe_elicit(
                             conv_id, entry, adj.get("ask", ""),
                             reactor_uid, is_dm,
-                            parent_evidence_id=reaction_ev["event_id"]))
+                            parent_evidence_id=reaction_ev["event_id"],
+                            chat_lang=chat_lang))
 
-            # Teaching reputation: corrective acts only, never the admin.
-            if not is_admin and adj["reaction"] in ("correction", "rejection"):
+            # Teaching reputation: corrective acts only, never the admin. A
+            # dismissed complaint about a reply to oneself is not teaching.
+            complaint = (adj["reaction"] == "rejection" and is_recipient
+                         and not adj["accept"])
+            if (not is_admin and not complaint
+                    and adj["reaction"] in ("correction", "rejection")):
                 self.teacher_stats.update(reactor_uid, reactor_name,
                                           accepted=adj["accept"])
 
@@ -730,12 +753,18 @@ class Learning:
 
     async def _maybe_elicit(self, conv_id: str, entry: dict, ask: str,
                             reactor_uid: str, is_dm: bool,
-                            parent_evidence_id: str = "") -> None:
+                            parent_evidence_id: str = "",
+                            chat_lang: str = "") -> None:
         """After a delay, unless the retry was accepted or the cooldown runs,
         ask what they meant; their next message (even without an @) then
-        adjudicates against the original reply."""
+        adjudicates against the original reply. An ask not in `chat_lang`,
+        the chat's language, is not sent."""
         try:
             if not ask:
+                return
+            if chat_lang and chatlangs.detect(ask, chat_lang) != chat_lang:
+                logger.info("[Agent] elicitation skipped: not in the chat's "
+                            "language (%s): %s", chat_lang, ask[:60])
                 return
             await asyncio.sleep(max(0.0, self.react_elicit_delay_s))
             uid = ""

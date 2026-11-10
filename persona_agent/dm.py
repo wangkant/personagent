@@ -11,6 +11,9 @@ from .access import ADMIN_MODE, PAGE_PLATFORM
 from . import channels
 from . import decision_log
 from .connector import current_sink
+# An emoji-only draft the sanitizer eats would come back identical from an
+# unchanged prompt, so the one retry carries a note.
+from .decision import EMPTY_DRAFT_RETRY_NOTE as _EMPTY_DRAFT_RETRY_NOTE
 from .decision import PASS, SEND
 from .textproc import (
     TextProcessing,
@@ -21,16 +24,39 @@ from .textproc import (
 
 logger = logging.getLogger("agent")
 
-# Appended for the one DM retry: an emoji-only draft the sanitizer eats would
-# come back identical from an unchanged prompt. It keeps the JSON contract.
-_EMPTY_DRAFT_RETRY_NOTE = (
-    "Your previous draft could not be rendered. Emit the same JSON object "
-    "again — same keys, same shape — with a `reply` of at least one word "
-    "and no emoji or markup inside it."
+# The empty-draft note's contract, for a draft that was PASS or that a guard refused.
+_PASS_DRAFT_RETRY_NOTE = (
+    "Your previous draft was PASS, but a private chat has no PASS: the person "
+    "is waiting for an answer. Emit the same JSON object again — same keys, "
+    "same shape — with a `reply` of at least one word."
 )
+_REFUSED_DRAFT_RETRY_NOTE = (
+    "Your previous draft was refused ({reason}) and was not sent. Emit the "
+    "same JSON object again — same keys, same shape — with a `reply` of at "
+    "least one word, in character, without what was refused."
+)
+
+# A refusal or a PASS is the model's answer to these words: one reader gets a
+# second draft for it this often, so an induced refusal cannot double the spend.
+_DECLINED_RETRY_GAP_S = 300.0
+_DECLINED_RETRY_READERS = 4096
 
 _DM_HISTORY_MAX = 60
 _DM_HISTORY_KEEP = 40
+_UNANSWERED_KEEP_CHARS = 1500
+
+
+def _kept_unanswered(said: list[str]) -> list[str]:
+    """The newest lines within _UNANSWERED_KEEP_CHARS, and never fewer
+    than the last: what someone said during an outage waits for a reply."""
+    kept: list[str] = []
+    size = 0
+    for line in reversed(said):
+        size += len(line) + (1 if kept else 0)
+        if kept and size > _UNANSWERED_KEEP_CHARS:
+            break
+        kept.append(line)
+    return kept[::-1]
 
 
 def _trimmed_history(history: list[dict]) -> list[dict]:
@@ -65,12 +91,13 @@ class DirectMessages:
             self._leave_line(pkey, gate, item)
             return False
 
+        sender = payload.get("sender") or {}
+        nickname = (_clean_prompt_source(
+            sender.get("card") or sender.get("nickname")) or "?")[:8]
+
         def run_command() -> str:
             """Answered like a room's: no model call, no history, and it does
             not consume the pending reply."""
-            sender = payload.get("sender") or {}
-            nickname = (_clean_prompt_source(
-                sender.get("card") or sender.get("nickname")) or "?")[:8]
             self.last_dm_activity_at[user_id] = time.time()
             return self._handle_memory_command(
                 pkey, ctrl_text, user_id, nickname)
@@ -79,9 +106,14 @@ class DirectMessages:
             return await self._say_dm_memory_answer(
                 user_id, answer, background=background)
 
-        def take_in() -> bool:
+        # The local page answers at once; elsewhere a burst becomes one turn.
+        debounce = (0.0 if channels.platform_of(pkey) == PAGE_PLATFORM
+                    else self.message_debounce_sec)
+
+        def take_in() -> int:
             """The reader's words wait for their next turn. Run in line, so a
-            reaction is matched against the replies committed before it."""
+            reaction is matched against the replies committed before it.
+            Returns the message's number in this conversation."""
             self.last_dm_activity_at[user_id] = time.time()
             if self.react_learn_enabled:
                 entry = self.pending_reactions.match(
@@ -89,20 +121,23 @@ class DirectMessages:
                     sender_uid=user_id, is_dm=True, now=time.time())
                 if entry:
                     self._spawn(self._process_reaction(
-                        entry, text, "owner" if is_admin else "friend",
-                        user_id, is_admin,
+                        entry, text, nickname, user_id, is_admin,
                         conv_id=channels.dm_learning_key(user_id),
                         is_dm=True))
             self._dm_unanswered.setdefault(user_id, []).append(text)
-            return True
+            self._msg_seq[pkey] += 1
+            return self._msg_seq[pkey]
 
+        waiting = not is_command and not proactive and debounce > 0
         if is_command:
             self._ready(pkey, gate, item, run_command, message=False, say=say)
         elif proactive:
             # A cue is not a reaction from the reader, and joins no user turn.
             self._ready(pkey, gate, item, lambda: True, message=False, turn=True)
         else:
-            self._ready(pkey, gate, item, take_in, message=True, turn=True)
+            # Taken in now; with a debounce the turn is asked for after it.
+            self._ready(pkey, gate, item, take_in, message=True,
+                        turn=not waiting)
         try:
             outcome = await item.waiter
         except BaseException:
@@ -114,6 +149,24 @@ class DirectMessages:
             # Overtaken by a newer message, whose turn answers this one too,
             # or a command that is answered once the turn in flight is over.
             return False
+        if waiting:
+            await asyncio.sleep(debounce)
+            # A newer message of theirs asks for the turn that answers both.
+            if self._msg_seq.get(pkey, 0) != outcome:
+                return False
+            gate, item = self._enter_line(pkey)
+            self._ready(pkey, gate, item, lambda: True, message=False, turn=True)
+            try:
+                if await item.waiter is None:
+                    return False
+            except BaseException:
+                if item.granted:
+                    self._end_turn(pkey, gate)
+                raise
+            # One still being read when this asked was taken in ahead of it.
+            if self._msg_seq.get(pkey, 0) != outcome:
+                self._end_turn(pkey, gate)
+                return False
         if is_command:
             try:
                 handled = await say(outcome)
@@ -128,7 +181,8 @@ class DirectMessages:
             await self._say_carried(pkey, item.carried)
             return handled
         try:
-            return await self._dm_turn(user_id, pkey, text, is_admin, proactive)
+            return await self._dm_turn(user_id, pkey, text, is_admin, proactive,
+                                       nickname=nickname)
         finally:
             self._end_turn(pkey, gate)
 
@@ -163,12 +217,21 @@ class DirectMessages:
         return True
 
     async def _dm_turn(self, user_id: str, pkey: str, text: str,
-                       is_admin: bool, proactive: bool) -> bool:
+                       is_admin: bool, proactive: bool, *,
+                       nickname: str = "?") -> bool:
         """The turn the line gave this handler: one model call under the turn
         budget, the send, the commit. Nothing of this user's enters meanwhile."""
         # The reader's words this turn; kept for their next turn unless committed.
         said: list[str] = []
         committed = False
+        mode = "proactive" if proactive else ADMIN_MODE if is_admin else "called"
+
+        def silent(reason: str) -> None:
+            # Activity shows a turn that said nothing, and why.
+            asked = "\n".join(said)
+            decision_log.record(pkey, mode, False, reason, asked,
+                                answered=asked, sender=nickname)
+
         try:
             async with self.locks[pkey]:
                 if proactive:
@@ -210,23 +273,25 @@ class DirectMessages:
                     # Marked, so a connector can tell the excuse from a reply.
                     for item in sink.items[start:] if sink is not None else ():
                         item["reason"] = "excuse"
+                silent("model failed")
                 return False
             if not reply:
+                silent("passed")
                 return False
 
             final = self._final_reply(reply, log_ctx=f"DM user={user_id}")
             if final.verdict == PASS:
                 logger.info("[Agent] PASS (DM user=%s)", user_id)
             if final.verdict != SEND:
+                silent("passed" if final.verdict == PASS else "blocked")
                 return False
             reply, pending_core = final.text, final.core_note
 
             def record(spoken: str) -> None:
                 # A one-on-one chat shows in Activity what was said, as a group does.
                 decision_log.record(
-                    pkey, "proactive" if proactive else ADMIN_MODE if is_admin else "called",
-                    True, "proactive" if proactive else "addressed", spoken,
-                    answered="\n".join(said))
+                    pkey, mode, True, "proactive" if proactive else "addressed",
+                    spoken, answered="\n".join(said))
 
             async with self._dm_sending(pkey):
                 send_result = await self._send_dm(user_id, reply)
@@ -244,6 +309,8 @@ class DirectMessages:
                             self._dm_unanswered.pop(user_id, None)
                         committed = True
                     record(send_result.delivered)
+                else:
+                    silent("delivery failed")
                 return send_result.partial
 
             async with self.locks[pkey]:
@@ -260,7 +327,7 @@ class DirectMessages:
                 if self.react_learn_enabled and not proactive:
                     self.pending_reactions.record(
                         channels.dm_learning_key(user_id), reply=reply,
-                        ctx_lines=[f"user: {_truncate_framed(text, 100)}"],
+                        ctx_lines=[f"{nickname}: {_truncate_framed(text, 100)}"],
                         mode=ADMIN_MODE if is_admin else "called",
                         target_uid=user_id, mids=send_result.message_ids,
                         ts=time.time())
@@ -270,7 +337,7 @@ class DirectMessages:
         finally:
             # No await: this also runs when the turn is cancelled.
             if said and not committed:
-                self._dm_unanswered[user_id] = said[-3:]
+                self._dm_unanswered[user_id] = _kept_unanswered(said)
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """One DM model turn (LLM_DM_MODEL): `is_admin` picks the close or
@@ -309,22 +376,42 @@ class DirectMessages:
             return reply, mem
 
         reply, mem = await draft(system)
-        # A DM has no PASS, so an empty render is retried once; a proactive
-        # turn's empty draft is the persona declining.
-        if not proactive and self._draft_should_be_retried(reply):
-            logger.info("[Agent] DM draft renders empty, retrying once")
+        # A DM has no PASS, so a draft that would send nothing is retried
+        # once; a proactive turn's empty draft is the persona declining.
+        note = "" if proactive else self._draft_retry_note(reply)
+        if note and note != _EMPTY_DRAFT_RETRY_NOTE and not self._declined_retry_free(pkey):
+            note = ""
+        if note:
+            logger.info("[Agent] DM draft would send nothing, retrying once")
             # The protocol block ends without a newline.
-            retry_reply, retry_mem = await draft(
-                system + "\n\n" + _EMPTY_DRAFT_RETRY_NOTE)
+            retry_reply, retry_mem = await draft(system + "\n\n" + note)
             # The first draft's memory is still a fact about the conversation.
             reply, mem = retry_reply, (retry_mem or mem)
         return reply, mem
 
-    def _draft_should_be_retried(self, reply: str) -> bool:
-        """Would this draft render to nothing? A guard's refusal is not retried."""
-        text, refusal = TextProcessing._sanitize_reply_with_reason(
-            reply, self.agent_lang, self.reply_style)
-        if refusal:
+    def _declined_retry_free(self, pkey: str) -> bool:
+        """Whether this reader's declined draft may be asked for again now."""
+        asked = vars(self).setdefault("_declined_retry_at", {})
+        now = time.monotonic()
+        last = asked.get(pkey)
+        if last is not None and now - last < _DECLINED_RETRY_GAP_S:
             return False
+        if len(asked) >= _DECLINED_RETRY_READERS:
+            asked.clear()
+        asked[pkey] = now
+        return True
+
+    def _draft_retry_note(self, reply: str) -> str:
+        """The note for a second draft when this one would send nothing: a
+        PASS, a guard's refusal, or a render to nothing; else ""."""
+        if re.fullmatch(r"\W*PASS\W*", (reply or "").strip(), re.IGNORECASE):
+            return _PASS_DRAFT_RETRY_NOTE
+        filtered, blocked = self._apply_output_filter(reply or "")
+        text, refusal = TextProcessing._sanitize_reply_with_reason(
+            filtered, self.agent_lang, self.reply_style)
+        if blocked or refusal:
+            return _REFUSED_DRAFT_RETRY_NOTE.format(reason=refusal or blocked)
         text = text.strip().strip('"').strip("「」")
-        return not re.sub(r'\[AT:[^\]\s]+\]', '', text).strip()
+        if re.sub(r'\[AT:[^\]\s]+\]', '', text).strip():
+            return ""
+        return _EMPTY_DRAFT_RETRY_NOTE

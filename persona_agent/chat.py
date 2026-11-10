@@ -20,7 +20,6 @@ import functools
 import itertools
 import logging
 import os
-import re
 import shutil
 import sys
 import time
@@ -34,7 +33,8 @@ from persona_agent import access, candidates, channels, evidence, home, langs, p
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
-from persona_agent.decision import GATED_MODES, choose_group_mode, pacing_skip
+from persona_agent.decision import (GATED_MODES, choose_group_mode, is_pass_sentinel,
+                                    pacing_skip)
 from persona_agent.llm import _status_of
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import (
@@ -663,7 +663,7 @@ class Trial:
                 turn.memory_saved = len(agent.memories.get(conv, [])) > notes
                 turn.reply = turn.sent = TextProcessing._sanitize_reply(
                     mem_reply, agent.agent_lang, agent.reply_style)
-                agent.last_reply_at[conv] = time.time()
+                agent._spoke_in(conv)
                 agent._append_buffer(conv, agent.persona_name, mem_reply)
                 self.last = turn
                 return turn
@@ -672,10 +672,12 @@ class Trial:
         turn.count = agent.counters[conv]
         mode, why = choose_group_mode(
             addressed=addressed, is_admin=is_admin, sticky_admin=None,
-            in_followup=(time.time() - agent.last_reply_at[conv]
-                         < agent.chat_followup_window_s),
+            in_followup=agent._followup_open(conv, uid),
             counter=turn.count, trigger_count=agent.chat_trigger_count,
             never_replied=never_replied)
+        if mode == "followup" and turn.short:
+            # As live: a "lol" in the window takes no turn and no gate call.
+            mode, why = "", "below the trigger count"
         turn.mode, turn.why = mode, why
         if not mode:
             turn.quiet = "below"
@@ -700,6 +702,8 @@ class Trial:
             return turn
         if mode in GATED_MODES and self._gate_verdict is False:
             turn.quiet = "gate_pass"
+            if mode == "followup":
+                agent._followup_pass(conv, uid)
             return turn
         return self._commit_group(turn, reply, intent, auto_mem, blocks)
 
@@ -711,16 +715,15 @@ class Trial:
             turn.quiet = "filter"
             return turn
         reply, at_uid, pending_core, had_visible = final
-        if not at_uid and turn.mode == "called":
+        if not at_uid and turn.mode in ("called", ADMIN_MODE):
             at_uid = turn.uid
         if had_visible and not reply:
             turn.quiet, turn.raw = "character", clip(raw, 60)
             return turn
-        if not reply or re.match(r"PASS\b", reply, re.IGNORECASE):
+        if not reply or is_pass_sentinel(reply):
             turn.quiet = "pass"
             if turn.mode == "followup":
-                agent.last_reply_at[conv] = (
-                    time.time() - agent.chat_followup_window_s - 1)
+                agent._followup_pass(conv, turn.uid)
             return turn
         sent = TextProcessing._sanitize_reply(
             reply, agent.agent_lang, agent.reply_style)
@@ -729,7 +732,7 @@ class Trial:
             return turn
         context = [f"{m['name']}: {m['text']}" for m in list(agent.buffers[conv])[-5:]]
         awaiting = _awaiting_fix(agent, conv)
-        agent.last_reply_at[conv] = time.time()
+        agent._spoke_in(conv)
         agent._append_buffer(conv, agent.persona_name, sent)
         agent._commit_core_memory(conv, pending_core)
         if auto_mem:
@@ -843,7 +846,7 @@ class Trial:
                 agent.buffers[conv] = saved
         final = agent._finalize_reply(reply, log_ctx="trial probe")
         turn.reply = _render(final[0]) if final else ""
-        if not turn.reply or re.match(r"PASS\b", turn.reply, re.IGNORECASE):
+        if not turn.reply or is_pass_sentinel(turn.reply):
             turn.reply, turn.quiet = "", "pass"
         turn.offered = self.offered(conv, blocks)
         return turn

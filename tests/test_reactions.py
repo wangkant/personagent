@@ -43,7 +43,7 @@ def test_pending_replies() -> None:
     check("foreign quote does NOT fall through to latest",
           p.match("g1", sender_uid="7", quote_mid="m999", now=110) is None)
     check("at-bot matches latest",
-          p.match("g1", sender_uid="7", at_bot=True, now=110) is not None)
+          p.match("g1", sender_uid="42", at_bot=True, now=110) is not None)
 
     p.record("dm", **_entry_kwargs(target_uid="42", mids=[]))
     check("private: other sender no match",
@@ -83,6 +83,49 @@ def test_a_connector_quote_falls_through_to_the_address() -> None:
           "names its own target",
           p.match("qq", sender_uid="7", quote_mid="m999", at_bot=True, now=110)
           is None)
+
+
+def test_an_at_takes_only_the_senders_own_reply() -> None:
+    """bob's @ must not take the reply meant for alice, so alice's later
+    quote or @ still finds hers. bob may still react to it, as a bystander,
+    once."""
+    def store():
+        p = reactions.PendingReplies(ttl_sec=600)
+        p.record("g1", **_entry_kwargs(reply="R1", target_uid="alice",
+                                       mids=["m1"]))
+        return p
+
+    p = store()
+    seen = p.match("g1", sender_uid="bob", at_bot=True, now=110)
+    check("bob's @ is judged against R1, as a bystander",
+          seen is not None and seen["reply"] == "R1"
+          and seen["target_uid"] == "alice", repr(seen))
+    check("but R1 is not taken from alice",
+          [e["reply"] for e in p._by_conv["g1"]] == ["R1"])
+    check("and bob's next @ does not react to R1 again",
+          p.match("g1", sender_uid="bob", at_bot=True, now=110) is None)
+    p.record("g1", **_entry_kwargs(reply="R2", target_uid="bob", mids=["m2"]))
+    hit = p.match("g1", sender_uid="alice", quote_mid="m1", now=111)
+    check("alice's quote of m1 still finds R1",
+          hit is not None and hit["reply"] == "R1", repr(hit))
+
+    p = store()
+    p.match("g1", sender_uid="bob", at_bot=True, now=110)
+    p.record("g1", **_entry_kwargs(reply="R2", target_uid="bob", mids=["m2"]))
+    hit = p.match("g1", sender_uid="alice", at_bot=True, now=111)
+    check("alice's @ takes R1, not bob's newer R2",
+          hit is not None and hit["reply"] == "R1", repr(hit))
+    hit = p.match("g1", sender_uid="bob", at_bot=True, now=112)
+    check("and bob's @ then takes R2",
+          hit is not None and hit["reply"] == "R2", repr(hit))
+
+    p = reactions.PendingReplies(ttl_sec=600)
+    p.record("g1", **_entry_kwargs(reply="to all", target_uid="", mids=["m1"]))
+    p.record("g1", **_entry_kwargs(reply="to alice", target_uid="alice",
+                                   mids=["m2"]))
+    hit = p.match("g1", sender_uid="bob", at_bot=True, now=110)
+    check("an @ falls back to a reply meant for nobody in particular",
+          hit is not None and hit["reply"] == "to all", repr(hit))
 
 
 def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
@@ -276,13 +319,13 @@ def test_retry_and_elicited() -> None:
     bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called")
     p.note_rejection("g1", bad, ts=100.0, complainant_uid="42")
     p.record("g1", **_entry_kwargs(reply="check the logs first", ts=150.0))
-    e = p.match("g1", sender_uid="7", at_bot=True, now=160.0)
+    e = p.match("g1", sender_uid="42", at_bot=True, now=160.0)
     check("retry entry carries fixes",
           e is not None and e.get("fixes", {}).get("reply") == "just restart it")
 
     p.note_rejection("g2", bad, ts=100.0, complainant_uid="42")
     p.record("g2", **_entry_kwargs(reply="late retry", ts=300.0))
-    e = p.match("g2", sender_uid="7", at_bot=True, now=310.0)
+    e = p.match("g2", sender_uid="42", at_bot=True, now=310.0)
     check("fix window expiry drops the link",
           e is not None and "fixes" not in e)
 
@@ -301,6 +344,85 @@ def test_retry_and_elicited() -> None:
     p.record("g4", **_entry_kwargs(elicited_uid="42", mids=[], ts=100.0))
     check("elicited window expires",
           p.match("g4", sender_uid="42", now=100.0 + 51) is None)
+
+
+def test_the_reaction_judge_is_told_the_chats_language() -> None:
+    entry = {"reply": "sup", "ctx_lines": ["a: hi"], "target_uid": "42"}
+    ja = reactions.build_adjudicator_prompt(entry, "違うよ", "alex", False, "Nova",
+                                            "en", chat_lang="ja")
+    check("ja: the judge writes better, ask and lesson in Japanese",
+          "in 日本語, the language this chat is in" in ja
+          and ja.index("日本語") < ja.index("Output ONE line of JSON"), ja[-700:])
+    zh_tw = reactions.build_adjudicator_prompt(entry, "不對", "alex", False, "小夏",
+                                               "zh", chat_lang="zh-TW")
+    check("zh-TW through the Chinese prompt", "繁體中文" in zh_tw)
+    plain = reactions.build_adjudicator_prompt(entry, "no", "alex", False, "Nova", "en")
+    check("no chat language given: no line", "the language this chat is in" not in plain)
+
+
+async def test_an_ask_in_another_language_is_not_sent(tmp: Path) -> None:
+    a = _make_agent(tmp)
+    a.chat_lang = "ja"
+    sent: list = []
+
+    async def fake_send_group(group_id, text, at_user_id=""):
+        sent.append(text)
+        return SendResult(success=True)
+    a._send_group = fake_send_group
+    prompts: list = []
+
+    async def adj_rejection(system, messages, model, **kw):
+        prompts.append(messages[-1]["content"])
+        return json.dumps({"reaction": "rejection", "accept": True,
+                           "reason": "misread", "better": "",
+                           "ask": "wait what did you mean then",
+                           "scenario": "missed ask"})
+    a._call_llm = adj_rejection
+    await a._process_reaction(_pending_entry(), "それ違うってば",
+                              "alex", "42", False, conv_id="g1", is_dm=False)
+    await asyncio.sleep(0.05)
+    check("the judge was told the chat is Japanese", "日本語" in prompts[0])
+    check("an English ask in a Japanese chat is not sent", sent == [], repr(sent))
+
+    b = _make_agent(tmp / "b")
+    b.chat_lang = "ja"
+    b._send_group = fake_send_group
+
+    async def adj_ja(system, messages, model, **kw):
+        return json.dumps({"reaction": "rejection", "accept": True,
+                           "reason": "misread", "better": "",
+                           "ask": "え、じゃあ何が言いたかったの？", "scenario": "s"})
+    b._call_llm = adj_ja
+    await b._process_reaction(_pending_entry(), "それ違うってば",
+                              "alex", "42", False, conv_id="g1", is_dm=False)
+    await asyncio.sleep(0.05)
+    check("a Japanese ask is", sent == ["え、じゃあ何が言いたかったの？"], repr(sent))
+
+
+async def test_complaining_about_a_reply_to_yourself_is_not_bad_teaching(
+        tmp: Path) -> None:
+    a = _make_agent(tmp)
+    verdict: dict = {}
+
+    async def judge(system, messages, model, **kw):
+        return json.dumps(verdict)
+    a._call_llm = judge
+    verdict.update(reaction="rejection", accept=False, reason="no", better="",
+                   ask="", scenario="")
+    for i in range(5):
+        await a._process_reaction(_pending_entry(), f"huh? {i}", "alex", "42", False)
+    check("five dismissed complaints from the reply's own recipient: not blocked",
+          not a.teacher_stats.hard_block("42")
+          and a.teacher_stats.history_line("42", "en") == "")
+    verdict.update(reaction="correction", better="x")
+    for i in range(5):
+        await a._process_reaction(_pending_entry(), f"say x {i}", "bob", "7", False)
+    check("five dismissed corrections from a bystander still block",
+          a.teacher_stats.hard_block("7"))
+    for i in range(5):
+        await a._process_reaction(_pending_entry(), f"no, x {i}", "alex", "42", False)
+    check("and dismissed corrections from the recipient still count",
+          a.teacher_stats.hard_block("42"))
 
 
 def test_teacher_stats(tmp: Path) -> None:
