@@ -24,11 +24,9 @@ Wenn du eines davon nutzt, nimm ein eigenes Konto, dessen Verlust du verkraften 
 - Halte es aus Gruppen heraus, in denen seine Antworten Menschen schaden oder sie irreführen könnten, etwa Gruppen zu medizinischen, rechtlichen, finanziellen oder Krisenthemen und Gruppen mit Kindern.
 - Wenn jemand es bittet zu gehen oder fragt, was es über ihn weiß, nimm das ernst. Der Admin kann es eine Notiz vergessen lassen (`<name>, forget ...`), und alles, was es speichert, liegt in seinem Home-Ordner (siehe unten).
 
-## Die Charaktere ChatGPT, DeepSeek und Claude
+## Bildnachweis für die Porträts
 
-Diese drei fertigen Charaktere sind Personifizierungen von Fans. ChatGPT, DeepSeek und Claude sind Marken von OpenAI, DeepSeek beziehungsweise Anthropic. personagent ist mit keinem dieser Unternehmen verbunden und wird von keinem unterstützt. Die Porträts sind eigene Illustrationen; sie übernehmen eine Farbe oder ein Motiv, etwa einen Wal oder einen Strahlenstern, aber keines der Logos dieser Unternehmen.
-
-Der Charakter läuft auf dem Modelldienst, den du wählst, nicht auf diesen Produkten, es sei denn, du wählst eines davon. Fragt man ihn, ob er der echte ist, sagt er, dass er es nicht ist.
+Die Porträts des DeepSeek-Walmädchens, des GPT-Drachenmädchens und der Claude-Dame wurden für personagent nach Entwürfen gezeichnet, die die Community bereits zeichnet. Das Walmädchen geht auf 溟月 zurück, eine Originalfigur des Bilibili-Creators 上善无形 (CC BY-NC-SA 4.0), im Dienstmädchen-Outfit, das ZipZipPipe ihr gegeben hat. Das Drachenmädchen folgt ZipZipPipes weißer Drachin. Die Claude-Dame folgt einem Community-Entwurf, bei dem nicht bekannt ist, wer ihn zuerst gezeichnet hat. Die Porträts stehen unter CC BY-NC-SA 4.0, nicht unter MIT wie der Code: Behalte die Namensnennung bei, nutze sie nicht kommerziell und gib Änderungen unter derselben Lizenz weiter. Siehe `persona_agent/static/characters/LICENSE.md`.
 
 ## Was dein Modellanbieter sieht
 

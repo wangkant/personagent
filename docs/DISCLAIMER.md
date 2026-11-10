@@ -58,17 +58,17 @@ mautrix and others) accept liability for a lost or restricted account.
   seriously. The admin can make it forget a note (`<name>, forget ...`), and
   everything it stores is in its home folder (see below).
 
-## The ChatGPT, DeepSeek and Claude characters
+## Portrait credits
 
-These three ready characters are fan-made personifications. ChatGPT, DeepSeek
-and Claude are trademarks of OpenAI, DeepSeek and Anthropic respectively.
-personagent is not affiliated with or endorsed by any of them. The portraits
-are original illustrations; they borrow a colour or a motif, such as a whale
-or a starburst, but none of the companies' logos.
-
-The character runs on whichever model service you pick, not on those products
-unless you pick one of them. Asked whether it is the real one, it says it is
-not.
+The portraits of the DeepSeek whale girl, the GPT dragon girl and the Claude
+lady were drawn for personagent after designs the community already draws.
+The whale girl derives from 溟月, an original character by the Bilibili
+creator 上善无形 (CC BY-NC-SA 4.0), in the maid outfit that ZipZipPipe gave
+her. The dragon girl follows ZipZipPipe's white dragon. The Claude lady
+follows a community design whose first artist is not known. The portraits are
+licensed CC BY-NC-SA 4.0, not MIT like the code: keep the credit, do not use
+them commercially, and share changes under the same licence. See
+`persona_agent/static/characters/LICENSE.md`.
 
 ## What your model provider sees
 

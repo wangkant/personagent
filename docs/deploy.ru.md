@@ -47,6 +47,7 @@ API находится под `/api/dashboard/` в службе агента:
 
 - `GET status`, `GET conversations` и `GET conversation?id=<chat id>` читают состояние службы, известные ей чаты и один чат подробно.
 - `POST candidates/<id>/promote`, `replace`, `reject` и `rollback` меняют то, чему он научился. Каждое изменение попадает в тот же журнал, что и `personagent learned`, с исполнителем `dashboard`.
+- `POST memory/forget` с телом `{"conv": "<chat id>", "note": "<note id>"}` удаляет одну заметку памяти. `conv` и id берутся из записи `memories` в `GET conversation`. Без `note` удаляет главную заметку чата.
 
 Каждому вызову нужен заголовок `X-Personagent-Dashboard-Token` с токеном из `dashboard.token` в папке выполнения (`<home>/runtime/`, если её не перенёс `AGENT_RUNTIME_DIR`). Читать файл может только владелец, и служба создаёт его при запуске. Вызов без заголовка получает 401 (`dashboard_token`), а неверный токен — 403 (`wrong_token`). `CONNECTOR_TOKEN` и `X-Personagent-Token` его не открывают. Они предназначены только для коннекторов и `/health/details`.
 

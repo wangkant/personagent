@@ -1,6 +1,6 @@
 # Set up personagent: instructions for a coding agent
 
-A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.3.0 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
+A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.0 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
 
 ## What you are setting up
 
@@ -10,7 +10,7 @@ Everything it stores lives in one **home folder**: `.env` (settings and keys), `
 
 When you are done:
 
-1. `personagent --version` prints `personagent 1.3.0` or later.
+1. `personagent --version` prints `personagent 1.4.0` or later.
 2. The home folder has `.env` with the user's language, character name and model service, and `persona.txt` with the personality.
 3. The local page is running, the user has the link, has entered their model key there and has chatted with the character.
 4. Any chat apps the user wanted are connected, by the user, in the page.
@@ -68,12 +68,12 @@ Personalities:
 | `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
 | `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
 | `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
-| `chatgpt` | ChatGPT as a person: upbeat all-rounder, always offers one more thing | 拟人版 ChatGPT |
-| `deepseek` | DeepSeek as a person: thinks it through first, quiet maths and code nerd | 拟人版 DeepSeek |
-| `claude` | Claude as a person: warm, candid, careful with words | 拟人版 Claude |
+| `chatgpt` | The GPT dragon girl: proud, well-read, fond of treasure | GPT 娘（白龙） |
+| `deepseek` | The DeepSeek whale girl: clever, a bit lazy, lives on white rice | DeepSeek 鲸鱼娘 |
+| `claude` | The Claude lady: well-bred, gentle and candid, strict house rules | Claude 娘（豪门圣女） |
 | `template` | A plain starting character to rewrite later | 以后自己写 |
 
-`chatgpt`, `deepseek` and `claude` are fan-made characters. Like the others, they run on the `--provider` service, whichever it is.
+`chatgpt`, `deepseek` and `claude` run on the `--provider` service like the others, whichever it is.
 
 ## 2. Check the prerequisites
 
@@ -152,7 +152,7 @@ Check the install:
 personagent --version
 ```
 
-It prints `personagent 1.3.0` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
+It prints `personagent 1.4.0` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
 
 ## 4. Create the home folder
 
@@ -261,7 +261,7 @@ sleep 5
 grep -Eo 'http://127\.0\.0\.1:[0-9]+/#token=[^[:space:]]+' "<home>/start.log"
 ```
 
-Note the process id the second line prints. The log starts with `personagent 1.3.0`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
+Note the process id the second line prints. The log starts with `personagent 1.4.0`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
 
 The port is chosen anew at every start; `--port N` fixes one. `SERVER_PORT=8080` in `.env` is not the page's port: it belongs to the character's own service, which the page starts behind it.
 
@@ -321,7 +321,7 @@ From the command line, personagent connects only AstrBot:
 
 The [deployment guide](deploy.md) covers AstrBot, NapCat, Satori, Matrix and public addresses in full.
 
-**Coding agents.** Only if the user asks for the character inside Claude Code, Codex or DeepSeek Harness, and only with a personagent newer than 1.3.1: run `personagent --home "<home>" connect claude-code`, `personagent --home "<home>" connect codex` or `personagent --home "<home>" connect dsh`. It changes that coding agent's configuration and asks nothing. The user then starts a new session there, after restarting DeepSeek Harness if that is the one. On Claude Code or Codex, add `--react` only if the user wants remarks at the end of a turn, after telling them that the folder's name and the start of the coding agent's last message then go to their model service. `--remove` undoes it. [The guide](guide.md#coding-agents) has the details.
+**Coding agents.** Only if the user asks for the character inside Claude Code, Codex or DeepSeek Harness: run `personagent --home "<home>" connect claude-code`, `personagent --home "<home>" connect codex` or `personagent --home "<home>" connect dsh`. It changes that coding agent's configuration and asks nothing. The user then starts a new session there, after restarting DeepSeek Harness if that is the one. On Claude Code or Codex, add `--react` only if the user wants remarks at the end of a turn, after telling them that the folder's name and the start of the coding agent's last message then go to their model service. `--remove` undoes it. [The guide](guide.md#coding-agents) has the details.
 
 ## 8. Daily use
 

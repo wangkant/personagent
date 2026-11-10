@@ -21,5 +21,6 @@
 | `package_smoke.py` | インストール済みの `personagent` コマンドを端から端まで確認します。バージョン、`init --no-input`、`chat`、`/health` 付きの `run`、`doctor --json` です | インストール済みの `personagent`（`--personagent PATH`）だけ | なし。代役のサーバーが応答します | サポート対象。CI が Linux と Windows で実行します |
 | `welcome_smoke.py` | インストール済みのローカルページを端から端まで確認します。`start --no-browser`、キーの保存、本物のキャラクターとの 1 回のチャット、ページを再利用する 2 回目の起動、きれいな終了です | インストール済みの `personagent`（`--personagent PATH`）だけ | なし。同じ代役のサーバーが応答します | サポート対象。CI が Linux と Windows で実行します |
 | `release_notes.py` | リリースタグを `pyproject.toml` と照合し、そのバージョンの CHANGELOG の節を出力します | `v1.1.0` のようなタグ | なし | サポート対象。リリースワークフローが実行します |
+| `locale_gaps.py` | `persona_agent/locales/` の言語ごとに、セットアップウィザード、ターミナルのチャット、デモの文のうち翻訳済みの数を出力します。`ja` のような言語コードを付けると、まだ翻訳がなく英語で表示される文を出力します | なし | なし | サポート対象。不足があると `tests/test_locales.py` が失敗します |
 
 実験的なスクリプトは研究と保守のための補助で、廃止予告なしに変更または削除されることがあります。モデルを呼ぶスクリプトは `.env` のアカウントのクレジットを消費します。まず `--help` を読み、`--dry-run` があれば試してください。

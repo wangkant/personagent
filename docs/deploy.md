@@ -94,6 +94,10 @@ The API lives under `/api/dashboard/` on the agent service:
 - `POST candidates/<id>/promote`, `replace`, `reject` and `rollback` change
   what it has learned. Each change goes into the same ledger as
   `personagent learned`, with the actor `dashboard`.
+- `POST memory/forget` with the body
+  `{"conv": "<chat id>", "note": "<note id>"}` deletes one memory note.
+  `conv` and the id are those of an entry of `memories` in
+  `GET conversation`. Without `note` it deletes the chat's core note.
 
 Every call needs the header `X-Personagent-Dashboard-Token` with the token in
 `dashboard.token` in the runtime folder (`<home>/runtime/` unless

@@ -24,11 +24,9 @@ Si vous utilisez l'un de ces moyens, utilisez un compte dédié que vous pouvez 
 - Gardez-le hors des groupes où ses réponses pourraient nuire aux gens ou les induire en erreur, comme les groupes sur des sujets médicaux, juridiques, financiers ou de crise, et les groupes avec des enfants.
 - Si quelqu'un lui demande de partir, ou demande ce qu'il sait sur lui, prenez-le au sérieux. L'administrateur peut lui faire oublier une note (`<name>, forget ...`), et tout ce qu'il stocke se trouve dans son dossier personnel (voir ci-dessous).
 
-## Les personnages ChatGPT, DeepSeek et Claude
+## Crédits des portraits
 
-Ces trois personnages tout prêts sont des personnifications imaginées par des fans. ChatGPT, DeepSeek et Claude sont des marques d'OpenAI, de DeepSeek et d'Anthropic respectivement. personagent n'est ni affilié à elles ni approuvé par elles. Les portraits sont des illustrations originales ; ils empruntent une couleur ou un motif, comme une baleine ou un éclat d'étoile, mais aucun des logos de ces entreprises.
-
-Le personnage fonctionne sur le service de modèle que vous choisissez, pas sur ces produits, sauf si vous choisissez l'un d'eux. Quand on lui demande s'il est le vrai, il répond que non.
+Les portraits de la fille-baleine de DeepSeek, de la fille-dragon GPT et de la demoiselle Claude ont été dessinés pour personagent d'après des designs que la communauté dessine déjà. La fille-baleine dérive de 溟月, un personnage original du créateur Bilibili 上善无形 (CC BY-NC-SA 4.0), dans la tenue de soubrette que ZipZipPipe lui a donnée. La fille-dragon suit la dragonne blanche de ZipZipPipe. La demoiselle Claude suit un design de la communauté dont le premier artiste n'est pas connu. Les portraits sont sous licence CC BY-NC-SA 4.0, et non MIT comme le code : conservez le crédit, ne les utilisez pas à des fins commerciales et partagez vos modifications sous la même licence. Voir `persona_agent/static/characters/LICENSE.md`.
 
 ## Ce que voit votre fournisseur de modèles
 

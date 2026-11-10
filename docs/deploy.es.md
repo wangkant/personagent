@@ -47,6 +47,7 @@ La API está bajo `/api/dashboard/` en el servicio del agente:
 
 - `GET status`, `GET conversations` y `GET conversation?id=<chat id>` leen el estado del servicio, los chats que conoce y un chat en detalle.
 - `POST candidates/<id>/promote`, `replace`, `reject` y `rollback` cambian lo que ha aprendido. Cada cambio va al mismo registro que `personagent learned`, con el actor `dashboard`.
+- `POST memory/forget` con el cuerpo `{"conv": "<chat id>", "note": "<note id>"}` borra una nota de memoria. `conv` y el id son los de una entrada de `memories` en `GET conversation`. Sin `note`, borra la nota principal del chat.
 
 Cada llamada necesita la cabecera `X-Personagent-Dashboard-Token` con el token de `dashboard.token` en la carpeta de ejecución (`<home>/runtime/` salvo que `AGENT_RUNTIME_DIR` la mueva). Solo el propietario puede leer el archivo, y el servicio lo crea al iniciarse. Una llamada sin la cabecera recibe 401 (`dashboard_token`), y un token incorrecto recibe 403 (`wrong_token`). `CONNECTOR_TOKEN` y `X-Personagent-Token` no la abren. Son solo para conectores y `/health/details`.
 

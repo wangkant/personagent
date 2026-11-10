@@ -123,7 +123,7 @@ Todos los comandos aceptan `--help`.
 
 - **El servicio de IA.** Los preajustes coinciden con los de la página. El predeterminado es `openrouter/free` de OpenRouter, que entrega cada petición a uno de sus modelos gratuitos. La clave no cuesta nada. El límite es de 20 peticiones por minuto y 50 al día, o 1000 al día si has comprado al menos 10 créditos. Cuenta toda llamada al modelo, no solo las respuestas, y el día se reinicia a medianoche UTC. Cuando se agota, el personaje dice que no puede responder ahora, y `runtime/desktop/agent.log` tiene el motivo de OpenRouter. El modelo cambia entre peticiones, así que la voz del personaje varía más que con un modelo elegido, y algunos proveedores gratuitos conservan lo que reciben. Para un personaje más estable, usa un modelo de pago con la misma clave. Si te cuesta acceder a OpenRouter desde donde estás, `glm-4.7-flash` de Zhipu también es gratuito. Para Ollama, nombra un modelo que ya hayas descargado. Ollama no necesita clave.
 - **La clave.** La entrada está oculta por defecto. Puedes elegir mostrarla, lo que también revela la clave guardada al reconfigurar. El asistente prueba la clave con una petición pequeña. Si falla, muestra la dirección a la que llamó, el estado HTTP y una posible solución.
-- **El personaje.** Un nombre y uno de siete personajes listos (amigo socarrón, oyente cálido, gamer, ratón de biblioteca, y ChatGPT, DeepSeek y Claude como personas) o uno simple para que lo escribas tú. Si eliges uno de los tres últimos sin elegir un nombre, el personaje se llama como él. La página local muestra su retrato animado.
+- **El personaje.** Un nombre y uno de siete personajes listos (amigo socarrón, oyente cálido, gamer, ratón de biblioteca, y tres que la comunidad ya dibuja: la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude) o uno simple para que lo escribas tú. Si eliges uno de los tres últimos sin elegir un nombre, el personaje se llama como él. La página local muestra su retrato animado.
 - **AstrBot.** Opcional, y puedes saltarlo la primera vez. Consulta [Puentes que ejecutas tú](#puentes-que-ejecutas-tú).
 
 Para configurar sin preguntas, por ejemplo en un script, ejecuta `personagent init --no-input` con `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` y `--persona`. En una carpeta de inicio nueva, una clave de `--key-env` o del `LLM_API_KEY` de la shell necesita `--provider` o `--base-url` para indicar de quién es. `--provider other` también necesita `--base-url`. `personagent init --help` lista todas las opciones. Si `personagent init` se ejecuta sin terminal y sin ninguna de estas opciones, omite las preguntas, lo indica y sale con el código 2.
@@ -553,7 +553,7 @@ La guía de despliegue tiene [la lista completa](deploy.es.md#cuando-el-bot-se-q
 
 **No arranca.** `personagent run` se detiene con una frase que dice por qué. Los motivos habituales son un puerto ya en uso, otro personagent ejecutándose desde la misma carpeta de inicio, una dirección de red definida sin `CONNECTOR_TOKEN`, o un ajuste retirado en 1.0 que sigue definido. Los ajustes retirados se listan uno por línea como `OLD -> NEW`, y `personagent doctor --fix` los renombra. La página y `personagent up` eligen un puerto libre cuando 8080 está ocupado.
 
-**Un ajuste no tiene efecto.** Reinicia el proceso que lo lee, comprueba la ortografía y guarda `.env` como UTF-8 sin BOM. Las variables de entorno de la shell tienen prioridad sobre `.env`. Los booleanos son `true` o `false`. `PERSONA_TZ_OFFSET_HOURS` define el reloj para la franja nocturna. Cuando está vacío (por defecto), personagent usa UTC+8 con `AGENT_LANG=zh` y la zona horaria de esta máquina en otro caso. Pon un número para elegir otro desfase.
+**Un ajuste no tiene efecto.** Reinicia el proceso que lo lee, comprueba la ortografía y guarda `.env` como UTF-8 sin BOM. Las variables de entorno de la shell tienen prioridad sobre `.env`. Los booleanos son `true` o `false`. `PERSONA_TZ_OFFSET_HOURS` define el reloj para la franja nocturna. Cuando está vacío (por defecto), personagent usa UTC+8 con `AGENT_LANG=zh` o `zh-TW` y la zona horaria de esta máquina en otro caso. Pon un número para elegir otro desfase.
 
 ## Actualizar desde 0.x
 
@@ -561,7 +561,7 @@ La guía de despliegue tiene [la lista completa](deploy.es.md#cuando-el-bot-se-q
 
 ## Estado y otros documentos
 
-personagent 1.3.1 está en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete y manejan el comando y la página local.
+personagent 1.4.0 está en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete y manejan el comando y la página local.
 
 La vía directa de OneBot (`/v1/onebot`) está obsoleta, pero se mantiene durante 1.x. Los scripts de `tools/` están pensados para ejecutarse desde un clon, y [tools.md](tools.es.md) los describe.
 

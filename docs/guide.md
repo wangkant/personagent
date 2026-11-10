@@ -123,7 +123,7 @@ Every command takes `--help`.
 
 - **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
 - **The key.** Input is hidden by default. You can choose to show it, which also reveals the saved key when you reconfigure. The wizard tests the key with one small request. If the request fails, it shows the address it called, the HTTP status and a likely fix.
-- **The character.** A name, and one of seven ready characters (dry-witted friend, warm listener, gamer, bookworm, and ChatGPT, DeepSeek and Claude as people) or a plain one to write yourself. Pick one of the last three without choosing a name and the character is named after it. The local page shows its animated portrait.
+- **The character.** A name, and one of seven ready characters (dry-witted friend, warm listener, gamer, bookworm, and three the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady) or a plain one to write yourself. Pick one of the last three without choosing a name and the character is named after it. The local page shows its animated portrait.
 - **AstrBot.** Optional, and you can skip it the first time. See [Bridges you run yourself](#bridges-you-run-yourself).
 
 To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`. On a new home, a key from `--key-env` or the shell's `LLM_API_KEY` needs `--provider` or `--base-url` to say whose it is. `--provider other` also needs `--base-url`. `personagent init --help` lists every flag. If `personagent init` runs without a terminal and without any of these flags, it skips the questions, says so, and exits with code 2.
@@ -553,7 +553,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 **It will not start.** `personagent run` stops with one sentence that says why. The usual reasons are a port already in use, another personagent running from the same home folder, a network address set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 that is still set. Retired settings are listed one per line as `OLD -> NEW`, and `personagent doctor --fix` renames them. The page and `personagent up` pick a free port when 8080 is taken.
 
-**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Booleans are `true` or `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window. When it is blank (the default), personagent uses UTC+8 with `AGENT_LANG=zh` and this machine's time zone otherwise. Set a number to choose another offset.
+**A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Booleans are `true` or `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window. When it is blank (the default), personagent uses UTC+8 with `AGENT_LANG=zh` or `zh-TW` and this machine's time zone otherwise. Set a number to choose another offset.
 
 ## Upgrading from 0.x
 
@@ -561,7 +561,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Status and other docs
 
-personagent 1.3.1 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page.
+personagent 1.4.0 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page.
 
 The direct OneBot route (`/v1/onebot`) is deprecated but kept through 1.x. The scripts in `tools/` are meant to be run from a clone, and [tools.md](tools.md) describes them.
 

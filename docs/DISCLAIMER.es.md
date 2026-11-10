@@ -24,11 +24,9 @@ Si usas alguno de estos, usa una cuenta dedicada que puedas permitirte perder, n
 - Mantenlo fuera de grupos donde sus respuestas puedan dañar o engañar a la gente, como grupos sobre temas médicos, legales, financieros o de crisis, y grupos con menores.
 - Si alguien le pide que se vaya, o pregunta qué sabe de él, tómatelo en serio. El administrador puede hacer que olvide una nota (`<name>, forget ...`), y todo lo que guarda está en su carpeta de inicio (ver más abajo).
 
-## Los personajes de ChatGPT, DeepSeek y Claude
+## Créditos de los retratos
 
-Estos tres personajes listos son personificaciones hechas por fans. ChatGPT, DeepSeek y Claude son marcas de OpenAI, DeepSeek y Anthropic, respectivamente. personagent no está afiliado a ninguna de ellas ni cuenta con su respaldo. Los retratos son ilustraciones originales; toman prestado un color o un motivo, como una ballena o una estrella radiante, pero ninguno de los logotipos de las empresas.
-
-El personaje funciona con el servicio de modelos que elijas, no con esos productos, salvo que elijas uno de ellos. Si le preguntan si es el de verdad, dice que no.
+Los retratos de la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude se dibujaron para personagent a partir de diseños que la comunidad ya dibuja. La chica ballena deriva de 溟月, un personaje original del creador de Bilibili 上善无形 (CC BY-NC-SA 4.0), con el traje de sirvienta que le puso ZipZipPipe. La chica dragón sigue a la dragona blanca de ZipZipPipe. La señorita Claude sigue un diseño de la comunidad cuyo primer artista se desconoce. Los retratos tienen licencia CC BY-NC-SA 4.0, no MIT como el código: conserva la atribución, no los uses con fines comerciales y comparte los cambios bajo la misma licencia. Consulta `persona_agent/static/characters/LICENSE.md`.
 
 ## Qué ve tu proveedor de modelos
 

@@ -13,7 +13,7 @@
 
 ## Docs
 
-- [ ] README, `docs/` or `.env.example` updated where behaviour or a setting changed (and the `*.zh-CN.md` twin, if there is one)
+- [ ] README, `docs/` or `.env.example` updated where behaviour or a setting changed (and the page's translations in `docs/` and `docs/readme/`, if it has any)
 - [ ] `CHANGELOG.md` has a line under `## [Unreleased]` for anything a user can see
 
 ## Checks

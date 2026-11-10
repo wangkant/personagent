@@ -123,7 +123,7 @@ Alle Befehle akzeptieren `--help`.
 
 - **Der KI-Dienst.** Die Voreinstellungen entsprechen denen der Seite. Standard ist `openrouter/free` von OpenRouter, das jede Anfrage an eines seiner kostenlosen Modelle gibt. Der Schlüssel kostet nichts. Das Limit liegt bei 20 Anfragen pro Minute und 50 pro Tag, oder 1000 pro Tag, sobald du mindestens 10 Credits gekauft hast. Jeder Modellaufruf zählt, nicht nur die Antworten, und der Tag beginnt um Mitternacht UTC neu. Ist das Limit erreicht, sagt der Charakter, dass er gerade nicht antworten kann, und `runtime/desktop/agent.log` enthält den Grund von OpenRouter. Das Modell wechselt von Anfrage zu Anfrage, also schwankt die Stimme des Charakters stärker als mit einem gewählten Modell, und manche kostenlosen Anbieter behalten, was sie erhalten. Für einen stabileren Charakter nimm ein kostenpflichtiges Modell mit demselben Schlüssel. Wenn OpenRouter bei dir schwer erreichbar ist, ist `glm-4.7-flash` von Zhipu ebenfalls kostenlos. Für Ollama nenne ein Modell, das du schon heruntergeladen hast. Ollama braucht keinen Schlüssel.
 - **Der Schlüssel.** Die Eingabe ist standardmäßig verborgen. Du kannst sie anzeigen lassen, was bei einer Neukonfiguration auch den gespeicherten Schlüssel zeigt. Der Assistent testet den Schlüssel mit einer kleinen Anfrage. Schlägt sie fehl, zeigt er die aufgerufene Adresse, den HTTP-Status und eine wahrscheinliche Lösung.
-- **Der Charakter.** Ein Name und einer von sieben fertigen Charakteren (trockener Freund, aufmerksamer Zuhörer, Gamer, Bücherwurm sowie ChatGPT, DeepSeek und Claude als Menschen) oder ein schlichter Charakter, den du selbst schreibst. Wählst du einen der letzten drei, ohne einen Namen festzulegen, trägt der Charakter dessen Namen. Die lokale Seite zeigt sein animiertes Porträt.
+- **Der Charakter.** Ein Name und einer von sieben fertigen Charakteren (trockener Freund, aufmerksamer Zuhörer, Gamer, Bücherwurm sowie drei, die die Community bereits zeichnet: das DeepSeek-Walmädchen, das GPT-Drachenmädchen und die Claude-Dame) oder ein schlichter Charakter, den du selbst schreibst. Wählst du einen der letzten drei, ohne einen Namen festzulegen, trägt der Charakter dessen Namen. Die lokale Seite zeigt sein animiertes Porträt.
 - **AstrBot.** Optional, und du kannst es beim ersten Mal überspringen. Siehe [Brücken, die du selbst betreibst](#brücken-die-du-selbst-betreibst).
 
 Um ohne Fragen einzurichten, etwa in einem Skript, führe `personagent init --no-input` mit `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` und `--persona` aus. In einem neuen Home-Ordner braucht ein Schlüssel aus `--key-env` oder aus dem `LLM_API_KEY` der Shell `--provider` oder `--base-url`, die sagen, wem er gehört. `--provider other` braucht außerdem `--base-url`. `personagent init --help` listet alle Optionen. Läuft `personagent init` ohne Terminal und ohne eine dieser Optionen, überspringt es die Fragen, sagt das und beendet sich mit Code 2.
@@ -553,7 +553,7 @@ Der Bereitstellungsleitfaden enthält [die vollständige Checkliste](deploy.de.m
 
 **Er startet nicht.** `personagent run` beendet sich mit einem Satz, der sagt warum. Die üblichen Gründe sind ein schon belegter Port, ein anderes personagent aus demselben Home-Ordner, eine Netzwerkadresse ohne `CONNECTOR_TOKEN` oder eine in 1.0 entfernte Einstellung, die noch gesetzt ist. Entfernte Einstellungen werden je Zeile als `OLD -> NEW` gelistet, und `personagent doctor --fix` benennt sie um. Die Seite und `personagent up` wählen einen freien Port, wenn 8080 belegt ist.
 
-**Eine Einstellung wirkt nicht.** Starte den Prozess neu, der sie liest, prüfe die Schreibweise und speichere `.env` als UTF-8 ohne BOM. Umgebungsvariablen der Shell haben Vorrang vor `.env`. Boolesche Werte sind `true` oder `false`. `PERSONA_TZ_OFFSET_HOURS` stellt die Uhr für die Nachtphase. Wenn es leer ist (Standard), nutzt personagent UTC+8 bei `AGENT_LANG=zh` und sonst die Zeitzone dieses Rechners. Gib eine Zahl an, um einen anderen Versatz zu wählen.
+**Eine Einstellung wirkt nicht.** Starte den Prozess neu, der sie liest, prüfe die Schreibweise und speichere `.env` als UTF-8 ohne BOM. Umgebungsvariablen der Shell haben Vorrang vor `.env`. Boolesche Werte sind `true` oder `false`. `PERSONA_TZ_OFFSET_HOURS` stellt die Uhr für die Nachtphase. Wenn es leer ist (Standard), nutzt personagent UTC+8 bei `AGENT_LANG=zh` oder `zh-TW` und sonst die Zeitzone dieses Rechners. Gib eine Zahl an, um einen anderen Versatz zu wählen.
 
 ## Upgrade von 0.x
 
@@ -561,7 +561,7 @@ Der Bereitstellungsleitfaden enthält [die vollständige Checkliste](deploy.de.m
 
 ## Status und weitere Dokumente
 
-personagent 1.3.1 ist auf PyPI. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus. Weitere CI-Jobs installieren das Paket und steuern den Befehl und die lokale Seite.
+personagent 1.4.0 ist auf PyPI. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus. Weitere CI-Jobs installieren das Paket und steuern den Befehl und die lokale Seite.
 
 Der direkte OneBot-Weg (`/v1/onebot`) ist veraltet, bleibt aber während der gesamten 1.x. Die Skripte in `tools/` sind dafür gedacht, aus einem Klon ausgeführt zu werden, und [tools.md](tools.de.md) beschreibt sie.
 

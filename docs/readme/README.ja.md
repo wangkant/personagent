@@ -15,54 +15,13 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。QQ、WeChat、Telegram、Discord には自力で接続し、KOOK、Feishu、DingTalk、Slack、WeCom、Mattermost、Misskey にも同じページから接続できます。
-
-まずはローカルのブラウザーチャットから始めます。モデルのキーを 1 つ追加して、あいさつするだけです。キャラクターをグループに参加させたくなったら、スマートフォンでのスキャンか、値を 1〜2 個入力してアプリを連携します。
+personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずはブラウザーで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに十数個のアプリへ連れていけます。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「アプリ連携」画面。参加できるすべてのプラットフォームが並んでいる" width="960">
 </p>
 
 <p align="center"><em>「アプリ連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>
-
-## はじめに
-
-PyPI からインストールして起動します。
-
-```sh
-python -m pip install personagent
-personagent
-```
-
-[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。
-
-ブラウザーでローカルページが開き、**チャット**、**アプリ連携**、**キャラクターと設定** の 3 つのビューが表示されます。モデルの API キーを貼り付けて **確認してチャット開始 →** をクリックすると、小さなリクエストを 1 回送ってキーを確認します。最初に選ばれているのは OpenRouter の無料モデルです。キーは無料で、1 日 50 リクエストまで、リクエストごとにモデルが変わることがあります。モデルサービスのプリセットは 10 種類あり、そのほかの OpenAI 互換サービスも使えます。キャラクターの名前と性格にもプリセットがあり、そのうち 3 つは ChatGPT、DeepSeek、Claude を人として思い描いたキャラクターで、動く立ち絵が付いています。**ペルソナ** 欄の内容は `persona.txt` に保存され、保存するとエージェントが再起動し、学んだことはそのまま残ります。**その他の機能** では、ウェブ検索、画像の理解、自分から話しかける機能をオンにできます。`personagent` をもう一度実行すると、すでに開いているページを再利用します。右上のメニューで、ページを英語、中国語、またはほか 8 つの言語で表示できます。キャラクターはチャットで使われている言語で返事をします。組み込みのプロンプトとデータは英語と中国語です。
-
-Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。対応する Python は 3.10–3.14 です。[簡単なスタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)を参照してください。ターミナルでのコマンドとコネクターについては[詳しいガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md)にあります。
-
-## コーディングエージェントにセットアップを任せる
-
-あなたのコンピューターでコマンドを実行できるコーディングエージェントなら、personagent のインストールとセットアップを代わりに行えます。次のように指示してください。
-
-```text
-https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md を読んで、personagent をセットアップしてください。
-```
-
-エージェントは、キャラクターの言語・名前・性格、使うモデルサービス、つなぎたいチャットアプリを尋ねたうえで、personagent をインストールし、ホームフォルダーを作成してローカルページを起動します。モデルのキーはそのページにあなた自身が貼り付けるので、キーがエージェントを経由することはありません。エージェントは[この手順書](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md)に従います。
-
-## コーディングエージェントに連れていく
-
-作業中に Codex、Claude Code、DeepSeek Harness（`dsh`）からキャラクターと話せます。先にモデルのキーを設定してから、次を実行します。
-
-```bash
-personagent connect claude-code
-personagent connect codex
-personagent connect dsh
-```
-
-そちらで新しいセッションを開き（DeepSeek Harness は先に再起動してください）、キャラクターに何か言うよう頼んでください。ローカルページと同じ一対一のチャットと記憶を使い、返信のたびにモデルサービスを 1 回呼び出します。Claude Code と Codex は、このツールを初めて使うときに許可を求めます。ローカルページも `personagent up` も動いていなければ、ページがバックグラウンドで起動し、接続済みのチャットアプリとともにそのセッションと一緒に終了します。
-
-Claude Code と Codex では、`--react` を付けるとターンの終わりにキャラクターが一言話すことがあります。このときフォルダ名とコーディングエージェントの最後のメッセージの冒頭がモデルサービスに送られます。頻度は最大で 30 分に 1 回です。`--remove` ですべて元に戻せます。MCP に対応した他のツールは、`personagent mcp` を自分で起動できます。詳しくは[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)（英語）をご覧ください。
 
 ## personagent を選ぶ理由
 
@@ -72,7 +31,7 @@ Claude Code と Codex では、`--react` を付けるとターンの終わりに
 <td valign="top">
 <strong>黙るべきときを心得ています。</strong><br>
 呼ばれれば答えます。それ以外のときは、人ならここで口を挟むかをモデルが判断します。<br>
-メッセージが立て続けに届いても、返信はまとめて 1 回です。
+メッセージが立て続けに届いても、返信は 1 回です。
 </td>
 </tr>
 <tr>
@@ -89,23 +48,43 @@ Claude Code と Codex では、`--react` を付けるとターンの終わりに
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>始めるのが簡単で、グループのいる場所で暮らします。</strong><br>
-ブラウザーでの設定とチャットは英語、中国語、ほか 8 つの言語に対応し、モデルサービスは 11 種類、必要なら詳細設定も使えます。<br>
-QQ、WeChat、Telegram、Discord には自力で参加し、さらに十数個のアプリにも同じページから参加できます。何をしたかは「アクティビティ」ビューで確認できます。
+コマンド 1 つでブラウザーにローカルページが開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
+モデルのキーを 1 つ貼り付ければチャットできます。10 種類のモデルサービスがプリセットされていて、そのほかの OpenAI 互換サービスも使えます。<br>
+アプリの連携は、スマートフォンでのスキャンか、値を 1〜2 個貼り付けるだけです。キャラクターがそこで何をしたかは「アクティビティ」ビューで確認できます。
 </td>
 </tr>
 <tr>
 <td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
 <td valign="top">
 <strong>既成のキャラクターにも、自分だけのキャラクターにもできます。</strong><br>
-既成の性格は 7 つ。そのうち 3 つは ChatGPT、DeepSeek、Claude のファンメイドの擬人化です。<br>
-この 3 つの立ち絵はまばたきし、返信を待つあいだは考え、返信が届くと話します。
+既成の性格は 7 つ。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、返信を待つあいだは考え、返信が届くと話します。<br>
+ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
 </td>
 </tr>
 </table>
 
-- チャットごとに独立した記憶を持ちます。グループで記録された本人についてのことは、その人との個別チャットにも引き継がれますが、逆はありません。
-- キャラクターを編集しても、学んだことは残ります。
-- 振る舞いは測定されています。`personagent eval` は、話すタイミング、キャラクターを保てているか、訂正が定着するかを採点します（[結果](https://github.com/wangkant/personagent#measured)）。
+- チャットごとに独立した記憶を持ち、頼めば忘れます：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`、`ノヴァ、何覚えてる？`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。グループで誰かについて記録されたことは、その人との DM にも引き継がれますが、逆はありません。
+- チャットで使われている言語で返事をします。最初に選べるペルソナは、ページの 10 言語すべてに用意されています。同梱の例、フィルター、プロンプトは英語と中国語です。
+- 振る舞いは測定されています。`personagent eval` は、話すタイミング、キャラクターを保てているか、訂正が定着するかを採点します（[結果](https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md#測定結果)）。
+
+## はじめに
+
+```sh
+python -m pip install personagent
+personagent
+```
+
+[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。personagent は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストされています。
+
+ブラウザーでローカルページが開きます。モデルの API キーを貼り付けて **確認してチャット開始** をクリックすると、小さなリクエストを 1 回送ってキーを確認します。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。キーを取る前に様子を見たいなら、`personagent demo` が台本のある 3 つの場面を無料で再生します。[スタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+
+## かかる費用
+
+personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。
+
+- **無料で始められます。** OpenRouter の無料モデルは 1 日 50 リクエストまで使えます。リクエストごとにモデルが変わることがあり、無料のプロバイダーの中には受け取った内容を保持するところもあります。Zhipu の `glm-4.7-flash` も無料で、Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
+- **モデルを呼び出すもの。** すべての返信と、2 つの小さなステップです。呼ばれていないときに会話に加わるかどうかの判断と、返信に対する人々の反応の判定です。`personagent doctor` と `personagent eval` もリクエストを送ります。そのほかは[デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md#コスト)にあります。
+- **決して呼び出さないもの。** `personagent demo` と記憶コマンドです。
 
 ## グループに参加させる
 
@@ -117,28 +96,35 @@ QQ、WeChat、Telegram、Discord には自力で参加し、さらに十数個�
 | 値を 1〜2 個貼り付け | Telegram、Discord、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | アプリのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
-認証情報は保存前に確認され、連携済みのアプリは personagent を起動するたびに再び起動します。QQ、WeChat、Telegram、Discord には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ほかに何かを開く必要はありません。サーバーでは、`personagent up` でキャラクターと連携済みのすべてのアプリをブラウザーなしで起動できます。
+認証情報は保存前に確認され、連携済みのアプリは personagent を起動するたびに再び起動します。スキャンで連携するアプリと Telegram、Discord には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ほかに何かを開く必要はありません。サーバーでは、`personagent up` でキャラクターと連携済みのすべてのアプリをブラウザーなしで起動できます。アプリごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロから一歩ずつつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
 
-**すでに AstrBot、Koishi、Matrix を運用していますか？** このコンピューター上の AstrBot なら、`personagent connect astrbot` でプラグインと共有トークンをインストールできます。別のマシン上の AstrBot なら、[最新リリース](https://github.com/wangkant/personagent/releases/latest)の `astrbot_plugin_personagent.zip` をそのプラグインページの **Install from File** からアップロードし、以下のガイドに従ってトークンと personagent の HTTPS アドレスを設定してください。[Koishi](https://koishi.chat) は [Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)で参加でき、[Matrix](https://matrix.org)（mautrix ブリッジ経由の WhatsApp と Signal を含む）は [Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)で参加できます。
+すでにブリッジを運用していますか？
 
-それぞれの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)と[デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md)にあります。
+- **AstrBot**：`personagent connect astrbot` でプラグインと共有トークンをインストールします。別のマシン上の AstrBot については[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)で説明しています。
+- **[Koishi](https://koishi.chat)**、またはほかの Satori サーバー：[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)を使います。
+- **[Matrix](https://matrix.org)**（mautrix ブリッジ経由の WhatsApp と Signal を含む）：[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を使います。
 
-## 他のプロジェクトとの比較
+## コーディングエージェント
 
-よく比較されるプロジェクト（2026 年 10 月時点）：
+**セットアップを任せる。** あなたのコンピューターでコマンドを実行できるコーディングエージェントに、下の 1 行を渡してください。エージェントは希望を尋ねたうえで、personagent をインストールしてローカルページを起動します。モデルのキーはそのページにあなた自身が貼り付けるので、キーがエージェントを経由することはありません。
 
-- **AstrBot**（AGPL-3.0）は 18 以上のプラットフォームに対応したボットフレームワークで、WebUI と大きなプラグインマーケットがあります。呼ばれていなくてもランダムに返信でき（確率 10%、初期設定ではオフ）、学習はプラグインに任せています。
-- **MaiBot**（GPL-3.0）は NapCat を通じて QQ で動くキャラクターボットで、WebUI とワンクリックのランチャーがあります。プランナーモデルが発言の頻度を決め、チャットから言い回しやスラングを覚えます。
-- Koishi 向けの **ChatLuna のキャラクタープラグイン**（AGPL-3.0）は、一定の間隔、チャットの活発さ、静かになってからの時間といったルールに基づいて会話に加わります。
-- **ElizaOS**（MIT）は Discord、Telegram、Slack などに対応した TypeScript 製のエージェントフレームワークで、返答するかどうかはモデルが決めます。
+```text
+https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md を読んで、personagent をセットアップしてください。
+```
 
-personagent に組み込まれているもの：返信への人々の反応（訂正、拒否、受け入れられた言い直し）から学ぶこと。変更には同じチャットからの一致する反応が 2 つ必要で、そのうち 1 つは強い反応であること。すべての変更が記録され、元に戻せること。そして振る舞いが公開された評価で測定されていること（[後述](https://github.com/wangkant/personagent#measured)）。
+**作業しながらキャラクターと話す。** モデルのキーを設定したら、Claude Code、Codex、DeepSeek Harness（`dsh`）からキャラクターに話しかけられます。
 
-ほかのプロジェクトが優れている点：すべての設定を WebUI で扱えるデスクトップアプリ、大きなプラグインエコシステム、スラング・スタンプパック・画像の記憶。すでに AstrBot や Koishi を運用しているなら、どちらかを選ぶ必要はありません。personagent はどちらの背後でもキャラクターとして動かせます。
+```bash
+personagent connect claude-code
+personagent connect codex
+personagent connect dsh
+```
+
+そちらで新しいセッションを開き（DeepSeek Harness は先に再起動してください）、キャラクターに何か言うよう頼んでください。ローカルページと同じ一対一のチャットと記憶です。Claude Code と Codex では、`--react` を付けるとターンの終わりにキャラクターが一言話せるようになります。`--remove` ですべて元に戻せます。権限、`--react` がモデルサービスに送る内容、そのほかの MCP ツールについては[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)にあります。
 
 ## 測定結果
 
-`personagent eval` は、ラベル付けされたチャットの場面を使って実際のエージェントを動かします。2026-10-18 の最新の実行では、同梱のキャラクターを OpenRouter 経由で 2 つのモデルで動かし、各ケースを 3 回ずつ試し、Claude Opus 5.5 がブラインドで判定しました。英語 / 中国語の結果です。
+`personagent eval` は、ラベル付けされたチャットの場面を使って実際のエージェントを動かします。2026-10-18 の最新の実行は 1.3.0 で測定しました。同梱のキャラクターを OpenRouter 経由で 2 つのモデルで動かし、各ケースを 3 回ずつ試し、Claude Opus 5.5 がブラインドで判定しています。英語 / 中国語の結果です。
 
 | | deepseek-v4.1-flash | gpt-6-luna |
 |---|---|---|
@@ -147,9 +133,32 @@ personagent に組み込まれているもの：返信への人々の反応（�
 | 訂正で教わったことを、言い方の異なる後のメッセージで生かす | 76% / 56% | 71% / 67% |
 
 - 自分宛てのメッセージを無視することはまれです。誤りの多くは、映画館や子犬など、別のものを指して名前が使われたケースです。
-- 荒らし、通りすがり、途中で去った人による訂正は、84 回の試行で 1 つも通りませんでした。
+- 荒らし、通りすがり、途中で去った人による 84 件の訂正は、1 つも通りませんでした。
 
-[詳しい結果](https://github.com/wangkant/personagent/tree/main/docs/evals/2026-10-18)には、信頼区間、種類別の誤り、手法、すべてのレポートが含まれています。
+[詳しい結果](https://github.com/wangkant/personagent/blob/main/docs/evals/2026-10-18/README.ja.md)には、信頼区間、種類別の誤り、手法、すべてのレポートが含まれています。
+
+## 他のプロジェクトとの比較
+
+よく比較されるプロジェクト（2026 年 11 月時点）：
+
+- **AstrBot**（AGPL-3.0）は十数種類を超えるプラットフォームに対応したボットフレームワークで、WebUI と大きなプラグインマーケットがあります。呼ばれていなくてもランダムに返信でき（確率 10%、初期設定ではオフ）、学習はプラグインに任せています。
+- **MaiBot**（GPL-3.0）は NapCat を通じて QQ で動くキャラクターボットで、WebUI とワンクリックのランチャーがあります。プランナーモデルが発言の頻度を決め、チャットから言い回しやスラングを覚えます。
+- Koishi 向けの **ChatLuna のキャラクタープラグイン**（AGPL-3.0）は、一定の間隔、チャットの活発さ、静かになってからの時間といったルールに基づいて会話に加わります。
+- **ElizaOS**（MIT）は Discord、Telegram、Slack などに対応した TypeScript 製のエージェントフレームワークで、返答するかどうかはモデルが決めます。
+
+personagent に組み込まれているもの：返信への人々の反応（訂正、拒否、受け入れられた言い直し）から学ぶこと、すべての変更を記録して元に戻せるようにしていること、そして振る舞いの評価を公開していること。
+
+ほかのプロジェクトが優れている点：すべての設定を WebUI で扱えるデスクトップアプリ、大きなプラグインエコシステム、そしてスラング、スタンプパック、画像の記憶。すでに AstrBot や Koishi を運用しているなら、どちらかを選ぶ必要はありません。personagent はどちらの背後でもキャラクターとして動かせます。
+
+## アップデートとアンインストール
+
+PyPI に新しいバージョンが出ると、ページに通知が表示され、インストール方法に合ったアップデートコマンドが示されます。pip の場合は `python -m pip install -U personagent` です。ホームフォルダーの中身、つまり設定、キャラクター、学んだこと、連携済みのアプリはそのまま引き継がれます。
+
+削除するには、まず接続したコーディングエージェントから取り外します（`personagent connect claude-code --remove`。`codex` と `dsh` も同様です）。次に personagent を終了して `python -m pip uninstall personagent` を実行します。最後にホームフォルダーを削除します。PyPI からインストールした場合、別の場所を選んでいなければ `~/personagent` です。ここにはキー、キャラクター、学んだことのすべてが入っているので、削除すると元に戻せません。uv や pipx の場合と、無効化しておくべきものは[詳しい手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）にあります。
+
+## プライバシー
+
+personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。キーを含む `.env`、`persona.txt`、`runtime/`、そして管理対象の AstrBot と直接接続の認証情報を含む `platforms/` です。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人々とつなぐ前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
 
 ## ドキュメント
 
@@ -157,20 +166,11 @@ personagent に組み込まれているもの：返信への人々の反応（�
 - [デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md)：本番運用について。コネクター、QQ、エンドポイントの公開、コスト、ボットが黙ってしまったときの確認事項。
 - [コネクタープロトコル](https://github.com/wangkant/personagent/blob/main/docs/connectors.ja.md)：1 メッセージにつき署名付き HTTP リクエスト 1 回。独自のコネクターを書くためのものです。
 - [ツール](https://github.com/wangkant/personagent/blob/main/docs/tools.ja.md)：`tools/` 内のスクリプト。クローンから実行するためのものです。
-- [変更履歴](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（[0.4 からのアップグレード](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md#upgrading-from-04)を含む）。
-- [コントリビューション](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [セキュリティポリシー](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [免責事項](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.ja.md)
-
-## プライバシー
-
-personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。キーを含む `.env`、`persona.txt`、`runtime/`、そして管理対象の AstrBot と直接接続の認証情報を含む `platforms/` です。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人々とつなぐ前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
-
-## ステータス
-
-1.3.1 は 2026-10-26 にリリースされ、PyPI で公開されています。CI は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストを実行し、さらにパッケージをインストールしてコマンドとローカルページを動かすジョブも実行します。
+- [変更履歴](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md) · [コントリビューション](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [セキュリティポリシー](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [免責事項](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.ja.md)
 
 ## ライセンス
 
-[MIT](https://github.com/wangkant/personagent/blob/main/LICENSE) © 2026 Qiankang (Kant) Wang.
+コードは [MIT](https://github.com/wangkant/personagent/blob/main/LICENSE) © 2026 Qiankang (Kant) Wang です。3 枚のキャラクターの立ち絵は CC BY-NC-SA 4.0 でライセンスされており、クレジットは [persona_agent/static/characters/LICENSE.md](https://github.com/wangkant/personagent/blob/main/persona_agent/static/characters/LICENSE.md) にあります。
 
 ## 謝辞
 
