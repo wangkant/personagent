@@ -636,7 +636,7 @@ personagent が保存するものはすべて、あなたのマシンのホー�
 
 ## 現状とその他の文書
 
-personagent 1.4.0 は PyPI にあります。CI は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストを実行します。さらに CI のジョブがパッケージをインストールし、コマンドとローカルページを動かします。
+personagent 1.4.1 は PyPI にあります。CI は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストを実行します。さらに CI のジョブがパッケージをインストールし、コマンドとローカルページを動かします。
 
 直接の OneBot 経路（`/v1/onebot`）は非推奨ですが 1.x の間は残ります。`tools/` のスクリプトはクローンから実行するもので、[tools.md](tools.ja.md) で説明しています。
 
