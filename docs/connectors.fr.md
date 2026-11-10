@@ -9,13 +9,13 @@ Ce dépôt fournit quatre connecteurs :
 | Connecteur | Atteint | Chemin |
 |---|---|---|
 | Direct | Bots officiels QQ, WeChat personnel (iLink), Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK et Stoat, sans autre logiciel. La page locale et `personagent up` le lancent en un seul processus, `python -m persona_agent.direct`. | `persona_agent/direct/` |
-| Plugin AstrBot | Les plateformes d'AstrBot, une passerelle tierce. L'AstrBot que personagent gère pour KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 et les autres reçoit le plugin automatiquement. Pour un AstrBot que vous faites déjà tourner, `personagent connect astrbot` le configure. Vous pouvez aussi téléverser `astrbot_plugin_personagent.zip` depuis une GitHub Release avec Installer depuis un fichier d'AstrBot et définir `connector_token` vous-même. | `integrations/astrbot/` |
+| Plugin AstrBot | Les plateformes d'AstrBot, une passerelle tierce. L'AstrBot que personagent gère pour KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 et les autres reçoit le plugin automatiquement. Pour un AstrBot que vous exécutez déjà, `personagent connect astrbot` le configure. Vous pouvez aussi téléverser `astrbot_plugin_personagent.zip` depuis une GitHub Release au moyen de la fonction Install from File d'AstrBot et définir `connector_token` vous-même. | `integrations/astrbot/` |
 | Satori | Toutes les implémentations de Satori (Koishi et d'autres, tierces) : QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, e-mail et plus. | `integrations/satori/` |
 | Matrix | Les salons Matrix et, via des passerelles mautrix tierces, WhatsApp, Signal, Messenger, Instagram, Google Messages et plus. | `integrations/matrix/` |
 
-Les agents de code ne sont pas des plateformes de discussion, ils ont donc leur propre voie : un serveur MCP, `personagent mcp`, présenté dans le [guide d'utilisation](guide.fr.md#agents-de-code).
+Les assistants de programmation ne sont pas des plateformes de discussion ; ils disposent donc de leur propre voie : un serveur MCP, `personagent mcp`, présenté dans le [guide d'utilisation](guide.fr.md#assistants-de-programmation).
 
-Les quatre parlent le protocole décrit sur cette page. Pour en écrire un nouveau, il vous faut cette page et un client HTTP. L'assistant Python de `integrations/sdk/personagent_connector.py` signe les requêtes et fait tourner la boucle de la boîte d'envoi pour vous. Il prend l'URL de base, le jeton et le `connector_id` du connecteur, et il a besoin de `httpx`.
+Les quatre parlent le protocole décrit sur cette page. Pour en écrire un nouveau, cette page et un client HTTP suffisent. Le module Python `integrations/sdk/personagent_connector.py` signe les requêtes et exécute la boucle de la boîte d'envoi à votre place. Il prend l'URL de base, le jeton et le `connector_id` du connecteur, et il a besoin de `httpx`.
 
 ## Configuration
 
@@ -49,7 +49,7 @@ Les deux points d'accès ci-dessous utilisent le même schéma. Quand `CONNECTOR
 - `X-Personagent-Nonce` : une nouvelle valeur aléatoire. Un nonce réutilisé est refusé.
 - `X-Personagent-Signature` : `sha256=` suivi du HMAC-SHA256 en hexadécimal de `timestamp + "." + nonce + "." + body`, avec le jeton comme clé.
 
-Le corps est du JSON canonique : UTF-8, clés triées, séparateurs compacts et non-ASCII non échappé. Le jeton est aussi la clé de signature, gardez-le donc hors des journaux.
+Le corps est du JSON canonique : UTF-8, clés triées, séparateurs compacts et non-ASCII non échappé. Le jeton sert aussi de clé de signature ; ne le consignez donc jamais dans les journaux.
 
 Sans jeton, l'agent n'accepte que les programmes locaux qui appellent directement `127.0.0.1` ou `localhost`. Un connecteur doit refuser d'envoyer à autre chose qu'une URL de boucle locale, ou qu'une URL HTTPS avec jeton.
 
@@ -80,9 +80,9 @@ Chaque requête apporte un message et renvoie les réponses à ce message.
 
 Les champs obligatoires sont `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` et `sent_at`, plus `conversation_id` pour les groupes. `sent_at` est le moment où la plateforme a horodaté le message, en secondes unix. Envoyez les identifiants bruts de la plateforme. L'agent ajoute le préfixe.
 
-Le connecteur définit `addressed`. Il est vrai quand le message mentionne le bot, répond à l'un des messages du bot ou s'adresse au bot selon les règles propres à la plateforme. L'agent remarque aussi tout seul son nom dans le texte. Il lit une citation de son propre message, ou une @ au bot, comme une réaction dont il peut apprendre : définissez donc `addressed` sur les réponses au bot. Une citation du message d'un autre membre n'est jamais une réaction au bot.
+Le connecteur définit `addressed`. Il est vrai quand le message mentionne le bot, répond à l'un des messages du bot ou s'adresse au bot selon les règles propres à la plateforme. L'agent repère également de lui-même son nom dans le texte. Il lit une citation de son propre message, ou une @ au bot, comme une réaction dont il peut apprendre : définissez donc `addressed` sur les réponses au bot. Une citation du message d'un autre membre n'est jamais une réaction au bot.
 
-Un événement dont le `sender_id` est égal au `bot_id` est le propre message du bot renvoyé en écho. L'agent le jette sans le lire et répond `{"handled": false, "owned": true, "replies": []}`, si bien que la logique de bot du connecteur reste elle aussi silencieuse. Ignorez ces événements dans le connecteur.
+Un événement dont le `sender_id` est égal au `bot_id` est le propre message du bot renvoyé en écho. L'agent l'ignore sans le lire et répond `{"handled": false, "owned": true, "replies": []}`, si bien que la logique de bot du connecteur reste elle aussi silencieuse. Ignorez ces événements dans le connecteur.
 
 Les segments arrivent dans l'ordre :
 
@@ -90,11 +90,11 @@ Les segments arrivent dans l'ordre :
 |---|---|---|
 | `text` | `text` | |
 | `mention` | `user_id`, `name` | Une mention de quelqu'un. Elle mentionne le bot quand `user_id` est égal à `bot_id`. |
-| `image` | `url` ou `b64`, `sticker` (booléen) | `sticker` marque un sticker envoyé comme image. |
-| `emoji` | `name`, `id` | Un sticker de plateforme ou un emoji personnalisé que l'agent ne peut pas voir. `name` est le nom qu'une personne lui donnerait. |
+| `image` | `url` ou `b64`, `sticker` (booléen) | `sticker` marque un autocollant envoyé comme image. |
+| `emoji` | `name`, `id` | Un autocollant de plateforme ou un emoji personnalisé que l'agent ne peut pas voir. `name` est le nom qu'une personne lui donnerait. |
 | `reply` | `message_id`, `text`, `sender_id`, `sender_name` | Le message que celui-ci cite. Envoyez `text` chaque fois que la plateforme le fournit. |
 
-Décrivez tout le reste avec des mots, sous forme de segment `text` comme `(sent a voice message)` ou `(sent a file: deck.pdf)`. L'agent jette les types de segments inconnus.
+Décrivez tout le reste avec des mots, sous forme de segment `text` comme `(sent a voice message)` ou `(sent a file: deck.pdf)`. L'agent ignore les types de segments inconnus.
 
 Ces champs facultatifs activent davantage de fonctions de l'agent :
 
@@ -116,7 +116,7 @@ La réponse ressemble à ceci :
 ```
 
 - `replies` : envoyez-les dans l'ordre, chacune comme un message séparé. Quand `mention_user_id` est présent, c'est l'identifiant préfixé à mentionner. Affichez la mention comme le fait la plateforme.
-- `owned` : l'agent a pris cette conversation. Quand il est vrai, empêchez toute autre logique de bot de répondre, même si `replies` est vide, car la persona a choisi de se taire. Quand il est faux, le message est à vous. Soit la conversation n'est pas sur les listes d'autorisation de l'agent, soit l'agent ne peut pas répondre du tout (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Dans le second cas, le journal de l'agent contient une ligne ERROR qui en indique la cause.
+- `owned` : l'agent a pris cette conversation. Quand il est vrai, empêchez toute autre logique de bot de répondre, même si `replies` est vide, car le personnage a choisi de se taire. Quand il est faux, le traitement du message vous revient. Soit la conversation n'est pas sur les listes d'autorisation de l'agent, soit l'agent ne peut pas répondre du tout (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Dans le second cas, le journal de l'agent contient une ligne ERROR qui en indique la cause.
 - La requête dure jusqu'à la fin du tour, soit un court anti-rebond plus le temps du modèle. Les appels au modèle d'un tour se partagent un seul budget de 1,5 × `LLM_TIMEOUT_S`, nouvelles tentatives comprises, dans un groupe comme en message privé, et un message qui arrive pendant qu'un tour précédent de sa conversation réfléchit encore attend la fin de ce tour avant de commencer le sien. Prévoyez au moins 3 × `LLM_TIMEOUT_S` secondes (360 avec la valeur par défaut).
 - Une commande de mémoire (comme « remember ... ») qui arrive pendant qu'un tour de sa conversation réfléchit encore reçoit sa réponse après ce tour. Un connecteur qui a déclaré `outbox` reçoit tout de suite `{"handled": false, "owned": true, "replies": []}` puis le résultat plus tard sous forme de livraison `follow_up`. Sans `outbox`, le résultat arrive dans la réponse à une requête : la sienne, ou celle d'une autre requête en attente de la même conversation, si bien qu'une réponse peut porter des `replies` qui mentionnent quelqu'un d'autre que l'expéditeur de l'événement.
 
@@ -185,11 +185,11 @@ Un 404 sans `code` signifie que l'agent ne sert pas la boîte d'envoi. Un `404` 
 
 ## Parler en premier sans la boîte d'envoi
 
-Un connecteur qui ne peut pas interroger peut quand même ouvrir un message privé. Son propre planificateur, comme une tâche de plugin AstrBot ou une entrée cron, envoie à `/v1/events` un événement de message privé ordinaire avec `"proactive": true`. L'agent lit le texte comme un signal adressé à la persona (« calme depuis un jour ; son examen était ce matin »), le coupe à 500 caractères et ne le stocke jamais comme les mots de la personne. Les instructions proactives du moteur décident toujours du tour et peuvent garder la persona silencieuse. Si la persona parle, la réponse revient dans la réponse HTTP et le planificateur la relaie.
+Un connecteur qui ne peut pas interroger peut quand même ouvrir un message privé. Son propre planificateur, comme une tâche de plugin AstrBot ou une entrée cron, envoie à `/v1/events` un événement de message privé ordinaire avec `"proactive": true`. L'agent lit le texte comme un signal adressé au personnage (« calme depuis un jour ; son examen était ce matin »), le tronque à 500 caractères et ne le stocke jamais comme les propos de la personne. Les instructions proactives du moteur décident toujours du tour et peuvent maintenir le personnage silencieux. Si le personnage s'exprime, la réponse revient dans la réponse HTTP et le planificateur la relaie.
 
-L'événement a besoin de tout ce que portent les événements normaux du connecteur : les en-têtes signés, tous les champs obligatoires, le même `platform` et le même `sender_id` brut que le connecteur envoie pour cette personne, un texte non vide et un nouveau `message_id` à chaque fois. Un événement dont le `message_id` est répété est jeté en silence. Le signal compte dans le même délai de message privé que les ouvertures de l'agent (`PROACTIVE_DM_COOLDOWN_S`), et il ne compte pas comme une activité de la personne.
+L'événement a besoin de tout ce que portent les événements normaux du connecteur : les en-têtes signés, tous les champs obligatoires, le même `platform` et le même `sender_id` brut que le connecteur envoie pour cette personne, un texte non vide et un nouveau `message_id` à chaque fois. Un événement dont le `message_id` est répété est ignoré sans avertissement. Le signal compte dans le même délai de message privé que les ouvertures de l'agent (`PROACTIVE_DM_COOLDOWN_S`), et il ne compte pas comme une activité de la personne.
 
-Définissez toujours l'indicateur ; sans lui, l'agent stocke le signal comme les mots de la personne. Un événement de groupe avec l'indicateur est pris en charge (`owned: true`, pour que le connecteur garde son bot silencieux) et jeté sans être lu.
+Définissez toujours l'indicateur ; sans lui, l'agent stocke le signal comme les mots de la personne. Un événement de groupe avec l'indicateur est pris en charge (`owned: true`, pour que le connecteur garde son bot silencieux) et ignoré sans être lu.
 
 ## Capacités et ce qui se dégrade
 
@@ -198,13 +198,13 @@ Définissez toujours l'indicateur ; sans lui, l'agent stocke le signal comme les
 | `outbox` | Pas d'ouvertures programmées, pas de question de suivi et pas d'excuse pour un appel au modèle raté dans un groupe. Les identifiants QQ les reçoivent quand même par NapCat quand `QQ_ONEBOT_URL` est défini et joignable. L'excuse d'un message privé revient dans les `replies` de la réponse et n'a pas besoin de la boîte d'envoi. |
 | `quote_text` | L'agent ne comprend un message cité que s'il a vu ce message lui-même. |
 | `reply_handle` | Comme si `outbox` manquait. |
-| `addressed` erroné | La persona traite les messages qui lui sont adressés comme un bavardage de fond. |
+| `addressed` erroné | Le personnage traite les messages qui lui sont adressés comme un bavardage de fond. |
 
 ## Écrire un connecteur
 
 1. Recevez un message de la plateforme. Ignorez les messages du bot lui-même et les événements qui ne sont pas des messages (arrivées, rappels, coups de coude).
 2. Construisez l'événement décrit ci-dessus. Définissez `addressed` d'après les règles de mention et de réponse de la plateforme.
 3. Signez et envoyez l'événement. Envoyez `replies` dans l'ordre et, quand `owned` est vrai, gardez toute autre logique de bot silencieuse.
-4. Si la plateforme peut envoyer de son propre chef, ajoutez `connector_id`, `reply_handle` et `capabilities: ["outbox"]`, puis faites tourner la boucle d'interrogation : interrogez, livrez chaque livraison par son `reply_handle` et confirmez à l'interrogation suivante.
+4. Si la plateforme peut envoyer de son propre chef, ajoutez `connector_id`, `reply_handle` et `capabilities: ["outbox"]`, puis exécutez la boucle d'interrogation : interrogez, livrez chaque livraison par son `reply_handle` et confirmez à l'interrogation suivante.
 
 `integrations/sdk/personagent_connector.py` gère les étapes 3 et 4.

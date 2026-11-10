@@ -3,7 +3,7 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · Français · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-Ce connecteur relie [personagent](https://github.com/wangkant/personagent) à un serveur [Satori](https://satori.chat). Satori est un protocole de discussion multiplateforme. Un serveur comme [Koishi](https://koishi.chat) (avec son plugin `server-satori`), Chronocat ou LLOneBot se connecte aux plateformes de discussion, et un client comme celui-ci reçoit chaque message de chaque connexion par un seul websocket. Un seul processus de connecteur place donc la persona sur toutes les plateformes pour lesquelles le serveur a un adaptateur.
+Ce connecteur relie [personagent](https://github.com/wangkant/personagent) à un serveur [Satori](https://satori.chat). Satori est un protocole de discussion multiplateforme. Un serveur comme [Koishi](https://koishi.chat) (avec son plugin `server-satori`), Chronocat ou LLOneBot se connecte aux plateformes de discussion, et un client comme celui-ci reçoit chaque message de chaque connexion par un seul websocket. Un seul processus de connecteur place donc le personnage sur toutes les plateformes pour lesquelles le serveur a un adaptateur.
 
 Satori et Koishi sont des logiciels tiers. personagent n'en a pas besoin pour QQ, WeChat, Telegram ou Discord, qu'il connecte lui-même, ni pour les plateformes que sa page locale configure via AstrBot. Utilisez ce connecteur si vous exécutez déjà Koishi, ou si vous voulez une plateforme que seul Koishi atteint.
 
@@ -13,19 +13,19 @@ Le connecteur transmet chaque message autorisé au `POST /v1/events` de l'agent 
 
 ## Configuration, avec Koishi
 
-1. **Koishi.** Installez Koishi avec le lanceur de bureau ou `npm init koishi@latest`. Dans sa console, ajoutez et configurez un adaptateur pour votre plateforme, comme `adapter-telegram` ou `adapter-discord`, et vérifiez que le bot est en ligne. Activez les plugins `server` et `server-satori`. Koishi sert alors Satori à `http://127.0.0.1:5140/satori`. Donnez un `token` à `server-satori` si autre chose que cette machine peut atteindre ce port.
+1. **Koishi.** Installez Koishi avec le lanceur de bureau ou `npm init koishi@latest`. Dans sa console, ajoutez et configurez un adaptateur pour votre plateforme, comme `adapter-telegram` ou `adapter-discord`, et vérifiez que le bot est en ligne. Activez les plugins `server` et `server-satori`. Koishi sert alors Satori à `http://127.0.0.1:5140/satori`. Attribuez un `token` à `server-satori` si une autre machine que celle-ci peut atteindre ce port.
 
-   Koishi continue d'exécuter ses autres plugins. Si l'un d'eux répond aussi aux messages, comme un modèle de discussion ou un plugin de réponse, il répondra en même temps que la persona, et le connecteur ne peut pas le faire taire. Désactivez ce plugin ou excluez-le des conversations que vous transmettez.
+   Koishi continue d'exécuter ses autres plugins. Si l'un d'eux répond aussi aux messages, comme un modèle de discussion ou un plugin de réponse, il répondra en même temps que le personnage, et le connecteur ne peut pas l'en empêcher. Désactivez ce plugin ou excluez-le des conversations que vous transmettez.
 
 2. **L'agent.** Exécutez personagent (`personagent run`, voir son README). Si le connecteur et l'agent sont sur des hôtes différents, définissez `CONNECTOR_TOKEN` dans le `.env` de l'agent et placez l'agent derrière HTTPS. Définissez le jeton avant d'ajouter un proxy ou un tunnel, même sur un seul hôte.
 
-3. **Le connecteur.** Le connecteur est un script de ce dépôt, il lui faut donc une copie du dépôt (un clone ou le ZIP de GitHub) et son propre environnement Python, car `satori-python` n'est pas une dépendance de personagent. Dans un clone qui a déjà le `.venv` de personagent, installez dans cet environnement :
+3. **Le connecteur.** Le connecteur est un script de ce dépôt ; il nécessite donc une copie du dépôt (un clone ou le ZIP de GitHub) et son propre environnement Python, car `satori-python` n'est pas une dépendance de personagent. Dans un clone qui a déjà le `.venv` de personagent, installez dans cet environnement :
 
    ```bash
    .venv/bin/python -m pip install -r integrations/satori/requirements.txt
    ```
 
-   Si vous avez installé personagent depuis PyPI avec pip, ou si vous le lancez avec uvx, créez un venv séparé à côté de la copie :
+   Si vous avez installé personagent depuis PyPI avec pip, ou si vous l'exécutez avec uvx, créez un venv distinct à côté de la copie :
 
    ```bash
    python -m venv connector-venv
@@ -46,7 +46,7 @@ Le connecteur transmet chaque message autorisé au `POST /v1/events` de l'agent 
 
    `--config FILE` lit un autre fichier de réglages. Tout réglage peut aussi être donné en variable d'environnement, qui a priorité sur le fichier.
 
-4. **Vérifiez que ça marche.** Pour chaque bot du serveur, le journal affiche une ligne comme `Satori login telegram:7000 is ONLINE`. Mentionnez le bot dans un groupe transmis. Le journal de l'agent montre le tour, et la réponse apparaît dans la discussion. Si rien ne se passe, définissez `SATORI_LOG_LEVEL=DEBUG`.
+4. **Vérifiez le fonctionnement.** Pour chaque bot du serveur, le journal affiche une ligne comme `Satori login telegram:7000 is ONLINE`. Mentionnez le bot dans un groupe transmis. Le journal de l'agent montre le tour, et la réponse apparaît dans la discussion. Si rien ne se passe, définissez `SATORI_LOG_LEVEL=DEBUG`.
 
 ## Réglages
 
@@ -94,7 +94,7 @@ personagent stocke les ids sous la forme `<platform>:<id>`, où la plateforme es
 | Détection d'appel (`addressed`) | Un `<at>` du bot (par id, ou par son nom quand le serveur ne donne pas d'id), et une réponse à un message du bot. `@all` compte comme du texte, pas comme une mention. |
 | Messages cités | Le texte cité, l'expéditeur et l'id, tirés d'un élément `<quote>` ou de `message.quote`. |
 | Images reçues | Les images `data:` et `internal:`, ainsi que celles du serveur Satori, sont intégrées. Les URL publiques sont transmises pour que l'agent les récupère. Les URL de réseau privé sont décrites par `(sent an image)`. Au plus 4 téléchargements par message, de 4 Mo chacun. |
-| Stickers et emoji | `<emoji>` et le `<face>` de QQ arrivent comme emoji, et la persona sait qu'elle ne peut pas les voir. |
+| Autocollants et emoji | `<emoji>` et le `<face>` de QQ arrivent comme emoji, et le personnage sait qu'il ne peut pas les voir. |
 | Voix, vidéo, fichiers | Décrits en mots : `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)`. |
 | Réponses | Du texte, et des images en URI `data:`, chacun envoyé comme message séparé avec un court intervalle. Dans les groupes, une mention demandée par l'agent devient un `<at>`. |
 | Plateformes à réponse passive | Les réponses portent le `referrer` de l'événement, dont l'API officielle des bots QQ a besoin pour répondre à un message. |

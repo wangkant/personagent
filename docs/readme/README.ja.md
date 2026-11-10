@@ -15,13 +15,13 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずは自分のパソコンで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに 18 のアプリへ連れていけます。
+personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まず自分のコンピューターで会話を試し、その後、同じローカルページから QQ、WeChat、Telegram、Discord をはじめ、さらに 18 のプラットフォームに参加させることができます。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「アプリ連携」画面。参加できるすべてのプラットフォームが並んでいる" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。参加できるすべてのプラットフォームが表示されている" width="960">
 </p>
 
-<p align="center"><em>「アプリ連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>
+<p align="center"><em>「プラットフォーム連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>
 
 ## personagent を選ぶ理由
 
@@ -42,16 +42,16 @@ personagent はグループチャットのためのキャラクターです。�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>始めるのが簡単で、グループのいる場所で暮らします。</strong></td>
+<td width="220" valign="top"><strong>簡単に始められ、グループが集まる場所で動作します。</strong></td>
 <td valign="top">
-コマンド 1 つで自分のパソコンに開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
-モデルのキーを 1 つ貼り付ければチャットでき、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけでアプリと連携できます。
+コマンド 1 つで自分のコンピューター上に開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
+モデルのキーを 1 つ貼り付ければチャットでき、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけでプラットフォームと連携できます。
 </td>
 </tr>
 <tr>
 <td width="220" valign="top"><strong>既成のキャラクターにも、自分だけのキャラクターにもできます。</strong></td>
 <td valign="top">
-既成の性格は 7 つ。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、考え、話します。<br>
+既成の性格が 7 つあります。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、考え、話します。<br>
 ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
 </td>
 </tr>
@@ -68,27 +68,27 @@ personagent
 
 [uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。
 
-Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャット開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本のある 3 つの場面を再生します。[スタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本のある 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
 personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
 ## グループに参加させる
 
-ローカルページで **アプリ連携** を開きます。
+ローカルページで **プラットフォーム連携** を開きます。
 
-| ページ上の表示 | アプリ | 必要なもの |
+| ページ上の表示 | プラットフォーム | 必要なもの |
 |---|---|---|
 | スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは 1 対 1 のチャットのみ |
-| 値を 1〜2 個貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | アプリのコンソールで取得する値。どの値かはページに表示されます |
+| 1〜2 個の値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
-連携済みのアプリは personagent を起動するたびに再び起動します。スキャンで連携するアプリと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。サーバーでは、`personagent up` でブラウザーなしですべてを起動できます。アプリごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
+連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。サーバーでは、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
 
-すでに AstrBot、Koishi、Matrix を運用していますか？personagent はその背後でキャラクターとして動かせます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
+すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でキャラクターとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
 
-## コーディングエージェント
+## コーディングアシスタント
 
-**セットアップを任せる。** あなたのコンピューターでコマンドを実行できるコーディングエージェントに、下の 1 行を渡してください。モデルのキーはローカルページにあなた自身が貼り付けるので、キーがエージェントを経由することはありません。
+**セットアップを任せる。** あなたのコンピューターでコマンドを実行できるコーディングアシスタントに、下の 1 行を渡してください。モデルのキーはローカルページにあなた自身が貼り付けるので、キーがコーディングアシスタントを経由することはありません。
 
 ```text
 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md を読んで、personagent をセットアップしてください。
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` で元に戻せます。**プラットフォーム連携** の **コーディングアシスタント** を使えば、どちらの操作もページから行えます。権限と、ターンの終わりにキャラクターが一言話せるようにする `--react` については[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)にあります。
+`--remove` で元に戻せます。**プラットフォーム連携** の **コーディングアシスタント** を使えば、どちらの操作もページから行えます。権限と、ターンの終わりにキャラクターがコメントできるようにする `--react` については、[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングアシスタント)で説明しています。
 
 ## アップデートとアンインストール
 
-PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学んだこと、連携済みのアプリはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
+PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学習内容、連携中のプラットフォームはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
 
 ## プライバシー
 

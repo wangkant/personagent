@@ -23,7 +23,7 @@ Il y a 60 moments de discussion de groupe par langue : 20 où personne ne le nom
 
 ## Jouer le personnage
 
-personagent est comparé au même modèle recevant seulement le texte du personnage comme prompt système, ce qu'on obtient en collant le personnage dans un modèle de discussion. Il y a 40 moments par langue, 22 en groupe et 18 en message privé. Claude Opus 5.5 a jugé chaque paire à l'aveugle deux fois, dans des sessions séparées, avec les réponses inversées. Une réponse ne gagne que si les deux choix s'accordent, et un partage compte pour moitié. Ne rien dire quand on est appelé compte comme une défaite.
+personagent est comparé au même modèle recevant seulement le texte du personnage comme prompt système, ce que l'on obtient en collant le texte du personnage dans un modèle de discussion. Il y a 40 moments par langue, 22 en groupe et 18 en message privé. Claude Opus 5.5 a jugé chaque paire à l'aveugle deux fois, dans des sessions séparées, avec les réponses inversées. Une réponse ne gagne que si les deux choix s'accordent, et un partage compte pour moitié. Ne rien dire quand on est appelé compte comme une défaite.
 
 | Taux de victoire de personagent | deepseek-v4.1-flash | gpt-6-luna |
 |---|---|---|
@@ -42,9 +42,9 @@ Il y a 20 scénarios par langue, exécutés par le vrai chemin des réactions :
 - 6 enseignent un style.
 - 7 doivent être retenus : la correction d'un spectateur, celle d'un troll et une que la personne abandonne.
 
-Un message ultérieur du même chat, formulé autrement, vérifie si le personnage utilise ce qu'on lui a enseigné. Il s'exécute une fois avant la correction et une fois après, et Opus 5.5 a jugé les réponses.
+Un message ultérieur de la même discussion, formulé autrement, vérifie si le personnage utilise ce qu'on lui a enseigné. Il s'exécute une fois avant la correction et une fois après, et Opus 5.5 a jugé les réponses.
 
-La première exécution de cette date a montré qu'une correction promue ne se transmettait presque jamais. Ce qui était promu était le nouvel essai du personnage lui-même, comme exemple de meilleure formulation, et le message suivant sur le même sujet sortait sans le fait. Les corrections conservent désormais aussi leur leçon sous forme d'une phrase, comme « Ce groupe appelle la salle de sport "la grotte". », et chaque prompt ultérieur de ce chat la contient (voir le [guide d'utilisation](../../guide.fr.md#corrections)). La suite d'apprentissage a été réexécutée après ce changement. Les suites de parole et de persona ne sont pas concernées.
+La première exécution de cette date a montré qu'une correction promue ne se transmettait presque jamais. Ce qui était promu était le nouvel essai du personnage lui-même, comme exemple de meilleure formulation, et le message suivant sur le même sujet sortait sans le fait. Les corrections conservent désormais aussi leur leçon sous forme d'une phrase, comme « Ce groupe appelle la salle de sport "la grotte". », et chaque prompt ultérieur de cette discussion la contient (voir le [guide d'utilisation](../../guide.fr.md#corrections)). La suite d'apprentissage a été réexécutée après ce changement. Les suites de prise de parole et de persona ne sont pas concernées.
 
 | | deepseek-v4.1-flash | gpt-6-luna |
 |---|---|---|

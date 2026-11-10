@@ -3,7 +3,7 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · Português (Brasil) · [Русский](README.ru.md)
 
 
-`personagent eval` coloca o agente real em momentos de chat rotulados e guarda cada caso, resposta e veredito. Esta execução mediu o código lançado como personagent 1.3.0 (os relatórios, escritos antes de o número da versão mudar, dizem 1.2.2), com o personagem de exemplo incluído (Nova em inglês, 小夏 em chinês) em dois modelos pelo OpenRouter: `deepseek/deepseek-v4.1-flash` e `openai/gpt-6-luna`. Cada caso rodou três vezes, cada uma em uma implantação nova.
+`personagent eval` coloca o agente real em momentos de chat rotulados e guarda cada caso, resposta e veredito. Esta execução mediu o código lançado como personagent 1.3.0 (os relatórios, escritos antes de o número da versão mudar, dizem 1.2.2), com o personagem de exemplo incluído (Nova em inglês, 小夏 em chinês) em dois modelos pelo OpenRouter: `deepseek/deepseek-v4.1-flash` e `openai/gpt-6-luna`. Cada caso foi executado três vezes, cada uma em uma implantação nova.
 
 Os colchetes são intervalos de 95%. Eles contam cada caso uma vez, então as três tentativas não aumentam o tamanho da amostra. Como cada suíte funciona está no [guia do usuário](../../guide.pt-BR.md#meça).
 
@@ -42,7 +42,7 @@ Há 20 cenários por idioma, executados pelo caminho real de reações:
 - 6 ensinam um estilo.
 - 7 devem ser retidos: a correção de um espectador, a de um troll e uma que a pessoa abandona.
 
-Uma mensagem posterior no mesmo chat, com outras palavras, verifica se o personagem usa o que aprendeu. Ela roda uma vez antes da correção e uma vez depois, e o Opus 5.5 julgou as respostas.
+Uma mensagem posterior no mesmo chat, com outras palavras, verifica se o personagem usa o que aprendeu. Ela é executada uma vez antes da correção e uma vez depois, e o Opus 5.5 julgou as respostas.
 
 A primeira execução nesta data mostrou que uma correção promovida quase nunca se mantinha. O que era promovido era a nova tentativa do próprio personagem, como exemplo de redação melhor, e a mensagem seguinte sobre o mesmo assunto saía sem o fato. Agora as correções também guardam a lição em uma frase, como "Este grupo chama a academia de 'a caverna'.", e todo prompt seguinte nesse chat a traz (veja o [guia do usuário](../../guide.pt-BR.md#correções)). A suíte de aprendizado foi executada de novo depois dessa mudança. As suítes de fala e persona não são afetadas.
 
@@ -54,7 +54,7 @@ A primeira execução nesta data mostrou que uma correção promovida quase nunc
 | O mesmo, antes de guardar as lições | 2 de 32 | 0 de 26 |
 
 - Antes de qualquer correção, os modelos usaram a convenção em 0 de 84 tentativas, então o que dizem depois foi ensinado.
-- A maioria dos erros restantes vem de dois cenários. Quando perguntam o que escolher para a "noite de cinema desta quinta", ele geralmente não a chama de Bad Film Thursday (1 de 12). Quando pedem para avaliar um filme que ele não viu, ele devolve a pergunta em pipocas, mas raramente dá a própria nota (2 de 11).
+- A maioria dos erros restantes vem de dois cenários. Quando lhe perguntam o que escolher para a "noite de cinema desta quinta", ele geralmente não a chama de Bad Film Thursday (1 de 12). Quando lhe pedem que avalie um filme que não viu, ele devolve a pergunta pedindo uma nota em pipocas, mas raramente atribui a própria nota (2 de 11).
 - Nenhuma correção de troll, de espectador ou abandonada passou, antes ou depois da mudança. Das 15 tentativas retidas que deveriam ser promovidas, o juiz de reações recusou 6 correções (todas no gpt-6-luna), 5 vereditos do deepseek se perderam por saída ilegível e 4 falharam na etapa da nova tentativa.
 - Durante a execução do deepseek em inglês, o JSON do juiz de reações voltou ilegível 24 vezes, com o raciocínio do modelo vazando para as chaves. Perguntar de novo, o que esta mudança adiciona, recuperou 18. As outras execuções não tiveram nenhum.
 - Os cenários de estilo não mostram muito: os modelos já seguiam esses estilos em 56 de 72 tentativas antes de qualquer correção, e em 66 depois.

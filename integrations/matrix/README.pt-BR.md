@@ -74,19 +74,19 @@ Convide o bot para uma sala listada em `MATRIX_GROUPS`, e ele entra. No Element,
 
 ### Login
 
-O login com senha é a forma mais fácil de começar. O conector salva a sessão que obtém (id de usuário, id de dispositivo e token de acesso) em `MATRIX_STORE_DIR/session.json` e a reutiliza na próxima inicialização, então reiniciar não cria um dispositivo novo. Apague esse arquivo para fazer login de novo.
+O login com senha é a forma mais simples de começar. O conector salva a sessão que obtém (id de usuário, id de dispositivo e token de acesso) em `MATRIX_STORE_DIR/session.json` e a reutiliza na próxima inicialização, então reiniciar não cria um dispositivo novo. Apague esse arquivo para fazer login de novo.
 
 Para usar um token de acesso existente, defina `MATRIX_ACCESS_TOKEN`. O conector pergunta ao homeserver de qual conta é o token. Não use o token de uma sessão que você mesmo usa, porque sair dessa sessão também desconecta o bot.
 
 Quando o homeserver desconecta o bot (`M_UNKNOWN_TOKEN`), o conector para com um erro que diz isso. Depois de um login com senha, iniciá-lo de novo faz login outra vez. Com `MATRIX_ACCESS_TOKEN`, defina primeiro um token novo. Qualquer outra sincronização com falha é tentada de novo após uma espera que dobra até um minuto.
 
-### Onde o agente pode rodar
+### Onde o agente pode ser executado
 
 O protocolo define a regra. `PERSONAGENT_URL` precisa ser um endereço de loopback, ou HTTPS com `CONNECTOR_TOKEN` igual ao `CONNECTOR_TOKEN` do agente. Caso contrário, o conector se recusa a iniciar. Defina o token nos dois lados antes de colocar qualquer proxy ou túnel na frente do agente, mesmo em um único host.
 
 ## Configurações
 
-[.env.example](.env.example) lista todas as configurações. As listas são separadas por vírgulas e aceitam curingas, então `@*:example.org` corresponde a um servidor inteiro. Uma lista vazia não responde a ninguém. Um `*` sozinho corresponde a todos e marca o evento com `prefiltered: false`. Então decidem sozinhos `ACCESS_GROUPS` / `ACCESS_DM_USERS` do próprio agente, e uma plataforma sem entradas ali é recusada.
+[.env.example](.env.example) lista todas as configurações. As listas são separadas por vírgulas e aceitam curingas, então `@*:example.org` corresponde a um servidor inteiro. Uma lista vazia não responde a ninguém. Um `*` sozinho corresponde a todos e marca o evento com `prefiltered: false`. Nesse caso, a decisão cabe exclusivamente a `ACCESS_GROUPS` / `ACCESS_DM_USERS` do próprio agente, e uma plataforma sem entradas ali é recusada.
 
 | Configuração | Significado |
 |---|---|
@@ -100,7 +100,7 @@ O protocolo define a regra. `PERSONAGENT_URL` precisa ser um endereço de loopba
 
 ## Pontes: WhatsApp, Signal, Messenger, Instagram e mais
 
-Uma ponte mautrix faz login em outra rede como uma conta dessa rede e espelha os chats dela em salas Matrix chamadas portais. Todos do outro lado aparecem no Matrix como um usuário fantasma, como `@whatsapp_4912345:example.org`. Quando a conta Matrix do bot é a que fez login na ponte, a persona vive nessa rede. Um contato do WhatsApp escreve para o número da persona, a ponte publica a mensagem em uma sala portal, este conector a encaminha e a resposta volta pelo mesmo caminho.
+Uma ponte mautrix faz login em outra rede como uma conta dessa rede e espelha os chats dela em salas Matrix chamadas portais. Todos do outro lado aparecem no Matrix como um usuário fantasma, como `@whatsapp_4912345:example.org`. Quando a conta Matrix do bot é a que fez login na ponte, a persona passa a atuar nessa rede. Um contato do WhatsApp escreve para o número da persona, a ponte publica a mensagem em uma sala portal, este conector a encaminha e a resposta volta pelo mesmo caminho.
 
 | Rede | Ponte |
 |---|---|
@@ -114,8 +114,8 @@ Uma ponte mautrix faz login em outra rede como uma conta dessa rede e espelha os
 Para configurar uma:
 
 1. Execute um homeserver que você controla (Synapse ou outro servidor com suporte a serviços de aplicativo) e instale a ponte seguindo [a documentação dela](https://docs.mau.fi/bridges/). Dê à conta do bot o nível de permissão `user` em `permissions` da ponte.
-2. Entre no Element como o bot, abra um chat com o bot da ponte (por exemplo, `@whatsappbot:example.org`) e envie `login`. Vincule a conta de rede que a persona vai usar. Para WhatsApp, Signal e Google Messages, escaneie o código QR com o celular da persona. Para Messenger e Instagram, forneça o login da Meta. Veja [Usar pontes](https://docs.mau.fi/bridges/general/using-bridges.html).
-3. Deixe o conector entrar nos portais e mantenha de fora as mensagens da própria ponte:
+2. Entre no Element como o bot, abra um chat com o bot da ponte (por exemplo, `@whatsappbot:example.org`) e envie `login`. Vincule a conta de rede que a persona vai usar. Para WhatsApp, Signal e Google Messages, leia o QR code com o celular da persona. Para Messenger e Instagram, forneça o login da Meta. Veja [Usar pontes](https://docs.mau.fi/bridges/general/using-bridges.html).
+3. Permita que o conector entre nos portais e exclua as mensagens da própria ponte:
 
    ```ini
    MATRIX_INVITE_FROM=@whatsappbot:example.org
@@ -150,7 +150,7 @@ Com `MATRIX_E2EE_ENABLED=false` (o padrão), o bot só lê salas não criptograf
 
 Com `MATRIX_E2EE_ENABLED=true`:
 
-- `MATRIX_STORE_DIR` (por padrão `runtime/` ao lado do script, que o git ignora) guarda as chaves do dispositivo e o token de sincronização. Mantenha este diretório. Se ele se perder, o bot vira um dispositivo novo que não consegue ler nada criptografado antes desse ponto.
+- `MATRIX_STORE_DIR` (por padrão `runtime/` ao lado do script, que o git ignora) guarda as chaves do dispositivo e o token de sincronização. Mantenha este diretório. Se ele for perdido, o bot passa a ser um dispositivo novo que não consegue ler nada criptografado antes desse ponto.
 - O dispositivo precisa continuar o mesmo entre reinícios. Um login com senha o mantém pela sessão salva. Com um token de acesso, defina `MATRIX_DEVICE_ID` como o dispositivo do token.
 - O bot compartilha as chaves com todos os dispositivos da sala, verificados ou não. Ele não consegue se verificar de forma interativa, então as pessoas veem o dispositivo como não verificado. Ele não tem backup de chaves nem assinatura cruzada.
 - Uma mensagem cuja chave não chegou é registrada e ignorada, sem nova tentativa.
@@ -158,7 +158,7 @@ Com `MATRIX_E2EE_ENABLED=true`:
 
 ## Testes
 
-`tests/test_matrix_connector.py` simula o cliente Matrix e o agente, então roda sem matrix-nio e sem rede:
+`tests/test_matrix_connector.py` simula o cliente Matrix e o agente, de modo que é executado sem matrix-nio e sem rede:
 
 ```bash
 python -m pytest tests/test_matrix_connector.py

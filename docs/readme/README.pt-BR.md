@@ -15,13 +15,13 @@
 
 *Esta é uma tradução do README em inglês, que é a versão de referência e pode estar mais atualizada.*
 
-O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu, e rode em qualquer modelo compatível com OpenAI. Comece conversando com ele no seu próprio computador e depois leve para o QQ, WeChat, Telegram, Discord e outras dezoito plataformas pela mesma página local.
+O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu e execute-o com qualquer modelo compatível com OpenAI. Comece conversando com ele no seu próprio computador e, depois, conecte-o ao QQ, ao WeChat, ao Telegram, ao Discord e a outras dezoito plataformas pela mesma página local.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar apps da página local, com todas as plataformas em que ele pode entrar" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar plataformas da página local, com todas as plataformas em que ele pode entrar" width="960">
 </p>
 
-<p align="center"><em>Conectar apps, na mesma página local da configuração e da conversa com o personagem.</em></p>
+<p align="center"><em>Conectar plataformas, na mesma página local da configuração e da conversa com o personagem.</em></p>
 
 ## Por que o personagent
 
@@ -45,7 +45,7 @@ Toda mudança fica registrada, e qualquer uma pode ser desfeita.
 <td width="220" valign="top"><strong>É fácil de começar e fica onde seu grupo está.</strong></td>
 <td valign="top">
 Um comando abre no seu computador, em inglês, chinês ou mais oito idiomas.<br>
-Cole uma chave de modelo para conversar e depois conecte um app escaneando com o celular ou colando um ou dois valores.
+Cole uma chave de modelo para conversar e, depois, conecte uma plataforma lendo um QR code com o celular ou colando um ou dois valores.
 </td>
 </tr>
 <tr>
@@ -57,7 +57,7 @@ Reescreva a persona quando quiser. O que o personagem aprendeu é mantido.
 </tr>
 </table>
 
-Cada conversa tem sua própria memória, e ele esquece quando pedem: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)).
+Cada conversa tem sua própria memória, e ele esquece o que lhe for solicitado: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)).
 
 ## Comece aqui
 
@@ -66,29 +66,29 @@ python -m pip install personagent
 personagent
 ```
 
-Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` roda sem uma etapa de instalação separada. No Windows, você também pode baixar o ZIP do código-fonte e dar dois cliques em `start.bat`.
+Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` o executa sem uma etapa de instalação separada. No Windows, você também pode baixar o ZIP do código-fonte e dar dois cliques em `start.bat`.
 
-No Windows, ele abre em uma janela própria; no macOS e no Linux, no navegador. Cole uma chave de API de modelo e clique em **Verificar e começar a conversar**. Ainda não tem chave? Os modelos gratuitos do OpenRouter já vêm selecionados, e a chave deles não custa nada. `personagent demo` mostra três cenas roteirizadas sem chave nenhuma. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
+No Windows, ele abre em uma janela própria; no macOS e no Linux, no navegador. Cole uma chave de API de modelo e clique em **Verificar e iniciar a conversa**. Caso ainda não tenha uma chave, os modelos gratuitos do OpenRouter já vêm selecionados, e a chave deles é gratuita. `personagent demo` mostra três cenas roteirizadas sem chave nenhuma. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
 
-O personagent é gratuito. Você paga o serviço de modelo que escolher, pelos preços dele. Os modelos gratuitos do OpenRouter permitem 50 solicitações por dia, e alguns provedores gratuitos guardam o que recebem; o Ollama roda um modelo no seu próprio computador, sem chave.
+O personagent é gratuito. Você paga o serviço de modelo que escolher, pelos preços dele. Os modelos gratuitos do OpenRouter permitem 50 solicitações por dia, e alguns provedores gratuitos guardam o que recebem; o Ollama executa um modelo no seu próprio computador, sem chave.
 
 ## Coloque no seu grupo
 
-Abra **Conectar apps** na página local:
+Abra **Conectar plataformas** na página local:
 
-| Na página | Apps | O que você precisa |
+| Na página | Plataformas | O que é necessário |
 |---|---|---|
-| Escanear para conectar | QQ, WeChat pessoal | Seu celular. Bots do WeChat só têm conversas privadas |
-| Colar um ou dois valores | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey | Valores do console do app; a página diz quais |
-| Avançado | App do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat), Satori | Um endereço público ou outro software neste computador |
+| Conectar com QR code | QQ, WeChat pessoal | O seu celular. Os bots do WeChat só participam de conversas privadas |
+| Colar um ou dois valores | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, Bot de IA do WeCom, Mattermost, Misskey | Valores do console da plataforma; a página indica quais |
+| Avançado | Aplicativo do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat), Satori | Um endereço público ou outro software neste computador |
 
-Os apps conectados voltam a iniciar sempre que o personagent inicia. O personagent conecta por conta própria os apps de escanear, o Telegram, o Discord, o Matrix, o Twitch, o IRC, o Zulip, o VK e o Stoat; o resto passa por um [AstrBot](https://github.com/AstrBotDevs/AstrBot) que ele baixa e roda em segundo plano. Num servidor, `personagent up` inicia tudo sem navegador. A configuração de cada app está no [guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#coloque-em-um-chat), e o QQ do zero no [guia de implantação em chinês](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+As plataformas conectadas são iniciadas novamente sempre que o personagent é iniciado. O personagent conecta por conta própria as plataformas com QR code, o Telegram, o Discord, o Matrix, o Twitch, o IRC, o Zulip, o VK e o Stoat; o resto passa por um [AstrBot](https://github.com/AstrBotDevs/AstrBot) que ele baixa e executa em segundo plano. Em um servidor, `personagent up` inicia tudo sem navegador. A configuração de cada plataforma está no [guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#coloque-em-um-chat), e o QQ do zero no [guia de implantação em chinês](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
-Já usa AstrBot, Koishi ou Matrix? O personagent pode rodar por trás de qualquer um deles como o personagem: veja [pontes que você mesmo executa](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#pontes-que-você-mesmo-executa), o [conector Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.pt-BR.md) e o [conector Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.pt-BR.md).
+Já usa AstrBot, Koishi ou Matrix? O personagent pode funcionar por trás de qualquer um deles como o personagem: veja [pontes que você mesmo executa](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#pontes-que-você-mesmo-executa), o [conector Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.pt-BR.md) e o [conector Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.pt-BR.md).
 
-## Agentes de programação
+## Assistentes de programação
 
-**Deixe um deles configurar.** Passe a linha abaixo para um agente de programação que consiga rodar comandos no seu computador. Você mesmo cola sua chave de modelo na página local, então a chave nunca passa pelo agente.
+**Configuração por um assistente.** Envie a linha abaixo a um assistente de programação capaz de executar comandos no seu computador. Você mesmo cola a chave de modelo na página local; assim, a chave nunca passa pelo assistente.
 
 ```text
 Leia https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md e configure o personagent para mim.
@@ -102,22 +102,22 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` desfaz a conexão, e **Assistentes de programação**, em **Conectar plataformas**, faz as duas coisas pela página. O [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#agentes-de-código) cobre as permissões e o `--react`, que deixa o personagem dizer uma frase quando um turno termina.
+`--remove` desfaz a conexão, e **Assistentes de programação**, em **Conectar plataformas**, faz as duas coisas pela página. O [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#assistentes-de-programação) cobre as permissões e o `--react`, que deixa o personagem dizer uma frase quando um turno termina.
 
 ## Atualizar e desinstalar
 
-Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo** da página, executa esse comando por você. As configurações, o personagem, o que ele aprendeu e os apps conectados são mantidos. Para remover, siga os [passos de desinstalação](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (em inglês).
+Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo** da página, executa esse comando por você. As configurações, o personagem, o que ele aprendeu e as plataformas conectadas são mantidos. Para remover, siga os [passos de desinstalação](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (em inglês).
 
 ## Privacidade
 
-Tudo o que o personagent guarda fica na sua máquina, numa única pasta principal. O provedor de modelo que você escolher vê as conversas que ele responde, e uma vez por dia o personagent pergunta ao pypi.org se há uma versão mais nova (`UPDATE_CHECK_ENABLED=false` desativa isso). Antes de conectá-lo a pessoas reais, avise que é um bot e peça o consentimento delas; o [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#privacidade-e-consentimento) lista o que vai para onde.
+Tudo o que o personagent guarda fica na sua máquina, em uma única pasta inicial. O provedor de modelo que você escolher vê as conversas que ele responde, e uma vez por dia o personagent pergunta ao pypi.org se há uma versão mais nova (`UPDATE_CHECK_ENABLED=false` desativa isso). Antes de conectá-lo a pessoas reais, avise que é um bot e peça o consentimento delas; o [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#privacidade-e-consentimento) lista o que vai para onde.
 
 ## Documentação
 
 - [Guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md): configuração, conectores, como ensiná-lo, a visão Atividade, solução de problemas.
-- [Guia de implantação](https://github.com/wangkant/personagent/blob/main/docs/deploy.pt-BR.md): rodar para valer, custos e o que verificar quando o bot fica em silêncio.
+- [Guia de implantação](https://github.com/wangkant/personagent/blob/main/docs/deploy.pt-BR.md): execução em produção, custos e o que verificar quando o bot fica em silêncio.
 - [Protocolo de conectores](https://github.com/wangkant/personagent/blob/main/docs/connectors.pt-BR.md): para escrever seu próprio conector.
-- [Ferramentas](https://github.com/wangkant/personagent/blob/main/docs/tools.pt-BR.md): os scripts em `tools/`, para rodar a partir de um clone.
+- [Ferramentas](https://github.com/wangkant/personagent/blob/main/docs/tools.pt-BR.md): os scripts em `tools/`, para execução a partir de um clone.
 - [Changelog](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md) · [Como contribuir](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [Política de segurança](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [Aviso legal](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.pt-BR.md)
 
 ## Licença

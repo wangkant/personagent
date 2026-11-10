@@ -100,7 +100,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 
 ## ブリッジ：WhatsApp、Signal、Messenger、Instagram など
 
-mautrix ブリッジは別のネットワークにそのネットワークのアカウントとしてログインし、チャットをポータルと呼ばれる Matrix ルームにミラーします。向こう側の全員が `@whatsapp_4912345:example.org` のようなゴーストユーザーとして Matrix に現れます。ブリッジにログインしているのがボットの Matrix アカウントなら、ペルソナはそのネットワークに住むことになります。WhatsApp の連絡先がペルソナの番号に書き込むと、ブリッジがメッセージをポータルルームに投稿し、このコネクターが転送し、返信は同じ道を戻ります。
+mautrix ブリッジは別のネットワークにそのネットワークのアカウントとしてログインし、チャットをポータルと呼ばれる Matrix ルームにミラーします。向こう側の全員が `@whatsapp_4912345:example.org` のようなゴーストユーザーとして Matrix に現れます。ブリッジにログインしているのがボットの Matrix アカウントなら、ペルソナはそのネットワーク上で活動します。WhatsApp の連絡先がペルソナの番号に書き込むと、ブリッジがメッセージをポータルルームに投稿し、このコネクターが転送し、返信は同じ道を戻ります。
 
 | ネットワーク | ブリッジ |
 |---|---|
@@ -124,7 +124,7 @@ mautrix ブリッジは別のネットワークにそのネットワークのア
    MATRIX_GROUPS=!groupPortal:example.org
    ```
 
-   `MATRIX_IGNORE_USERS` の 2 番目のエントリーは、ペルソナ自身の番号のブリッジ上のゴーストです。[ダブルパペッティング](https://docs.mau.fi/bridges/general/double-puppeting.html)がないと、ペルソナのスマートフォンで打ったメッセージがそのゴーストから Matrix に届き、ボットが自分に答えてしまいます。`MATRIX_GROUPS=*` はボットがいるすべてのグループポータルを転送し、personagent は `ACCESS_GROUPS` に `matrix:!room:server` として載っているルームだけで答えます。ここにルーム ID を書けば、コネクター側でルームを選べます。
+   `MATRIX_IGNORE_USERS` の 2 番目のエントリーは、ペルソナ自身の番号のブリッジ上のゴーストです。[ダブルパペッティング](https://docs.mau.fi/bridges/general/double-puppeting.html)がないと、ペルソナのスマートフォンで打ったメッセージがそのゴーストから Matrix に届き、ボットが自分自身のメッセージに返信することになります。`MATRIX_GROUPS=*` はボットがいるすべてのグループポータルを転送し、personagent は `ACCESS_GROUPS` に `matrix:!room:server` として載っているルームだけで答えます。ここにルーム ID を書けば、コネクター側でルームを選べます。
 
 ### パペッティング
 

@@ -10,11 +10,11 @@ Ce guide explique comment configurer personagent, le placer dans vos discussions
 4. [Commandes du terminal](#commandes-du-terminal) : [configuration](#configurer-dans-le-terminal) · [discussion](#discuter-dans-le-terminal) · [exécuter le service](#exécuter-le-service)
 5. [En faire votre personnage](#en-faire-votre-personnage)
 6. [Le placer dans une discussion](#le-placer-dans-une-discussion) : [Plateformes connectées par personagent lui-même](#plateformes-connectées-par-personagent-lui-même) · [Autres plateformes](#autres-plateformes-via-lastrbot-géré) · [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même) · [Parler en premier](#parler-en-premier)
-7. [Agents de code](#agents-de-code)
+7. [Assistants de programmation](#assistants-de-programmation)
 8. [Lui enseigner](#lui-enseigner)
 9. [Activité](#activité)
 10. [Le mesurer](#le-mesurer)
-11. [Comment ça marche](#comment-ça-marche)
+11. [Fonctionnement](#fonctionnement)
 12. [Confidentialité et consentement](#confidentialité-et-consentement)
 13. [Dépannage](#dépannage)
 14. [Mettre à niveau depuis 0.x](#mettre-à-niveau-depuis-0x)
@@ -55,18 +55,18 @@ Ce guide écrit les commandes sous la forme `personagent ...`. Si vous ne l'avez
 
 - **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond. Dans cette discussion, vous êtes l'administrateur. **Commandes de mémoire**, sous la zone de saisie, liste les [commandes de mémoire](#commandes-de-mémoire) ; en sélectionner une l'insère dans la zone de saisie. **Oublier cette discussion** supprime ce que le personnage a noté dans cette discussion et en commence une nouvelle. Cette fonction nécessite les données de la vue [Activité](#activité).
 - **Activité** montre les discussions où se trouve le personnage, ce qu'il a dit récemment, ce qu'il a appris et ce qui attend votre décision. Voir [Activité](#activité).
-- **Connecter des plateformes** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion). En bas de la vue, **Assistants de programmation** relie le personnage aux [agents de code](#agents-de-code) installés sur cet ordinateur.
-- **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité toute prête. **Vérifier et commencer la discussion** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les applications de votre choix. Viennent ensuite les [Réglages avancés](#réglages-avancés).
+- **Connecter des plateformes** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion). En bas de la vue, **Assistants de programmation** relie le personnage aux [assistants de programmation](#assistants-de-programmation) installés sur cet ordinateur.
+- **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité prédéfinie. **Vérifier et commencer la discussion** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les plateformes de votre choix. Viennent ensuite les [Réglages avancés](#réglages-avancés).
 - **Entraînement** joue la démonstration scriptée et anime un groupe de discussion d'entraînement. Voir [Le voir d'abord : la démo](#le-voir-dabord--la-démo).
 - **Application** vérifie les services dont dépend le personnage et regroupe les journaux, l'exécution en arrière-plan, les mises à jour et vos données. Voir [La vue Application](#la-vue-application).
 
-**Entraînement** et **Application** sont accessibles avant même la configuration d'un modèle. Tant que vous n'avez pas connecté d'application, la vue Discussion affiche une courte barre **Prise en main**.
+**Entraînement** et **Application** sont accessibles avant même la configuration d'un modèle. Tant que vous n'avez connecté aucune plateforme, la vue **Discussion** affiche une courte barre **Prise en main**.
 
 Relancer `personagent` fait réapparaître la page déjà ouverte. `--browser` ouvre la page dans le navigateur plutôt que dans une fenêtre, et `--no-browser` affiche le lien sans rien ouvrir. Sous Windows, `personagent shortcut` place sur le bureau et dans le menu Démarrer une icône qui ouvre la fenêtre sans terminal derrière, et `personagent shortcut --remove` la retire. La vue **Application** offre les mêmes possibilités.
 
 Quand un personagent plus récent est sur PyPI, la vue Discussion affiche un avis avec la commande qui met à jour votre installation, qu'elle vienne de pip, uvx, uv tool, pipx ou d'un clone Git. Pour un ZIP des sources décompressé, l'avis renvoie plutôt à la page des versions. Le terminal affiche la même commande. Fermer l'avis le masque pour cette version, et **N disponible** sous le numéro de version le fait réapparaître. `personagent up` et `personagent doctor` signalent aussi une nouvelle version. La page et `up` interrogent pypi.org au plus une fois par jour, en arrière-plan. `doctor` interroge immédiatement quand la dernière réponse date de plus d'un jour. Définissez `UPDATE_CHECK_ENABLED=false` pour désactiver la vérification. La vue **Application** peut également installer la mise à jour elle-même ; voir [Version et mises à jour](#version-et-mises-à-jour).
 
-La page démarre l'agent et les plateformes connectées en arrière-plan, alors gardez sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Tant qu'une application est connectée, fermer la fenêtre demande d'abord confirmation. Sous Windows, vous pouvez à la place faire en sorte que la fermeture de la fenêtre laisse personagent actif ; voir [Exécution en arrière-plan](#exécution-en-arrière-plan). Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
+La page démarre l'agent et les plateformes connectées en arrière-plan ; laissez donc sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Tant qu'une plateforme est connectée, la fermeture de la fenêtre demande d'abord confirmation. Sous Windows, vous pouvez à la place faire en sorte que la fermeture de la fenêtre laisse personagent actif ; voir [Exécution en arrière-plan](#exécution-en-arrière-plan). Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
 
 ### Réglages avancés
 
@@ -163,8 +163,8 @@ Tout ce que fait la page est aussi disponible depuis un terminal, ce qui convien
 | `personagent run` | le service seul, pour les connecteurs que vous exécutez vous-même |
 | `personagent up` | le service, les plateformes que personagent connecte lui-même et l'AstrBot géré, ensemble |
 | `personagent connect astrbot` | connecte un AstrBot (`--install` pour en télécharger un géré, `--start` pour le démarrer) |
-| `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | place le personnage dans un [agent de code](#agents-de-code) (`--react` pour des remarques à la fin d'un tour sur les deux premiers, `--remove` pour annuler) |
-| `personagent mcp` | le serveur MCP que démarre un agent de code ; vous ne le lancez pas vous-même |
+| `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | place le personnage dans un [assistant de programmation](#assistants-de-programmation) (`--react` pour des remarques à la fin d'un tour sur les deux premiers, `--remove` pour annuler) |
+| `personagent mcp` | le serveur MCP que démarre un assistant de programmation ; vous ne le lancez pas vous-même |
 | `personagent doctor` | vérifie la configuration et chaque service dont il dépend |
 | `personagent learned` | examine, promeut ou annule ce qu'il a appris |
 | `personagent eval` | mesure la prise de parole, la persona et l'apprentissage |
@@ -177,14 +177,14 @@ Toutes les commandes acceptent `--help`.
 
 - **Le service d'IA.** Les préréglages correspondent à ceux de la page. Le défaut est `openrouter/free` d'OpenRouter, qui confie chaque requête à l'un de ses modèles gratuits. La clé ne coûte rien. La limite est de 20 requêtes par minute et 50 par jour, ou 1000 par jour une fois que vous avez acheté au moins 10 crédits. Chaque appel au modèle compte, pas seulement les réponses, et la journée repart à minuit UTC. Une fois la limite atteinte, le personnage dit qu'il ne peut pas répondre pour l'instant, et `runtime/desktop/agent.log` contient la raison d'OpenRouter. Le modèle change d'une requête à l'autre, donc la voix du personnage varie plus qu'avec un modèle choisi, et certains fournisseurs gratuits conservent ce qu'ils reçoivent. Pour un personnage plus stable, utilisez un modèle payant avec la même clé. Si OpenRouter est difficile d'accès chez vous, `glm-4.7-flash` de Zhipu est aussi gratuit. Pour Ollama, nommez un modèle déjà téléchargé. Ollama ne nécessite pas de clé.
 - **La clé.** La saisie est masquée par défaut. Vous pouvez choisir de l'afficher, ce qui révèle aussi la clé enregistrée lors d'une reconfiguration. L'assistant teste la clé avec une petite requête. Si elle échoue, il montre l'adresse appelée, le statut HTTP et une correction probable.
-- **Le personnage.** Un nom, et l'un des sept personnages tout prêts (ami pince-sans-rire, oreille attentive, joueur, rat de bibliothèque, et trois que la communauté dessine déjà : la fille-baleine de DeepSeek, la fille-dragon GPT et la demoiselle Claude) ou un personnage simple à écrire vous-même. Si vous prenez l'un des trois derniers sans choisir de nom, le personnage porte son nom. La page locale affiche son portrait animé.
+- **Le personnage.** Un nom, et l'un des sept personnages prédéfinis (ami pince-sans-rire, interlocuteur attentionné, joueur, grand lecteur, ainsi que trois personnages que la communauté dessine déjà : la fille-baleine DeepSeek, la fille-dragon GPT et la demoiselle Claude), ou un personnage simple à rédiger vous-même. Si vous choisissez l'un des trois derniers sans indiquer de nom, le personnage porte le sien. La page locale affiche son portrait animé.
 - **AstrBot.** Facultatif, et vous pouvez le passer la première fois. Voir [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même).
 
 Pour configurer sans questions, par exemple dans un script, exécutez `personagent init --no-input` avec `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` et `--persona`. Sur un nouveau dossier personnel, une clé venant de `--key-env` ou du `LLM_API_KEY` du shell a besoin de `--provider` ou `--base-url` pour indiquer à qui elle appartient. `--provider other` nécessite aussi `--base-url`. `personagent init --help` liste toutes les options. Si `personagent init` s'exécute sans terminal et sans aucune de ces options, il saute les questions, le signale et sort avec le code 2.
 
 ### Discuter dans le terminal
 
-`personagent chat` vous place dans une discussion de groupe simulée avec le personnage. Une ligne ordinaire est une conversation de groupe normale, et l'essai vous dit si le personnage s'y joindrait et pourquoi. Une ligne contenant son nom l'appelle :
+`personagent chat` vous place dans une discussion de groupe simulée avec le personnage. Une ligne ordinaire est un message de groupe normal, et l'essai indique si le personnage interviendrait et pourquoi. Une ligne contenant son nom l'appelle :
 
 ```text
 Alex> anyone around tonight?
@@ -204,7 +204,7 @@ Alex> Nova, the deploy failed again
 | `/reset` | effacer la discussion et ce que l'essai a appris |
 | `/quit` | quitter |
 
-Les lignes `/as` et `/admin` suivent aussi les règles de groupe, alors incluez le nom pour obtenir une réponse. Une ligne de moins de quatre caractères qui ne nomme pas le personnage ne compte pas pour la participation. Les [commandes de mémoire](#commandes-de-mémoire) fonctionnent ici aussi.
+Les lignes `/as` et `/admin` suivent également les règles de groupe ; incluez donc le nom pour obtenir une réponse. Une ligne de moins de quatre caractères qui ne nomme pas le personnage ne compte pas pour la participation. Les [commandes de mémoire](#commandes-de-mémoire) fonctionnent ici aussi.
 
 | Option | Rôle |
 |---|---|
@@ -240,7 +240,7 @@ When a friend vents, listen before offering advice.
 If you have not seen a film, say so instead of inventing an opinion.
 ```
 
-`AGENT_LANG` est l'un de `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` et `ru`. Il définit la persona de départ, la configuration en terminal, l'essai et la démo, `--help` et `doctor`, les commandes de mémoire et les réponses fixes. Les exemples, filtres et vérifications fournis sont en chinois pour `zh` et `zh-TW` et en anglais pour les autres. Il ne traduit pas votre persona. [.env.example](../.env.example) décrit chaque réglage.
+`AGENT_LANG` est l'un de `en`, `zh`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR` et `ru`. Il définit la fiche du personnage de départ, la configuration en terminal, l'essai et la démo, `--help` et `doctor`, les commandes de mémoire et les réponses fixes. Les exemples, filtres et vérifications fournis sont en chinois pour `zh` et `zh-TW` et en anglais pour les autres. Il ne traduit pas votre fiche du personnage. [.env.example](../.env.example) décrit chaque réglage.
 
 Le menu de langue en haut à droite de la page locale propose English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) et Русский. Il change la page, et le navigateur s'en souvient. Quand vous enregistrez les réglages, la langue de la page devient `AGENT_LANG`. Le personnage répond dans la langue qu'utilise la discussion. Ses prompts sont en anglais et en chinois. Les [commandes de mémoire](#commandes-de-mémoire) et les quelques réponses fixes, qui ne passent pas par le modèle, fonctionnent dans les dix langues.
 
@@ -258,7 +258,7 @@ Pour lui faire voir les images, définissez `VISION_MODEL`, `VISION_API_KEY` et 
 
 ## Le placer dans une discussion
 
-Ouvrez **Connecter des applis** sur la page locale et choisissez une plateforme. La page ne demande que les valeurs que vous copiez depuis la console de la plateforme. Elle les vérifie auprès de la plateforme, démarre la connexion et attend quelques secondes pour confirmer que la plateforme l'a acceptée. Si la plateforme refuse, la page le dit et n'enregistre rien. Les plateformes connectées sont listées en haut, où vous pouvez en reconfigurer une ou la déconnecter. Elles redémarrent chaque fois que la page ou `personagent up` démarre.
+Ouvrez **Connecter des plateformes** sur la page locale et choisissez une plateforme. La page ne demande que les valeurs que vous copiez depuis la console de la plateforme. Elle les vérifie auprès de la plateforme, démarre la connexion et attend quelques secondes pour confirmer que la plateforme l'a acceptée. Si la plateforme refuse, la page le dit et n'enregistre rien. Les plateformes connectées sont listées en haut, où vous pouvez en reconfigurer une ou la déconnecter. Elles redémarrent chaque fois que la page ou `personagent up` démarre.
 
 ```text
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
@@ -272,7 +272,7 @@ personagent connecte lui-même ces dix plateformes, dans un seul processus d'arr
 
 | Plateforme | Ce que vous faites |
 |---|---|
-| QQ | Scannez le code avec QQ mobile et confirmez. Cela crée un bot QQ officiel, ou en utilise un que vous avez déjà, et personagent récupère ses clés. **Coller des valeurs à la place** prend l'AppID et l'AppSecret d'un bot créé sur la [page des bots QQ](https://q.qq.com/qqbot/openclaw/login.html). |
+| QQ | Scannez le code avec QQ mobile et confirmez. Cela crée un bot QQ officiel, ou en utilise un que vous avez déjà, et personagent récupère ses clés. **Saisir les valeurs manuellement** prend l'AppID et l'AppSecret d'un bot créé sur la [page des bots QQ](https://q.qq.com/qqbot/openclaw/login.html). |
 | WeChat (personnel) | Scannez le code avec WeChat et confirmez la connexion. La connexion utilise l'API de bots iLink de Tencent et ne gère que les discussions individuelles, car WeChat ne transmet pas les messages de groupe à ces bots. |
 | Telegram | Créez un bot avec [@BotFather](https://t.me/BotFather) et collez son jeton. |
 | Discord | Dans le [Developer Portal](https://discord.com/developers/applications), copiez le jeton du bot et activez Message Content Intent. |
@@ -291,7 +291,7 @@ Les identifiants sont stockés dans `platforms/direct.json` du dossier personnel
 
 ### Autres plateformes, via l'AstrBot géré
 
-La première fois que vous connectez une autre plateforme, personagent télécharge [AstrBot](https://docs.astrbot.app) et un runtime Python 3.12 dédié dans `platforms/` du dossier personnel. Gardez la page ouverte pendant le téléchargement. AstrBot s'exécute ensuite en arrière-plan sans tableau de bord ni seconde connexion. Il n'a pas besoin d'un `uv` global et laisse le Python de personagent tranquille. Connecter une plateforme depuis la page permet aux groupes et messages privés de cette plateforme d'atteindre le personnage. Les listes d'autorisation des autres plateformes restent telles quelles.
+La première fois que vous connectez une autre plateforme, personagent télécharge [AstrBot](https://docs.astrbot.app) et un runtime Python 3.12 dédié dans `platforms/` du dossier personnel. Laissez la page ouverte pendant le téléchargement. AstrBot s'exécute ensuite en arrière-plan, sans tableau de bord ni seconde connexion. Il ne nécessite pas de `uv` global et ne modifie pas l'environnement Python de personagent. Connecter une plateforme depuis la page permet aux groupes et messages privés de cette plateforme d'atteindre le personnage. Les listes d'autorisation des autres plateformes restent telles quelles.
 
 | Groupe | Plateformes | Ce que vous fournissez |
 |---|---|---|
@@ -340,7 +340,7 @@ personagent connect astrbot <AstrBot data dir> --platform telegram --token <bot 
 
 **QQ via NapCat.** Cette voie utilise un compte QQ personnel au lieu d'un bot officiel. NapCat se connecte avec le compte et se relie à l'adaptateur `aiocqhttp` (OneBot v11) d'AstrBot, avec son WebSocket inverse à `ws://127.0.0.1:6199/ws`. Choisir QQ dans `personagent connect astrbot`, ou passer `--qq` avec un dossier, retire `aiocqhttp` de `excluded_platforms` du plugin et définit `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Les discussions QQ gardent alors les mêmes identités et la même mémoire. Le serveur HTTP de NapCat (`QQ_ONEBOT_URL`) est facultatif. Avec lui et `QQ_BOT_ID` définis, personagent rattrape les mentions manquées hors ligne. Le [guide pas à pas en chinois](deploy.zh-CN.md#第三方路线astrbot--napcat) contient une courte section sur cette voie. Les clients QQ tiers mettent le compte en danger, alors lisez d'abord l'[avertissement](DISCLAIMER.fr.md).
 
-La voie directe OneBot (`/v1/onebot`) est obsolète et reste pendant toute la 1.x. Elle envoie les réponses via `QQ_ONEBOT_URL`, alors définissez-le si vous l'utilisez encore. `personagent doctor` avertit quand la voie semble configurée sans lui. Ne l'exécutez jamais en même temps que le transfert AstrBot, sinon chaque message arrive deux fois.
+La voie directe OneBot (`/v1/onebot`) est obsolète et reste pendant toute la 1.x. Elle envoie les réponses via `QQ_ONEBOT_URL` ; définissez-le donc si vous l'utilisez encore. `personagent doctor` avertit quand la voie semble configurée sans lui. Ne l'exécutez jamais en même temps que le transfert AstrBot, sinon chaque message arrive deux fois.
 
 **AstrBot dans Docker ou sur un autre hôte.** Le plugin n'envoie qu'au même hôte (ou à un conteneur partageant son réseau), ou à une adresse HTTPS avec `connector_token` défini. Il refuse `http://` en clair partout ailleurs, comme `http://host.docker.internal:8080`, journalise `refusing unsafe personagent_url` et laisse le modèle d'AstrBot répondre. Il y a deux solutions :
 
@@ -353,9 +353,9 @@ personagent écoute sur `127.0.0.1:8080`, et un `SERVER_HOST` vide signifie la m
 
 ### Parler en premier
 
-Certains messages ne répondent à personne. Ce sont les prises de parole (`PROACTIVE_ENABLED`, désactivé par défaut), la question de suivi après un rejet et l'excuse envoyée quand le modèle échoue dans un groupe. En message privé, l'excuse repart dans la réponse au message en attente. personagent met ces messages dans une boîte d'envoi, et les connecteurs les récupèrent et les envoient sur les plateformes qui laissent un bot parler en premier. Les comptes officiels WeChat et les bots intelligents WeCom ne le permettent pas. QQ limite le débit des messages spontanés d'un bot officiel, et les utilisateurs peuvent les désactiver. `PROACTIVE_PLATFORMS=qq_official` limite les prises de parole au bot QQ officiel, et `qq` à QQ via NapCat. Sur la page, **Parler parfois en premier** sous **Autres fonctions** écrit les deux réglages. Voir le [guide de déploiement](deploy.fr.md#plusieurs-plateformes).
+Certains messages ne répondent à personne. Ce sont les prises de parole (`PROACTIVE_ENABLED`, désactivé par défaut), la question de suivi après un rejet et l'excuse envoyée quand le modèle échoue dans un groupe. En message privé, l'excuse repart dans la réponse au message en attente. personagent met ces messages dans une boîte d'envoi, et les connecteurs les récupèrent et les envoient sur les plateformes qui laissent un bot parler en premier. Les comptes officiels WeChat et les bots intelligents WeCom ne le permettent pas. QQ limite le débit des messages spontanés d'un bot officiel, et les utilisateurs peuvent les désactiver. `PROACTIVE_PLATFORMS=qq_official` limite les prises de parole au bot QQ officiel, et `qq` à QQ via NapCat. Sur la page, **Prendre parfois la parole en premier** sous **Autres fonctions** écrit les deux réglages. Voir le [guide de déploiement](deploy.fr.md#plusieurs-plateformes).
 
-## Agents de code
+## Assistants de programmation
 
 Codex, Claude Code et DeepSeek Harness (`dsh`) atteignent le personnage via MCP. Avec une clé de modèle enregistrée, exécutez une ou plusieurs de ces commandes :
 
@@ -365,7 +365,7 @@ personagent connect codex
 personagent connect dsh
 ```
 
-La première appelle `claude mcp add` à la portée utilisateur. La deuxième écrit dans `config.toml` du dossier de Codex (`CODEX_HOME` ou `~/.codex`). La troisième ajoute une entrée à `cordis.patch.yml` dans chaque profil sous `DSH_HOME` ou `~/.dsh`. Chaque façon d'exécuter DeepSeek Harness, comme l'application de bureau ou `dsh web`, obtient son profil au premier démarrage, alors démarrez-le une fois avant de connecter, et redémarrez-le ensuite. Les trois nomment cette installation et ce dossier personnel, alors relancez la commande si vous déplacez l'un ou l'autre, avec `--react` si vous l'avez utilisé : une exécution sans lui retire le hook. Démarrez une nouvelle session, puis demandez à l'agent de code de dire quelque chose à votre personnage.
+La première appelle `claude mcp add` à la portée utilisateur. La deuxième écrit dans `config.toml` du dossier de Codex (`CODEX_HOME` ou `~/.codex`). La troisième ajoute une entrée à `cordis.patch.yml` dans chaque profil sous `DSH_HOME` ou `~/.dsh`. Chaque façon d'exécuter DeepSeek Harness, comme l'application de bureau ou `dsh web`, obtient son profil au premier démarrage ; démarrez-le donc une fois avant la connexion, puis redémarrez-le. Les trois désignent cette installation et ce dossier personnel ; relancez donc la commande si vous déplacez l'un ou l'autre, avec `--react` si vous l'avez utilisé : une exécution sans lui retire le hook. Démarrez une nouvelle session, puis demandez à l'assistant de programmation de dire quelque chose à votre personnage.
 
 **Depuis la page locale.** **Assistants de programmation**, en bas de **Connecter des plateformes**, détecte Claude Code, Codex et DeepSeek Harness sur cet ordinateur et indique si chacun est connecté. **Connecter** (ou **Réparer** et **Mettre à jour** pour une configuration existante) et **Retirer** effectuent les mêmes opérations que les commandes ci-dessus et `--remove`, après avoir demandé confirmation. Une reconnexion conserve le réglage des remarques tel qu'il était. Sur Claude Code et Codex, **Formuler une remarque à la fin de chaque tour** active ou désactive le hook `--react`, et **Intervalle minimal entre les remarques** règle `CODING_REACT_COOLDOWN_S` sur 10 minutes, 30 minutes, 1 heure ou 2 heures. **Vérifier à nouveau** relit l'état, par exemple après l'installation de l'un de ces outils.
 
@@ -373,7 +373,7 @@ Il dispose de deux outils :
 
 | Outil | Rôle | Coût |
 |---|---|---|
-| `talk` | un message dans la même discussion individuelle que la page locale, avec la même mémoire. Les tours dits depuis un agent de code apparaissent dans Discussion de la page après rechargement, quand c'est la page qui a répondu. Les commandes de mémoire comme `Nova, what do you remember?` fonctionnent ici aussi. | une réponse de votre service de modèles, sauf pour les commandes de mémoire |
+| `talk` | un message dans la même discussion individuelle que la page locale, avec la même mémoire. Les tours envoyés depuis un assistant de programmation apparaissent dans la vue **Discussion** de la page après rechargement, quand c'est la page qui a répondu. Les commandes de mémoire comme `Nova, what do you remember?` fonctionnent ici aussi. | une réponse de votre service de modèles, sauf pour les commandes de mémoire |
 | `character` | lit le nom et `persona.txt` | rien |
 
 Claude Code et Codex demandent avant le premier `talk`, et vous pouvez l'autoriser pour la suite dans cette invite. `dsh headless` ne demande pas. Une exécution sans personne pour répondre a besoin de l'autorisation à l'avance : `claude -p` prend `--allowedTools mcp__personagent__talk`, et `codex exec` a besoin de ceci dans `config.toml` :
@@ -383,22 +383,22 @@ Claude Code et Codex demandent avant le premier `talk`, et vous pouvez l'autoris
 approval_mode = "approve"
 ```
 
-**Ce qui répond.** Une page ouverte répond d'abord, puis un service que `personagent up` exécute. Sans l'un ni l'autre, le serveur MCP démarre la page en arrière-plan, et la page se termine avec la session de code, ainsi que les applications de discussion connectées. Deux sessions simultanées partagent une page. Lancer `personagent` pendant qu'une telle page est active affiche son lien, et la page se termine toujours avec la session qui l'a démarrée. N'exécutez pas `personagent up` pendant qu'une telle page est active : terminez d'abord la session de code.
+**Ce qui répond.** Une page ouverte répond d'abord, puis un service que `personagent up` exécute. Sans l'un ni l'autre, le serveur MCP démarre la page en arrière-plan, et la page se termine avec la session de programmation, ainsi que les plateformes de discussion connectées. Deux sessions simultanées partagent une page. Lancer `personagent` pendant qu'une telle page est active affiche son lien, et la page se termine toujours avec la session qui l'a démarrée. N'exécutez pas `personagent up` pendant qu'une telle page est active : terminez d'abord la session de programmation.
 
-**Remarques à la fin d'un tour.** Sur Claude Code et Codex, `--react` ajoute un hook Stop. DeepSeek Harness ne le prend pas en charge : son pont de hooks ne transmet pas le dernier message à un hook Stop et n'affiche pas la sortie du hook. Quand l'agent de code termine un tour, le personnage reçoit un [signal proactif](connectors.fr.md#parler-en-premier-sans-la-boîte-denvoi) et vous dit une phrase ou passe. La phrase vous est adressée et ne va pas à l'agent de code.
+**Remarques à la fin d'un tour.** Sur Claude Code et Codex, `--react` ajoute un hook Stop. DeepSeek Harness ne le prend pas en charge : son pont de hooks ne transmet pas le dernier message à un hook Stop et n'affiche pas la sortie du hook. Quand l'assistant de programmation termine un tour, le personnage reçoit un [signal proactif](connectors.fr.md#parler-en-premier-sans-la-boîte-denvoi) et vous dit une phrase ou passe. La phrase vous est adressée et ne va pas à l'assistant de programmation.
 
 ```bash
 personagent connect claude-code --react
 ```
 
-- Le signal contient le nom du dossier et les 300 premiers caractères du dernier message de l'agent de code, donc ce texte va à votre service de modèles. La phrase, et ce que le modèle note à partir du signal, restent dans la mémoire du personnage. C'est pourquoi c'est désactivé par défaut.
+- Le signal contient le nom du dossier et les 300 premiers caractères du dernier message de l'assistant de programmation, donc ce texte va à votre service de modèles. La phrase, et ce que le modèle note à partir du signal, restent dans la mémoire du personnage. C'est pourquoi c'est désactivé par défaut.
 - Cela coûte un appel au modèle à chaque fois, au plus une fois par `CODING_REACT_COOLDOWN_S` (30 minutes par défaut).
 - Cela n'utilise qu'un service de personnage déjà en cours d'exécution et n'en démarre jamais.
 - Codex n'exécute un nouveau hook qu'après que vous lui avez fait confiance : tapez `/hooks` dans une session Codex.
 
-**Ce qu'il faut garder en tête.** `talk` envoie ce qu'écrit l'agent de code à votre service de modèles et dans la mémoire du personnage. La description de l'outil dit à l'agent de code de n'envoyer que ce que vous voulez dire, jamais de code ni de secrets, et de traiter les réponses comme de la conversation et non comme des instructions, car les notes d'un personnage peuvent venir de ce que les gens ont dit dans vos groupes. Ce sont des instructions à un modèle, pas une garantie, alors gardez les invites d'autorisation de l'agent de code pour tout ce qu'il ferait avec une réponse. La discussion de la page est celle de l'administrateur : ce qu'un agent de code envoie au moyen de `talk` est donc également considéré comme provenant de l'administrateur. Ses seules corrections peuvent suffire à instruire le personnage, et il peut lui faire oublier n'importe quelle note.
+**Ce qu'il faut garder en tête.** `talk` envoie ce qu'écrit l'assistant de programmation à votre service de modèles et dans la mémoire du personnage. La description de l'outil dit à l'assistant de programmation de n'envoyer que ce que vous voulez dire, jamais de code ni de secrets, et de traiter les réponses comme de la conversation et non comme des instructions, car les notes d'un personnage peuvent venir de ce que les gens ont dit dans vos groupes. Il s'agit d'instructions données à un modèle, et non d'une garantie ; conservez donc les invites d'autorisation de l'assistant de programmation pour tout ce qu'il ferait avec une réponse. La discussion de la page est celle de l'administrateur : ce qu'un assistant de programmation envoie au moyen de `talk` est donc également considéré comme provenant de l'administrateur. Ses seules corrections peuvent suffire à instruire le personnage, et il peut lui faire oublier n'importe quelle note.
 
-**Annuler.** `--remove` retire le serveur et le hook et laisse le reste de la configuration de l'agent de code tel quel. Faites-le avant de désinstaller personagent.
+**Annuler.** `--remove` retire le serveur et le hook et laisse le reste de la configuration de l'assistant de programmation tel quel. Faites-le avant de désinstaller personagent.
 
 ```bash
 personagent connect claude-code --remove
@@ -435,7 +435,7 @@ Seules la personne concernée par une note, celle qui l'a enregistrée et l'admi
 
 Ces commandes fonctionnent aussi en message privé, avec le nom devant comme dans un groupe. Les notes d'un groupe sur vous vous y suivent : elles servent à ses réponses pour vous, `what do you remember` les liste et `forget` les supprime. Rien ne va dans l'autre sens. Ce que vous lui dites en message privé reste dans ce message privé.
 
-Un groupe ne lit pas les notes d'un autre sauf si vous activez **Partager la mémoire entre les groupes** sous **Autres fonctions** (`MEMORY_SHARE_ROOMS`, désactivé par défaut). Ce qu'un groupe a noté sur quelqu'un revient alors aussi dans les autres groupes où cette personne parle, et dans ces groupes `what do you remember` le liste, devant tous les présents, et `forget` le supprime. Les messages privés et les notes sur tout un groupe restent où ils sont, et un compte sur une application n'est pas relié au compte de la même personne sur une autre.
+Un groupe ne lit pas les notes d'un autre sauf si vous activez **Partager la mémoire entre les groupes** sous **Autres fonctions** (`MEMORY_SHARE_ROOMS`, désactivé par défaut). Ce qu'un groupe a noté sur quelqu'un revient alors aussi dans les autres groupes où cette personne parle, et dans ces groupes `what do you remember` le liste, devant tous les présents, et `forget` le supprime. Les messages privés et les notes sur tout un groupe restent où ils sont, et un compte sur une plateforme n'est pas relié au compte de la même personne sur une autre.
 
 `forget` retire aussi les phrases correspondantes de la note principale de la discussion, le court résumé présent dans chaque prompt. Dans un groupe, cela exige l'administrateur ou une phrase qui vous nomme.
 
@@ -471,7 +471,7 @@ Nova:  fair. that's a rough end to the day
 Alex:  haha yeah it is, thanks Nova
 ```
 
-Un appel au modèle juge chaque réaction par rapport à la réponse à laquelle elle répond. Le rejet d'Alex dit que le conseil était à côté. Alex accepte ensuite le second essai, ce qui compte comme fort parce que la réponse était pour Alex. Ensemble, les deux réactions promeuvent la correction pour cette discussion, et la recherche peut la proposer la prochaine fois que quelqu'un y vide son sac. Si Alex était passé à autre chose, rien ne changerait. La règle :
+Un appel au modèle juge chaque réaction par rapport à la réponse à laquelle elle répond. Le rejet d'Alex dit que le conseil était à côté. Alex accepte ensuite le second essai, ce qui compte comme fort parce que la réponse était pour Alex. Ensemble, les deux réactions promeuvent la correction pour cette discussion, et la recherche peut la proposer la prochaine fois que quelqu'un y exprime sa frustration. Si Alex était passé à autre chose, rien ne changerait. La règle :
 
 > Un seul message ne lui apprend jamais rien. Un changement nécessite deux réactions concordantes de la même discussion, et au moins une doit être forte : la personne à qui s'adressait la réponse la corrige avec ses propres mots, ou accepte le prochain essai du bot. Un rire, la correction d'un spectateur, l'instruction d'un inconnu que le juge des réactions écarte, ou quelqu'un qui passe à autre chose n'est jamais fort. Donc avec le `PROMOTE_MIN_SPEAKERS=1` par défaut, une personne ne peut lui apprendre que comment lui répondre à elle, dans sa propre discussion. `PROMOTE_MIN_SPEAKERS=2` exige l'accord d'une seconde personne avant tout changement (l'administrateur en est dispensé). Quand les corrections de deux personnes divergent, rien ne change tant que l'administrateur n'a pas décidé.
 
@@ -512,7 +512,7 @@ personagent learned lineage                   # persona revisions that share wha
 personagent learned rebuild                   # re-derive the views retrieval reads from the ledger
 ```
 
-`promote`, `reject`, `rollback` et `supersede` prennent `--reason`, qui est écrit dans le registre. `promote` refuse une réécriture pour une réponse qui en a déjà une en usage, et affiche la commande `supersede` qui la remplace. Dans la vue Activité, **Garder** la remplace pour vous.
+`promote`, `reject`, `rollback` et `supersede` prennent `--reason`, qui est écrit dans le registre. `promote` refuse une réécriture pour une réponse qui en a déjà une en usage, et affiche la commande `supersede` qui la remplace. Dans la vue **Activité**, **Conserver** la remplace pour vous.
 
 ### Les valeurs par défaut
 
@@ -527,14 +527,14 @@ Modifier `persona.txt` conserve ce qu'il a appris. Changer `PERSONA_NAME` ou `PE
 
 ## Activité
 
-**Activité** sur la page locale montre où se trouve le personnage et ce qu'il a fait. Elle se trouve dans la barre latérale entre **Discussion** et **Connecter des applis**. Un point ambré signifie que quelque chose attend votre décision.
+**Activité** sur la page locale montre où se trouve le personnage et ce qu'il a fait. Elle se trouve dans la barre latérale entre **Discussion** et **Connecter des plateformes**. Un point ambré signifie que quelque chose attend votre décision.
 
 La vue liste chaque discussion connue du personnage, avec la plateforme, s'il s'agit d'un groupe ou d'un message privé, la fin de l'identifiant de discussion et la dernière activité. La discussion de la page elle-même apparaît comme **Cette page**. Un nombre à côté d'une discussion indique combien d'éléments y attendent. Choisissez une discussion pour voir quatre parties :
 
-- **À vous de décider** contient les changements qui ne remplissent pas encore la règle de promotion (deux réactions concordantes de la même discussion, dont une forte). Chacun est soit un **Meilleure formulation**, avec ce qu'il a dit barré et ce qu'il faut dire à la place, soit un **Réponse à reproduire**. Il montre aussi qui a réagi. **Garder** met le changement en usage et remplace toute réécriture déjà en usage pour cette réponse. **Rejeter** le rejette.
-- **Appris** liste ce qui est en usage. **Annuler** annule un changement.
-- **Ce qu'il retient** montre ses notes de mémoire pour cette discussion, de qui elles parlent et qui les a ajoutées, ainsi que la note principale. **Oublier** en supprime une. En message privé, cela inclut ce que les groupes ont noté sur cette personne.
-- **Récent** montre les derniers messages et ses réponses. Chaque réponse porte une étiquette indiquant pourquoi il a parlé : **appelé**, **intervenu de lui-même**, **suite**, **spontané** ou **admin**. Les lignes qu'il a laissé passer montrent pourquoi il s'est tu. L'activité récente n'est gardée qu'en mémoire, donc un redémarrage l'efface.
+- **En attente de votre décision** contient les changements qui ne remplissent pas encore la règle de promotion (deux réactions concordantes de la même discussion, dont une forte). Chacun est soit une **Meilleure formulation**, avec la réponse initiale barrée et la formulation à employer à la place, soit une **Réponse à reproduire**. Chaque élément indique aussi qui a réagi. **Conserver** met le changement en usage et remplace toute réécriture déjà en usage pour cette réponse. **Rejeter** le rejette.
+- **Apprentissages** liste ce qui est en usage. **Annuler** annule un changement.
+- **Mémoire** montre ses notes de mémoire pour cette discussion, de qui elles parlent et qui les a ajoutées, ainsi que la note principale. **Oublier** en supprime une. En message privé, cela inclut ce que les groupes ont noté sur cette personne.
+- **Activité récente** montre les derniers messages et ses réponses. Chaque réponse porte une étiquette indiquant pourquoi il a parlé : **appelé**, **intervenu de sa propre initiative**, **suite**, **sujet lancé spontanément** ou **administrateur**. Les lignes qu'il a laissé passer montrent pourquoi il s'est tu. L'activité récente n'est conservée qu'en mémoire vive ; un redémarrage l'efface donc.
 
 Chaque **Conserver**, **Rejeter** et **Annuler** est écrit dans le même registre que `personagent learned`, avec l'acteur `dashboard` et la raison `local page`.
 
@@ -547,11 +547,11 @@ Sous les discussions, **Apprentissages du personnage** liste tout ce que le pers
 
 Lorsque le personnage est en cours d'exécution, une décision passe par lui. Sinon, elle est écrite directement dans les fichiers. Le terminal donne accès au même enregistrement ; voir [Examiner et annuler](#examiner-et-annuler).
 
-La liste des discussions reste vide tant que le personnage ne tourne pas. Il démarre quand vous discutez sur la page ou connectez une application, et la vue vous le dit. `DASHBOARD_ENABLED=false` désactive les données derrière la vue. La vue dit alors qu'elle est désactivée, et `personagent doctor` signale `activity: off`.
+La liste des discussions reste vide tant que le personnage n'est pas en cours d'exécution. Il démarre lorsque vous discutez sur la page ou connectez une plateforme, et la vue l'indique. `DASHBOARD_ENABLED=false` désactive les données derrière la vue. La vue dit alors qu'elle est désactivée, et `personagent doctor` signale `activity: off`.
 
 La page locale ne répond que sur cet ordinateur. Sur un serveur sans page locale, utilisez `personagent learned` pour examiner et annuler ce qu'il a appris. Les scripts peuvent lire les mêmes données via l'API du service, décrite dans la [section Activité](deploy.fr.md#activité) du guide de déploiement.
 
-![La vue Activité d'une discussion de groupe : deux éléments qui vous attendent, une meilleure formulation et une réponse à réutiliser, chacun avec garder et écarter ; un élément appris avec annuler ; une note de mémoire ; et les lignes récentes, avec pourquoi il a parlé ou s'est tu](activity.png)
+![La vue Activité d'une discussion de groupe : deux éléments qui vous attendent, une meilleure formulation et une réponse à réutiliser, chacun avec conserver et rejeter ; un élément appris avec annuler ; une note de mémoire ; et les lignes récentes, avec pourquoi il a parlé ou s'est tu](activity.png)
 
 ## Le mesurer
 
@@ -580,15 +580,15 @@ Les derniers résultats, avec la méthode et tous les rapports, se trouvent dans
 - Dans `persona`, un partage signifie que le juge a choisi la réponse venue en premier (ou en second) les deux fois. Les verdicts publiés sont ceux de Claude Opus 5.5. Il a jugé hors de `personagent eval`, par lots, comme l'enregistre le champ `rejudged` de chaque rapport. Le champ `earlier` de chaque paire garde le verdict du premier juge, Claude Haiku 5.5.
 - Dans `learning`, la ligne de politique et les lignes de sonde répondent à des questions différentes. La ligne de politique demande si la règle a promu les bonnes corrections. Les lignes de sonde demandent si une correction promue a changé une réponse ultérieure. La ligne de sonde `not_promoted` est le niveau de bruit, puisque rien n'a changé dans son prompt.
 
-## Comment ça marche
+## Fonctionnement
 
 ![Architecture : un message de discussion de groupe passe par Décider, Construire le prompt, Modèle et Vérifier, et la réponse revient par le connecteur ; si le bot se tait, rien n'est envoyé. Les réactions sont jugées et vont dans un journal de preuves, et seul ce que la promotion approuve atteint les exemples que lit le prompt](persona_llm_agent_architecture.svg)
 
 Toutes les plateformes entrent par un seul endpoint. Chaque message est authentifié, dédoublonné et enrichi, c'est-à-dire que les images sont décrites et les liens développés. Vient ensuite l'étape de décision. Si le bot a été appelé, il répond. Sinon, il attend assez de conversation (30 messages par défaut), et un appel de filtrage peu coûteux à `LLM_JUDGE_MODEL` décide si une personne interviendrait. Une rafale de messages reçoit une seule réponse, à la dernière ligne. Entre 02:00 et 07:00, il reste le plus souvent en retrait sauf s'il est appelé.
 
-Le prompt combine la persona, les entrées correspondantes du lorebook, la mémoire de cette conversation et les exemples les plus pertinents. Le modèle répond en JSON avec `reasoning`, `intent`, `reply` et `mem`. La réponse passe le filtre de sortie et la politique du personnage, puis est découpée en messages de la taille d'une discussion. Une réponse mal formée échoue en sécurité, donc rien n'est envoyé.
+Le prompt combine la fiche du personnage, les entrées correspondantes du lorebook, la mémoire de cette conversation et les exemples les plus pertinents. Le modèle répond en JSON avec `reasoning`, `intent`, `reply` et `mem`. La réponse passe le filtre de sortie et la politique du personnage, puis est découpée en messages de la taille d'une discussion. Une réponse mal formée échoue en sécurité, donc rien n'est envoyé.
 
-L'apprentissage tourne à côté de ce chemin, jamais à l'intérieur, et garde son état dans des fichiers simples sous `runtime/` dans le dossier personnel. Les réactions vont dans un journal de preuves qui n'est jamais réécrit. Leur arbitrage produit des candidats, et la politique de promotion décide lesquels peuvent changer les réponses. Les candidats promus sont écrits dans de petits fichiers de vue que la recherche recharge sans redémarrage. Aucun modèle n'est affiné. Le personnage apprend en améliorant les exemples de son prompt. Comme les registres sont en ajout seul, « pourquoi parle-t-il comme ça ? » a toujours une réponse, et une annulation a toujours quelque chose à annuler.
+L'apprentissage s'exécute à côté de ce chemin, jamais à l'intérieur, et garde son état dans des fichiers simples sous `runtime/` dans le dossier personnel. Les réactions vont dans un journal de preuves qui n'est jamais réécrit. Leur arbitrage produit des candidats, et la politique de promotion décide lesquels peuvent changer les réponses. Les candidats promus sont écrits dans de petits fichiers de vue que la recherche recharge sans redémarrage. Aucun modèle n'est affiné. Le personnage apprend en améliorant les exemples de son prompt. Comme les registres sont en ajout seul, « pourquoi s'exprime-t-il ainsi ? » a toujours une réponse, et une annulation a toujours quelque chose à annuler.
 
 ## Confidentialité et consentement
 
@@ -601,7 +601,7 @@ Au plus une fois par jour, la page locale, `personagent up` et `personagent doct
 Le fournisseur de modèles voit les conversations :
 
 - Le contexte de discussion va à votre `LLM_BASE_URL`.
-- Si vous configurez un repli (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), il est aussi appelé lors des tours ordinaires pour le filtre de réponse, les décisions de recherche, le jugement des réactions, l'auto-évaluation et l'étiquetage des stickers, et il reçoit aussi le contexte de discussion.
+- Si vous configurez un repli (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), il est aussi appelé lors des tours ordinaires pour le filtre de réponse, les décisions de recherche, le jugement des réactions, l'auto-évaluation et l'étiquetage des autocollants, et il reçoit aussi le contexte de discussion.
 - Les images vont à l'endpoint de vision.
 - Quand le modèle décide de chercher quelque chose, la requête va à Tavily (si `TAVILY_API_KEY` est défini) ou à DuckDuckGo.
 - Avec `EMBEDDING_MODEL` défini, le message auquel il répond, les souvenirs et les exemples de recherche vont à l'endpoint d'embeddings (`EMBEDDING_BASE_URL`, ou `LLM_BASE_URL` s'il est vide).
@@ -616,7 +616,7 @@ Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obt
 
 **Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personnel, et la vue **Application** les affiche sous **Journaux**.
 
-**Il tourne mais ne répond jamais.** Les trois causes les plus courantes sont :
+**Il est en cours d'exécution mais ne répond jamais.** Les trois causes les plus courantes sont :
 
 1. L'agent est désactivé. La bannière de `personagent run` affiche alors `OFF` et nomme la cause, généralement une `LLM_API_KEY` manquante. Définissez la clé sur la page locale ou exécutez `personagent init`.
 2. Rien n'arrive. Sur l'ordinateur qui exécute la page locale, ouvrez [Activité](#activité) et cherchez la discussion. Sur un serveur, mentionnez le bot par son nom et vérifiez le journal du service : il consigne chaque réponse et chaque discussion refusée. Si aucun message n'est arrivé, le connecteur ne les transmet pas ou n'atteint pas personagent. Sur QQ, vérifiez dans QQ lui-même quels messages de groupe le bot reçoit. Avec un AstrBot que vous exécutez, le plugin ne transmet que les `groups` et `dm_users` qu'il liste, et pour NapCat, `aiocqhttp` ne doit pas être dans ses `excluded_platforms`. Vérifiez aussi le `personagent_url` du plugin, et que `CONNECTOR_TOKEN` correspond des deux côtés.
@@ -624,7 +624,7 @@ Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obt
 
 Le guide de déploiement contient [la liste de contrôle complète](deploy.fr.md#quand-le-bot-se-tait).
 
-**Est-il en marche ?** `curl http://127.0.0.1:8080/health` répond sans appeler de modèle. `/health/details` sonde aussi les services et exige un en-tête `X-Personagent-Token` dès qu'un jeton est configuré.
+**Le service est-il actif ?** `curl http://127.0.0.1:8080/health` répond sans appeler de modèle. `/health/details` sonde aussi les services et exige un en-tête `X-Personagent-Token` dès qu'un jeton est configuré.
 
 **Il ne démarre pas.** `personagent run` s'arrête avec une phrase qui dit pourquoi. Les raisons habituelles sont un port déjà utilisé, un autre personagent lancé depuis le même dossier personnel, une adresse réseau définie sans `CONNECTOR_TOKEN`, ou un réglage retiré en 1.0 encore défini. Les réglages retirés sont listés un par ligne sous la forme `OLD -> NEW`, et `personagent doctor --fix` les renomme, tout comme **Renommer les réglages** dans la vue **Application**. Lorsque le personnage démarré depuis la page échoue, la vue **Application** nomme l'élément défaillant et affiche la dernière ligne de son journal. La page et `personagent up` choisissent un port libre quand 8080 est pris.
 

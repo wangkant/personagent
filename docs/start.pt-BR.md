@@ -4,57 +4,57 @@
 
 ## Abrir
 
-Instale o personagent pelo PyPI e abra:
+Instale o personagent pelo PyPI e abra-o:
 
 ```sh
 python -m pip install personagent
 personagent
 ```
 
-Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` executa sem uma etapa de instalação separada.
+Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` o executa sem uma etapa de instalação separada.
 
-No Windows, a página abre em uma janela própria. No macOS e no Linux, ela abre no seu navegador; `pip install "personagent[app]"` dá a ela uma janela lá também.
+No Windows, a página abre em uma janela própria. No macOS e no Linux, ela abre no navegador; `pip install "personagent[app]"` permite que ela também abra em uma janela própria nesses sistemas.
 
-Um agente de programação pode fazer a configuração por você: peça que ele leia [setup-for-agents.md](setup-for-agents.md) e configure o personagent.
+Um assistente de programação pode fazer a configuração por você: peça que ele leia [setup-for-agents.md](setup-for-agents.md) e configure o personagent.
 
-No Windows, você também pode baixar o ZIP do código-fonte, descompactar e clicar duas vezes em `start.bat`. Ele cria um ambiente Python próprio na pasta e abre a mesma página. Na primeira vez, ele também coloca um ícone do personagent na sua área de trabalho e no menu Iniciar.
+No Windows, você também pode baixar o ZIP do código-fonte, descompactá-lo e clicar duas vezes em `start.bat`. Ele cria um ambiente Python próprio na pasta e abre a mesma página. Na primeira vez, ele também adiciona um ícone do personagent à área de trabalho e ao menu Iniciar.
 
-Para executar a partir de um clone, dê a ele um venv próprio: `python -m venv .venv`, depois `.venv/bin/python -m pip install -e .` e `.venv/bin/python -m persona_agent`. No Windows, o interpretador é `.venv\Scripts\python.exe`, ou você pode clicar duas vezes em `start.bat`.
+Para executá-lo a partir de um clone, crie para ele um venv próprio: `python -m venv .venv`, depois `.venv/bin/python -m pip install -e .` e `.venv/bin/python -m persona_agent`. No Windows, o interpretador é `.venv\Scripts\python.exe`, ou você pode clicar duas vezes em `start.bat`.
 
 ## Adicione uma chave e converse
 
-Escolha um serviço de modelos, cole a chave de API dele e clique em **Verificar e começar a conversar**. Os modelos gratuitos do OpenRouter e o personagem ouvinte acolhedor vêm selecionados no início. A chave é gratuita e o limite é de 50 solicitações por dia. **Configurações avançadas** contém o nome do modelo e o endereço da API, e **Escolha um nome ou personalidade** contém o nome e a personalidade do personagem.
+Escolha um serviço de modelo, cole a chave de API dele e clique em **Verificar e iniciar a conversa**. Os modelos gratuitos do OpenRouter e o personagem Ouvinte acolhedor vêm selecionados inicialmente. A chave é gratuita, e o limite é de 50 solicitações por dia. **Configurações avançadas** contém o nome do modelo e o endereço da API, e **Escolher um nome ou uma personalidade** contém o nome e a personalidade do personagem.
 
-A chave fica no seu computador; clique em **Mostrar** para conferir. As mensagens do chat vão para o serviço de modelos que você escolher, pelas tarifas normais desse serviço.
+A chave permanece no seu computador; clique em **Mostrar** para conferi-la. As mensagens da conversa são enviadas ao serviço de modelo que você escolher, pelas tarifas habituais desse serviço.
 
-Seu personagem responde na página. Suas configurações ficam salvas, então a próxima abertura vai direto para o chat.
+O personagem responde na página. As configurações ficam salvas, de modo que a próxima abertura leva diretamente à conversa.
 
-Depois de configurado, **Personagem e configurações** tem uma caixa **Persona** com o texto em que o personagem se baseia. Reescreva quem ele é e como fala, depois clique em **Salvar persona**. A mudança vale na hora, e o que o personagem aprendeu é mantido.
+Após a configuração, **Personagem e configurações** apresenta uma caixa **Persona** com o texto que define o personagem. Reescreva quem ele é e como se expressa e, em seguida, clique em **Salvar a persona**. A alteração entra em vigor imediatamente, e o que o personagem aprendeu é mantido.
 
-Abaixo, **Mais recursos** ativa a busca na web, a compreensão de imagens e falar primeiro. A busca usa o DuckDuckGo por padrão; uma chave do Tavily a torna mais confiável. Logo abaixo, **Configurações avançadas** reúne as configurações que antes só estavam disponíveis no `.env`. Até você conectar um app, a visão **Conversa** mostra uma barra curta de primeiros passos.
+Abaixo dela, **Mais recursos** ativa a pesquisa na web, a compreensão de imagens e o início de conversas por iniciativa própria. A pesquisa usa o DuckDuckGo por padrão; uma chave do Tavily a torna mais confiável. Logo abaixo, **Configurações avançadas** reúne as configurações que antes só estavam disponíveis no `.env`. Até que você conecte uma plataforma, a visão **Conversa** mostra uma barra curta de **Primeiros passos**.
 
-Outras duas visões dispensam qualquer app. **Prática** reproduz uma demonstração roteirizada e oferece um grupo de prática, no qual é possível ver por que o personagem responde ou permanece em silêncio. **Aplicativo** verifica cada serviço de que o personagem depende, exibe os logs e reúne as atualizações, os backups e o ícone da área de trabalho.
+Outras duas visões não exigem nenhuma plataforma. **Prática** reproduz uma demonstração roteirizada e oferece um grupo de prática, no qual é possível ver por que o personagem responde ou permanece em silêncio. **Aplicativo** verifica cada serviço de que o personagem depende, exibe os logs e reúne as atualizações, os backups e o ícone da área de trabalho.
 
-## Leve para outros apps
+## Conecte outras plataformas
 
-1. Clique em **Conectar apps** e escolha um app. Depois de conectado, seu personagem responde nos grupos e nas mensagens diretas desse app.
-   - **Escanear para conectar**: QQ e WeChat pessoal. Clique em **Gerar QR code** e confirme no celular.
-     - QQ: escaneie com o QQ para celular. O QQ cria um bot ou deixa você escolher um que já tem, e o personagent busca as chaves dele. Se você mesmo criou o bot na [página de bots do QQ](https://q.qq.com/qqbot/openclaw/login.html), clique em **Colar valores em vez disso** e informe o AppID e o AppSecret.
-     - WeChat: escaneie com o WeChat. O bot só conversa um a um, porque o WeChat não repassa mensagens de grupo para esses bots.
-   - **Colar um ou dois valores**: Telegram (um token do @BotFather), Discord (um token de bot, com Message Content Intent ativado), KOOK, Feishu, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK e Stoat. A página diz quais valores copiar do console do app. Todo o resto usa os padrões. O Twitch também pede que você aprove um login por meio de um link.
-   - **Avançado**: apps do WeCom, contas oficiais do WeChat e webhooks do QQ precisam de um endereço público que encaminhe para a porta de callback deles. OneBot v11 (NapCat) e Satori precisam de outro software em execução neste computador.
-2. O personagent conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK e Stoat por conta própria. Os outros apps passam pelo AstrBot, uma ponte de terceiros. Na primeira vez que você conecta um deles, o personagent baixa o AstrBot com um ambiente Python 3.12 separado, então mantenha a página aberta até terminar. Depois, o AstrBot roda em segundo plano, sem painel para entrar.
-3. O personagent verifica as credenciais com o app antes de salvá-las. Se o app as recusar, a página avisa e nada é salvo.
-4. Os apps conectados ficam listados no topo de **Conectar apps**, onde você pode configurá-los de novo ou desconectá-los.
+1. Clique em **Conectar plataformas** e escolha uma plataforma. Após a conexão, o personagem responde nos grupos e nas conversas privadas dessa plataforma.
+   - **Conectar com QR code**: QQ e WeChat pessoal. Clique em **Gerar QR code** e confirme no celular.
+     - QQ: leia o código com o QQ no celular. O QQ cria um bot ou permite que você escolha um que já possui, e o personagent obtém as chaves dele. Se você mesmo criou o bot na [página de bots do QQ](https://q.qq.com/qqbot/openclaw/login.html), clique em **Colar valores manualmente** e informe o AppID e o AppSecret.
+     - WeChat: leia o código com o WeChat. O bot conversa apenas individualmente, porque o WeChat não repassa mensagens de grupo a esses bots.
+   - **Colar um ou dois valores**: Telegram (um token do @BotFather), Discord (um token de bot, com Message Content Intent ativado), KOOK, Feishu, DingTalk, Slack, Bot de IA do WeCom, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK e Stoat. A página indica quais valores copiar do console da plataforma. Todo o restante usa os valores padrão. A Twitch também solicita que você aprove um login por meio de um link.
+   - **Avançado**: o Aplicativo do WeCom, as Contas Oficiais do WeChat e os webhooks do QQ requerem um endereço público que encaminhe para a porta de callback deles. OneBot v11 (NapCat) e Satori requerem outro software em execução neste computador.
+2. O personagent conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK e Stoat por conta própria. As demais plataformas passam pelo AstrBot, uma ponte de terceiros. Na primeira vez que você conecta uma delas, o personagent baixa o AstrBot com um ambiente Python 3.12 separado; mantenha a página aberta até a conclusão. Depois disso, o AstrBot é executado em segundo plano, sem painel em que seja preciso fazer login.
+3. O personagent verifica as credenciais com a plataforma antes de salvá-las. Se a plataforma as recusar, a página informa o motivo e nada é salvo.
+4. As plataformas conectadas ficam listadas no topo de **Conectar plataformas**, onde você pode configurá-las novamente ou desconectá-las.
 
-Para encontrar um bot do QQ, abra o QQ para celular e vá em Contatos → Bots. Converse com ele em privado ou adicione-o a um grupo que seja seu. Este caminho usa a plataforma oficial de bots do QQ, então você não precisa de conta pessoal do QQ nem de software extra. O QQ decide onde o bot pode entrar. Até o bot ser certificado, ele só pode entrar em grupos cujo dono seja o administrador dele, e não há sandbox para configurar. Em um grupo, ele só vê mensagens que o mencionam com @, a menos que o dono do grupo ative o recebimento de todas as mensagens no perfil do bot nesse grupo. O [guia de bots do QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) cobre a certificação e o resto do lado da conta.
+Para encontrar um bot do QQ, abra o QQ no celular e acesse Contatos → Bots. Converse com ele em particular ou adicione-o a um grupo do qual você seja o proprietário. Este caminho usa a plataforma oficial de bots do QQ; portanto, você não precisa de uma conta pessoal do QQ nem de software adicional. O QQ decide onde o bot pode entrar. Até que o bot seja certificado, ele só pode entrar em grupos cujo proprietário seja o administrador dele, e não há sandbox a configurar. Em um grupo, ele só vê as mensagens que o mencionam com @, a menos que o proprietário do grupo ative o recebimento de todas as mensagens no perfil do bot nesse grupo. O [guia de bots do QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) trata da certificação e dos demais aspectos da conta.
 
-Se um QR code expirar, peça um novo. Se um download falhar, tente de novo sem repetir a configuração do modelo. Conectar um app abre ao personagem apenas os grupos e as mensagens diretas desse app; os outros adaptadores mantêm suas listas de permissão. O LINE não é oferecido, porque o AstrBot só recebe callbacks do LINE pelo painel dele, que o personagent não executa.
+Se um QR code expirar, solicite um novo. Se um download falhar, tente novamente sem repetir a configuração do modelo. Conectar uma plataforma dá ao personagem acesso apenas aos grupos e às conversas privadas dessa plataforma; os outros adaptadores mantêm suas listas de permissão. O LINE não é oferecido, porque o AstrBot só recebe callbacks do LINE pelo painel dele, que o personagent não executa.
 
 ## Da próxima vez
 
-Abra o personagent de novo. Suas configurações são mantidas e os apps conectados voltam sozinhos. Se ele já estiver rodando, abrir de novo traz a janela dele de volta. Mantenha-a aberta enquanto usa: os processos que ele iniciou param junto com ele, quer você clique em **Sair** ou feche a janela, e o que uma falha deixou para trás é encerrado na próxima inicialização. No Windows, `personagent shortcut` coloca na sua área de trabalho e no menu Iniciar um ícone que o abre sem terminal. Também no Windows, **Executar em segundo plano**, na visão **Aplicativo**, permite que o personagent continue em execução após o fechamento da janela, representado por um ícone na área de notificação, e o personagem continua respondendo.
+Abra o personagent novamente. As configurações são mantidas, e as plataformas conectadas são retomadas automaticamente. Se ele já estiver em execução, abri-lo novamente exibe a janela existente. Mantenha-a aberta enquanto o utiliza: os processos que ele iniciou são encerrados junto com ele, seja ao clicar em **Sair**, seja ao fechar a janela, e o que uma falha tiver deixado em execução é encerrado na próxima inicialização. No Windows, `personagent shortcut` adiciona à área de trabalho e ao menu Iniciar um ícone que o abre sem terminal. Também no Windows, **Executar em segundo plano**, na visão **Aplicativo**, permite que o personagent continue em execução após o fechamento da janela, representado por um ícone na área de notificação, e o personagem continua respondendo.
 
-Quando há uma versão mais nova no PyPI, a visão **Conversa** mostra um aviso com um link para as notas da versão e o comando de atualização de acordo com a forma como esta cópia foi instalada. Uma cópia descompactada do ZIP do código-fonte recebe, em vez disso, um link para baixar o novo código da página de versões. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo**, instala a atualização. O personagent consulta o pypi.org no máximo uma vez por dia, e a solicitação leva apenas o número da versão. Defina `UPDATE_CHECK_ENABLED=false` no `.env` para desativar a verificação.
+Quando há uma versão mais recente no PyPI, a visão **Conversa** mostra um aviso com um link para as notas da versão e o comando de atualização correspondente à forma como esta cópia foi instalada. Uma cópia descompactada do ZIP do código-fonte recebe, em vez disso, um link para baixar o novo código na página de versões. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo**, instala a atualização. O personagent consulta o pypi.org no máximo uma vez por dia, e a solicitação contém apenas o número da versão. Defina `UPDATE_CHECK_ENABLED=false` no `.env` para desativar a verificação.
 
-Se preferir a linha de comando, use `personagent start --terminal`, `personagent init --terminal`, `personagent up` ou os comandos `chat`, `demo` (sem chave), `run` e `connect`. Eles mantêm seu `.env`, sua persona editada e as memórias aprendidas. O [guia completo](guide.pt-BR.md) cobre as outras plataformas.
+Se preferir a linha de comando, use `personagent start --terminal`, `personagent init --terminal`, `personagent up` ou os comandos `chat`, `demo` (sem chave), `run` e `connect`. Eles mantêm o `.env` existente, a persona editada e as memórias aprendidas. O [guia completo](guide.pt-BR.md) trata das demais plataformas.

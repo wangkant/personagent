@@ -2,7 +2,7 @@
 
 [English](deploy.md) · [简体中文](deploy.zh-CN.md) · [繁體中文](deploy.zh-TW.md) · 日本語 · [한국어](deploy.ko.md) · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
-[クイックスタート](start.ja.md)と[ユーザーガイド](guide.ja.md)で最初のチャットまで進めます。インストール、[ホームフォルダー](guide.ja.md#インストールとホームフォルダー)、ローカルページでの設定、プラットフォームの接続を扱っています。このガイドでは、本番運用に必要なことと、ボットが黙ったときに確認することを説明します。
+[はじめに](start.ja.md)と[ユーザーガイド](guide.ja.md)で、最初のチャットまで進めることができます。インストール、[ホームフォルダー](guide.ja.md#インストールとホームフォルダー)、ローカルページでの設定、プラットフォームの接続を扱っています。このガイドでは、本番運用に必要なことと、ボットが黙ったときに確認することを説明します。
 
 ## 動く最短の設定
 
@@ -46,10 +46,10 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 API はエージェントサービスの `/api/dashboard/` の下にあります。
 
 - `GET conversations` と `GET conversation?id=<chat id>` は、サービスが把握しているチャットと、1 つのチャットの詳細を読みます。
-- `POST candidates/<id>/promote`、`replace`、`reject`、`rollback` は学習内容を変更します。各変更は `personagent learned` と同じ台帳に、アクター `dashboard` で記録されます。
+- `POST candidates/<id>/promote`、`replace`、`reject`、`rollback` は学習内容を変更します。各変更は `personagent learned` と同じ学習記録に、アクター `dashboard` で記録されます。
 - `POST memory/forget` は、本文 `{"conv": "<chat id>", "note": "<note id>"}` で記憶メモを 1 つ削除します。`conv` と id は `GET conversation` の `memories` の項目にあるものです。`note` がなければ、そのチャットのコアノートを削除します。
 
-すべての呼び出しには、ランタイムフォルダー（`AGENT_RUNTIME_DIR` で移さない限り `<home>/runtime/`）の `dashboard.token` にあるトークンを、ヘッダー `X-Personagent-Dashboard-Token` に入れる必要があります。このファイルを読めるのは所有者だけで、サービスは起動時に作成します。ヘッダーのない呼び出しは 401（`dashboard_token`）、誤ったトークンは 403（`wrong_token`）になります。`CONNECTOR_TOKEN` と `X-Personagent-Token` では開けません。これらはコネクターと `/health/details` 専用です。
+すべての呼び出しには、ランタイムフォルダー（`AGENT_RUNTIME_DIR` で移さない限り `<home>/runtime/`）の `dashboard.token` にあるトークンを、ヘッダー `X-Personagent-Dashboard-Token` に入れる必要があります。このファイルを読めるのはサービスを実行しているユーザーだけで、サービスは起動時に作成します。ヘッダーのない呼び出しは 401（`dashboard_token`）、誤ったトークンは 403（`wrong_token`）になります。`CONNECTOR_TOKEN` と `X-Personagent-Token` では開けません。これらはコネクターと `/health/details` 専用です。
 
 - 書き込みにはさらに `X-Personagent-Dashboard: 1` と `Content-Type: application/json` が必要です。リクエストが `Origin` を送る場合は、サービス自身のものでなければなりません。
 - ブラウザーのクロスサイトリクエストは拒否されます。
@@ -68,7 +68,7 @@ API はエージェントサービスの `/api/dashboard/` の下にあります
 
 ## プラットフォームをつなぐ
 
-ローカルページの **アプリ連携** でプラットフォームを追加します。personagent は何かを保存する前に、認証情報をプラットフォームに確認します。プラットフォームが拒否すると、ページに拒否内容が表示され、何も残りません。
+ローカルページの **プラットフォーム連携** でプラットフォームを追加します。personagent は何かを保存する前に、認証情報をプラットフォームに確認します。プラットフォームが拒否すると、ページに拒否内容が表示され、何も残りません。
 
 **personagent 自身がつなぐもの。** QQ、個人の WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat は 1 つの「direct」プロセスで動き、AstrBot も NapCat も要りません。読み込めないプラットフォームはスキップされ、ほかのプラットフォームは起動します。表は最初の 4 つを扱います。ほかの 6 つに必要なものと制限は、ユーザーガイドの[一覧](guide.ja.md#personagent-が自らつなぐプラットフォーム)にあります。
 
@@ -119,11 +119,11 @@ Docker や別のホストの AstrBot については[ユーザーガイド](guid
 
 ### NapCat（OneBot）経由の QQ
 
-この経路は公式ボットではなく個人の QQ アカウントを使います。対象のグループには、自分のものではない 2 つ目の QQ アカウントが必要です（[DISCLAIMER.md](DISCLAIMER.ja.md) を参照）。通常は QR コードで、再起動後も続くセッションとして、AstrBot の `aiocqhttp` アダプターにつながった OneBot v11 実装にログインします。[NapCat](https://github.com/NapNeko/NapCatQQ) はテスト済みで、QQ NT デスクトップクライアントに接続します。LLOneBot と Lagrange もOneBot v11 の実装です。
+この経路は公式ボットではなく個人の QQ アカウントを使います。対象のグループには、自分のものではない 2 つ目の QQ アカウントが必要です（[DISCLAIMER.md](DISCLAIMER.ja.md) を参照）。通常は QR コードで、再起動後も続くセッションとして、AstrBot の `aiocqhttp` アダプターにつながった OneBot v11 実装にログインします。[NapCat](https://github.com/NapNeko/NapCatQQ) はテスト済みで、QQ NT デスクトップクライアントに接続します。LLOneBot と Lagrange も OneBot v11 の実装です。
 
-管理下の AstrBot では、ローカルページで **上級 > OneBot v11 (NapCat)** を追加し、NapCat を `ws://127.0.0.1:6199/ws` に向けます。[中国語のガイド](deploy.zh-CN.md)に手順があります。自分の AstrBot では、プラグインの `excluded_platforms` から `aiocqhttp` を外し、`CONNECTOR_QQ_PLATFORMS=aiocqhttp` を設定し（`--qq` で両方できます）、`QQ_BOT_ID` を設定します（`personagent connect astrbot` が尋ねます）。
+管理下の AstrBot では、ローカルページで **上級** の **OneBot v11（NapCat）** を追加し、NapCat を `ws://127.0.0.1:6199/ws` に向けます。[中国語のガイド](deploy.zh-CN.md)に手順があります。自分の AstrBot では、プラグインの `excluded_platforms` から `aiocqhttp` を外し、`CONNECTOR_QQ_PLATFORMS=aiocqhttp` を設定し（`--qq` で両方できます）、`QQ_BOT_ID` を設定します（`personagent connect astrbot` が尋ねます）。
 
-**ここでは `CONNECTOR_QQ_PLATFORMS` が必須です。** ないと QQ の ID が名前空間付き（`aiocqhttp:123456`）で届き、すべての会話が新しく見えます。記憶、履歴、学習した例は接頭辞なしの ID をキーにしており、台帳は会話 ID から行 ID を導くので、分かれたものは後から修復できません。
+**ここでは `CONNECTOR_QQ_PLATFORMS` が必須です。** ないと QQ の ID が名前空間付き（`aiocqhttp:123456`）で届き、すべての会話が新しく見えます。記憶、履歴、学習した例は接頭辞なしの ID をキーにしており、学習記録は会話 ID から行 ID を導くので、分かれたものは後から修復できません。
 
 接頭辞なしの ID は QQ の権限を持つので、`ADMIN_IDS`、`ACCESS_GROUPS`、`ACCESS_DM_USERS` の QQ の項目はプラグインの許可リストに重ねて適用されます。QQ の DM は `dm_users` に含まれ、*かつ*管理者か `ACCESS_DM_USERS` の項目からのものでなければなりません。`ACCESS_GROUPS` に QQ グループがあれば、QQ グループは両方に含まれている必要があります。その権限をコネクターに任せられる場合だけ、プラットフォームを `CONNECTOR_QQ_PLATFORMS` に入れてください。
 
@@ -178,11 +178,11 @@ direct プロセスとここにある 3 つのコネクターは、ボットが�
 
 ## コスト
 
-- **調査はクレジットを消費します。** `personagent doctor` と `/health/details` は、設定された各モデルエンドポイント（チャット、DM、評価、ビジョン）に小さなチャット補完を 1 回送ります。`EMBEDDING_MODEL` があれば埋め込みを 1 回、`TAVILY_API_KEY` があれば Tavily 検索を 1 回送ります。`/health` と設定や台帳の確認は無料です。
+- **調査はクレジットを消費します。** `personagent doctor` と `/health/details` は、設定された各モデルエンドポイント（チャット、DM、評価、ビジョン）に小さなチャット補完を 1 回送ります。`EMBEDDING_MODEL` があれば埋め込みを 1 回、`TAVILY_API_KEY` があれば Tavily 検索を 1 回送ります。`/health` と設定や学習記録の確認は無料です。
 - **`tools/` のスクリプト**はさまざまです。無料のものもモデルを呼ぶものもあります。[tools.md](tools.ja.md) の表に書かれています。
 - **`personagent eval`** はケースごとにモデルを呼びます。ペルソナと学習のスイートには、判定用の 2 つ目のモデル（`BENCH_JUDGE_MODEL`）も必要です。
-- **メモリ。** 名前空間付き（QQ 以外）の会話が 256 を超えると、最も長く動きのないアイドル会話が最近の履歴と保留中のリアクションを失います。長期記憶、コアノート、台帳は残ります。リクエストの途中の会話は追い出されません。長期記憶は起動時にディスクから読み込まれ、この上限の対象外です。
-- **ディスク。** `runtime/` の証拠ログと候補台帳は追記専用で、切り詰められません。`personagent doctor` はどちらかが 50 MB を超えると警告します（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。ボットが学んだすべてが入っているので、`runtime/` をバックアップしてください。
+- **メモリ。** 名前空間付き（QQ 以外）の会話が 256 を超えると、最も長く動きのないアイドル会話が最近の履歴と保留中のリアクションを失います。長期記憶、コアノート、学習記録は残ります。リクエストの途中の会話は追い出されません。長期記憶は起動時にディスクから読み込まれ、この上限の対象外です。
+- **ディスク。** `runtime/` の学習記録（証拠ログと候補ログ）は追記専用で、切り詰められません。`personagent doctor` はどちらかが 50 MB を超えると警告します（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。ボットが学んだすべてが入っているので、`runtime/` をバックアップしてください。
 
 ## ボットが黙ったとき
 
@@ -203,15 +203,15 @@ direct プロセスとここにある 3 つのコネクターは、ボットが�
 
 | ステータス | `code` | AstrBot のログのメッセージ | 原因 |
 |---|---|---|---|
-| 403 | `unauthenticated` | authentication required | `CONNECTOR_TOKEN` がなく、呼び出し元がこのマシンにない |
-| 403 | `non_local_request` | no credential is configured; only local requests accepted | `CONNECTOR_TOKEN` がなく、リクエストがブラウザー、プロキシ、または別のホスト名を通ってきた |
+| 403 | `unauthenticated` | authentication required | `CONNECTOR_TOKEN` がなく、呼び出し元がこのマシン上にありません |
+| 403 | `non_local_request` | no credential is configured; only local requests accepted | `CONNECTOR_TOKEN` がなく、リクエストがブラウザー、プロキシ、または別のホスト名を経由しています |
 | 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | トークン、ヘッダー、署名の欠落や誤り、5 分を超える時計のずれ、再利用された nonce、またはリプレイ防止の満杯（エージェントのログに `connector replay guard full`） |
-| 403 | `stale_event` | stale or invalid sent_at | `sent_at` が現在と `CONNECTOR_MAX_EVENT_AGE_S`（24 時間）を超えて異なる。未来やミリ秒のタイムスタンプを含む |
+| 403 | `stale_event` | stale or invalid sent_at | `sent_at` が現在と `CONNECTOR_MAX_EVENT_AGE_S`（24 時間）を超えて異なります。未来の時刻やミリ秒単位のタイムスタンプも該当します |
 | 400 | `invalid_schema` | invalid event schema | 必須フィールドの欠落：`platform`、`conversation_type`、`sender_id`、`message_id`、`sent_at`、グループでは `conversation_id` |
-| 400 | `client_disconnected` | client disconnected | 呼び出し元が送信中に切断した |
-| 408 | `body_timeout` | request body not received in time | 本文の到着に 30 秒を超えた |
-| 413 | `body_too_large` | request body too large | `SERVER_MAX_BODY_BYTES`（8 MB）超過。たいていはインライン画像 |
-| 429 | `capacity_exceeded` | webhook capacity exceeded | 処理中のターンが `CONNECTOR_MAX_INFLIGHT` を超えた。3 秒後に再試行してください |
+| 400 | `client_disconnected` | client disconnected | 呼び出し元が送信中に切断しました |
+| 408 | `body_timeout` | request body not received in time | 本文の到着に 30 秒を超えました |
+| 413 | `body_too_large` | request body too large | `SERVER_MAX_BODY_BYTES`（8 MB）を超えています。多くの場合はインライン画像が原因です |
+| 429 | `capacity_exceeded` | webhook capacity exceeded | 処理中のターンが `CONNECTOR_MAX_INFLIGHT` を超えました。3 秒後に再試行してください |
 
 ## 旧方式：直接の OneBot 受信
 

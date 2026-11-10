@@ -7,12 +7,12 @@
 
 ## 必要ですか？
 
-QQ、WeChat、Telegram、Discord には必要ありません。personagent が AstrBot なしで直接つなぎます。`personagent` を実行してローカルページを開き、**アプリ連携** で追加してください。
+QQ、WeChat、Telegram、Discord には必要ありません。personagent が AstrBot なしで直接つなぎます。`personagent` を実行してローカルページを開き、**プラットフォーム連携** で追加してください。
 
 このプラグインが必要なのは、AstrBot が会話を運ぶときです。次の 2 つの場合があります。
 
-- **personagent のページで別のプラットフォームを追加する。** KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey、詳細設定にあるプラットフォームはすべて AstrBot を通ります。ページが AstrBot をダウンロードして実行し、このプラグインも入れるので、ここですることはありません。
-- **すでに AstrBot を動かしていて**、独自のプラットフォームやプラグインがある。下の手順でプラグインをインストールしてください。
+- **personagent のページで別のプラットフォームを追加する。** KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey、**上級** にあるプラットフォームはすべて AstrBot を通ります。ページが AstrBot をダウンロードして実行し、このプラグインも入れるので、ここですることはありません。
+- **すでに AstrBot を動かしていて**、独自のプラットフォームやプラグインがある場合。下の手順でプラグインをインストールしてください。
 
 ## 何をするか
 
@@ -34,7 +34,7 @@ AstrBot（データフォルダーができるよう一度は起動したもの�
 personagent connect astrbot
 ```
 
-このコマンドはまず AstrBot のデータフォルダー、つまり `cmd_config.json`、`plugins/`、`config/` があるフォルダーを探します。見つからなければ AstrBot のダウンロードを提案します。次に、AstrBot が Docker で動くか、ボットが参加するチャットアプリ（AstrBot がまだ必要とする場合はそのアプリのトークンも）、グループ、管理者、ボットに DM できる人を尋ねます。NapCat 経由の QQ ではボットアカウントの番号も尋ねます。最後にこのプラグインをコピーし、共有トークンを生成して両側に書き込み、許可リストを書き込みます。`personagent init --terminal` も最後に同じ手順を提案します。
+このコマンドはまず AstrBot のデータフォルダー、つまり `cmd_config.json`、`plugins/`、`config/` があるフォルダーを探します。見つからなければ AstrBot のダウンロードを提案します。次に、AstrBot が Docker で動くか、ボットが参加するチャットプラットフォーム（AstrBot がまだ必要とする場合はそのプラットフォームのトークンも）、グループ、管理者、ボットに DM できる人を尋ねます。NapCat 経由の QQ ではボットアカウントの番号も尋ねます。最後にこのプラグインをコピーし、共有トークンを生成して両側に書き込み、許可リストを書き込みます。`personagent init --terminal` も最後に同じ手順を提案します。
 
 質問を省くにはデータフォルダーを渡します。
 
@@ -105,7 +105,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 
 **Docker の AstrBot。** コンテナーの中では `127.0.0.1` はコンテナー自身なので、既定の `personagent_url` はどこにも届きません。選択肢は 2 つです。
 
-- AstrBot にホストネットワークを与える：compose ファイルに `network_mode: host`、または `docker run --network host`。Docker Desktop はバージョン 4.34 以降で host networking を有効にする必要があります。同じ compose ファイルの NapCat コンテナーにもホストネットワークが必要です。
+- AstrBot にホストネットワークを与える：compose ファイルに `network_mode: host`、または `docker run --network host`。Docker Desktop ではバージョン 4.34 以降で「Enable host networking」を有効にする必要があります。同じ compose ファイルの NapCat コンテナーにもホストネットワークが必要です。
 - エージェントを HTTPS の後ろに置き、そのアドレスを `personagent_url` にします（`personagent connect astrbot <dir> --url https://...`）。
 
 エージェントは既定で `127.0.0.1:8080` で待ち受けます。`SERVER_HOST` をループバック以外にすると、`CONNECTOR_TOKEN` がなければ起動を拒否します。エージェントの前にプロキシやトンネルを置く前にトークンを設定してください。1 台のホストでも同じです。
@@ -126,7 +126,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 
 ## NapCat 経由の QQ
 
-QQ 公式ボットは personagent が AstrBot なしで直接つなぎます。この節は、NapCat（または別の OneBot v11 実装）で動かす QQ アカウントを AstrBot の `aiocqhttp` アダプターの後ろで使う場合だけを扱います。personagent 自身のページで OneBot v11 を追加すると、`excluded_platforms` から `aiocqhttp` を除き、`CONNECTOR_QQ_PLATFORMS` を設定してくれます。
+QQ 公式ボットは personagent が AstrBot なしで直接つなぎます。この節は、NapCat（または別の OneBot v11 実装）で動かす QQ アカウントを AstrBot の `aiocqhttp` アダプターの後ろで使う場合だけを扱います。personagent 自身のページで OneBot v11 を追加すると、`excluded_platforms` から `aiocqhttp` を除き、`CONNECTOR_QQ_PLATFORMS` を設定します。
 
 1. `excluded_platforms` から `aiocqhttp` を除き、QQ グループを `groups` に追加します。
 2. エージェントの `.env` に `CONNECTOR_QQ_PLATFORMS=aiocqhttp` と `QQ_BOT_ID`（ボットアカウントの番号）を設定します。
@@ -135,7 +135,7 @@ QQ 公式ボットは personagent が AstrBot なしで直接つなぎます。�
 
 `personagent connect astrbot <data dir> --qq` は `excluded_platforms` から `aiocqhttp` を除き、`CONNECTOR_QQ_PLATFORMS` を設定します。フォルダーなしで実行すると `QQ_BOT_ID` も尋ねます。デプロイガイドもこの経路を扱っています：[docs/deploy.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md#napcatonebot経由の-qq)。
 
-`CONNECTOR_QQ_PLATFORMS=aiocqhttp` を省かないでください。これがないとエージェントは QQ のチャットを `aiocqhttp:` 付きの ID で記録し、プレフィックスなしの QQ ID で学んだことが一致しなくなり、台帳を後から付け替えることもできません。
+`CONNECTOR_QQ_PLATFORMS=aiocqhttp` を省かないでください。これがないとエージェントは QQ のチャットを `aiocqhttp:` 付きの ID で記録し、プレフィックスなしの QQ ID で学んだことが一致しなくなり、学習記録を後から付け替えることもできません。
 
 QQ の ID はプレフィックスなしのままなので、エージェント自身の QQ 設定がそのまま適用されます。`ACCESS_GROUPS` の QQ の項目がグループを制限し（項目がなければすべての QQ グループ）、DM は `ADMIN_IDS` の管理者か `ACCESS_DM_USERS` の人にだけ答えます。ウィザードは指定された QQ グループをエージェントの `.env` に書き込みます。後で QQ グループを追加するときは `groups` と `ACCESS_GROUPS` の両方に加えるか、`ACCESS_GROUPS` に QQ グループを一切書かないでください。
 

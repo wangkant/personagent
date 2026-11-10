@@ -7,7 +7,7 @@ Este plugin do [AstrBot](https://github.com/AstrBotDevs/AstrBot) conecta o AstrB
 
 ## Você precisa dele?
 
-Não para QQ, WeChat, Telegram ou Discord. O personagent os conecta por conta própria, sem AstrBot. Execute `personagent` para abrir a página local e adicione-os em **Conectar apps**.
+Ele não é necessário para o QQ, o WeChat, o Telegram ou o Discord. O personagent os conecta por conta própria, sem AstrBot. Execute `personagent` para abrir a página local e adicione-os em **Conectar plataformas**.
 
 Você precisa deste plugin quando o AstrBot carrega a conversa. Isso acontece em dois casos.
 
@@ -17,12 +17,12 @@ Você precisa deste plugin quando o AstrBot carrega a conversa. Isso acontece em
 ## O que ele faz
 
 - Recebe mensagens de grupo e mensagens diretas de todos os adaptadores de plataforma do AstrBot (Telegram, Discord, Slack, QQ...), exceto os de `excluded_platforms`.
-- Encaminha mensagens de grupos e remetentes da lista de permissão ao `POST /v1/events` do agente como evento neutro de plataforma. Ele lê cada plataforma do jeito que o adaptador a entrega, incluindo a quem a mensagem se dirige, o que foi citado, figurinhas, imagens, mensagens de voz e a hora em que a plataforma diz que foi enviada.
+- Encaminha mensagens de grupos e remetentes da lista de permissão ao `POST /v1/events` do agente como evento neutro de plataforma. Ele lê cada plataforma da forma como o adaptador a entrega, incluindo a quem a mensagem se dirige, o que foi citado, figurinhas, imagens, mensagens de voz e a hora em que a plataforma diz que foi enviada.
 - Devolve as respostas do agente pelo AstrBot na forma que cada plataforma espera. As respostas podem levar texto e imagens e, em chats em grupo, uma menção quando o agente pede.
-- Consulta a caixa de saída do agente para entregar o que ele diz sem ser solicitado, como uma mensagem programada, uma pergunta de acompanhamento ou a desculpa que ele publica em um grupo quando o modelo está fora do ar. Veja [Caixa de saída](#caixa-de-saída).
+- Consulta a caixa de saída do agente para entregar o que ele diz sem ser solicitado, como uma mensagem programada, uma pergunta de acompanhamento ou a desculpa que ele publica em um grupo quando o modelo está indisponível. Veja [Caixa de saída](#caixa-de-saída).
 - Interrompe o pipeline do próprio AstrBot quando o agente assume a conversa (`block_default`), para que o modelo embutido do AstrBot nunca responda no lugar da persona.
 
-A persona, a memória, o debounce e a simulação de digitação rodam todos no agente. Este plugin é um conector como definido no [`docs/connectors.md`](https://github.com/wangkant/personagent/blob/main/docs/connectors.pt-BR.md) do agente.
+A persona, a memória, o debounce e a simulação de digitação são todos executados no agente. Este plugin é um conector como definido no [`docs/connectors.md`](https://github.com/wangkant/personagent/blob/main/docs/connectors.pt-BR.md) do agente.
 
 ## Instalar no seu próprio AstrBot
 
@@ -34,9 +34,9 @@ Você precisa do AstrBot, iniciado pelo menos uma vez para que a pasta de dados 
 personagent connect astrbot
 ```
 
-O comando primeiro procura a pasta de dados do AstrBot, a que contém `cmd_config.json`, `plugins/` e `config/`. Se não encontrar nenhuma, oferece baixar o AstrBot. Depois pergunta se o AstrBot roda no Docker, em qual app de chat o bot entra (com o token desse app, onde o AstrBot ainda precisa de um), os grupos, o administrador e quem pode enviar mensagens diretas ao bot. Para QQ pelo NapCat, também pergunta o número da conta do bot. Por fim, copia este plugin, gera um token compartilhado, grava-o nos dois lados e grava as listas de permissão. `personagent init --terminal` oferece a mesma etapa no final.
+O comando primeiro procura a pasta de dados do AstrBot, a que contém `cmd_config.json`, `plugins/` e `config/`. Se não encontrar nenhuma, oferece baixar o AstrBot. Depois pergunta se o AstrBot é executado no Docker, em qual plataforma de chat o bot entra (com o token dessa plataforma, quando o AstrBot ainda precisa de um), os grupos, o administrador e quem pode enviar mensagens diretas ao bot. Para QQ pelo NapCat, também pergunta o número da conta do bot. Por fim, copia este plugin, gera um token compartilhado, grava-o nos dois lados e grava as listas de permissão. `personagent init --terminal` oferece a mesma etapa no final.
 
-Para pular as perguntas, passe a pasta de dados:
+Para dispensar as perguntas, informe a pasta de dados:
 
 ```bash
 personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (NapCat) as well
@@ -44,7 +44,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 
 Executado assim, uma primeira conexão deixa as listas de permissão **vazias**, e você as preenche nas configurações do plugin. `personagent connect astrbot --help` lista as flags que também ativam uma plataforma no AstrBot.
 
-Você pode executar o comando de novo a qualquer momento. Ele mantém as listas de permissão, outras plataformas excluídas e qualquer `personagent_url` que este plugin aceite (veja [Onde o agente pode rodar](#onde-o-agente-pode-rodar)). Um `personagent_url` que o plugin recusaria é substituído pelo padrão de loopback. O roteamento do QQ só muda quando você passa `--qq` ou `--no-qq`, e o `CONNECTOR_QQ_PLATFORMS` do agente acompanha. Quando ele pergunta, as listas atuais são os padrões: pressione Enter para manter uma ou digite `-` para limpá-la.
+Você pode executar o comando de novo a qualquer momento. Ele mantém as listas de permissão, outras plataformas excluídas e qualquer `personagent_url` que este plugin aceite (veja [Onde o agente pode ser executado](#onde-o-agente-pode-ser-executado)). Um `personagent_url` que o plugin recusaria é substituído pelo padrão de loopback. O roteamento do QQ só muda quando você passa `--qq` ou `--no-qq`, e o `CONNECTOR_QQ_PLATFORMS` do agente acompanha. Quando ele pergunta, as listas atuais são os padrões: pressione Enter para manter uma ou digite `-` para limpá-la.
 
 Depois reinicie o AstrBot e inicie o agente (veja [Verificar se funciona](#verificar-se-funciona)).
 
@@ -53,9 +53,9 @@ Depois reinicie o AstrBot e inicie o agente (veja [Verificar se funciona](#verif
 1. Baixe `astrbot_plugin_personagent.zip` da [versão mais recente do personagent](https://github.com/wangkant/personagent/releases/latest).
 2. Envie-o em **Install from File** na página de plugins do AstrBot.
 3. Defina `connector_token` como o `CONNECTOR_TOKEN` do `.env` do personagent e preencha as listas de permissão como descrito abaixo.
-4. Se o AstrBot roda em outro computador que não o do personagent, defina `personagent_url` como um endereço HTTPS (veja [Onde o agente pode rodar](#onde-o-agente-pode-rodar)).
+4. Se o AstrBot é executado em um computador diferente daquele do personagent, defina `personagent_url` como um endereço HTTPS (veja [Onde o agente pode ser executado](#onde-o-agente-pode-ser-executado)).
 
-Para atualizar, envie o zip da versão mais nova do mesmo jeito. O AstrBot 4.29 e posteriores substituem a cópia instalada. Em versões mais antigas, desinstale o plugin primeiro e deixe **Also delete plugin configuration file** desmarcado.
+Para atualizar, envie o zip da versão mais recente da mesma forma. O AstrBot 4.29 e posteriores substituem a cópia instalada. Em versões mais antigas, desinstale o plugin primeiro e deixe **Also delete plugin configuration file** desmarcado.
 
 ### Manualmente
 
@@ -65,11 +65,11 @@ Para atualizar, envie o zip da versão mais nova do mesmo jeito. O AstrBot 4.29 
    - Adicione a `groups` os IDs de grupo em que a persona pode entrar.
    - Adicione a `dm_users` os IDs de remetente cujas mensagens diretas ela pode responder.
    - Se o `.env` do agente define `CONNECTOR_TOKEN`, coloque o mesmo valor em `connector_token`. É obrigatório quando o agente está em outro host.
-   - Deixe `personagent_url` no padrão quando o agente roda no mesmo host com o `SERVER_PORT=8080` padrão.
+   - Deixe `personagent_url` no padrão quando o agente é executado no mesmo host com o `SERVER_PORT=8080` padrão.
 
 O plugin **nega por padrão**. Com listas vazias, ele não encaminha nada, e o AstrBot se comporta como se o plugin não estivesse instalado. Escreva os IDs como o AstrBot os mostra; envie `/sid` em um chat para vê-los. Um ID sem prefixo corresponde em todos os adaptadores. `qq_official:ID` corresponde apenas nesse adaptador, e `qq_official:*` encaminha todas as conversas desse tipo nele.
 
-Um `*` sozinho em `groups` ou `dm_users` encaminha todas as conversas desse tipo em todos os adaptadores e as marca como `prefiltered: false`. Então decidem sozinhos `ACCESS_GROUPS` e `ACCESS_DM_USERS` do próprio agente. O agente recusa uma plataforma sem entradas ali, exceto grupos do QQ, aos quais responde a menos que `ACCESS_GROUPS` liste algum.
+Um `*` sozinho em `groups` ou `dm_users` encaminha todas as conversas desse tipo em todos os adaptadores e as marca como `prefiltered: false`. Nesse caso, a decisão cabe exclusivamente a `ACCESS_GROUPS` e `ACCESS_DM_USERS` do próprio agente. O agente recusa uma plataforma sem entradas ali, exceto grupos do QQ, aos quais responde a menos que `ACCESS_GROUPS` liste algum.
 
 ### Verificar se funciona
 
@@ -96,7 +96,7 @@ Se nenhuma resposta chegar, procure linhas `personagent:` no log do AstrBot, lei
 | `outbox_wait_s` | int | `25` | Quanto uma consulta da caixa de saída pode esperar no agente, no máximo 30. |
 | `connector_id` | string | `""` | Nome deste AstrBot para o agente. Vazio gera um uma vez e o mantém. Dois hosts de AstrBot precisam de nomes diferentes. |
 
-### Onde o agente pode rodar
+### Onde o agente pode ser executado
 
 - **Mesmo host**, ou um contêiner que compartilha o namespace de rede do host ou usa a rede do host: mantenha o `personagent_url` de loopback padrão.
 - **Outro contêiner ou host**: use um `personagent_url` HTTPS e defina o mesmo segredo não vazio em `connector_token` e no `CONNECTOR_TOKEN` do agente. Um túnel privado que termine em uma URL de loopback visível para o AstrBot também funciona. Nesse caso, defina também o mesmo token nos dois lados, porque o agente recusa solicitações sem token que chegam por um proxy.
@@ -139,7 +139,7 @@ Não omita `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. Sem ele, o agente arquiva os chat
 
 Como os IDs do QQ continuam simples, as configurações de QQ do próprio agente continuam valendo. As entradas de QQ em `ACCESS_GROUPS` filtram os grupos (sem entradas significa todos os grupos do QQ), e só são respondidas as mensagens diretas do administrador em `ADMIN_IDS` ou de quem está em `ACCESS_DM_USERS`. O assistente grava no `.env` do agente os grupos do QQ que você informa. Para adicionar um grupo do QQ depois, adicione-o tanto a `groups` quanto a `ACCESS_GROUPS`, ou não liste nenhum grupo do QQ em `ACCESS_GROUPS`.
 
-Antes de o AstrBot carregar um grupo do QQ movimentado, revise duas configurações do AstrBot. As duas rodam antes dos manipuladores de plugins.
+Antes de o AstrBot carregar um grupo do QQ movimentado, revise duas configurações do AstrBot. As duas são executadas antes dos manipuladores de plugins.
 
 - `platform_settings.rate_limit` tem padrão de 30 mensagens por 60 s. Mensagens acima do limite são atrasadas, não descartadas. Aumente ou desative o limite.
 - `content_safety.internal_keywords` vem ativado e descarta mensagens que correspondem à lista de palavras-chave, incluindo as que a persona teria respondido. Revise a lista.
@@ -154,14 +154,14 @@ Em todas as plataformas:
 - Vídeos, arquivos e mensagens de voz chegam como uma nota à qual a persona pode reagir, como `(sent a video)`, `(sent a file: deck.pdf)` ou `(sent a voice message)`, com a transcrição da plataforma quando ela tem uma.
 - Mensagens citadas trazem texto e autor quando a plataforma os fornece (`forward_quoted_text`).
 - Onde o adaptador a mantém, a hora da mensagem é a da plataforma, e não a hora em que o AstrBot a recebeu.
-- As respostas são divididas abaixo do limite de tamanho da plataforma, contando a menção e os escapes como a plataforma conta. Nunca viram uma imagem de texto, e citam as pessoas como a plataforma faz.
+- As respostas são divididas abaixo do limite de tamanho da plataforma, contando a menção e os escapes como a plataforma conta. Nunca são convertidas em imagem de texto e citam as pessoas da forma usada pela plataforma.
 - A caixa de saída só é usada onde a plataforma pode enviar sem solicitação.
 
 | Plataforma (adaptador) | O que funciona | O que a própria plataforma não consegue fazer |
 | --- | --- | --- |
-| QQ via OneBot (`aiocqhttp`) | Grupos e mensagens diretas. @ e resposta ao bot, também quando o adaptador não conseguiu resolver o @. Nomes de rostos, figurinhas da loja (`mface`) e imagens marcadas como figurinhas. Menções como um @ real do QQ, seguido de um espaço. Respostas longas são divididas abaixo do `forward_threshold` do AstrBot, então nenhuma vira um cartão de encaminhamento combinado. Caixa de saída. | Markdown aparece como digitado. |
+| QQ via OneBot (`aiocqhttp`) | Grupos e mensagens diretas. @ e resposta ao bot, também quando o adaptador não conseguiu resolver o @. Nomes de rostos, figurinhas da loja (`mface`) e imagens marcadas como figurinhas. Menções como um @ real do QQ, seguido de um espaço. Respostas longas são divididas abaixo do `forward_threshold` do AstrBot, de modo que nenhuma se torna um cartão de encaminhamento combinado. Caixa de saída. | Markdown aparece como digitado. |
 | QQ oficial (`qq_official`, `qq_official_webhook`) | Mensagens de grupo que dão @ no bot e mensagens diretas. Rostos como `[表情:name]`. As respostas pedem texto simples em vez do markdown do adaptador. | Os grupos entregam só mensagens que dão @ no bot, então a persona não consegue acompanhar uma conversa. Sem citações, sem nomes (só openids), sem menções nas respostas. Só é possível responder até 5 minutos depois de uma mensagem, então não há caixa de saída. |
-| Telegram (`telegram`) | Grupos, tópicos (`<chat>#<thread>`) e mensagens diretas. Resposta ao bot para qualquer tipo de mensagem, sem o prefixo de ativação `/@bot` do adaptador. Emoji de figurinhas, mais a imagem das estáticas. Imagens buscadas pelo bot do adaptador, então o token do bot nunca sai do AstrBot. Um nome de usuário mencionado vira o id numérico da pessoa depois que ela escreve. As respostas mencionam por nome de usuário, ou por um link `tg://user` para quem não tem, e mostram `*`, `_` e caracteres parecidos como digitados. Caixa de saída. | Com o modo de privacidade do BotFather ativo (o padrão), os grupos entregam só comandos, @menções e respostas ao bot. Desative-o para que a persona possa acompanhar a conversa. Figurinhas animadas e de vídeo não podem ser vistas. |
+| Telegram (`telegram`) | Grupos, tópicos (`<chat>#<thread>`) e mensagens diretas. Resposta ao bot para qualquer tipo de mensagem, sem o prefixo de ativação `/@bot` do adaptador. Emoji de figurinhas, mais a imagem das estáticas. Imagens buscadas pelo bot do adaptador, então o token do bot nunca sai do AstrBot. Um nome de usuário mencionado é convertido no id numérico da pessoa depois que ela escreve. As respostas mencionam por nome de usuário, ou por um link `tg://user` para quem não tem, e mostram `*`, `_` e caracteres parecidos como digitados. Caixa de saída. | Com o modo de privacidade do BotFather ativo (o padrão), os grupos entregam só comandos, @menções e respostas ao bot. Desative-o para que a persona possa acompanhar a conversa. Figurinhas animadas e de vídeo não podem ser vistas. |
 | Discord (`discord`) | Canais e threads como grupos, e mensagens diretas. Um `@bot` inicial (que o adaptador remove), um ping de um dos cargos do bot e respostas ao bot se dirigem a ele. Citações com texto. Figurinhas. Anexos de voz e vídeo como notas. Menções como `<@id>`, com `@everyone` e `@here` inertes. Respostas divididas em 2000 caracteres. Caixa de saída, incluindo mensagens diretas. | Precisa do intent Message Content. |
 | Slack (`slack`) | Canais e mensagens diretas. Uma resposta em thread sob a mensagem do bot se dirige a ele. Links expandidos. Os ids de mensagem são o `ts` do Slack. Menções como `<@id>`. `&`, `<` e `>` escapados para que o texto não possa acionar um canal. Respostas divididas em 3000 caracteres. Caixa de saída. | Uma resposta em thread não traz o texto da mensagem pai. Sem indicador de digitação para bots. As respostas caem no canal, não na thread (adaptador). |
 | KOOK (`kook`) | Canais e mensagens diretas. @ e pings de um cargo que o bot tem. Citações quando o KOOK as inclui. Emoji `(emj)` e a hora real de envio. Menções no texto, com as tags no estilo `(met)` do texto da persona inertes. Imagens enviadas como arquivo, pois o adaptador só envia JPEG base64. Caixa de saída. | O adaptador do AstrBot descarta mensagens simples de imagem, arquivo, voz e vídeo (não cartões) antes que qualquer plugin as veja. Sem indicador de digitação. |
@@ -172,19 +172,19 @@ Em todas as plataformas:
 | Misskey (`misskey`) | Mensagens diretas de chat e salas, com `@bot` em qualquer lugar de uma mensagem de sala. Menções como `@user@host` depois que a pessoa escreve, com qualquer outro `@` do texto da persona inerte. Respostas divididas em 3000 caracteres. Caixa de saída para chat e salas. | Notas (publicações públicas) não são encaminhadas, porque o AstrBot as classifica como eventos de sistema e uma resposta seria pública. `unique_session` quebra as salas (adaptador). |
 | Satori (`satori`) | O que o backend Satori fizer de ponte: grupos, mensagens diretas, @, respostas ao bot, citações com texto. Carimbos de data/hora em milissegundos lidos como segundos. Caixa de saída. | O id do grupo é a guilda, então os canais de uma guilda compartilham uma conversa. Valem os limites da plataforma conectada. |
 | WebChat (`webchat`) | O chat do painel, como mensagens diretas. Citações e imagens. Caixa de saída, mostrada ao vivo ou salva na conversa. | Só um a um. |
-| App WeCom (`wecom`) | Mensagens diretas, imagens e voz com transcrição. O modo de atendimento ao cliente encaminha só as mensagens do cliente, com a hora real de envio. Respostas divididas por bytes. Caixa de saída no modo app, depois que alguém escreve desde o início do AstrBot. | Só mensagens diretas, sem citações. O modo de atendimento ao cliente não pode enviar sem solicitação. Markdown aparece como digitado. |
+| Aplicativo do WeCom (`wecom`) | Mensagens diretas, imagens e voz com transcrição. O modo de atendimento ao cliente encaminha só as mensagens do cliente, com a hora real de envio. Respostas divididas por bytes. Caixa de saída no modo aplicativo, depois que alguém escreve desde o início do AstrBot. | Só mensagens diretas, sem citações. O modo de atendimento ao cliente não pode enviar sem solicitação. Markdown aparece como digitado. |
 | Bot de IA do WeCom (`wecom_ai_bot`) | Grupos (o WeCom entrega uma mensagem de grupo só quando o bot recebe @) e mensagens diretas. Notas de voz, arquivo e vídeo. Um turno enviado como uma resposta em streaming. | Só responde dentro da resposta a uma mensagem, então não há caixa de saída nem menções. A resposta é renderizada como markdown. Defina `wecom_ai_bot_name` no AstrBot para que "@bot" seja removido do texto. |
-| Conta oficial do WeChat (`weixin_official_account`) | Mensagens diretas e voz com transcrição. Um turno enviado como uma mensagem. | O modo passivo entrega uma resposta por mensagem do usuário, dentro da janela de 5 s do WeChat. O resto espera a próxima mensagem do usuário, e um turno em que a persona não participa deixa o usuário esperando (adaptador). Imagens só no modo ativo. Sem caixa de saída. |
+| Conta Oficial do WeChat (`weixin_official_account`) | Mensagens diretas e voz com transcrição. Um turno enviado como uma mensagem. | O modo passivo entrega uma resposta por mensagem do usuário, dentro da janela de 5 s do WeChat. O resto espera a próxima mensagem do usuário, e um turno em que a persona não participa deixa o usuário esperando (adaptador). Imagens só no modo ativo. Sem caixa de saída. |
 | WeChat pessoal (`weixin_oc`) | Mensagens diretas. Citações com texto. Imagens inline. Voz com transcrição. Indicador de digitação. Caixa de saída. | Sem grupos. Depois de um novo login, ninguém pode ser alcançado até escrever de novo. |
 | Qualquer outro adaptador | Encaminhado como o AstrBot entrega. Menções como At. | Caixa de saída não declarada. |
 
 ## Caixa de saída
 
-Algumas mensagens não respondem a nada: uma mensagem programada, a pergunta de acompanhamento após uma rejeição ou a desculpa em um grupo quando o modelo está fora do ar. (A desculpa de uma mensagem direta volta na resposta do próprio evento.) O agente coloca essas mensagens em fila, e este plugin as busca em `POST <personagent_url>/v1/outbox` com a mesma assinatura dos eventos, então o agente nunca precisa alcançar o AstrBot. A caixa de saída vem ativada (`outbox_enabled`).
+Algumas mensagens não respondem a nada: uma mensagem programada, a pergunta de acompanhamento após uma rejeição ou a desculpa em um grupo quando o modelo está indisponível. (A desculpa de uma mensagem direta volta na resposta do próprio evento.) O agente coloca essas mensagens em fila, e este plugin as busca em `POST <personagent_url>/v1/outbox` com a mesma assinatura dos eventos, então o agente nunca precisa alcançar o AstrBot. A caixa de saída vem ativada (`outbox_enabled`).
 
 - Cada entrega sai pela própria sessão do AstrBot da conversa, em ordem, e cada mensagem é enviada no máximo uma vez.
-- Uma entrega vai só para uma sessão que o próprio plugin obteve de uma mensagem dessa mesma conversa. Essas sessões ficam no armazenamento de plugins do AstrBot, então sobrevivem a um recarregamento. Nada mais que publique um evento no agente pode apontar a caixa de saída para outro chat, e o plugin recusa essa entrega.
-- O plugin confere de novo as listas de permissão e `excluded_platforms` na hora do envio e recusa uma conversa removida nesse meio-tempo.
+- Uma entrega vai só para uma sessão que o próprio plugin obteve de uma mensagem dessa mesma conversa. Essas sessões ficam no armazenamento de plugins do AstrBot, e, por isso, são preservadas após um recarregamento. Nada mais que publique um evento no agente pode apontar a caixa de saída para outro chat, e o plugin recusa essa entrega.
+- O plugin confere de novo as listas de permissão e `excluded_platforms` na hora do envio e recusa uma conversa removida nesse intervalo.
 - Plataformas que não podem falar primeiro (veja a tabela) nunca recebem mensagens da caixa de saída, porque o plugin não a declara para as conversas delas.
 - Um agente sem caixa de saída responde 404. O plugin pergunta de novo a cada dez minutos.
 
@@ -213,8 +213,8 @@ As linhas do plugin no log do AstrBot começam com `personagent:`.
 
 | Mensagem de log | O que fazer |
 | --- | --- |
-| `refusing unsafe personagent_url` | `personagent_url` é HTTP sem criptografia para outro host, ou HTTPS sem `connector_token`. Veja [Onde o agente pode rodar](#onde-o-agente-pode-rodar). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` está vazio ou não corresponde ao `CONNECTOR_TOKEN` do agente, os dois relógios diferem em mais de cinco minutos, ou um proxy alterou o corpo. Se o log do agente disser `connector replay guard full`, espere esvaziar. |
+| `refusing unsafe personagent_url` | `personagent_url` é HTTP sem criptografia para outro host, ou HTTPS sem `connector_token`. Veja [Onde o agente pode ser executado](#onde-o-agente-pode-ser-executado). |
+| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` está vazio ou não corresponde ao `CONNECTOR_TOKEN` do agente, os dois relógios diferem em mais de cinco minutos, ou um proxy alterou o corpo. Se o log do agente disser `connector replay guard full`, aguarde até que ela seja esvaziada. |
 | `agent refused the request (403): stale or invalid sent_at` | A mensagem é mais antiga que `CONNECTOR_MAX_EVENT_AGE_S` do agente. Isso costuma acontecer depois que o AstrBot entrega um acúmulo. |
 | `agent refused the request (403): authentication required` ou `... only local requests accepted` | O agente não tem `CONNECTOR_TOKEN` e a solicitação não é local. Defina o mesmo token nos dois lados. |
 | `agent at capacity (429)` | O agente já executava `CONNECTOR_MAX_INFLIGHT` turnos e ainda recusou a mensagem depois das tentativas, então o modelo do próprio AstrBot respondeu. Aumente `CONNECTOR_MAX_INFLIGHT` se isso acontecer com frequência. |
@@ -222,14 +222,14 @@ As linhas do plugin no log do AstrBot começam com `personagent:`.
 | `agent rejected the event schema (400)` | O evento não tinha id de mensagem ou de remetente (alguns adaptadores os omitem), ou este plugin tem um bug. Informe com a linha do log. |
 | `timed out waiting for the agent` | Veja [Tempos limite](#tempos-limite). |
 | `dropping event without a valid time the platform sent it` | O adaptador não deu carimbo de data/hora. O AstrBot trata essa mensagem por conta própria. |
-| `agent request failed: ...` ou `agent request failed (<status>)` | Geralmente o agente não está rodando ou `personagent_url` está errado. Um 404 significa caminho errado: `personagent_url` é a URL base, sem `/v1/events`. Um 500 significa que o agente falhou, então veja o log dele. |
+| `agent request failed: ...` ou `agent request failed (<status>)` | Geralmente o agente não está em execução ou `personagent_url` está incorreto. Um 404 significa caminho errado: `personagent_url` é a URL base, sem `/v1/events`. Um 500 significa que o agente falhou, então veja o log dele. |
 | `outbox off: ...` | A caixa de saída segue a mesma regra de `personagent_url` dos eventos. Veja a primeira linha. |
 | `outbox: agent has no outbox (turned off, or an older version); retrying in 10 minutes` | `CONNECTOR_OUTBOX_ENABLED` do agente está desativado. |
 | `outbox: outbox pull refused (403)` ou `outbox pull failed: ...` | As mesmas causas dos eventos: o token, os relógios ou o agente parado. O plugin espera até um minuto entre as tentativas. |
 | `outbox: no running platform '<id>'` | Uma entrega para um adaptador desativado ou renomeado no AstrBot. O plugin a informa ao agente como falha. |
-| `could not store connector_id` | O armazenamento de plugins do AstrBot falhou. Defina `connector_id` você mesmo, ou o agente verá um AstrBot novo depois de cada reinício. |
+| `could not store connector_id` | O armazenamento de plugins do AstrBot falhou. Defina `connector_id` manualmente, ou o agente verá um AstrBot novo depois de cada reinício. |
 
-Se o modelo do próprio AstrBot de repente responder com outra voz, o plugin não alcançou o agente, ou o agente não assumiu a conversa. Confira a tabela acima e execute `personagent doctor`. Se a página local iniciou o agente, abra **Atividade** ali para ver se a mensagem chegou e por que a persona ficou em silêncio. Se você o iniciou com `personagent run`, leia o terminal dele.
+Se o modelo do próprio AstrBot de repente responder com outra voz, o plugin não alcançou o agente, ou o agente não assumiu a conversa. Verifique a tabela acima e execute `personagent doctor`. Se a página local iniciou o agente, abra **Atividade** ali para ver se a mensagem chegou e por que a persona ficou em silêncio. Se você o iniciou com `personagent run`, leia o terminal dele.
 
 Se o próprio log do agente disser que o conector envia `X-Personagent-Token` mas `CONNECTOR_TOKEN` está em branco, o agente está ignorando o token. Defina o mesmo valor no `.env` do agente.
 

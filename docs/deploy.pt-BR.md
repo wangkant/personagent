@@ -31,9 +31,9 @@ As chaves ficam nesta máquina. O provedor de modelos que você escolher vê as 
 
 `personagent` abre a página local. Enquanto a página está aberta, ele executa o agente, o processo que mantém as plataformas conectadas diretamente e o AstrBot gerenciado, quando há um instalado. Executar `personagent` de novo reutiliza uma página aberta. `personagent up` inicia os mesmos processos sem navegador.
 
-De qualquer forma, esses processos terminam junto com ele, seja como for que ele termine. O que uma execução anterior que travou deixou para trás é encerrado no próximo início. Cada processo grava seu log em `<home>/runtime/desktop/` (`agent.log`, `direct.log`, `astrbot.log`).
+Em ambos os casos, esses processos são encerrados junto com ele, independentemente de como ele seja encerrado. O que uma execução anterior interrompida por falha tiver deixado em execução é encerrado na próxima inicialização. Cada processo grava seu log em `<home>/runtime/desktop/` (`agent.log`, `direct.log`, `astrbot.log`).
 
-A página local e `personagent up` perguntam ao pypi.org no máximo uma vez por dia se saiu um personagent mais novo. Se saiu, a visão Conversa e o terminal mostram o comando que atualiza esta cópia. A requisição leva só o número da versão, e `UPDATE_CHECK_ENABLED=false` desliga a verificação.
+A página local e `personagent up` perguntam ao pypi.org no máximo uma vez por dia se saiu um personagent mais novo. Se saiu, a visão Conversa e o terminal mostram o comando que atualiza esta cópia. A requisição contém apenas o número da versão, e `UPDATE_CHECK_ENABLED=false` desativa a verificação.
 
 `personagent run` inicia só o agente, como descreve [Executar o serviço](guide.pt-BR.md#executar-o-serviço). Use quando seus próprios conectores (um AstrBot que você executa, Satori, Matrix) falarem com ele. `personagent doctor` verifica as configurações e testa cada serviço externo.
 
@@ -41,7 +41,7 @@ A página local e `personagent up` perguntam ao pypi.org no máximo uma vez por 
 
 ### Atividade
 
-[Atividade](guide.pt-BR.md#atividade) é uma visão da página local. Não precisa de instalação extra, não carrega nada da internet e nunca mostra chaves ou tokens. Ela lê a API JSON do serviço do agente que a página local iniciou. Com `personagent run` sozinho, leia o log do serviço e use `personagent learned`. `DASHBOARD_ENABLED=false` desliga a API. A visão então avisa, e `personagent doctor` imprime `activity: off (...)`.
+[Atividade](guide.pt-BR.md#atividade) é uma visão da página local. Não precisa de instalação extra, não carrega nada da internet e nunca mostra chaves ou tokens. Ela lê a API JSON do serviço do agente que a página local iniciou. Com `personagent run` sozinho, leia o log do serviço e use `personagent learned`. `DASHBOARD_ENABLED=false` desativa a API. A visão então informa isso, e `personagent doctor` imprime `activity: off (...)`.
 
 A API fica em `/api/dashboard/` no serviço do agente:
 
@@ -49,12 +49,12 @@ A API fica em `/api/dashboard/` no serviço do agente:
 - `POST candidates/<id>/promote`, `replace`, `reject` e `rollback` alteram o que ele aprendeu. Cada alteração vai para o mesmo registro de `personagent learned`, com o ator `dashboard`.
 - `POST memory/forget` com o corpo `{"conv": "<chat id>", "note": "<note id>"}` apaga uma nota de memória. `conv` e o id são os de uma entrada de `memories` em `GET conversation`. Sem `note`, apaga a nota principal da conversa.
 
-Toda chamada precisa do cabeçalho `X-Personagent-Dashboard-Token` com o token de `dashboard.token` na pasta de execução (`<home>/runtime/`, a menos que `AGENT_RUNTIME_DIR` a mova). Só o dono pode ler o arquivo, e o serviço o cria ao iniciar. Uma chamada sem o cabeçalho recebe 401 (`dashboard_token`), e um token errado recebe 403 (`wrong_token`). `CONNECTOR_TOKEN` e `X-Personagent-Token` não a abrem. Eles são só para conectores e `/health/details`.
+Toda chamada precisa do cabeçalho `X-Personagent-Dashboard-Token` com o token de `dashboard.token` na pasta de execução (`<home>/runtime/`, a menos que `AGENT_RUNTIME_DIR` a mova). Somente a conta de usuário do sistema que executa o serviço pode ler o arquivo, e o serviço o cria ao iniciar. Uma chamada sem o cabeçalho recebe 401 (`dashboard_token`), e um token errado recebe 403 (`wrong_token`). `CONNECTOR_TOKEN` e `X-Personagent-Token` não a abrem. Eles são só para conectores e `/health/details`.
 
 - Gravações também precisam de `X-Personagent-Dashboard: 1` e `Content-Type: application/json`. Quando a requisição envia um `Origin`, ele deve ser o do próprio serviço.
 - Requisições de navegador entre sites são recusadas.
 - As respostas substituem toda credencial por `***`. URLs nas verificações de início também têm usuário, senha e query mascarados.
-- Scripts no mesmo computador podem chamar a API do mesmo jeito que a página local.
+- Scripts no mesmo computador podem chamar a API da mesma forma que a página local.
 
 O serviço não serve nenhuma página. `GET /` responde com uma nota curta que aponta para a página local e para `personagent learned`, e é isso que um link antigo com `?token=` abre agora. A página local se vincula só a 127.0.0.1. Em um servidor sem página local, revise e reverta o aprendizado com `personagent learned`.
 
@@ -68,18 +68,18 @@ O serviço não serve nenhuma página. `GET /` responde com uma nota curta que a
 
 ## Conectar plataformas
 
-Adicione plataformas em **Conectar apps** na página local. O personagent verifica as credenciais com a plataforma antes de salvar qualquer coisa. Se a plataforma as recusar, a página mostra a recusa e não guarda nada.
+Adicione plataformas em **Conectar plataformas** na página local. O personagent verifica as credenciais com a plataforma antes de salvar qualquer coisa. Se a plataforma as recusar, a página mostra a recusa e não guarda nada.
 
-**Conectadas pelo próprio personagent.** QQ, WeChat pessoal, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK e Stoat rodam em um único processo "direct", sem AstrBot e sem NapCat. Uma plataforma que não pode ser carregada é ignorada, e as demais iniciam normalmente. A tabela abrange as quatro primeiras; o guia do usuário descreve [o que as outras seis exigem e quais são seus limites](guide.pt-BR.md#plataformas-que-o-personagent-conecta-por-conta-própria).
+**Conectadas pelo próprio personagent.** QQ, WeChat pessoal, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK e Stoat são executados em um único processo "direct", sem AstrBot e sem NapCat. Uma plataforma que não pode ser carregada é ignorada, e as demais iniciam normalmente. A tabela abrange as quatro primeiras; o guia do usuário descreve [o que as outras seis exigem e quais são seus limites](guide.pt-BR.md#plataformas-que-o-personagent-conecta-por-conta-própria).
 
 | Plataforma | O que você faz | Limites |
 |---|---|---|
-| QQ (bot oficial) | Escaneie um QR code com o QQ móvel, que cria um bot ou escolhe um que você fez. Colar o AppID e o AppSecret é a alternativa. | Até o bot ser certificado, o QQ só permite que ele entre em grupos que são seus. As permissões de mensagens de grupo são definidas no QQ. |
-| WeChat pessoal | Escaneie com o WeChat (a API de bots iLink da Tencent). | Só conversas individuais. O WeChat não dá mensagens de grupo a esses bots. |
+| QQ (bot oficial) | Leia um QR code com o QQ no celular; ele cria um bot ou seleciona um que você já criou. A alternativa é colar o AppID e o AppSecret. | Até que o bot seja certificado, o QQ só permite que ele entre em grupos dos quais você é o proprietário. As permissões de mensagens de grupo são definidas no QQ. |
+| WeChat pessoal | Leia o código com o WeChat (a API de bots iLink da Tencent). | Somente conversas individuais. O WeChat não entrega mensagens de grupo a esses bots. |
 | Telegram | Cole o token do @BotFather. | |
-| Discord | Cole o token do bot, com Message Content Intent ligado. | |
+| Discord | Cole o token do bot, com Message Content Intent ativado. | |
 
-**Pelo AstrBot gerenciado.** Todas as outras plataformas passam por um AstrBot que o personagent baixa, junto com o próprio runtime Python 3.12, e executa sem interface. Ele não tem painel e não precisa de um segundo login. KOOK, Feishu/Lark (conexão longa), DingTalk (modo Stream), Slack (Socket Mode, e o link do guia preenche o app), bot de IA do WeCom (conexão longa), Mattermost e Misskey pedem um ou dois valores. O grupo Avançado precisa de um endereço público ou outro software: app do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat) e Satori. O LINE não é oferecido.
+**Pelo AstrBot gerenciado.** Todas as outras plataformas passam por um AstrBot que o personagent baixa, junto com o próprio runtime Python 3.12, e executa sem interface. Ele não tem painel e não precisa de um segundo login. KOOK, Feishu/Lark (conexão persistente), DingTalk (modo Stream), Slack (Socket Mode, e o link do guia preenche o aplicativo), Bot de IA do WeCom (conexão persistente), Mattermost e Misskey solicitam um ou dois valores. O grupo Avançado requer um endereço público ou outro software: Aplicativo do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat) e Satori. O LINE não é oferecido.
 
 Nos dois caminhos, uma plataforma conectada responde a todo grupo e mensagem direta que a plataforma entrega ao bot. Isso muda quando `ACCESS_GROUPS` ou `ACCESS_DM_USERS` tem uma entrada para essa plataforma (veja [as listas de permissão do personagent](#por-um-astrbot-que-você-já-executa)). Os IDs chegam como `<platform>:<id>`, por exemplo `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` e `discord:<id>`. O bot oficial do QQ vê openids, não números de QQ. Conectar uma plataforma diretamente remove a conexão do AstrBot para essa mesma plataforma.
 
@@ -87,7 +87,7 @@ Nos dois caminhos, uma plataforma conectada responde a todo grupo e mensagem dir
 
 AstrBot, NapCat (OneBot), Koishi (pelo [conector Satori](../integrations/satori/README.pt-BR.md)) e Matrix (pelo [conector Matrix](../integrations/matrix/README.pt-BR.md) e pontes mautrix) são pontes de terceiros com as quais o personagent funciona. Nenhuma é necessária para as plataformas que o personagent conecta por conta própria.
 
-O AstrBot entrega mensagens ao personagent por um plugin em `integrations/astrbot/astrbot_plugin_personagent/`. O plugin envia cada mensagem para `POST /v1/events` e repassa as respostas recebidas. Ele também busca a caixa de saída do personagent (`outbox_enabled`, ligado por padrão), então a persona pode falar primeiro onde a plataforma permitir isso a um bot. O README do plugin tem a tabela. O AstrBot gerenciado recebe o plugin automaticamente. Para o seu próprio AstrBot, inicie-o uma vez para que ele crie a pasta de dados (a que contém `cmd_config.json`, `plugins/` e `config/`) e depois execute:
+O AstrBot entrega mensagens ao personagent por um plugin em `integrations/astrbot/astrbot_plugin_personagent/`. O plugin envia cada mensagem para `POST /v1/events` e repassa as respostas recebidas. Ele também busca a caixa de saída do personagent (`outbox_enabled`, ativado por padrão), então a persona pode falar primeiro onde a plataforma permitir isso a um bot. O README do plugin tem a tabela. O AstrBot gerenciado recebe o plugin automaticamente. Para o seu próprio AstrBot, inicie-o uma vez para que ele crie a pasta de dados (a que contém `cmd_config.json`, `plugins/` e `config/`) e depois execute:
 
 ```
 personagent connect astrbot                       # asks, and finds AstrBot's folder itself
@@ -102,8 +102,8 @@ Depois de atualizar o personagent, execute `connect astrbot` de novo ou envie o 
 
 Opções de `connect astrbot`:
 
-- `--qq` tira `aiocqhttp` de `excluded_platforms`, e `--no-qq` o coloca de volta. Sem nenhum dos dois, o roteamento do QQ fica como está. `CONNECTOR_QQ_PLATFORMS` acompanha o que o plugin acabar fazendo.
-- `--platform qq_official|telegram|discord|slack|kook|lark --token <token>` também liga esse adaptador na configuração do próprio AstrBot. O Slack também aceita `--app-token`, e o Lark e o QQ aceitam `--app-id` e `--app-secret`. Uma entrada de adaptador que já existe mantém as outras configurações (proxy, URL base, polling) e recebe só as credenciais novas.
+- `--qq` remove `aiocqhttp` de `excluded_platforms`, e `--no-qq` o adiciona novamente. Sem nenhum dos dois, o roteamento do QQ fica como está. `CONNECTOR_QQ_PLATFORMS` acompanha o que o plugin acabar fazendo.
+- `--platform qq_official|telegram|discord|slack|kook|lark --token <token>` também ativa esse adaptador na configuração do próprio AstrBot. O Slack também aceita `--app-token`, e o Lark e o QQ aceitam `--app-id` e `--app-secret`. Uma entrada de adaptador que já existe mantém as outras configurações (proxy, URL base, polling) e recebe só as credenciais novas.
 - `--url https://...` define um endereço HTTPS para onde o plugin envia.
 - `--install` baixa em vez disso um AstrBot gerenciado, e `--start` o inicia.
 
@@ -119,7 +119,7 @@ Para o AstrBot no Docker ou em outro host, veja [o guia do usuário](guide.pt-BR
 
 ### QQ pelo NapCat (OneBot)
 
-Este caminho usa uma conta pessoal de QQ em vez de um bot oficial. Você precisa de uma segunda conta de QQ nos grupos de destino, que não seja a sua (veja [DISCLAIMER.md](DISCLAIMER.pt-BR.md)). Ela faz login, em geral por QR code e em uma sessão que sobrevive a reinícios, em uma implementação de OneBot v11 conectada ao adaptador `aiocqhttp` do AstrBot. O [NapCat](https://github.com/NapNeko/NapCatQQ) é testado e se liga ao cliente de desktop QQ NT. LLOneBot e Lagrange são outras implementações de OneBot v11.
+Este caminho usa uma conta pessoal de QQ em vez de um bot oficial. Você precisa de uma segunda conta de QQ nos grupos de destino, que não seja a sua (veja [DISCLAIMER.md](DISCLAIMER.pt-BR.md)). Ela faz login, em geral por QR code e em uma sessão que persiste após reinicializações, em uma implementação de OneBot v11 conectada ao adaptador `aiocqhttp` do AstrBot. O [NapCat](https://github.com/NapNeko/NapCatQQ) é testado e se conecta ao cliente de desktop QQ NT. LLOneBot e Lagrange são outras implementações de OneBot v11.
 
 No AstrBot gerenciado, adicione **Avançado > OneBot v11 (NapCat)** na página local e aponte o NapCat para `ws://127.0.0.1:6199/ws`. O [guia em chinês](deploy.zh-CN.md) explica passo a passo. Com o seu próprio AstrBot, remova `aiocqhttp` de `excluded_platforms` do plugin, defina `CONNECTOR_QQ_PLATFORMS=aiocqhttp` (`--qq` faz as duas coisas) e defina `QQ_BOT_ID` (`personagent connect astrbot` pergunta).
 
@@ -129,11 +129,11 @@ IDs puros carregam a autoridade do QQ, então as entradas de QQ de `ADMIN_IDS`, 
 
 **O servidor HTTP do NapCat** (`QQ_ONEBOT_URL`, vazio por padrão) é opcional neste caminho. O personagent também envia mensagens por iniciativa própria:
 
-- mensagens proativas (`PROACTIVE_ENABLED`, desligado por padrão);
+- mensagens proativas (`PROACTIVE_ENABLED`, desativado por padrão);
 - a pergunta feita dois minutos depois de uma rejeição (`REACT_ELICIT_ENABLED`);
 - a desculpa enviada em um grupo quando a chamada ao modelo falha.
 
-Elas voltam pela caixa de saída do plugin enquanto o plugin a estiver buscando. Quando não estiver, vão para `QQ_ONEBOT_URL`, se a URL estiver definida. Só a varredura de @menções perdidas enquanto offline precisa do servidor, junto com `QQ_BOT_ID`. A varredura roda no início e depois a cada 30 minutos. Ela cobre os grupos de QQ em `ACCESS_GROUPS` mais qualquer grupo com atividade desde o último reinício, e reproduz @menções com menos de uma hora. Com a URL vazia, `personagent doctor` mostra a ponte OneBot como "not configured".
+Elas voltam pela caixa de saída do plugin enquanto o plugin a estiver buscando. Quando não estiver, vão para `QQ_ONEBOT_URL`, se a URL estiver definida. Só a varredura de @menções perdidas enquanto offline precisa do servidor, junto com `QQ_BOT_ID`. A varredura é executada na inicialização e depois a cada 30 minutos. Ela cobre os grupos de QQ em `ACCESS_GROUPS` mais qualquer grupo com atividade desde o último reinício, e reproduz @menções com menos de uma hora. Com a URL vazia, `personagent doctor` mostra a ponte OneBot como "not configured".
 
 **Perdido em todo caminho de conector** (direto, AstrBot ou outro conector), sem configuração que traga de volta:
 
@@ -143,13 +143,13 @@ Elas voltam pela caixa de saída do plugin enquanto o plugin a estiver buscando.
 
 ## Mais de uma plataforma
 
-Vários conectores podem rodar lado a lado com um único personagent, porque cada um nomeia sua plataforma (`telegram:-1001234`, `matrix:!room:example.org`). O processo direct, o AstrBot, o Satori e o Matrix podem rodar todos ao mesmo tempo. Não traga uma conversa por dois conectores, ou cada mensagem chega duas vezes. IDs com namespace nunca colidem com um número de QQ puro.
+Vários conectores podem ser executados lado a lado com um único personagent, porque cada um nomeia sua plataforma (`telegram:-1001234`, `matrix:!room:example.org`). O processo direct, o AstrBot, o Satori e o Matrix podem ser executados ao mesmo tempo. Não encaminhe uma mesma conversa por dois conectores; caso contrário, cada mensagem chega duas vezes. IDs com namespace nunca colidem com um número de QQ puro.
 
 Mensagens que ninguém pediu chegam a uma plataforma por um conector que busca a caixa de saída do personagent. São as aberturas proativas, a pergunta depois de uma rejeição e a desculpa quando a chamada ao modelo falha em um grupo. A desculpa de uma mensagem direta volta na resposta à requisição que trouxe a mensagem.
 
-O processo direct e os três conectores daqui buscam a caixa de saída, nas plataformas em que um bot pode enviar primeiro. O QQ limita a taxa de mensagens espontâneas de um bot oficial, e uma pessoa pode desligá-las. Um conector seu envia `connector_id`, `reply_handle` e `"capabilities": ["outbox"]` com os eventos e faz long polling em `/v1/outbox` (veja [o protocolo de conectores](connectors.pt-BR.md)). Sem um conector assim, o personagent só fala dentro da requisição que trouxe uma mensagem. Os loops proativos pulam essas conversas, e a pergunta e a desculpa não são enviadas.
+O processo direct e os três conectores daqui buscam a caixa de saída, nas plataformas em que um bot pode enviar primeiro. O QQ limita a taxa de mensagens espontâneas de um bot oficial, e uma pessoa pode desativá-las. Um conector seu envia `connector_id`, `reply_handle` e `"capabilities": ["outbox"]` com os eventos e faz long polling em `/v1/outbox` (veja [o protocolo de conectores](connectors.pt-BR.md)). Sem um conector assim, o personagent só fala dentro da requisição que trouxe uma mensagem. Os loops proativos ignoram essas conversas, e a pergunta e a desculpa não são enviadas.
 
-`PROACTIVE_PLATFORMS` limita onde o loop proativo pode falar primeiro. `PROACTIVE_PLATFORMS=qq_official` o mantém no bot oficial do QQ, e `qq` no QQ pelo NapCat. `CONNECTOR_OUTBOX_ENABLED=false` desliga a caixa de saída por completo.
+`PROACTIVE_PLATFORMS` limita onde o loop proativo pode falar primeiro. `PROACTIVE_PLATFORMS=qq_official` o mantém no bot oficial do QQ, e `qq` no QQ pelo NapCat. `CONNECTOR_OUTBOX_ENABLED=false` desativa a caixa de saída por completo.
 
 Para falar primeiro em uma mensagem direta sem a caixa de saída, seu próprio agendador (uma tarefa de plugin do AstrBot, uma entrada de cron) pode enviar um evento de mensagem direta marcado com `"proactive": true`. Veja [Falar primeiro sem a caixa de saída](connectors.pt-BR.md#falar-primeiro-sem-a-caixa-de-saída).
 
@@ -157,7 +157,7 @@ Para falar primeiro em uma mensagem direta sem a caixa de saída, seu próprio a
 
 Mantenha `SERVER_HOST=127.0.0.1` quando o conector e o personagent compartilharem uma máquina. Um contêiner conta como a mesma máquina só com o namespace de rede do host ou com rede do host. A página local e `personagent up` sempre se vinculam a `127.0.0.1`. Caso contrário:
 
-1. Defina `SERVER_HOST=0.0.0.0` (ou `--host 0.0.0.0`) e `CONNECTOR_TOKEN`. O início recusa um vínculo de rede sem o token. Ele não exige `QQ_ONEBOT_SECRET`, mas sem ele o obsoleto `/v1/onebot` fica desligado em um vínculo de rede. Toda requisição a ele recebe 403 `onebot_disabled`, e o log diz o motivo uma vez.
+1. Defina `SERVER_HOST=0.0.0.0` (ou `--host 0.0.0.0`) e `CONNECTOR_TOKEN`. O início recusa um vínculo de rede sem o token. Ele não exige `QQ_ONEBOT_SECRET`, mas sem ele o obsoleto `/v1/onebot` fica desativado em um vínculo de rede. Toda requisição a ele recebe 403 `onebot_disabled`, e o log diz o motivo uma vez.
 2. Coloque na frente um proxy reverso HTTPS ou um túnel privado. Todos os conectores daqui enviam só para loopback, ou para HTTPS com um token definido. O plugin do AstrBot registra qualquer outra coisa como `refusing unsafe personagent_url`, e os conectores Satori e Matrix se recusam a iniciar.
 3. Mantenha o corpo intacto byte a byte, porque a assinatura o cobre, e mantenha os relógios a menos de cinco minutos um do outro.
 
@@ -173,8 +173,8 @@ Um proxy no mesmo host que não adicione nenhum destes ainda parece local. Defin
 ## Endpoints de saúde
 
 - `GET /health` é gratuito e aberto, e não chama nada.
-- `GET /health/details` testa os serviços externos (em cache por 60 s). Com `CONNECTOR_TOKEN` vazio, responde só a requisições locais. Com um token definido, responde **só** a requisições com um cabeçalho `X-Personagent-Token` correspondente, mesmo vindas do loopback. Retorna 503 quando um teste crítico falha ou não pode rodar. Os testes críticos são os modelos de conversa e, quando o QQ usa a entrada direta do OneBot (`QQ_BOT_ID` e `QQ_ONEBOT_URL` definidos, `CONNECTOR_QQ_PLATFORMS` não definido), a ponte OneBot.
-- `personagent doctor [--json]` roda os mesmos testes mais a verificação das configurações, e sai com valor diferente de zero no mesmo caso. Quando a última verificação de atualização tem um dia, também pergunta ao pypi.org pela versão mais nova (`UPDATE_CHECK_ENABLED=false` pula isso).
+- `GET /health/details` testa os serviços externos (em cache por 60 s). Com `CONNECTOR_TOKEN` vazio, responde só a requisições locais. Com um token definido, responde **só** a requisições com um cabeçalho `X-Personagent-Token` correspondente, mesmo vindas do loopback. Retorna 503 quando um teste crítico falha ou não pode ser executado. Os testes críticos são os modelos de conversa e, quando o QQ usa a entrada direta do OneBot (`QQ_BOT_ID` e `QQ_ONEBOT_URL` definidos, `CONNECTOR_QQ_PLATFORMS` não definido), a ponte OneBot.
+- `personagent doctor [--json]` executa os mesmos testes mais a verificação das configurações, e sai com valor diferente de zero no mesmo caso. Quando a última verificação de atualização tem um dia, também pergunta ao pypi.org pela versão mais nova (`UPDATE_CHECK_ENABLED=false` evita essa consulta).
 
 ## Custos
 
@@ -186,14 +186,14 @@ Um proxy no mesmo host que não adicione nenhum destes ainda parece local. Defin
 
 ## Quando o bot fica em silêncio
 
-As causas estão listadas da mais comum para a menos comum. Quando a página local executa o agente, [Atividade](guide.pt-BR.md#atividade) mostra se as mensagens chegam e por que ele ficou quieto. Em um servidor, leia o log do serviço e use `personagent learned` para o que ele aprendeu.
+As causas estão listadas da mais comum para a menos comum. Quando a página local executa o agente, [Atividade](guide.pt-BR.md#atividade) mostra se as mensagens chegam e por que ele permaneceu em silêncio. Em um servidor, leia o log do serviço e use `personagent learned` para o que ele aprendeu.
 
-1. **Nada chega até ele.** Na página local, verifique se a plataforma aparece como conectada e leia `runtime/desktop/direct.log` ou `astrbot.log`. O bot oficial do QQ precisa estar no grupo, e o QQ decide quais mensagens de grupo ele recebe. Um bot de WeChat pessoal nunca recebe grupos. Em um AstrBot que você executa, preencha `groups` do plugin (e `dm_users` para mensagens diretas), e para o NapCat tire `aiocqhttp` de `excluded_platforms`. Os conectores Satori e Matrix têm listas de permissão próprias no `.env` deles. Veja os README deles. Nesse caso, a conversa nunca aparece em Atividade.
-2. **O agente está desligado.** O banner de `personagent run` diz `agent: OFF`, com o motivo e a solução. Sem `LLM_API_KEY`, adicione uma chave na página local (ou defina `LLM_API_KEY`) e reinicie. Com `AGENT_ENABLED=false`, defina como `true` em `<home>/.env` e reinicie. Até lá, todo evento recebe `owned: false`, e o primeiro registra uma única linha ERROR com o mesmo conselho.
-3. **O modelo do próprio AstrBot responde no lugar.** O plugin recorreu a ele porque a requisição falhou, o personagent recusou a mensagem (item 5) ou o agente está desligado (item 2). O log do AstrBot mostra `refusing unsafe personagent_url`, `agent refused the request (403): <message>` (ou outro status, veja a tabela abaixo) ou `timed out waiting for the agent`. `timeout_s` precisa cobrir o debounce e as chamadas ao modelo no turno, e também o turno que estava pensando quando a mensagem chegou. As chamadas ao modelo de um turno dividem 1,5 × `LLM_TIMEOUT_S`, tanto em um grupo quanto em uma mensagem direta, então mantenha 3 × `LLM_TIMEOUT_S` abaixo dele. O padrão (420) cobre o padrão do agente (3 × 120 = 360 s). Aumente-o quando aumentar `LLM_TIMEOUT_S`.
-4. **Ele não foi chamado.** Em um grupo, responde ao nome (`PERSONA_NAME`) ou a um @. Caso contrário, espera conversa suficiente (`CHAT_TRIGGER_COUNT`, 30 mensagens por padrão) e ainda pode passar. Das 02:00 às 07:00 no fuso horário dele, quase não entra em conversas em que não foi chamado. O fuso horário é `PERSONA_TZ_OFFSET_HOURS`. Vazio, é UTC+8 quando `AGENT_LANG` é `zh` ou `zh-TW`, e caso contrário o desta máquina. Atividade mostra o motivo de cada turno recente. Para ver a mesma decisão offline, execute `personagent chat --trigger 4`.
+1. **Nada chega até ele.** Na página local, verifique se a plataforma aparece como conectada e leia `runtime/desktop/direct.log` ou `astrbot.log`. O bot oficial do QQ precisa estar no grupo, e o QQ decide quais mensagens de grupo ele recebe. Um bot de WeChat pessoal nunca recebe grupos. Em um AstrBot que você executa, preencha `groups` do plugin (e `dm_users` para mensagens diretas), e, para o NapCat, remova `aiocqhttp` de `excluded_platforms`. Os conectores Satori e Matrix têm listas de permissão próprias no `.env` deles. Veja os README deles. Nesse caso, a conversa nunca aparece em Atividade.
+2. **O agente está desativado.** O banner de `personagent run` diz `agent: OFF`, com o motivo e a solução. Sem `LLM_API_KEY`, adicione uma chave na página local (ou defina `LLM_API_KEY`) e reinicie. Com `AGENT_ENABLED=false`, defina como `true` em `<home>/.env` e reinicie. Até lá, todo evento recebe `owned: false`, e o primeiro registra uma única linha ERROR com o mesmo conselho.
+3. **O modelo do próprio AstrBot responde no lugar.** O plugin recorreu a ele porque a requisição falhou, o personagent recusou a mensagem (item 5) ou o agente está desativado (item 2). O log do AstrBot mostra `refusing unsafe personagent_url`, `agent refused the request (403): <message>` (ou outro status, veja a tabela abaixo) ou `timed out waiting for the agent`. `timeout_s` precisa cobrir o debounce e as chamadas ao modelo no turno, e também o turno que estava pensando quando a mensagem chegou. As chamadas ao modelo de um turno dividem 1,5 × `LLM_TIMEOUT_S`, tanto em um grupo quanto em uma mensagem direta, então mantenha 3 × `LLM_TIMEOUT_S` abaixo dele. O padrão (420) cobre o padrão do agente (3 × 120 = 360 s). Aumente-o quando aumentar `LLM_TIMEOUT_S`.
+4. **Ele não foi chamado.** Em um grupo, responde ao nome (`PERSONA_NAME`) ou a um @. Caso contrário, espera conversa suficiente (`CHAT_TRIGGER_COUNT`, 30 mensagens por padrão) e ainda pode optar por não responder. Das 02:00 às 07:00 no fuso horário dele, quase não entra em conversas em que não foi chamado. O fuso horário é `PERSONA_TZ_OFFSET_HOURS`. Vazio, é UTC+8 quando `AGENT_LANG` é `zh` ou `zh-TW`, e caso contrário o desta máquina. Atividade mostra o motivo de cada turno recente. Para ver a mesma decisão offline, execute `personagent chat --trigger 4`.
 5. **As listas de permissão do personagent.** `ACCESS_GROUPS` e `ACCESS_DM_USERS` se aplicam em todos os caminhos, e uma mensagem direta do QQ com ID puro também precisa do administrador ou de uma entrada. Uma mensagem recusada por elas volta sem ser assumida, então pelo AstrBot o modelo dele pode responder. O personagent registra cada conversa recusada uma vez, em INFO, com a configuração que a recusou.
-6. **A chamada ao modelo falha.** Uma chave rejeitada (401 ou 403) ou um saldo vazio (402 ou cota esgotada) registra uma linha ERROR que nomeia o host do provedor e a configuração a corrigir. Execute `personagent doctor`. Ele envia uma pequena requisição a cada endpoint de modelo e mostra o status, o que também pega um `LLM_BASE_URL` ou `LLM_MODEL` errado. Enquanto o modelo está fora, a persona envia uma desculpa curta dentro do personagem quando é chamada, no máximo uma vez por conversa a cada cinco minutos.
+6. **A chamada ao modelo falha.** Uma chave rejeitada (401 ou 403) ou um saldo vazio (402 ou cota esgotada) registra uma linha ERROR que nomeia o host do provedor e a configuração a corrigir. Execute `personagent doctor`. Ele envia uma pequena requisição a cada endpoint de modelo e mostra o status, o que também detecta um `LLM_BASE_URL` ou `LLM_MODEL` incorreto. Enquanto o modelo está indisponível, a persona envia uma desculpa curta dentro do personagem quando é chamada, no máximo uma vez por conversa a cada cinco minutos.
 7. **Uma configuração com erro de digitação.** O log de início e `personagent doctor` listam toda chave que `.env.example` não conhece e qualquer valor que comece com `#`.
 8. **Um BOM no `.env`.** O nome da primeira configuração carrega o BOM e nunca chega ao processo. O início e `personagent doctor` informam isso. Salve o arquivo de novo como UTF-8 sem BOM.
 9. **`QQ_BOT_ID` não definido ou errado com o NapCat.** Pelo AstrBot, as @menções ainda funcionam, mas a varredura de menções perdidas compara com ele. Na entrada direta do OneBot, uma @menção nunca é reconhecida. O bot inicia sem problemas, não registra nada e nunca responde. `personagent doctor` avisa quando `QQ_BOT_ID` está vazio e outras configurações de QQ estão definidas. O bot oficial do QQ não o usa.
@@ -208,7 +208,7 @@ Os erros de `/v1/events` estão listados abaixo. O plugin do AstrBot registra a 
 | 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | token, cabeçalhos ou assinatura ausentes ou errados, relógios com mais de 5 min de diferença, nonce reutilizado ou proteção contra repetição cheia (`connector replay guard full` no log do agente) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` difere de agora em mais de `CONNECTOR_MAX_EVENT_AGE_S` (24 h), incluindo carimbos de tempo futuros ou em milissegundos |
 | 400 | `invalid_schema` | invalid event schema | falta um campo obrigatório: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, e `conversation_id` para grupos |
-| 400 | `client_disconnected` | client disconnected | quem chama desligou durante o envio |
+| 400 | `client_disconnected` | client disconnected | quem chama encerrou a conexão durante o envio |
 | 408 | `body_timeout` | request body not received in time | o corpo levou mais de 30 s para chegar |
 | 413 | `body_too_large` | request body too large | acima de `SERVER_MAX_BODY_BYTES` (8 MB), em geral uma imagem embutida |
 | 429 | `capacity_exceeded` | webhook capacity exceeded | acima de `CONNECTOR_MAX_INFLIGHT` turnos em andamento; tente de novo após 3 s |
@@ -217,12 +217,12 @@ Os erros de `/v1/events` estão listados abaixo. O plugin do AstrBot registra a 
 
 O webhook do NapCat ainda pode enviar eventos para `POST /v1/onebot`, e o personagent responde por `QQ_ONEBOT_URL`. Esta rota está obsoleta e permanece durante a 1.x. Use em vez disso a conexão do bot oficial do QQ, ou o NapCat pelo AstrBot com `CONNECTOR_QQ_PLATFORMS=aiocqhttp`. A rota avisa uma vez no primeiro uso e marca toda resposta com `Deprecation: true`.
 
-Para passar ao NapCat pelo AstrBot, adicione OneBot v11 (NapCat) na página local, ou execute `personagent connect astrbot <AstrBot data dir> --qq` para o seu próprio AstrBot e preencha as listas de permissão. Aponte o cliente WebSocket do NapCat para ele e desligue o cliente HTTP do NapCat (mantenha o servidor HTTP). Memória e aprendizado são mantidos, porque `CONNECTOR_QQ_PLATFORMS` preserva os IDs.
+Para passar ao NapCat pelo AstrBot, adicione OneBot v11 (NapCat) na página local, ou execute `personagent connect astrbot <AstrBot data dir> --qq` para o seu próprio AstrBot e preencha as listas de permissão. Aponte o cliente WebSocket do NapCat para ele e desative o cliente HTTP do NapCat (mantenha o servidor HTTP). Memória e aprendizado são mantidos, porque `CONNECTOR_QQ_PLATFORMS` preserva os IDs.
 
 Se você ainda usa a rota legada:
 
 - Configure as duas direções como a [documentação do NapCat](https://napneko.github.io/) descreve. Você precisa de um **servidor HTTP** em `QQ_ONEBOT_URL` para enviar e de um **cliente HTTP** que envie para `http://127.0.0.1:8080/v1/onebot` (`SERVER_HOST`, `SERVER_PORT`). `QQ_ONEBOT_URL` é vazio por padrão, então escreva-o no `.env`. Sem ele, o bot recebe mas nunca responde. A verificação prévia e `personagent doctor` avisam quando esta rota parece configurada (`QQ_BOT_ID` ou `QQ_ONEBOT_SECRET` definido, `CONNECTOR_QQ_PLATFORMS` vazio) e `QQ_ONEBOT_URL` está vazio.
-- Se o NapCat estiver em outra máquina, defina `QQ_ONEBOT_SECRET` como o `secret` do cliente HTTP. Caso contrário, qualquer um que alcance a porta pode forjar eventos. Os corpos então precisam levar `x-signature: sha1=<hex>` (403 `bad_signature`), e eventos com carimbo de tempo desviado em mais de cinco minutos recebem 403 `stale_event`. Sem o segredo, a rota responde só a programas neste host, e em um vínculo de rede fica desligada (403 `onebot_disabled`).
-- Com o AstrBot na mesma conta, mantenha `aiocqhttp` em `excluded_platforms`, ou cada mensagem chega duas vezes.
+- Se o NapCat estiver em outra máquina, defina `QQ_ONEBOT_SECRET` como o `secret` do cliente HTTP. Caso contrário, qualquer um que alcance a porta pode forjar eventos. Os corpos então precisam levar `x-signature: sha1=<hex>` (403 `bad_signature`), e eventos com carimbo de tempo desviado em mais de cinco minutos recebem 403 `stale_event`. Sem o segredo, a rota responde só a programas neste host, e em um vínculo de rede fica desativada (403 `onebot_disabled`).
+- Com o AstrBot na mesma conta, mantenha `aiocqhttp` em `excluded_platforms`; caso contrário, cada mensagem chega duas vezes.
 
 Verifique o envio com `curl http://127.0.0.1:3000/get_login_info`. Verifique o recebimento observando o log do personagent enquanto escreve para o bot em um grupo.
