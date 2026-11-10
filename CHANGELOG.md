@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-10
+
+Three characters the community already draws, with animated portraits; the character inside your coding agent; memory that stays current and can be forgotten; the local page, the terminal and the guides in ten languages; and a calmer local page.
+
 ### Added
 
 - **The character in your coding agent.** `personagent connect claude-code`, `personagent connect codex` and `personagent connect dsh` (DeepSeek Harness) register a new MCP server, `personagent mcp`, with a `talk` tool in the same one-to-one chat and memory as the local page and a free `character` tool. It uses the open page or a running `personagent up`, and otherwise starts the page for that session. On Claude Code and Codex, `--react` adds a Stop hook that lets the character say a line when a turn ends (`CODING_REACT_COOLDOWN_S`, 30 minutes by default); `--remove` undoes it all.
@@ -15,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Memory on the local page.** Activity shows the core note and who each note is about, and **Forget** deletes either.
 
 - **Ten languages in the terminal.** `init --terminal`, `chat`, `demo`, every `--help` and `doctor` run in English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, French, German, Brazilian Portuguese and Russian, and `--lang` and `AGENT_LANG` take all ten codes. Each language has its own starter personas and default name. Saving the local page writes the page's language to `AGENT_LANG`, and the first setup follows the system language.
-- **ChatGPT, DeepSeek and Claude as people.** Three new fan-made characters (`chatgpt`, `deepseek`, `claude`) in every setup path and all ten languages, with animated portraits in the local page that blink, think while a reply is on the way and talk when it arrives, and hold still under reduced motion. Picking one without naming it names the character after it, and `PERSONA_AVATAR` keeps the portrait after the persona is edited.
+- **Three characters the community already draws.** The DeepSeek whale girl, the GPT dragon girl and the Claude lady (`deepseek`, `chatgpt`, `claude`) in every setup path and all ten languages. On the local page each has a portrait that blinks, glances up while a reply is on the way and talks when it arrives, and holds still under reduced motion. Picking one without naming it names the character after it, and `PERSONA_AVATAR` keeps the portrait after the persona is edited. The portraits are CC BY-NC-SA 4.0, with credits in `persona_agent/static/characters/LICENSE.md`.
+- **The documentation in ten languages.** The getting-started guide, user guide, deployment guide, connector protocol, tools page and disclaimer follow the README.
 
 ### Changed
 
@@ -25,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A new setup starts on OpenRouter's free models.** OpenRouter is the first preset, with `openrouter/free`, so the only thing to get is a free key. The limit is 50 requests a day, and the local page says so under the service. A home that already names a service keeps it, and a `.env` with only a key still means DeepSeek. On a new home, `init --no-input` with a key from `--key-env` or the shell's `LLM_API_KEY` now needs `--provider` or `--base-url`, so an existing script cannot send its key to the wrong company. A 429 now logs the provider's reason, and the page says when a service is out of requests.
 
 - **Less defensive code.** Guards for states the code itself never produces are gone: type checks on its own files and values, catch-alls around its own calls, misuse warnings. A corrupt state file (`connector_handles.json`, `stickers.json`, the direct-app credentials and others) now stops with an error instead of reading as empty. Network and model failures, the auth and SSRF checks and the handling of what chat users send are unchanged. Comments and docs lost their hedging.
+- **A calmer local page.** No boxed cards: fields are a light fill with a line under them, secondary actions are text, one accent marks where you are, and the lightest text now meets 4.5:1.
+- **A lighter install.** The README's illustrations no longer ship in the wheel, and Pillow 13 and websockets 17 are accepted.
+- **Quicker to open.** The browser opens as soon as the page listens, not 0.8 s later; `--help` reads `.env` once, not once per sentence; the local page no longer re-reads every shipped character on each poll.
 
 ### Fixed
 
@@ -35,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The model could not tell how old a note was**, so "has an exam tomorrow" read as current for months. Each note now carries its age, and notes are asked to give dates rather than "tomorrow".
 - **Activity listed who a note was about under "who added it".**
 - **A reply could send the same sticker twice.** The once-per-reply check looked stickers up by file name, but they are keyed by path, so it never matched.
+- **A failing model is skipped by every call.** The cooldown after a failure applied only to group replies, so a DM, the gate and the other calls sat through the retries on every turn.
+- **One failed vision call no longer blinds an image.** What OCR read during the outage was cached in the caption's place.
+- **A sticker has to match.** A new, much-used sticker could clear the bar for any tag, so a comforting reply could send a teasing one.
+- **Saving settings no longer replaces an old template persona** with the warm listener on a home set up by an earlier release.
+- **On Windows, a script that gives no input is not a terminal.** `personagent` with its input closed opened the page and waited, and `init` asked its questions and dropped the flags.
+- **Retry on a failed message no longer loses it** when another reply is on its way.
+- **A long message says it is too long.** The page accepts the 8000 characters the chat does, in any script, and names the problem past that.
+- **The page no longer flashes the Chinese setup form** before it shows the right view.
+- **`--port` on a port in use says so** in one line. The update notice of `start` and `up` is translated, and a language outside the ten no longer breaks the line said when the model fails.
 
 ## [1.3.1] — 2026-10-26
 
@@ -464,7 +481,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/wangkant/personagent/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/wangkant/personagent/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/wangkant/personagent/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/wangkant/personagent/compare/v1.2.1...v1.2.2
