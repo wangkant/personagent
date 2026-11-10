@@ -15,7 +15,7 @@
 
 *Ceci est une traduction du README anglais, qui fait référence et peut être plus récent.*
 
-personagent est un personnage pour vos discussions de groupe : choisissez-en un tout prêt ou écrivez le vôtre, et faites-le tourner sur n'importe quel modèle compatible OpenAI. Commencez par discuter avec lui sur votre propre ordinateur, puis emmenez-le sur QQ, WeChat, Telegram, Discord et une douzaine d'autres applis depuis la même page locale.
+personagent est un personnage pour vos discussions de groupe : choisissez-en un tout prêt ou écrivez le vôtre, et faites-le tourner sur n'importe quel modèle compatible OpenAI. Commencez par discuter avec lui sur votre propre ordinateur, puis emmenez-le sur QQ, WeChat, Telegram, Discord et dix-huit autres applis depuis la même page locale.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="L'écran Connecter des applis de la page locale, avec toutes les plateformes que le personnage peut rejoindre" width="960">
@@ -79,10 +79,10 @@ Ouvrez **Connecter des applis** dans la page locale :
 | Sur la page | Applis | Ce qu'il vous faut |
 |---|---|---|
 | Scanner pour connecter | QQ, WeChat personnel | Votre téléphone. Les bots WeChat n'ont que des discussions en tête-à-tête |
-| Coller une ou deux valeurs | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | Des valeurs issues de la console de l'appli ; la page indique lesquelles |
+| Coller une ou deux valeurs | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | Des valeurs issues de la console de l'appli ; la page indique lesquelles |
 | Avancé | Appli WeCom, compte officiel WeChat, webhook QQ, OneBot v11 (NapCat), Satori | Une adresse publique, ou un autre logiciel sur cet ordinateur |
 
-Les applis connectées redémarrent à chaque lancement de personagent. personagent connecte lui-même les applis à scanner, Telegram et Discord ; les autres passent par un [AstrBot](https://github.com/AstrBotDevs/AstrBot) qu'il télécharge et fait tourner en arrière-plan. Sur un serveur, `personagent up` démarre tout sans navigateur. La configuration de chaque appli est décrite dans le [guide d'utilisation](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#le-placer-dans-une-discussion), et QQ en partant de zéro dans le [guide de déploiement en chinois](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+Les applis connectées redémarrent à chaque lancement de personagent. personagent connecte lui-même les applis à scanner, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK et Stoat ; les autres passent par un [AstrBot](https://github.com/AstrBotDevs/AstrBot) qu'il télécharge et fait tourner en arrière-plan. Sur un serveur, `personagent up` démarre tout sans navigateur. La configuration de chaque appli est décrite dans le [guide d'utilisation](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#le-placer-dans-une-discussion), et QQ en partant de zéro dans le [guide de déploiement en chinois](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 Vous faites déjà tourner AstrBot, Koishi ou Matrix ? personagent peut se placer derrière comme personnage : voir les [ponts que vous exécutez vous-même](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#ponts-que-vous-exécutez-vous-même), le [connecteur Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.fr.md) et le [connecteur Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.fr.md).
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` le retire à nouveau. Le [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#agents-de-code) couvre les autorisations et `--react`, qui permet au personnage de dire un mot à la fin d'un tour.
+`--remove` le retire à nouveau, et **Assistants de programmation**, dans **Connecter des plateformes**, effectue ces deux opérations depuis la page. Le [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#agents-de-code) couvre les autorisations et `--react`, qui permet au personnage de dire un mot à la fin d'un tour.
 
 ## Mise à jour et désinstallation
 
-Quand une version plus récente est sur PyPI, la page affiche un avis avec la commande de mise à jour. Avec pip, c'est `python -m pip install -U personagent`. Les réglages, le personnage, ce qu'il a appris et les applis connectées sont conservés. Pour le retirer, suivez les [étapes de désinstallation](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (en anglais).
+Quand une version plus récente est sur PyPI, la page affiche un avis avec la commande de mise à jour. Avec pip, c'est `python -m pip install -U personagent`. Sur la plupart des installations, **Mettre à jour et rouvrir**, dans la vue **Application** de la page, l'exécute pour vous. Les réglages, le personnage, ce qu'il a appris et les applis connectées sont conservés. Pour le retirer, suivez les [étapes de désinstallation](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (en anglais).
 
 ## Confidentialité
 

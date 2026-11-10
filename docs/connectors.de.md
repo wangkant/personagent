@@ -8,7 +8,7 @@ Dieses Repository enthält vier Konnektoren:
 
 | Konnektor | Erreicht | Pfad |
 |---|---|---|
-| Direkt | Offizielle QQ-Bots, persönliches WeChat (iLink), Telegram und Discord, ohne weitere Software. Die lokale Seite und `personagent up` führen ihn als einen Prozess aus, `python -m persona_agent.direct`. | `persona_agent/direct/` |
+| Direkt | Offizielle QQ-Bots, persönliches WeChat (iLink), Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat, ohne weitere Software. Die lokale Seite und `personagent up` führen ihn als einen Prozess aus, `python -m persona_agent.direct`. | `persona_agent/direct/` |
 | AstrBot-Plugin | Die Plattformen von AstrBot, einer Brücke eines Drittanbieters. Das AstrBot, das personagent für KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 und die übrigen verwaltet, bekommt das Plugin automatisch. Für ein AstrBot, das du schon betreibst, richtet `personagent connect astrbot` es ein. Du kannst auch `astrbot_plugin_personagent.zip` aus einem GitHub Release über „Aus Datei installieren“ in AstrBot hochladen und `connector_token` selbst setzen. | `integrations/astrbot/` |
 | Satori | Jede Satori-Implementierung (Koishi und andere, von Drittanbietern): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, E-Mail und mehr. | `integrations/satori/` |
 | Matrix | Matrix-Räume und über mautrix-Brücken von Drittanbietern WhatsApp, Signal, Messenger, Instagram, Google Messages und mehr. | `integrations/matrix/` |

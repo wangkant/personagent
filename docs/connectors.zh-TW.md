@@ -8,7 +8,7 @@ agent 自己從不和聊天平臺打交道，這件事由聯結器來做。聯�
 
 | 聯結器 | 能連到 | 路徑 |
 |---|---|---|
-| 直連 | QQ 官方機器人、個人微信（iLink）、Telegram 和 Discord，不需要其他軟體。本地頁面和 `personagent up` 用一個程序執行它：`python -m persona_agent.direct`。 | `persona_agent/direct/` |
+| 直連 | QQ 官方機器人、個人微信（iLink）、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat，不需要其他軟體。本地頁面和 `personagent up` 用一個程序執行它：`python -m persona_agent.direct`。 | `persona_agent/direct/` |
 | AstrBot 外掛 | 第三方橋接 AstrBot 支援的平臺。personagent 為 KOOK、飛書/Lark、釘釘、Slack、企業微信、Mattermost、Misskey、OneBot v11 等管理的 AstrBot 會自動裝好外掛。已經在執行的 AstrBot 用 `personagent connect astrbot` 設定。也可以用 AstrBot 的“從檔案安裝”上傳 GitHub Release 裡的 `astrbot_plugin_personagent.zip`，再自己設定 `connector_token`。 | `integrations/astrbot/` |
 | Satori | 所有 Satori 實現（Koishi 等第三方）：QQ、Telegram、Discord、KOOK、Lark、釘釘、LINE、WhatsApp、Matrix、Zulip、電子郵件等。 | `integrations/satori/` |
 | Matrix | Matrix 房間，並可透過第三方 mautrix 橋接連到 WhatsApp、Signal、Messenger、Instagram、Google Messages 等。 | `integrations/matrix/` |

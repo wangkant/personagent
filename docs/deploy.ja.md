@@ -70,7 +70,7 @@ API はエージェントサービスの `/api/dashboard/` の下にあります
 
 ローカルページの **アプリ連携** でプラットフォームを追加します。personagent は何かを保存する前に、認証情報をプラットフォームに確認します。プラットフォームが拒否すると、ページに拒否内容が表示され、何も残りません。
 
-**personagent 自身がつなぐもの。** QQ、個人の WeChat、Telegram、Discord は 1 つの「direct」プロセスで動き、AstrBot も NapCat も要りません。
+**personagent 自身がつなぐもの。** QQ、個人の WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat は 1 つの「direct」プロセスで動き、AstrBot も NapCat も要りません。読み込めないプラットフォームはスキップされ、ほかのプラットフォームは起動します。表は最初の 4 つを扱います。ほかの 6 つに必要なものと制限は、ユーザーガイドの[一覧](guide.ja.md#personagent-が自らつなぐプラットフォーム)にあります。
 
 | プラットフォーム | すること | 制限 |
 |---|---|---|
@@ -85,7 +85,7 @@ API はエージェントサービスの `/api/dashboard/` の下にあります
 
 ## すでに動かしている AstrBot を通す
 
-AstrBot、NapCat（OneBot）、Koishi（[Satori コネクター](../integrations/satori/README.ja.md)経由）、Matrix（[Matrix コネクター](../integrations/matrix/README.ja.md)と mautrix ブリッジ経由）は、personagent と連携するサードパーティのブリッジです。QQ、WeChat、Telegram、Discord にはどれも必要ありません。
+AstrBot、NapCat（OneBot）、Koishi（[Satori コネクター](../integrations/satori/README.ja.md)経由）、Matrix（[Matrix コネクター](../integrations/matrix/README.ja.md)と mautrix ブリッジ経由）は、personagent と連携するサードパーティのブリッジです。personagent が自らつなぐプラットフォームには、どれも必要ありません。
 
 AstrBot は `integrations/astrbot/astrbot_plugin_personagent/` のプラグインを通じて personagent にメッセージを渡します。プラグインは各メッセージを `POST /v1/events` に送り、レスポンスの返信を中継します。personagent のアウトボックスも取得するので（`outbox_enabled`、既定でオン）、プラットフォームがボットに許す場所ではペルソナが先に話せます。表はプラグインの README にあります。管理下の AstrBot にはプラグインが自動で入ります。自分の AstrBot の場合は、一度起動してデータフォルダー（`cmd_config.json`、`plugins/`、`config/` があるフォルダー）を作らせてから、次を実行します。
 

@@ -70,7 +70,7 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있어요.
 
 로컬 페이지의 **앱 연결**에서 플랫폼을 추가하세요. personagent는 무언가를 저장하기 전에 자격 증명을 플랫폼에 확인해요. 플랫폼이 거부하면 페이지에 거부 내용이 표시되고 아무것도 남지 않아요.
 
-**personagent가 직접 연결하는 것.** QQ, 개인 WeChat, Telegram, Discord는 하나의 "direct" 프로세스에서 실행되며 AstrBot도 NapCat도 필요 없어요.
+**personagent가 직접 연결하는 것.** QQ, 개인 WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 하나의 "direct" 프로세스에서 실행되며 AstrBot도 NapCat도 필요하지 않습니다. 불러올 수 없는 플랫폼은 건너뛰고 나머지 플랫폼은 그대로 시작합니다. 아래 표는 처음 네 개 플랫폼을 다룹니다. 나머지 여섯 개 플랫폼에 필요한 사항과 제한은 사용자 가이드의 [해당 절](guide.ko.md#personagent가-직접-연결하는-플랫폼)에 나와 있습니다.
 
 | 플랫폼 | 할 일 | 제한 |
 |---|---|---|
@@ -85,7 +85,7 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있어요.
 
 ## 이미 실행 중인 AstrBot을 통해
 
-AstrBot, NapCat(OneBot), Koishi([Satori 커넥터](../integrations/satori/README.ko.md) 경유), Matrix([Matrix 커넥터](../integrations/matrix/README.ko.md)와 mautrix 브리지 경유)는 personagent와 함께 동작하는 서드파티 브리지예요. QQ, WeChat, Telegram, Discord에는 어느 것도 필요 없어요.
+AstrBot, NapCat(OneBot), Koishi([Satori 커넥터](../integrations/satori/README.ko.md) 경유), Matrix([Matrix 커넥터](../integrations/matrix/README.ko.md)와 mautrix 브리지 경유)는 personagent와 함께 동작하는 서드파티 브리지예요. personagent가 직접 연결하는 플랫폼에는 이 중 어느 것도 필요하지 않습니다.
 
 AstrBot은 `integrations/astrbot/astrbot_plugin_personagent/`의 플러그인을 통해 personagent에 메시지를 넘겨요. 플러그인은 각 메시지를 `POST /v1/events`로 보내고 응답의 답장을 전달해요. personagent의 아웃박스도 가져오므로(`outbox_enabled`, 기본값 켜짐), 플랫폼이 봇에 허용하는 곳에서는 페르소나가 먼저 말할 수 있어요. 표는 플러그인 README에 있어요. 관리형 AstrBot에는 플러그인이 자동으로 들어가요. 직접 운영하는 AstrBot은 한 번 시작해서 데이터 폴더(`cmd_config.json`, `plugins/`, `config/`가 있는 폴더)를 만들게 한 다음 실행하세요.
 

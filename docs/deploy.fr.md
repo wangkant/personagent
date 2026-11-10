@@ -70,7 +70,7 @@ Le service ne sert aucune page. `GET /` répond par une courte note qui renvoie 
 
 Ajoutez des plateformes sous **Connecter des applis** sur la page locale. personagent vérifie les identifiants auprès de la plateforme avant d'enregistrer quoi que ce soit. Si la plateforme les refuse, la page affiche le refus et ne conserve rien.
 
-**Connectées par personagent lui-même.** QQ, WeChat personnel, Telegram et Discord fonctionnent dans un seul processus « direct », sans AstrBot ni NapCat.
+**Connectées par personagent lui-même.** QQ, WeChat personnel, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK et Stoat fonctionnent dans un seul processus « direct », sans AstrBot ni NapCat. Une plateforme qui ne peut pas être chargée est ignorée, et les autres démarrent malgré tout. Le tableau ci-dessous couvre les quatre premières ; le guide d'utilisation indique [ce dont les six autres ont besoin et leurs limites](guide.fr.md#plateformes-connectées-par-personagent-lui-même).
 
 | Plateforme | Ce que vous faites | Limites |
 |---|---|---|
@@ -85,7 +85,7 @@ Sur les deux voies, une plateforme connectée répond à chaque groupe et messag
 
 ## Via un AstrBot que vous exécutez déjà
 
-AstrBot, NapCat (OneBot), Koishi (via le [connecteur Satori](../integrations/satori/README.fr.md)) et Matrix (via le [connecteur Matrix](../integrations/matrix/README.fr.md) et les ponts mautrix) sont des ponts tiers avec lesquels personagent fonctionne. Aucun n'est nécessaire pour QQ, WeChat, Telegram ou Discord.
+AstrBot, NapCat (OneBot), Koishi (via le [connecteur Satori](../integrations/satori/README.fr.md)) et Matrix (via le [connecteur Matrix](../integrations/matrix/README.fr.md) et les ponts mautrix) sont des ponts tiers avec lesquels personagent fonctionne. Aucun n'est nécessaire pour les plateformes que personagent connecte lui-même.
 
 AstrBot transmet les messages à personagent via un plugin dans `integrations/astrbot/astrbot_plugin_personagent/`. Le plugin envoie chaque message à `POST /v1/events` et relaie les réponses reçues. Il récupère aussi la boîte d'envoi de personagent (`outbox_enabled`, activé par défaut), donc la persona peut parler en premier là où la plateforme le permet à un bot. Le README du plugin contient le tableau. L'AstrBot géré reçoit le plugin automatiquement. Pour votre propre AstrBot, démarrez-le une fois pour qu'il crée son dossier de données (celui qui contient `cmd_config.json`, `plugins/` et `config/`), puis exécutez :
 

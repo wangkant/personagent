@@ -8,7 +8,7 @@
 
 | 커넥터 | 연결 대상 | 경로 |
 |---|---|---|
-| 직접 연결 | QQ 공식 봇, 개인 WeChat(iLink), Telegram, Discord. 다른 소프트웨어가 필요 없어요. 로컬 페이지와 `personagent up`이 하나의 프로세스 `python -m persona_agent.direct`로 실행해요. | `persona_agent/direct/` |
+| 직접 연결 | QQ 공식 봇, 개인 WeChat(iLink), Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat. 다른 소프트웨어가 필요하지 않습니다. 로컬 페이지와 `personagent up`이 하나의 프로세스 `python -m persona_agent.direct`로 실행해요. | `persona_agent/direct/` |
 | AstrBot 플러그인 | 서드파티 브리지 AstrBot의 플랫폼. KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 등을 위해 personagent가 관리하는 AstrBot에는 플러그인이 자동으로 들어가요. 이미 실행 중인 AstrBot은 `personagent connect astrbot`으로 설정해요. GitHub Release의 `astrbot_plugin_personagent.zip`을 AstrBot의 파일에서 설치로 올리고 `connector_token`을 직접 설정할 수도 있어요. | `integrations/astrbot/` |
 | Satori | 모든 Satori 구현(Koishi 등 서드파티): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, 이메일 등. | `integrations/satori/` |
 | Matrix | Matrix 방, 그리고 서드파티 mautrix 브리지를 통한 WhatsApp, Signal, Messenger, Instagram, Google Messages 등. | `integrations/matrix/` |
