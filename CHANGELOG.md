@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A memory command sent while a reply is on the way is answered after it** without holding its request open: through the outbox as `follow_up` where the connector pulls one, and otherwise in a response of the same conversation.
 - **The Activity API sends what the page shows.** `GET /api/dashboard/conversation` no longer carries the checklists, history, full evidence, past proposals and totals that `personagent learned` prints; on a busy chat that is 0.7 ms and 30 KB in place of 4.3 ms and 197 KB, every 8 seconds. `GET /api/dashboard/status`, which nothing read, is removed.
 - **The README has a product cover.** The wordmark and two real screens of the local page replace the hand-drawn scene, and the feature table reads as two plain columns.
+- **A shorter README.** The measured results and the comparison with other projects are no longer on it, and the cost notes moved into Start here. The results stay in `docs/evals/2026-10-18`, and the user guide covers `personagent eval`.
 - **`start.ps1` finds Python through `py -3`** and names a Python older than 3.10, or a `.venv` whose Python is gone, where it used to fail inside pip.
 - **`init` flags typed at a terminal carry into the questions.** `--provider`, `--model`, `--name` and the rest answer their question; only `--lang` used to.
 
