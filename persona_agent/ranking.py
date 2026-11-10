@@ -36,15 +36,32 @@ class Weights:
     #: Bonus per scope tier: SEED, PERSONA, CONVERSATION.
     scope: tuple[float, float, float] = (0.0, 0.0, 0.0)
     mode: float = 0.0
+    #: Times (imp - 1) / 4 for an importance of 1 to 5.
+    importance: float = 0.0
+    #: Times min(uses, 5) / 5.
+    use: float = 0.0
+    #: The bonus of an event inside the time a message asks about.
+    time_match: float = 0.0
 
 
 #: Examples and pairs; scope stays under the mode bonus, a preference not a filter.
 EXAMPLE_WEIGHTS = Weights(lexical=1.0, embedding=2.0, recency=0.3,
                           half_life_days=14.0, fields=(1.0, 0.3),
                           scope=(0.0, 0.2, 0.4), mode=0.5)
-#: Memories all belong to one conversation, so scope and mode say nothing.
-MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=1.0,
-                         half_life_days=7.0)
+#: Memories all belong to one conversation, so scope and mode say nothing;
+#: importance and use keep an old useful fact above new trivia.
+MEMORY_WEIGHTS = Weights(lexical=0.5, embedding=1.0, recency=0.6,
+                         half_life_days=14.0, importance=0.4, use=0.2,
+                         time_match=2.0)
+
+#: Days for the recency part of `retention` to halve.
+RETENTION_HALF_LIFE_DAYS = 30.0
+
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+           "Oct", "Nov", "Dec")
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July",
+                "August", "September", "October", "November", "December")
 
 
 class Lexicon:
@@ -152,7 +169,9 @@ def scope_tier(row: dict, conv_id: str) -> int:
 
 def score(weights: Weights, *, lexical: float = 0.0,
           similarity: Optional[float] = None, tier: int = SEED,
-          age_s: Optional[float] = None, mode_match: bool = False) -> float:
+          age_s: Optional[float] = None, mode_match: bool = False,
+          importance: Optional[float] = None, uses: int = 0,
+          time_match: bool = False) -> float:
     s = weights.lexical * lexical + weights.scope[tier]
     if similarity is not None:
         s += weights.embedding * max(0.0, similarity)
@@ -160,4 +179,102 @@ def score(weights: Weights, *, lexical: float = 0.0,
         s += weights.recency * recency(age_s, weights.half_life_days)
     if mode_match:
         s += weights.mode
+    if importance is not None:
+        s += weights.importance * _importance_part(importance)
+    if uses:
+        s += weights.use * _use_part(uses)
+    if time_match:
+        s += weights.time_match
     return s
+
+
+def _importance_part(imp) -> float:
+    try:
+        value = float(imp)
+    except (TypeError, ValueError):
+        value = 3.0
+    return (min(5.0, max(1.0, value)) - 1.0) / 4.0
+
+
+def _use_part(uses) -> float:
+    try:
+        count = int(uses or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return min(max(0, count), 5) / 5.0
+
+
+def retention(imp, uses, last_s, now: float) -> float:
+    """How much a remembered item is worth keeping: importance, use, and how
+    long since it was written, confirmed or used. Missing fields are 3, 0, 0."""
+    try:
+        last = float(last_s or 0.0)
+    except (TypeError, ValueError):
+        last = 0.0
+    days = max(0.0, now - last) / 86400.0
+    return (0.4 * _importance_part(3 if imp is None else imp)
+            + 0.2 * _use_part(uses)
+            + 0.5 ** (days / RETENTION_HALF_LIFE_DAYS))
+
+
+def memory_age(born, time_s, now: float) -> str:
+    """"first noted X", and ", confirmed Y" when it was written again more
+    than a day after it was first noted."""
+    try:
+        written = float(time_s or 0.0)
+    except (TypeError, ValueError):
+        written = 0.0
+    try:
+        first = float(born or 0.0) or written
+    except (TypeError, ValueError):
+        first = written
+    phrase = f"first noted {age_phrase(now - first)}"
+    if written - first > 86400.0:
+        phrase += f", confirmed {age_phrase(now - written)}"
+    return phrase
+
+
+def gap_phrase(seconds: float) -> str:
+    """A pause between two chat lines, as the prompt marks it."""
+    seconds = max(0.0, seconds)
+    if seconds < 3600:
+        n, unit = max(1, int(seconds // 60)), "minute"
+    elif seconds < 86400:
+        n, unit = int(seconds // 3600), "hour"
+    else:
+        n, unit = int(seconds // 86400), "day"
+    return f"{n} {unit}{'' if n == 1 else 's'} later"
+
+
+def _local(t: float, tz=None) -> datetime:
+    return datetime.fromtimestamp(t, tz)
+
+
+def day_label(t: float, tz=None) -> str:
+    """"Mon 10 Nov", in English whatever the system locale; local time
+    unless `tz` is given."""
+    d = _local(t, tz)
+    return f"{_WEEKDAYS[d.weekday()]} {d.day} {_MONTHS[d.month - 1]}"
+
+
+def month_label(t: float, tz=None) -> str:
+    """"September 2026", for a month's roll-up."""
+    d = _local(t, tz)
+    return f"{_MONTH_NAMES[d.month - 1]} {d.year}"
+
+
+def date_span(t0: float, t1: float, now: float, tz=None) -> str:
+    """When an event happened, made by code: "Mon 10 Nov, 19:00–20:30" within
+    a day, "10 to 12 Nov" across days; the year only when it is not this one."""
+    first, last = min(t0, t1), max(t0, t1)
+    a, b = _local(first, tz), _local(last, tz)
+    year = "" if a.year == b.year == _local(now, tz).year else f" {b.year}"
+    if a.date() == b.date():
+        hours = (f"{a:%H:%M}" if a.strftime("%H:%M") == b.strftime("%H:%M")
+                 else f"{a:%H:%M}–{b:%H:%M}")
+        return f"{day_label(first, tz)}{year}, {hours}"
+    if (a.year, a.month) == (b.year, b.month):
+        return f"{a.day} to {b.day} {_MONTHS[b.month - 1]}{year}"
+    left = f"{a.day} {_MONTHS[a.month - 1]}" + (
+        f" {a.year}" if a.year != b.year else "")
+    return f"{left} to {b.day} {_MONTHS[b.month - 1]}{year}"

@@ -588,3 +588,47 @@ async def test_memory_first_person_render(tmp: Path) -> None:
     out3 = agent._memories_for_prompt(g, "")
     check("memory render: en first person untouched",
           "I like spicy food" in out3, repr(out3))
+
+
+
+def test_recall_lists_the_callers_events_as_dated_lines(tmp: Path) -> None:
+    from datetime import datetime
+
+    a = make_agent(tmp)
+    g = "g-events"
+    a.memories[g] = [{"text": "the room likes jazz", "time": 1.0}]
+    base = time.time() - 5 * 86400
+    store = a.episode_store
+    for i, (text, who) in enumerate((("Sam and Kim planned a picnic", ["7", "9"]),
+                                     ("Kim fixed the bike", ["9"]),
+                                     ("Sam lost his keys", ["7"]),
+                                     ("Sam won the quiz", ["7"]),
+                                     ("Sam baked bread", ["7"]))):
+        store.add(g, {"text": text, "t0": base + i * 3600, "t1": base + i * 3600 + 60,
+                      "who": who})
+    a._save_episodes()
+    out = a._handle_memory_command(g, "Luna what do you remember", "7", "Sam") or ""
+    day = datetime.fromtimestamp(base).strftime("%Y-%m-%d")
+    lines = out.splitlines()
+    check("facts first, as before", lines[1] == "the room likes jazz", out)
+    check("then the caller's three newest events, dated",
+          lines[2:] == [f"{day} Sam baked bread", f"{day} Sam won the quiz",
+                        f"{day} Sam lost his keys"], out)
+    check("never someone else's", "fixed the bike" not in out, out)
+
+
+def test_forget_deletes_an_event_only_its_sole_participant_owns(tmp: Path) -> None:
+    a = make_agent(tmp)
+    g = "g-events"
+    store = a.episode_store
+    store.add(g, {"text": "Sam ate the cake alone", "t0": 1.0, "t1": 2.0, "who": ["7"]})
+    store.add(g, {"text": "Sam and Kim shared the cake", "t0": 3.0, "t1": 4.0,
+                  "who": ["7", "9"]})
+    a._save_episodes()
+    out = a._handle_memory_command(g, "Luna forget cake", "7", "Sam") or ""
+    check("forgotten", out in _COMMAND_REPLIES["en"]["forgotten"], out)
+    check("the event Sam alone took part in is gone, the shared one stays",
+          [ep["text"] for ep in a.episode_store.episodes(g)]
+          == ["Sam and Kim shared the cake"])
+    check("and the file agrees", "alone" not in a.episode_store.path.read_text(
+        encoding="utf-8"))
