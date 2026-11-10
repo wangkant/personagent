@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent: conversaciones ilustradas" width="100%">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
 <h3 align="center">Un personaje para tus chats de grupo que sabe cuándo quedarse callado y aprende cuando lo corrigen.</h3>
@@ -27,17 +27,15 @@ personagent es un personaje para tus chats de grupo: elige uno ya listo o escrib
 
 <table>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>Sabe cuándo quedarse callado.</strong></td>
 <td valign="top">
-<strong>Sabe cuándo quedarse callado.</strong><br>
 Responde cuando lo llaman. Si no, un modelo juzga si una persona intervendría.<br>
 Una ráfaga de mensajes recibe una sola respuesta.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>Aprende de las correcciones que se sostienen.</strong></td>
 <td valign="top">
-<strong>Aprende de las correcciones que se sostienen.</strong><br>
 Lo que enseña una corrección, como el nombre que el grupo le da al gimnasio, se aplica a todas las respuestas posteriores en ese chat.<br>
 Un cambio necesita dos reacciones coincidentes del mismo chat, y una de ellas fuerte.<br>
 Un troll o un mero espectador no pueden reentrenarlo.<br>
@@ -45,18 +43,16 @@ Cada cambio queda registrado y cualquiera de ellos se puede revertir.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>Es fácil de empezar y vive donde está tu grupo.</strong></td>
 <td valign="top">
-<strong>Es fácil de empezar y vive donde está tu grupo.</strong><br>
 Un solo comando abre una página local en el navegador, en inglés, en chino o en otros ocho idiomas.<br>
 Pega una clave de modelo para chatear: hay diez servicios de modelos preconfigurados y funciona cualquier otro compatible con OpenAI.<br>
 Conecta una app escaneando con el teléfono o pegando uno o dos valores. La vista Actividad muestra lo que el personaje ha hecho allí.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>Puede ser un personaje listo o el tuyo.</strong></td>
 <td valign="top">
-<strong>Puede ser un personaje listo o el tuyo.</strong><br>
 Siete personalidades listas. Tres son personajes que la comunidad ya dibuja, la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude, con retratos que parpadean, piensan mientras llega una respuesta y hablan cuando llega.<br>
 Reescribe el perfil del personaje cuando quieras. Lo que ha aprendido se conserva.
 </td>

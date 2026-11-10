@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent：畫出來的聊天場景" width="100%">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
 <h3 align="center">一個知道什麼時候該安靜、能從別人的糾正中學習的群組聊天角色。</h3>
@@ -27,17 +27,15 @@ personagent 是放進群組聊天裡的一個角色：選一個現成的或自�
 
 <table>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>知道什麼時候該安靜</strong></td>
 <td valign="top">
-<strong>知道什麼時候該安靜</strong><br>
 叫它就回。沒人叫它時，由一個模型判斷真人這時會不會接話。<br>
 有人連續洗版，它只回一則。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>只從站得住腳的糾正中學習</strong></td>
 <td valign="top">
-<strong>只從站得住腳的糾正中學習</strong><br>
 糾正教會的事（例如群組裡怎麼稱呼健身房）會帶進這個聊天之後的每一則回覆。<br>
 一項變更需要同一個聊天裡兩則一致的反應，其中一則是強證據。<br>
 搗亂的人、旁觀者都教不壞它。<br>
@@ -45,18 +43,16 @@ personagent 是放進群組聊天裡的一個角色：選一個現成的或自�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>上手快，你的群組在哪它就去哪</strong></td>
 <td valign="top">
-<strong>上手快，你的群組在哪它就去哪</strong><br>
 一行指令就在瀏覽器裡開啟本機頁面，頁面有中文、英文和另外八種語言。<br>
 填一個模型金鑰就能聊：預設了十家模型服務，其他相容 OpenAI 的服務也能用。<br>
 接入一個平台，用手機掃描一次或貼上一兩項就行。在「動態」裡能看到角色在那邊做了什麼。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>現成角色可以挑，也能自己寫</strong></td>
 <td valign="top">
-<strong>現成角色可以挑，也能自己寫</strong><br>
 七個現成個性。其中三個是社群裡早就有人畫的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼，等回覆時在思考，回覆到了就開口說話。<br>
 人設隨時可以改寫，角色學到的東西會留著。
 </td>

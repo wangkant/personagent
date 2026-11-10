@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent：画出来的聊天场景" width="100%">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
 <h3 align="center">一个知道什么时候该安静、能从别人的纠正里学习的群聊角色。</h3>
@@ -25,17 +25,15 @@ personagent 是放进群聊里的一个角色：选一个现成的或自己写�
 
 <table>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>知道什么时候该安静</strong></td>
 <td valign="top">
-<strong>知道什么时候该安静</strong><br>
 叫它就回。没人叫时，由一个模型判断真人这时会不会接话。<br>
 有人连着刷屏，它只回一条。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>只从站得住的纠正里学</strong></td>
 <td valign="top">
-<strong>只从站得住的纠正里学</strong><br>
 纠正教会的事（比如群里管健身房叫什么）会带进这个聊天之后的每一句回复。<br>
 一处改动要同一个聊天里两条一致的反应，其中一条是强证据。<br>
 捣乱的人、旁观者都教不坏它。<br>
@@ -43,18 +41,16 @@ personagent 是放进群聊里的一个角色：选一个现成的或自己写�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>上手快，你的群在哪它就去哪</strong></td>
 <td valign="top">
-<strong>上手快，你的群在哪它就去哪</strong><br>
 一条命令就在浏览器里打开本地页面，页面有中文、英文和另外八种语言。<br>
 填一个模型 Key 就能聊：预设了十家模型服务，其他 OpenAI 兼容的服务也能用。<br>
 接入一个平台，用手机扫一次码或粘贴一两项就行。在「动态」里能看到角色在那边做了什么。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>现成角色可以挑，也能自己写</strong></td>
 <td valign="top">
-<strong>现成角色可以挑，也能自己写</strong><br>
 七个现成性格。其中三个是社区里早就有人画的角色：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘，立绘会眨眼，等回复时在想，回复到了就开口说话。<br>
 人设随时可以改写，角色学到的东西会留着。
 </td>

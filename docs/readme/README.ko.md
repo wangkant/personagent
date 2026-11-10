@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent: 일러스트로 그린 대화 장면" width="100%">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
 <h3 align="center">언제 조용히 있어야 할지 알고, 지적받으면 배우는 그룹 채팅 캐릭터.</h3>
@@ -27,17 +27,15 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 
 <table>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>언제 조용히 있어야 할지 압니다.</strong></td>
 <td valign="top">
-<strong>언제 조용히 있어야 할지 압니다.</strong><br>
 부르면 답합니다. 그 밖에는 사람이라면 끼어들었을지를 모델이 판단합니다.<br>
 메시지가 몰려와도 한 번만 답합니다.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>믿을 만한 지적에서 배웁니다.</strong></td>
 <td valign="top">
-<strong>믿을 만한 지적에서 배웁니다.</strong><br>
 그룹에서 헬스장을 뭐라고 부르는지처럼 지적에서 배운 내용은 그 대화의 이후 모든 답장에 반영됩니다.<br>
 변경이 적용되려면 같은 대화에서 일치하는 반응이 두 번 필요하고, 그중 하나는 강한 반응이어야 합니다.<br>
 장난꾼이나 구경꾼이 다시 길들일 수는 없습니다.<br>
@@ -45,18 +43,16 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>시작하기 쉽고, 그룹이 있는 곳에서 지냅니다.</strong></td>
 <td valign="top">
-<strong>시작하기 쉽고, 그룹이 있는 곳에서 지냅니다.</strong><br>
 명령 하나로 브라우저에 로컬 페이지가 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
 모델 키 하나만 붙여 넣으면 채팅할 수 있습니다. 모델 서비스 10개가 프리셋으로 들어 있고, 그 밖의 OpenAI 호환 서비스도 쓸 수 있습니다.<br>
 앱은 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 연결합니다. 캐릭터가 거기서 무엇을 했는지는 활동 화면에서 볼 수 있습니다.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>준비된 캐릭터를 고르거나 직접 만들 수 있습니다.</strong></td>
 <td valign="top">
-<strong>준비된 캐릭터를 고르거나 직접 만들 수 있습니다.</strong><br>
 준비된 성격은 7가지입니다. 그중 셋은 커뮤니티에서 이미 그려 온 캐릭터인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨로, 초상화가 눈을 깜빡이고, 답장을 기다리는 동안 생각하고, 답장이 오면 말합니다.<br>
 페르소나는 언제든 다시 쓸 수 있습니다. 캐릭터가 배운 것은 그대로 남습니다.
 </td>

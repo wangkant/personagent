@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent：イラストで描いた会話の様子" width="100%">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
 <h3 align="center">黙るべきときを心得ていて、訂正されると学ぶ、グループチャットのためのキャラクター。</h3>
@@ -27,17 +27,15 @@ personagent はグループチャットのためのキャラクターです。�
 
 <table>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/listening.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>黙るべきときを心得ています。</strong></td>
 <td valign="top">
-<strong>黙るべきときを心得ています。</strong><br>
 呼ばれれば答えます。それ以外のときは、人ならここで口を挟むかをモデルが判断します。<br>
 メッセージが立て続けに届いても、返信は 1 回です。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/learned-notebook.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>確かな訂正から学びます。</strong></td>
 <td valign="top">
-<strong>確かな訂正から学びます。</strong><br>
 訂正で教わったこと（たとえば、グループでジムを何と呼んでいるか）は、そのチャットでのその後のすべての返信に反映されます。<br>
 変更には、同じチャットからの一致する反応が 2 つ必要で、そのうち 1 つは強い反応でなければなりません。<br>
 荒らしや通りすがりの人が学習し直させることはできません。<br>
@@ -45,18 +43,16 @@ personagent はグループチャットのためのキャラクターです。�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/persona_agent/static/empty-chats.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>始めるのが簡単で、グループのいる場所で暮らします。</strong></td>
 <td valign="top">
-<strong>始めるのが簡単で、グループのいる場所で暮らします。</strong><br>
 コマンド 1 つでブラウザーにローカルページが開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
 モデルのキーを 1 つ貼り付ければチャットできます。10 種類のモデルサービスがプリセットされていて、そのほかの OpenAI 互換サービスも使えます。<br>
 アプリの連携は、スマートフォンでのスキャンか、値を 1〜2 個貼り付けるだけです。キャラクターがそこで何をしたかは「アクティビティ」ビューで確認できます。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/characters.webp" alt="" width="220"></td>
+<td width="220" valign="top"><strong>既成のキャラクターにも、自分だけのキャラクターにもできます。</strong></td>
 <td valign="top">
-<strong>既成のキャラクターにも、自分だけのキャラクターにもできます。</strong><br>
 既成の性格は 7 つ。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、返信を待つあいだは考え、返信が届くと話します。<br>
 ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
 </td>
