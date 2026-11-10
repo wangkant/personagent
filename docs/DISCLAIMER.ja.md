@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · 日本語 · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent は [MIT ライセンス](../LICENSE)のフリーソフトウェアです。AI キャラクターをあなたのチャットに置くものであり、動かすのはあなた自身です。何を話すか、どこで話すか、どのアカウントを使うかについての責任はあなたにあります。このページは法的助言ではありません。
+personagent は [PolyForm Noncommercial License 1.0.0](../LICENSE) で公開されています。非商用目的であれば無料で利用・改変・共有でき、商用目的では利用できません。AI キャラクターをあなたのチャットに置くものであり、動かすのはあなた自身です。何を話すか、どこで話すか、どのアカウントを使うかについての責任はあなたにあります。このページは法的助言ではありません。
 
 ## チャットプラットフォームとあなたのアカウント
 
@@ -26,7 +26,7 @@ personagent がチャットプラットフォームにつながる方法は 2 �
 
 ## 立ち絵のクレジット
 
-DeepSeek のクジラ娘、GPT ドラゴン娘、Claude お嬢様の立ち絵は、コミュニティですでに描かれているデザインをもとに、personagent のために描かれました。クジラ娘は、Bilibili のクリエイター 上善无形 によるオリジナルキャラクター 溟月（CC BY-NC-SA 4.0）に由来し、ZipZipPipe が着せたメイド服姿です。ドラゴン娘は ZipZipPipe の白い竜にならっています。Claude お嬢様はコミュニティのデザインにならっていて、最初に描いた人は分かっていません。立ち絵のライセンスは CC BY-NC-SA 4.0 で、コードの MIT とは異なります。クレジットを残し、商用利用はせず、変更したものは同じライセンスで共有してください。`persona_agent/static/characters/LICENSE.md` を参照してください。
+DeepSeek のクジラ娘、GPT ドラゴン娘、Claude お嬢様の立ち絵は、コミュニティですでに描かれているデザインをもとに、personagent のために描かれました。クジラ娘は、Bilibili のクリエイター 上善无形 によるオリジナルキャラクター 溟月（CC BY-NC-SA 4.0）に由来し、ZipZipPipe が着せたメイド服姿です。ドラゴン娘は ZipZipPipe の白い竜にならっています。Claude お嬢様はコミュニティのデザインにならっていて、最初に描いた人は分かっていません。立ち絵には別途 CC BY-NC-SA 4.0 ライセンスが適用されます。クレジットを残し、商用利用はせず、変更したものは同じライセンスで共有してください。`persona_agent/static/characters/LICENSE.md` を参照してください。
 
 ## モデルプロバイダーに見えるもの
 

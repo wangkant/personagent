@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · 简体中文 · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent 是以 [MIT 许可证](../LICENSE)发布的自由软件。它让一个 AI 角色出现在你的聊天里，而运行它的人是你。它说什么、在哪里说、使用哪些账号，都由你负责。本页不构成法律意见。
+personagent 以 [PolyForm Noncommercial License 1.0.0](../LICENSE) 发布：可免费用于非商业目的的使用、修改和分享，不得用于商业目的。它让一个 AI 角色出现在你的聊天里，而运行它的人是你。它说什么、在哪里说、使用哪些账号，都由你负责。本页不构成法律意见。
 
 ## 聊天平台和你的账号
 
@@ -26,7 +26,7 @@ personagent 接入聊天平台有两种方式。QQ 官方机器人、个人微�
 
 ## 立绘署名
 
-DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘的立绘是为 personagent 绘制的，参照的是社区里已经在画的形象。鲸鱼娘源自 Bilibili 创作者上善无形的原创角色溟月（CC BY-NC-SA 4.0），穿的是 ZipZipPipe 给她设计的女仆装。GPT 娘参照 ZipZipPipe 的白龙。Claude 娘参照一个社区形象，最初的画师已不可考。这些立绘采用 CC BY-NC-SA 4.0 许可，而不是代码所用的 MIT：请保留署名，不得商用，修改后须以相同许可分享。详见 `persona_agent/static/characters/LICENSE.md`。
+DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘的立绘是为 personagent 绘制的，参照的是社区里已经在画的形象。鲸鱼娘源自 Bilibili 创作者上善无形的原创角色溟月（CC BY-NC-SA 4.0），穿的是 ZipZipPipe 给她设计的女仆装。GPT 娘参照 ZipZipPipe 的白龙。Claude 娘参照一个社区形象，最初的画师已不可考。这些立绘单独采用 CC BY-NC-SA 4.0 许可：请保留署名，不得商用，修改后须以相同许可分享。详见 `persona_agent/static/characters/LICENSE.md`。
 
 ## 模型服务商能看到什么
 

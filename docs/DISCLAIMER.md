@@ -2,7 +2,7 @@
 
 English · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent is free software under the [MIT License](../LICENSE). It puts an AI
+personagent is released under the [PolyForm Noncommercial License 1.0.0](../LICENSE): free to use, change and share for noncommercial purposes, and not for commercial ones. It puts an AI
 character in your chats, and you are the one who runs it. You are responsible
 for what it says, where it says it and which accounts it uses. This page is
 not legal advice.
@@ -66,7 +66,7 @@ The whale girl derives from 溟月, an original character by the Bilibili
 creator 上善无形 (CC BY-NC-SA 4.0), in the maid outfit that ZipZipPipe gave
 her. The dragon girl follows ZipZipPipe's white dragon. The Claude lady
 follows a community design whose first artist is not known. The portraits are
-licensed CC BY-NC-SA 4.0, not MIT like the code: keep the credit, do not use
+licensed CC BY-NC-SA 4.0, a licence of their own: keep the credit, do not use
 them commercially, and share changes under the same licence. See
 `persona_agent/static/characters/LICENSE.md`.
 

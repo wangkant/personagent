@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · Português (Brasil) · [Русский](DISCLAIMER.ru.md)
 
-O personagent é software livre sob a [licença MIT](../LICENSE). Ele coloca um personagem de IA nas suas conversas, e quem o executa é você. Você é responsável pelo que ele diz, por onde diz e por quais contas ele usa. Esta página não é aconselhamento jurídico.
+O personagent é distribuído sob a [PolyForm Noncommercial License 1.0.0](../LICENSE): o uso, a modificação e o compartilhamento são gratuitos para fins não comerciais e não são permitidos para fins comerciais. Ele coloca um personagem de IA nas suas conversas, e quem o executa é você. Você é responsável pelo que ele diz, por onde diz e por quais contas ele usa. Esta página não é aconselhamento jurídico.
 
 ## Plataformas de chat e suas contas
 
@@ -26,7 +26,7 @@ Se você usar um desses, use uma conta dedicada que possa perder, nunca a princi
 
 ## Créditos dos retratos
 
-Os retratos da garota-baleia do DeepSeek, da garota-dragão do GPT e da senhorita Claude foram desenhados para o personagent a partir de designs que a comunidade já desenha. A garota-baleia deriva de 溟月, personagem original do criador do Bilibili 上善无形 (CC BY-NC-SA 4.0), com a roupa de empregada que ZipZipPipe deu a ela. A garota-dragão segue a dragoa branca de ZipZipPipe. A senhorita Claude segue um design da comunidade cujo primeiro artista não é conhecido. Os retratos são licenciados sob CC BY-NC-SA 4.0, não sob MIT como o código: mantenha o crédito, não os use comercialmente e compartilhe as alterações sob a mesma licença. Veja `persona_agent/static/characters/LICENSE.md`.
+Os retratos da garota-baleia do DeepSeek, da garota-dragão do GPT e da senhorita Claude foram desenhados para o personagent a partir de designs que a comunidade já desenha. A garota-baleia deriva de 溟月, personagem original do criador do Bilibili 上善无形 (CC BY-NC-SA 4.0), com a roupa de empregada que ZipZipPipe deu a ela. A garota-dragão segue a dragoa branca de ZipZipPipe. A senhorita Claude segue um design da comunidade cujo primeiro artista não é conhecido. Os retratos têm licença própria, CC BY-NC-SA 4.0: mantenha o crédito, não os use comercialmente e compartilhe as alterações sob a mesma licença. Veja `persona_agent/static/characters/LICENSE.md`.
 
 ## O que seu provedor de modelos vê
 

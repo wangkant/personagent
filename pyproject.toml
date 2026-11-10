@@ -8,9 +8,10 @@ version = "1.4.0"
 description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
 readme = "README.md"
 requires-python = ">=3.10"
-# The code is MIT; the three character portraits are CC BY-NC-SA 4.0.
-license = "MIT AND CC-BY-NC-SA-4.0"
-license-files = ["LICENSE", "persona_agent/static/characters/LICENSE.md"]
+# Noncommercial use only. The bundled AstrBot plugin and connector SDK are MIT,
+# and the three character portraits are CC BY-NC-SA 4.0.
+license = "PolyForm-Noncommercial-1.0.0 AND MIT AND CC-BY-NC-SA-4.0"
+license-files = ["LICENSE", "integrations/astrbot/astrbot_plugin_personagent/LICENSE", "persona_agent/static/characters/LICENSE.md"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
     "llm", "agent", "persona", "chatbot", "group-chat", "astrbot", "onebot",

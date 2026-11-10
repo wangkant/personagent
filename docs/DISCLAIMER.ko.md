@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · 한국어 · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent는 [MIT 라이선스](../LICENSE)의 자유 소프트웨어예요. AI 캐릭터를 내 채팅에 넣는 프로그램이고, 실행하는 사람은 나 자신이에요. 무엇을 말하는지, 어디서 말하는지, 어떤 계정을 쓰는지에 대한 책임은 나에게 있어요. 이 페이지는 법률 자문이 아니에요.
+personagent는 [PolyForm Noncommercial License 1.0.0](../LICENSE)으로 배포됩니다. 비상업적 목적이라면 무료로 사용, 수정, 공유할 수 있으며 상업적 목적으로는 사용할 수 없습니다. AI 캐릭터를 내 채팅에 넣는 프로그램이고, 실행하는 사람은 나 자신이에요. 무엇을 말하는지, 어디서 말하는지, 어떤 계정을 쓰는지에 대한 책임은 나에게 있어요. 이 페이지는 법률 자문이 아니에요.
 
 ## 채팅 플랫폼과 내 계정
 
@@ -26,7 +26,7 @@ personagent가 채팅 플랫폼에 닿는 방법은 두 가지예요. QQ 공식 
 
 ## 초상화 크레딧
 
-DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨의 초상화는 커뮤니티에서 이미 그리고 있는 디자인을 따라 personagent를 위해 그린 거예요. 고래 소녀는 Bilibili 크리에이터 上善无形의 오리지널 캐릭터 溟月(CC BY-NC-SA 4.0)에서 나왔고, ZipZipPipe가 입혀 준 메이드복 차림이에요. 용 소녀는 ZipZipPipe의 흰 용을 따랐어요. Claude 아가씨는 처음 그린 사람이 알려지지 않은 커뮤니티 디자인을 따랐어요. 초상화의 라이선스는 코드와 같은 MIT가 아니라 CC BY-NC-SA 4.0이에요. 크레딧을 유지하고, 상업적으로 쓰지 말고, 바꾼 것은 같은 라이선스로 공유하세요. `persona_agent/static/characters/LICENSE.md`를 보세요.
+DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨의 초상화는 커뮤니티에서 이미 그리고 있는 디자인을 따라 personagent를 위해 그린 거예요. 고래 소녀는 Bilibili 크리에이터 上善无形의 오리지널 캐릭터 溟月(CC BY-NC-SA 4.0)에서 나왔고, ZipZipPipe가 입혀 준 메이드복 차림이에요. 용 소녀는 ZipZipPipe의 흰 용을 따랐어요. Claude 아가씨는 처음 그린 사람이 알려지지 않은 커뮤니티 디자인을 따랐어요. 초상화에는 별도로 CC BY-NC-SA 4.0 라이선스가 적용됩니다. 크레딧을 유지하고, 상업적으로 쓰지 말고, 바꾼 것은 같은 라이선스로 공유하세요. `persona_agent/static/characters/LICENSE.md`를 보세요.
 
 ## 모델 제공업체가 보는 것
 

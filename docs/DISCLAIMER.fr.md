@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · Français · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent est un logiciel libre sous [licence MIT](../LICENSE). Il place un personnage d'IA dans vos discussions, et c'est vous qui le faites tourner. Vous êtes responsable de ce qu'il dit, de l'endroit où il le dit et des comptes qu'il utilise. Cette page n'est pas un conseil juridique.
+personagent est publié sous la [PolyForm Noncommercial License 1.0.0](../LICENSE) : son utilisation, sa modification et son partage sont gratuits à des fins non commerciales, et interdits à des fins commerciales. Il place un personnage d'IA dans vos discussions, et c'est vous qui le faites tourner. Vous êtes responsable de ce qu'il dit, de l'endroit où il le dit et des comptes qu'il utilise. Cette page n'est pas un conseil juridique.
 
 ## Les plateformes de discussion et vos comptes
 
@@ -26,7 +26,7 @@ Si vous utilisez l'un de ces moyens, utilisez un compte dédié que vous pouvez 
 
 ## Crédits des portraits
 
-Les portraits de la fille-baleine de DeepSeek, de la fille-dragon GPT et de la demoiselle Claude ont été dessinés pour personagent d'après des designs que la communauté dessine déjà. La fille-baleine dérive de 溟月, un personnage original du créateur Bilibili 上善无形 (CC BY-NC-SA 4.0), dans la tenue de soubrette que ZipZipPipe lui a donnée. La fille-dragon suit la dragonne blanche de ZipZipPipe. La demoiselle Claude suit un design de la communauté dont le premier artiste n'est pas connu. Les portraits sont sous licence CC BY-NC-SA 4.0, et non MIT comme le code : conservez le crédit, ne les utilisez pas à des fins commerciales et partagez vos modifications sous la même licence. Voir `persona_agent/static/characters/LICENSE.md`.
+Les portraits de la fille-baleine de DeepSeek, de la fille-dragon GPT et de la demoiselle Claude ont été dessinés pour personagent d'après des designs que la communauté dessine déjà. La fille-baleine dérive de 溟月, un personnage original du créateur Bilibili 上善无形 (CC BY-NC-SA 4.0), dans la tenue de soubrette que ZipZipPipe lui a donnée. La fille-dragon suit la dragonne blanche de ZipZipPipe. La demoiselle Claude suit un design de la communauté dont le premier artiste n'est pas connu. Les portraits ont leur propre licence, CC BY-NC-SA 4.0 : conservez le crédit, ne les utilisez pas à des fins commerciales et partagez vos modifications sous la même licence. Voir `persona_agent/static/characters/LICENSE.md`.
 
 ## Ce que voit votre fournisseur de modèles
 

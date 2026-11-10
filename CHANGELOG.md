@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Licence
+
+- **personagent is now licensed for noncommercial use only**, under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0). The connectors under `integrations/` (the AstrBot plugin, the connector SDK, Matrix and Satori) stay under the MIT License, and the portraits stay under CC BY-NC-SA 4.0. Versions 1.4.0 and earlier were released under the MIT License and remain so.
+
 ### Added
 
 - **personagent opens in a window of its own.** On Windows `personagent` shows the local page in an app window (WebView2 through [pywebview](https://pywebview.flowrl.com/)) with its own taskbar icon, where it used to open a browser tab. Closing the window stops personagent, and asks first while an app is connected. Starting it a second time brings the window back. On macOS and Linux the page still opens in the browser; `pip install "personagent[app]"` gives it the window there too, with Qt on Linux. `--browser` keeps the browser, and where no window can open the page falls back to it. In the window, right-click works where there is text to paste into or to copy, and nowhere else.

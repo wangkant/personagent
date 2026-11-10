@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · Deutsch · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent ist freie Software unter der [MIT-Lizenz](../LICENSE). Es bringt eine KI-Figur in deine Chats, und du bist derjenige, der es betreibt. Du bist dafür verantwortlich, was es sagt, wo es das sagt und welche Konten es nutzt. Diese Seite ist keine Rechtsberatung.
+personagent wird unter der [PolyForm Noncommercial License 1.0.0](../LICENSE) veröffentlicht: Nutzung, Änderung und Weitergabe sind für nichtkommerzielle Zwecke kostenlos, für kommerzielle Zwecke nicht gestattet. Es bringt eine KI-Figur in deine Chats, und du bist derjenige, der es betreibt. Du bist dafür verantwortlich, was es sagt, wo es das sagt und welche Konten es nutzt. Diese Seite ist keine Rechtsberatung.
 
 ## Chat-Plattformen und deine Konten
 
@@ -26,7 +26,7 @@ Wenn du eines davon nutzt, nimm ein eigenes Konto, dessen Verlust du verkraften 
 
 ## Bildnachweis für die Porträts
 
-Die Porträts des DeepSeek-Walmädchens, des GPT-Drachenmädchens und der Claude-Dame wurden für personagent nach Entwürfen gezeichnet, die die Community bereits zeichnet. Das Walmädchen geht auf 溟月 zurück, eine Originalfigur des Bilibili-Creators 上善无形 (CC BY-NC-SA 4.0), im Dienstmädchen-Outfit, das ZipZipPipe ihr gegeben hat. Das Drachenmädchen folgt ZipZipPipes weißer Drachin. Die Claude-Dame folgt einem Community-Entwurf, bei dem nicht bekannt ist, wer ihn zuerst gezeichnet hat. Die Porträts stehen unter CC BY-NC-SA 4.0, nicht unter MIT wie der Code: Behalte die Namensnennung bei, nutze sie nicht kommerziell und gib Änderungen unter derselben Lizenz weiter. Siehe `persona_agent/static/characters/LICENSE.md`.
+Die Porträts des DeepSeek-Walmädchens, des GPT-Drachenmädchens und der Claude-Dame wurden für personagent nach Entwürfen gezeichnet, die die Community bereits zeichnet. Das Walmädchen geht auf 溟月 zurück, eine Originalfigur des Bilibili-Creators 上善无形 (CC BY-NC-SA 4.0), im Dienstmädchen-Outfit, das ZipZipPipe ihr gegeben hat. Das Drachenmädchen folgt ZipZipPipes weißer Drachin. Die Claude-Dame folgt einem Community-Entwurf, bei dem nicht bekannt ist, wer ihn zuerst gezeichnet hat. Die Porträts stehen unter einer eigenen Lizenz, CC BY-NC-SA 4.0: Behalte die Namensnennung bei, nutze sie nicht kommerziell und gib Änderungen unter derselben Lizenz weiter. Siehe `persona_agent/static/characters/LICENSE.md`.
 
 ## Was dein Modellanbieter sieht
 
