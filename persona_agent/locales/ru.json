@@ -336,7 +336,7 @@
 "accepted": "принято",
 "dismissed": "отклонено",
 "ledger: strong (a correction with a better line, from the person the reply was for)": "записи об обучении: сильная (исправление с лучшей фразой от того, кому был адресован ответ)",
-"ledger: negative only (it says the reply was wrong, not what to say instead)": "записи об обучении: только негативная (говорит, что ответ не подошёл, но не что сказать)",
+"ledger: negative only (it says the reply was wrong, not what to say instead)": "записи об обучении: только негативная (сообщает, что ответ был неверным, но не что сказать вместо него)",
 "ledger: negative only (from someone the reply was not for)": "записи об обучении: только негативная (от того, кому ответ не был адресован)",
 "ledger: weak (a laugh or a thanks never changes anything alone)": "записи об обучении: слабая (смех или спасибо сами по себе ничего не меняют)",
 "ledger: {who} accepted the second try: strong ({who} is who the reply was for)": "записи об обучении: {who} принимает вторую попытку: сильная (ответ был адресован пользователю {who})",

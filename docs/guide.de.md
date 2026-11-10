@@ -136,12 +136,12 @@ Es folgt ein gekürzter Lauf von `personagent demo teach`. Die Zeilen des Modell
       Lernprotokoll: Alex hat den zweiten Versuch akzeptiert: stark (die Antwort war für Alex)
 
   Korrektur: „hast du die Logs angeschaut? erst zurückr...“ -> „stimmt. harter Tagesabschluss“
-    [x] 2 von 2 übereinstimmenden Reaktionen
-    [x] 1 von 1 stark
+    [x] übereinstimmende Reaktionen: 2 von 2
+    [x] starke Reaktionen: 1 von 1
     [x] gleicher Chat
     [x] 1 von 1 Person (PROMOTE_MIN_SPEAKERS)
     [x] kein Widerspruch, keine konkurrierende Korrektur
-    jetzt in Gebrauch: 2 übereinstimmende Reaktionen, 1 stark, gleicher Chat
+    jetzt in Gebrauch: 2 übereinstimmende Reaktionen, davon stark: 1, gleicher Chat
 ```
 
 Die Szene sendet außerdem dieselbe Nachricht vor und nach der Lektion: Jemandes Laptop ist mitten in der Demo ausgefallen. Vor der Korrektur bietet Nova eine Lösung an. Danach zeigt Nova Mitgefühl. Die Demo bleibt auch mit gesetztem Schlüssel vorgegeben, sodass jeder Lauf identisch und kostenlos ist. `personagent demo --online` spielt sie stattdessen mit Ihrem eigenen Modell ab; dies verbraucht Token und variiert von Lauf zu Lauf.
@@ -563,7 +563,7 @@ Die Liste der Chats bleibt leer, bis die Figur läuft. Sie startet, wenn Sie auf
 
 Die lokale Seite antwortet nur auf diesem Computer. Auf einem Server ohne lokale Seite verwenden Sie `personagent learned`, um zu prüfen und zu widerrufen, was die Figur gelernt hat. Skripte können dieselben Daten über die API des Dienstes lesen, beschrieben im [Abschnitt Aktivität](deploy.de.md#aktivität) des Bereitstellungsleitfadens.
 
-![Die Ansicht Aktivität eines Gruppenchats: zwei Einträge warten auf Sie, eine bessere Formulierung und eine wiederholenswerte Antwort, jeweils mit Behalten und Verwerfen; ein gelernter Eintrag mit Rückgängig; eine Gedächtnisnotiz; und die letzten Zeilen, mit dem Grund, warum er sprach oder schwieg](activity.png)
+![Die Ansicht Aktivität: links die Chats (eine Telegram-Gruppe, eine Discord-Direktnachricht und Diese Seite); für die Telegram-Gruppe zwei Einträge, die auf Sie warten, eine wiederverwendbare Antwort und eine bessere Formulierung, jeweils mit Behalten und Verwerfen; ein gelernter Eintrag mit Rückgängig machen; eine Gedächtnisnotiz mit Vergessen; die letzten Zeilen, mit dem Grund, warum die Figur sprach oder schwieg; und darunter Was die Figur gelernt hat, über alle Chats, mit den Reitern In Verwendung, Ausstehend, Verworfen, Rückgängig gemacht und Ersetzt](activity.png)
 
 ## Messen
 

@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · Español · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-Este conector lleva [personagent](https://github.com/wangkant/personagent) a salas de Matrix y, mediante [puentes mautrix](https://docs.mau.fi/bridges/), a WhatsApp, Signal, Messenger, Instagram, Google Messages y otras redes. Matrix y los puentes son software de terceros que ejecuta usted. personagent no los necesita para las plataformas que conecta desde su página local.
+Este conector lleva [personagent](https://github.com/wangkant/personagent) a salas de Matrix y, mediante [puentes mautrix](https://docs.mau.fi/bridges/), a WhatsApp, Signal, Messenger, Instagram, Google Messages y otras redes. Los puentes son software de terceros que usted ejecuta en un servidor doméstico bajo su control. personagent no los necesita para las plataformas que conecta desde su página local.
+
+personagent también conecta Matrix por sí mismo, sin este conector: la vista **Conectar plataformas** de su página local, o `personagent connect matrix`, solicita la dirección del servidor doméstico, el token de acceso de la cuenta del bot y su propio ID de Matrix. Esa conexión integrada solo lee salas sin cifrado de extremo a extremo y solo se une a las salas a las que usted invita al bot desde ese ID de Matrix. Utilice este conector en su lugar cuando el bot deba leer salas cifradas, responder en portales de puentes o en salas a las que lo inviten otras personas, o cuando desee elegir salas y personas mediante listas de permitidos.
 
 El conector es un pequeño proceso independiente basado en [matrix-nio](https://github.com/matrix-nio/matrix-nio), que admite cifrado de extremo a extremo sin libolm. Inicia sesión en un servidor doméstico (homeserver) como un usuario normal de Matrix, reenvía cada mensaje permitido de una sala al `POST /v1/events` del agente como un evento independiente de la plataforma ([docs/connectors.md](../../docs/connectors.es.md)) y publica las respuestas del agente en la sala. También consulta periódicamente la bandeja de salida del agente, de modo que los mensajes programados, las preguntas de seguimiento y las disculpas también llegan a Matrix.
 
@@ -108,8 +110,8 @@ Un puente mautrix inicia sesión en otra red como una cuenta de esa red y reflej
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger, mensajes directos de Instagram | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages (RCS y SMS a través de un teléfono Android) | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice, LinkedIn, mensajes directos de Twitter/X y Bluesky, Google Chat, Zulip, IRC, iMessage | Los demás [puentes mautrix](https://github.com/mautrix) |
-| Telegram, Discord, Slack | Existen puentes mautrix, pero estas redes disponen de API oficiales para bots. personagent conecta Telegram y Discord por sí mismo, y Slack a través del AstrBot que ejecuta su página local. |
+| Google Voice, LinkedIn, mensajes directos de Twitter/X y Bluesky, Google Chat, iMessage | Los demás [puentes mautrix](https://github.com/mautrix) |
+| Telegram, Discord, Slack, Zulip, IRC | Existen puentes, pero a estas redes se puede llegar sin ellos. personagent conecta Telegram, Discord, Zulip e IRC por sí mismo, y Slack a través del AstrBot que ejecuta su página local. |
 
 Para configurar uno:
 

@@ -136,12 +136,12 @@ A continuación se muestra una ejecución abreviada de `personagent demo teach`.
       registro: Alex aceptó el segundo intento: fuerte (Alex es a quien iba la respuesta)
 
   corrección: «¿miraste los logs? primero revierte y lue...» -> «ya. vaya final de día»
-    [x] 2 de 2 reacciones coincidentes
-    [x] 1 de 1 fuertes
+    [x] reacciones coincidentes: 2 de 2
+    [x] reacciones fuertes: 1 de 1
     [x] mismo chat
     [x] 1 de 1 persona (PROMOTE_MIN_SPEAKERS)
     [x] nada en contra, ninguna corrección rival
-    ya en uso: 2 reacciones coincidentes, 1 fuertes, mismo chat
+    ya en uso: 2 reacciones a favor, fuertes: 1, mismo chat
 ```
 
 La escena también envía el mismo mensaje antes y después de la lección: a alguien se le ha estropeado el portátil en mitad de una demostración. Antes de la corrección, Nova ofrece una solución. Después, muestra comprensión. La demostración sigue siendo guionizada aunque haya una clave definida, por lo que cada ejecución es idéntica y no tiene coste. `personagent demo --online` la reproduce con su propio modelo, lo que consume tokens y varía de una ejecución a otra.
@@ -563,7 +563,7 @@ La lista de chats permanece vacía hasta que el personaje se ejecuta. Comienza a
 
 La página local solo responde en este equipo. En un servidor sin página local, utilice `personagent learned` para revisar y anular lo aprendido. Los scripts pueden leer los mismos datos mediante la API del servicio, descrita en la [sección Actividad](deploy.es.md#actividad) de la guía de despliegue.
 
-![La vista Actividad de un chat de grupo: dos elementos pendientes de su decisión, una mejor redacción y una respuesta que conviene repetir, cada uno con las opciones de conservar y descartar; un elemento aprendido con la opción de deshacer; una nota de memoria; y las líneas recientes, con el motivo por el que habló o guardó silencio](activity.png)
+![La vista Actividad: a la izquierda, los chats (un grupo de Telegram, un mensaje directo de Discord y Esta página); para el grupo de Telegram, dos elementos pendientes de su decisión, una respuesta que conviene repetir y una mejor redacción, cada uno con Conservar y Descartar; un elemento aprendido con Deshacer; un recuerdo con Olvidar; las líneas recientes, con el motivo por el que habló o guardó silencio; y debajo, Lo que ha aprendido el personaje en todos los chats, con las pestañas En uso, Pendientes, Descartados, Deshechos y Sustituidos](activity.png)
 
 ## Medir el rendimiento
 

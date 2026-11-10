@@ -5,7 +5,7 @@
 
 이 커넥터는 [personagent](https://github.com/wangkant/personagent)를 [Satori](https://satori.chat) 서버에 연결합니다. Satori는 크로스 플랫폼 채팅 프로토콜입니다. [Koishi](https://koishi.chat)(`server-satori` 플러그인 포함), Chronocat, LLOneBot 같은 서버가 채팅 플랫폼에 로그인하고, 이런 클라이언트는 웹소켓 하나로 모든 로그인의 모든 메시지를 받습니다. 그래서 커넥터 프로세스 하나로 서버에 어댑터가 있는 모든 플랫폼에 캐릭터를 둘 수 있습니다.
 
-Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접 연결하는 QQ, WeChat, Telegram, Discord나 로컬 페이지가 AstrBot으로 설정하는 플랫폼에는 필요하지 않습니다. 이미 Koishi를 쓰고 있거나 Koishi로만 닿는 플랫폼을 원할 때 이 커넥터를 쓰십시오.
+Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접 연결하는 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat 또는 로컬 페이지가 AstrBot으로 설정하는 플랫폼에는 필요하지 않습니다. 이미 Koishi를 쓰고 있거나 Koishi로만 닿는 플랫폼을 원할 때 이 커넥터를 쓰십시오.
 
 커넥터는 허용된 각 메시지를 중립 이벤트로 에이전트의 `POST /v1/events`에 전달하고([docs/connectors.md](../../docs/connectors.ko.md)), 답변을 Satori로 돌려보냅니다. 에이전트의 아웃박스도 가져오므로 예약된 말 걸기, 후속 질문, 변명도 채팅에 도달합니다.
 

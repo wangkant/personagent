@@ -5,7 +5,7 @@
 
 このコネクターは [personagent](https://github.com/wangkant/personagent) を [Satori](https://satori.chat) サーバーにつなぎます。Satori はクロスプラットフォームのチャットプロトコルです。[Koishi](https://koishi.chat)（`server-satori` プラグイン付き）、Chronocat、LLOneBot などのサーバーがチャットプラットフォームにログインし、このようなクライアントは 1 本の websocket ですべてのログインのすべてのメッセージを受け取ります。そのため、1 つのコネクタープロセスで、サーバーにアダプターがあるすべてのプラットフォームにペルソナを置けます。
 
-Satori と Koishi はサードパーティのソフトウェアです。personagent が自分で接続する QQ、WeChat、Telegram、Discord や、ローカルページが AstrBot 経由で設定するプラットフォームには必要ありません。すでに Koishi を動かしている場合や、Koishi でしか届かないプラットフォームを使いたい場合に、このコネクターを使ってください。
+Satori と Koishi はサードパーティのソフトウェアです。personagent が自分で接続する QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat や、ローカルページが AstrBot 経由で設定するプラットフォームには必要ありません。すでに Koishi を動かしている場合や、Koishi でしか届かないプラットフォームを使いたい場合に、このコネクターを使ってください。
 
 コネクターは許可された各メッセージを中立イベントとしてエージェントの `POST /v1/events` に転送し（[docs/connectors.md](../../docs/connectors.ja.md)）、返信を Satori 経由で送り返します。エージェントのアウトボックスも取得するので、予定された話しかけ、追加の質問、言い訳もチャットに届きます。
 

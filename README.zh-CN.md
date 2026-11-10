@@ -16,7 +16,7 @@
 personagent 是一个用于群聊的角色：可选用现成角色或自行编写，接入任意兼容 OpenAI 接口的模型即可使用。你可以先在本机与角色聊天，再通过同一个本地页面将其接入 QQ、微信、Telegram、Discord 及其他十余个平台。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：列出所有可接入的平台" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写一至两项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
 </p>
 
 <p align="center"><em>「连接平台」与设置、聊天位于同一个本地页面中。</em></p>

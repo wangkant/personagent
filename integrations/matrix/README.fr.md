@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · Français · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-Ce connecteur place [personagent](https://github.com/wangkant/personagent) dans des salons Matrix et, via les [ponts mautrix](https://docs.mau.fi/bridges/), sur WhatsApp, Signal, Messenger, Instagram, Google Messages et d'autres réseaux. Matrix et les ponts sont des logiciels tiers que vous exécutez vous-même. personagent n'en a pas besoin pour les plateformes qu'il connecte depuis sa page locale.
+Ce connecteur place [personagent](https://github.com/wangkant/personagent) dans des salons Matrix et, via les [ponts mautrix](https://docs.mau.fi/bridges/), sur WhatsApp, Signal, Messenger, Instagram, Google Messages et d'autres réseaux. Les ponts sont des logiciels tiers que vous exécutez vous-même, sur un homeserver que vous contrôlez. personagent n'en a pas besoin pour les plateformes qu'il connecte depuis sa page locale.
+
+personagent connecte aussi Matrix lui-même, sans ce connecteur : la vue **Connecter des plateformes** de sa page locale, ou `personagent connect matrix`, demande l'adresse du homeserver, le jeton d'accès du compte du bot et votre propre identifiant Matrix. Cette connexion intégrée ne lit que les salons sans chiffrement de bout en bout et ne rejoint que les salons où vous invitez le bot depuis cet identifiant Matrix. Utilisez plutôt ce connecteur lorsque le bot doit lire des salons chiffrés, répondre dans les portails des ponts ou dans des salons où d'autres personnes l'invitent, ou lorsque vous souhaitez choisir les salons et les personnes au moyen de listes d'autorisation.
 
 Le connecteur est un petit processus autonome construit sur [matrix-nio](https://github.com/matrix-nio/matrix-nio), qui prend en charge le chiffrement de bout en bout sans libolm. Il se connecte à un homeserver comme un utilisateur Matrix ordinaire, transmet chaque message autorisé d'un salon au `POST /v1/events` de l'agent sous forme d'événement neutre vis-à-vis de la plateforme ([docs/connectors.md](../../docs/connectors.fr.md)) et publie les réponses de l'agent dans le salon. Il interroge aussi la boîte d'envoi de l'agent, donc les messages programmés, les questions de suivi et les excuses atteignent également Matrix.
 
@@ -108,8 +110,8 @@ Un pont mautrix se connecte à un autre réseau avec un compte de ce réseau et 
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger, messages privés Instagram | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages (RCS et SMS via un téléphone Android) | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice, LinkedIn, messages privés Twitter/X et Bluesky, Google Chat, Zulip, IRC, iMessage | Les autres [ponts mautrix](https://github.com/mautrix) |
-| Telegram, Discord, Slack | Des ponts mautrix existent, mais ces réseaux ont des API de bots officielles. personagent connecte lui-même Telegram et Discord, et Slack via l'AstrBot qu'exécute sa page locale. |
+| Google Voice, LinkedIn, messages privés Twitter/X et Bluesky, Google Chat, iMessage | Les autres [ponts mautrix](https://github.com/mautrix) |
+| Telegram, Discord, Slack, Zulip, IRC | Des ponts existent, mais ces réseaux sont accessibles sans pont. personagent connecte lui-même Telegram, Discord, Zulip et IRC, et Slack via l'AstrBot qu'exécute sa page locale. |
 
 Pour en configurer un :
 

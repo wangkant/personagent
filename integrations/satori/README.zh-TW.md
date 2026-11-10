@@ -5,7 +5,7 @@
 
 此聯結器將 [personagent](https://github.com/wangkant/personagent) 連接至 [Satori](https://satori.chat) 伺服器。Satori 是一種跨平台的聊天協定。[Koishi](https://koishi.chat)（搭配其 `server-satori` 外掛程式）、Chronocat 或 LLOneBot 等伺服器負責登入各聊天平台，此用戶端則透過一條 websocket 接收所有已登入帳號的每則訊息。因此，只需一個聯結器處理程序，即可將角色接入伺服器具有配接器的每個平台。
 
-Satori 和 Koishi 是第三方軟體。QQ、微信、Telegram、Discord 由 personagent 自行連線，本機頁面透過 AstrBot 設定的平台亦然，這些都不需要它們。如果你已在執行 Koishi，或需要只有 Koishi 能連接的平台，再使用此聯結器。
+Satori 和 Koishi 是第三方軟體。QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat 由 personagent 自行連線，本機頁面透過 AstrBot 設定的平台亦然，這些都不需要它們。如果你已在執行 Koishi，或需要只有 Koishi 能連接的平台，再使用此聯結器。
 
 聯結器將每則獲准的訊息以中立事件格式傳送至 agent 的 `POST /v1/events`（[docs/connectors.md](../../docs/connectors.zh-TW.md)），再透過 Satori 將回覆傳回。它也會拉取 agent 的 outbox，因此定時開場、追問和致歉都能送達聊天。
 

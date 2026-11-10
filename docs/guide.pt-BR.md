@@ -136,12 +136,12 @@ Aqui está uma execução resumida de `personagent demo teach`. As falas do mode
       registro: Alex aceitou a segunda tentativa: forte (a resposta era para Alex)
 
   correção: “você olhou os logs? primeiro faz rollback...” -> “pois é. fim de dia difícil”
-    [x] 2 de 2 reações concordantes
-    [x] 1 de 1 fortes
+    [x] reações concordantes: 2 de 2
+    [x] reações fortes: 1 de 1
     [x] mesma conversa
     [x] 1 de 1 pessoa (PROMOTE_MIN_SPEAKERS)
     [x] nenhuma discordância, nenhuma correção concorrente
-    em uso agora: 2 reações concordantes, 1 fortes, mesma conversa
+    em uso agora: 2 reações a favor, fortes: 1, mesma conversa
 ```
 
 A cena também envia a mesma mensagem antes e depois da lição: o notebook de alguém parou de funcionar no meio de uma apresentação. Antes da correção, Nova oferece uma solução. Depois, Nova se solidariza. A demonstração continua roteirizada mesmo com uma chave definida; assim, todas as execuções são iguais e não têm custo. `personagent demo --online` a reproduz no seu próprio modelo, o que custa tokens e varia de uma execução para outra.
@@ -563,7 +563,7 @@ A lista de chats fica vazia até que o personagem esteja em execução. Ele é i
 
 A página local só responde neste computador. Em um servidor sem página local, use `personagent learned` para revisar e reverter o que ele aprendeu. Scripts podem ler os mesmos dados pela API do serviço, descrita na [seção Atividade](deploy.pt-BR.md#atividade) do guia de implantação.
 
-![A visão Atividade de um chat em grupo: dois itens aguardando sua decisão, uma redação aprimorada e uma resposta a ser reutilizada, cada um com manter e descartar; um item aprendido com desfazer; uma nota de memória; e as linhas recentes, com o motivo de ele ter falado ou ficado em silêncio](activity.png)
+![A visão Atividade: à esquerda, as conversas (um grupo do Telegram, uma mensagem direta do Discord e Esta página); para o grupo do Telegram, dois itens aguardando sua decisão, uma resposta a ser reutilizada e uma redação aprimorada, cada um com Manter e Descartar; um item aprendido com Desfazer; uma nota de memória com Esquecer; as linhas recentes, com o motivo de ele ter falado ou ficado em silêncio; e abaixo, O que o personagem aprendeu em todas as conversas, com as abas Em uso, Pendentes, Descartados, Desfeitos e Substituídos](activity.png)
 
 ## Meça
 

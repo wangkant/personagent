@@ -16,7 +16,7 @@
 personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it on your own computer, then bring it into QQ, WeChat, Telegram, Discord and eighteen more from the same local page.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps screen of the local page, with every platform it can join" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps view of the local page: the platforms that connect by scanning a code or by pasting one or two values, the advanced platforms collapsed, and the coding assistants it can join" width="960">
 </p>
 
 <p align="center"><em>Connect apps, in the same local page as setup and the character chat.</em></p>

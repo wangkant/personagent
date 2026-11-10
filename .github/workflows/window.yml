@@ -8,8 +8,11 @@ on:
     paths:
       - persona_agent/window.py
       - persona_agent/welcome.py
-      - persona_agent/static/welcome/**
+      - persona_agent/services.py
+      - persona_agent/panels/**
+      - persona_agent/static/**
       - tools/window_smoke.py
+      - tools/package_smoke.py
       - pyproject.toml
       - .github/workflows/window.yml
   workflow_dispatch:

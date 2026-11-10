@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · 한국어 · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-이 커넥터는 [personagent](https://github.com/wangkant/personagent)를 Matrix 방에, 그리고 [mautrix 브리지](https://docs.mau.fi/bridges/)를 통해 WhatsApp, Signal, Messenger, Instagram, Google Messages 등의 네트워크에 둡니다. Matrix와 브리지는 직접 운영하는 서드파티 소프트웨어입니다. personagent가 로컬 페이지에서 연결하는 플랫폼에는 필요하지 않습니다.
+이 커넥터는 [personagent](https://github.com/wangkant/personagent)를 Matrix 방에, 그리고 [mautrix 브리지](https://docs.mau.fi/bridges/)를 통해 WhatsApp, Signal, Messenger, Instagram, Google Messages 등의 네트워크에 둡니다. 브리지는 직접 관리하는 홈서버에서 운영하는 서드파티 소프트웨어입니다. personagent가 로컬 페이지에서 연결하는 플랫폼에는 필요하지 않습니다.
+
+personagent는 이 커넥터 없이 Matrix에 직접 연결할 수도 있습니다. 로컬 페이지의 **플랫폼 연결** 화면 또는 `personagent connect matrix`에서 홈서버 주소, 봇 계정의 액세스 토큰, 본인의 Matrix ID를 입력합니다. 이 기본 제공 연결은 종단 간 암호화가 없는 방만 읽으며, 그 Matrix ID로 초대한 방에만 참여합니다. 봇이 암호화된 방을 읽어야 하는 경우, 브리지 포털이나 다른 사람이 초대한 방에서 답해야 하는 경우, 또는 허용 목록으로 방과 사람을 지정하려는 경우에는 이 커넥터를 사용하십시오.
 
 커넥터는 [matrix-nio](https://github.com/matrix-nio/matrix-nio)로 만든 작은 독립 프로세스로, libolm 없이 종단 간 암호화를 지원합니다. 일반 Matrix 사용자로 홈서버에 로그인해 허용된 각 방 메시지를 플랫폼 중립 이벤트로 에이전트의 `POST /v1/events`에 전달하고([docs/connectors.md](../../docs/connectors.ko.md)), 에이전트의 답변을 방에 올립니다. 에이전트의 아웃박스도 폴링하므로 예약된 말 걸기, 후속 질문, 변명도 Matrix에 도달합니다.
 
@@ -108,8 +110,8 @@ mautrix 브리지는 다른 네트워크에 그 네트워크 계정으로 로그
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger, Instagram DM | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages (Android 휴대폰을 통한 RCS와 SMS) | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice, LinkedIn, Twitter/X DM, Bluesky DM, Google Chat, Zulip, IRC, iMessage | 다른 [mautrix 브리지](https://github.com/mautrix) |
-| Telegram, Discord, Slack | mautrix 브리지가 있지만 이 네트워크들에는 공식 봇 API가 있습니다. personagent는 Telegram과 Discord에 직접 연결하고, Slack은 로컬 페이지가 실행하는 AstrBot으로 연결합니다. |
+| Google Voice, LinkedIn, Twitter/X DM, Bluesky DM, Google Chat, iMessage | 다른 [mautrix 브리지](https://github.com/mautrix) |
+| Telegram, Discord, Slack, Zulip, IRC | 브리지가 있지만 이 네트워크들에는 브리지 없이 연결할 수 있습니다. personagent는 Telegram, Discord, Zulip, IRC에 직접 연결하고, Slack은 로컬 페이지가 실행하는 AstrBot으로 연결합니다. |
 
 설정 방법:
 

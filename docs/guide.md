@@ -563,7 +563,7 @@ The list of chats stays empty until the character runs. It starts when you chat 
 
 The local page answers only on this computer. On a server without the local page, use `personagent learned` to review and overrule what it learned. Scripts can read the same data through the service's API, described in the deployment guide's [Activity section](deploy.md#activity).
 
-![The Activity view of a group chat: two items waiting for you, a better wording and a reply worth repeating, each with Keep and Discard; one learned item with Undo; a memory note; and the recent lines, with why it spoke or stayed quiet](activity.png)
+![The Activity view: the chats on the left (a Telegram group, a Discord DM and this page); for the Telegram group, two items waiting for you, a reply worth repeating and a better wording, each with Keep and Discard; one learned item with Undo; a remembered fact with Forget; the recent lines, with why it spoke or stayed quiet; and below, What the character has learned, across every chat, with the tabs In use, Pending, Discarded, Undone and Replaced](activity.png)
 
 ## Measure it
 

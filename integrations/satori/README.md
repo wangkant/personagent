@@ -11,10 +11,10 @@ login over one websocket. One connector process therefore puts the persona
 on every platform the server has an adapter for.
 
 Satori and Koishi are third-party software. personagent does not need them
-for QQ, WeChat, Telegram or Discord, which it connects itself, or for the
-platforms its local page sets up through AstrBot. Use this connector when
-you already run Koishi, or when you want a platform that only Koishi
-reaches.
+for QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK or
+Stoat, which it connects itself, or for the platforms its local page sets
+up through AstrBot. Use this connector when you already run Koishi, or when
+you want a platform that only Koishi reaches.
 
 The connector forwards each allowed message to the agent's
 `POST /v1/events` as a neutral event ([docs/connectors.md](../../docs/connectors.md))

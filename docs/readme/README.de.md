@@ -18,7 +18,7 @@
 personagent ist eine Figur für Ihre Gruppenchats: Wählen Sie eine fertige aus oder schreiben Sie Ihre eigene, und betreiben Sie sie mit einem beliebigen OpenAI-kompatiblen Modell. Chatten Sie zunächst auf Ihrem eigenen Rechner mit ihr, und holen Sie sie dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und achtzehn weitere Plattformen.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite mit allen Plattformen, denen die Figur beitreten kann" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite: die Plattformen, die per Scan oder mit ein bis zwei eingefügten Werten verbunden werden, die eingeklappten erweiterten Plattformen und die Programmierassistenten, denen die Figur beitreten kann" width="960">
 </p>
 
 <p align="center"><em>Plattformen verbinden, auf derselben lokalen Seite wie Einrichtung und Chat mit der Figur.</em></p>

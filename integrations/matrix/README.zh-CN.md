@@ -3,7 +3,9 @@
 [English](README.md) · 简体中文 · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-本连接器将 [personagent](https://github.com/wangkant/personagent) 接入 Matrix 房间，并通过 [mautrix 桥](https://docs.mau.fi/bridges/)接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等网络。Matrix 和这些桥是第三方软件，由你自行运行。personagent 从本地页面连接的平台无需使用它们。
+本连接器将 [personagent](https://github.com/wangkant/personagent) 接入 Matrix 房间，并通过 [mautrix 桥](https://docs.mau.fi/bridges/)接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等网络。这些桥是第三方软件，由你在自己管理的主服务器上运行。personagent 从本地页面连接的平台无需使用它们。
+
+personagent 也可以不经本连接器、直接连接 Matrix：在本地页面的「连接平台」中，或通过 `personagent connect matrix`，填写主服务器地址、机器人账号的访问令牌和你自己的 Matrix ID 即可。这种内置连接只读取未开启端到端加密的房间，并且只加入你用该 Matrix ID 邀请它加入的房间。如果机器人需要读取加密房间、需要在桥的门户房间或其他人邀请它加入的房间中回复，或者你希望用允许名单指定房间和人员，请改用本连接器。
 
 连接器是一个基于 [matrix-nio](https://github.com/matrix-nio/matrix-nio) 的独立小进程，支持端到端加密，不需要 libolm。它以普通 Matrix 用户身份登录主服务器，将每条允许的房间消息作为平台中立的事件转发到 agent 的 `POST /v1/events`（[docs/connectors.md](../../docs/connectors.zh-CN.md)），再将 agent 的回复发回房间。它也轮询 agent 的发件箱，因此定时开场、追问和致歉同样能送达 Matrix。
 
@@ -108,8 +110,8 @@ mautrix 桥以某网络账号的身份登录该网络，将其聊天镜像到称
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger、Instagram 私信 | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages（通过 Android 手机的 RCS 和短信） | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice、LinkedIn、Twitter/X 私信、Bluesky 私信、Google Chat、Zulip、IRC、iMessage | 其他 [mautrix 桥](https://github.com/mautrix) |
-| Telegram、Discord、Slack | 有 mautrix 桥，但这些网络有官方机器人 API。personagent 直接连接 Telegram 和 Discord，Slack 则通过本地页面运行的 AstrBot 连接。 |
+| Google Voice、LinkedIn、Twitter/X 私信、Bluesky 私信、Google Chat、iMessage | 其他 [mautrix 桥](https://github.com/mautrix) |
+| Telegram、Discord、Slack、Zulip、IRC | 有相应的桥，但这些网络无需桥即可接入。personagent 直接连接 Telegram、Discord、Zulip 和 IRC，Slack 则通过本地页面运行的 AstrBot 连接。 |
 
 配置步骤：
 

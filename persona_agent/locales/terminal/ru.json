@@ -223,7 +223,7 @@
 "{0} absent": "{0}: нет",
 "{0}; {1}": "{0}; {1}",
 "{0} OVER": "{0} ПРЕВЫШЕНО",
-"{0} UNPARSEABLE row(s)": "{0} нечитаемых строк",
+"{0} UNPARSEABLE row(s)": "нечитаемых строк: {0}",
 "no ledgers yet": "записей об обучении пока нет",
 "a chat platform, astrbot, claude-code, codex or dsh; omit it to list the chat platforms": "чат-платформа, astrbot, claude-code, codex или dsh; если не указано, выводится список чат-платформ",
 "a chat platform: ask nothing; give every required value as an option": "чат-платформа: ничего не спрашивает; все обязательные значения передаются в виде параметров",

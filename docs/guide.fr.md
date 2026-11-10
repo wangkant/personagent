@@ -136,12 +136,12 @@ Voici une exécution abrégée de `personagent demo teach --lang fr`. Les répli
       registre d'apprentissage : Alex a accepté la deuxième tentative : forte (la réponse s'adressait à Alex)
 
   correction : « t'as regardé les logs ? fais d'abord un r... » -> « c'est clair. dure fin de journée »
-    [x] 2 réactions concordantes sur 2
-    [x] 1 fortes sur 1
+    [x] réactions concordantes : 2 sur 2
+    [x] réactions fortes : 1 sur 1
     [x] même conversation
-    [x] 1 personne sur 1 (PROMOTE_MIN_SPEAKERS)
+    [x] 1 sur 1 personne (PROMOTE_MIN_SPEAKERS)
     [x] aucune opposition, aucune correction concurrente
-    désormais utilisé : 2 réactions concordantes, 1 fortes, même conversation
+    désormais utilisé : 2 réactions en accord, fortes : 1, même conversation
 ```
 
 La scène envoie aussi le même message avant et après la leçon : l'ordinateur portable de quelqu'un a lâché en pleine démo. Avant la correction, Nova propose une solution. Après, Nova compatit. La démo reste scénarisée même avec une clé définie, donc chaque exécution est identique et ne coûte rien. `personagent demo --online` la joue plutôt sur votre propre modèle, ce qui coûte des jetons et varie d'une exécution à l'autre.
@@ -200,7 +200,7 @@ La connexion est active tant que personagent s'exécute. `personagent up` démar
 
 ```text
 Alex> il y a quelqu'un ce soir ?
-  (Nova se tait : pas interpellé, 1 messages sur 4)
+  (Nova se tait : pas interpellé, 1 sur 4 messages)
 
 Alex> Nova, le déploiement a encore planté
   Nova > t'as regardé les logs ? fais d'abord un rollback, puis compare les configs
@@ -563,7 +563,7 @@ La liste des discussions reste vide tant que le personnage n'est pas en cours d'
 
 La page locale ne répond que sur cet ordinateur. Sur un serveur sans page locale, utilisez `personagent learned` pour examiner et annuler ce qu'il a appris. Les scripts peuvent lire les mêmes données via l'API du service, décrite dans la [section Activité](deploy.fr.md#activité) du guide de déploiement.
 
-![La vue Activité d'une discussion de groupe : deux éléments qui vous attendent, une meilleure formulation et une réponse à réutiliser, chacun avec conserver et rejeter ; un élément appris avec annuler ; une note de mémoire ; et les lignes récentes, avec pourquoi il a parlé ou s'est tu](activity.png)
+![La vue Activité : à gauche, les discussions (un groupe Telegram, un message privé Discord et Cette page) ; pour le groupe Telegram, deux éléments en attente de votre décision, une réponse à reproduire et une meilleure formulation, chacun avec Conserver et Rejeter ; un élément appris avec Annuler ; une note de mémoire avec Oublier ; les lignes récentes, avec la raison pour laquelle il a parlé ou s'est tu ; et en dessous, Apprentissages du personnage dans toutes les discussions, avec les onglets Utilisés, En attente, Rejetés, Annulés et Remplacés](activity.png)
 
 ## Le mesurer
 

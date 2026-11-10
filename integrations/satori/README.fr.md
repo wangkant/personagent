@@ -5,7 +5,7 @@
 
 Ce connecteur relie [personagent](https://github.com/wangkant/personagent) à un serveur [Satori](https://satori.chat). Satori est un protocole de discussion multiplateforme. Un serveur comme [Koishi](https://koishi.chat) (avec son plugin `server-satori`), Chronocat ou LLOneBot se connecte aux plateformes de discussion, et un client comme celui-ci reçoit chaque message de chaque connexion par un seul websocket. Un seul processus de connecteur place donc le personnage sur toutes les plateformes pour lesquelles le serveur a un adaptateur.
 
-Satori et Koishi sont des logiciels tiers. personagent n'en a pas besoin pour QQ, WeChat, Telegram ou Discord, qu'il connecte lui-même, ni pour les plateformes que sa page locale configure via AstrBot. Utilisez ce connecteur si vous exécutez déjà Koishi, ou si vous voulez une plateforme que seul Koishi atteint.
+Satori et Koishi sont des logiciels tiers. personagent n'en a pas besoin pour QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK ou Stoat, qu'il connecte lui-même, ni pour les plateformes que sa page locale configure via AstrBot. Utilisez ce connecteur si vous exécutez déjà Koishi, ou si vous voulez une plateforme que seul Koishi atteint.
 
 Le connecteur transmet chaque message autorisé au `POST /v1/events` de l'agent sous forme d'événement neutre ([docs/connectors.md](../../docs/connectors.fr.md)) et renvoie les réponses via Satori. Il récupère aussi la boîte d'envoi de l'agent, donc les messages programmés, les questions de suivi et les excuses arrivent dans la discussion.
 

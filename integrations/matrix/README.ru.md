@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · Русский
 
 
-Этот коннектор размещает [personagent](https://github.com/wangkant/personagent) в комнатах Matrix, а через [мосты mautrix](https://docs.mau.fi/bridges/) — в WhatsApp, Signal, Messenger, Instagram, Google Messages и других сетях. Matrix и мосты — сторонние программы, которые вы запускаете сами. personagent не нуждается в них для платформ, которые подключает со своей локальной страницы.
+Этот коннектор размещает [personagent](https://github.com/wangkant/personagent) в комнатах Matrix, а через [мосты mautrix](https://docs.mau.fi/bridges/) — в WhatsApp, Signal, Messenger, Instagram, Google Messages и других сетях. Мосты — сторонние программы, которые вы запускаете сами на домашнем сервере под вашим управлением. personagent не нуждается в них для платформ, которые подключает со своей локальной страницы.
+
+personagent также подключается к Matrix сам, без этого коннектора: раздел «Подключение платформ» на его локальной странице или команда `personagent connect matrix` запрашивает адрес домашнего сервера, токен доступа учётной записи бота и ваш собственный Matrix ID. Это встроенное подключение читает только комнаты без сквозного шифрования и входит только в те комнаты, в которые вы приглашаете бота с этого Matrix ID. Используйте вместо него этот коннектор, если бот должен читать зашифрованные комнаты, отвечать в порталах мостов или в комнатах, куда его приглашают другие люди, либо если вы хотите выбирать комнаты и людей по спискам разрешённых.
 
 Коннектор — это небольшой самостоятельный процесс на основе [matrix-nio](https://github.com/matrix-nio/matrix-nio), поддерживающего сквозное шифрование без libolm. Он входит на домашний сервер как обычный пользователь Matrix, пересылает каждое разрешённое сообщение комнаты в `POST /v1/events` агента как событие, не зависящее от платформы ([docs/connectors.md](../../docs/connectors.ru.md)), и публикует ответы агента в комнате. Он также опрашивает исходящую очередь агента, так что запланированные реплики, уточняющие вопросы и резервные ответы тоже доходят до Matrix.
 
@@ -108,8 +110,8 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger, личные сообщения Instagram | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages (RCS и SMS через телефон Android) | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice, LinkedIn, личные сообщения Twitter/X и Bluesky, Google Chat, Zulip, IRC, iMessage | Другие [мосты mautrix](https://github.com/mautrix) |
-| Telegram, Discord, Slack | Мосты mautrix существуют, но у этих сетей есть официальные API ботов. personagent сам подключает Telegram и Discord, а Slack — через AstrBot, который запускает его локальная страница. |
+| Google Voice, LinkedIn, личные сообщения Twitter/X и Bluesky, Google Chat, iMessage | Другие [мосты mautrix](https://github.com/mautrix) |
+| Telegram, Discord, Slack, Zulip, IRC | Мосты существуют, но к этим сетям можно подключиться и без них. personagent сам подключает Telegram, Discord, Zulip и IRC, а Slack — через AstrBot, который запускает его локальная страница. |
 
 Как настроить:
 

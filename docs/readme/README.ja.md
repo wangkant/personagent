@@ -18,7 +18,7 @@
 personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まず自分のコンピューターで会話を試し、その後、同じローカルページから QQ、WeChat、Telegram、Discord をはじめ、さらに 18 のプラットフォームに参加させることができます。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。参加できるすべてのプラットフォームが表示されている" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたは 1〜2 個の値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
 </p>
 
 <p align="center"><em>「プラットフォーム連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>

@@ -3,7 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · 繁體中文 · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-此聯結器將 [personagent](https://github.com/wangkant/personagent) 接入 Matrix 聊天室，並透過 [mautrix 橋接](https://docs.mau.fi/bridges/)接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等網路。Matrix 和這些橋接程式都是第三方軟體，由你自行執行。personagent 從本機頁面連接的平台不需要它們。
+此聯結器將 [personagent](https://github.com/wangkant/personagent) 接入 Matrix 聊天室，並透過 [mautrix 橋接](https://docs.mau.fi/bridges/)接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等網路。這些橋接程式是第三方軟體，由你在自己管理的主伺服器上執行。personagent 從本機頁面連接的平台不需要它們。
+
+personagent 也可以不經此聯結器、直接連線 Matrix：在本機頁面的「連接平台」中，或透過 `personagent connect matrix`，填寫主伺服器位址、機器人帳號的存取權杖和你自己的 Matrix ID 即可。這種內建連線只讀取未啟用端對端加密的聊天室，而且只加入你以該 Matrix ID 邀請它加入的聊天室。如果機器人需要讀取加密聊天室、需要在橋接程式的入口聊天室或其他人邀請它加入的聊天室中回覆，或者你希望以允許清單指定聊天室和人員，請改用此聯結器。
 
 聯結器是一個以 [matrix-nio](https://github.com/matrix-nio/matrix-nio) 為基礎的獨立小型程式，支援端對端加密，不需要 libolm。它以一般 Matrix 使用者的身分登入主伺服器，將每則獲准的聊天室訊息以平台中立的事件格式轉送至 agent 的 `POST /v1/events`（[docs/connectors.md](../../docs/connectors.zh-TW.md)），再將 agent 的回覆傳回聊天室。它也會輪詢 agent 的 outbox，因此定時開場、追問和致歉同樣能送達 Matrix。
 
@@ -108,8 +110,8 @@ mautrix 橋接程式以某個網路帳號的身分登入該網路，將其聊天
 | Signal | [mautrix-signal](https://github.com/mautrix/signal) |
 | Facebook Messenger、Instagram 私訊 | [mautrix-meta](https://github.com/mautrix/meta) |
 | Google Messages（透過 Android 手機的 RCS 和簡訊） | [mautrix-gmessages](https://github.com/mautrix/gmessages) |
-| Google Voice、LinkedIn、Twitter/X 私訊、Bluesky 私訊、Google Chat、Zulip、IRC、iMessage | 其他 [mautrix 橋接程式](https://github.com/mautrix) |
-| Telegram、Discord、Slack | 有 mautrix 橋接程式，但這些網路提供官方機器人 API。personagent 會自行連線 Telegram 和 Discord，Slack 則透過本機頁面執行的 AstrBot 連線。 |
+| Google Voice、LinkedIn、Twitter/X 私訊、Bluesky 私訊、Google Chat、iMessage | 其他 [mautrix 橋接程式](https://github.com/mautrix) |
+| Telegram、Discord、Slack、Zulip、IRC | 有相應的橋接程式，但這些網路不需橋接即可接入。personagent 會自行連線 Telegram、Discord、Zulip 和 IRC，Slack 則透過本機頁面執行的 AstrBot 連線。 |
 
 設定步驟：
 
