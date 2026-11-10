@@ -15,7 +15,7 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずはブラウザーで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに十数個のアプリへ連れていけます。
+personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずは自分のパソコンで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに十数個のアプリへ連れていけます。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「アプリ連携」画面。参加できるすべてのプラットフォームが並んでいる" width="960">
@@ -45,7 +45,7 @@ personagent はグループチャットのためのキャラクターです。�
 <tr>
 <td width="220" valign="top"><strong>始めるのが簡単で、グループのいる場所で暮らします。</strong></td>
 <td valign="top">
-コマンド 1 つでブラウザーにローカルページが開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
+コマンド 1 つで自分のパソコンに開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
 モデルのキーを 1 つ貼り付ければチャットできます。10 種類のモデルサービスがプリセットされていて、そのほかの OpenAI 互換サービスも使えます。<br>
 アプリの連携は、スマートフォンでのスキャンか、値を 1〜2 個貼り付けるだけです。キャラクターがそこで何をしたかは「アクティビティ」ビューで確認できます。
 </td>
@@ -70,9 +70,9 @@ python -m pip install personagent
 personagent
 ```
 
-[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。personagent は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストされています。
+[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。デスクトップに personagent のアイコンも置かれます。personagent は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストされています。
 
-ブラウザーでローカルページが開きます。モデルの API キーを貼り付けて **確認してチャット開始** をクリックすると、小さなリクエストを 1 回送ってキーを確認します。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。キーを取る前に様子を見たいなら、`personagent demo` が台本のある 3 つの場面を無料で再生します。[スタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+Windows では専用のウィンドウで開きます。macOS と Linux ではブラウザーで開き、`pip install "personagent[app]"` を入れればウィンドウでも開けます。モデルの API キーを貼り付けて **確認してチャット開始** をクリックすると、小さなリクエストを 1 回送ってキーを確認します。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。キーを取る前に様子を見たいなら、`personagent demo` が台本のある 3 つの場面を無料で再生します。[スタートガイド](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
 ## かかる費用
 

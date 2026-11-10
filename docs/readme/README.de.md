@@ -15,7 +15,7 @@
 
 *Dies ist eine Übersetzung der englischen README, die maßgeblich ist und aktueller sein kann.*
 
-personagent ist ein Charakter für deine Gruppenchats: Wähl einen fertigen aus oder schreib deinen eigenen und betreib ihn mit einem beliebigen OpenAI-kompatiblen Modell. Fang damit an, im Browser mit ihm zu chatten, und hol ihn dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und ein Dutzend weitere Apps.
+personagent ist ein Charakter für deine Gruppenchats: Wähl einen fertigen aus oder schreib deinen eigenen und betreib ihn mit einem beliebigen OpenAI-kompatiblen Modell. Fang damit an, auf deinem eigenen Rechner mit ihm zu chatten, und hol ihn dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und ein Dutzend weitere Apps.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Apps verbinden der lokalen Seite mit allen Plattformen, denen er beitreten kann" width="960">
@@ -45,7 +45,7 @@ Jede Änderung wird festgehalten, und jede lässt sich zurücknehmen.
 <tr>
 <td width="220" valign="top"><strong>Er ist schnell gestartet und lebt dort, wo deine Gruppe ist.</strong></td>
 <td valign="top">
-Ein Befehl öffnet eine lokale Seite in deinem Browser, auf Englisch, Chinesisch oder in acht weiteren Sprachen.<br>
+Ein Befehl öffnet ihn auf deinem Rechner, auf Englisch, Chinesisch oder in acht weiteren Sprachen.<br>
 Füge einen Modellschlüssel ein und chatte los: Zehn Modelldienste sind voreingestellt, und jeder andere OpenAI-kompatible funktioniert ebenfalls.<br>
 Verbinde eine App per Handy-Scan oder mit ein, zwei eingefügten Werten. Die Ansicht Aktivität zeigt, was der Charakter dort getan hat.
 </td>
@@ -70,9 +70,9 @@ python -m pip install personagent
 personagent
 ```
 
-Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` es ohne separaten Installationsschritt. Unter Windows kannst du auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken. personagent wird unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 getestet.
+Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` es ohne separaten Installationsschritt. Unter Windows kannst du auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken; das legt auch ein personagent-Symbol auf deinen Desktop. personagent wird unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 getestet.
 
-Dein Browser öffnet eine lokale Seite. Füge einen API-Schlüssel für das Modell ein und klick auf **Prüfen & Chat starten**; eine kleine Anfrage prüft den Schlüssel. Noch keinen Schlüssel? Die kostenlosen Modelle von OpenRouter sind vorausgewählt, und ihr Schlüssel kostet nichts. Willst du ihn erst einmal sehen, bevor du dir überhaupt einen Schlüssel holst, spielt `personagent demo` kostenlos drei vorgefertigte Szenen ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) führt Bildschirm für Bildschirm durch die Seite.
+Unter Windows öffnet es sich in einem eigenen Fenster. Unter macOS und Linux öffnet es sich im Browser, nach `pip install "personagent[app]"` ebenfalls in einem Fenster. Füge einen API-Schlüssel für das Modell ein und klick auf **Prüfen & Chat starten**; eine kleine Anfrage prüft den Schlüssel. Noch keinen Schlüssel? Die kostenlosen Modelle von OpenRouter sind vorausgewählt, und ihr Schlüssel kostet nichts. Willst du ihn erst einmal sehen, bevor du dir überhaupt einen Schlüssel holst, spielt `personagent demo` kostenlos drei vorgefertigte Szenen ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) führt Bildschirm für Bildschirm durch die Seite.
 
 ## Was es kostet
 

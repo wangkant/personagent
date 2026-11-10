@@ -276,7 +276,7 @@ Give the user the link and tell them:
 3. Say hello in **Chat** [开始聊天] to check the character. Rewrite the character any time in the **Persona** box [人设] under **Character & settings**.
 4. Click **Quit** [退出] to stop it.
 
-**If your background processes do not survive.** Some agent environments end them when a command or the session finishes. Then ask the user to run `personagent --home "<home>" start` in their own terminal. It opens the page in their browser; they keep that window open while they use it.
+**If your background processes do not survive.** Some agent environments end them when a command or the session finishes. Then ask the user to run `personagent --home "<home>" start` in their own terminal. It opens the page in a window of its own, or in their browser on macOS and Linux; they keep it open while they use it.
 
 **On a remote machine over SSH**, the page listens only on that machine's 127.0.0.1. Start it with a fixed port, `personagent --home "<home>" start --no-browser --port 8765`, and have the user open a tunnel from their own computer with `ssh -N -L 8765:127.0.0.1:8765 <user>@<host>`. The same link then works in their local browser.
 
@@ -325,8 +325,8 @@ The [deployment guide](deploy.md) covers AstrBot, NapCat, Satori, Matrix and pub
 
 ## 8. Daily use
 
-- **With a browser:** `personagent --home "<home>" start` opens the page and resumes the connected apps. The user keeps its window open; **Quit**, Ctrl+C or closing the window stops everything.
-- **Without a browser**, on a server or to keep it running: `personagent --home "<home>" up` starts the character and every connected app. It needs the key: without one it prints "Open personagent start to finish setup first." and exits with 2. Ctrl+C stops it, and each process logs to `<home>/runtime/desktop/`. To run it in the background, use the commands from step 6 with `up` in place of `start --no-browser`, inside the `cmd` line too.
+- **With the page:** `personagent --home "<home>" start` opens the page and resumes the connected apps. The user keeps its window open; **Quit**, Ctrl+C or closing the window stops everything.
+- **Without the page**, on a server or to keep it running: `personagent --home "<home>" up` starts the character and every connected app. It needs the key: without one it prints "Open personagent start to finish setup first." and exits with 2. Ctrl+C stops it, and each process logs to `<home>/runtime/desktop/`. To run it in the background, use the commands from step 6 with `up` in place of `start --no-browser`, inside the `cmd` line too.
 - Run either the page or `up` for one home, never both at once.
 - When the home is the default `~/personagent`, the user can leave out `--home`: a bare `personagent` in a terminal opens the page. Anywhere else, every command needs the same `--home "<home>"`.
 

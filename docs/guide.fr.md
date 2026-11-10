@@ -27,7 +27,7 @@ python -m pip install personagent
 personagent
 ```
 
-`personagent` ouvre [la page locale](#la-page-locale) dans votre navigateur. Vous pouvez aussi l'installer ou le lancer de ces façons :
+`personagent` ouvre [la page locale](#la-page-locale). Vous pouvez aussi l'installer ou le lancer de ces façons :
 
 | Voie | Commande |
 |---|---|
@@ -36,7 +36,7 @@ personagent
 | Windows, depuis le ZIP des sources | décompressez-le et double-cliquez sur `start.bat` |
 | Depuis un clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python -m venv .venv`, puis `.venv/bin/python -m pip install -e .` et `.venv/bin/python -m persona_agent` (sous Windows, `.venv\Scripts\python.exe`) |
 
-personagent fonctionne sur Python 3.10–3.14. `start.bat` crée `.venv`, installe les dépendances et ouvre la même page. Il les réinstalle chaque fois que la liste de dépendances de `pyproject.toml` change.
+personagent fonctionne sur Python 3.10–3.14. `start.bat` crée `.venv`, installe les dépendances et ouvre la même page ; la première fois, il place aussi une icône personagent sur le bureau et dans le menu Démarrer. Il les réinstalle chaque fois que la liste de dépendances de `pyproject.toml` change.
 
 Le **dossier personnel** contient les réglages (`.env`), le personnage (`persona.txt`), ce qu'il apprend (`runtime/`) et les plateformes de discussion (`platforms/`). `platforms/` contient l'AstrBot géré et `direct.json`, qui stocke les identifiants des plateformes que personagent connecte lui-même. personagent utilise le premier de ces dossiers :
 
@@ -51,20 +51,20 @@ Ce guide écrit les commandes sous la forme `personagent ...`. Si vous ne l'avez
 
 ## La page locale
 
-`personagent` (ou `personagent start`) sert une page accessible uniquement depuis cet ordinateur et l'ouvre dans le navigateur. La page a quatre vues :
+`personagent` (ou `personagent start`) sert une page accessible uniquement depuis cet ordinateur. Sous Windows, elle s'ouvre dans sa propre fenêtre. Sous macOS et Linux, elle s'ouvre dans le navigateur, ou aussi dans une fenêtre une fois que `pip install "personagent[app]"` a ajouté [pywebview](https://pywebview.flowrl.com/), avec Qt sous Linux. La page a quatre vues :
 
-- **Discussion** est une discussion individuelle avec le personnage dans le navigateur. Le même agent que celui qui sert vos plateformes de discussion y répond.
+- **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond.
 - **Activité** montre les discussions où se trouve le personnage, ce qu'il a dit récemment, ce qu'il a appris et ce qui attend votre décision. Voir [Activité](#activité).
 - **Connecter des applis** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion).
 - **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité toute prête. **Vérifier et discuter** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les applications de votre choix.
 
 Tant que vous n'avez pas connecté d'application, la vue Discussion affiche une courte barre **Pour commencer**.
 
-Relancer `personagent` réutilise la page déjà ouverte. `--no-browser` affiche le lien au lieu d'ouvrir un navigateur.
+Relancer `personagent` fait réapparaître la page déjà ouverte. `--browser` ouvre la page dans le navigateur plutôt que dans une fenêtre, et `--no-browser` affiche le lien sans rien ouvrir. Sous Windows, `personagent shortcut` place sur le bureau et dans le menu Démarrer une icône qui ouvre la fenêtre sans terminal derrière, et `personagent shortcut --remove` la retire.
 
 Quand un personagent plus récent est sur PyPI, la vue Discussion affiche un avis avec la commande qui met à jour votre installation, qu'elle vienne de pip, uvx, uv tool, pipx ou d'un clone Git. Pour un ZIP des sources décompressé, l'avis renvoie plutôt à la page des versions. Le terminal affiche la même commande. Fermer l'avis le masque pour cette version, et **N disponible** sous le numéro de version le fait réapparaître. `personagent up` et `personagent doctor` signalent aussi une nouvelle version. La page et `up` interrogent pypi.org au plus une fois par jour, en arrière-plan. `doctor` interroge immédiatement quand la dernière réponse date de plus d'un jour. Définissez `UPDATE_CHECK_ENABLED=false` pour désactiver la vérification.
 
-La page démarre l'agent et les plateformes connectées en arrière-plan, alors gardez sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
+La page démarre l'agent et les plateformes connectées en arrière-plan, alors gardez sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Tant qu'une application est connectée, fermer la fenêtre demande d'abord confirmation. Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
 
 ## Le voir d'abord : la démo
 

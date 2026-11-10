@@ -18,6 +18,8 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
+from typing import Callable
 from urllib.parse import urlsplit
 import webbrowser
 
@@ -32,6 +34,7 @@ from . import direct
 from .direct import base as direct_base
 from . import setup_wizard as sw
 from . import updates
+from . import window as appwindow
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
 from .storage import FileLock, LockUnavailable, atomic_write_text
@@ -905,6 +908,12 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def activity_forget(request: Request):
         return await workspace.activity_forget(await body(request))
 
+    @app.post("/api/show")
+    async def show(request: Request):
+        await body(request)
+        callback = getattr(app.state, "show", None)
+        return {"ok": True, "window": bool(callback and await asyncio.to_thread(callback))}
+
     @app.post("/api/exit")
     async def exit_app(request: Request):
         await body(request)
@@ -917,27 +926,118 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     return app
 
 
+def _raise_window(url: str) -> bool:
+    """Ask the personagent already running to bring its window to the front."""
+    address = urlsplit(url)
+    if os.name == "nt":
+        import ctypes
+        # Windows lets a window take the foreground only when the process the
+        # person just started says it may.
+        ctypes.windll.user32.AllowSetForegroundWindow(-1)
+    try:
+        answer = httpx.post(f"{address.scheme}://{address.netloc}/api/show", json={}, timeout=5,
+                            trust_env=False,
+                            headers={TOKEN_HEADER: address.fragment.partition("token=")[2]})
+        return bool(answer.json().get("window"))
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return False
+
+
+def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, desktop: Path) -> None:
+    """The page in its own window on this thread, the server behind it on another."""
+    services = app.state.workspace.services
+
+    def confirm() -> str:
+        if not (services.running("direct") or services.running("astrbot")):
+            return ""
+        return langs.term("Closing personagent takes the character out of your chats "
+                          "until you open it again. Close it?")
+
+    window = appwindow.AppWindow(url, storage=desktop / "webview", confirm=confirm)
+
+    def stop() -> None:
+        server.should_exit = True
+        window.close()
+
+    def serve() -> None:
+        try:
+            server.run(sockets=[sock])
+        finally:
+            window.close()
+
+    app.state.shutdown = stop
+    app.state.show = window.show
+    serving = threading.Thread(target=serve, name="personagent-page")
+    serving.start()
+    try:
+        # No error and no window: it was closed before it finished opening.
+        if not window.run() and window.error:
+            app.state.show = None
+            print(langs.term("No window opened, so the page is in your browser.")
+                  + f" ({window.error})", flush=True)
+            webbrowser.open(url)
+            while serving.is_alive():
+                serving.join(0.5)
+    except KeyboardInterrupt:
+        # Ctrl+C closed the window; the signal itself may land only here.
+        pass
+    finally:
+        stop()
+        serving.join()
+
+
 def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
-    import uvicorn
-    parser = argparse.ArgumentParser(prog=prog, description=langs.term("Open local setup and chat in your browser"))
-    parser.add_argument("--no-browser", action="store_true", help=langs.term("print the local link without opening a browser"))
+    parser = argparse.ArgumentParser(prog=prog, description=langs.term("Open local setup and chat in a window of their own"))
+    parser.add_argument("--browser", action="store_true", help=langs.term("open the page in your browser instead of a window"))
+    parser.add_argument("--no-browser", action="store_true", help=langs.term("print the local link and open nothing"))
     parser.add_argument("--terminal", action="store_true", help=langs.term("use the terminal menu instead"))
     parser.add_argument("--port", type=int, default=0, help=langs.term("local page port (default: choose automatically)"))
     args = parser.parse_args(argv)
     if args.terminal:
         return sw.start_main([])
     home = homes.find_home()
-    info = home / "runtime" / "desktop" / "welcome.json"
+    desktop = home / "runtime" / "desktop"
+    # Started by pythonw, as the shortcut does: no terminal, so sentences go to
+    # a log and a refusal to a dialog.
+    quiet = sys.stdout is None or sys.stderr is None
+    log = None
+    if quiet:
+        desktop.mkdir(parents=True, exist_ok=True)
+        # Appended: a second start must not empty the log of the one running.
+        log = sys.stdout = sys.stderr = open(desktop / "app.log", "a", encoding="utf-8", buffering=1)
+
+    def refuse(text: str) -> int:
+        print(text, flush=True)
+        if quiet:
+            appwindow.alert(text)
+        return 1
+
+    try:
+        return _start(args, home, refuse, log)
+    except Exception:
+        if not quiet:
+            raise
+        traceback.print_exc()
+        appwindow.alert(langs.term(f"personagent could not start. The details are in {desktop / 'app.log'}."))
+        return 1
+
+
+def _start(args: argparse.Namespace, home: Path, refuse: Callable[[str], int], log=None) -> int:
+    import uvicorn
+    desktop = home / "runtime" / "desktop"
+    info = desktop / "welcome.json"
     lock = FileLock(info.with_suffix(".lock"), timeout=0)
     try:
         lock.acquire()
+        if log:
+            # This start is the one that runs: its log begins here.
+            log.truncate(0)
     except LockUnavailable:
         url = sw._read_json(info).get("url", "")
         if not url:
-            print(langs.term("personagent is starting. Try again in a moment."))
-            return 1
+            return refuse(langs.term("personagent is starting. Try again in a moment."))
         print(url, flush=True)
-        if not args.no_browser:
+        if not args.no_browser and (args.browser or not _raise_window(url)):
             webbrowser.open(url)
         return 0
     token = secrets.token_urlsafe(32)
@@ -949,23 +1049,29 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         try:
             sock.bind(("127.0.0.1", args.port))
         except (OSError, OverflowError):
-            print(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
-            return 1
+            return refuse(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
         sock.listen(128)
         port = sock.getsockname()[1]
         url = f"http://127.0.0.1:{port}/#token={token}"
         atomic_write_text(info, json.dumps({"url": url}))
-        print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
+        windowed = not (args.browser or args.no_browser) and appwindow.available()
+        if windowed:
+            print(langs.term(f"personagent {__version__}\n\n  {url}\n\nClose the personagent window to stop."), flush=True)
+        else:
+            print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
         notice = updates.line(updates.notice(home))
         if notice:
             print(langs.term(notice), flush=True)
+        app = create_app(home, token)
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        if windowed:
+            _serve_in_window(app, server, sock, url, desktop)
+            return 0
         if not args.no_browser:
             # The socket already listens, so an early request waits its turn.
             timer = threading.Timer(0, webbrowser.open, args=(url,))
             timer.daemon = True
             timer.start()
-        app = create_app(home, token)
-        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         app.state.shutdown = lambda: setattr(server, "should_exit", True)
         server.run(sockets=[sock])
         return 0

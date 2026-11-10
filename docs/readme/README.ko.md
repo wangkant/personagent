@@ -15,7 +15,7 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 브라우저에서 이야기해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 십여 개 앱으로 데려가세요.
+personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 내 컴퓨터에서 이야기해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 십여 개 앱으로 데려가세요.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 앱 연결 화면. 참여할 수 있는 모든 플랫폼이 표시되어 있습니다" width="960">
@@ -45,7 +45,7 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 <tr>
 <td width="220" valign="top"><strong>시작하기 쉽고, 그룹이 있는 곳에서 지냅니다.</strong></td>
 <td valign="top">
-명령 하나로 브라우저에 로컬 페이지가 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
+명령 하나로 내 컴퓨터에서 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
 모델 키 하나만 붙여 넣으면 채팅할 수 있습니다. 모델 서비스 10개가 프리셋으로 들어 있고, 그 밖의 OpenAI 호환 서비스도 쓸 수 있습니다.<br>
 앱은 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 연결합니다. 캐릭터가 거기서 무엇을 했는지는 활동 화면에서 볼 수 있습니다.
 </td>
@@ -70,9 +70,9 @@ python -m pip install personagent
 personagent
 ```
 
-[uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다. Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 됩니다. personagent는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트합니다.
+[uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다. Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 됩니다. 바탕 화면에 personagent 아이콘도 생깁니다. personagent는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트합니다.
 
-브라우저에서 로컬 페이지가 열립니다. 모델 API 키를 붙여 넣고 **확인하고 채팅 시작**을 누르면, 작은 요청 하나로 키를 확인합니다. 아직 키가 없나요? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. 키를 받기 전에 먼저 구경하고 싶다면 `personagent demo`가 대본이 있는 장면 세 개를 무료로 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
+Windows에서는 전용 창에서 열립니다. macOS와 Linux에서는 브라우저에서 열리고, `pip install "personagent[app]"`을 설치하면 창으로도 열 수 있습니다. 모델 API 키를 붙여 넣고 **확인하고 채팅 시작**을 누르면, 작은 요청 하나로 키를 확인합니다. 아직 키가 없나요? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. 키를 받기 전에 먼저 구경하고 싶다면 `personagent demo`가 대본이 있는 장면 세 개를 무료로 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
 
 ## 비용
 

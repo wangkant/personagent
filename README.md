@@ -13,7 +13,7 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it in your browser, then bring it into QQ, WeChat, Telegram, Discord and a dozen more from the same local page.
+personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it on your own computer, then bring it into QQ, WeChat, Telegram, Discord and a dozen more from the same local page.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps screen of the local page, with every platform it can join" width="960">
@@ -43,7 +43,7 @@ Every change is on record, and any of them can be rolled back.
 <tr>
 <td width="220" valign="top"><strong>It is easy to start, and lives where your group is.</strong></td>
 <td valign="top">
-One command opens a local page in your browser, in English, Chinese or eight more languages.<br>
+One command opens it on your computer, in English, Chinese or eight more languages.<br>
 Paste one model key to chat: ten model services are preset, and any other OpenAI-compatible one works.<br>
 Connect an app with a phone scan or one or two pasted values. The Activity view shows what the character did there.
 </td>
@@ -68,9 +68,9 @@ python -m pip install personagent
 personagent
 ```
 
-With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`. personagent is tested on Linux with Python 3.10–3.14 and on Windows with Python 3.12.
+With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`, which leaves a personagent icon on your desktop. personagent is tested on Linux with Python 3.10–3.14 and on Windows with Python 3.12.
 
-Your browser opens on a local page. Paste a model API key and click **Verify & start chatting**; one small request checks the key. No key yet? OpenRouter's free models are preselected, and their key costs nothing. To watch it before you get any key, `personagent demo` plays three scripted scenes for free. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
+On Windows it opens in a window of its own. On macOS and Linux it opens in your browser, or in a window as well after `pip install "personagent[app]"`. Paste a model API key and click **Verify & start chatting**; one small request checks the key. No key yet? OpenRouter's free models are preselected, and their key costs nothing. To watch it before you get any key, `personagent demo` plays three scripted scenes for free. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
 
 ## What it costs
 

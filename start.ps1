@@ -124,6 +124,18 @@ $env:PYTHONIOENCODING = 'utf-8'
 
 Write-Host ""
 if (-not [Console]::IsInputRedirected -and $args.Count -eq 0) {
+    $quietPy = Join-Path (Split-Path -Parent $pySource) 'pythonw.exe'
+    if (Test-Path -LiteralPath $quietPy) {
+        # Once per checkout: a deleted icon stays deleted.
+        $iconStamp = Join-Path $PSScriptRoot '.venv/.personagent-shortcut'
+        if (-not (Test-Path -LiteralPath $iconStamp)) {
+            & $pySource -m persona_agent shortcut
+            if ($LASTEXITCODE -eq 0) { Set-Content -LiteralPath $iconStamp -Value 'made' -Encoding ascii }
+        }
+        # The window needs no console behind it, so this one can close.
+        Start-Process -FilePath $quietPy -ArgumentList '-m', 'persona_agent', 'start' -WorkingDirectory $PSScriptRoot
+        exit 0
+    }
     & $pySource -m persona_agent start
 } else {
     & $pySource -m persona_agent run @args

@@ -6,8 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **personagent opens in a window of its own.** On Windows `personagent` shows the local page in an app window (WebView2 through [pywebview](https://pywebview.flowrl.com/)) with its own taskbar icon, where it used to open a browser tab. Closing the window stops personagent, and asks first while an app is connected. Starting it a second time brings the window back. On macOS and Linux the page still opens in the browser; `pip install "personagent[app]"` gives it the window there too, with Qt on Linux. `--browser` keeps the browser, and where no window can open the page falls back to it. In the window, right-click works where there is text to paste into or to copy, and nowhere else.
+- **`personagent shortcut`** puts an icon on the Windows desktop and in the Start menu that opens the window with no terminal behind it; `--remove` takes it away. `start.bat` makes the icon the first time it runs, then opens the window and closes its console. Started this way, personagent writes what it would print to `runtime/desktop/app.log` and says a refusal in a dialog.
+
 ### Changed
 
+- **Every button on the local page shows that it was pressed**: it moves a pixel and darkens while the pointer is down, where only hovering used to show.
+- **Disconnecting an app asks in the page's own dialog**, where the browser's one named `127.0.0.1` in its title. Esc and Cancel keep the app connected.
+- **The name at the top left of the local page goes to the chat.** It was a link that led nowhere.
 - **A turn has one time budget.** A reply gets 1.5 × `LLM_TIMEOUT_S` in all, in a group, in a DM and when the character speaks first, where it used to get the timeout again for every retry and every model. A connector should allow 3 × `LLM_TIMEOUT_S` for a request, since a message first waits for the turn that was thinking when it arrived; the defaults (420 s against 360 s) already do. `LLM_MAX_RETRIES` no longer enters that sum.
 - **DMs sent while a reply is on the way are answered together.** Someone who sends three more messages while the model is thinking gets one reply to all three, as a group already did, where each used to queue a reply of its own.
 - **A memory command sent while a reply is on the way is answered after it** without holding its request open: through the outbox as `follow_up` where the connector pulls one, and otherwise in a response of the same conversation.

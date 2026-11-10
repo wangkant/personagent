@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -99,6 +100,38 @@ class LauncherTests(unittest.TestCase):
         # Without a console it runs the service, as `personagent run`.
         self.assertEqual(recorded["argv"], ["run"])
         self.assertTrue((repo / ".venv" / ".personagent-installed").is_file())
+
+    @unittest.skipUnless(os.name == "nt", "start.bat is double-clicked on Windows")
+    def test_a_double_click_makes_the_icon_once_and_starts_with_no_console(self) -> None:
+        repo, caller, env = self._windows_repo()
+        starts = repo.parent / "starts.log"
+        (repo / "persona_agent" / "__main__.py").write_text(
+            "import os, sys\n"
+            "with open(os.environ['LAUNCHER_CAPTURE'], 'a', encoding='utf-8') as log:\n"
+            "    log.write(os.path.basename(sys.executable).lower() + ' ' + ' '.join(sys.argv[1:])\n"
+            "              + (' console' if sys.stdout else ' quiet') + '\\n')\n",
+            encoding="utf-8")
+        env["LAUNCHER_CAPTURE"] = str(starts)
+        # A console of its own, kept off screen, is what a double click gives:
+        # input that is not redirected.
+        hidden = subprocess.STARTUPINFO()
+        hidden.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        hidden.wShowWindow = 0
+        for expected in (["python.exe shortcut console", "pythonw.exe start quiet"],
+                         ["pythonw.exe start quiet"]):
+            done = subprocess.run(["cmd", "/c", str(repo / "start.bat")], cwd=caller, env=env,
+                                  creationflags=subprocess.CREATE_NEW_CONSOLE,
+                                  startupinfo=hidden, timeout=180)
+            self.assertEqual(done.returncode, 0)
+            lines: list[str] = []
+            # pythonw is started and left; give it a moment to write its line.
+            for _ in range(100):
+                lines = starts.read_text(encoding="utf-8").splitlines() if starts.exists() else []
+                if len(lines) >= len(expected):
+                    break
+                time.sleep(0.1)
+            self.assertEqual(lines, expected)
+            starts.unlink()
 
     def test_a_python_older_than_3_10_is_named_before_anything_is_installed(self) -> None:
         """Python 3.9 used to run on into pip and read as a network failure."""

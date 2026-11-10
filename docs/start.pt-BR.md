@@ -13,9 +13,11 @@ personagent
 
 Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` executa sem uma etapa de instalação separada.
 
+No Windows, a página abre em uma janela própria. No macOS e no Linux, ela abre no seu navegador; `pip install "personagent[app]"` dá a ela uma janela lá também.
+
 Um agente de programação pode fazer a configuração por você: peça que ele leia [setup-for-agents.md](setup-for-agents.md) e configure o personagent.
 
-No Windows, você também pode baixar o ZIP do código-fonte, descompactar e clicar duas vezes em `start.bat`. Ele cria um ambiente Python próprio na pasta e abre a mesma página.
+No Windows, você também pode baixar o ZIP do código-fonte, descompactar e clicar duas vezes em `start.bat`. Ele cria um ambiente Python próprio na pasta e abre a mesma página. Na primeira vez, ele também coloca um ícone do personagent na sua área de trabalho e no menu Iniciar.
 
 Para executar a partir de um clone, dê a ele um venv próprio: `python -m venv .venv`, depois `.venv/bin/python -m pip install -e .` e `.venv/bin/python -m persona_agent`. No Windows, o interpretador é `.venv\Scripts\python.exe`, ou você pode clicar duas vezes em `start.bat`.
 
@@ -49,7 +51,7 @@ Se um QR code expirar, peça um novo. Se um download falhar, tente de novo sem r
 
 ## Da próxima vez
 
-Abra o personagent de novo. Suas configurações são mantidas e os apps conectados voltam sozinhos. Se ele já estiver rodando, abrir de novo reaproveita a página em execução. Mantenha a janela de inicialização aberta enquanto usa. Os processos que ele iniciou param junto com ele, quer você clique em **Sair** ou feche a janela, e o que uma falha deixou para trás é encerrado na próxima inicialização.
+Abra o personagent de novo. Suas configurações são mantidas e os apps conectados voltam sozinhos. Se ele já estiver rodando, abrir de novo traz a janela dele de volta. Mantenha-a aberta enquanto usa: os processos que ele iniciou param junto com ele, quer você clique em **Sair** ou feche a janela, e o que uma falha deixou para trás é encerrado na próxima inicialização. No Windows, `personagent shortcut` coloca na sua área de trabalho e no menu Iniciar um ícone que o abre sem terminal.
 
 Quando há uma versão mais nova no PyPI, a visão **Conversa** mostra um aviso com um link para as notas da versão e o comando de atualização de acordo com a forma como esta cópia foi instalada. Uma cópia descompactada do ZIP do código-fonte recebe, em vez disso, um link para baixar o novo código da página de versões. O personagent consulta o pypi.org no máximo uma vez por dia, e a solicitação leva apenas o número da versão. Defina `UPDATE_CHECK_ENABLED=false` no `.env` para desativar a verificação.
 

@@ -13,9 +13,11 @@ personagent
 
 装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 无需单独安装即可运行。
 
+在 Windows 上，页面开在独立的窗口里。在 macOS 和 Linux 上在浏览器里打开；运行 `pip install "personagent[app]"` 之后也能开窗口。
+
 也可以让 AI 编程助手代劳：让它读 [setup-for-agents.md](setup-for-agents.md)，然后帮你把 personagent 装好并设置好。
 
-在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。它会在文件夹里建好自己的 Python 环境，再打开同一个本地页面。
+在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。它会在文件夹里建好自己的 Python 环境，再打开同一个本地页面。第一次运行时，还会在桌面和开始菜单里放一个 personagent 图标。
 
 从 Git 仓库运行时，请为它单独建一个虚拟环境：先运行 `python -m venv .venv`，再运行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的解释器是 `.venv\Scripts\python.exe`，也可以直接双击 `start.bat`。
 
@@ -49,7 +51,7 @@ QQ 机器人连好后，在手机 QQ 的「联系人 → 机器人」里找到�
 
 ## 下次使用
 
-再次打开 personagent 即可。配置会保留，已连接的平台会自动恢复。如果它已经在运行，再次打开会复用当前页面。使用期间请保持启动窗口打开。无论是点「退出」还是关闭窗口，它启动的进程都会一起结束；意外崩溃后残留的进程会在下次启动时清理。
+再次打开 personagent 即可。配置会保留，已连接的平台会自动恢复。如果它已经在运行，再次打开会把它的窗口调到前面。使用期间请保持它开着：无论是点「退出」还是关闭窗口，它启动的进程都会一起结束；意外崩溃后残留的进程会在下次启动时清理。在 Windows 上，`personagent shortcut` 会在桌面和开始菜单里放一个图标，点它就能打开，不用终端。
 
 PyPI 上有新版本时，「开始聊天」页面会显示一条提示，给出更新内容的链接和与当前安装方式对应的更新命令；解压源码 ZIP 运行的，提示会让你到发布页下载新版源码。personagent 每天最多向 pypi.org 查询一次，请求中只包含它的版本号。在 `.env` 中设置 `UPDATE_CHECK_ENABLED=false` 可以关闭这项检查。
 

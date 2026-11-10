@@ -53,11 +53,17 @@ dependencies = [
     "qrcode>=7.4,<9",
     # Unseals the bot secret QQ's scan-to-bind flow returns (AES-GCM).
     "cryptography>=44,<52",
+    # Opens the local page in a window of its own. Windows has WebView2 for it;
+    # elsewhere it needs a system toolkit, so it is the `app` extra there.
+    "pywebview>=6,<7; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
 # Only for `evolution_benchmark.py --judge anthropic`, which scores with another vendor.
 judge = ["anthropic>=0.103,<1"]
+# The window of its own on macOS and Linux; without it the page opens in the browser.
+# pywebview alone brings no toolkit on Linux, so Qt comes with it there.
+app = ["pywebview>=6,<7; sys_platform != 'linux'", "pywebview[qt]>=6,<7; sys_platform == 'linux'"]
 # What CI installs on top of the runtime dependencies.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 

@@ -13,7 +13,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <strong>简体中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent 是放进群聊里的一个角色：选一个现成的或自己写一个，接上任意 OpenAI 兼容的模型就能用。先在浏览器里和它聊，再从同一个本地页面把它带进 QQ、微信、Telegram、Discord 和另外十几个平台。
+personagent 是放进群聊里的一个角色：选一个现成的或自己写一个，接上任意 OpenAI 兼容的模型就能用。先在自己电脑上和它聊，再从同一个本地页面把它带进 QQ、微信、Telegram、Discord 和另外十几个平台。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面的「连接平台」：能接入的平台一目了然" width="960">
@@ -43,7 +43,7 @@ personagent 是放进群聊里的一个角色：选一个现成的或自己写�
 <tr>
 <td width="220" valign="top"><strong>上手快，你的群在哪它就去哪</strong></td>
 <td valign="top">
-一条命令就在浏览器里打开本地页面，页面有中文、英文和另外八种语言。<br>
+一条命令就在电脑上打开它，页面有中文、英文和另外八种语言。<br>
 填一个模型 Key 就能聊：预设了十家模型服务，其他 OpenAI 兼容的服务也能用。<br>
 接入一个平台，用手机扫一次码或粘贴一两项就行。在「动态」里能看到角色在那边做了什么。
 </td>
@@ -68,9 +68,9 @@ python -m pip install personagent
 personagent
 ```
 
-装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，双击 `start.bat`。personagent 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 测试过。
+装了 [uv](https://docs.astral.sh/uv/) 的话，`uvx personagent` 不用单独安装就能运行。Windows 也可以下载源码 ZIP，双击 `start.bat`，它还会在桌面上放一个 personagent 图标。personagent 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 测试过。
 
-浏览器会打开一个本地页面。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。还没有 Key？默认选中的是 OpenRouter 的免费模型，它的 Key 不花钱。想在拿到 Key 之前先看看效果，`personagent demo` 会免费播放三段写好的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)把页面一屏一屏讲了一遍。
+在 Windows 上，它会开一个独立的窗口；在 macOS 和 Linux 上在浏览器里打开，运行 `pip install "personagent[app]"` 之后也能开窗口。填入模型 API Key，点「验证并开始聊天」，它会发一次小请求校验 Key。还没有 Key？默认选中的是 OpenRouter 的免费模型，它的 Key 不花钱。想在拿到 Key 之前先看看效果，`personagent demo` 会免费播放三段写好的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)把页面一屏一屏讲了一遍。
 
 ## 要花多少钱
 

@@ -46,6 +46,17 @@ def test_the_dependencies_have_floors_and_stay_on_pydantic_2() -> None:
     assert all(">=" in ln for ln in requirements), "every dependency has a floor"
 
 
+def test_the_window_toolkit_is_required_only_where_the_system_has_one() -> None:
+    """Windows ships WebView2; macOS and Linux opt in with the `app` extra,
+    so a server install never needs a GUI toolkit."""
+    webview = [ln for ln in _dependencies() if ln.startswith("pywebview")]
+    assert len(webview) == 1 and webview[0].endswith("; sys_platform == 'win32'"), webview
+    extra = re.findall(r'"([^"]+)"', re.search(r"^app = \[(.*)\]$", _pyproject(), re.MULTILINE).group(1))
+    assert [spec.split(";")[1].strip() for spec in extra] == [
+        "sys_platform != 'linux'", "sys_platform == 'linux'"], extra
+    assert extra[1].startswith("pywebview[qt]>="), "pywebview alone brings Linux no toolkit"
+
+
 def test_the_workflows_take_pytest_and_ruff_from_the_dev_extra() -> None:
     """Their versions are written once, in pyproject.toml."""
     extra = re.search(r"^dev = \[(.*?)\]", _pyproject(), re.MULTILINE).group(1)
@@ -142,7 +153,7 @@ def test_the_cli_prints_its_version(capsys) -> None:
 def test_the_subcommands_this_package_serves_resolve() -> None:
     import importlib
 
-    for name in ("run", "doctor", "learned", "chat", "eval"):
+    for name in ("start", "shortcut", "run", "doctor", "learned", "chat", "eval"):
         module, func, _help = cli.COMMANDS[name]
         assert callable(getattr(importlib.import_module(module), func)), name
 

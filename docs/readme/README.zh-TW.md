@@ -15,7 +15,7 @@
 
 *本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
-personagent 是放進群組聊天裡的一個角色：選一個現成的或自己寫一個，接上任何相容 OpenAI 的模型就能用。先在瀏覽器裡和它聊，再從同一個本機頁面把它帶進 QQ、微信、Telegram、Discord 和另外十幾個平台。
+personagent 是放進群組聊天裡的一個角色：選一個現成的或自己寫一個，接上任何相容 OpenAI 的模型就能用。先在自己電腦上和它聊，再從同一個本機頁面把它帶進 QQ、微信、Telegram、Discord 和另外十幾個平台。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：能接入的平台一目瞭然" width="960">
@@ -45,7 +45,7 @@ personagent 是放進群組聊天裡的一個角色：選一個現成的或自�
 <tr>
 <td width="220" valign="top"><strong>上手快，你的群組在哪它就去哪</strong></td>
 <td valign="top">
-一行指令就在瀏覽器裡開啟本機頁面，頁面有中文、英文和另外八種語言。<br>
+一行指令就在電腦上開啟它，頁面有中文、英文和另外八種語言。<br>
 填一個模型金鑰就能聊：預設了十家模型服務，其他相容 OpenAI 的服務也能用。<br>
 接入一個平台，用手機掃描一次或貼上一兩項就行。在「動態」裡能看到角色在那邊做了什麼。
 </td>
@@ -70,9 +70,9 @@ python -m pip install personagent
 personagent
 ```
 
-如果裝了 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 不必另外安裝就能執行。Windows 也可以下載原始碼 ZIP，雙擊 `start.bat`。personagent 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 測試過。
+如果裝了 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 不必另外安裝就能執行。Windows 也可以下載原始碼 ZIP，雙擊 `start.bat`，它還會在桌面上放一個 personagent 圖示。personagent 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 測試過。
 
-瀏覽器會開啟一個本機頁面。貼上模型 API 金鑰，按下「驗證並開始聊天」，它會送出一次小請求來驗證金鑰。還沒有金鑰？預設選中的是 OpenRouter 的免費模型，它的金鑰不用付費。想在拿到金鑰之前先看看效果，`personagent demo` 會免費播放三段寫好的場景。[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)把頁面一個畫面一個畫面講了一遍。
+在 Windows 上，它會開一個獨立的視窗；在 macOS 和 Linux 上在瀏覽器裡開啟，執行 `pip install "personagent[app]"` 之後也能開視窗。貼上模型 API 金鑰，按下「驗證並開始聊天」，它會送出一次小請求來驗證金鑰。還沒有金鑰？預設選中的是 OpenRouter 的免費模型，它的金鑰不用付費。想在拿到金鑰之前先看看效果，`personagent demo` 會免費播放三段寫好的場景。[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)把頁面一個畫面一個畫面講了一遍。
 
 ## 要花多少錢
 

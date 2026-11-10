@@ -29,7 +29,7 @@ python -m pip install personagent
 personagent
 ```
 
-`personagent` 会在浏览器里打开[本地页面](#本地页面)。也可以用下面几种方式安装或运行：
+`personagent` 会打开[本地页面](#本地页面)。也可以用下面几种方式安装或运行：
 
 | 方式 | 命令 |
 |---|---|
@@ -38,7 +38,7 @@ personagent
 | Windows，用源码 ZIP | 解压后双击 `start.bat` |
 | 从源码 | `git clone https://github.com/wangkant/personagent.git`、`cd personagent`，然后 `python -m venv .venv`，再运行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`（Windows 上是 `.venv\Scripts\python.exe`） |
 
-支持 Python 3.10–3.14。`pip` 下载慢时可以加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。`start.bat` 会创建 `.venv`、安装依赖并打开同一个页面；`pyproject.toml` 里的依赖列表有变化时，它会重新安装。
+支持 Python 3.10–3.14。`pip` 下载慢时可以加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。`start.bat` 会创建 `.venv`、安装依赖并打开同一个页面，第一次运行时还会在桌面和开始菜单里放一个 personagent 图标；`pyproject.toml` 里的依赖列表有变化时，它会重新安装。
 
 **主目录**存放设置（`.env`）、人设（`persona.txt`）、学到的内容（`runtime/`）和聊天平台（`platforms/`）。`platforms/` 里是托管的 AstrBot 和 `direct.json`，后者保存 personagent 直接连接的平台的凭据。personagent 按下面的顺序选用第一个符合条件的文件夹：
 
@@ -53,20 +53,20 @@ personagent
 
 ## 本地页面
 
-`personagent`（或 `personagent start`）会启动一个只有本机能访问的页面，并在浏览器里打开。页面分四部分：
+`personagent`（或 `personagent start`）会启动一个只有本机能访问的页面。在 Windows 上，页面开在独立的窗口里；在 macOS 和 Linux 上在浏览器里打开，运行 `pip install "personagent[app]"` 装上 [pywebview](https://pywebview.flowrl.com/) 之后也能开窗口（Linux 上会连 Qt 一起装）。页面分四部分：
 
-- 「开始聊天」：在浏览器里和角色一对一聊天。回复你的，就是为各个聊天平台服务的同一个 agent。
+- 「开始聊天」：在页面上和角色一对一聊天。回复你的，就是为各个聊天平台服务的同一个 agent。
 - 「动态」：角色在哪些群和私聊里、最近说了什么、学到了什么，以及哪些改动在等你决定，见[动态](#动态)。
 - 「连接平台」：把角色接入 QQ、微信、Telegram、Discord 和其他平台，见[接进聊天平台](#接进聊天平台)。
 - 「角色与设置」：选择模型服务（OpenRouter、DeepSeek、硅基流动、阿里云百炼、智谱 GLM、月之暗面 Kimi、火山方舟、OpenAI、Google Gemini、Ollama，或其他兼容 OpenAI 接口的服务），填写 API 密钥，再选名字和现成的性格。点「验证并开始聊天」时，页面先用一个很小的请求测试密钥，测试通过才保存。设置完成后，「人设」框里显示的就是 `persona.txt`；点「保存人设」会用新内容重启 agent，已学到的内容保留。在「更多功能」里可以开启联网搜索（默认用免费的 DuckDuckGo，也可以填 Tavily 的密钥）、看懂图片，以及在选定的平台上偶尔主动说话。
 
 连上第一个平台之前，「开始聊天」上方会显示一条「开始使用」提示。
 
-再次运行 `personagent` 会复用已经打开的页面。加 `--no-browser` 则只打印链接，不打开浏览器。
+再次运行 `personagent` 会把已经打开的页面调到前面。加 `--browser` 改用浏览器打开而不开窗口，加 `--no-browser` 则只打印链接，什么都不打开。在 Windows 上，`personagent shortcut` 会在桌面和开始菜单里放一个图标，点它就能打开窗口，不带终端；`personagent shortcut --remove` 把图标删掉。
 
 PyPI 上有新版本时，「开始聊天」页会显示一条提示，并给出适合当前安装方式的更新命令，覆盖 pip、uvx、uv tool、pipx 和 Git 克隆；解压源码 ZIP 安装的，提示里给的是发布页链接。终端里也会打印同样的命令。关掉提示后，同一版本不再显示，点版本号下方的「新版本 N」可以重新打开。`personagent up` 和 `personagent doctor` 也会提醒。页面和 `up` 在后台检查，每天最多访问 pypi.org 一次；`doctor` 在上次结果已超过一天时当场检查。设置 `UPDATE_CHECK_ENABLED=false` 可以关闭检查。
 
-页面会在后台启动 agent 和已连接的平台，使用期间请保持页面窗口开着。无论是点「退出」、按 Ctrl+C 还是直接关闭窗口，它启动的进程都会一起结束。如果上次运行崩溃后留下了进程，下次启动时会先结束它们。
+页面会在后台启动 agent 和已连接的平台，使用期间请保持页面窗口开着。无论是点「退出」、按 Ctrl+C 还是直接关闭窗口，它启动的进程都会一起结束。有平台连着的时候，关闭窗口前会先问一句。如果上次运行崩溃后留下了进程，下次启动时会先结束它们。
 
 ## 先看演示
 

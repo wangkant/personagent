@@ -15,7 +15,7 @@
 
 *Esta é uma tradução do README em inglês, que é a versão de referência e pode estar mais atualizada.*
 
-O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu, e rode em qualquer modelo compatível com OpenAI. Comece conversando com ele no navegador e depois leve para o QQ, WeChat, Telegram, Discord e mais uma dúzia de apps pela mesma página local.
+O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu, e rode em qualquer modelo compatível com OpenAI. Comece conversando com ele no seu próprio computador e depois leve para o QQ, WeChat, Telegram, Discord e mais uma dúzia de apps pela mesma página local.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar apps da página local, com todas as plataformas em que ele pode entrar" width="960">
@@ -45,7 +45,7 @@ Toda mudança fica registrada, e qualquer uma pode ser desfeita.
 <tr>
 <td width="220" valign="top"><strong>É fácil de começar e fica onde seu grupo está.</strong></td>
 <td valign="top">
-Um comando abre uma página local no navegador, em inglês, chinês ou mais oito idiomas.<br>
+Um comando abre no seu computador, em inglês, chinês ou mais oito idiomas.<br>
 Cole uma chave de modelo para conversar: dez serviços de modelo já vêm pré-configurados, e qualquer outro compatível com OpenAI funciona.<br>
 Conecte um app escaneando com o celular ou colando um ou dois valores. A visão Atividade mostra o que o personagem fez por lá.
 </td>
@@ -70,9 +70,9 @@ python -m pip install personagent
 personagent
 ```
 
-Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` roda sem uma etapa de instalação separada. No Windows, você também pode baixar o ZIP do código-fonte e dar dois cliques em `start.bat`. O personagent é testado no Linux com Python 3.10–3.14 e no Windows com Python 3.12.
+Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` roda sem uma etapa de instalação separada. No Windows, você também pode baixar o ZIP do código-fonte e dar dois cliques em `start.bat`, que também deixa um ícone do personagent na sua área de trabalho. O personagent é testado no Linux com Python 3.10–3.14 e no Windows com Python 3.12.
 
-O navegador abre numa página local. Cole uma chave de API de modelo e clique em **Verificar e começar a conversar**; uma pequena solicitação confere a chave. Ainda não tem chave? Os modelos gratuitos do OpenRouter já vêm selecionados, e a chave deles não custa nada. Para ver como é antes de conseguir qualquer chave, `personagent demo` mostra três cenas roteirizadas de graça. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
+No Windows, ele abre em uma janela própria. No macOS e no Linux, abre no navegador, ou também em uma janela depois de `pip install "personagent[app]"`. Cole uma chave de API de modelo e clique em **Verificar e começar a conversar**; uma pequena solicitação confere a chave. Ainda não tem chave? Os modelos gratuitos do OpenRouter já vêm selecionados, e a chave deles não custa nada. Para ver como é antes de conseguir qualquer chave, `personagent demo` mostra três cenas roteirizadas de graça. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
 
 ## Quanto custa
 

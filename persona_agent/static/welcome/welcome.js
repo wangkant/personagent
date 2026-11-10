@@ -200,7 +200,7 @@ const translations = {
     keySaved: "留空保留已保存的密钥",
     firstConfigure: "先连接一个模型，再把角色带到其他平台。",
     working: "当前操作还在进行，请稍等。",
-    offline: "应用连接中断，请确认启动窗口仍在运行。",
+    offline: "应用连接中断，请关闭 personagent 后重新打开。",
     auth: "请通过启动窗口里显示的本地链接打开此页面。",
     key_required: "请填入 API Key。",
     key_rejected: "密钥未通过验证，请检查是否复制完整、是否属于所选服务。",
@@ -452,7 +452,7 @@ const translations = {
     firstConfigure: "Connect a model first, then bring the character to other apps.",
     working: "An operation is still in progress. Please wait.",
     offline:
-      "The app disconnected. Check that its launch window is still running.",
+      "The app disconnected. Close personagent and open it again.",
     auth: "Open this page using the local link in the launch window.",
     key_required: "Enter your API key.",
     key_rejected:
@@ -1676,6 +1676,11 @@ async function send(text, repeat = false) {
 }
 for (const button of document.querySelectorAll(".nav"))
   button.addEventListener("click", () => showView(button.dataset.view));
+// The name at the top left goes home, as a logo does.
+document.querySelector(".brand").addEventListener("click", (event) => {
+  event.preventDefault();
+  showView("chat");
+});
 $("language").addEventListener("change", async () => {
   const oldDefault = defaultName();
   const next = $("language").value;
@@ -1901,9 +1906,22 @@ async function refresh() {
   state = await api("state");
   renderStatus();
 }
+// The page's own question: a browser's confirm() names 127.0.0.1 in its title.
+function ask(question, yes) {
+  const box = $("ask");
+  $("ask-text").textContent = question;
+  $("ask-yes").textContent = yes;
+  box.returnValue = "";
+  return new Promise((resolve) => {
+    box.addEventListener("close", () => resolve(box.returnValue === "yes"), { once: true });
+    box.showModal();
+  });
+}
+$("ask-yes").addEventListener("click", () => $("ask").close("yes"));
+$("ask-no").addEventListener("click", () => $("ask").close(""));
 async function disconnect(kind) {
-  if (!confirm(t("confirmDisconnect", { platform: platformName(kind) })))
-    return;
+  const sure = await ask(t("confirmDisconnect", { platform: platformName(kind) }), t("disconnect"));
+  if (!sure) return;
   try {
     await api("platforms/disconnect", { platform: kind });
     toast(t("disconnecting", { platform: platformName(kind) }));

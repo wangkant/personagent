@@ -27,7 +27,7 @@ python -m pip install personagent
 personagent
 ```
 
-`personagent` abre [a página local](#a-página-local) no seu navegador. Você também pode instalá-lo ou executá-lo destas formas:
+`personagent` abre [a página local](#a-página-local). Você também pode instalá-lo ou executá-lo destas formas:
 
 | Caminho | Comando |
 |---|---|
@@ -36,7 +36,7 @@ personagent
 | Windows, a partir do ZIP do código-fonte | descompacte e dê dois cliques em `start.bat` |
 | A partir de um clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python -m venv .venv`, depois `.venv/bin/python -m pip install -e .` e `.venv/bin/python -m persona_agent` (no Windows, `.venv\Scripts\python.exe`) |
 
-O personagent roda em Python 3.10–3.14. `start.bat` cria `.venv`, instala as dependências e abre a mesma página. Ele as reinstala sempre que a lista de dependências em `pyproject.toml` muda.
+O personagent roda em Python 3.10–3.14. `start.bat` cria `.venv`, instala as dependências e abre a mesma página; na primeira vez, também coloca um ícone do personagent na área de trabalho e no menu Iniciar. Ele as reinstala sempre que a lista de dependências em `pyproject.toml` muda.
 
 A **pasta inicial** guarda as configurações (`.env`), o personagem (`persona.txt`), o que ele aprende (`runtime/`) e as plataformas de chat (`platforms/`). `platforms/` contém o AstrBot gerenciado e `direct.json`, que armazena as credenciais das plataformas que o personagent conecta por conta própria. O personagent usa a primeira destas pastas:
 
@@ -51,20 +51,20 @@ Este guia escreve os comandos como `personagent ...`. Se você não o instalou, 
 
 ## A página local
 
-`personagent` (ou `personagent start`) serve uma página acessível apenas deste computador e a abre no navegador. A página tem quatro visões:
+`personagent` (ou `personagent start`) serve uma página acessível apenas deste computador. No Windows, ela abre em uma janela própria. No macOS e no Linux, abre no navegador, ou também em uma janela depois que `pip install "personagent[app]"` instalar o [pywebview](https://pywebview.flowrl.com/), junto com o Qt no Linux. A página tem quatro visões:
 
-- **Conversa** é uma conversa individual com o personagem no navegador. O mesmo agente que atende às suas plataformas de chat responde aqui.
+- **Conversa** é uma conversa individual com o personagem na página. O mesmo agente que atende às suas plataformas de chat responde aqui.
 - **Atividade** mostra os chats em que o personagem está, o que ele disse recentemente, o que aprendeu e o que espera sua decisão. Veja [Atividade](#atividade).
 - **Conectar apps** coloca o personagem no QQ, WeChat, Telegram, Discord e outras plataformas. Veja [Coloque em um chat](#coloque-em-um-chat).
 - **Personagem e configurações** é onde você escolhe um serviço de modelos (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou qualquer outro serviço compatível com OpenAI), cola a chave de API e escolhe um nome e uma personalidade pronta. **Verificar e começar a conversar** testa a chave com uma pequena solicitação e só a salva se a solicitação funcionar. Depois da configuração, a caixa **Persona** mostra `persona.txt`. **Salvar persona** reinicia o agente com o novo texto e mantém o que ele aprendeu. **Mais recursos** ativa a busca na web pelo Tavily (DuckDuckGo é o padrão gratuito), a compreensão de imagens e o falar primeiro nos aplicativos que você escolher.
 
 Até você conectar um aplicativo, a visão Conversa mostra uma barra curta de **Primeiros passos**.
 
-Executar `personagent` de novo reutiliza a página já aberta. `--no-browser` imprime o link em vez de abrir um navegador.
+Executar `personagent` de novo traz de volta a página já aberta. `--browser` abre a página no navegador em vez de numa janela, e `--no-browser` imprime o link e não abre nada. No Windows, `personagent shortcut` coloca na área de trabalho e no menu Iniciar um ícone que abre a janela sem nenhum terminal por trás, e `personagent shortcut --remove` o remove.
 
 Quando há um personagent mais novo no PyPI, a visão Conversa mostra um aviso com o comando que atualiza sua instalação, seja ela do pip, uvx, uv tool, pipx ou de um clone Git. Para um ZIP do código-fonte descompactado, o aviso aponta para a página de versões. O terminal imprime o mesmo comando. Fechar o aviso o oculta para aquela versão, e **N disponível** abaixo do número da versão o traz de volta. `personagent up` e `personagent doctor` também informam uma versão nova. A página e `up` consultam pypi.org no máximo uma vez por dia, em segundo plano. `doctor` consulta na hora quando a última resposta tem mais de um dia. Defina `UPDATE_CHECK_ENABLED=false` para desativar a verificação.
 
-A página inicia o agente e as plataformas conectadas em segundo plano, então mantenha a janela aberta enquanto os usa. Tudo o que ela iniciou termina com ela, seja clicando em **Sair**, pressionando Ctrl+C ou fechando a janela. Se uma execução anterior travou e deixou processos, a próxima inicialização os encerra primeiro.
+A página inicia o agente e as plataformas conectadas em segundo plano, então mantenha a janela aberta enquanto os usa. Tudo o que ela iniciou termina com ela, seja clicando em **Sair**, pressionando Ctrl+C ou fechando a janela. Enquanto houver um aplicativo conectado, fechar a janela pede confirmação antes. Se uma execução anterior travou e deixou processos, a próxima inicialização os encerra primeiro.
 
 ## Veja primeiro: a demo
 

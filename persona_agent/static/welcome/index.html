@@ -474,6 +474,13 @@
           </p>
         </section>
         <div id="toast" role="status" hidden></div>
+        <dialog id="ask" class="ask" aria-labelledby="ask-text">
+          <p id="ask-text"></p>
+          <div class="ask-actions">
+            <button type="button" class="quiet" id="ask-no" data-t="cancel">取消</button>
+            <button type="button" class="primary" id="ask-yes"></button>
+          </div>
+        </dialog>
         <div id="closed" class="closed-overlay" hidden>
           <div class="card">
             <h2 data-t="closed">应用已关闭</h2>

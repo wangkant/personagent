@@ -196,7 +196,7 @@
     "keySaved": "Laissez vide pour garder la clé enregistrée",
     "firstConfigure": "Connectez d'abord un modèle, puis emmenez le personnage sur d'autres applis.",
     "working": "Une opération est encore en cours. Veuillez patienter.",
-    "offline": "L'appli s'est déconnectée. Vérifiez que sa fenêtre de lancement est toujours ouverte.",
+    "offline": "L'appli s'est déconnectée. Fermez personagent, puis rouvrez-le.",
     "auth": "Ouvrez cette page avec le lien local affiché dans la fenêtre de lancement.",
     "key_required": "Saisissez votre clé API.",
     "key_rejected": "La clé n'a pas été acceptée. Vérifiez qu'elle est complète et qu'elle correspond à ce service.",
