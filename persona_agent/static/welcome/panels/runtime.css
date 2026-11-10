@@ -1,0 +1,53 @@
+/* The runtime panel. */
+.runtime-card {
+  margin-top: 28px;
+}
+.runtime-line {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.runtime-new {
+  color: var(--accent);
+}
+.runtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.runtime-actions a {
+  font-size: 13px;
+}
+.runtime-command {
+  display: block;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--field);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.runtime-done {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--field);
+}
+.runtime-done.failed {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.runtime-done p {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+}
+.runtime-log {
+  margin: 10px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+}

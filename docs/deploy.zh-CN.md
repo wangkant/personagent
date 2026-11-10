@@ -2,7 +2,7 @@
 
 [English](deploy.md) · 简体中文 · [繁體中文](deploy.zh-TW.md) · [日本語](deploy.ja.md) · [한국어](deploy.ko.md) · [Español](deploy.es.md) · [Français](deploy.fr.md) · [Deutsch](deploy.de.md) · [Português (Brasil)](deploy.pt-BR.md) · [Русский](deploy.ru.md)
 
-本文按顺序介绍如何把角色接入 QQ 群：安装、填写 key、用手机 QQ 扫码。QQ 官方机器人由 personagent 直接连接，不需要 AstrBot，也不需要 NapCat 和 QQ 小号。微信、Telegram、Discord 同样由它直接连接。如果想用个人 QQ 小号，请看后面的[第三方路线：AstrBot + NapCat](#第三方路线astrbot--napcat)。
+本文按顺序介绍如何把角色接入 QQ 群：安装、填写 key、用手机 QQ 扫码。QQ 官方机器人由 personagent 直接连接，不需要 AstrBot，也不需要 NapCat 和 QQ 小号。微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 同样由它直接连接。如果想用个人 QQ 小号，请看后面的[第三方路线：AstrBot + NapCat](#第三方路线astrbot--napcat)。
 
 ```text
 QQ 群  ⇄  personagent（直连进程 + 角色服务）  ⇄  AI 模型
@@ -25,7 +25,7 @@ personagent
 
 如果装了 [uv](https://docs.astral.sh/uv/)，可以用 `uvx personagent` 免安装运行。在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。从 Git 仓库运行的方法见[简明入门](start.zh-CN.md)。
 
-你应该看到浏览器打开一个本地页面，包含三个视图：「开始聊天」「连接平台」「角色与设置」。再次运行 `personagent` 会复用已经打开的页面。
+你应该看到一个本地页面：在 Windows 上显示在独立的窗口中，在 macOS 和 Linux 上在浏览器中打开。页面侧栏有六个视图：「开始聊天」「动态」「连接平台」「角色与设置」「演练」「应用」。再次运行 `personagent` 会复用已经打开的页面。
 
 > 如果想把数据放在别的盘，运行 `personagent --home D:\personagent`，之后每条命令都带上同样的 `--home`。不指定时，数据存放在用户目录下的 `personagent` 文件夹。
 
@@ -55,7 +55,7 @@ personagent
 
 所有平台都在「连接平台」里添加。凭据会先交给平台验证，通过后才保存。
 
-- **personagent 直接连接**：QQ、个人微信、Telegram、Discord。个人微信用手机微信扫码登录（使用腾讯的 iLink 机器人接口），只支持私聊，因为微信不会把群消息交给这类机器人。Telegram 需要粘贴 @BotFather 提供的 token；Discord 需要粘贴机器人 token，并开启 Message Content Intent。
+- **personagent 直接连接**：QQ、个人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。个人微信用手机微信扫码登录（使用腾讯的 iLink 机器人接口），只支持私聊，因为微信不会把群消息交给这类机器人。Telegram 需要粘贴 @BotFather 提供的 token；Discord 需要粘贴机器人 token，并开启 Message Content Intent。其余六个平台需要填写的内容和使用限制见[使用手册](guide.zh-CN.md#personagent-直接连接的平台)。
 - **经托管的 AstrBot 连接**：其余平台。第一次连接这类平台时，personagent 会下载 AstrBot 和独立的 Python 3.12，并在后台运行。它没有网页后台，也不需要再登录一个账号。只需粘贴一两项就能连接的有：KOOK、飞书（长连接）、钉钉（Stream 模式）、Slack（Socket Mode，页面上的链接会预填好应用）、企业微信智能机器人（长连接）、Mattermost、Misskey。「高级」分组里的平台需要公网地址或本机的其他软件：企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori。暂不提供 LINE。
 
 连接好的平台默认回复所有群聊和私聊。如果只想放行一部分，在 `.env` 里写 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`（格式为 `平台:ID`，见[下文](#经你已经在运行的-astrbot)）。
@@ -84,7 +84,7 @@ personagent
 
 学到的所有内容都记录在只追加的账本里，随时可以撤销：
 
-- 在「动态」里，「等你确认」下的每条改动都有「保留」和「不要」两个按钮。「保留」会让它生效，如果同一条回复已经有生效中的改写，就替换掉那条。「学到的」下每一条都有「撤销」按钮。
+- 在「动态」中，「待你确认」下的每条改动都有「保留」和「放弃」两个按钮。「保留」会让它生效，如果同一条回复已经有生效中的改写，就替换掉那条。「学习记录」下每一条都有「撤销」按钮。下方的「角色学到的内容」列出全部学到的内容，角色未运行时也可以在此处理。
 - 也可以使用命令：`personagent learned list`、`personagent learned show <编号>`、`personagent learned rollback <编号>`。
 
 如果希望它更保守，在 `.env` 里加上 `PROMOTE_MIN_SPEAKERS=2`，这样需要两个不同的人都认可才会改变。
@@ -95,7 +95,7 @@ personagent
 
 ## 机器人不说话
 
-请按顺序排查，越靠前的原因越常见。角色服务由本地页面启动时，先看「动态」：聊天是否出现、有没有收到消息、它为什么没开口，都能在这里看到。在服务器上，看服务日志，学到的东西用 `personagent learned` 查看。再看主目录下 `runtime/desktop/` 里的日志：`agent.log`（角色服务）、`direct.log`（QQ、微信、Telegram、Discord）、`astrbot.log`（其他平台）。
+请按顺序排查，越靠前的原因越常见。角色服务由本地页面启动时，先看「动态」：聊天是否出现、有没有收到消息、它为什么没开口，都能在这里看到。在服务器上，看服务日志，学到的东西用 `personagent learned` 查看。再看主目录下 `runtime/desktop/` 里的日志：`agent.log`（角色服务）、`direct.log`（personagent 直接连接的平台）、`astrbot.log`（其他平台）。
 
 1. **消息没有送达。** 在「连接平台」里确认该平台显示为已连接。QQ 机器人必须已经在群里，群里能收到哪些消息由 QQ 的设置决定；个人微信只支持私聊。使用第三方 AstrBot 的，见[第三方路线排查](#第三方路线排查)。
 2. **角色服务没有开启，或者缺少 key。** 在「角色与设置」里重新填写 key 并保存。如果 `.env` 里写了 `AGENT_ENABLED=false`，改为 `true` 后重启。
@@ -110,7 +110,7 @@ personagent
 
 ## 第三方路线：AstrBot + NapCat
 
-AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 mautrix 桥接 WhatsApp、Signal 等）是 personagent 可以配合使用的第三方桥接，连接 QQ、微信、Telegram、Discord 都用不到它们。只有在想用**个人 QQ 小号**而不是官方机器人时，才需要 NapCat。
+AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 mautrix 桥接 WhatsApp、Signal 等）是 personagent 可以配合使用的第三方桥接，连接 personagent 直接连接的平台都用不到它们。只有在想用**个人 QQ 小号**而不是官方机器人时，才需要 NapCat。
 
 注意：NapCat 不是腾讯官方客户端，小号有被限制甚至封禁的风险。不要使用你自己的主号，详见 [DISCLAIMER.zh-CN.md](DISCLAIMER.zh-CN.md)。
 
@@ -221,7 +221,7 @@ key 只留在这台电脑上，对话内容会发给你选的模型服务。`.en
 
 在本地页面的「连接平台」里添加平台。personagent 在保存之前先向平台验证凭据。平台拒绝时，页面显示拒绝原因，不保留任何内容。
 
-**由 personagent 直接连接。** QQ、个人微信、Telegram 和 Discord 运行在一个「直连」进程里，不需要 AstrBot 和 NapCat。
+**由 personagent 直接连接。** QQ、个人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 运行在一个「直连」进程中，不需要 AstrBot 和 NapCat。某个平台无法加载时会被跳过，其余平台仍正常启动。下表列出前四个平台；其余六个平台需要填写的内容和使用限制见[使用手册](guide.zh-CN.md#personagent-直接连接的平台)。
 
 | 平台 | 你要做的 | 限制 |
 |---|---|---|
@@ -236,7 +236,7 @@ key 只留在这台电脑上，对话内容会发给你选的模型服务。`.en
 
 ### 经你已经在运行的 AstrBot
 
-AstrBot、NapCat（OneBot）、Koishi（经 [Satori 连接器](../integrations/satori/README.zh-CN.md)）和 Matrix（经 [Matrix 连接器](../integrations/matrix/README.zh-CN.md)和 mautrix 桥接）是 personagent 可以配合使用的第三方桥接。连接 QQ、微信、Telegram、Discord 都用不到它们。
+AstrBot、NapCat（OneBot）、Koishi（经 [Satori 连接器](../integrations/satori/README.zh-CN.md)）和 Matrix（经 [Matrix 连接器](../integrations/matrix/README.zh-CN.md)和 mautrix 桥接）是 personagent 可以配合使用的第三方桥接。连接 personagent 直接连接的平台都用不到它们。
 
 AstrBot 通过 `integrations/astrbot/astrbot_plugin_personagent/` 里的插件把消息交给 personagent。插件把每条消息发到 `POST /v1/events`，并转发响应中的回复。它还拉取 personagent 的 outbox（`outbox_enabled`，默认开启），所以在平台允许机器人主动发言的地方，角色可以先开口。插件说明里有详细的表格。托管的 AstrBot 会自动装好插件。使用你自己的 AstrBot 时，先启动一次让它生成 data 文件夹（其中有 `cmd_config.json`、`plugins/` 和 `config/`），然后运行：
 

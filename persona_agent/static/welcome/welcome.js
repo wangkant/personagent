@@ -1,122 +1,128 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
+// What the panels registered: see PA at the end of this file.
+const panelHooks = { show: {}, state: [], language: [] };
 const translations = {
   zh: {
     chat: "开始聊天",
     platforms: "连接平台",
     settings: "角色与设置",
     activity: "动态",
-    activityLead: "它在哪些群和私聊里，最近说了什么，学到了什么。",
-    activityConnect: "去连接平台",
-    activityNotRunning: "角色还没有运行。在「开始聊天」里说一句话，或者连上一个平台，它就会启动。",
-    activityNone: "还没有聊天记录。连上一个平台，把它拉进群或私聊它，这里就会出现。",
-    activityOff: "动态已关闭（.env 里的 DASHBOARD_ENABLED=false）。",
-    activity_unavailable: "暂时读不到角色的动态，稍后会自动重试。",
-    activity_changed: "这条已经被处理过了，列表已刷新。",
-    invalid_chat: "这个聊天已经不在了。",
-    activityHere: "这个页面",
+    practice: "演练",
+    practiceLead: "无需连接平台，即可查看角色在群聊中如何发言、如何学习。",
+    app: "应用",
+    appLead: "运行检查、后台运行、版本更新，以及数据的存放位置。",
+    activityLead: "角色所在的群聊和私聊、近期的发言，以及学到的内容。",
+    activityConnect: "连接平台",
+    activityNotRunning: "角色尚未运行。在「开始聊天」中发送一条消息，或连接一个平台，角色即会启动。",
+    activityNone: "暂无聊天记录。连接平台后，将角色添加到群聊或向它发送私信，记录即会显示在此处。",
+    activityOff: "动态已关闭（.env 中 DASHBOARD_ENABLED=false）。",
+    activity_unavailable: "暂时无法读取角色的动态，页面稍后将自动重试。",
+    activity_changed: "该项已被处理，列表已刷新。",
+    invalid_chat: "该聊天已不存在。",
+    activityHere: "本页面",
     activityGroup: "群聊",
     activityDm: "私聊",
-    activityReview: "等你确认",
-    activityReviewHint: "这些改动还在等更多反应才会自动生效，你也可以直接决定。",
-    activityLearned: "学到的",
-    activityNotes: "记住的事",
-    activityRecent: "最近",
-    activityRecentNone: "还没有记录。这里只保留最近的动态，角色重启后会清空。",
-    activityWording: "换个说法",
-    activityRepeat: "值得重复的回复",
-    activitySaid: "它说的",
-    activityBetter: "改成",
-    activityLesson: "以后都这样",
+    activityReview: "待你确认",
+    activityReviewHint: "以下改动将在收到足够的反馈后自动生效，你也可以现在直接决定。",
+    activityLearned: "学习记录",
+    activityNotes: "记忆",
+    activityRecent: "近期动态",
+    activityRecentNone: "暂无记录。此处仅保留近期动态，角色重启后将清空。",
+    activityWording: "改进措辞",
+    activityRepeat: "值得沿用的回复",
+    activitySaid: "原回复",
+    activityBetter: "改为",
+    activityLesson: "今后遵循",
     activityFrom: "来自 {who}",
     activityAbout: "关于 {who}",
-    activityRoomNote: "群里记下的",
-    activityCore: "一直记着",
-    activityForget: "忘掉",
-    activityForgotten: "已忘掉。",
+    activityRoomNote: "来自群聊",
+    activityCore: "长期记忆",
+    activityForget: "删除",
+    activityForgotten: "已删除。",
     listSep: "、",
     activityKeep: "保留",
-    activityDiscard: "不要",
+    activityDiscard: "放弃",
     activityUndo: "撤销",
-    activityKept: "已保留，之后的回复会用上。",
-    activityDiscarded: "已放弃这条改动。",
-    activityUndone: "已撤销，它不会再这样说。",
-    activityQuiet: "没开口",
+    activityKept: "已保留，之后的回复将采用此改动。",
+    activityDiscarded: "已放弃此改动。",
+    activityUndone: "已撤销，角色不会再使用这一说法。",
+    activityQuiet: "未发言",
     activityCount: "×{n}",
     justNow: "刚刚",
     minutesAgo: "{n} 分钟前",
     hoursAgo: "{n} 小时前",
-    r_below: "没被叫到，消息数还没到插话门槛",
-    r_sleep: "深夜时段，为了作息自然跳过",
-    r_skip: "为了节奏自然随机跳过",
-    r_passed: "判断这里不需要它说话",
-    r_addressed: "被点名或 @",
-    r_sticky: "回应之前的点名",
-    r_followup: "接着自己刚才的话",
-    r_trigger: "消息数到了，考虑插话",
-    r_first: "第一次在这个聊天出现",
-    m_called: "被叫到",
+    r_below: "未被点名，且累计消息数未达到主动发言的条件",
+    r_sleep: "处于夜间休息时段，按作息规律跳过",
+    r_skip: "为保持自然的发言节奏而随机跳过",
+    r_passed: "判断此处无需发言",
+    r_addressed: "被点名或被 @",
+    r_sticky: "回应此前的点名",
+    r_followup: "延续自己上一条发言",
+    r_trigger: "累计消息数已达到条件，考虑主动发言",
+    r_first: "首次出现在此聊天中",
+    m_called: "被点名",
     m_owner: "管理员",
-    m_judge: "自己决定插话",
-    m_judge_quiet: "可以插话",
+    m_judge: "自行判断后发言",
+    m_judge_quiet: "可参与发言",
     m_followup: "跟进",
-    m_proactive: "主动",
+    m_proactive: "主动发起话题",
     local: "运行在你的电脑上",
-    welcome: "欢迎来到 personagent",
+    welcome: "欢迎使用 personagent",
     localReady: "本地应用已就绪",
     running: "正在运行",
     exit: "退出",
-    hero: "设置你的角色",
-    intro: "填一个模型密钥就能开始聊天，其他都有默认值。",
-    modelTitle: "连接一个模型",
-    modelHint: "角色通过你选择的模型服务与你聊天。",
+    hero: "设置角色",
+    intro: "填写模型密钥即可开始聊天，其余设置均有默认值。",
+    modelTitle: "连接模型",
+    modelHint: "角色通过你选择的模型服务进行聊天。",
     provider: "模型服务",
-    freeNote: "OpenRouter 的免费模型：密钥不花钱，每天限 50 次请求。每次用的模型可能不同，部分免费服务商会保留收到的内容。",
-    getKey: "去获取密钥 ↗",
+    freeNote: "OpenRouter 免费模型：密钥本身不收费，每天限 50 次请求。每次请求使用的模型可能不同，部分免费服务商会保留收到的内容。",
+    getKey: "获取密钥 ↗",
     show: "显示",
     hide: "隐藏",
-    keyNote: "密钥保存在本机；聊天内容会发送给你选择的模型服务。",
-    advanced: "更多设置",
-    characterOptions: "给角色换个名字或性格",
-    name: "角色名字",
+    keyNote: "密钥保存在本机；聊天内容会发送至你选择的模型服务。",
+    advanced: "高级设置",
+    characterOptions: "更改角色名称或性格",
+    name: "角色名称",
     character: "性格",
-    customKept: "已有的人设会保留；选择新性格才会替换它。",
-    custom: "保留我自己写的人设",
+    customKept: "现有人设将保留；仅在选择新的性格时才会被替换。",
+    custom: "保留我自己编写的人设",
     personaTitle: "人设",
-    personaHint: "写它是谁、怎么说话、在意什么。保存后马上生效，它学到的东西会保留。",
+    personaHint: "描述角色的身份、说话方式和关注的事物。保存后立即生效，角色已学到的内容将保留。",
     personaSave: "保存人设",
     personaSaving: "正在保存…",
     personaUndo: "撤销修改",
     personaSaved: "人设已保存，角色已按新人设重新启动。",
-    invalid_persona: "人设不能为空，也不能超过 4000 字。",
+    invalid_persona: "人设不能为空，且不能超过 4000 字。",
     save: "保存",
     featuresTitle: "更多功能",
     searchTitle: "联网搜索",
-    searchHint: "遇到不熟的事会先查一下。默认用 DuckDuckGo，不需要密钥；填 Tavily 的密钥会更稳定。",
-    searchFree: "DuckDuckGo，免费",
+    searchHint: "遇到不了解的内容时，角色会先进行搜索。默认使用 DuckDuckGo，无需密钥；填写 Tavily 密钥可获得更稳定的结果。",
+    searchFree: "DuckDuckGo（免费）",
     searchTavily: "Tavily",
-    tavilyKeep: "留空保留已保存的 Tavily 密钥",
+    tavilyKeep: "留空以保留已保存的 Tavily 密钥",
     tavilyNew: "Tavily API Key（可选）",
     tavilyClear: "改回免费搜索",
-    visionTitle: "看懂图片",
-    visionHint: "收到图片和表情包时，用一个能看图的模型描述它；不开时只认图里的文字。",
-    visionModel: "看图模型",
-    visionSame: "和聊天用同一个服务和密钥",
-    proactiveTitle: "偶尔主动说话",
-    proactiveHint: "群聊或私聊安静一阵后，它可能会主动开个话题，次数很少。",
-    proactivePlatforms: "只在这些平台上（都不勾就是全部）：",
-    shareRoomsTitle: "让群之间的记忆互通",
-    shareRoomsHint: "在一个群里记下的关于某人的事，也会带到 TA 发言的其他群。私聊内容和不针对具体某人的笔记不会带过去。",
-    featuresSaved: "已保存，角色已按新的设置重新启动。",
-    invalid_feature: "这里有一项填得不对，检查一下密钥和平台。",
+    visionTitle: "识别图片",
+    visionHint: "收到图片和表情包时，使用支持图像的模型进行描述；未开启时仅识别图片中的文字。",
+    visionModel: "图像模型",
+    visionSame: "使用与聊天相同的服务和密钥",
+    proactiveTitle: "偶尔主动发言",
+    proactiveHint: "群聊或私聊安静一段时间后，角色可能会主动发起话题，频率很低。",
+    proactivePlatforms: "仅在以下平台启用（均未勾选时适用于所有平台）：",
+    shareRoomsTitle: "在群聊之间共享记忆",
+    shareRoomsHint: "在一个群聊中记下的关于某人的内容，也会用于此人发言的其他群聊。私聊内容和不针对具体个人的记录不会共享。",
+    featuresSaved: "已保存，角色已按新设置重新启动。",
+    invalid_feature: "有一项设置无效，请检查密钥和所选平台。",
     gsTitle: "开始使用",
-    gsPlatform: "连接一个平台",
+    gsPlatform: "连接平台",
     updateLink: "新版本 {version}",
     updateTitle: "personagent {version} 已发布",
-    updateNotes: "更新内容 ↗",
-    updateRun: "退出 personagent，运行下面这条命令，再重新打开。",
-    updateOpens: "退出 personagent，再用下面这条命令打开新版。",
-    updateDownload: "在更新内容页下载新版源码，解压后覆盖这个文件夹。",
+    updateNotes: "更新说明 ↗",
+    updateRun: "请退出 personagent，运行以下命令，然后重新打开。",
+    updateOpens: "请退出 personagent，然后使用以下命令打开新版本。",
+    updateDownload: "请在更新说明页下载新版本源码，解压后覆盖 personagent 文件夹。",
     copy: "复制",
     copied: "已复制",
     close: "关闭",
@@ -124,121 +130,169 @@ const translations = {
     saveStart: "验证并开始聊天 →",
     saveAgain: "保存并返回聊天 →",
     saving: "正在验证密钥…",
-    testNote: "会用一个很小的请求验证密钥，可能产生少量模型费用。",
+    testNote: "验证时会发送一次很小的请求，可能产生少量模型费用。",
     yourCharacter: "预览",
-    previewText: "性格决定它说话的语气。",
-    sample: "今天怎么样？有什么想和我说的吗？",
-    changeLater: "名字和性格，随时都能改。",
-    trioLabel: "也可以选 GPT 娘、鲸鱼娘或 Claude 娘",
-    qqLater: "也可以把它带到 QQ、微信、Telegram…",
-    qqLaterHint: "先聊起来。想接入时，在「连接平台」里选一个，扫码或填一两项就好。",
-    chatHint: "本机对话",
+    previewText: "性格决定角色说话的语气。",
+    sample: "今天过得怎么样？有什么想聊的吗？",
+    changeLater: "名称和性格可随时更改。",
+    trioLabel: "也可以选择 GPT 娘、鲸鱼娘或 Claude 娘",
+    qqLater: "也可以将角色接入 QQ、微信、Telegram…",
+    qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。",
+    chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
-    emptyHint: "说点什么，开始聊天。",
-    promptHello: "你好，认识一下？",
+    forgetChat: "清除本次对话的记忆",
+    forgetChatAsk: "角色将清除在本次对话中记下的内容，并开始新的对话。此操作无法撤销。",
+    forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
+    forgetChatDone: "已清除本次对话中记下的 {count} 项内容。",
+    forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
+    commandsShow: "记忆命令",
+    commandsHint: "点击命令即可填入输入框：",
+    emptyHint: "发送一条消息以开始聊天。",
+    promptHello: "你好，请做个自我介绍。",
     promptDay: "今天过得怎么样？",
-    promptFilm: "推荐一部周末看的电影吧",
+    promptFilm: "请推荐一部适合周末观看的电影。",
     message: "输入消息",
     composerNote: "Enter 发送 · Shift + Enter 换行",
     platformsIntro:
-      "扫码或填一两项即可，下载、配置和启动都会自动完成。",
+      "扫码或填写一至两项即可，下载、配置和启动均会自动完成。",
     connectedTitle: "已连接的平台",
-    groupScan: "扫码就能连",
-    groupScanHint: "用手机确认一下就好，什么都不用填。",
-    groupKey: "粘贴一两项",
-    groupKeyHint: "从平台后台复制，页面会告诉你复制哪一项。",
+    groupScan: "扫码连接",
+    groupScanHint: "在手机上确认即可，无需填写任何内容。",
+    groupKey: "填写一至两项",
+    groupKeyHint: "从平台的开发者后台复制，页面会说明需要复制哪几项。",
     howScan: "扫码",
-    howPaste: "粘贴 {n} 项",
-    howAdvanced: "需要额外准备",
+    howPaste: "填写 {n} 项",
+    howAdvanced: "需额外准备",
     reachAll: "群聊和私聊",
     reachDm: "仅私聊",
     groupAdvanced: "高级：需要公网地址或本机其他软件",
     back: "← 返回",
-    guide: "去平台后台获取 ↗",
+    guide: "前往平台后台获取 ↗",
     optional: "（可选）",
-    scope: "连接后，角色会回复这个平台上的群聊和私聊。",
+    scope: "连接后，角色将回复此平台上的群聊和私聊。",
     getQr: "获取二维码",
     connectNow: "连接",
     reconnect: "重新设置",
-    disconnect: "断开",
-    confirmDisconnect: "断开 {platform}？保存的凭据会被删除。",
+    disconnect: "断开连接",
+    confirmDisconnect: "确定要断开 {platform} 吗？已保存的凭据将被删除。",
     disconnecting: "正在断开 {platform}…",
     isConnected: "已连接",
     paused: "已暂停",
-    connectingState: "连接中",
+    connectingState: "正在连接",
     failedState: "连接失败",
     pasteInstead: "改为手动填写",
-    scanInstead: "改回扫码",
-    pasteNote: "在平台后台创建机器人后，把下面几项复制过来。",
+    scanInstead: "改为扫码",
+    pasteNote: "请在平台后台创建机器人，然后将以下各项复制到此处。",
     cancel: "取消",
-    startServices: "一键启动",
+    startServices: "全部启动",
     stopServices: "暂停运行",
     backToList: "返回平台列表",
     keepOpen:
-      "使用期间保持应用运行即可。关闭程序时，会一并停止由它启动的服务。",
+      "使用期间请保持本应用运行。退出本应用时，由其启动的服务将一并停止。",
     closed: "应用已关闭",
-    closedHint: "再次运行 personagent，即可回到这里。",
+    closedHint: "再次运行 personagent 即可返回此页面。",
     installTitle: "正在自动准备…",
     installHint:
-      "首次使用会下载 AstrBot 和所需运行环境，可能需要几分钟。保持页面打开即可，不需要手动操作。",
-    scanTitle: "用手机扫一下。",
-    scanHint: "确认后会自动保存并启动。二维码过期可以重新获取。",
-    scanHelp_qq_official: "用手机 QQ 扫码，确认新建或选用一个机器人。",
-    scanHelp_weixin_oc: "用手机微信扫码，并确认登录。",
-    startTitle: "正在连接你的角色…",
-    startHint: "正在启动角色服务和聊天平台，很快就好。",
+      "首次使用时将下载 AstrBot 及所需运行环境，可能需要几分钟。请保持页面打开，无需手动操作。",
+    scanTitle: "请使用手机扫码。",
+    scanHint: "确认后将自动保存并启动。二维码过期后可重新获取。",
+    scanHelp_qq_official: "请使用手机 QQ 扫码，并确认新建或选用一个机器人。",
+    scanHelp_weixin_oc: "请使用手机微信扫码，并确认登录。",
+    scanHelp_twitch:
+      "请在已登录角色 Twitch 账号的浏览器中打开该链接，核对代码一致后点击 Authorize（授权）。也可用手机扫描二维码打开同一链接。",
+    linkTitle: "请在浏览器中批准登录。",
+    linkHint: "批准后将自动检查、保存并启动连接。链接过期后会自动更换。",
+    linkOpen: "打开登录链接 ↗",
+    startTitle: "正在连接角色…",
+    startHint: "正在启动角色服务和聊天平台，请稍候。",
     prepareTitle: "正在获取二维码…",
-    prepareHint: "马上就好。",
-    checkTitle: "正在确认 {platform} 接受了连接…",
-    checkHint: "如果平台拒绝了这些凭据，会在这里告诉你，不会保存。",
-    doneTitle: "{platform} 已连接，去打个招呼吧。",
-    saved: "设置已保存。可以开始聊天了。",
+    prepareHint: "请稍候。",
+    checkTitle: "正在确认 {platform} 是否接受连接…",
+    checkHint: "如果平台拒绝这些凭据，原因将显示在此处，且不会保存任何内容。",
+    doneTitle: "{platform} 已连接，现在可以在该平台上与角色交流。",
+    saved: "设置已保存，可以开始聊天。",
     thinking: "正在回复…",
-    noReply: "它暂时没有回复，换个话题试试。",
-    greeting: "你好，我是 {name}。",
+    noReply: "角色未作回复，请换一个话题再试。",
+    greeting: "你好，我是{name}。",
     platformsTitle: "连接平台",
-    keySaved: "留空保留已保存的密钥",
-    firstConfigure: "先连接一个模型，再把角色带到其他平台。",
-    working: "当前操作还在进行，请稍等。",
-    offline: "应用连接中断，请关闭 personagent 后重新打开。",
-    auth: "请通过启动窗口里显示的本地链接打开此页面。",
-    key_required: "请填入 API Key。",
-    key_rejected: "密钥未通过验证，请检查是否复制完整、是否属于所选服务。",
+    keySaved: "留空以保留已保存的密钥",
+    firstConfigure: "请先连接模型，再将角色接入其他平台。",
+    working: "当前操作仍在进行，请稍候。",
+    offline: "与应用的连接已中断，请关闭 personagent 后重新打开。",
+    auth: "请通过启动窗口中显示的本地链接打开此页面。",
+    key_required: "请填写 API Key。",
+    key_rejected: "密钥未通过验证。请检查密钥是否完整，以及是否属于所选服务。",
     model_limited:
-      "服务商说请求太多或额度用完了。OpenRouter 的免费模型每天限 50 次，到 UTC 零点恢复。请稍后再试，或换一个服务。",
+      "服务商提示请求过多或额度已用完。OpenRouter 免费模型每天限 50 次请求，于 UTC 零点重置。请稍后重试，或更换其他服务。",
     model_unreachable:
-      "暂时连不上这个模型，请检查网络、模型名称和服务地址后重试。",
-    model_required: "请在更多设置中填写模型名称。",
-    invalid_url: "请填写完整的 API 地址。",
-    https_required: "远程模型服务需要使用 HTTPS 地址。",
-    invalid_character: "请检查角色名字与性格。",
-    busy: "当前操作还在进行，请稍等完成。",
-    chat_failed: "回复没有完成，请检查模型服务和网络，再重试。",
+      "暂时无法连接该模型。请检查网络、模型名称和服务地址后重试。",
+    model_required: "请在高级设置中填写模型名称。",
+    invalid_url: "请填写完整的服务地址。",
+    https_required: "远程模型服务须使用 HTTPS 地址。",
+    invalid_character: "请检查角色名称和性格。",
+    busy: "当前操作仍在进行，请等待其完成。",
+    chat_failed: "回复未能完成。请检查模型服务和网络后重试。",
     setup_failed:
-      "这次连接没有完成。请检查网络后重试；已保存的模型和角色不会丢失。",
-    download_failed: "下载没有完成，请检查网络后重试。",
-    service_failed: "聊天平台没有启动成功。请检查填写的内容是否正确，然后重试。",
-    scan_failed: "扫码没有完成或二维码已过期，请重新获取。",
+      "连接未能完成。请检查网络后重试；已保存的模型和角色设置不受影响。",
+    download_failed: "下载未能完成，请检查网络后重试。",
+    service_failed: "聊天平台未能启动。请检查填写的内容是否正确，然后重试。",
+    agent_failed: "角色未能启动。请在「应用」中执行运行检查以查看原因。",
+    scan_failed: "扫码未完成或二维码已过期，请重新获取。",
     platform_rejected:
-      "平台没有接受这次连接，所以没有保存。请检查填写的内容（和平台后台的设置）后重试。",
-    token_rejected: "平台说这个 Token 不对，没有保存。请重新复制完整的 Token。",
-    app_rejected: "QQ 说 AppID 或 AppSecret 不对，没有保存。请到 QQ 开放平台重新复制。",
-    bot_in_use: "这个机器人正被别的程序使用（或设置了 Webhook）。先停掉那个程序再连接。",
+      "平台未接受此次连接，因此未保存任何内容。请检查填写的内容及平台后台的设置，然后重试。",
+    token_rejected: "平台未接受该 Token，因此未保存任何内容。请重新复制完整的 Token。",
+    app_rejected: "QQ 未接受该 AppID 或 AppSecret，因此未保存任何内容。请到 QQ 开放平台重新复制。",
+    bot_in_use: "该机器人正被其他程序使用，或已设置 Webhook。请先停止该程序，然后重新连接。",
     message_content_intent_off:
-      "Discord 拒绝了：请在开发者后台的 Bot 页面打开 Message Content Intent，保存后重试。",
-    intents_not_allowed: "QQ 没有给这个机器人收群聊和私聊消息的权限。",
+      "Discord 拒绝了连接。请在开发者后台的 Bot 页面开启 Message Content Intent，保存后重试。",
+    intents_not_allowed: "QQ 未授予该机器人接收群聊和私聊消息的权限。",
     session_expired: "登录已失效，请重新扫码。",
-    bot_offline: "这个 QQ 机器人已下架。",
-    bot_banned: "这个 QQ 机器人已被封禁。",
-    network_failed: "连不上这个平台的服务器。Telegram、Discord 在国内通常需要代理。",
+    bot_offline: "该 QQ 机器人已下架。",
+    bot_banned: "该 QQ 机器人已被封禁。",
+    network_failed: "无法连接该平台的服务器。请检查网络连接及代理设置，然后重试。",
+    account_deactivated:
+      "平台已停用该机器人账号或其所在组织，因此未保存任何内容。请在平台上重新启用，或新建一个机器人账号后重新连接。",
+    insecure_address: "服务器地址必须以 https:// 开头。仅本机上的服务器可以使用 http 地址。",
+    homeserver_invalid:
+      "该地址不是可用的 Matrix 服务器，或未使用安全连接（https）。请检查地址，例如 https://matrix.org。仅本机上的服务器可以使用 http 地址。",
+    owner_invalid:
+      "请填写你本人的 Matrix ID，例如 @you:matrix.org。该 ID 必须是你本人的账号，而不是机器人账号。",
+    channel_not_found: "所填写的 Twitch 频道中有一个不存在，或未填写任何频道。请检查频道名后重试。",
+    nick_in_use: "该昵称在此网络上已被占用。请关闭正在使用该昵称的其他 IRC 客户端，或改用其他昵称。",
+    nick_invalid: "该网络不接受此昵称。昵称只能包含字母、数字及 - _ [ ] { } | ^，且须以字母开头。",
+    password_rejected: "网络提示该昵称的密码不正确，因此未保存任何内容。请检查该昵称在 NickServ 中的密码。",
+    sasl_required: "该网络只允许已注册的昵称从你的网络地址连接。请先通过 NickServ 注册昵称，再填写其密码。",
+    long_poll_off:
+      "该社区未开启 Long Poll API。请在社区中打开「管理 > API 使用 > Long Poll API」，将其设为「开启」，然后重新连接。",
+    message_events_off:
+      "该社区尚未向机器人推送新消息。请在「管理 > API 使用 > Long Poll API > 事件类型」中勾选「收到消息（message_new）」并保存。",
+    token_rights_missing:
+      "该密钥缺少必需的权限。请在「管理 > API 使用」中新建密钥，勾选社区管理、消息和照片权限，再粘贴到此处。",
+    not_a_bot:
+      "这是个人账号的信息，而非机器人的信息，因此未保存任何内容。请在「个人设置 > 机器人」中添加一个通用机器人，并粘贴其邮箱和 API 密钥。",
+    wrong_bot_type: "该机器人无法读取消息。请在 Zulip 中添加类型为「通用机器人（Generic bot）」的机器人，并使用其信息。",
+    not_zulip_site:
+      "该地址不是 Zulip 组织的地址。请在打开 Zulip 时从浏览器地址栏复制，例如 https://yourteam.zulipchat.com。",
+    // `<code>_<platform>`: one platform's own wording of a shared code.
+    bot_banned_irc: "该 IRC 网络已封禁此连接（K-line 或其他封禁）。",
+    bot_banned_vk: "VK 已封禁或停用该社区。",
+    token_rejected_zulip:
+      "Zulip 不接受该机器人邮箱和 API 密钥，因此未保存任何内容。请在「个人设置 > 机器人」中该机器人所在行重新复制这两项。",
+    token_rejected_vk:
+      "VK 不接受该密钥，因此未保存任何内容。请在「管理 > API 使用 > 访问密钥」中创建社区访问密钥，并完整粘贴。",
+    token_rejected_twitch: "此次 Twitch 登录未授予聊天权限。请点击「连接」并重新批准登录。",
+    app_rejected_twitch:
+      "Twitch 不接受此 Client ID 用于本次登录。请确认该开发者应用存在且 Client Type 为 Public，然后重新复制 Client ID。",
+    session_expired_twitch: "Twitch 登录已失效。请点击「连接」并重新批准登录。",
+    scan_failed_twitch: "Twitch 登录未完成、已被拒绝或链接已过期。请点击「连接」获取新的链接。",
     field_required: "请填写所有必填项。",
-    invalid_field: "有一项格式不对，请检查地址或端口。",
-    invalid_platform: "暂不支持这个平台。",
-    invalid_message: "这条消息太长了，缩短一些再发。",
-    too_large: "这条消息太长了，缩短一些再发。",
-    permission_required: "需要允许角色在这个平台回复。",
-    forbidden: "页面授权已失效，请重新打开启动窗口里的本地链接。",
-    generic: "操作没有完成，请重试。",
+    invalid_field: "有一项格式不正确，请检查地址或端口。",
+    invalid_platform: "暂不支持该平台。",
+    invalid_message: "消息过长，请缩短后重新发送。",
+    too_large: "消息过长，请缩短后重新发送。",
+    permission_required: "角色需要获得在此平台回复的权限。",
+    forbidden: "页面授权已失效，请重新打开启动窗口中的本地链接。",
+    generic: "操作未能完成，请重试。",
     stopped: "聊天平台已暂停。",
     retryChat: "重新发送",
     closing: "正在关闭…",
@@ -248,14 +302,18 @@ const translations = {
     platforms: "Connect apps",
     settings: "Character & settings",
     activity: "Activity",
+    practice: "Practice",
+    practiceLead: "Without connecting an app, see how the character speaks in a group and how it learns.",
+    app: "App",
+    appLead: "The health check, running in the background, updates, and where the data is stored.",
     activityLead: "Where it is, what it said lately, and what it learned.",
     activityConnect: "Connect an app",
-    activityNotRunning: "The character isn't running yet. Say something in Chat, or connect an app, and it starts.",
-    activityNone: "No chats yet. Connect an app and add it to a group or message it, and they show up here.",
+    activityNotRunning: "The character is not running. Send a message in Chat or connect an app to start it.",
+    activityNone: "There are no chats yet. Connect an app, then add the character to a group or send it a direct message; the chat appears here.",
     activityOff: "Activity is turned off (DASHBOARD_ENABLED=false in .env).",
-    activity_unavailable: "Couldn't read the character's activity just now. It will try again shortly.",
-    activity_changed: "That one was already handled. The list is up to date now.",
-    invalid_chat: "That chat is no longer there.",
+    activity_unavailable: "The character's activity could not be read. The page will try again shortly.",
+    activity_changed: "This item has already been handled. The list has been refreshed.",
+    invalid_chat: "This chat no longer exists.",
     activityHere: "This page",
     activityGroup: "group",
     activityDm: "DM",
@@ -280,9 +338,9 @@ const translations = {
     activityKeep: "Keep",
     activityDiscard: "Discard",
     activityUndo: "Undo",
-    activityKept: "Kept. Its next replies will use it.",
+    activityKept: "Kept. Later replies will use it.",
     activityDiscarded: "Discarded.",
-    activityUndone: "Undone. It won't say it this way any more.",
+    activityUndone: "Undone. The character will no longer phrase it this way.",
     activityQuiet: "Stayed quiet",
     activityCount: "×{n}",
     justNow: "just now",
@@ -335,7 +393,7 @@ const translations = {
     personaSaving: "Saving…",
     personaUndo: "Undo changes",
     personaSaved: "Persona saved. The character restarted with it.",
-    invalid_persona: "The persona can't be empty or longer than 4,000 characters.",
+    invalid_persona: "The persona cannot be empty or longer than 4,000 characters.",
     save: "Save",
     featuresTitle: "More features",
     searchTitle: "Web search",
@@ -360,7 +418,7 @@ const translations = {
     gsPlatform: "Connect an app",
     updateLink: "{version} available",
     updateTitle: "personagent {version} is out",
-    updateNotes: "What's new ↗",
+    updateNotes: "Release notes ↗",
     updateRun: "Quit personagent, run this command, then open it again.",
     updateOpens: "Quit personagent, then open the new version with this command.",
     updateDownload: "Download the new source from the release page and unpack it over this folder.",
@@ -380,10 +438,17 @@ const translations = {
     trioLabel: "Or pick the GPT dragon girl, the DeepSeek whale girl or the Claude lady",
     qqLater: "Bring your character to QQ, WeChat, Telegram…",
     qqLaterHint:
-      "Start with a chat. Then pick an app under Connect apps: a scan or one or two values.",
-    chatHint: "Local chat",
+      "To connect another app, choose it under Connect apps. Most need only a QR code scan or one or two values.",
+    chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
-    emptyHint: "Say something to start.",
+    forgetChat: "Forget this chat",
+    forgetChatAsk: "The character will forget what it noted in this chat and start a new one. This cannot be undone.",
+    forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
+    forgetChatDone: "Cleared {count} item(s) the character had noted in this chat.",
+    forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
+    commandsShow: "Memory commands",
+    commandsHint: "Select a command to insert it into the message box:",
+    emptyHint: "Send a message to start the conversation.",
     promptHello: "Hi, shall we get to know each other?",
     promptDay: "How has your day been?",
     promptFilm: "Recommend a film for the weekend",
@@ -393,9 +458,9 @@ const translations = {
       "Scan or paste one or two values. Downloading, setup and starting happen on their own.",
     connectedTitle: "Connected apps",
     groupScan: "Scan to connect",
-    groupScanHint: "Confirm on your phone. Nothing to fill in.",
+    groupScanHint: "Confirm on your phone. No fields need to be filled in.",
     groupKey: "Paste one or two values",
-    groupKeyHint: "Copy them from the app's console; the page says which.",
+    groupKeyHint: "Copy them from the app's developer console. The page states which values are needed.",
     howScan: "Scan",
     howPaste: "Paste {n}",
     howAdvanced: "Needs setup",
@@ -429,72 +494,123 @@ const translations = {
     closedHint: "Run personagent again to return here.",
     installTitle: "Getting things ready…",
     installHint:
-      "First use downloads AstrBot and its runtime, which can take a few minutes. Keep this page open; there's nothing to do by hand.",
+      "First use downloads AstrBot and its runtime, which can take a few minutes. Keep this page open; no manual steps are needed.",
     scanTitle: "Scan with your phone.",
     scanHint:
       "After you confirm, everything is saved and started. An expired code can be refreshed.",
     scanHelp_qq_official: "Scan with mobile QQ and confirm a new bot or one you made.",
     scanHelp_weixin_oc: "Scan with WeChat and confirm the login.",
+    scanHelp_twitch:
+      "Open the link in a browser that is signed in to the character's Twitch account, confirm that the code matches, and select Authorize. The QR code opens the same link on a phone.",
+    linkTitle: "Approve the sign-in in your browser.",
+    linkHint:
+      "After you approve, the connection is checked, saved and started. An expired link is replaced automatically.",
+    linkOpen: "Open the sign-in link ↗",
     startTitle: "Connecting your character…",
     startHint: "Starting the character service and chat platform.",
     prepareTitle: "Getting a QR code…",
-    prepareHint: "Just a moment.",
+    prepareHint: "Please wait.",
     checkTitle: "Checking that {platform} accepts the connection…",
     checkHint:
-      "If the app refuses these credentials, you'll see it here and nothing is saved.",
-    doneTitle: "{platform} is connected. Go say hello.",
-    saved: "Saved. You're ready to chat.",
+      "If the app refuses these credentials, the reason is shown here and nothing is saved.",
+    doneTitle: "{platform} is connected. You can now talk to the character there.",
+    saved: "Settings saved. You can start chatting.",
     thinking: "Replying…",
-    noReply: "No reply this time. Try another topic.",
+    noReply: "The character did not reply. Try a different topic.",
     greeting: "Hi, I'm {name}.",
     platformsTitle: "Connect apps",
     keySaved: "Leave blank to keep the saved key",
     firstConfigure: "Connect a model first, then bring the character to other apps.",
     working: "An operation is still in progress. Please wait.",
     offline:
-      "The app disconnected. Close personagent and open it again.",
+      "The connection to the app was lost. Close personagent and open it again.",
     auth: "Open this page using the local link in the launch window.",
     key_required: "Enter your API key.",
     key_rejected:
       "The key was not accepted. Check that it is complete and belongs to this service.",
     model_limited:
-      "The service says too many requests or no quota left. OpenRouter's free models stop at 50 requests a day, until midnight UTC. Try again later or pick another service.",
+      "The service reports too many requests or an exhausted quota. OpenRouter's free models allow 50 requests a day, reset at midnight UTC. Try again later or choose another service.",
     model_unreachable:
-      "Couldn't reach this model. Check the network, model name and API address, then retry.",
+      "The model could not be reached. Check the network, the model name and the API address, then try again.",
     model_required: "Enter a model name under advanced settings.",
     invalid_url: "Enter a complete API address.",
     https_required: "Remote model services require an HTTPS address.",
     invalid_character: "Check the character name and personality.",
     busy: "An operation is still running. Please wait.",
     chat_failed:
-      "The reply failed. Check the model service and your connection, then retry.",
+      "The reply could not be completed. Check the model service and the network, then try again.",
     setup_failed:
-      "The connection didn't finish. Check your network and retry. Your model and character settings are saved.",
-    download_failed: "The download didn't finish. Check your network and retry.",
+      "The connection did not complete. Check the network and try again. Your model and character settings are kept.",
+    download_failed: "The download did not complete. Check the network and try again.",
     service_failed:
-      "The chat platform didn't start. Check what you entered, then retry.",
-    scan_failed: "The scan didn't finish or the code expired. Get a new code.",
+      "The chat platform did not start. Check what you entered, then try again.",
+    agent_failed: "The character did not start. Run the health check under App to see the cause.",
+    scan_failed: "The scan did not complete or the code expired. Get a new code.",
     platform_rejected:
       "The app refused the connection, so nothing was saved. Check what you entered and the app's console settings, then retry.",
-    token_rejected: "The app says this token is wrong, so nothing was saved. Copy the whole token again.",
-    app_rejected: "QQ says the AppID or AppSecret is wrong, so nothing was saved. Copy them again from QQ's console.",
-    bot_in_use: "Another program is using this bot (or a webhook is set). Stop it, then connect again.",
+    token_rejected: "The app did not accept this token, so nothing was saved. Copy the complete token again.",
+    app_rejected: "QQ did not accept the AppID or AppSecret, so nothing was saved. Copy them again from the QQ console.",
+    bot_in_use: "Another program is using this bot, or a webhook is set for it. Stop that program, then connect again.",
     message_content_intent_off:
-      "Discord refused: turn on Message Content Intent on the Bot page of the developer portal, save, and retry.",
+      "Discord refused the connection. Turn on Message Content Intent on the Bot page of the developer portal, save, and try again.",
     intents_not_allowed: "QQ has not given this bot permission to receive group and direct messages.",
     session_expired: "The login has expired. Scan again.",
     bot_offline: "This QQ bot has been taken offline.",
     bot_banned: "This QQ bot has been banned.",
-    network_failed: "Couldn't reach this app's servers. Check your network or proxy.",
+    network_failed: "The app's servers could not be reached. Check the network connection and any proxy settings, then try again.",
+    account_deactivated:
+      "The platform has deactivated this bot account or its organization, so nothing was saved. Reactivate it on the platform, or create a new bot account and connect again.",
+    insecure_address:
+      "The server address must begin with https://. A plain http address is accepted only for a server on this computer.",
+    homeserver_invalid:
+      "This address is not a Matrix homeserver that accepts secure connections. Check the address, for example https://matrix.org. A plain http address is accepted only for a server on this computer.",
+    owner_invalid:
+      "Enter your own Matrix ID, for example @you:matrix.org. It must be your personal account, not the bot account.",
+    channel_not_found:
+      "One of the listed Twitch channels does not exist, or no channel was entered. Check the channel names and try again.",
+    nick_in_use:
+      "This nickname is already in use on the network. Close the other IRC client that uses it, or choose another nickname.",
+    nick_invalid:
+      "The network does not accept this nickname. Use only letters, digits and the characters - _ [ ] { } | ^, and begin with a letter.",
+    password_rejected:
+      "The network reports that the nickname's password is incorrect, so nothing was saved. Check the NickServ password for this nickname.",
+    sasl_required:
+      "This network accepts only registered nicknames from your network address. Register the nickname with NickServ and enter its password.",
+    long_poll_off:
+      "The Long Poll API is turned off for this community. In the community, open Manage > API usage > Long Poll API, set it to Enabled, and connect again.",
+    message_events_off:
+      "The community does not yet send new messages to the bot. Under Manage > API usage > Long Poll API > Event types, tick Incoming message (message_new) and save.",
+    token_rights_missing:
+      "This key lacks a required right. Create a new key under Manage > API usage with community management, messages and photos ticked, then paste it here.",
+    not_a_bot:
+      "These are the details of a personal account, not of a bot, so nothing was saved. Add a Generic bot under Personal settings > Bots and paste its email and API key.",
+    wrong_bot_type:
+      "This bot cannot read messages. In Zulip, add a bot of the type Generic bot and use its details.",
+    not_zulip_site:
+      "This address does not respond as a Zulip organization. Copy the address from the browser while Zulip is open, for example https://yourteam.zulipchat.com.",
+    // `<code>_<platform>`: one platform's own wording of a shared code.
+    bot_banned_irc: "The network has banned this connection (a K-line or another ban).",
+    bot_banned_vk: "VK has blocked or deactivated this community.",
+    token_rejected_zulip:
+      "Zulip does not accept this bot email and API key, so nothing was saved. Copy both again from the bot's row under Personal settings > Bots.",
+    token_rejected_vk:
+      "VK does not accept this key, so nothing was saved. Create a community access key under Manage > API usage > Access keys and paste the whole key.",
+    token_rejected_twitch:
+      "The Twitch sign-in did not grant the chat permissions. Select Connect and approve the sign-in again.",
+    app_rejected_twitch:
+      "Twitch does not accept this Client ID for this sign-in. Check that the application exists and that its Client Type is Public, then copy the Client ID again.",
+    session_expired_twitch: "The Twitch sign-in has ended. Select Connect and approve the sign-in again.",
+    scan_failed_twitch:
+      "The Twitch sign-in did not finish, was declined, or the link expired. Select Connect to receive a new link.",
     field_required: "Fill in every required field.",
-    invalid_field: "One value isn't valid. Check the address or port.",
-    invalid_platform: "This app isn't supported.",
+    invalid_field: "One value is not valid. Check the address or port.",
+    invalid_platform: "This app is not supported.",
     invalid_message: "That message is too long. Shorten it and send again.",
     too_large: "That message is too long. Shorten it and send again.",
     permission_required: "Your character needs permission to reply in this app.",
     forbidden:
-      "This page's authorization expired. Reopen the link in the launch window.",
-    generic: "That didn't finish. Please try again.",
+      "The authorization for this page has expired. Reopen the local link shown in the launch window.",
+    generic: "The operation did not complete. Try again.",
     stopped: "Chat platform paused.",
     retryChat: "Send again",
     closing: "Closing…",
@@ -584,6 +700,9 @@ const t = (key, fields = {}) =>
       translations[lang]?.generic ||
       translations.en.generic,
   );
+// A shared code in one platform's own words (`token_rejected_zulip`), when it has them.
+const tFor = (key, kind) =>
+  translations.en[`${key}_${kind}`] ? t(`${key}_${kind}`) : t(key);
 function toast(text) {
   $("toast").textContent = text;
   $("toast").hidden = false;
@@ -640,6 +759,8 @@ function renderLanguage() {
   renderActivity();
   if (!saving)
     $("save").textContent = t(state.configured ? "saveAgain" : "saveStart");
+  $("api-key").placeholder = state.configured ? t("keySaved") : "sk-…";
+  for (const retold of panelHooks.language) retold();
 }
 const characterSpec = (id) => catalog.characters.find((c) => c.id === id);
 const portraitOf = (id) => characterSpec(id)?.avatar || "";
@@ -770,7 +891,7 @@ function showView(next) {
     toast(t("working"));
     return;
   }
-  if ((next === "platforms" || next === "activity") && !state.configured) {
+  if (["platforms", "activity"].includes(next) && !state.configured) {
     toast(t("firstConfigure"));
     next = "settings";
   }
@@ -782,14 +903,10 @@ function showView(next) {
   $("chat-view").hidden = setup || next !== "chat";
   $("platforms-view").hidden = next !== "platforms";
   $("activity-view").hidden = next !== "activity";
+  for (const section of document.querySelectorAll("[data-panel-view]"))
+    section.hidden = section.dataset.panelView !== next;
   $("page-label").textContent = t(
-    setup
-      ? state.configured
-        ? "settings"
-        : "welcome"
-      : next === "platforms" || next === "activity"
-        ? next
-        : "chat",
+    setup ? (state.configured ? "settings" : "welcome") : next,
   );
   $("persona-card").hidden = !(setup && state.configured);
   $("features-card").hidden = !(setup && state.configured);
@@ -802,6 +919,7 @@ function showView(next) {
     renderActivity();
     activityLoop();
   }
+  for (const shown of panelHooks.show[setup ? "settings" : next] || []) shown();
 }
 // The persona as last loaded or saved; edits are compared with it.
 let personaShown = null,
@@ -834,8 +952,16 @@ const platformName = (kind) => (spec(kind) ? pick(spec(kind).name) : kind);
 // Simple Icons (CC0-1.0): QQ, WeChat, Telegram, Discord, Mattermost and
 // Misskey. MingCute (Apache-2.0): DingTalk. IconPark (Apache-2.0): Feishu.
 // SVG Logos (CC0-1.0): Slack. TDesign (MIT): WeCom. KOOK: its site icon.
-// OneBot: the logo in botuniverse/onebot (MIT). Satori has none.
+// OneBot: the logo in botuniverse/onebot (MIT). Satori has none. Matrix ([m]),
+// IRC (#) and Twitch (a chat bubble) are plain glyphs drawn here, not logo files.
 const LOGOS = {
+  matrix:
+    "M2 2h5v2H4v16h3v2H2zM22 2h-5v2h3v16h-3v2h5zM8 8h8v2H8zM8 10h2v6H8zM11 10h2v6h-2zM14 10h2v6h-2z",
+  irc: "M9 3h2L8 21H6zM15 3h2l-3 18h-2zM4 8h16v2H4zM4 14h16v2H4z",
+  twitch: {
+    box: "0 0 24 24",
+    svg: "<path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M4 2L2 6v14h5v3h3l3-3h4l5-5V2zM20 4v10l-3 3h-5l-3 3v-3H5V4zM10 7h2v5h-2zM15 7h2v5h-2z\"/>",
+  },
   qq:
     "M21.395 15.035a40 40 0 0 0-.803-2.264l-1.079-2.695c.001-.032.014-.562.014-.836C19.526 4.632 17.351 0 12 0S4.474 4.632 4.474 9.241c0 .274.013.804.014.836l-1.08 2.695a39 39 0 0 0-.802 2.264c-1.021 3.283-.69 4.643-.438 4.673.54.065 2.103-2.472 2.103-2.472 0 1.469.756 3.387 2.394 4.771-.612.188-1.363.479-1.845.835-.434.32-.379.646-.301.778.343.578 5.883.369 7.482.189 1.6.18 7.14.389 7.483-.189.078-.132.132-.458-.301-.778-.483-.356-1.233-.646-1.846-.836 1.637-1.384 2.393-3.302 2.393-4.771 0 0 1.563 2.537 2.103 2.472.251-.03.581-1.39-.438-4.673",
   wechat:
@@ -883,6 +1009,12 @@ const MARKS = {
   wecom_ai_bot: ["企", "#0082ef", "wecom"],
   mattermost: ["M", "#0058cc", "mattermost"],
   misskey: ["Mi", "#86b300", "misskey"],
+  matrix: ["M", "#000000", "matrix"],
+  twitch: ["T", "#9146ff", "twitch"],
+  irc: ["#", "#3b4252", "irc"],
+  zulip: ["Z", "#6492fe"],
+  vk: ["VK", "#0077ff"],
+  stoat: ["St", "#ff4654"],
   wecom: ["企", "#0082ef", "wecom"],
   weixin_official_account: ["公", "#07c160", "wechat"],
   qq_official_webhook: ["Q", "#1ebafc", "qq"],
@@ -983,9 +1115,18 @@ function buildFields(keep = false) {
   const note = item.group === "scan" && pasting ? t("pasteNote") : pick(item.note);
   $("panel-note").textContent = note;
   $("panel-note").hidden = !note;
+  const steps = scanning ? [] : item.steps || [];
+  $("panel-steps").replaceChildren(
+    ...steps.map((step) => {
+      const line = document.createElement("li");
+      line.textContent = pick(step);
+      return line;
+    }),
+  );
+  $("panel-steps").hidden = !steps.length;
   $("panel-guide").href = item.guide || "#";
   $("panel-guide").hidden = !item.guide || scanning;
-  $("panel-howto").hidden = !note && $("panel-guide").hidden;
+  $("panel-howto").hidden = !note && !steps.length && $("panel-guide").hidden;
   $("panel-mode").hidden = item.group !== "scan" || !item.fields.length;
   $("panel-mode").textContent = t(pasting ? "scanInstead" : "pasteInstead");
   const box = $("panel-fields");
@@ -1144,6 +1285,7 @@ function renderUpdate() {
   $("update-close").setAttribute("aria-label", t("close"));
 }
 function renderStatus() {
+  for (const changed of panelHooks.state) changed(state);
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
   renderUpdate();
@@ -1181,10 +1323,12 @@ function renderStatus() {
     done = mine && fresh && job.state === "ready",
     failed = mine && fresh && job.state === "error";
   $("platform-form").hidden = active || done;
+  // The steps are for filling the form; a sign-in in progress keeps its link in view.
+  $("panel-steps").hidden = active || !$("panel-steps").children.length;
   $("panel-progress").hidden = !active;
   $("panel-done").hidden = !done;
   $("panel-submit").disabled = working;
-  const error = failed ? t(job.error) : panelError;
+  const error = failed ? tFor(job.error, selected) : panelError;
   $("panel-error").hidden = !error;
   $("panel-error").textContent = error;
   $("done-title").textContent = t("doneTitle", {
@@ -1192,22 +1336,33 @@ function renderStatus() {
   });
   if (!active) return;
   const scan = job.stage === "scan";
+  // A sign-in by link (Twitch) shows the link itself; its QR is for a phone.
+  const link = scan && spec(selected)?.signIn === "link";
   $("qr-box").hidden = !scan;
   $("progress-spinner").hidden = scan;
   const late = job.stage === "start" || job.stage === "check";
   $("cancel-platform").hidden = late;
-  const step = scan
-    ? "scan"
-    : late || job.stage === "prepare"
-      ? job.stage
-      : "install";
+  const step = link
+    ? "link"
+    : scan
+      ? "scan"
+      : late || job.stage === "prepare"
+        ? job.stage
+        : "install";
   $("progress-title").textContent = t(`${step}Title`, {
     platform: platformName(selected),
   });
   $("progress-hint").textContent = t(`${step}Hint`);
+  $("qr-link").hidden = !link;
   if (!scan) return;
   $("scan-help").textContent = t(`scanHelp_${selected}`);
   $("qr-image").src = job.qrImage;
+  if (!link) return;
+  // Only an https link from the platform's own flow becomes a link here.
+  const safe = /^https:\/\//.test(job.qrUrl || "") ? job.qrUrl : "";
+  $("qr-link").href = safe || "#";
+  $("qr-link").hidden = !safe;
+  $("qr-link").textContent = t("linkOpen");
 }
 async function poll() {
   if (ended) return;
@@ -1892,6 +2047,49 @@ for (const button of document.querySelectorAll("[data-prompt]"))
       ),
     ),
   );
+// The commands the character takes in a chat, in the language it reads them
+// in: its name first, then the words docs/guide.md lists.
+function memoryCommands() {
+  const name = state.name || defaultName();
+  return ["zh", "zh-TW"].includes(state.lang)
+    ? [`${name}，记住 `, `${name} 忘掉 `, `${name} 你都记得什么`, `${name} 学到了什么`]
+    : [`${name}, remember `, `${name}, forget `, `${name}, what do you remember`, `${name}, what have you learned`];
+}
+$("commands-show").addEventListener("click", () => {
+  const open = $("chat-commands").hidden;
+  $("chat-commands").hidden = !open;
+  $("commands-show").setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  $("chat-command-list").replaceChildren(
+    ...memoryCommands().map((command) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "quiet";
+      chip.textContent = command.trim();
+      chip.addEventListener("click", () => {
+        $("message").value = command;
+        $("message").dispatchEvent(new Event("input", { bubbles: true }));
+        $("message").focus();
+      });
+      return chip;
+    }),
+  );
+});
+$("forget-chat").addEventListener("click", async () => {
+  if (chatting) return toast(t("working"));
+  if (!(await ask(t("forgetChatAsk"), t("forgetChat")))) return;
+  $("forget-chat").disabled = true;
+  try {
+    const done = await api("chat/forget", {});
+    for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
+    $("chat-empty").hidden = false;
+    toast(done.forgotten ? t("forgetChatDone", { count: String(done.forgotten) }) : t("forgetChatNone"));
+  } catch (error) {
+    toast(t(error.message));
+  } finally {
+    $("forget-chat").disabled = false;
+  }
+});
 $("reset-chat").addEventListener("click", async () => {
   if (chatting) return;
   try {
@@ -1998,6 +2196,58 @@ $("exit").addEventListener("click", async () => {
     $("exit").disabled = false;
   }
 });
+// What a panel under /assets/panels builds its part of the page with. Panel
+// scripts run after this file and before the first state arrives.
+window.PA = {
+  $,
+  api,
+  t,
+  toast,
+  ask,
+  refresh,
+  showView,
+  get state() {
+    return state;
+  },
+  get lang() {
+    return lang;
+  },
+  get view() {
+    return view;
+  },
+  // { en: {key: "..."}, zh: {...} }: a panel's sentences, keyed like the rest.
+  strings(tables) {
+    for (const [code, table] of Object.entries(tables))
+      Object.assign((translations[code] ||= {}), table);
+  },
+  // fn() each time `view` is opened: chat, activity, platforms, settings, practice, app.
+  onShow(view, fn) {
+    (panelHooks.show[view] ||= []).push(fn);
+  },
+  // fn(state) each time the page's state is read again.
+  onState(fn) {
+    panelHooks.state.push(fn);
+  },
+  // fn() after the page changes language.
+  onLanguage(fn) {
+    panelHooks.language.push(fn);
+  },
+  // After a panel changed what the page is built from (a reset, a restore):
+  // read the state again, fill the forms from it and empty the chat on screen.
+  async reload() {
+    state = await api("state");
+    populate();
+    renderLanguage();
+    for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
+    $("chat-empty").hidden = false;
+    const history = await api("chat/history");
+    if (history.messages.length) {
+      $("chat-empty").hidden = true;
+      for (const item of history.messages)
+        bubble(item.text, item.role === "user" ? "user" : "bot");
+    }
+  },
+};
 (async () => {
   await loadLang(lang);
   if (!token) {

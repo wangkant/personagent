@@ -229,6 +229,22 @@ def append_jsonl_rotating(path: str | Path, row: dict, *, max_bytes: int,
         return append_jsonl_unlocked(path, row)
 
 
+_WINDOWS = os.name == "nt"
+
+
+def replace(source: str | Path, target: str | Path) -> None:
+    """os.replace that waits out a reader. On Windows a file someone has open
+    for an instant cannot be replaced, and the page reads .env on every poll."""
+    for attempt in range(20):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if not _WINDOWS or attempt == 19:
+                raise
+            time.sleep(0.05)
+
+
 def atomic_write_text(path: str | Path, text: str, *,
                       encoding: str = "utf-8", fsync: bool = True) -> None:
     """Durably replace ``path`` through a same-directory temporary file.
@@ -250,7 +266,7 @@ def atomic_write_text(path: str | Path, text: str, *,
             handle.flush()
             if fsync:
                 os.fsync(handle.fileno())
-        os.replace(tmp, path)
+        replace(tmp, path)
         _set_private_permissions(path)
         if fsync:
             _sync_directory(path.parent)

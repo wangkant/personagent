@@ -64,10 +64,10 @@ async def test_teach_scene_promotes_the_accepted_retry(tmp: Path, lang: str) -> 
             "Nova would say: ugh, mid-demo? that's brutal")
     else:
         assert "判定：否定，采信" in out
-        assert "账本：小林接受了第二次尝试：强" in out
-        assert "已生效：2 条一致的反应，其中 1 条强，同一个聊天" in out
-        assert "提示词里的学习结果：这个聊天里学到的 1 条改写" in out
-        assert "小夏会说：啊，演示到一半？太惨了" in out
+        assert "学习记录：小林接受了第二次回复，记为强" in out
+        assert "已生效：2 条一致的反应，其中 1 条为强，来自同一聊天" in out
+        assert "提示词中的学习结果：本聊天中学到的 1 条改写" in out
+        assert "小夏将回复：啊，演示到一半？太惨了" in out
 
 
 @pytest.mark.parametrize("lang", ["en", "zh"])
@@ -82,16 +82,16 @@ async def test_troll_scene_changes_nothing(tmp: Path, lang: str) -> None:
                 "0 in use.\n  Nothing Nova says has changed.") in out
     else:
         assert out.count("判定：纠正，不采信") == 2
-        assert "那条回复是对小林说的，阿强的纠正只算仅否定" in out
-        assert "记忆：没有保存；笔记只记事实，不记指令" in out
-        assert "0 条提议，0 条生效。\n  小夏的说话方式没有任何改变。" in out
+        assert "该回复的对象是小林，因此阿强的纠正强度为「仅否定」" in out
+        assert "记忆：未保存；记忆仅保存事实，不保存指令" in out
+        assert "产生 0 条提议，0 条已生效。\n  小夏的表达方式未发生任何改变。" in out
 
 
 async def test_every_scene_runs_in_chinese(tmp: Path) -> None:
     out = await play(tmp, demo.SCENES, "zh")
-    assert "脚本模型，真实的账本和晋升代码" in out
-    assert "（没说话：没被点名，1/4 条消息）" in out
-    assert "（插话：攒够 4/4 条消息，判断模型认为该开口）" in out
+    assert "模型回答为预设脚本，学习记录与生效判定均由真实代码执行" in out
+    assert "（未发言：未被点名，已累计 1/4 条消息）" in out
+    assert "（主动发言：已累计 4/4 条消息，判断模型认为应当发言）" in out
     assert out.rstrip().endswith("先运行 `personagent init`）。")
 
 

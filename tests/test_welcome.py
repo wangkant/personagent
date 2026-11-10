@@ -383,6 +383,87 @@ def test_an_unreachable_platform_is_reported_as_a_network_problem(workspace, mon
     assert workspace.job["error"] == "network_failed"
 
 
+# The values the page sends, and one refusal each platform names.
+NEW_DIRECT = {
+    "matrix": ({"matrix_token": "syt_x", "matrix_owner": "@me:example.org"}, "owner_invalid"),
+    "irc": ({"irc_nick": "NovaBot", "irc_channels": "#nova"}, "nick_in_use"),
+    "zulip": ({"zulip_site": "https://z.example.org", "zulip_email": "bot@z.example.org",
+               "zulip_api_key": "k"}, "not_a_bot"),
+    "vk": ({"vk_token": "vk1.a.x"}, "long_poll_off"),
+    "stoat": ({"stoat_token": "t"}, "insecure_address"),
+}
+
+
+@pytest.mark.parametrize("kind", sorted(NEW_DIRECT))
+def test_each_new_paste_platform_is_checked_kept_and_refused_by_name(workspace, monkeypatch, kind):
+    values, refusal = NEW_DIRECT[kind]
+    built = []
+    _direct_job(workspace, monkeypatch, FakeDirect(), iter([{kind: {"state": "connected"}}] * 5))
+    monkeypatch.setattr(welcome.direct, "platform_for",
+                        lambda k, v, home: built.append((k, v)) or FakeDirect())
+    workspace.start_job("connect", kind, values)
+    workspace._future.result(timeout=5)
+    assert workspace.job["state"] == "ready", workspace.job
+    stored = direct_base.load_credentials(workspace.home)[kind]
+    assert built == [(kind, stored)] and values.items() <= stored.items()
+    assert workspace.summary()["platforms"] == [kind]
+
+    workspace._disconnect_direct(conn.platform(kind))
+    assert refusal in welcome.NAMED_REFUSALS
+    monkeypatch.setattr(welcome.direct, "platform_for",
+                        lambda k, v, home: FakeDirect(direct_base.Refused(refusal)))
+    workspace.start_job("connect", kind, values)
+    workspace._future.result(timeout=5)
+    assert workspace.job["error"] == refusal
+    assert direct_base.load_credentials(workspace.home) == {}
+
+
+def test_twitch_signs_in_by_link_then_checks_the_tokens_before_keeping_them(workspace, monkeypatch):
+    from persona_agent.direct import twitch
+
+    asked = {}
+
+    async def login(client, show, values):
+        asked.update(values)
+        show("https://www.twitch.tv/activate?public=true&device-code=ABCDEFGH")
+        assert workspace.job["stage"] == "scan" and workspace.job["qrUrl"].endswith("ABCDEFGH")
+        assert workspace.job["qrImage"].startswith("data:image/png;base64,")
+        return {**values, "twitch_access_token": "twitch-private-access",
+                "twitch_refresh_token": "twitch-private-refresh"}
+    monkeypatch.setattr(twitch, "login", login)
+    checked = []
+    _direct_job(workspace, monkeypatch, FakeDirect(), iter([{"twitch": {"state": "connected"}}] * 5))
+    monkeypatch.setattr(welcome.direct, "platform_for",
+                        lambda k, v, home: checked.append(dict(v)) or FakeDirect())
+    form = {"twitch_client_id": "client", "twitch_channels": "nova, friend"}
+    workspace.start_job("connect", "twitch", form)
+    workspace._future.result(timeout=5)
+    assert workspace.job["state"] == "ready", workspace.job
+    assert asked == form
+    stored = direct_base.load_credentials(workspace.home)["twitch"]
+    assert checked == [stored] and stored["twitch_access_token"] == "twitch-private-access"
+    assert "twitch-private" not in json.dumps(workspace.summary())
+
+    # Refused after the sign-in: nothing kept, the code named.
+    workspace._disconnect_direct(conn.platform("twitch"))
+    monkeypatch.setattr(welcome.direct, "platform_for",
+                        lambda k, v, home: FakeDirect(direct_base.Refused("channel_not_found")))
+    workspace.start_job("connect", "twitch", form)
+    workspace._future.result(timeout=5)
+    assert workspace.job["error"] == "channel_not_found"
+    assert direct_base.load_credentials(workspace.home) == {}
+
+    # The login itself: an app Twitch does not accept is named; any other end is a failed sign-in.
+    for code, error in (("app_rejected", "app_rejected"), ("denied", "scan_failed")):
+        async def failed(client, show, values, code=code):
+            raise twitch.LoginFailed(code)
+        monkeypatch.setattr(twitch, "login", failed)
+        workspace.start_job("connect", "twitch", form)
+        workspace._future.result(timeout=5)
+        assert workspace.job["error"] == error
+        assert direct_base.load_credentials(workspace.home) == {}
+
+
 def test_each_platform_keeps_astrbot_defaults_and_opens_only_itself(workspace, monkeypatch):
     data = _managed(workspace, monkeypatch,
                     {"id": "telegram", "type": "telegram", "enable": True, "telegram_token": "",
@@ -866,14 +947,42 @@ def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypa
     assert workspace._activity_token() == "default-token"
 
 
-def _page_strings(code):
-    """One of the string tables welcome.js carries inline (en or zh)."""
-    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    start = js.index(f"\n  {code}: {{\n")
+def _table(js, code, name):
+    """One `  <code>: {` table of `key: "sentence",` lines in a script, or {}."""
+    start = js.find(f"\n  {code}: {{\n")
+    if start < 0:
+        return {}
     block = js[start:js.index("\n  },\n", start)]
     found = re.findall(r'^ {4}(\w+):\s*("(?:[^"\\]|\\.)*"),?$', block, re.M)
-    assert len(found) == len(re.findall(r"^ {4}\w+:", block, re.M))
+    assert len(found) == len(re.findall(r"^ {4}\w+:", block, re.M)), f"{name}: a {code} line the page test cannot read"
     return {key: json.loads(value) for key, value in found}
+
+
+def _page_strings(code):
+    """The page's sentences in en or zh: welcome.js and every panel carry theirs inline."""
+    scripts = [welcome.ASSETS / "welcome.js",
+               *(welcome.ASSETS / "panels" / f"{name}.js" for name in welcome.PANELS)]
+    strings = {}
+    for script in scripts:
+        table = _table(script.read_text(encoding="utf-8"), code, script.name)
+        again = strings.keys() & table.keys()
+        assert not again, f"{script.name} repeats {sorted(again)}"
+        strings.update(table)
+    return strings
+
+
+def test_every_panel_has_its_module_its_script_and_its_stylesheet(client):
+    import importlib
+
+    for name in welcome.PANELS:
+        module = importlib.import_module(f"persona_agent.panels.{name}")
+        assert callable(module.mount) and isinstance(module.ERRORS, frozenset), name
+        for kind in ("js", "css"):
+            assert client.get(f"/assets/panels/{name}.{kind}").status_code == 200, (name, kind)
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert re.findall(r'/assets/panels/(\w+)\.js', html) == list(welcome.PANELS)
+    for name in ("unknown.js", "health.py", "..%2Fwelcome.js", "health.js.bak"):
+        assert client.get(f"/assets/panels/{name}").status_code == 404, name
 
 
 def _catalog_english(client):

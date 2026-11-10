@@ -4,7 +4,7 @@ A user gave you this file and asked you to install and set up personagent for th
 
 ## What you are setting up
 
-personagent is a character for group chats. It answers when called, judges when a person would join in, and learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and a dozen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
+personagent is a character for group chats. It answers when called, judges when a person would join in, and learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and eighteen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
 
 Everything it stores lives in one **home folder**: `.env` (settings and keys), `persona.txt` (the character), `runtime/` (memory and what it learned) and `platforms/` (chat app connections).
 
@@ -22,7 +22,7 @@ When you are done:
 2. **Never handle secrets.** Do not ask the user to paste an API key, bot token or password into the chat, and never put one in a command you run. The model key goes in through the local page (step 6). Two other routes are open only if the user prefers them: the user writes `LLM_API_KEY` into the home's `.env` themselves, or the user sets an environment variable in their own terminal for `--key-env`. If a user pastes a key into the chat anyway, do not repeat it or use it. Ask them to enter it in the page instead.
 3. **Never print key values.** Do not print `.env` with `cat`, `type` or `Get-Content`. Step 5 has commands that print only whether a key is set and the settings that are not secret.
 4. **The page link is a credential.** Its `#token=` part opens the page, and the page can show the saved key. Give the link only to the user. Do not post it anywhere else, and do not call the page's API yourself. Reading the link from the log, and loading the page's address without the token to see that it answers, are fine (step 6).
-5. **QR-code logins are done by the user.** QQ and WeChat connect by scanning a code with a phone in the page. App tokens for Telegram, Discord and the rest are pasted into the page by the user.
+5. **QR-code logins are done by the user.** QQ and WeChat connect by scanning a code with a phone in the page. App tokens for Telegram, Discord and the rest are pasted into the page by the user. The Twitch sign-in, approved through a link the page shows, is done by the user too.
 6. **Do not install system software without asking.** Python, uv, pipx, Homebrew packages, apt packages and lasting changes to PATH, such as in the shell's startup files, all need a yes from the user first. Installing personagent itself is what the user asked for.
 7. **Know what costs money.** The model service charges per message. Verifying the key in the page sends one tiny request. `personagent doctor` probes every configured upstream service with tiny paid requests, so ask before you run it. `personagent demo` and `personagent --version` are free. Do not run `personagent chat`, `personagent demo --online` or `personagent eval` unless the user asks: they call the model, and `eval` calls it hundreds of times.
 8. **Do not run commands that wait for a person.** Bare `personagent`, `personagent init` without `--no-input`, `init --terminal`, `start --terminal`, `chat` and `connect astrbot` without a folder ask questions in a terminal or open the page and keep running. Your shell may count as a terminal: on Windows a stdin redirected from `NUL`, which many agent shells give a command, does, so bare `personagent` and `personagent init` would start the page and never return. Always pass `--no-input` to `init`. `start` and `up` run until stopped, so start them in the background as step 6 shows.
@@ -64,14 +64,14 @@ Personalities:
 
 | `--persona` | Character | 中文 |
 |---|---|---|
-| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 毒舌损友 |
-| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温柔倾听者 |
-| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏搭子 |
-| `bookworm` | Bookworm: careful words, recommends books when asked | 文艺书虫 |
+| `dry-wit` | Dry-witted friend: deadpan, short replies, teases lightly | 冷面损友 |
+| `warm-listener` | Warm listener: asks how you are, remembers the small things | 温和的倾听者 |
+| `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏伙伴 |
+| `bookworm` | Bookworm: careful words, recommends books when asked | 爱书人 |
 | `chatgpt` | The GPT dragon girl: proud, well-read, fond of treasure | GPT 娘（白龙） |
 | `deepseek` | The DeepSeek whale girl: clever, a bit lazy, lives on white rice | DeepSeek 鲸鱼娘 |
 | `claude` | The Claude lady: well-bred, gentle and candid, strict house rules | Claude 娘（豪门圣女） |
-| `template` | A plain starting character to rewrite later | 以后自己写 |
+| `template` | A plain starting character to rewrite later | 稍后自行编写 |
 
 `chatgpt`, `deepseek` and `claude` run on the `--provider` service like the others, whichever it is.
 
@@ -308,10 +308,10 @@ The user connects apps under **Connect apps** [连接平台] in the page. Your p
 | On the page | Apps | What the user needs |
 |---|---|---|
 | Scan to connect | QQ, personal WeChat | Their phone. WeChat bots get one-to-one chats only |
-| Paste one or two values | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which. Telegram: a token from @BotFather. Discord: a bot token, with Message Content Intent turned on |
+| Paste one or two values | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which, and for Matrix, Twitch, IRC, Zulip, VK and Stoat it shows numbered steps. Telegram: a token from @BotFather. Discord: a bot token, with Message Content Intent turned on |
 | Advanced | WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat), Satori | A public address, or other software running on this computer |
 
-personagent connects QQ, WeChat, Telegram and Discord itself. The first time the user connects any other app, it downloads AstrBot and its own Python 3.12 into `<home>/platforms/`, which takes a while, so tell the user to keep the page open until it finishes. Connected apps start again whenever the page or `personagent up` starts. For QQ, the bot shows up in mobile QQ under Contacts → Bots; until QQ certifies it, it can join only groups the user owns.
+personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The first time the user connects any other app, it downloads AstrBot and its own Python 3.12 into `<home>/platforms/`, which takes a while, so tell the user to keep the page open until it finishes. Connected apps start again whenever the page or `personagent up` starts. For QQ, the bot shows up in mobile QQ under Contacts → Bots; until QQ certifies it, it can join only groups the user owns.
 
 From the command line, personagent connects only AstrBot:
 

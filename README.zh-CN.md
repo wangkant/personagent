@@ -76,11 +76,11 @@ personagent 本身免费。钱付给你选的模型服务，按它自己的价�
 
 | 页面分组 | 平台 | 要准备什么 |
 |---|---|---|
-| 扫码就能连 | QQ、个人微信 | 手机。微信机器人只能一对一聊天 |
-| 粘贴一两项 | Telegram、Discord、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说复制哪一项 |
+| 扫码连接 | QQ、个人微信 | 手机。微信机器人只能一对一聊天 |
+| 填写一至两项 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说复制哪一项 |
 | 高级 | 企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公网地址，或本机的其他软件 |
 
-连好的平台以后每次启动 personagent 都会自动连上。扫码连接的平台、Telegram 和 Discord 由 personagent 自己连接；其余平台经它在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在服务器上，`personagent up` 不开浏览器就能全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)；从零接 QQ 见[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
+连好的平台以后每次启动 personagent 都会自动连上。扫码连接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 自己连接；其余平台经它在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在服务器上，`personagent up` 不开浏览器就能全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接进聊天平台)；从零接 QQ 见[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
 
 已经在跑 AstrBot、Koishi 或 Matrix？personagent 可以接在它后面，只当那个角色：见[你自己运行的桥接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#你自己运行的桥接)、[Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-CN.md)和 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-CN.md)。
 
@@ -100,11 +100,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` 会把它撤掉。权限，以及让角色在一轮结束时说一句话的 `--react`，见[手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#编程助手)。
+`--remove` 会把它撤掉；在页面「连接平台」的「编程助手」中也可以完成接入和移除。权限，以及让角色在一轮结束时说一句话的 `--react`，见[手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#编程助手)。
 
 ## 更新和卸载
 
-PyPI 上有新版本时，页面会显示一条提示和对应的更新命令。用 pip 装的话是 `python -m pip install -U personagent`。设置、角色、它学到的东西和连好的平台都会保留。要卸载，照[卸载步骤](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）做。
+PyPI 上有新版本时，页面会显示一条提示和对应的更新命令。用 pip 装的话是 `python -m pip install -U personagent`。对于大多数安装方式，页面「应用」视图中的「更新并重新打开」可以代你执行。设置、角色、它学到的东西和连好的平台都会保留。要卸载，照[卸载步骤](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）做。
 
 ## 隐私
 

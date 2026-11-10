@@ -13,6 +13,7 @@ from . import access
 from .decision import (BLOCKED, PASS, SLEEP_WINDOW, STICKY_CALL,
                        choose_group_mode, pacing_skip)
 from . import channels
+from . import paths
 from . import chatlangs
 from . import decision_log
 from .connector import (ConnectorSink, current_sink,
@@ -387,7 +388,8 @@ class Turns:
     def _admins(self) -> frozenset[str]:
         """Every admin account (ADMIN_IDS), canonical; re-read since it is edited live."""
         return access.parse_ids(
-            self.admin_ids, native_platforms=self.connector_qq_platforms)
+            self.admin_ids, native_platforms=self.connector_qq_platforms,
+        ) | access.page_owner(paths.runtime_dir())
 
     def _dm_allowlist(self) -> frozenset[str]:
         """ACCESS_DM_USERS, canonical."""

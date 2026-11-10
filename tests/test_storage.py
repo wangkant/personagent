@@ -370,3 +370,23 @@ def test_a_rebuildable_loader_hides_only_a_bad_file(
           "with the one warning saying so",
           loaded is None and path.exists() and len(said) == 1
           and "could not be moved aside" in said[0], repr(said))
+
+
+def test_a_replace_waits_out_a_reader_on_windows(tmp_path, monkeypatch) -> None:
+    """The page reads .env on every poll; Windows refuses to replace an open file."""
+    from persona_agent import storage
+
+    target = tmp_path / ".env"
+    target.write_text("old", encoding="utf-8")
+    real, refusals = os.replace, [PermissionError(5, "Access is denied")] * 3
+
+    def busy(source, destination):
+        if refusals:
+            raise refusals.pop()
+        real(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", busy)
+    monkeypatch.setattr(storage, "_WINDOWS", True)
+    monkeypatch.setattr(storage.time, "sleep", lambda seconds: None)
+    storage.atomic_write_text(target, "new")
+    assert target.read_text(encoding="utf-8") == "new" and not refusals

@@ -1,0 +1,66 @@
+/* The agents panel. */
+#agents-root {
+  margin-top: 12px;
+}
+.agents-head .agents-recheck {
+  margin-left: auto;
+}
+.agents-list .feature:first-of-type {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.agents-state.agents-on {
+  color: var(--ok);
+}
+#agents-root label.check.agents-react {
+  margin-top: 10px;
+}
+.agents-react-hint {
+  padding-left: 26px;
+}
+#agents-root .field-note,
+#agents-root .error,
+.agents-done {
+  overflow-wrap: anywhere;
+}
+.agents-done {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 8px 0 0;
+}
+.agents-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.agents-cooldown label {
+  margin-top: 0;
+}
+.agents-cooldown select {
+  max-width: 220px;
+}
+.agents-astrbot input {
+  min-width: 0;
+}
+#agents-root label.check.agents-docker {
+  margin-top: 16px;
+}
+/* Text buttons line their words up with the text above, as .feature > .quiet does. */
+.agents-actions > .quiet:first-child,
+.agents-actions > .secondary:first-child {
+  margin-left: -10px;
+}
+.agents-allow {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.agents-allow .feature-head {
+  font-weight: 500;
+}
+.agents-allow .field-note {
+  margin: 4px 0 0;
+}

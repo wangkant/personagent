@@ -35,6 +35,8 @@ Thumbs.db
 # Runtime / scraped data (PII: QQ numbers, group IDs, chat snippets)
 runtime/
 platforms/
+# Backups made from the app: each zip holds .env and the platform logins.
+backups/
 eval.jsonl
 memory.json
 core_memory.json

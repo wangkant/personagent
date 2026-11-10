@@ -31,7 +31,9 @@ Your character replies in the page. Your settings are saved, so the next launch 
 
 Once it is set up, **Character & settings** has a **Persona** box with the text the character runs on. Rewrite who it is and how it talks, then click **Save persona**. The change applies at once, and what the character has learned is kept.
 
-Below it, **More features** turns on web search, image understanding and speaking first. Search uses DuckDuckGo by default; a Tavily key makes it more reliable. Until you connect an app, the Chat view shows a short getting-started bar.
+Below it, **More features** turns on web search, image understanding and speaking first. Search uses DuckDuckGo by default; a Tavily key makes it more reliable. **Advanced settings** below it holds the settings that were previously available only in `.env`. Until you connect an app, the Chat view shows a short getting-started bar.
+
+Two more views need no app. **Practice** plays a scripted demo and runs a practice group chat, where you can see why the character replies or stays silent. **App** checks every service the character relies on, shows the logs, and holds updates, backups and the desktop icon.
 
 ## Bring it to other apps
 
@@ -39,9 +41,9 @@ Below it, **More features** turns on web search, image understanding and speakin
    - **Scan to connect**: QQ and personal WeChat. Click **Get a QR code** and confirm on your phone.
      - QQ: scan with mobile QQ. QQ creates a bot or lets you pick one you already have, and personagent fetches its keys. If you made the bot yourself on [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html), click **Paste values instead** and enter its AppID and AppSecret.
      - WeChat: scan with WeChat. The bot chats one to one only, because WeChat does not pass group messages to these bots.
-   - **Paste one or two values**: Telegram (a token from @BotFather), Discord (a bot token, with Message Content Intent turned on), KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost and Misskey. The page tells you which values to copy from the app's console. Everything else uses defaults.
+   - **Paste one or two values**: Telegram (a token from @BotFather), Discord (a bot token, with Message Content Intent turned on), KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK and Stoat. The page tells you which values to copy from the app's console. Everything else uses defaults. Twitch also asks you to approve a sign-in through a link.
    - **Advanced**: WeCom apps, WeChat Official Accounts and QQ webhooks need a public address that forwards to their callback port. OneBot v11 (NapCat) and Satori need other software running on this computer.
-2. personagent connects QQ, WeChat, Telegram and Discord itself. The other apps go through AstrBot, a third-party bridge. The first time you connect one of them, personagent downloads AstrBot with a separate Python 3.12 runtime, so keep the page open until it finishes. AstrBot then runs in the background, with no dashboard to sign in to.
+2. personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The other apps go through AstrBot, a third-party bridge. The first time you connect one of them, personagent downloads AstrBot with a separate Python 3.12 runtime, so keep the page open until it finishes. AstrBot then runs in the background, with no dashboard to sign in to.
 3. personagent checks the credentials with the app before saving them. If the app refuses them, the page tells you and nothing is saved.
 4. Connected apps are listed at the top of **Connect apps**, where you can set one up again or disconnect it.
 
@@ -51,8 +53,8 @@ If a QR code expires, request a new one. If a download fails, retry it without r
 
 ## Next time
 
-Open personagent again. Your settings are kept, and connected apps resume on their own. If it is already running, opening it again brings its window back. Keep it open while you use it: the processes it started stop with it, whether you click **Quit** or close the window, and anything a crash left behind is stopped at the next start. On Windows, `personagent shortcut` puts an icon on your desktop and in the Start menu that opens it without a terminal.
+Open personagent again. Your settings are kept, and connected apps resume on their own. If it is already running, opening it again brings its window back. Keep it open while you use it: the processes it started stop with it, whether you click **Quit** or close the window, and anything a crash left behind is stopped at the next start. On Windows, `personagent shortcut` puts an icon on your desktop and in the Start menu that opens it without a terminal. Also on Windows, **Run in the background** in the App view lets closing the window leave personagent running behind an icon in the notification area, and the character keeps answering.
 
-When a newer version is on PyPI, the Chat view shows a notice with a link to the release notes and the update command for the way this copy was installed. A copy unpacked from the source ZIP gets a link to download the new source from the release page instead. personagent asks pypi.org at most once a day, and the request carries only its version number. Set `UPDATE_CHECK_ENABLED=false` in `.env` to turn the check off.
+When a newer version is on PyPI, the Chat view shows a notice with a link to the release notes and the update command for the way this copy was installed. A copy unpacked from the source ZIP gets a link to download the new source from the release page instead. **Update and reopen** in the App view installs the update for most installations. personagent asks pypi.org at most once a day, and the request carries only its version number. Set `UPDATE_CHECK_ENABLED=false` in `.env` to turn the check off.
 
 If you prefer the command line, use `personagent start --terminal`, `personagent init --terminal`, `personagent up`, or the `chat`, `demo` (no key needed), `run` and `connect` commands. They keep your existing `.env`, edited persona and learned memories. The [full guide](guide.md) covers the other platforms.

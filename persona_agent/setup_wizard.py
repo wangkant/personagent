@@ -556,6 +556,12 @@ def set_env_values(env_text: str, values: dict) -> str:
     return out
 
 
+def _replace(source, target) -> None:
+    # Imported here: this module is read before any home is chosen.
+    from persona_agent.storage import replace
+    replace(source, target)
+
+
 def write_env(env_path: Path, values: dict) -> None:
     """Merge `values` into .env through a 0600 temp file and an atomic replace,
     so an interrupted run never leaves a truncated or world-readable .env."""
@@ -571,7 +577,7 @@ def write_env(env_path: Path, values: dict) -> None:
     # Keep a stricter mode the operator chose, never a wider one.
     if env_path.exists():
         os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
-    os.replace(tmp, env_path)
+    _replace(tmp, env_path)
 
 
 def secure_env_file(env_path: Path) -> None:
@@ -641,21 +647,21 @@ class Character:
 TEMPLATE = "template"
 CHARACTERS: tuple[Character, ...] = (
     Character("dry-wit", ("Dry-witted friend: deadpan, short replies, teases lightly",
-                          "毒舌损友：冷幽默，回得短，调侃点到为止")),
+                          "冷面损友：冷幽默，回复简短，调侃适可而止")),
     Character("warm-listener", ("Warm listener: asks how you are, remembers the small things",
-                                "温柔倾听者：会问近况，记得小事")),
+                                "温和的倾听者：关心你的近况，记得生活中的细节")),
     Character("gamer", ("Gamer: co-op shooters and roguelikes, friendly trash talk",
-                        "游戏搭子：合作射击和肉鸽，爱互相嘴几句")),
+                        "游戏伙伴：喜爱合作射击和 Roguelike 游戏，常以玩笑互相调侃")),
     Character("bookworm", ("Bookworm: careful words, recommends books when asked",
-                           "文艺书虫：用词讲究，被问到才推荐书")),
+                           "爱书人：措辞考究，仅在被问及时推荐书籍")),
     Character("chatgpt", ("The GPT dragon girl: proud, well-read, fond of treasure",
-                          "GPT 娘（白龙）：傲娇自信，博学，爱财宝"), name="ChatGPT"),
+                          "GPT 娘（白龙）：骄傲自信，学识广博，喜爱财宝"), name="ChatGPT"),
     Character("deepseek", ("The DeepSeek whale girl: clever, a bit lazy, lives on white rice",
-                           "DeepSeek 鲸鱼娘：聪明但爱偷懒，傲娇嘴甜，主食白饭"), name="DeepSeek"),
+                           "DeepSeek 鲸鱼娘：聪明而略显懒散，言语讨喜，以白米饭为主食"), name="DeepSeek"),
     Character("claude", ("The Claude lady: well-bred, gentle and candid, strict house rules",
-                         "Claude 娘（豪门圣女）：温柔端庄，坦诚，家规很严"), name="Claude"),
+                         "Claude 娘（豪门圣女）：温柔端庄，坦诚直率，家规严格"), name="Claude"),
     Character(TEMPLATE, ("Write my own later: a plain starting character to edit",
-                         "以后自己写：先放一个朴素的起步角色，之后再改")),
+                         "稍后自行编写：先使用一个基础角色，之后再修改")),
 )
 PERSONA_KEYS = tuple(c.key for c in CHARACTERS)
 # The local page's portrait sprites, <key>.webp.
@@ -790,7 +796,7 @@ def write_persona(home: Path, key: str, *, name: str, lang: str, admin_name: str
     home.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    _replace(tmp, path)
     return True
 
 

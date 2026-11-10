@@ -1,0 +1,101 @@
+/* The tuning panel: sections on the page, fields with a light fill. */
+.tuning-card h2 {
+  margin-bottom: 4px;
+}
+.tuning-card > .field-note {
+  margin: 0 0 8px;
+}
+.tuning-card .field-note,
+.tuning-card label,
+.tuning-section > summary,
+#tuning-error {
+  overflow-wrap: anywhere;
+}
+.tuning-section {
+  margin-top: 8px;
+}
+.tuning-section > summary {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+  padding: 4px 0;
+}
+.tuning-body {
+  max-width: 620px;
+  padding-bottom: 8px;
+}
+.tuning-field {
+  padding: 4px 0 2px;
+}
+.tuning-field > label:not(.check) {
+  margin-top: 10px;
+}
+.tuning-field > label.check {
+  margin-top: 12px;
+}
+.tuning-field .field-note {
+  margin: 6px 0 8px;
+}
+.tuning-field.tuning-bad input:not([type="checkbox"]),
+.tuning-field.tuning-bad select {
+  box-shadow: inset 0 -2px 0 var(--error);
+}
+.tuning-field.tuning-bad > .field-note:first-of-type {
+  color: var(--error);
+}
+.tuning-sub {
+  display: block;
+  margin-top: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.tuning-charsets {
+  margin: 10px 0 0;
+}
+.tuning-limit {
+  color: var(--warn-text);
+}
+.tuning-pick {
+  margin: 4px 0 8px;
+}
+.tuning-pick > .secondary {
+  margin-left: -10px;
+}
+.tuning-pick-title {
+  margin: 12px 0 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.tuning-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.tuning-pick-id {
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--ink);
+}
+.tuning-pick-row label.check {
+  font-size: 13px;
+}
+.tuning-fresh {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.tuning-fresh .secondary {
+  margin-left: -10px;
+}
+.tuning-fresh .field-note {
+  overflow-wrap: anywhere;
+}
+.tuning-rename {
+  color: var(--warn-text);
+}

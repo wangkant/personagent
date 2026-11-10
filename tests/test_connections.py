@@ -11,12 +11,18 @@ def test_every_platform_is_listed_once_and_only_scan_platforms_may_ask_for_nothi
     assert len(kinds) == len(set(kinds))
     assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"weixin_oc", "qq_official"}
     assert {p.kind for p in conn.PLATFORMS if conn.is_direct(p.kind)} == {
-        "qq_official", "weixin_oc", "telegram", "discord"}
+        "qq_official", "weixin_oc", "telegram", "discord",
+        "matrix", "twitch", "irc", "zulip", "vk", "stoat"}
     for item in conn.PLATFORMS:
         assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED)
         # A scan platform's fields, if any, are for a bot made elsewhere.
         assert item.fields or item.group == conn.SCAN
-        assert all(f.required for f in item.fields) or item.group == conn.ADVANCED
+        # The one exception: an unregistered IRC nickname has no password.
+        optional = [f.key for f in item.fields if not f.required]
+        assert not optional or item.group == conn.ADVANCED or optional == ["irc_password"]
+        # Only a direct platform with a login flow signs in by link.
+        assert item.sign_in in ("", "link")
+        assert not item.sign_in or conn.is_direct(item.kind) and item.group == conn.KEY
     # LINE always routes callbacks through AstrBot's dashboard, which does not run.
     assert "line" not in kinds
 
@@ -26,6 +32,26 @@ def test_the_catalog_never_carries_values():
     assert [p["id"] for p in listed] == [p.kind for p in conn.PLATFORMS]
     assert all(set(f) == {"key", "label", "secret", "required", "kind", "default"}
                for p in listed for f in p["fields"])
+    # Steps are [en, zh] pairs like every other text, so translations find them.
+    assert all(len(step) == 2 and all(isinstance(s, str) and s.strip() for s in step)
+               for p in listed for step in p["steps"])
+    assert [p["id"] for p in listed if p["signIn"]] == ["twitch"]
+
+
+def test_the_new_direct_platforms_ask_for_their_own_values():
+    irc = conn.platform("irc")
+    clean = conn.clean_values(irc, {"irc_nick": "NovaBot", "irc_channels": "#a, #b"})
+    assert clean == {"irc_server": "irc.libera.chat", "irc_port": 6697, "irc_nick": "NovaBot",
+                     "irc_channels": "#a, #b", "irc_password": ""}
+    with pytest.raises(ValueError, match="invalid_field"):
+        conn.clean_values(irc, {"irc_nick": "N", "irc_channels": "#a", "irc_port": "66a"})
+    assert conn.clean_values(conn.platform("stoat"), {"stoat_token": "t"})["stoat_api"] == "https://api.stoat.chat"
+    assert conn.clean_values(conn.platform("matrix"), {"matrix_token": "t", "matrix_owner": "@me:x.org"}
+                             )["matrix_homeserver"] == "https://matrix.org"
+    for kind, values in (("zulip", {"zulip_site": "https://z.example", "zulip_email": "b@z"}),
+                         ("twitch", {"twitch_client_id": "abc"}), ("vk", {})):
+        with pytest.raises(ValueError, match="field_required"):
+            conn.clean_values(conn.platform(kind), values)
 
 
 def test_values_are_checked_trimmed_and_limited_to_the_asked_fields():

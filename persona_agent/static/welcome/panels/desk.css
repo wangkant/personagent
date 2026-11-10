@@ -1,0 +1,94 @@
+/* The desk panel. */
+.desk-card h2 {
+  margin-bottom: 4px;
+}
+.desk-card .feature > .secondary {
+  margin-left: -10px;
+}
+.desk-warn {
+  color: var(--warn-text);
+}
+.desk-path {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.desk-places {
+  display: flex;
+  flex-direction: column;
+}
+.desk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.desk-row:first-child {
+  border-top: 0;
+}
+.desk-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.desk-row-text strong {
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.desk-row-hint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.desk-file {
+  overflow-wrap: anywhere;
+}
+.desk-row > .secondary {
+  flex-shrink: 0;
+}
+.desk-subtitle {
+  margin: 28px 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.desk-result {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ok);
+  overflow-wrap: anywhere;
+}
+.desk-card .card-actions {
+  margin-top: 12px;
+}
+.desk-danger {
+  color: var(--error);
+  text-decoration-color: var(--error);
+}
+.desk-danger:hover {
+  color: var(--error);
+}
+.desk-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+#desk-icon-state[data-state="on"] {
+  color: var(--ok);
+}
+@media (max-width: 480px) {
+  .desk-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .desk-row > .secondary {
+    margin-left: -10px;
+  }
+}
